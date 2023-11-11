@@ -70,7 +70,7 @@ Datatype:
   | MSize
   | Gas
   | JumpDest
-  | Push (6 word)
+  | Push (6 word) (word8 list)
   | Dup (4 word)
   | Swap (4 word)
   | Log (3 word)
@@ -86,93 +86,93 @@ Datatype:
 End
 
 Definition wf_opname_def[simp]:
-    wf_opname (Push n) = (n ≤ n2w 32)
+    wf_opname (Push n w) = (n ≤ n2w 32 ∧ LENGTH w = w2n n)
   ∧ wf_opname (Log n) = (n ≤ n2w 4)
   ∧ wf_opname _ = T
 End
 
 Definition opcode_def:
-    opcode Stop           = n2w 0x00 : byte
-  ∧ opcode Add            = n2w 0x01
-  ∧ opcode Mul            = n2w 0x02
-  ∧ opcode Sub            = n2w 0x03
-  ∧ opcode Div            = n2w 0x04
-  ∧ opcode SDiv           = n2w 0x05
-  ∧ opcode Mod            = n2w 0x06
-  ∧ opcode SMod           = n2w 0x07
-  ∧ opcode AddMod         = n2w 0x08
-  ∧ opcode MulMod         = n2w 0x09
-  ∧ opcode Exp            = n2w 0x0a
-  ∧ opcode SignExtend     = n2w 0x0b
-  ∧ opcode LT             = n2w 0x10
-  ∧ opcode GT             = n2w 0x11
-  ∧ opcode SLT            = n2w 0x12
-  ∧ opcode SGT            = n2w 0x13
-  ∧ opcode Eq             = n2w 0x14
-  ∧ opcode IsZero         = n2w 0x15
-  ∧ opcode And            = n2w 0x16
-  ∧ opcode Or             = n2w 0x17
-  ∧ opcode XOr            = n2w 0x18
-  ∧ opcode Not            = n2w 0x19
-  ∧ opcode Byte           = n2w 0x1a
-  ∧ opcode ShL            = n2w 0x1b
-  ∧ opcode ShR            = n2w 0x1c
-  ∧ opcode SAR            = n2w 0x1d
-  ∧ opcode SHA3           = n2w 0x20
-  ∧ opcode Address        = n2w 0x30
-  ∧ opcode Balance        = n2w 0x31
-  ∧ opcode Origin         = n2w 0x32
-  ∧ opcode Caller         = n2w 0x33
-  ∧ opcode CallValue      = n2w 0x34
-  ∧ opcode CallDataLoad   = n2w 0x35
-  ∧ opcode CallDataSize   = n2w 0x36
-  ∧ opcode CallDataCopy   = n2w 0x37
-  ∧ opcode CodeSize       = n2w 0x38
-  ∧ opcode CodeCopy       = n2w 0x39
-  ∧ opcode GasPrice       = n2w 0x3a
-  ∧ opcode ExtCodeSize    = n2w 0x3b
-  ∧ opcode ExtCodeCopy    = n2w 0x3c
-  ∧ opcode ReturnDataSize = n2w 0x3d
-  ∧ opcode ReturnDataCopy = n2w 0x3e
-  ∧ opcode ExtCodeHash    = n2w 0x3f
-  ∧ opcode BlockHash      = n2w 0x40
-  ∧ opcode CoinBase       = n2w 0x41
-  ∧ opcode TimeStamp      = n2w 0x42
-  ∧ opcode Number         = n2w 0x43
-  ∧ opcode PrevRandao     = n2w 0x44
-  ∧ opcode GasLimit       = n2w 0x45
-  ∧ opcode ChainId        = n2w 0x46
-  ∧ opcode SelfBalance    = n2w 0x47
-  ∧ opcode BaseFee        = n2w 0x48
-  ∧ opcode Pop            = n2w 0x50
-  ∧ opcode MLoad          = n2w 0x51
-  ∧ opcode MStore         = n2w 0x52
-  ∧ opcode MStore8        = n2w 0x53
-  ∧ opcode SLoad          = n2w 0x54
-  ∧ opcode SStore         = n2w 0x55
-  ∧ opcode Jump           = n2w 0x56
-  ∧ opcode JumpI          = n2w 0x57
-  ∧ opcode PC             = n2w 0x58
-  ∧ opcode MSize          = n2w 0x59
-  ∧ opcode Gas            = n2w 0x5a
-  ∧ opcode JumpDest       = n2w 0x5b
-  ∧ opcode (Push n)       = n2w 0x5f + w2w n
-  ∧ opcode (Dup n)        = n2w 0x81 + w2w n
-  ∧ opcode (Swap n)       = n2w 0x91 + w2w n
-  ∧ opcode (Log n)        = n2w 0xa0 + w2w n
-  ∧ opcode Create         = n2w 0xf0
-  ∧ opcode Call           = n2w 0xf1
-  ∧ opcode CallCode       = n2w 0xf2
-  ∧ opcode Return         = n2w 0xf3
-  ∧ opcode DelegateCall   = n2w 0xf4
-  ∧ opcode Create2        = n2w 0xf5
-  ∧ opcode StaticCall     = n2w 0xfa
-  ∧ opcode Revert         = n2w 0xfd
-  ∧ opcode Invalid        = n2w 0xfe
+    opcode Stop           = [n2w 0x00]
+  ∧ opcode Add            = [n2w 0x01]
+  ∧ opcode Mul            = [n2w 0x02]
+  ∧ opcode Sub            = [n2w 0x03]
+  ∧ opcode Div            = [n2w 0x04]
+  ∧ opcode SDiv           = [n2w 0x05]
+  ∧ opcode Mod            = [n2w 0x06]
+  ∧ opcode SMod           = [n2w 0x07]
+  ∧ opcode AddMod         = [n2w 0x08]
+  ∧ opcode MulMod         = [n2w 0x09]
+  ∧ opcode Exp            = [n2w 0x0a]
+  ∧ opcode SignExtend     = [n2w 0x0b]
+  ∧ opcode LT             = [n2w 0x10]
+  ∧ opcode GT             = [n2w 0x11]
+  ∧ opcode SLT            = [n2w 0x12]
+  ∧ opcode SGT            = [n2w 0x13]
+  ∧ opcode Eq             = [n2w 0x14]
+  ∧ opcode IsZero         = [n2w 0x15]
+  ∧ opcode And            = [n2w 0x16]
+  ∧ opcode Or             = [n2w 0x17]
+  ∧ opcode XOr            = [n2w 0x18]
+  ∧ opcode Not            = [n2w 0x19]
+  ∧ opcode Byte           = [n2w 0x1a]
+  ∧ opcode ShL            = [n2w 0x1b]
+  ∧ opcode ShR            = [n2w 0x1c]
+  ∧ opcode SAR            = [n2w 0x1d]
+  ∧ opcode SHA3           = [n2w 0x20]
+  ∧ opcode Address        = [n2w 0x30]
+  ∧ opcode Balance        = [n2w 0x31]
+  ∧ opcode Origin         = [n2w 0x32]
+  ∧ opcode Caller         = [n2w 0x33]
+  ∧ opcode CallValue      = [n2w 0x34]
+  ∧ opcode CallDataLoad   = [n2w 0x35]
+  ∧ opcode CallDataSize   = [n2w 0x36]
+  ∧ opcode CallDataCopy   = [n2w 0x37]
+  ∧ opcode CodeSize       = [n2w 0x38]
+  ∧ opcode CodeCopy       = [n2w 0x39]
+  ∧ opcode GasPrice       = [n2w 0x3a]
+  ∧ opcode ExtCodeSize    = [n2w 0x3b]
+  ∧ opcode ExtCodeCopy    = [n2w 0x3c]
+  ∧ opcode ReturnDataSize = [n2w 0x3d]
+  ∧ opcode ReturnDataCopy = [n2w 0x3e]
+  ∧ opcode ExtCodeHash    = [n2w 0x3f]
+  ∧ opcode BlockHash      = [n2w 0x40]
+  ∧ opcode CoinBase       = [n2w 0x41]
+  ∧ opcode TimeStamp      = [n2w 0x42]
+  ∧ opcode Number         = [n2w 0x43]
+  ∧ opcode PrevRandao     = [n2w 0x44]
+  ∧ opcode GasLimit       = [n2w 0x45]
+  ∧ opcode ChainId        = [n2w 0x46]
+  ∧ opcode SelfBalance    = [n2w 0x47]
+  ∧ opcode BaseFee        = [n2w 0x48]
+  ∧ opcode Pop            = [n2w 0x50]
+  ∧ opcode MLoad          = [n2w 0x51]
+  ∧ opcode MStore         = [n2w 0x52]
+  ∧ opcode MStore8        = [n2w 0x53]
+  ∧ opcode SLoad          = [n2w 0x54]
+  ∧ opcode SStore         = [n2w 0x55]
+  ∧ opcode Jump           = [n2w 0x56]
+  ∧ opcode JumpI          = [n2w 0x57]
+  ∧ opcode PC             = [n2w 0x58]
+  ∧ opcode MSize          = [n2w 0x59]
+  ∧ opcode Gas            = [n2w 0x5a]
+  ∧ opcode JumpDest       = [n2w 0x5b]
+  ∧ opcode (Push n w)     = [n2w 0x5f + w2w n] ++ w
+  ∧ opcode (Dup n)        = [n2w 0x81 + w2w n]
+  ∧ opcode (Swap n)       = [n2w 0x91 + w2w n]
+  ∧ opcode (Log n)        = [n2w 0xa0 + w2w n]
+  ∧ opcode Create         = [n2w 0xf0]
+  ∧ opcode Call           = [n2w 0xf1]
+  ∧ opcode CallCode       = [n2w 0xf2]
+  ∧ opcode Return         = [n2w 0xf3]
+  ∧ opcode DelegateCall   = [n2w 0xf4]
+  ∧ opcode Create2        = [n2w 0xf5]
+  ∧ opcode StaticCall     = [n2w 0xfa]
+  ∧ opcode Revert         = [n2w 0xfd]
+  ∧ opcode Invalid        = [n2w 0xfe]
 End
 
 Definition parse_opcode_def:
-  parse_opcode (opc:byte) =
+  parse_opcode (opc:byte list) =
     some opn. wf_opname opn ∧ opcode opn = opc
 End
 
