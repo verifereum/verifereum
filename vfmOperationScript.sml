@@ -173,8 +173,10 @@ End
 
 Definition parse_opcode_def:
   parse_opcode (opc:byte list) =
-    some opn. wf_opname opn ∧ opcode opn = opc
+    some opn. wf_opname opn ∧ opcode opn ≼ opc
 End
+
+(* TODO: parse_opcode_unique theorem *)
 
 Definition static_gas_def[simp]:
     static_gas Stop           = 0
