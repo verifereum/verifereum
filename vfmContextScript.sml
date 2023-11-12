@@ -26,7 +26,7 @@ End
 Datatype:
   context =
   <| stack      : bytes32 list
-   ; memory     : num -> bytes32
+   ; memory     : num |-> bytes32
    ; pc         : num
    ; returnData : byte list
    ; gasUsed    : num
@@ -35,7 +35,6 @@ Datatype:
    ; accAddress : address set
    ; accStorage : (address # bytes32) set
    ; callParams : call_parameters
-   ; txParams   : transaction_parameters
    |>
 End
 
@@ -47,6 +46,7 @@ End
 Datatype:
   transaction_state =
   <| contexts : context list
+   ; txParams : transaction_parameters
    ; accounts : evm_accounts
    |>
 End
@@ -80,9 +80,9 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context b t =
+  initial_context t =
   <| stack      := []
-   ; memory     := K 0w
+   ; memory     := FEMPTY
    ; pc         := 0
    ; returnData := []
    ; gasUsed    := 0
@@ -93,8 +93,50 @@ Definition initial_context_def:
                      (IMAGE (λe. IMAGE (λk. (e.account, k)) e.keys)
                             (set t.accessList))
    ; callParams := initial_call_params t
-   ; txParams   := initial_tx_params b t
    |>
 End
+
+Theorem initial_context_simp[simp]:
+  (initial_context t).stack = []
+Proof
+  rw[initial_context_def]
+  (* TODO: add more if needed *)
+QED
+
+Theorem wf_initial_context[simp]:
+  wf_context (initial_context t)
+Proof
+  rw[wf_context_def]
+QED
+
+Definition wf_state_def:
+  wf_state s ⇔
+    s.contexts ≠ [] ∧
+    EVERY wf_context s.contexts ∧
+    wf_accounts s.accounts
+End
+
+Definition initial_state_def:
+  initial_state a b t =
+  <| contexts := [initial_context t]
+   ; txParams := initial_tx_params b t
+   ; accounts := a
+   |>
+End
+
+Theorem initial_state_simp[simp]:
+  (initial_state a b t).contexts = [initial_context t] ∧
+  (initial_state a b t).accounts = a ∧
+  (initial_state a b t).txParams = initial_tx_params b t
+Proof
+  rw[initial_state_def]
+QED
+
+Theorem wf_initial_state[simp]:
+  wf_accounts a ⇒
+  wf_state (initial_state a b t)
+Proof
+  rw[wf_accounts_def, wf_state_def]
+QED
 
 val _ = export_theory();
