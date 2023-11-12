@@ -176,6 +176,85 @@ Definition parse_opcode_def:
     some opn. wf_opname opn ∧ opcode opn = opc
 End
 
+Definition static_gas_def[simp]:
+    static_gas Stop           = 0
+  ∧ static_gas Add            = 3
+  ∧ static_gas Mul            = 5
+  ∧ static_gas Sub            = 3
+  ∧ static_gas Div            = 5
+  ∧ static_gas SDiv           = 5
+  ∧ static_gas Mod            = 5
+  ∧ static_gas SMod           = 5
+  ∧ static_gas AddMod         = 8
+  ∧ static_gas MulMod         = 8
+  ∧ static_gas Exp            = 10
+  ∧ static_gas SignExtend     = 5
+  ∧ static_gas LT             = 3
+  ∧ static_gas GT             = 3
+  ∧ static_gas SLT            = 3
+  ∧ static_gas SGT            = 3
+  ∧ static_gas Eq             = 3
+  ∧ static_gas IsZero         = 3
+  ∧ static_gas And            = 3
+  ∧ static_gas Or             = 3
+  ∧ static_gas XOr            = 3
+  ∧ static_gas Not            = 3
+  ∧ static_gas Byte           = 3
+  ∧ static_gas ShL            = 3
+  ∧ static_gas ShR            = 3
+  ∧ static_gas SAR            = 3
+  ∧ static_gas SHA3           = 30
+  ∧ static_gas Address        = 30
+  ∧ static_gas Balance        = 0
+  ∧ static_gas Origin         = 2
+  ∧ static_gas Caller         = 2
+  ∧ static_gas CallValue      = 2
+  ∧ static_gas CallDataLoad   = 3
+  ∧ static_gas CallDataSize   = 2
+  ∧ static_gas CallDataCopy   = 3
+  ∧ static_gas CodeSize       = 2
+  ∧ static_gas CodeCopy       = 3
+  ∧ static_gas GasPrice       = 2
+  ∧ static_gas ExtCodeSize    = 0
+  ∧ static_gas ExtCodeCopy    = 0
+  ∧ static_gas ReturnDataSize = 2
+  ∧ static_gas ReturnDataCopy = 3
+  ∧ static_gas ExtCodeHash    = 0
+  ∧ static_gas BlockHash      = 20
+  ∧ static_gas CoinBase       = 2
+  ∧ static_gas TimeStamp      = 2
+  ∧ static_gas Number         = 2
+  ∧ static_gas PrevRandao     = 2
+  ∧ static_gas GasLimit       = 2
+  ∧ static_gas ChainId        = 2
+  ∧ static_gas SelfBalance    = 5
+  ∧ static_gas BaseFee        = 2
+  ∧ static_gas Pop            = 2
+  ∧ static_gas MLoad          = 3
+  ∧ static_gas MStore         = 3
+  ∧ static_gas MStore8        = 3
+  ∧ static_gas SLoad          = 0
+  ∧ static_gas SStore         = 0
+  ∧ static_gas Jump           = 8
+  ∧ static_gas JumpI          = 10
+  ∧ static_gas PC             = 2
+  ∧ static_gas MSize          = 2
+  ∧ static_gas Gas            = 2
+  ∧ static_gas JumpDest       = 1
+  ∧ static_gas (Push n w)     = (if n = 0w then 2 else 3)
+  ∧ static_gas (Dup n)        = 3
+  ∧ static_gas (Swap n)       = 3
+  ∧ static_gas (Log n)        = 375
+  ∧ static_gas Create         = 32000
+  ∧ static_gas Call           = 0
+  ∧ static_gas CallCode       = 0
+  ∧ static_gas Return         = 0
+  ∧ static_gas DelegateCall   = 0
+  ∧ static_gas Create2        = 32000
+  ∧ static_gas StaticCall     = 0
+  ∧ static_gas Revert         = 0
+End
+
 (*
 * finish if necessary
 Theorem parse_opcode_cond_thm:
