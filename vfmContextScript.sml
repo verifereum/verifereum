@@ -19,6 +19,7 @@ Datatype:
   <| caller      : address
    ; callee      : address
    ; value       : num
+   ; gasLimit    : num
    ; callData    : byte list
    |>
 End
@@ -30,7 +31,7 @@ Datatype:
    ; pc         : num
    ; returnData : byte list
    ; gasUsed    : num
-   ; gasLeft    : num
+   ; gasRefund  : num
    ; logs       : event list
    ; accAddress : address set
    ; accStorage : (address # bytes32) set
@@ -66,6 +67,7 @@ Definition initial_call_params_def:
    ; callee   := t.to
    ; value    := t.value
    ; callData := t.data
+   ; gasLimit := t.gasLimit
    |>
 End
 
@@ -86,7 +88,7 @@ Definition initial_context_def:
    ; pc         := 0
    ; returnData := []
    ; gasUsed    := 0
-   ; gasLeft    := t.gasLimit
+   ; gasRefund  := 0
    ; logs       := []
    ; accAddress := IMAGE (λe. e.account) (set t.accessList)
    ; accStorage := BIGUNION
@@ -112,6 +114,7 @@ QED
 Definition wf_state_def:
   wf_state s ⇔
     s.contexts ≠ [] ∧
+    LENGTH s.contexts ≤ 1024 ∧
     EVERY wf_context s.contexts ∧
     wf_accounts s.accounts
 End
