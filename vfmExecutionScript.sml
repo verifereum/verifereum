@@ -174,6 +174,28 @@ Definition take_pad_0_def:
   take_pad_0 z l = PAD_RIGHT 0w z (TAKE z l)
 End
 
+Definition copy_to_memory_def:
+  copy_to_memory f s =
+    bind (get_current_context s)
+      (λcontext s.
+        if 3 ≤ LENGTH context.stack then
+        let destOffset = w2n $ EL 0 context.stack in
+        let offset = w2n $ EL 1 context.stack in
+        let size = w2n $ EL 2 context.stack in
+        let minimumWordSize = (size + 31) DIV 32 in
+        let bytes = take_pad_0 size (DROP offset (f context s)) in
+        let newMemory = write_memory destOffset bytes context.memory in
+        let expansionCost = memory_expansion_cost context.memory newMemory in
+        let dynamicGas = 3 * minimumWordSize + expansionCost in
+        let newStack = DROP 3 context.stack in
+        let newContext = context with
+          <| stack := newStack; memory := newMemory |>
+        in
+          ignore_bind (consume_gas dynamicGas s)
+            (set_current_context newContext)
+        else Done (Excepted StackUnderflow) s.accounts)
+End
+
 Definition step_inst_def:
     step_inst Stop = finish_context T [] 0 0
   ∧ step_inst Add = binop word_add
@@ -249,28 +271,12 @@ Definition step_inst_def:
             set_current_context (context with stack := newStack) s
           else Done (Excepted StackUnderflow) s.accounts))
   ∧ step_inst CallDataSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.data))
-  ∧ step_inst CallDataCopy = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 3 ≤ LENGTH context.stack then
-          let destOffset = w2n $ EL 0 context.stack in
-          let offset = w2n $ EL 1 context.stack in
-          let size = w2n $ EL 2 context.stack in
-          let minimumWordSize = (size + 31) DIV 32 in
-          let bytes = take_pad_0 size (DROP offset context.callParams.data) in
-          let newMemory = write_memory destOffset bytes context.memory in
-          let expansionCost = memory_expansion_cost context.memory newMemory in
-          let dynamicGas = 3 * minimumWordSize + expansionCost in
-          let newStack = DROP 3 context.stack in
-          let newContext = context with
-            <| stack := newStack; memory := newMemory |>
-          in
-            ignore_bind (consume_gas dynamicGas s)
-              (set_current_context newContext)
-          else Done (Excepted StackUnderflow) s.accounts))
+  ∧ step_inst CallDataCopy =
+      copy_to_memory (λcontext s. context.callParams.data)
   ∧ step_inst CodeSize =
       get_from_tx (λc t a. n2w (LENGTH (a c.callParams.codeAcct).code))
-  ∧ step_inst CodeCopy = Step () (* TODO *)
+  ∧ step_inst CodeCopy =
+      copy_to_memory (λcontext s. (s.accounts context.callParams.codeAcct).code)
   ∧ step_inst GasPrice = get_from_tx (λc t a. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize = Step () (* TODO *)
   ∧ step_inst ExtCodeCopy = Step () (* TODO *)
