@@ -38,9 +38,14 @@ Datatype:
    ; gasUsed    : num
    ; gasRefund  : num
    ; logs       : event list
-   ; accAddress : address set
-   ; accStorage : (address # bytes32) set
    ; callParams : call_parameters
+   |>
+End
+
+Datatype:
+  access_sets =
+  <| addresses   : address set
+   ; storageKeys : (address # bytes32) set
    |>
 End
 
@@ -61,6 +66,7 @@ Datatype:
   transaction_state =
   <| contexts : context list
    ; txParams : transaction_parameters
+   ; accesses : access_sets
    ; accounts : evm_accounts
    |>
 End
@@ -110,10 +116,6 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; gasRefund  := 0
    ; logs       := []
-   ; accAddress := IMAGE (λe. e.account) (set t.accessList)
-   ; accStorage := BIGUNION
-                     (IMAGE (λe. IMAGE (λk. (e.account, k)) e.keys)
-                            (set t.accessList))
    ; callParams := initial_call_params t
    |>
 End
@@ -139,18 +141,29 @@ Definition wf_state_def:
     wf_accounts s.accounts
 End
 
+Definition initial_access_sets_def:
+  initial_access_sets t =
+  <| addresses   := IMAGE (λe. e.account) (set t.accessList)
+   ; storageKeys := BIGUNION
+                      (IMAGE (λe. IMAGE (λk. (e.account, k)) e.keys)
+                             (set t.accessList))
+   |>
+End
+
 Definition initial_state_def:
   initial_state c a b t =
   <| contexts := [initial_context t]
    ; txParams := initial_tx_params c b t
+   ; accesses := initial_access_sets t
    ; accounts := a
    |>
 End
 
 Theorem initial_state_simp[simp]:
-  (initial_state c a b t).contexts = [initial_context t] ∧
-  (initial_state c a b t).accounts = a ∧
-  (initial_state c a b t).txParams = initial_tx_params c b t
+    (initial_state c a b t).contexts = [initial_context t]
+  ∧ (initial_state c a b t).accounts = a
+  ∧ (initial_state c a b t).accesses = initial_access_sets t
+  ∧ (initial_state c a b t).txParams = initial_tx_params c b t
 Proof
   rw[initial_state_def]
 QED

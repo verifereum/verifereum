@@ -215,7 +215,20 @@ Definition step_inst_def:
   ∧ step_inst SAR = binop SAR (λn w. word_asr w (w2n n))
   ∧ step_inst SHA3 = Step () (* TODO *)
   ∧ step_inst Address = get_from_ctxt Address (λc. w2w c.callParams.callee)
-  ∧ step_inst Balance = Step () (* TODO *)
+  ∧ step_inst Balance = (λs.
+      ignore_bind (consume_gas (static_gas Balance) s)
+      (λs. bind (get_current_context s)
+        (λcontext s.
+          if 1 ≤ LENGTH context.stack then
+          let address = w2w (EL 0 context.stack) in
+          let dynamicGas = if address ∈ s.accesses.addresses
+                           then 100 else 2600 in
+          (* TODO: add address to access set (and for other instructions too) *)
+          let balance = (s.accounts address).balance in
+          let newStack = n2w balance :: TL context.stack in
+            ignore_bind (consume_gas dynamicGas s)
+              (set_current_context (context with stack := newStack))
+          else Done (Excepted StackUnderflow) s.accounts)))
   ∧ step_inst Origin = get_from_tx Origin (λc t a. w2w t.origin)
   ∧ step_inst Caller = get_from_ctxt Caller (λc. w2w c.callParams.caller)
   ∧ step_inst CallValue = get_from_ctxt CallValue (λc. n2w c.callParams.value)
@@ -255,6 +268,18 @@ Definition step_inst_def:
   ∧ step_inst PrevRandao = get_from_tx PrevRandao (λc t a. t.prevRandao)
   ∧ step_inst GasLimit = get_from_tx GasLimit (λc t a. n2w t.blockGasLimit)
   ∧ step_inst ChainId = get_from_tx ChainId (λc t a. n2w t.chainId)
+  ∧ step_inst SelfBalance =
+    get_from_tx SelfBalance (λc t a. n2w (a c.callParams.callee).balance)
+  ∧ step_inst BaseFee = get_from_tx BaseFee (λc t a. n2w t.baseFee)
+  ∧ step_inst Pop = (λs.
+    ignore_bind (consume_gas (static_gas Pop) s)
+      (λs. bind (get_current_context s)
+        (λcontext s.
+         if context.stack ≠ []
+         then
+           set_current_context (context with stack := TL context.stack) s
+         else Done (Excepted StackUnderflow) s.accounts)))
+  ∧ step_inst MLoad = Step () (* TODO *)
   ∧ step_inst _ = Step () (* TODO *)
 End
 
@@ -265,6 +290,7 @@ Definition step_def:
     let code = (s.accounts (context.callParams.codeAcct)).code in
     if context.pc < LENGTH code then
     if IS_SOME (parse_opcode (DROP context.pc code)) then
+      (* TODO: consume the static gas first here *)
       step_inst (THE (parse_opcode (DROP context.pc code))) s
     else Done (Excepted InvalidOpcode) s.accounts
     else Done (Excepted Impossible) s.accounts)
