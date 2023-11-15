@@ -6,11 +6,15 @@ val _ = new_theory "vfmContext";
 
 Datatype:
   transaction_parameters =
-  <| origin      : address
-   ; gasPrice    : num
-   ; baseFee     : num
-   ; blockNumber : num
-   ; prevRandao  : bytes32
+  <| origin         : address
+   ; gasPrice       : num
+   ; baseFee        : num
+   ; blockNumber    : num
+   ; blockTimeStamp : num
+   ; blockCoinBase  : address
+   ; blockGasLimit  : num
+   ; prevRandao     : bytes32
+   ; chainId        : num
    |>
 End
 
@@ -18,6 +22,7 @@ Datatype:
   call_parameters =
   <| caller   : address
    ; callee   : address
+   ; codeAcct : address
    ; value    : num
    ; gasLimit : num
    ; data     : byte list
@@ -65,6 +70,8 @@ Datatype:
   <| baseFee    : num
    ; number     : num
    ; timeStamp  : num
+   ; coinBase   : address
+   ; gasLimit   : num
    ; prevRandao : bytes32
    |>
 End
@@ -73,6 +80,7 @@ Definition initial_call_params_def:
   initial_call_params t =
   <| caller   := t.from
    ; callee   := t.to
+   ; codeAcct := t.to
    ; value    := t.value
    ; data     := t.data
    ; gasLimit := t.gasLimit
@@ -80,12 +88,16 @@ Definition initial_call_params_def:
 End
 
 Definition initial_tx_params_def:
-  initial_tx_params b t =
-  <| origin      := t.from
-   ; gasPrice    := t.gasPrice
-   ; baseFee     := b.baseFee
-   ; blockNumber := b.number
-   ; prevRandao  := b.prevRandao
+  initial_tx_params c b t =
+  <| origin         := t.from
+   ; gasPrice       := t.gasPrice
+   ; baseFee        := b.baseFee
+   ; blockNumber    := b.number
+   ; blockTimeStamp := b.timeStamp
+   ; blockCoinBase  := b.coinBase
+   ; blockGasLimit  := b.gasLimit
+   ; prevRandao     := b.prevRandao
+   ; chainId        := c
    |>
 End
 
@@ -128,24 +140,24 @@ Definition wf_state_def:
 End
 
 Definition initial_state_def:
-  initial_state a b t =
+  initial_state c a b t =
   <| contexts := [initial_context t]
-   ; txParams := initial_tx_params b t
+   ; txParams := initial_tx_params c b t
    ; accounts := a
    |>
 End
 
 Theorem initial_state_simp[simp]:
-  (initial_state a b t).contexts = [initial_context t] ∧
-  (initial_state a b t).accounts = a ∧
-  (initial_state a b t).txParams = initial_tx_params b t
+  (initial_state c a b t).contexts = [initial_context t] ∧
+  (initial_state c a b t).accounts = a ∧
+  (initial_state c a b t).txParams = initial_tx_params c b t
 Proof
   rw[initial_state_def]
 QED
 
 Theorem wf_initial_state[simp]:
   wf_accounts a ⇒
-  wf_state (initial_state a b t)
+  wf_state (initial_state c a b t)
 Proof
   rw[wf_accounts_def, wf_state_def]
 QED
