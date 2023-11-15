@@ -123,6 +123,12 @@ Definition stack_op_def:
    else Done (Excepted StackUnderflow) s.accounts)
 End
 
+Definition monop_def:
+  monop op f s =
+    ignore_bind (consume_gas (static_gas op) s)
+      (stack_op 1 (λl. f (EL 0 l)))
+End
+
 Definition binop_def:
   binop op f s =
     ignore_bind (consume_gas (static_gas op) s)
@@ -177,15 +183,24 @@ Definition step_inst_def:
   ∧ step_inst SLT = binop SLT (λx y. b2w $ word_lt x y)
   ∧ step_inst SGT = binop SGT (λx y. b2w $ word_gt x y)
   ∧ step_inst Eq = binop Eq (λx y. b2w (x = y))
-  ∧ step_inst IsZero = (λs.
-      ignore_bind (consume_gas (static_gas Eq) s)
-        (stack_op 1 (λl. b2w (EL 0 l = 0w))))
+  ∧ step_inst IsZero = monop IsZero (λx. b2w (x = 0w))
   ∧ step_inst And = binop And word_and
   ∧ step_inst Or = binop Or word_or
   ∧ step_inst XOr = binop XOr word_xor
-  ∧ step_inst Not = (λs.
-      ignore_bind (consume_gas (static_gas Not) s)
-        (stack_op 1 (λl. word_1comp (EL 0 l))))
+  ∧ step_inst Not = monop Not word_1comp
+  ∧ step_inst Byte = binop Byte ARB (* TODO: use get_byte *)
+  ∧ step_inst ShL = binop ShL (λn w. word_lsl w (w2n n))
+  ∧ step_inst ShR = binop ShR (λn w. word_lsr w (w2n n))
+  ∧ step_inst SAR = binop SAR (λn w. word_asr w (w2n n))
+  ∧ step_inst SHA3 = Step () (* TODO *)
+  ∧ step_inst Address = (λs.
+      ignore_bind (consume_gas (static_gas Address) s)
+        (λs. bind (get_current_context s)
+          (λcontext s.
+            let newStack = w2w context.callParams.callee :: context.stack in
+            if LENGTH newStack ≤ stack_limit
+            then set_current_context (context with stack := newStack) s
+            else Done (Excepted StackOverflow) s.accounts)))
   ∧ step_inst _ = Step () (* TODO *)
 End
 

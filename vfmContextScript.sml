@@ -39,9 +39,17 @@ Datatype:
    |>
 End
 
+Definition stack_limit_def[simp]:
+  stack_limit = 1024
+End
+
+Definition context_limit_def[simp]:
+  context_limit = 1024
+End
+
 Definition wf_context_def:
   wf_context c ⇔
-    LENGTH c.stack ≤ 1024
+    LENGTH c.stack ≤ stack_limit
 End
 
 Datatype:
@@ -114,7 +122,7 @@ QED
 Definition wf_state_def:
   wf_state s ⇔
     s.contexts ≠ [] ∧
-    LENGTH s.contexts ≤ 1024 ∧
+    LENGTH s.contexts ≤ context_limit ∧
     EVERY wf_context s.contexts ∧
     wf_accounts s.accounts
 End
