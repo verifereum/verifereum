@@ -16,11 +16,11 @@ End
 
 Datatype:
   call_parameters =
-  <| caller      : address
-   ; callee      : address
-   ; value       : num
-   ; gasLimit    : num
-   ; callData    : byte list
+  <| caller   : address
+   ; callee   : address
+   ; value    : num
+   ; gasLimit : num
+   ; data     : byte list
    |>
 End
 
@@ -74,7 +74,7 @@ Definition initial_call_params_def:
   <| caller   := t.from
    ; callee   := t.to
    ; value    := t.value
-   ; callData := t.data
+   ; data     := t.data
    ; gasLimit := t.gasLimit
    |>
 End

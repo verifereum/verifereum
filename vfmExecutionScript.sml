@@ -45,10 +45,16 @@ End
 
 (* TODO: use byteTheory after moving it to HOL *)
 Definition set_byte_def:
-  set_byte w i b =
+  set_byte i b w =
       word_slice 256 ((SUC i) * 8) w ||
       w2w b << i ||
       word_slice (i * 8) 0 w
+End
+
+Definition word_of_bytes_def:
+  (word_of_bytes be a [] = 0w) /\
+  (word_of_bytes be a (b::bs) =
+     set_byte a b (word_of_bytes be (SUC a) bs))
 End
 
 Definition write_memory_def:
@@ -56,7 +62,7 @@ Definition write_memory_def:
   ∧ write_memory byteIndex (byte::bytes) memory =
       let wordIndex = byteIndex DIV 32 in
       let word = case FLOOKUP memory wordIndex of SOME w => w | NONE => 0w in
-      let newWord = set_byte word (byteIndex MOD 32) byte in
+      let newWord = set_byte (byteIndex MOD 32) byte word in
       write_memory (SUC byteIndex) bytes (FUPDATE memory (wordIndex, newWord))
 End
 
@@ -74,6 +80,10 @@ Definition set_current_context_def:
     Done (Excepted Impossible) s.accounts
   else
     Step () (s with contexts := c::(TL s.contexts))
+End
+
+Definition b2w_def[simp]:
+  b2w T = 1w ∧ b2w F = 0w
 End
 
 Definition finish_context_def:
@@ -94,7 +104,7 @@ Definition finish_context_def:
        ; gasUsed    := caller.gasUsed + callee.gasUsed
        (* TODO: revert if out of gas? or should this have been already detected? *)
        ; pc         := caller.pc + 1
-       ; stack      := (if success then 1w else 0w) :: caller.stack
+       ; stack      := b2w success :: caller.stack
        ; memory     :=
            write_memory returnOffset (TAKE returnSize returnData) caller.memory
        |> in
@@ -135,12 +145,19 @@ Definition binop_def:
       (stack_op 2 (λl. f (EL 0 l) (EL 1 l)))
 End
 
-Definition with_zero_def:
-  with_zero f x y = if y = 0w then 0w else f x y
+Definition get_def:
+  get op f s =
+    ignore_bind (consume_gas (static_gas op) s)
+      (λs. bind (get_current_context s)
+        (λcontext s.
+          let newStack = f context :: context.stack in
+          if LENGTH newStack ≤ stack_limit
+          then set_current_context (context with stack := newStack) s
+          else Done (Excepted StackOverflow) s.accounts))
 End
 
-Definition b2w_def[simp]:
-  b2w T = 1w ∧ b2w F = 0w
+Definition with_zero_def:
+  with_zero f x y = if y = 0w then 0w else f x y
 End
 
 Definition step_inst_def:
@@ -193,14 +210,33 @@ Definition step_inst_def:
   ∧ step_inst ShR = binop ShR (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = binop SAR (λn w. word_asr w (w2n n))
   ∧ step_inst SHA3 = Step () (* TODO *)
-  ∧ step_inst Address = (λs.
-      ignore_bind (consume_gas (static_gas Address) s)
+  ∧ step_inst Address = get Address (λc. w2w c.callParams.callee)
+  ∧ step_inst Balance = Step () (* TODO *)
+  ∧ step_inst Origin = (λs.
+      ignore_bind (consume_gas (static_gas Origin) s)
         (λs. bind (get_current_context s)
           (λcontext s.
-            let newStack = w2w context.callParams.callee :: context.stack in
+            let newStack = w2w s.txParams.origin :: context.stack in
             if LENGTH newStack ≤ stack_limit
             then set_current_context (context with stack := newStack) s
             else Done (Excepted StackOverflow) s.accounts)))
+            (* TODO: abstract stack push operation *)
+  ∧ step_inst Caller = get Caller (λc. w2w c.callParams.caller)
+  ∧ step_inst CallValue = get CallValue (λc. n2w c.callParams.value)
+  ∧ step_inst CallDataLoad = (λs.
+      ignore_bind (consume_gas (static_gas CallDataLoad) s)
+        (λs. bind (get_current_context s)
+          (λcontext s.
+            if 1 ≤ LENGTH context.stack
+            then
+              let index = w2n (EL 0 context.stack) in
+              let bytes = PAD_RIGHT 0w 32
+                            (TAKE 32 (DROP index context.callParams.data)) in
+              let newStack = word_of_bytes F 0 bytes :: TL context.stack in
+              set_current_context (context with stack := newStack) s
+            else Done (Excepted StackUnderflow) s.accounts)))
+  ∧ step_inst CallDataSize =
+      get CallDataSize (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst _ = Step () (* TODO *)
 End
 
