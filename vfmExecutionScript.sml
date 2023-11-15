@@ -134,30 +134,25 @@ Definition stack_op_def:
 End
 
 Definition monop_def:
-  monop op f s =
-    ignore_bind (consume_gas (static_gas op) s)
-      (stack_op 1 (λl. f (EL 0 l)))
+  monop f = stack_op 1 (λl. f (EL 0 l))
 End
 
 Definition binop_def:
-  binop op f s =
-    ignore_bind (consume_gas (static_gas op) s)
-      (stack_op 2 (λl. f (EL 0 l) (EL 1 l)))
+  binop f = stack_op 2 (λl. f (EL 0 l) (EL 1 l))
 End
 
 Definition get_from_tx_def:
-  get_from_tx op f s =
-    ignore_bind (consume_gas (static_gas op) s)
-      (λs. bind (get_current_context s)
-        (λcontext s.
-          let newStack = f context s.txParams s.accounts :: context.stack in
-          if LENGTH newStack ≤ stack_limit
-          then set_current_context (context with stack := newStack) s
-          else Done (Excepted StackOverflow) s.accounts))
+  get_from_tx f s =
+    bind (get_current_context s)
+      (λcontext s.
+        let newStack = f context s.txParams s.accounts :: context.stack in
+        if LENGTH newStack ≤ stack_limit
+        then set_current_context (context with stack := newStack) s
+        else Done (Excepted StackOverflow) s.accounts)
 End
 
 Definition get_from_ctxt_def:
-  get_from_ctxt op f = get_from_tx op (λctxt txParams accts. f ctxt)
+  get_from_ctxt f = get_from_tx (λctxt txParams accts. f ctxt)
 End
 
 Definition with_zero_def:
@@ -166,58 +161,54 @@ End
 
 Definition step_inst_def:
     step_inst Stop = finish_context T [] 0 0
-  ∧ step_inst Add = binop Add word_add
-  ∧ step_inst Mul = binop Mul word_mul
-  ∧ step_inst Sub = binop Sub word_sub
-  ∧ step_inst Div = binop Div (with_zero word_div)
-  ∧ step_inst SDiv = binop SDiv (with_zero word_quot)
-  ∧ step_inst Mod = binop Mod (with_zero word_mod)
-  ∧ step_inst SMod = binop SMod (with_zero word_rem)
-  ∧ step_inst AddMod = (λs.
-      ignore_bind (consume_gas (static_gas AddMod) s)
-        (stack_op 3 (λl. with_zero word_mod
-                           (word_add (EL 0 l) (EL 1 l))
-                           (EL 2 l))))
-  ∧ step_inst MulMod = (λs.
-      ignore_bind (consume_gas (static_gas MulMod) s)
-        (stack_op 3 (λl. with_zero word_mod
-                           (word_mul (EL 0 l) (EL 1 l))
-                           (EL 2 l))))
+  ∧ step_inst Add = binop word_add
+  ∧ step_inst Mul = binop word_mul
+  ∧ step_inst Sub = binop word_sub
+  ∧ step_inst Div = binop $ with_zero word_div
+  ∧ step_inst SDiv = binop $ with_zero word_quot
+  ∧ step_inst Mod = binop $ with_zero word_mod
+  ∧ step_inst SMod = binop $ with_zero word_rem
+  ∧ step_inst AddMod = stack_op 3
+      (λl. with_zero word_mod
+             (word_add (EL 0 l) (EL 1 l))
+             (EL 2 l))
+  ∧ step_inst MulMod = stack_op 3
+      (λl. with_zero word_mod
+             (word_mul (EL 0 l) (EL 1 l))
+             (EL 2 l))
   ∧ step_inst Exp = (λs.
-      ignore_bind (consume_gas (static_gas Exp) s)
-        (λs. bind (get_current_context s)
-          (λcontext s.
-           if 2 ≤ LENGTH context.stack
-           then
-             let exponent = w2n (EL 1 context.stack) in
-             let exponentByteSize = SUC (LOG2 exponent DIV 8) in
-             let dynamicGas = 50 * exponentByteSize in
-             let base = w2n (EL 0 context.stack) in
-             let result = n2w (base ** exponent) in
-             let newStack = result :: DROP 2 context.stack in
-             ignore_bind (consume_gas dynamicGas s)
-               (set_current_context (context with stack := newStack))
-           else Done (Excepted StackUnderflow) s.accounts)))
-  ∧ step_inst SignExtend = binop SignExtend (λn. word_sign_extend (w2n n))
-  ∧ step_inst LT = binop LT (λx y. b2w (w2n x < w2n y))
-  ∧ step_inst GT = binop GT (λx y. b2w (w2n x > w2n y))
-  ∧ step_inst SLT = binop SLT (λx y. b2w $ word_lt x y)
-  ∧ step_inst SGT = binop SGT (λx y. b2w $ word_gt x y)
-  ∧ step_inst Eq = binop Eq (λx y. b2w (x = y))
-  ∧ step_inst IsZero = monop IsZero (λx. b2w (x = 0w))
-  ∧ step_inst And = binop And word_and
-  ∧ step_inst Or = binop Or word_or
-  ∧ step_inst XOr = binop XOr word_xor
-  ∧ step_inst Not = monop Not word_1comp
-  ∧ step_inst Byte = binop Byte ARB (* TODO: use get_byte *)
-  ∧ step_inst ShL = binop ShL (λn w. word_lsl w (w2n n))
-  ∧ step_inst ShR = binop ShR (λn w. word_lsr w (w2n n))
-  ∧ step_inst SAR = binop SAR (λn w. word_asr w (w2n n))
+      bind (get_current_context s)
+        (λcontext s.
+         if 2 ≤ LENGTH context.stack
+         then
+           let exponent = w2n (EL 1 context.stack) in
+           let exponentByteSize = SUC (LOG2 exponent DIV 8) in
+           let dynamicGas = 50 * exponentByteSize in
+           let base = w2n (EL 0 context.stack) in
+           let result = n2w (base ** exponent) in
+           let newStack = result :: DROP 2 context.stack in
+           ignore_bind (consume_gas dynamicGas s)
+             (set_current_context (context with stack := newStack))
+         else Done (Excepted StackUnderflow) s.accounts))
+  ∧ step_inst SignExtend = binop (λn. word_sign_extend (w2n n))
+  ∧ step_inst LT = binop (λx y. b2w (w2n x < w2n y))
+  ∧ step_inst GT = binop (λx y. b2w (w2n x > w2n y))
+  ∧ step_inst SLT = binop (λx y. b2w $ word_lt x y)
+  ∧ step_inst SGT = binop (λx y. b2w $ word_gt x y)
+  ∧ step_inst Eq = binop (λx y. b2w (x = y))
+  ∧ step_inst IsZero = monop (λx. b2w (x = 0w))
+  ∧ step_inst And = binop word_and
+  ∧ step_inst Or = binop word_or
+  ∧ step_inst XOr = binop word_xor
+  ∧ step_inst Not = monop word_1comp
+  ∧ step_inst Byte = binop ARB (* TODO: use get_byte *)
+  ∧ step_inst ShL = binop (λn w. word_lsl w (w2n n))
+  ∧ step_inst ShR = binop (λn w. word_lsr w (w2n n))
+  ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
   ∧ step_inst SHA3 = Step () (* TODO *)
-  ∧ step_inst Address = get_from_ctxt Address (λc. w2w c.callParams.callee)
+  ∧ step_inst Address = get_from_ctxt (λc. w2w c.callParams.callee)
   ∧ step_inst Balance = (λs.
-      ignore_bind (consume_gas (static_gas Balance) s)
-      (λs. bind (get_current_context s)
+      bind (get_current_context s)
         (λcontext s.
           if 1 ≤ LENGTH context.stack then
           let address = w2w (EL 0 context.stack) in
@@ -228,33 +219,30 @@ Definition step_inst_def:
           let newStack = n2w balance :: TL context.stack in
             ignore_bind (consume_gas dynamicGas s)
               (set_current_context (context with stack := newStack))
-          else Done (Excepted StackUnderflow) s.accounts)))
-  ∧ step_inst Origin = get_from_tx Origin (λc t a. w2w t.origin)
-  ∧ step_inst Caller = get_from_ctxt Caller (λc. w2w c.callParams.caller)
-  ∧ step_inst CallValue = get_from_ctxt CallValue (λc. n2w c.callParams.value)
+          else Done (Excepted StackUnderflow) s.accounts))
+  ∧ step_inst Origin = get_from_tx (λc t a. w2w t.origin)
+  ∧ step_inst Caller = get_from_ctxt (λc. w2w c.callParams.caller)
+  ∧ step_inst CallValue = get_from_ctxt (λc. n2w c.callParams.value)
   ∧ step_inst CallDataLoad = (λs.
-      ignore_bind (consume_gas (static_gas CallDataLoad) s)
-        (λs. bind (get_current_context s)
-          (λcontext s.
-            if 1 ≤ LENGTH context.stack
-            then
-              let index = w2n (EL 0 context.stack) in
-              let bytes = PAD_RIGHT 0w 32
-                            (TAKE 32 (DROP index context.callParams.data)) in
-              let newStack = word_of_bytes F 0 bytes :: TL context.stack in
-              set_current_context (context with stack := newStack) s
-            else Done (Excepted StackUnderflow) s.accounts)))
-  ∧ step_inst CallDataSize =
-      get_from_ctxt CallDataSize (λc. n2w (LENGTH c.callParams.data))
+      bind (get_current_context s)
+        (λcontext s.
+          if 1 ≤ LENGTH context.stack
+          then
+            let index = w2n (EL 0 context.stack) in
+            let bytes = PAD_RIGHT 0w 32
+                          (TAKE 32 (DROP index context.callParams.data)) in
+            let newStack = word_of_bytes F 0 bytes :: TL context.stack in
+            set_current_context (context with stack := newStack) s
+          else Done (Excepted StackUnderflow) s.accounts))
+  ∧ step_inst CallDataSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst CallDataCopy = Step () (* TODO *)
-  ∧ step_inst CodeSize = get_from_tx CodeSize
-      (λc t a. n2w (LENGTH (a c.callParams.codeAcct).code))
+  ∧ step_inst CodeSize =
+      get_from_tx (λc t a. n2w (LENGTH (a c.callParams.codeAcct).code))
   ∧ step_inst CodeCopy = Step () (* TODO *)
-  ∧ step_inst GasPrice = get_from_tx GasPrice (λc t a. n2w t.gasPrice)
+  ∧ step_inst GasPrice = get_from_tx (λc t a. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize = Step () (* TODO *)
   ∧ step_inst ExtCodeCopy = Step () (* TODO *)
-  ∧ step_inst ReturnDataSize =
-      get_from_ctxt ReturnDataSize (λc. n2w (LENGTH c.returnData))
+  ∧ step_inst ReturnDataSize = get_from_ctxt (λc. n2w (LENGTH c.returnData))
   ∧ step_inst ReturnDataCopy = Step () (* TODO *)
   ∧ step_inst ExtCodeHash = Step () (* TODO *)
   (* TODO: needs the hashes to be in the state
@@ -262,23 +250,22 @@ Definition step_inst_def:
       ignore_bind (consume_gas (static_gas BlockHash) s)
       (λs.
   *)
-  ∧ step_inst CoinBase = get_from_tx CoinBase (λc t a. w2w t.blockCoinBase)
-  ∧ step_inst TimeStamp = get_from_tx TimeStamp (λc t a. n2w t.blockTimeStamp)
-  ∧ step_inst Number = get_from_tx Number (λc t a. n2w t.blockNumber)
-  ∧ step_inst PrevRandao = get_from_tx PrevRandao (λc t a. t.prevRandao)
-  ∧ step_inst GasLimit = get_from_tx GasLimit (λc t a. n2w t.blockGasLimit)
-  ∧ step_inst ChainId = get_from_tx ChainId (λc t a. n2w t.chainId)
+  ∧ step_inst CoinBase = get_from_tx (λc t a. w2w t.blockCoinBase)
+  ∧ step_inst TimeStamp = get_from_tx (λc t a. n2w t.blockTimeStamp)
+  ∧ step_inst Number = get_from_tx (λc t a. n2w t.blockNumber)
+  ∧ step_inst PrevRandao = get_from_tx (λc t a. t.prevRandao)
+  ∧ step_inst GasLimit = get_from_tx (λc t a. n2w t.blockGasLimit)
+  ∧ step_inst ChainId = get_from_tx (λc t a. n2w t.chainId)
   ∧ step_inst SelfBalance =
-    get_from_tx SelfBalance (λc t a. n2w (a c.callParams.callee).balance)
-  ∧ step_inst BaseFee = get_from_tx BaseFee (λc t a. n2w t.baseFee)
+      get_from_tx (λc t a. n2w (a c.callParams.callee).balance)
+  ∧ step_inst BaseFee = get_from_tx (λc t a. n2w t.baseFee)
   ∧ step_inst Pop = (λs.
-    ignore_bind (consume_gas (static_gas Pop) s)
-      (λs. bind (get_current_context s)
+      bind (get_current_context s)
         (λcontext s.
          if context.stack ≠ []
          then
            set_current_context (context with stack := TL context.stack) s
-         else Done (Excepted StackUnderflow) s.accounts)))
+         else Done (Excepted StackUnderflow) s.accounts))
   ∧ step_inst MLoad = Step () (* TODO *)
   ∧ step_inst _ = Step () (* TODO *)
 End
@@ -290,8 +277,8 @@ Definition step_def:
     let code = (s.accounts (context.callParams.codeAcct)).code in
     if context.pc < LENGTH code then
     if IS_SOME (parse_opcode (DROP context.pc code)) then
-      (* TODO: consume the static gas first here *)
-      step_inst (THE (parse_opcode (DROP context.pc code))) s
+      let op = (THE (parse_opcode (DROP context.pc code))) in
+        ignore_bind (consume_gas (static_gas op) s) $ step_inst op
     else Done (Excepted InvalidOpcode) s.accounts
     else Done (Excepted Impossible) s.accounts)
 End
