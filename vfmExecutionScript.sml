@@ -145,15 +145,19 @@ Definition binop_def:
       (stack_op 2 (λl. f (EL 0 l) (EL 1 l)))
 End
 
-Definition get_def:
-  get op f s =
+Definition get_from_tx_def:
+  get_from_tx op f s =
     ignore_bind (consume_gas (static_gas op) s)
       (λs. bind (get_current_context s)
         (λcontext s.
-          let newStack = f context :: context.stack in
+          let newStack = f context s.txParams s.accounts :: context.stack in
           if LENGTH newStack ≤ stack_limit
           then set_current_context (context with stack := newStack) s
           else Done (Excepted StackOverflow) s.accounts))
+End
+
+Definition get_from_ctxt_def:
+  get_from_ctxt op f = get_from_tx op (λctxt txParams accts. f ctxt)
 End
 
 Definition with_zero_def:
@@ -210,19 +214,11 @@ Definition step_inst_def:
   ∧ step_inst ShR = binop ShR (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = binop SAR (λn w. word_asr w (w2n n))
   ∧ step_inst SHA3 = Step () (* TODO *)
-  ∧ step_inst Address = get Address (λc. w2w c.callParams.callee)
+  ∧ step_inst Address = get_from_ctxt Address (λc. w2w c.callParams.callee)
   ∧ step_inst Balance = Step () (* TODO *)
-  ∧ step_inst Origin = (λs.
-      ignore_bind (consume_gas (static_gas Origin) s)
-        (λs. bind (get_current_context s)
-          (λcontext s.
-            let newStack = w2w s.txParams.origin :: context.stack in
-            if LENGTH newStack ≤ stack_limit
-            then set_current_context (context with stack := newStack) s
-            else Done (Excepted StackOverflow) s.accounts)))
-            (* TODO: abstract stack push operation *)
-  ∧ step_inst Caller = get Caller (λc. w2w c.callParams.caller)
-  ∧ step_inst CallValue = get CallValue (λc. n2w c.callParams.value)
+  ∧ step_inst Origin = get_from_tx Origin (λc t a. w2w t.origin)
+  ∧ step_inst Caller = get_from_ctxt Caller (λc. w2w c.callParams.caller)
+  ∧ step_inst CallValue = get_from_ctxt CallValue (λc. n2w c.callParams.value)
   ∧ step_inst CallDataLoad = (λs.
       ignore_bind (consume_gas (static_gas CallDataLoad) s)
         (λs. bind (get_current_context s)
@@ -236,20 +232,42 @@ Definition step_inst_def:
               set_current_context (context with stack := newStack) s
             else Done (Excepted StackUnderflow) s.accounts)))
   ∧ step_inst CallDataSize =
-      get CallDataSize (λc. n2w (LENGTH c.callParams.data))
+      get_from_ctxt CallDataSize (λc. n2w (LENGTH c.callParams.data))
+  ∧ step_inst CallDataCopy = Step () (* TODO *)
+  ∧ step_inst CodeSize = get_from_tx CodeSize
+      (λc t a. n2w (LENGTH (a c.callParams.codeAcct).code))
+  ∧ step_inst CodeCopy = Step () (* TODO *)
+  ∧ step_inst GasPrice = get_from_tx GasPrice (λc t a. n2w t.gasPrice)
+  ∧ step_inst ExtCodeSize = Step () (* TODO *)
+  ∧ step_inst ExtCodeCopy = Step () (* TODO *)
+  ∧ step_inst ReturnDataSize =
+      get_from_ctxt ReturnDataSize (λc. n2w (LENGTH c.returnData))
+  ∧ step_inst ReturnDataCopy = Step () (* TODO *)
+  ∧ step_inst ExtCodeHash = Step () (* TODO *)
+  (* TODO: needs the hashes to be in the state
+  ∧ step_inst BlockHash = (λs.
+      ignore_bind (consume_gas (static_gas BlockHash) s)
+      (λs.
+  *)
+  ∧ step_inst CoinBase = get_from_tx CoinBase (λc t a. w2w t.blockCoinBase)
+  ∧ step_inst TimeStamp = get_from_tx TimeStamp (λc t a. n2w t.blockTimeStamp)
+  ∧ step_inst Number = get_from_tx Number (λc t a. n2w t.blockNumber)
+  ∧ step_inst PrevRandao = get_from_tx PrevRandao (λc t a. t.prevRandao)
+  ∧ step_inst GasLimit = get_from_tx GasLimit (λc t a. n2w t.blockGasLimit)
+  ∧ step_inst ChainId = get_from_tx ChainId (λc t a. n2w t.chainId)
   ∧ step_inst _ = Step () (* TODO *)
 End
 
 Definition step_def:
   step s =
-  if s.contexts = [] then Done (Excepted Impossible) s.accounts else
-  let ctx = HD s.contexts in
-  let code = (s.accounts (ctx.callParams.callee)).code in
-  if ctx.pc < LENGTH code then
-  if IS_SOME (parse_opcode (DROP ctx.pc code)) then
-    step_inst (THE (parse_opcode (DROP ctx.pc code))) s
-  else Done (Excepted InvalidOpcode) s.accounts
-  else Done (Excepted Impossible) s.accounts
+  bind (get_current_context s)
+  (λcontext s.
+    let code = (s.accounts (context.callParams.codeAcct)).code in
+    if context.pc < LENGTH code then
+    if IS_SOME (parse_opcode (DROP context.pc code)) then
+      step_inst (THE (parse_opcode (DROP context.pc code))) s
+    else Done (Excepted InvalidOpcode) s.accounts
+    else Done (Excepted Impossible) s.accounts)
 End
 
 val _ = export_theory();
