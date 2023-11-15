@@ -69,7 +69,7 @@ Definition get_current_context_def:
 End
 
 Definition set_current_context_def:
-  set_current_context s c =
+  set_current_context c s =
   if s.contexts = [] then
     Done (Excepted Impossible) s.accounts
   else
@@ -108,7 +108,7 @@ Definition consume_gas_def:
     (λcontext s.
       let newContext = context with gasUsed := context.gasUsed + n in
       if newContext.gasUsed ≤ newContext.callParams.gasLimit
-      then set_current_context s newContext
+      then set_current_context newContext s
       else Done (Excepted OutOfGas) s.accounts)
 End
 
@@ -119,22 +119,55 @@ Definition stack_op_def:
    if n ≤ LENGTH context.stack
    then
      let newStack = f (TAKE n context.stack) :: DROP n context.stack in
-     set_current_context s (context with stack := newStack)
+     set_current_context (context with stack := newStack) s
    else Done (Excepted StackUnderflow) s.accounts)
 End
 
+Definition binop_def:
+  binop op f s =
+    ignore_bind (consume_gas (static_gas op) s)
+      (stack_op 2 (λl. f (EL 0 l) (EL 1 l)))
+End
+
+Definition with_zero_def:
+  with_zero f x y = if y = 0w then 0w else f x y
+End
+
 Definition step_inst_def:
-    step_inst s Stop = finish_context T [] 0 0 s
-  ∧ step_inst s Add =
-      ignore_bind (consume_gas (static_gas Add) s)
-           (stack_op 2 (λl. word_add (EL 0 l) (EL 1 l)))
-  ∧ step_inst s Mul =
-      ignore_bind (consume_gas (static_gas Add) s)
-           (stack_op 2 (λl. word_mul (EL 0 l) (EL 1 l)))
-  ∧ step_inst s Sub =
-      ignore_bind (consume_gas (static_gas Add) s)
-           (stack_op 2 (λl. word_sub (EL 0 l) (EL 1 l)))
-  ∧ step_inst s _ = Step () s (* TODO *)
+    step_inst Stop = finish_context T [] 0 0
+  ∧ step_inst Add = binop Add word_add
+  ∧ step_inst Mul = binop Mul word_mul
+  ∧ step_inst Sub = binop Sub word_sub
+  ∧ step_inst Div = binop Div (with_zero word_div)
+  ∧ step_inst SDiv = binop SDiv (with_zero word_quot)
+  ∧ step_inst Mod = binop Mod (with_zero word_mod)
+  ∧ step_inst SMod = binop SMod (with_zero word_rem)
+  ∧ step_inst AddMod = (λs.
+      ignore_bind (consume_gas (static_gas AddMod) s)
+        (stack_op 3 (λl. with_zero word_mod
+                           (word_add (EL 0 l) (EL 1 l))
+                           (EL 2 l))))
+  ∧ step_inst MulMod = (λs.
+      ignore_bind (consume_gas (static_gas MulMod) s)
+        (stack_op 3 (λl. with_zero word_mod
+                           (word_mul (EL 0 l) (EL 1 l))
+                           (EL 2 l))))
+  ∧ step_inst Exp = (λs.
+      ignore_bind (consume_gas (static_gas Exp) s)
+        (λs. bind (get_current_context s)
+          (λcontext s.
+           if 2 ≤ LENGTH context.stack
+           then
+             let exponent = w2n (EL 1 context.stack) in
+             let exponentByteSize = SUC (LOG2 exponent DIV 8) in
+             let dynamicGas = 50 * exponentByteSize in
+             let base = w2n (EL 0 context.stack) in
+             let result = n2w (base ** exponent) in
+             let newStack = result :: DROP 2 context.stack in
+             ignore_bind (consume_gas dynamicGas s)
+               (set_current_context (context with stack := newStack))
+           else Done (Excepted StackUnderflow) s.accounts)))
+  ∧ step_inst _ = Step () (* TODO *)
 End
 
 Definition step_def:
@@ -144,7 +177,7 @@ Definition step_def:
   let code = (s.accounts (ctx.callParams.callee)).code in
   if ctx.pc < LENGTH code then
   if IS_SOME (parse_opcode (DROP ctx.pc code)) then
-    step_inst s (THE (parse_opcode (DROP ctx.pc code)))
+    step_inst (THE (parse_opcode (DROP ctx.pc code))) s
   else Done (Excepted InvalidOpcode) s.accounts
   else Done (Excepted Impossible) s.accounts
 End
