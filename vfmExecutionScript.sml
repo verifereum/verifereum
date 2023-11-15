@@ -133,6 +133,10 @@ Definition with_zero_def:
   with_zero f x y = if y = 0w then 0w else f x y
 End
 
+Definition b2w_def[simp]:
+  b2w T = 1w ∧ b2w F = 0w
+End
+
 Definition step_inst_def:
     step_inst Stop = finish_context T [] 0 0
   ∧ step_inst Add = binop Add word_add
@@ -167,6 +171,21 @@ Definition step_inst_def:
              ignore_bind (consume_gas dynamicGas s)
                (set_current_context (context with stack := newStack))
            else Done (Excepted StackUnderflow) s.accounts)))
+  ∧ step_inst SignExtend = binop SignExtend (λn. word_sign_extend (w2n n))
+  ∧ step_inst LT = binop LT (λx y. b2w (w2n x < w2n y))
+  ∧ step_inst GT = binop GT (λx y. b2w (w2n x > w2n y))
+  ∧ step_inst SLT = binop SLT (λx y. b2w $ word_lt x y)
+  ∧ step_inst SGT = binop SGT (λx y. b2w $ word_gt x y)
+  ∧ step_inst Eq = binop Eq (λx y. b2w (x = y))
+  ∧ step_inst IsZero = (λs.
+      ignore_bind (consume_gas (static_gas Eq) s)
+        (stack_op 1 (λl. b2w (EL 0 l = 0w))))
+  ∧ step_inst And = binop And word_and
+  ∧ step_inst Or = binop Or word_or
+  ∧ step_inst XOr = binop XOr word_xor
+  ∧ step_inst Not = (λs.
+      ignore_bind (consume_gas (static_gas Not) s)
+        (stack_op 1 (λl. word_1comp (EL 0 l))))
   ∧ step_inst _ = Step () (* TODO *)
 End
 
