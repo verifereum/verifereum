@@ -159,6 +159,21 @@ Definition with_zero_def:
   with_zero f x y = if y = 0w then 0w else f x y
 End
 
+Definition memory_cost_def:
+  memory_cost m =
+  let byteSize = CARD (FDOM m) in
+  let wordSize = (byteSize + 31) DIV 32 in
+  (wordSize ** 32) DIV 512 + (3 * wordSize)
+End
+
+Definition memory_expansion_cost_def:
+  memory_expansion_cost old new = memory_cost new - memory_cost old
+End
+
+Definition take_pad_0_def:
+  take_pad_0 z l = PAD_RIGHT 0w z (TAKE z l)
+End
+
 Definition step_inst_def:
     step_inst Stop = finish_context T [] 0 0
   ∧ step_inst Add = binop word_add
@@ -229,13 +244,30 @@ Definition step_inst_def:
           if 1 ≤ LENGTH context.stack
           then
             let index = w2n (EL 0 context.stack) in
-            let bytes = PAD_RIGHT 0w 32
-                          (TAKE 32 (DROP index context.callParams.data)) in
+            let bytes = take_pad_0 32 (DROP index context.callParams.data) in
             let newStack = word_of_bytes F 0 bytes :: TL context.stack in
             set_current_context (context with stack := newStack) s
           else Done (Excepted StackUnderflow) s.accounts))
   ∧ step_inst CallDataSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.data))
-  ∧ step_inst CallDataCopy = Step () (* TODO *)
+  ∧ step_inst CallDataCopy = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if 3 ≤ LENGTH context.stack then
+          let destOffset = w2n $ EL 0 context.stack in
+          let offset = w2n $ EL 1 context.stack in
+          let size = w2n $ EL 2 context.stack in
+          let minimumWordSize = (size + 31) DIV 32 in
+          let bytes = take_pad_0 size (DROP offset context.callParams.data) in
+          let newMemory = write_memory destOffset bytes context.memory in
+          let expansionCost = memory_expansion_cost context.memory newMemory in
+          let dynamicGas = 3 * minimumWordSize + expansionCost in
+          let newStack = DROP 3 context.stack in
+          let newContext = context with
+            <| stack := newStack; memory := newMemory |>
+          in
+            ignore_bind (consume_gas dynamicGas s)
+              (set_current_context newContext)
+          else Done (Excepted StackUnderflow) s.accounts))
   ∧ step_inst CodeSize =
       get_from_tx (λc t a. n2w (LENGTH (a c.callParams.codeAcct).code))
   ∧ step_inst CodeCopy = Step () (* TODO *)
