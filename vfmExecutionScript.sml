@@ -226,9 +226,10 @@ Definition copy_to_memory_def:
         let destOffset = w2n $ EL 0 context.stack in
         let offset = w2n $ EL 1 context.stack in
         let size = w2n $ EL 2 context.stack in
-        let minimumWordSize = (size + 31) DIV 32 in
+        let minimumWordSize = word_size size in
         let bytes = take_pad_0 size (DROP offset (f context s)) in
-        let newMemory = write_memory destOffset bytes context.memory in
+        let expandedMemory = PAD_RIGHT 0w (minimumWordSize * 32) context.memory in
+        let newMemory = write_memory destOffset bytes expandedMemory in
         let expansionCost = memory_expansion_cost context.memory newMemory in
         let dynamicGas = 3 * minimumWordSize + expansionCost in
         let newStack = DROP 3 context.stack in
@@ -443,14 +444,60 @@ Definition step_inst_def:
       bind (get_current_context s)
         (λcontext s.
           if 1 ≤ LENGTH context.stack
-          then if context.jumpDest = NONE
           then
             let dest = w2n $ EL 0 context.stack in
             let newContext =
               context with <| stack := TL context.stack; jumpDest := SOME dest |>
             in
               set_current_context newContext s
-          else Done (Excepted Impossible)
+          else Done (Excepted StackUnderflow)))
+  ∧ step_inst JumpI = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if 2 ≤ LENGTH context.stack
+          then
+            let dest = w2n $ EL 0 context.stack in
+            let jumpDest = if EL 1 context.stack ≠ 0w then SOME dest else NONE in
+            let newStack = DROP 2 context.stack in
+            let newContext =
+              context with <| stack := newStack; jumpDest := jumpDest |>
+            in
+              set_current_context newContext s
+          else Done (Excepted StackUnderflow)))
+  ∧ step_inst PC = get_from_ctxt (λc. n2w c.pc)
+  ∧ step_inst MSize = get_from_ctxt (λc. n2w $ LENGTH c.memory)
+  ∧ step_inst Gas = get_from_ctxt (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
+  ∧ step_inst JumpDest = Step ()
+  ∧ step_inst (Push n ws) = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          let word = word_of_bytes F 0 ws in
+          let newStack = word :: context.stack in
+          if LENGTH newStack ≤ stack_limit
+          then set_current_context (context with stack := newStack) s
+          else Done (Excepted StackOverflow)))
+  ∧ step_inst (Dup n) = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if w2n n < LENGTH context.stack
+          then
+            let word = EL (w2n n) context.stack in
+            let newStack = word :: context.stack in
+            if LENGTH newStack ≤ stack_limit
+            then set_current_context (context with stack := newStack) s
+            else Done (Excepted StackOverflow)
+          else Done (Excepted StackUnderflow)))
+  ∧ step_inst (Swap n) = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if SUC (w2n n) < LENGTH context.stack
+          then
+            let top = HD context.stack in
+            let swap = EL (w2n n) (TL context.stack) in
+            let ignored = TAKE (w2n n) (TL context.stack) in
+            let rest = DROP (w2n n) (TL context.stack) in
+            let newStack = [swap] ++ ignored ++ [top] ++ rest in
+              set_current_context (context with stack := newStack) s
           else Done (Excepted StackUnderflow)))
   ∧ step_inst _ = Step () (* TODO *)
 End
@@ -483,5 +530,7 @@ Definition step_def:
     else if context.pc = LENGTH code then step_inst Stop s
     else Done (Excepted Impossible))
 End
+
+(* TODO: prove LENGTH memory is always a multiple of 32 bytes *)
 
 val _ = export_theory();
