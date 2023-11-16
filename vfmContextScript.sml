@@ -32,7 +32,7 @@ End
 Datatype:
   context =
   <| stack      : bytes32 list
-   ; memory     : num |-> bytes32
+   ; memory     : byte list
    ; pc         : num
    ; returnData : byte list
    ; gasUsed    : num
@@ -110,7 +110,7 @@ End
 Definition initial_context_def:
   initial_context t =
   <| stack      := []
-   ; memory     := FEMPTY
+   ; memory     := []
    ; pc         := 0
    ; returnData := []
    ; gasUsed    := 0

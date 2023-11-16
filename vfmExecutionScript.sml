@@ -57,13 +57,36 @@ Definition word_of_bytes_def:
      set_byte a b (word_of_bytes be (SUC a) bs))
 End
 
+Definition words_of_bytes_def:
+  words_of_bytes be bytes = ARB (* TODO: wait for byteTheory *)
+End
+
+(*
+Definition fill_word_def:
+    fill_word i w [] = (w, [])
+  ∧ fill_word i w (byte::bytes) =
+    if i < 32
+    then fill_word (SUC i) (set_byte i byte w) bytes
+    else (w, byte::bytes)
+End
+
 Definition write_memory_def:
-    write_memory byteIndex [] memory = memory
-  ∧ write_memory byteIndex (byte::bytes) memory =
-      let wordIndex = byteIndex DIV 32 in
-      let word = case FLOOKUP memory wordIndex of SOME w => w | NONE => 0w in
-      let newWord = set_byte (byteIndex MOD 32) byte word in
-      write_memory (SUC byteIndex) bytes (FUPDATE memory (wordIndex, newWord))
+  write_memory byteIndex bytes memory =
+  let wordIndex = byteIndex DIV 32 in
+  let expandedMemory = PAD_RIGHT 0w (SUC wordIndex) memory in
+  let firstWord = EL wordIndex expandedMemory in
+  let (newFirstWord, restBytes) = fill_word (byteIndex MOD 32) firstWord bytes in
+  let restWords = words_of_bytes F restBytes in
+  TAKE wordIndex expandedMemory ++ [newFirstWord] ++ restWords
+  ++ DROP (wordIndex + SUC (LENGTH restWords)) expandedMemory
+End
+*)
+
+Definition write_memory_def:
+  write_memory byteIndex bytes memory =
+  let expandedMemory = PAD_RIGHT 0w (SUC byteIndex) memory in
+  TAKE byteIndex expandedMemory ++ bytes
+  ++ DROP (byteIndex + LENGTH bytes) expandedMemory
 End
 
 Definition get_current_context_def:
@@ -159,10 +182,14 @@ Definition with_zero_def:
   with_zero f x y = if y = 0w then 0w else f x y
 End
 
+Definition word_size_def:
+  word_size byteSize = (byteSize + 31) DIV 32
+End
+
 Definition memory_cost_def:
   memory_cost m =
-  let byteSize = CARD (FDOM m) in
-  let wordSize = (byteSize + 31) DIV 32 in
+  let byteSize = LENGTH m in
+  let wordSize = word_size byteSize in
   (wordSize ** 32) DIV 512 + (3 * wordSize)
 End
 
@@ -304,7 +331,23 @@ Definition step_inst_def:
          then
            set_current_context (context with stack := TL context.stack) s
          else Done (Excepted StackUnderflow) s.accounts))
-  ∧ step_inst MLoad = Step () (* TODO *)
+  ∧ step_inst MLoad = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if 1 ≤ LENGTH context.stack
+          then
+            let byteIndex = w2n (EL 0 context.stack) in
+            let newMinSize = word_size (SUC byteIndex) * 32 in
+            let newMemory = PAD_RIGHT 0w newMinSize context.memory in
+            let expansionCost = memory_expansion_cost context.memory newMemory in
+            let word = word_of_bytes F 0 (TAKE 32 (DROP byteIndex newMemory)) in
+            let newStack = word :: TL context.stack in
+            let newContext =
+              context with <| stack := newStack; memory := newMemory |>
+            in
+              ignore_bind (consume_gas expansionCost s)
+                (set_current_context newContext)
+          else Done (Excepted StackUnderflow) s.accounts))
   ∧ step_inst _ = Step () (* TODO *)
 End
 
