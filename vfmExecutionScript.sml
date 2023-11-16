@@ -61,6 +61,10 @@ Definition words_of_bytes_def:
   words_of_bytes be bytes = ARB (* TODO: wait for byteTheory *)
 End
 
+Definition word_to_bytes_def:
+  word_to_bytes w be = ARB (* TODO: wait for byteTheory *)
+End
+
 (*
 Definition fill_word_def:
     fill_word i w [] = (w, [])
@@ -223,6 +227,27 @@ Definition copy_to_memory_def:
         else Done (Excepted StackUnderflow) s.accounts)
 End
 
+Definition store_to_memory_def:
+  store_to_memory f s =
+    bind (get_current_context s)
+      (λcontext s.
+        if 2 ≤ LENGTH context.stack
+        then
+          let byteIndex = w2n (EL 0 context.stack) in
+          let value = EL 1 context.stack in
+          let newMinSize = word_size (SUC byteIndex) * 32 in
+          let expandedMemory = PAD_RIGHT 0w newMinSize context.memory in
+          let newMemory = write_memory byteIndex (f value) expandedMemory in
+          let expansionCost = memory_expansion_cost context.memory newMemory in
+          let newStack = DROP 2 context.stack in
+          let newContext =
+            context with <| stack := newStack; memory := newMemory |>
+          in
+            ignore_bind (consume_gas expansionCost s)
+              (set_current_context newContext)
+        else Done (Excepted StackUnderflow) s.accounts)
+End
+
 Definition step_inst_def:
     step_inst Stop = finish_context T [] 0 0
   ∧ step_inst Add = binop word_add
@@ -348,6 +373,8 @@ Definition step_inst_def:
               ignore_bind (consume_gas expansionCost s)
                 (set_current_context newContext)
           else Done (Excepted StackUnderflow) s.accounts))
+  ∧ step_inst MStore = store_to_memory (combin$C word_to_bytes F)
+  ∧ step_inst MStore8 = store_to_memory (SINGL o w2w)
   ∧ step_inst _ = Step () (* TODO *)
 End
 
