@@ -68,6 +68,7 @@ Datatype:
    ; txParams : transaction_parameters
    ; accesses : access_sets
    ; accounts : evm_accounts
+   ; original : evm_accounts
    |>
 End
 
@@ -156,6 +157,7 @@ Definition initial_state_def:
    ; txParams := initial_tx_params c b t
    ; accesses := initial_access_sets t
    ; accounts := a
+   ; original := a
    |>
 End
 

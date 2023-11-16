@@ -20,22 +20,31 @@ Datatype:
 End
 
 Datatype:
+  result =
+  <| output   : byte list
+   ; events   : event list
+   ; refund   : num
+   ; accounts : evm_accounts
+   |>
+End
+
+Datatype:
   outcome =
   | Excepted exception
   | Reverted (byte list)
-  | Finished (byte list) (event list) num
+  | Finished result
 End
 
 Datatype:
   transaction_result =
   | Step α transaction_state
-  | Done outcome evm_accounts
+  | Done outcome
 End
 
 (* TODO: use a monad from the library? *)
 Definition bind_def:
   bind r f =
-  case r of Done z a => Done z a
+  case r of Done z => Done z
           | Step x s => f x s
 End
 
@@ -96,7 +105,7 @@ End
 Definition get_current_context_def:
   get_current_context s =
   if s.contexts = [] then
-    Done (Excepted Impossible) s.accounts
+    Done (Excepted Impossible)
   else
     Step (HD s.contexts) s
 End
@@ -104,7 +113,7 @@ End
 Definition set_current_context_def:
   set_current_context c s =
   if s.contexts = [] then
-    Done (Excepted Impossible) s.accounts
+    Done (Excepted Impossible)
   else
     Step () (s with contexts := c::(TL s.contexts))
 End
@@ -116,10 +125,14 @@ End
 Definition finish_context_def:
   finish_context success returnData returnOffset returnSize s =
   if s.contexts = [] then
-    Done (Excepted Impossible) s.accounts
+    Done (Excepted Impossible)
   else if LENGTH s.contexts = 1 then
     let context = HD s.contexts in
-    Done (Finished returnData context.logs context.gasRefund) s.accounts
+    Done $ Finished <|
+      output := returnData;
+      events := context.logs;
+      refund := context.gasRefund;
+      accounts := s.accounts |>
   else
     let callee = HD s.contexts in
     let contexts = TL s.contexts in
@@ -146,7 +159,7 @@ Definition consume_gas_def:
       let newContext = context with gasUsed := context.gasUsed + n in
       if newContext.gasUsed ≤ newContext.callParams.gasLimit
       then set_current_context newContext s
-      else Done (Excepted OutOfGas) s.accounts)
+      else Done (Excepted OutOfGas))
 End
 
 Definition stack_op_def:
@@ -157,7 +170,7 @@ Definition stack_op_def:
    then
      let newStack = f (TAKE n context.stack) :: DROP n context.stack in
      set_current_context (context with stack := newStack) s
-   else Done (Excepted StackUnderflow) s.accounts)
+   else Done (Excepted StackUnderflow))
 End
 
 Definition monop_def:
@@ -175,7 +188,7 @@ Definition get_from_tx_def:
         let newStack = f context s.txParams s.accounts :: context.stack in
         if LENGTH newStack ≤ stack_limit
         then set_current_context (context with stack := newStack) s
-        else Done (Excepted StackOverflow) s.accounts)
+        else Done (Excepted StackOverflow))
 End
 
 Definition get_from_ctxt_def:
@@ -224,7 +237,7 @@ Definition copy_to_memory_def:
         in
           ignore_bind (consume_gas dynamicGas s)
             (set_current_context newContext)
-        else Done (Excepted StackUnderflow) s.accounts)
+        else Done (Excepted StackUnderflow))
 End
 
 Definition store_to_memory_def:
@@ -245,7 +258,7 @@ Definition store_to_memory_def:
           in
             ignore_bind (consume_gas expansionCost s)
               (set_current_context newContext)
-        else Done (Excepted StackUnderflow) s.accounts)
+        else Done (Excepted StackUnderflow))
 End
 
 Definition step_inst_def:
@@ -278,7 +291,7 @@ Definition step_inst_def:
            let newStack = result :: DROP 2 context.stack in
            ignore_bind (consume_gas dynamicGas s)
              (set_current_context (context with stack := newStack))
-         else Done (Excepted StackUnderflow) s.accounts))
+         else Done (Excepted StackUnderflow)))
   ∧ step_inst SignExtend = binop (λn. word_sign_extend (w2n n))
   ∧ step_inst LT = binop (λx y. b2w (w2n x < w2n y))
   ∧ step_inst GT = binop (λx y. b2w (w2n x > w2n y))
@@ -303,12 +316,13 @@ Definition step_inst_def:
           let address = w2w (EL 0 context.stack) in
           let dynamicGas = if address ∈ s.accesses.addresses
                            then 100 else 2600 in
-          (* TODO: add address to access set (and for other instructions too) *)
+          let newAddresses = address INSERT s.accesses.addresses in
+          let newAccesses = s.accesses with addresses := newAddresses in
           let balance = (s.accounts address).balance in
           let newStack = n2w balance :: TL context.stack in
-            ignore_bind (consume_gas dynamicGas s)
+            ignore_bind (consume_gas dynamicGas (s with accesses := newAccesses))
               (set_current_context (context with stack := newStack))
-          else Done (Excepted StackUnderflow) s.accounts))
+          else Done (Excepted StackUnderflow)))
   ∧ step_inst Origin = get_from_tx (λc t a. w2w t.origin)
   ∧ step_inst Caller = get_from_ctxt (λc. w2w c.callParams.caller)
   ∧ step_inst CallValue = get_from_ctxt (λc. n2w c.callParams.value)
@@ -321,7 +335,7 @@ Definition step_inst_def:
             let bytes = take_pad_0 32 (DROP index context.callParams.data) in
             let newStack = word_of_bytes F 0 bytes :: TL context.stack in
             set_current_context (context with stack := newStack) s
-          else Done (Excepted StackUnderflow) s.accounts))
+          else Done (Excepted StackUnderflow)))
   ∧ step_inst CallDataSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst CallDataCopy =
       copy_to_memory (λcontext s. context.callParams.data)
@@ -355,7 +369,7 @@ Definition step_inst_def:
          if context.stack ≠ []
          then
            set_current_context (context with stack := TL context.stack) s
-         else Done (Excepted StackUnderflow) s.accounts))
+         else Done (Excepted StackUnderflow)))
   ∧ step_inst MLoad = (λs.
       bind (get_current_context s)
         (λcontext s.
@@ -372,7 +386,7 @@ Definition step_inst_def:
             in
               ignore_bind (consume_gas expansionCost s)
                 (set_current_context newContext)
-          else Done (Excepted StackUnderflow) s.accounts))
+          else Done (Excepted StackUnderflow)))
   ∧ step_inst MStore = store_to_memory (combin$C word_to_bytes F)
   ∧ step_inst MStore8 = store_to_memory (SINGL o w2w)
   ∧ step_inst SLoad = (λs.
@@ -382,15 +396,49 @@ Definition step_inst_def:
           then
             let key = EL 0 context.stack in
             let address = context.callParams.callee in
-            let dynamicGas = if address ∈ s.accesses.addresses
+            let dynamicGas = if (address, key) ∈ s.accesses.storageKeys
                              then 100 else 2600 in
-            (* TODO: add address to access set (and for other instructions too) *)
+            let newSlots = (address, key) INSERT s.accesses.storageKeys in
+            let newAccesses = s.accesses with storageKeys := newSlots in
             let word = (s.accounts address).storage key in
             let newStack = word :: TL context.stack in
             let newContext = context with <| stack := newStack |> in
-            ignore_bind (consume_gas dynamicGas s)
+            ignore_bind (consume_gas dynamicGas (s with accesses := newAccesses))
               (set_current_context newContext)
-          else Done (Excepted StackUnderflow) s.accounts))
+          else Done (Excepted StackUnderflow)))
+  ∧ step_inst SStore = (λs.
+      (* TODO: check whether call is static *)
+      (* TODO: check minimum gas left (2300) before this instruction *)
+      (* TODO: add gas refunds *)
+      bind (get_current_context s)
+        (λcontext s.
+          if 2 ≤ LENGTH context.stack
+          then
+            let key = EL 0 context.stack in
+            let value = EL 1 context.stack in
+            let address = context.callParams.callee in
+            let account = s.accounts address in
+            let currentValue = account.storage key in
+            let originalValue = (s.original address).storage key in
+            let slotWarm = ((address, key) ∈ s.accesses.storageKeys) in
+            let baseDynamicGas =
+              if originalValue = currentValue ∧ currentValue ≠ value
+              then if originalValue = 0w then 20000 else 2900
+              else 100 in
+            let dynamicGas = baseDynamicGas + if slotWarm then 0 else 2100 in
+            let newSlots = (address, key) INSERT s.accesses.storageKeys in
+            let newAccesses = s.accesses with storageKeys := newSlots in
+            let newStorage = (key =+ value) account.storage in
+            let newAccount = account with storage := newStorage in
+            let newAccounts = (address =+ newAccount) s.accounts in
+            let newStack = DROP 2 context.stack in
+            let newContext = context with stack := newStack in
+            let newState =
+              s with <| accesses := newAccesses; accounts := newAccounts |>
+            in
+              ignore_bind (consume_gas dynamicGas newState)
+                (set_current_context newContext)
+          else Done (Excepted StackUnderflow)))
   ∧ step_inst _ = Step () (* TODO *)
 End
 
@@ -403,8 +451,8 @@ Definition step_def:
     if IS_SOME (parse_opcode (DROP context.pc code)) then
       let op = (THE (parse_opcode (DROP context.pc code))) in
         ignore_bind (consume_gas (static_gas op) s) $ step_inst op
-    else Done (Excepted InvalidOpcode) s.accounts
-    else Done (Excepted Impossible) s.accounts)
+    else Done (Excepted InvalidOpcode)
+    else Done (Excepted Impossible))
 End
 
 val _ = export_theory();
