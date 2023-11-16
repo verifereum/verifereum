@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse
-     wordsTheory finite_mapTheory
+     wordsTheory
      vfmTypesTheory;
 
 val _ = new_theory "vfmState";
@@ -8,7 +8,7 @@ Datatype:
   account_state =
   <| nonce   : num
    ; balance : num
-   ; storage : bytes32 |-> bytes32
+   ; storage : bytes32 -> bytes32
    ; code    : byte list
    |>
 End

@@ -375,6 +375,22 @@ Definition step_inst_def:
           else Done (Excepted StackUnderflow) s.accounts))
   ∧ step_inst MStore = store_to_memory (combin$C word_to_bytes F)
   ∧ step_inst MStore8 = store_to_memory (SINGL o w2w)
+  ∧ step_inst SLoad = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if 1 ≤ LENGTH context.stack
+          then
+            let key = EL 0 context.stack in
+            let address = context.callParams.callee in
+            let dynamicGas = if address ∈ s.accesses.addresses
+                             then 100 else 2600 in
+            (* TODO: add address to access set (and for other instructions too) *)
+            let word = (s.accounts address).storage key in
+            let newStack = word :: TL context.stack in
+            let newContext = context with <| stack := newStack |> in
+            ignore_bind (consume_gas dynamicGas s)
+              (set_current_context newContext)
+          else Done (Excepted StackUnderflow) s.accounts))
   ∧ step_inst _ = Step () (* TODO *)
 End
 
