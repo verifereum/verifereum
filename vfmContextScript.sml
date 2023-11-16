@@ -34,6 +34,7 @@ Datatype:
   <| stack      : bytes32 list
    ; memory     : byte list
    ; pc         : num
+   ; jumpDest   : num option
    ; returnData : byte list
    ; gasUsed    : num
    ; gasRefund  : num
@@ -113,6 +114,7 @@ Definition initial_context_def:
   <| stack      := []
    ; memory     := []
    ; pc         := 0
+   ; jumpDest   := NONE
    ; returnData := []
    ; gasUsed    := 0
    ; gasRefund  := 0

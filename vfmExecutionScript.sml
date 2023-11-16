@@ -439,7 +439,33 @@ Definition step_inst_def:
               ignore_bind (consume_gas dynamicGas newState)
                 (set_current_context newContext)
           else Done (Excepted StackUnderflow)))
+  ∧ step_inst Jump = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if 1 ≤ LENGTH context.stack
+          then if context.jumpDest = NONE
+          then
+            let dest = w2n $ EL 0 context.stack in
+            let newContext =
+              context with <| stack := TL context.stack; jumpDest := SOME dest |>
+            in
+              set_current_context newContext s
+          else Done (Excepted Impossible)
+          else Done (Excepted StackUnderflow)))
   ∧ step_inst _ = Step () (* TODO *)
+End
+
+Definition inc_pc_def:
+  inc_pc n s =
+  bind (get_current_context s)
+    (λcontext s.
+      case context.jumpDest of
+      | NONE => set_current_context (context with pc := context.pc + n) s
+      | SOME pc =>
+        let code = (s.accounts (context.callParams.codeAcct)).code in
+        if pc < LENGTH code ∧ parse_opcode (DROP pc code) = SOME JumpDest
+        then set_current_context (context with <| pc := pc; jumpDest := NONE |>) s
+        else Done (Excepted InvalidJumpDest))
 End
 
 Definition step_def:
@@ -450,8 +476,11 @@ Definition step_def:
     if context.pc < LENGTH code then
     if IS_SOME (parse_opcode (DROP context.pc code)) then
       let op = (THE (parse_opcode (DROP context.pc code))) in
-        ignore_bind (consume_gas (static_gas op) s) $ step_inst op
+        ignore_bind (consume_gas (static_gas op) s)
+          (λs. ignore_bind (step_inst op s) $
+                 inc_pc (LENGTH (opcode op)))
     else Done (Excepted InvalidOpcode)
+    else if context.pc = LENGTH code then step_inst Stop s
     else Done (Excepted Impossible))
 End
 
