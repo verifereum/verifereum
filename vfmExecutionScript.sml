@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse
+open HolKernel boolLib bossLib Parse monadsyntax
      vfmTypesTheory vfmContextTheory;
 
 val _ = new_theory"vfmExecution";
@@ -43,14 +43,33 @@ End
 
 (* TODO: use a monad from the library? *)
 Definition bind_def:
-  bind r f =
-  case r of Done z => Done z
-          | Step x s => f x s
+  bind g f s =
+    case g s of
+    | Done z => Done z
+    | Step x s => f x s
 End
 
 Definition ignore_bind_def:
-  ignore_bind r f = bind r (λx s. f s)
+  ignore_bind r f = bind r (λx. f)
 End
+
+Definition fail_def:
+  fail e (s:transaction_state) = Done (Excepted e)
+End
+
+Definition assert_def:
+  assert b e s = if b then Step () s else Done (Excepted e)
+End
+
+val _ = monadsyntax.declare_monad (
+  "txn",
+  { bind = “bind”, unit = “Step”,
+    ignorebind = SOME “ignore_bind”, choice = NONE,
+    fail = SOME “fail”, guard = SOME “assert”
+  }
+);
+val () = monadsyntax.enable_monad "txn";
+val () = monadsyntax.enable_monadsyntax();
 
 (* TODO: use byteTheory after moving it to HOL *)
 Definition set_byte_def:
@@ -74,27 +93,6 @@ Definition word_to_bytes_def:
   word_to_bytes w be = ARB (* TODO: wait for byteTheory *)
 End
 
-(*
-Definition fill_word_def:
-    fill_word i w [] = (w, [])
-  ∧ fill_word i w (byte::bytes) =
-    if i < 32
-    then fill_word (SUC i) (set_byte i byte w) bytes
-    else (w, byte::bytes)
-End
-
-Definition write_memory_def:
-  write_memory byteIndex bytes memory =
-  let wordIndex = byteIndex DIV 32 in
-  let expandedMemory = PAD_RIGHT 0w (SUC wordIndex) memory in
-  let firstWord = EL wordIndex expandedMemory in
-  let (newFirstWord, restBytes) = fill_word (byteIndex MOD 32) firstWord bytes in
-  let restWords = words_of_bytes F restBytes in
-  TAKE wordIndex expandedMemory ++ [newFirstWord] ++ restWords
-  ++ DROP (wordIndex + SUC (LENGTH restWords)) expandedMemory
-End
-*)
-
 Definition write_memory_def:
   write_memory byteIndex bytes memory =
   let expandedMemory = PAD_RIGHT 0w (SUC byteIndex) memory in
@@ -108,6 +106,22 @@ Definition get_current_context_def:
     Done (Excepted Impossible)
   else
     Step (HD s.contexts) s
+End
+
+Definition get_tx_params_def:
+  get_tx_params s = Step s.txParams s
+End
+
+Definition get_accounts_def:
+  get_accounts s = Step s.accounts s
+End
+
+Definition update_accounts_def:
+  update_accounts f s = Step () (s with accounts updated_by f)
+End
+
+Definition get_original_def:
+  get_original s = Step s.original s
 End
 
 Definition set_current_context_def:
@@ -153,24 +167,24 @@ Definition finish_context_def:
 End
 
 Definition consume_gas_def:
-  consume_gas n s =
-    bind (get_current_context s)
-    (λcontext s.
-      let newContext = context with gasUsed := context.gasUsed + n in
-      if newContext.gasUsed ≤ newContext.callParams.gasLimit
-      then set_current_context newContext s
-      else Done (Excepted OutOfGas))
+  consume_gas n =
+  do
+    context <- get_current_context;
+    newContext <<- context with gasUsed := context.gasUsed + n;
+    if newContext.gasUsed ≤ newContext.callParams.gasLimit then
+      set_current_context newContext
+    else fail OutOfGas
+  od
 End
 
 Definition stack_op_def:
-  stack_op n f s =
-  bind (get_current_context s)
-  (λcontext s.
-   if n ≤ LENGTH context.stack
-   then
-     let newStack = f (TAKE n context.stack) :: DROP n context.stack in
-     set_current_context (context with stack := newStack) s
-   else Done (Excepted StackUnderflow))
+  stack_op n f =
+  do
+    context <- get_current_context;
+    assert (n ≤ LENGTH context.stack) StackUnderflow;
+    newStack <<- f (TAKE n context.stack) :: DROP n context.stack;
+    set_current_context (context with stack := newStack)
+  od
 End
 
 Definition monop_def:
@@ -182,13 +196,15 @@ Definition binop_def:
 End
 
 Definition get_from_tx_def:
-  get_from_tx f s =
-    bind (get_current_context s)
-      (λcontext s.
-        let newStack = f context s.txParams s.accounts :: context.stack in
-        if LENGTH newStack ≤ stack_limit
-        then set_current_context (context with stack := newStack) s
-        else Done (Excepted StackOverflow))
+  get_from_tx f =
+  do
+    context <- get_current_context;
+    txParams <- get_tx_params;
+    accounts <- get_accounts;
+    newStack <<- f context txParams accounts :: context.stack;
+    assert (LENGTH newStack ≤ stack_limit) StackOverflow;
+    set_current_context (context with stack := newStack)
+  od
 End
 
 Definition get_from_ctxt_def:
@@ -219,15 +235,16 @@ Definition take_pad_0_def:
 End
 
 Definition copy_to_memory_def:
-  copy_to_memory f s =
-    bind (get_current_context s)
-      (λcontext s.
-        if 3 ≤ LENGTH context.stack then
+  copy_to_memory f =
+    bind get_current_context
+      (λcontext.
+        ignore_bind (assert (3 ≤ LENGTH context.stack) StackUnderflow) (
         let destOffset = w2n $ EL 0 context.stack in
         let offset = w2n $ EL 1 context.stack in
         let size = w2n $ EL 2 context.stack in
         let minimumWordSize = word_size size in
-        let bytes = take_pad_0 size (DROP offset (f context s)) in
+        bind get_accounts (λaccounts.
+        let bytes = take_pad_0 size (DROP offset (f context accounts)) in
         let expandedMemory = PAD_RIGHT 0w (minimumWordSize * 32) context.memory in
         let newMemory = write_memory destOffset bytes expandedMemory in
         let expansionCost = memory_expansion_cost context.memory newMemory in
@@ -236,17 +253,15 @@ Definition copy_to_memory_def:
         let newContext = context with
           <| stack := newStack; memory := newMemory |>
         in
-          ignore_bind (consume_gas dynamicGas s)
-            (set_current_context newContext)
-        else Done (Excepted StackUnderflow))
+          ignore_bind (consume_gas dynamicGas)
+            (set_current_context newContext))))
 End
 
 Definition store_to_memory_def:
-  store_to_memory f s =
-    bind (get_current_context s)
-      (λcontext s.
-        if 2 ≤ LENGTH context.stack
-        then
+  store_to_memory f =
+    bind (get_current_context)
+      (λcontext.
+        ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
           let byteIndex = w2n (EL 0 context.stack) in
           let value = EL 1 context.stack in
           let newMinSize = word_size (SUC byteIndex) * 32 in
@@ -257,9 +272,22 @@ Definition store_to_memory_def:
           let newContext =
             context with <| stack := newStack; memory := newMemory |>
           in
-            ignore_bind (consume_gas expansionCost s)
-              (set_current_context newContext)
-        else Done (Excepted StackUnderflow))
+            ignore_bind (consume_gas expansionCost)
+              (set_current_context newContext)))
+End
+
+Definition access_address_def:
+  access_address a s =
+  let addresses = s.accesses.addresses in
+  Step (a ∈ addresses)
+       (s with accesses := (s.accesses with addresses := a INSERT addresses))
+End
+
+Definition access_slot_def:
+  access_slot x s =
+  let storageKeys = s.accesses.storageKeys in
+  Step (x ∈ storageKeys)
+       (s with accesses := (s.accesses with storageKeys := x INSERT storageKeys))
 End
 
 Definition step_inst_def:
@@ -279,20 +307,18 @@ Definition step_inst_def:
       (λl. with_zero word_mod
              (word_mul (EL 0 l) (EL 1 l))
              (EL 2 l))
-  ∧ step_inst Exp = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-         if 2 ≤ LENGTH context.stack
-         then
+  ∧ step_inst Exp =
+      bind get_current_context
+        (λcontext.
+         ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
            let exponent = w2n (EL 1 context.stack) in
            let exponentByteSize = SUC (LOG2 exponent DIV 8) in
            let dynamicGas = 50 * exponentByteSize in
            let base = w2n (EL 0 context.stack) in
            let result = n2w (base ** exponent) in
            let newStack = result :: DROP 2 context.stack in
-           ignore_bind (consume_gas dynamicGas s)
-             (set_current_context (context with stack := newStack))
-         else Done (Excepted StackUnderflow)))
+           ignore_bind (consume_gas dynamicGas)
+             (set_current_context (context with stack := newStack))))
   ∧ step_inst SignExtend = binop (λn. word_sign_extend (w2n n))
   ∧ step_inst LT = binop (λx y. b2w (w2n x < w2n y))
   ∧ step_inst GT = binop (λx y. b2w (w2n x > w2n y))
@@ -310,75 +336,64 @@ Definition step_inst_def:
   ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
   ∧ step_inst SHA3 = Step () (* TODO *)
   ∧ step_inst Address = get_from_ctxt (λc. w2w c.callParams.callee)
-  ∧ step_inst Balance = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 1 ≤ LENGTH context.stack then
-          let address = w2w (EL 0 context.stack) in
-          let dynamicGas = if address ∈ s.accesses.addresses
-                           then 100 else 2600 in
-          let newAddresses = address INSERT s.accesses.addresses in
-          let newAccesses = s.accesses with addresses := newAddresses in
-          let balance = (s.accounts address).balance in
-          let newStack = n2w balance :: TL context.stack in
-            ignore_bind (consume_gas dynamicGas (s with accesses := newAccesses))
-              (set_current_context (context with stack := newStack))
-          else Done (Excepted StackUnderflow)))
+  ∧ step_inst Balance = do
+      context <- get_current_context;
+      assert (1 ≤ LENGTH context.stack) StackUnderflow;
+      address <<- w2w (EL 0 context.stack);
+      warm <- access_address address;
+      dynamicGas <<- if warm then 100 else 2600;
+      accounts <- get_accounts;
+      balance <<- (accounts address).balance;
+      newStack <<- n2w balance :: TL context.stack;
+      consume_gas dynamicGas;
+      set_current_context (context with stack := newStack)
+    od
   ∧ step_inst Origin = get_from_tx (λc t a. w2w t.origin)
   ∧ step_inst Caller = get_from_ctxt (λc. w2w c.callParams.caller)
   ∧ step_inst CallValue = get_from_ctxt (λc. n2w c.callParams.value)
-  ∧ step_inst CallDataLoad = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 1 ≤ LENGTH context.stack
-          then
+  ∧ step_inst CallDataLoad =
+      bind (get_current_context)
+        (λcontext.
+          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let index = w2n (EL 0 context.stack) in
             let bytes = take_pad_0 32 (DROP index context.callParams.data) in
             let newStack = word_of_bytes F 0 bytes :: TL context.stack in
-            set_current_context (context with stack := newStack) s
-          else Done (Excepted StackUnderflow)))
+            set_current_context (context with stack := newStack)))
   ∧ step_inst CallDataSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst CallDataCopy =
-      copy_to_memory (λcontext s. context.callParams.data)
+      copy_to_memory (λcontext accounts. context.callParams.data)
   ∧ step_inst CodeSize =
       get_from_tx (λc t a. n2w (LENGTH (a c.callParams.codeAcct).code))
   ∧ step_inst CodeCopy =
-      copy_to_memory (λcontext s. (s.accounts context.callParams.codeAcct).code)
+      copy_to_memory (λcontext accounts. (accounts context.callParams.codeAcct).code)
   ∧ step_inst GasPrice = get_from_tx (λc t a. n2w t.gasPrice)
-  ∧ step_inst ExtCodeSize = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 1 ≤ LENGTH context.stack
-          then
+  ∧ step_inst ExtCodeSize =
+      bind (get_current_context)
+        (λcontext.
+          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let address = w2w (EL 0 context.stack) in
-            let dynamicGas = if address ∈ s.accesses.addresses
-                             then 100 else 2600 in
-            let newAddresses = address INSERT s.accesses.addresses in
-            let newAccesses = s.accesses with addresses := newAddresses in
-            let code = (s.accounts address).code in
+            bind (access_address address) (λwarm.
+            let dynamicGas = if warm then 100 else 2600 in
+            bind get_accounts (λaccounts.
+            let code = (accounts address).code in
             let newStack = n2w (LENGTH code) :: TL context.stack in
             let newContext = context with stack := newStack in
               ignore_bind
-                (consume_gas dynamicGas (s with accesses := newAccesses))
-                (set_current_context newContext)
-          else Done (Excepted StackUnderflow)))
-  ∧ step_inst ExtCodeCopy = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 1 ≤ LENGTH context.stack
-          then
+                (consume_gas dynamicGas)
+                (set_current_context newContext)))))
+  ∧ step_inst ExtCodeCopy =
+      bind get_current_context
+        (λcontext.
+          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let address = w2w (EL 0 context.stack) in
-            let addressAccessCost = if address ∈ s.accesses.addresses
-                                    then 100 else 2600 in
-            let newAddresses = address INSERT s.accesses.addresses in
-            let newAccesses = s.accesses with addresses := newAddresses in
+            bind (access_address address) (λwarm.
+            let addressAccessCost = if warm then 100 else 2600 in
             let newContext = context with stack := TL context.stack in
               ignore_bind
-                (consume_gas addressAccessCost (s with accesses := newAccesses))
-                (λs. ignore_bind
-                      (set_current_context newContext s)
-                      (copy_to_memory (λc s. (s.accounts address).code)))
-          else Done (Excepted StackUnderflow)))
+                (consume_gas addressAccessCost)
+                (ignore_bind
+                  (set_current_context newContext)
+                  (copy_to_memory (λc accounts. (accounts address).code))))))
   ∧ step_inst ReturnDataSize = get_from_ctxt (λc. n2w (LENGTH c.returnData))
   ∧ step_inst ReturnDataCopy = Step () (* TODO *)
   ∧ step_inst ExtCodeHash = Step () (* TODO *)
@@ -396,18 +411,15 @@ Definition step_inst_def:
   ∧ step_inst SelfBalance =
       get_from_tx (λc t a. n2w (a c.callParams.callee).balance)
   ∧ step_inst BaseFee = get_from_tx (λc t a. n2w t.baseFee)
-  ∧ step_inst Pop = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-         if context.stack ≠ []
-         then
-           set_current_context (context with stack := TL context.stack) s
-         else Done (Excepted StackUnderflow)))
-  ∧ step_inst MLoad = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 1 ≤ LENGTH context.stack
-          then
+  ∧ step_inst Pop =
+      bind get_current_context
+        (λcontext.
+          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
+           set_current_context (context with stack := TL context.stack)))
+  ∧ step_inst MLoad =
+      bind get_current_context
+        (λcontext.
+          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let byteIndex = w2n (EL 0 context.stack) in
             let newMinSize = word_size (SUC byteIndex) * 32 in
             let newMemory = PAD_RIGHT 0w newMinSize context.memory in
@@ -417,150 +429,132 @@ Definition step_inst_def:
             let newContext =
               context with <| stack := newStack; memory := newMemory |>
             in
-              ignore_bind (consume_gas expansionCost s)
-                (set_current_context newContext)
-          else Done (Excepted StackUnderflow)))
+              ignore_bind (consume_gas expansionCost)
+                (set_current_context newContext)))
   ∧ step_inst MStore = store_to_memory (combin$C word_to_bytes F)
   ∧ step_inst MStore8 = store_to_memory (SINGL o w2w)
-  ∧ step_inst SLoad = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 1 ≤ LENGTH context.stack
-          then
+  ∧ step_inst SLoad =
+      bind get_current_context
+        (λcontext.
+          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let key = EL 0 context.stack in
             let address = context.callParams.callee in
-            let dynamicGas = if (address, key) ∈ s.accesses.storageKeys
-                             then 100 else 2600 in
-            let newSlots = (address, key) INSERT s.accesses.storageKeys in
-            let newAccesses = s.accesses with storageKeys := newSlots in
-            let word = (s.accounts address).storage key in
+            bind (access_slot (address, key)) (λwarm.
+            let dynamicGas = if warm then 100 else 2600 in
+            bind get_accounts (λaccounts.
+            let word = (accounts address).storage key in
             let newStack = word :: TL context.stack in
             let newContext = context with <| stack := newStack |> in
-            ignore_bind (consume_gas dynamicGas (s with accesses := newAccesses))
-              (set_current_context newContext)
-          else Done (Excepted StackUnderflow)))
-  ∧ step_inst SStore = (λs.
+            ignore_bind (consume_gas dynamicGas)
+              (set_current_context newContext)))))
+  ∧ step_inst SStore =
       (* TODO: check whether call is static *)
       (* TODO: check minimum gas left (2300) before this instruction *)
       (* TODO: add gas refunds *)
-      bind (get_current_context s)
-        (λcontext s.
-          if 2 ≤ LENGTH context.stack
-          then
+      bind (get_current_context)
+        (λcontext.
+          ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
             let key = EL 0 context.stack in
             let value = EL 1 context.stack in
             let address = context.callParams.callee in
-            let account = s.accounts address in
+            bind get_accounts (λaccounts.
+            let account = accounts address in
             let currentValue = account.storage key in
-            let originalValue = (s.original address).storage key in
-            let slotWarm = ((address, key) ∈ s.accesses.storageKeys) in
+            bind get_original (λoriginal.
+            let originalValue = (original address).storage key in
+            bind (access_slot (address, key)) (λslotWarm.
             let baseDynamicGas =
               if originalValue = currentValue ∧ currentValue ≠ value
               then if originalValue = 0w then 20000 else 2900
               else 100 in
             let dynamicGas = baseDynamicGas + if slotWarm then 0 else 2100 in
-            let newSlots = (address, key) INSERT s.accesses.storageKeys in
-            let newAccesses = s.accesses with storageKeys := newSlots in
             let newStorage = (key =+ value) account.storage in
             let newAccount = account with storage := newStorage in
-            let newAccounts = (address =+ newAccount) s.accounts in
             let newStack = DROP 2 context.stack in
             let newContext = context with stack := newStack in
-            let newState =
-              s with <| accesses := newAccesses; accounts := newAccounts |>
-            in
-              ignore_bind (consume_gas dynamicGas newState)
-                (set_current_context newContext)
-          else Done (Excepted StackUnderflow)))
-  ∧ step_inst Jump = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 1 ≤ LENGTH context.stack
-          then
+            ignore_bind (update_accounts (address =+ newAccount)) (
+              ignore_bind (consume_gas dynamicGas)
+                (set_current_context newContext)))))))
+  ∧ step_inst Jump =
+      bind get_current_context
+        (λcontext.
+          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let dest = w2n $ EL 0 context.stack in
             let newContext =
               context with <| stack := TL context.stack; jumpDest := SOME dest |>
             in
-              set_current_context newContext s
-          else Done (Excepted StackUnderflow)))
-  ∧ step_inst JumpI = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if 2 ≤ LENGTH context.stack
-          then
+              set_current_context newContext))
+  ∧ step_inst JumpI =
+      bind get_current_context
+        (λcontext.
+          ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
             let dest = w2n $ EL 0 context.stack in
             let jumpDest = if EL 1 context.stack ≠ 0w then SOME dest else NONE in
             let newStack = DROP 2 context.stack in
             let newContext =
               context with <| stack := newStack; jumpDest := jumpDest |>
             in
-              set_current_context newContext s
-          else Done (Excepted StackUnderflow)))
+              set_current_context newContext))
   ∧ step_inst PC = get_from_ctxt (λc. n2w c.pc)
   ∧ step_inst MSize = get_from_ctxt (λc. n2w $ LENGTH c.memory)
   ∧ step_inst Gas = get_from_ctxt (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
   ∧ step_inst JumpDest = Step ()
-  ∧ step_inst (Push n ws) = (λs.
-      bind (get_current_context s)
-        (λcontext s.
+  ∧ step_inst (Push n ws) =
+      bind get_current_context
+        (λcontext.
           let word = word_of_bytes F 0 ws in
           let newStack = word :: context.stack in
-          if LENGTH newStack ≤ stack_limit
-          then set_current_context (context with stack := newStack) s
-          else Done (Excepted StackOverflow)))
-  ∧ step_inst (Dup n) = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if w2n n < LENGTH context.stack
-          then
+          ignore_bind (assert (LENGTH newStack ≤ stack_limit) StackOverflow) (
+          set_current_context (context with stack := newStack)))
+  ∧ step_inst (Dup n) =
+      bind (get_current_context)
+        (λcontext.
+          ignore_bind (assert (w2n n ≤ LENGTH context.stack) StackUnderflow) (
             let word = EL (w2n n) context.stack in
             let newStack = word :: context.stack in
-            if LENGTH newStack ≤ stack_limit
-            then set_current_context (context with stack := newStack) s
-            else Done (Excepted StackOverflow)
-          else Done (Excepted StackUnderflow)))
-  ∧ step_inst (Swap n) = (λs.
-      bind (get_current_context s)
-        (λcontext s.
-          if SUC (w2n n) < LENGTH context.stack
-          then
+            ignore_bind (assert (LENGTH newStack ≤ stack_limit) StackOverflow) (
+            set_current_context (context with stack := newStack))))
+  ∧ step_inst (Swap n) =
+      bind get_current_context
+        (λcontext.
+          ignore_bind (assert (SUC (w2n n) ≤ LENGTH context.stack) StackUnderflow) (
             let top = HD context.stack in
             let swap = EL (w2n n) (TL context.stack) in
             let ignored = TAKE (w2n n) (TL context.stack) in
             let rest = DROP (w2n n) (TL context.stack) in
             let newStack = [swap] ++ ignored ++ [top] ++ rest in
-              set_current_context (context with stack := newStack) s
-          else Done (Excepted StackUnderflow)))
+              set_current_context (context with stack := newStack)))
   ∧ step_inst _ = Step () (* TODO *)
 End
 
 Definition inc_pc_def:
-  inc_pc n s =
-  bind (get_current_context s)
-    (λcontext s.
+  inc_pc n =
+  bind (get_current_context)
+    (λcontext.
       case context.jumpDest of
-      | NONE => set_current_context (context with pc := context.pc + n) s
+      | NONE => set_current_context (context with pc := context.pc + n)
       | SOME pc =>
-        let code = (s.accounts (context.callParams.codeAcct)).code in
-        if pc < LENGTH code ∧ parse_opcode (DROP pc code) = SOME JumpDest
-        then set_current_context (context with <| pc := pc; jumpDest := NONE |>) s
-        else Done (Excepted InvalidJumpDest))
+        bind get_accounts (λaccounts.
+        let code = (accounts (context.callParams.codeAcct)).code in
+        ignore_bind (assert
+          (pc < LENGTH code ∧ parse_opcode (DROP pc code) = SOME JumpDest)
+          InvalidJumpDest) (
+        set_current_context (context with <| pc := pc; jumpDest := NONE |>))))
 End
 
 Definition step_def:
-  step s =
-  bind (get_current_context s)
-  (λcontext s.
-    let code = (s.accounts (context.callParams.codeAcct)).code in
-    if context.pc < LENGTH code then
-    if IS_SOME (parse_opcode (DROP context.pc code)) then
+  step =
+  bind (get_current_context)
+  (λcontext.
+    bind get_accounts (λaccounts.
+    let code = (accounts (context.callParams.codeAcct)).code in
+    if context.pc = LENGTH code then step_inst Stop else
+    ignore_bind (assert (context.pc < LENGTH code) Impossible) (
+    ignore_bind (assert (IS_SOME (parse_opcode (DROP context.pc code)))
+      InvalidOpcode) (
       let op = (THE (parse_opcode (DROP context.pc code))) in
-        ignore_bind (consume_gas (static_gas op) s)
-          (λs. ignore_bind (step_inst op s) $
-                 inc_pc (LENGTH (opcode op)))
-    else Done (Excepted InvalidOpcode)
-    else if context.pc = LENGTH code then step_inst Stop s
-    else Done (Excepted Impossible))
+        ignore_bind (consume_gas (static_gas op))
+          (ignore_bind (step_inst op) $ inc_pc (LENGTH (opcode op)))))))
 End
 
 (* TODO: prove LENGTH memory is always a multiple of 32 bytes *)
