@@ -41,7 +41,6 @@ Datatype:
   | Done outcome
 End
 
-(* TODO: use a monad from the library? *)
 Definition bind_def:
   bind g f s =
     case g s of
@@ -171,9 +170,8 @@ Definition consume_gas_def:
   do
     context <- get_current_context;
     newContext <<- context with gasUsed := context.gasUsed + n;
-    if newContext.gasUsed ≤ newContext.callParams.gasLimit then
-      set_current_context newContext
-    else fail OutOfGas
+    assert (newContext.gasUsed ≤ context.callParams.gasLimit) OutOfGas;
+    set_current_context newContext
   od
 End
 
@@ -234,8 +232,8 @@ Definition take_pad_0_def:
   take_pad_0 z l = PAD_RIGHT 0w z (TAKE z l)
 End
 
-Definition copy_to_memory_def:
-  copy_to_memory f =
+Definition copy_to_memory_check_def:
+  copy_to_memory_check checkSize f =
     bind get_current_context
       (λcontext.
         ignore_bind (assert (3 ≤ LENGTH context.stack) StackUnderflow) (
@@ -244,7 +242,10 @@ Definition copy_to_memory_def:
         let size = w2n $ EL 2 context.stack in
         let minimumWordSize = word_size size in
         bind get_accounts (λaccounts.
-        let bytes = take_pad_0 size (DROP offset (f context accounts)) in
+        let sourceBytes = f context accounts in
+        ignore_bind
+          (assert (¬checkSize ∨ offset + size ≤ LENGTH sourceBytes) OutOfBoundsRead) (
+        let bytes = take_pad_0 size (DROP offset sourceBytes) in
         let expandedMemory = PAD_RIGHT 0w (minimumWordSize * 32) context.memory in
         let newMemory = write_memory destOffset bytes expandedMemory in
         let expansionCost = memory_expansion_cost context.memory newMemory in
@@ -254,7 +255,11 @@ Definition copy_to_memory_def:
           <| stack := newStack; memory := newMemory |>
         in
           ignore_bind (consume_gas dynamicGas)
-            (set_current_context newContext))))
+            (set_current_context newContext)))))
+End
+
+Definition copy_to_memory_def:
+  copy_to_memory = copy_to_memory_check F
 End
 
 Definition store_to_memory_def:
@@ -395,13 +400,10 @@ Definition step_inst_def:
                   (set_current_context newContext)
                   (copy_to_memory (λc accounts. (accounts address).code))))))
   ∧ step_inst ReturnDataSize = get_from_ctxt (λc. n2w (LENGTH c.returnData))
-  ∧ step_inst ReturnDataCopy = Step () (* TODO *)
-  ∧ step_inst ExtCodeHash = Step () (* TODO *)
-  (* TODO: needs the hashes to be in the state
-  ∧ step_inst BlockHash = (λs.
-      ignore_bind (consume_gas (static_gas BlockHash) s)
-      (λs.
-  *)
+  ∧ step_inst ReturnDataCopy =
+      copy_to_memory_check T (λcontext accounts. context.returnData)
+  ∧ step_inst ExtCodeHash = Step () (* TODO needs hash in state *)
+  ∧ step_inst BlockHash = Step () (* TODO needs hash in state *)
   ∧ step_inst CoinBase = get_from_tx (λc t a. w2w t.blockCoinBase)
   ∧ step_inst TimeStamp = get_from_tx (λc t a. n2w t.blockTimeStamp)
   ∧ step_inst Number = get_from_tx (λc t a. n2w t.blockNumber)
