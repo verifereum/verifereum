@@ -345,8 +345,40 @@ Definition step_inst_def:
   ∧ step_inst CodeCopy =
       copy_to_memory (λcontext s. (s.accounts context.callParams.codeAcct).code)
   ∧ step_inst GasPrice = get_from_tx (λc t a. n2w t.gasPrice)
-  ∧ step_inst ExtCodeSize = Step () (* TODO *)
-  ∧ step_inst ExtCodeCopy = Step () (* TODO *)
+  ∧ step_inst ExtCodeSize = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if 1 ≤ LENGTH context.stack
+          then
+            let address = w2w (EL 0 context.stack) in
+            let dynamicGas = if address ∈ s.accesses.addresses
+                             then 100 else 2600 in
+            let newAddresses = address INSERT s.accesses.addresses in
+            let newAccesses = s.accesses with addresses := newAddresses in
+            let code = (s.accounts address).code in
+            let newStack = n2w (LENGTH code) :: TL context.stack in
+            let newContext = context with stack := newStack in
+              ignore_bind
+                (consume_gas dynamicGas (s with accesses := newAccesses))
+                (set_current_context newContext)
+          else Done (Excepted StackUnderflow)))
+  ∧ step_inst ExtCodeCopy = (λs.
+      bind (get_current_context s)
+        (λcontext s.
+          if 1 ≤ LENGTH context.stack
+          then
+            let address = w2w (EL 0 context.stack) in
+            let addressAccessCost = if address ∈ s.accesses.addresses
+                                    then 100 else 2600 in
+            let newAddresses = address INSERT s.accesses.addresses in
+            let newAccesses = s.accesses with addresses := newAddresses in
+            let newContext = context with stack := TL context.stack in
+              ignore_bind
+                (consume_gas addressAccessCost (s with accesses := newAccesses))
+                (λs. ignore_bind
+                      (set_current_context newContext s)
+                      (copy_to_memory (λc s. (s.accounts address).code)))
+          else Done (Excepted StackUnderflow)))
   ∧ step_inst ReturnDataSize = get_from_ctxt (λc. n2w (LENGTH c.returnData))
   ∧ step_inst ReturnDataCopy = Step () (* TODO *)
   ∧ step_inst ExtCodeHash = Step () (* TODO *)
