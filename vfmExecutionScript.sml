@@ -8,7 +8,6 @@ Datatype:
   | OutOfGas
   | StackOverflow
   | StackUnderflow
-  | InvalidOpcode (* TODO: use Reverted instead *)
   | InvalidJumpDest
   | StackDepthLimit
   | WriteInStaticContext
@@ -159,6 +158,7 @@ Definition finish_context_def:
     let callee = HD s.contexts in
     let contexts = TL s.contexts in
     let caller = HD contexts in
+      (* TODO: roll back things on failure? *)
     let newCaller = caller with
       <| returnData := returnData
        ; logs       := caller.logs ++ callee.logs
@@ -405,10 +405,9 @@ Definition step_inst_def:
   ∧ step_inst CallDataSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst CallDataCopy =
       copy_to_memory (λcontext accounts. context.callParams.data)
-  ∧ step_inst CodeSize =
-      get_from_tx (λc t a. n2w (LENGTH (a c.callParams.codeAcct).code))
+  ∧ step_inst CodeSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.code))
   ∧ step_inst CodeCopy =
-      copy_to_memory (λcontext accounts. (accounts context.callParams.codeAcct).code)
+      copy_to_memory (λcontext accounts. context.callParams.code)
   ∧ step_inst GasPrice = get_from_tx (λc t a. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize =
       bind (get_current_context)
@@ -610,27 +609,30 @@ Definition inc_pc_def:
       case context.jumpDest of
       | NONE => set_current_context (context with pc := context.pc + n)
       | SOME pc =>
-        bind get_accounts (λaccounts.
-        let code = (accounts (context.callParams.codeAcct)).code in
+        let code = context.callParams.code in
         ignore_bind (assert
           (pc < LENGTH code ∧ parse_opcode (DROP pc code) = SOME JumpDest)
           InvalidJumpDest) (
-        set_current_context (context with <| pc := pc; jumpDest := NONE |>))))
+        set_current_context (context with <| pc := pc; jumpDest := NONE |>)))
 End
 
 Definition step_def:
-  step =
-  bind (get_current_context)
-  (λcontext.
-    bind get_accounts (λaccounts.
-    let code = (accounts (context.callParams.codeAcct)).code in
-    if context.pc = LENGTH code then step_inst Stop else
-    ignore_bind (assert (context.pc < LENGTH code) Impossible) (
-    ignore_bind (assert (IS_SOME (parse_opcode (DROP context.pc code)))
-      InvalidOpcode) (
-      let op = (THE (parse_opcode (DROP context.pc code))) in
-        ignore_bind (consume_gas (static_gas op))
-          (ignore_bind (step_inst op) $ inc_pc (LENGTH (opcode op)))))))
+  step = do
+    context <- get_current_context;
+    code <<- context.callParams.code;
+    if context.pc = LENGTH code
+    then step_inst Stop
+    else do
+      assert (context.pc < LENGTH code) Impossible;
+      case parse_opcode (DROP context.pc code) of
+      | NONE => finish_context F [] 0 0
+      | SOME op => do
+          consume_gas (static_gas op);
+          step_inst op;
+          inc_pc (LENGTH (opcode op))
+        od
+    od
+  od
 End
 
 (* TODO: prove LENGTH memory is always a multiple of 32 bytes *)

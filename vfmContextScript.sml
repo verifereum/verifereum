@@ -22,7 +22,7 @@ Datatype:
   call_parameters =
   <| caller   : address
    ; callee   : address
-   ; codeAcct : address
+   ; code     : byte list
    ; value    : num
    ; static   : bool
    ; gasLimit : num
@@ -86,10 +86,10 @@ Datatype:
 End
 
 Definition initial_call_params_def:
-  initial_call_params t =
+  initial_call_params code t =
   <| caller   := t.from
    ; callee   := t.to
-   ; codeAcct := t.to
+   ; code     := code
    ; value    := t.value
    ; static   := F
    ; data     := t.data
@@ -112,7 +112,7 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context t =
+  initial_context code t =
   <| stack      := []
    ; memory     := []
    ; pc         := 0
@@ -121,19 +121,19 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; gasRefund  := 0
    ; logs       := []
-   ; callParams := initial_call_params t
+   ; callParams := initial_call_params code t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context t).stack = []
+  (initial_context code t).stack = []
 Proof
   rw[initial_context_def]
   (* TODO: add more if needed *)
 QED
 
 Theorem wf_initial_context[simp]:
-  wf_context (initial_context t)
+  wf_context (initial_context code t)
 Proof
   rw[wf_context_def]
 QED
@@ -157,7 +157,7 @@ End
 
 Definition initial_state_def:
   initial_state c a b t =
-  <| contexts := [initial_context t]
+  <| contexts := [initial_context (a t.to).code t]
    ; txParams := initial_tx_params c b t
    ; accesses := initial_access_sets t
    ; accounts := a
@@ -166,7 +166,7 @@ Definition initial_state_def:
 End
 
 Theorem initial_state_simp[simp]:
-    (initial_state c a b t).contexts = [initial_context t]
+    (initial_state c a b t).contexts = [initial_context (a t.to).code t]
   ∧ (initial_state c a b t).accounts = a
   ∧ (initial_state c a b t).accesses = initial_access_sets t
   ∧ (initial_state c a b t).txParams = initial_tx_params c b t
