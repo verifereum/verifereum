@@ -35,17 +35,17 @@ Datatype:
   | Finished result
 End
 
-Datatype:
-  transaction_result =
-  | Step α transaction_state
-  | Done outcome
-End
+Type transaction_result = “:(α + outcome) # transaction_state”;
 
 Definition bind_def:
   bind g f s =
     case g s of
-    | Done z => Done z
-    | Step x s => f x s
+    | (INR e, s) => (INR e, s)
+    | (INL x, s) => f x s
+End
+
+Definition return_def:
+  return (x:α) s = (INL x, s) : α transaction_result
 End
 
 Definition ignore_bind_def:
@@ -53,16 +53,20 @@ Definition ignore_bind_def:
 End
 
 Definition fail_def:
-  fail e (s:transaction_state) = Done (Excepted e)
+  fail e s = (INR (Excepted e), s)
+End
+
+Definition finish_def:
+  finish r s = (INR (Finished r), s)
 End
 
 Definition assert_def:
-  assert b e s = if b then Step () s else Done (Excepted e)
+  assert b e s = (if b then INL () else INR (Excepted e), s)
 End
 
 val _ = monadsyntax.declare_monad (
   "txn",
-  { bind = “bind”, unit = “Step”,
+  { bind = “bind”, unit = “return”,
     ignorebind = SOME “ignore_bind”, choice = NONE,
     fail = SOME “fail”, guard = SOME “assert”
   }
@@ -106,33 +110,33 @@ End
 Definition get_current_context_def:
   get_current_context s =
   if s.contexts = [] then
-    Done (Excepted Impossible)
+    fail Impossible s
   else
-    Step (HD s.contexts) s
+    return (HD s.contexts) s
 End
 
 Definition get_tx_params_def:
-  get_tx_params s = Step s.txParams s
+  get_tx_params s = return s.txParams s
 End
 
 Definition get_accounts_def:
-  get_accounts s = Step s.accounts s
+  get_accounts s = return s.accounts s
 End
 
 Definition update_accounts_def:
-  update_accounts f s = Step () (s with accounts updated_by f)
+  update_accounts f s = return () (s with accounts updated_by f)
 End
 
 Definition get_original_def:
-  get_original s = Step s.original s
+  get_original s = return s.original s
 End
 
 Definition set_current_context_def:
   set_current_context c s =
   if s.contexts = [] then
-    Done (Excepted Impossible)
+    fail Impossible s
   else
-    Step () (s with contexts := c::(TL s.contexts))
+    return () (s with contexts := c::(TL s.contexts))
 End
 
 Definition b2w_def[simp]:
@@ -142,14 +146,15 @@ End
 Definition finish_context_def:
   finish_context success returnData returnOffset returnSize s =
   if s.contexts = [] then
-    Done (Excepted Impossible)
+    fail Impossible s
   else if LENGTH s.contexts = 1 then
     let context = HD s.contexts in
-    Done $ Finished <|
-      output := returnData;
-      events := context.logs;
-      refund := context.gasRefund;
-      accounts := s.accounts |>
+      finish <|
+        output := returnData;
+        events := context.logs;
+        refund := context.gasRefund;
+        accounts := s.accounts
+      |> s
   else
     let callee = HD s.contexts in
     let contexts = TL s.contexts in
@@ -166,7 +171,7 @@ Definition finish_context_def:
            write_memory returnOffset (TAKE returnSize returnData) caller.memory
        |> in
     let newContexts = newCaller :: (TL contexts) in
-    Step () (s with contexts := newContexts)
+    return () (s with contexts := newContexts)
 End
 
 Definition consume_gas_def:
@@ -288,15 +293,17 @@ End
 Definition access_address_def:
   access_address a s =
   let addresses = s.accesses.addresses in
-  Step (a ∈ addresses)
-       (s with accesses := (s.accesses with addresses := a INSERT addresses))
+    return
+      (a ∈ addresses)
+      (s with accesses := (s.accesses with addresses := a INSERT addresses))
 End
 
 Definition access_slot_def:
   access_slot x s =
   let storageKeys = s.accesses.storageKeys in
-  Step (x ∈ storageKeys)
-       (s with accesses := (s.accesses with storageKeys := x INSERT storageKeys))
+    return
+      (x ∈ storageKeys)
+      (s with accesses := (s.accesses with storageKeys := x INSERT storageKeys))
 End
 
 Definition assert_not_static_def:
@@ -370,7 +377,7 @@ Definition step_inst_def:
   ∧ step_inst ShL = binop (λn w. word_lsl w (w2n n))
   ∧ step_inst ShR = binop (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
-  ∧ step_inst SHA3 = Step () (* TODO *)
+  ∧ step_inst SHA3 = return () (* TODO *)
   ∧ step_inst Address = get_from_ctxt (λc. w2w c.callParams.callee)
   ∧ step_inst Balance = do
       context <- get_current_context;
@@ -433,8 +440,8 @@ Definition step_inst_def:
   ∧ step_inst ReturnDataSize = get_from_ctxt (λc. n2w (LENGTH c.returnData))
   ∧ step_inst ReturnDataCopy =
       copy_to_memory_check T (λcontext accounts. context.returnData)
-  ∧ step_inst ExtCodeHash = Step () (* TODO needs hash in state *)
-  ∧ step_inst BlockHash = Step () (* TODO needs hash in state *)
+  ∧ step_inst ExtCodeHash = return () (* TODO needs hash in state *)
+  ∧ step_inst BlockHash = return () (* TODO needs hash in state *)
   ∧ step_inst CoinBase = get_from_tx (λc t a. w2w t.blockCoinBase)
   ∧ step_inst TimeStamp = get_from_tx (λc t a. n2w t.blockTimeStamp)
   ∧ step_inst Number = get_from_tx (λc t a. n2w t.blockNumber)
@@ -531,7 +538,7 @@ Definition step_inst_def:
   ∧ step_inst PC = get_from_ctxt (λc. n2w c.pc)
   ∧ step_inst MSize = get_from_ctxt (λc. n2w $ LENGTH c.memory)
   ∧ step_inst Gas = get_from_ctxt (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
-  ∧ step_inst JumpDest = Step ()
+  ∧ step_inst JumpDest = return ()
   ∧ step_inst (Push n ws) =
       bind get_current_context
         (λcontext.
@@ -575,7 +582,25 @@ Definition step_inst_def:
       newContext <<- context with logs := event :: context.logs;
       set_current_context newContext
     od
-  ∧ step_inst _ = Step () (* TODO *)
+  ∧ step_inst Create = do
+      context <- get_current_context;
+      assert (3 ≤ LENGTH context.stack) StackUnderflow;
+      value <<- w2n $ EL 0 context.stack;
+      offset <<- w2n $ EL 1 context.stack;
+      size <<- w2n $ EL 2 context.stack;
+      sender <<- context.callParams.callee;
+      accounts <- get_accounts;
+      nonce <<- (accounts sender).nonce;
+      rlpSender <<- rlp_bytes $ word_to_bytes sender T;
+      rlpNonce <<- rlp_bytes $ MAP n2w $ REVERSE $ n2l 256 $ nonce;
+      rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
+      hash <<- keccak256 $ rlpBytes;
+      address <<- w2w hash;
+      newStack <<- address :: DROP 3 context.stack;
+      (* TODO *)
+      set_current_context (context with stack := newStack)
+    od
+  ∧ step_inst _ = return () (* TODO *)
 End
 
 Definition inc_pc_def:
