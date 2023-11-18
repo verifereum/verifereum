@@ -8,7 +8,7 @@ Datatype:
   | OutOfGas
   | StackOverflow
   | StackUnderflow
-  | InvalidOpcode
+  | InvalidOpcode (* TODO: use Reverted instead *)
   | InvalidJumpDest
   | StackDepthLimit
   | WriteInStaticContext
@@ -295,6 +295,13 @@ Definition access_slot_def:
        (s with accesses := (s.accesses with storageKeys := x INSERT storageKeys))
 End
 
+Definition assert_not_static_def:
+  assert_not_static = do
+    context <- get_current_context;
+    assert (¬context.callParams.static) WriteInStaticContext
+  od
+End
+
 Definition step_inst_def:
     step_inst Stop = finish_context T [] 0 0
   ∧ step_inst Add = binop word_add
@@ -450,11 +457,11 @@ Definition step_inst_def:
             ignore_bind (consume_gas dynamicGas)
               (set_current_context newContext)))))
   ∧ step_inst SStore =
-      (* TODO: check whether call is static *)
       (* TODO: check minimum gas left (2300) before this instruction *)
       (* TODO: add gas refunds *)
       bind (get_current_context)
         (λcontext.
+          ignore_bind (assert (¬context.callParams.static) WriteInStaticContext) (
           ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
             let key = EL 0 context.stack in
             let value = EL 1 context.stack in
@@ -476,7 +483,7 @@ Definition step_inst_def:
             let newContext = context with stack := newStack in
             ignore_bind (update_accounts (address =+ newAccount)) (
               ignore_bind (consume_gas dynamicGas)
-                (set_current_context newContext)))))))
+                (set_current_context newContext))))))))
   ∧ step_inst Jump =
       bind get_current_context
         (λcontext.
@@ -526,6 +533,24 @@ Definition step_inst_def:
             let rest = DROP (w2n n) (TL context.stack) in
             let newStack = [swap] ++ ignored ++ [top] ++ rest in
               set_current_context (context with stack := newStack)))
+  ∧ step_inst (Log n) = do
+      context <- get_current_context;
+      assert (¬context.callParams.static) WriteInStaticContext;
+      assert (2 + w2n n ≤ LENGTH context.stack) StackUnderflow;
+      offset <<- w2n $ EL 0 context.stack;
+      size <<- w2n $ EL 1 context.stack;
+      newMinSize <<- word_size (offset + size) * 32;
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
+      dynamicGas <<- 375 * w2n n + 8 * size + expansionCost;
+      consume_gas dynamicGas;
+      logger <<- context.callParams.callee;
+      topics <<- TAKE (w2n n) (DROP 2 context.stack);
+      data <<- TAKE size (DROP offset newMemory);
+      event <<- <| logger := logger; topics := topics; data := data |>;
+      newContext <<- context with logs := event :: context.logs;
+      set_current_context newContext
+    od
   ∧ step_inst _ = Step () (* TODO *)
 End
 

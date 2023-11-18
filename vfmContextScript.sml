@@ -24,6 +24,7 @@ Datatype:
    ; callee   : address
    ; codeAcct : address
    ; value    : num
+   ; static   : bool
    ; gasLimit : num
    ; data     : byte list
    |>
@@ -90,6 +91,7 @@ Definition initial_call_params_def:
    ; callee   := t.to
    ; codeAcct := t.to
    ; value    := t.value
+   ; static   := F
    ; data     := t.data
    ; gasLimit := t.gasLimit
    |>
