@@ -19,6 +19,13 @@ Datatype:
 End
 
 Datatype:
+  access_sets =
+  <| addresses   : address set
+   ; storageKeys : (address # bytes32) set
+   |>
+End
+
+Datatype:
   call_parameters =
   <| caller   : address
    ; callee   : address
@@ -27,6 +34,9 @@ Datatype:
    ; static   : bool
    ; gasLimit : num
    ; data     : byte list
+   (* values at the start of the call, for rollback *)
+   ; accounts : evm_accounts
+   ; accesses : access_sets
    |>
 End
 
@@ -41,13 +51,6 @@ Datatype:
    ; gasRefund  : num
    ; logs       : event list
    ; callParams : call_parameters
-   |>
-End
-
-Datatype:
-  access_sets =
-  <| addresses   : address set
-   ; storageKeys : (address # bytes32) set
    |>
 End
 
@@ -70,7 +73,6 @@ Datatype:
    ; txParams : transaction_parameters
    ; accesses : access_sets
    ; accounts : evm_accounts
-   ; original : evm_accounts
    |>
 End
 
@@ -86,7 +88,7 @@ Datatype:
 End
 
 Definition initial_call_params_def:
-  initial_call_params code t =
+  initial_call_params code origState origAccess t =
   <| caller   := t.from
    ; callee   := t.to
    ; code     := code
@@ -94,6 +96,8 @@ Definition initial_call_params_def:
    ; static   := F
    ; data     := t.data
    ; gasLimit := t.gasLimit
+   ; accounts := origState
+   ; accesses := origAccess
    |>
 End
 
@@ -112,7 +116,7 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context code t =
+  initial_context code st acc t =
   <| stack      := []
    ; memory     := []
    ; pc         := 0
@@ -121,19 +125,19 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; gasRefund  := 0
    ; logs       := []
-   ; callParams := initial_call_params code t
+   ; callParams := initial_call_params code st acc t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context code t).stack = []
+  (initial_context code st acc t).stack = []
 Proof
   rw[initial_context_def]
   (* TODO: add more if needed *)
 QED
 
 Theorem wf_initial_context[simp]:
-  wf_context (initial_context code t)
+  wf_context (initial_context code st acc t)
 Proof
   rw[wf_context_def]
 QED
@@ -157,16 +161,17 @@ End
 
 Definition initial_state_def:
   initial_state c a b t =
-  <| contexts := [initial_context (a t.to).code t]
+  let acc = initial_access_sets t in
+  <| contexts := [initial_context (a t.to).code a acc t]
    ; txParams := initial_tx_params c b t
-   ; accesses := initial_access_sets t
+   ; accesses := acc
    ; accounts := a
-   ; original := a
    |>
 End
 
 Theorem initial_state_simp[simp]:
-    (initial_state c a b t).contexts = [initial_context (a t.to).code t]
+    (initial_state c a b t).contexts =
+      [initial_context (a t.to).code a (initial_access_sets t) t]
   ∧ (initial_state c a b t).accounts = a
   ∧ (initial_state c a b t).accesses = initial_access_sets t
   ∧ (initial_state c a b t).txParams = initial_tx_params c b t

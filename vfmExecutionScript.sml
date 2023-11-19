@@ -127,7 +127,11 @@ Definition update_accounts_def:
 End
 
 Definition get_original_def:
-  get_original s = return s.original s
+  get_original s =
+    if s.contexts = [] then
+      fail Impossible s
+    else
+      return (LAST s.contexts).callParams.accounts s
 End
 
 Definition set_current_context_def:
@@ -596,8 +600,26 @@ Definition step_inst_def:
       hash <<- keccak256 $ rlpBytes;
       address <<- w2w hash;
       newStack <<- address :: DROP 3 context.stack;
-      (* TODO *)
       set_current_context (context with stack := newStack)
+      (* TODO *)
+    od
+  ∧ step_inst Call = do
+      context <- get_current_context;
+      assert (7 ≤ LENGTH context.stack) StackUnderflow;
+      gas <<- w2n $ EL 0 context.stack;
+      address <<- w2w $ EL 1 context.stack;
+      value <<- w2n $ EL 2 context.stack;
+      argsOffset <<- w2n $ EL 3 context.stack;
+      argsSize <<- w2n $ EL 4 context.stack;
+      retOffset <<- w2n $ EL 5 context.stack;
+      retSize <<- w2n $ EL 6 context.stack;
+      newStack <<- DROP 7 context.stack;
+      addressWarm <- access_address address;
+      (* TODO: consume memory, address-access, create, and transfer gas *)
+      gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+      stipend <<- if 0 < value then 2300 else 0;
+      cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
+      return () (* TODO: create context *)
     od
   ∧ step_inst _ = return () (* TODO *)
 End
@@ -636,5 +658,6 @@ Definition step_def:
 End
 
 (* TODO: prove LENGTH memory is always a multiple of 32 bytes *)
+(* TODO: define gas-oblivious execution semantics (where Gas is an invalid op) *)
 
 val _ = export_theory();
