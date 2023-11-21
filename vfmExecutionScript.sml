@@ -294,6 +294,10 @@ Definition store_to_memory_def:
               (set_current_context newContext)))
 End
 
+Definition get_current_accesses_def:
+  get_current_accesses s = return s.accesses s
+End
+
 Definition access_address_def:
   access_address a s =
   let addresses = s.accesses.addresses in
@@ -614,11 +618,36 @@ Definition step_inst_def:
       retOffset <<- w2n $ EL 5 context.stack;
       retSize <<- w2n $ EL 6 context.stack;
       newStack <<- DROP 7 context.stack;
+      newMinSize <<- MAX
+        (word_size (retOffset + retSize) * 32)
+        (word_size (argsOffset + argsSize) * 32);
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
       addressWarm <- access_address address;
-      (* TODO: consume memory, address-access, create, and transfer gas *)
+      accessCost <<- if addressWarm then 100 else 2600;
+      positiveValueCost <<- if 0 < value then 9000 else 0;
+      accounts <- get_accounts;
+      toAccount <<- accounts address;
+      emptyAccount <<-
+        toAccount.balance = 0 ∧ toAccount.nonce = 0 ∧ toAccount.code = [];
+      transferCost <<- if 0 < value ∧ emptyAccount then 25000 else 0;
+      consume_gas (expansionCost + accessCost + transferCost + positiveValueCost);
       gasLeft <<- context.callParams.gasLimit - context.gasUsed;
       stipend <<- if 0 < value then 2300 else 0;
       cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
+      assert (¬context.callParams.static) WriteInStaticContext;
+      consume_gas cappedGas;
+      accesses <- get_current_accesses;
+      subContextTx <<- <|
+          from     := context.callParams.callee
+        ; to       := address
+        ; value    := value
+        ; gasLimit := cappedGas + stipend
+        ; data     := TAKE argsSize (DROP argsOffset newMemory)
+      |>;
+      (* TODO: transfer value before(?) getting accounts *)
+      (* TODO: get the accesses before address is added? *)
+      subContext <<- initial_context toAccount.code accounts accesses;
       return () (* TODO: create context *)
     od
   ∧ step_inst _ = return () (* TODO *)
