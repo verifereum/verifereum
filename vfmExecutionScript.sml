@@ -206,8 +206,8 @@ Definition binop_def:
   binop f = stack_op 2 (λl. f (EL 0 l) (EL 1 l))
 End
 
-Definition get_from_tx_def:
-  get_from_tx f =
+Definition push_from_tx_def:
+  push_from_tx f =
   do
     context <- get_current_context;
     txParams <- get_tx_params;
@@ -218,8 +218,8 @@ Definition get_from_tx_def:
   od
 End
 
-Definition get_from_ctxt_def:
-  get_from_ctxt f = get_from_tx (λctxt txParams accts. f ctxt)
+Definition push_from_ctxt_def:
+  push_from_ctxt f = push_from_tx (λctxt txParams accts. f ctxt)
 End
 
 Definition with_zero_def:
@@ -382,7 +382,7 @@ Definition step_inst_def:
   ∧ step_inst ShR = binop (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
   ∧ step_inst SHA3 = return () (* TODO *)
-  ∧ step_inst Address = get_from_ctxt (λc. w2w c.callParams.callee)
+  ∧ step_inst Address = push_from_ctxt (λc. w2w c.callParams.callee)
   ∧ step_inst Balance = do
       context <- get_current_context;
       assert (1 ≤ LENGTH context.stack) StackUnderflow;
@@ -395,9 +395,9 @@ Definition step_inst_def:
       consume_gas dynamicGas;
       set_current_context (context with stack := newStack)
     od
-  ∧ step_inst Origin = get_from_tx (λc t a. w2w t.origin)
-  ∧ step_inst Caller = get_from_ctxt (λc. w2w c.callParams.caller)
-  ∧ step_inst CallValue = get_from_ctxt (λc. n2w c.callParams.value)
+  ∧ step_inst Origin = push_from_tx (λc t a. w2w t.origin)
+  ∧ step_inst Caller = push_from_ctxt (λc. w2w c.callParams.caller)
+  ∧ step_inst CallValue = push_from_ctxt (λc. n2w c.callParams.value)
   ∧ step_inst CallDataLoad =
       bind (get_current_context)
         (λcontext.
@@ -406,13 +406,13 @@ Definition step_inst_def:
             let bytes = take_pad_0 32 (DROP index context.callParams.data) in
             let newStack = word_of_bytes F 0 bytes :: TL context.stack in
             set_current_context (context with stack := newStack)))
-  ∧ step_inst CallDataSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.data))
+  ∧ step_inst CallDataSize = push_from_ctxt (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst CallDataCopy =
       copy_to_memory (λcontext accounts. context.callParams.data)
-  ∧ step_inst CodeSize = get_from_ctxt (λc. n2w (LENGTH c.callParams.code))
+  ∧ step_inst CodeSize = push_from_ctxt (λc. n2w (LENGTH c.callParams.code))
   ∧ step_inst CodeCopy =
       copy_to_memory (λcontext accounts. context.callParams.code)
-  ∧ step_inst GasPrice = get_from_tx (λc t a. n2w t.gasPrice)
+  ∧ step_inst GasPrice = push_from_tx (λc t a. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize =
       bind (get_current_context)
         (λcontext.
@@ -440,20 +440,20 @@ Definition step_inst_def:
                 (ignore_bind
                   (set_current_context newContext)
                   (copy_to_memory (λc accounts. (accounts address).code))))))
-  ∧ step_inst ReturnDataSize = get_from_ctxt (λc. n2w (LENGTH c.returnData))
+  ∧ step_inst ReturnDataSize = push_from_ctxt (λc. n2w (LENGTH c.returnData))
   ∧ step_inst ReturnDataCopy =
       copy_to_memory_check T (λcontext accounts. context.returnData)
   ∧ step_inst ExtCodeHash = return () (* TODO needs hash in state *)
   ∧ step_inst BlockHash = return () (* TODO needs hash in state *)
-  ∧ step_inst CoinBase = get_from_tx (λc t a. w2w t.blockCoinBase)
-  ∧ step_inst TimeStamp = get_from_tx (λc t a. n2w t.blockTimeStamp)
-  ∧ step_inst Number = get_from_tx (λc t a. n2w t.blockNumber)
-  ∧ step_inst PrevRandao = get_from_tx (λc t a. t.prevRandao)
-  ∧ step_inst GasLimit = get_from_tx (λc t a. n2w t.blockGasLimit)
-  ∧ step_inst ChainId = get_from_tx (λc t a. n2w t.chainId)
+  ∧ step_inst CoinBase = push_from_tx (λc t a. w2w t.blockCoinBase)
+  ∧ step_inst TimeStamp = push_from_tx (λc t a. n2w t.blockTimeStamp)
+  ∧ step_inst Number = push_from_tx (λc t a. n2w t.blockNumber)
+  ∧ step_inst PrevRandao = push_from_tx (λc t a. t.prevRandao)
+  ∧ step_inst GasLimit = push_from_tx (λc t a. n2w t.blockGasLimit)
+  ∧ step_inst ChainId = push_from_tx (λc t a. n2w t.chainId)
   ∧ step_inst SelfBalance =
-      get_from_tx (λc t a. n2w (a c.callParams.callee).balance)
-  ∧ step_inst BaseFee = get_from_tx (λc t a. n2w t.baseFee)
+      push_from_tx (λc t a. n2w (a c.callParams.callee).balance)
+  ∧ step_inst BaseFee = push_from_tx (λc t a. n2w t.baseFee)
   ∧ step_inst Pop =
       bind get_current_context
         (λcontext.
@@ -538,9 +538,9 @@ Definition step_inst_def:
               context with <| stack := newStack; jumpDest := jumpDest |>
             in
               set_current_context newContext))
-  ∧ step_inst PC = get_from_ctxt (λc. n2w c.pc)
-  ∧ step_inst MSize = get_from_ctxt (λc. n2w $ LENGTH c.memory)
-  ∧ step_inst Gas = get_from_ctxt (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
+  ∧ step_inst PC = push_from_ctxt (λc. n2w c.pc)
+  ∧ step_inst MSize = push_from_ctxt (λc. n2w $ LENGTH c.memory)
+  ∧ step_inst Gas = push_from_ctxt (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
   ∧ step_inst JumpDest = return ()
   ∧ step_inst (Push n ws) =
       bind get_current_context
