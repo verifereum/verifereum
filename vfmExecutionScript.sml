@@ -12,6 +12,7 @@ Datatype:
   | StackDepthLimit
   | WriteInStaticContext
   | OutOfBoundsRead
+  | InsufficientBalance
   | InvalidParameter
   | InvalidContractPrefix
   | AddressCollision
@@ -188,6 +189,15 @@ Definition consume_gas_def:
   od
 End
 
+Definition refund_gas_def:
+  refund_gas n = do
+    context <- get_current_context;
+    assert (n ≤ context.gasUsed) Impossible;
+    newContext <<- context with gasUsed := context.gasUsed - n;
+    set_current_context newContext
+  od
+End
+
 Definition stack_op_def:
   stack_op n f =
   do
@@ -318,6 +328,24 @@ Definition assert_not_static_def:
   assert_not_static = do
     context <- get_current_context;
     assert (¬context.callParams.static) WriteInStaticContext
+  od
+End
+
+Definition get_num_contexts_def:
+  get_num_contexts s = return (LENGTH s.contexts) s
+End
+
+Definition push_context_def:
+  push_context c = do
+    value <<- c.callParams.value;
+    caller <<- c.callParams.caller;
+    callee <<- c.callParams.callee;
+    accounts <- get_accounts;
+    assert (value ≤ (accounts caller).balance) InsufficientBalance;
+    newCaller <<- accounts caller with balance updated_by combin$C $- value;
+    newCallee <<- accounts callee with balance updated_by $+ value;
+    update_accounts $ (caller =+ newCaller) o (callee =+ newCallee);
+    (λs. return () (s with contexts updated_by CONS c))
   od
 End
 
@@ -628,9 +656,9 @@ Definition step_inst_def:
       positiveValueCost <<- if 0 < value then 9000 else 0;
       accounts <- get_accounts;
       toAccount <<- accounts address;
-      emptyAccount <<-
+      toAccountEmpty <<-
         toAccount.balance = 0 ∧ toAccount.nonce = 0 ∧ toAccount.code = [];
-      transferCost <<- if 0 < value ∧ emptyAccount then 25000 else 0;
+      transferCost <<- if 0 < value ∧ toAccountEmpty then 25000 else 0;
       consume_gas (expansionCost + accessCost + transferCost + positiveValueCost);
       gasLeft <<- context.callParams.gasLimit - context.gasUsed;
       stipend <<- if 0 < value then 2300 else 0;
@@ -645,10 +673,15 @@ Definition step_inst_def:
         ; gasLimit := cappedGas + stipend
         ; data     := TAKE argsSize (DROP argsOffset newMemory)
       |>;
-      (* TODO: transfer value before(?) getting accounts *)
-      (* TODO: get the accesses before address is added? *)
-      subContext <<- initial_context toAccount.code accounts accesses;
-      return () (* TODO: create context *)
+      subContext <<-
+        initial_context toAccount.code accounts accesses subContextTx;
+      n <- get_num_contexts;
+      assert (n < context_limit) StackDepthLimit;
+      push_context subContext;
+      n1 <- get_num_contexts;
+      if n = n1
+      then refund_gas subContextTx.gasLimit
+      else return ()
     od
   ∧ step_inst _ = return () (* TODO *)
 End

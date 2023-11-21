@@ -165,7 +165,7 @@ Definition initial_state_def:
   <| contexts := [initial_context (a t.to).code a acc t]
    ; txParams := initial_tx_params c b t
    ; accesses := acc
-   ; accounts := a
+   ; accounts := a (* TODO: transfer t.value *)
    |>
 End
 
