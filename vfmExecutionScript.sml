@@ -410,7 +410,7 @@ Definition step_inst_def:
   ∧ step_inst Or = binop word_or
   ∧ step_inst XOr = binop word_xor
   ∧ step_inst Not = monop word_1comp
-  ∧ step_inst Byte = binop ARB (* TODO: use get_byte *)
+  ∧ step_inst Byte = binop (λi w. w2w $ get_byte i w T)
   ∧ step_inst ShL = binop (λn w. word_lsl w (w2n n))
   ∧ step_inst ShR = binop (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
@@ -523,34 +523,35 @@ Definition step_inst_def:
             let newContext = context with <| stack := newStack |> in
             ignore_bind (consume_gas dynamicGas)
               (set_current_context newContext)))))
-  ∧ step_inst SStore =
-      (* TODO: check minimum gas left (2300) before this instruction *)
+  ∧ step_inst SStore = do
+      context <- get_current_context;
+      assert (¬context.callParams.static) WriteInStaticContext;
+      assert (2 ≤ LENGTH context.stack) StackUnderflow;
+      gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+      assert (2300 < gasLeft) OutOfGas;
+      key <<- EL 0 context.stack;
+      value <<- EL 1 context.stack;
+      address <<- context.callParams.callee;
+      accounts <- get_accounts;
+      account <<- accounts address;
+      currentValue <<- account.storage key;
+      original <- get_original;
+      originalValue <<- (original address).storage key;
+      slotWarm <- access_slot (address, key);
+      baseDynamicGas <<-
+        if originalValue = currentValue ∧ currentValue ≠ value
+        then if originalValue = 0w then 20000 else 2900
+        else 100;
+      dynamicGas <<- baseDynamicGas + if slotWarm then 0 else 2100;
       (* TODO: add gas refunds *)
-      bind (get_current_context)
-        (λcontext.
-          ignore_bind (assert (¬context.callParams.static) WriteInStaticContext) (
-          ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
-            let key = EL 0 context.stack in
-            let value = EL 1 context.stack in
-            let address = context.callParams.callee in
-            bind get_accounts (λaccounts.
-            let account = accounts address in
-            let currentValue = account.storage key in
-            bind get_original (λoriginal.
-            let originalValue = (original address).storage key in
-            bind (access_slot (address, key)) (λslotWarm.
-            let baseDynamicGas =
-              if originalValue = currentValue ∧ currentValue ≠ value
-              then if originalValue = 0w then 20000 else 2900
-              else 100 in
-            let dynamicGas = baseDynamicGas + if slotWarm then 0 else 2100 in
-            let newStorage = (key =+ value) account.storage in
-            let newAccount = account with storage := newStorage in
-            let newStack = DROP 2 context.stack in
-            let newContext = context with stack := newStack in
-            ignore_bind (update_accounts (address =+ newAccount)) (
-              ignore_bind (consume_gas dynamicGas)
-                (set_current_context newContext))))))))
+      newStorage <<- (key =+ value) account.storage;
+      newAccount <<- account with storage := newStorage;
+      newStack <<- DROP 2 context.stack;
+      newContext <<- context with stack := newStack;
+      consume_gas dynamicGas;
+      update_accounts (address =+ newAccount);
+      set_current_context newContext
+    od
   ∧ step_inst Jump =
       bind get_current_context
         (λcontext.
@@ -690,6 +691,7 @@ Definition step_inst_def:
       then refund_gas subContextTx.gasLimit
       else return ()
     od
+  ∧ step_inst CallCode = return () (* TODO *)
   ∧ step_inst Return = do
       context <- get_current_context;
       assert (2 ≤ LENGTH context.stack) StackUnderflow;
@@ -700,7 +702,10 @@ Definition step_inst_def:
       returnData <<- TAKE size (DROP offset expandedMemory);
       finish_context T returnData
     od
-  ∧ step_inst _ = return () (* TODO *)
+  ∧ step_inst DelegateCall = return () (* TODO *)
+  ∧ step_inst Create2 = return () (* TODO *)
+  ∧ step_inst StaticCall = return () (* TODO *)
+  ∧ step_inst Revert = return () (* TODO *)
 End
 
 Definition inc_pc_def:
