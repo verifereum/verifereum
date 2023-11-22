@@ -27,16 +27,18 @@ End
 
 Datatype:
   call_parameters =
-  <| caller   : address
-   ; callee   : address
-   ; code     : byte list
-   ; value    : num
-   ; static   : bool
-   ; gasLimit : num
-   ; data     : byte list
+  <| caller    : address
+   ; callee    : address
+   ; code      : byte list
+   ; value     : num
+   ; static    : bool
+   ; gasLimit  : num
+   ; data      : byte list
+   ; retOffset : num
+   ; retSize   : num
    (* values at the start of the call, for rollback *)
-   ; accounts : evm_accounts
-   ; accesses : access_sets
+   ; accounts  : evm_accounts
+   ; accesses  : access_sets
    |>
 End
 
@@ -87,17 +89,29 @@ Datatype:
    |>
 End
 
+Datatype:
+  call_context =
+  <| code      : byte list
+   ; accounts  : evm_accounts
+   ; accesses  : access_sets
+   ; retOffset : num
+   ; retSize   : num
+   |>
+End
+
 Definition initial_call_params_def:
-  initial_call_params code origState origAccess t =
-  <| caller   := t.from
-   ; callee   := t.to
-   ; code     := code
-   ; value    := t.value
-   ; static   := F
-   ; data     := t.data
-   ; gasLimit := t.gasLimit
-   ; accounts := origState
-   ; accesses := origAccess
+  initial_call_params ctxt t =
+  <| caller    := t.from
+   ; callee    := t.to
+   ; code      := ctxt.code
+   ; value     := t.value
+   ; static    := F
+   ; data      := t.data
+   ; gasLimit  := t.gasLimit
+   ; accounts  := ctxt.accounts
+   ; accesses  := ctxt.accesses
+   ; retOffset := ctxt.retOffset
+   ; retSize   := ctxt.retSize
    |>
 End
 
@@ -116,7 +130,7 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context code st acc t =
+  initial_context ctxt t =
   <| stack      := []
    ; memory     := []
    ; pc         := 0
@@ -125,19 +139,19 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; gasRefund  := 0
    ; logs       := []
-   ; callParams := initial_call_params code st acc t
+   ; callParams := initial_call_params ctxt t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context code st acc t).stack = []
+  (initial_context ctxt t).stack = []
 Proof
   rw[initial_context_def]
   (* TODO: add more if needed *)
 QED
 
 Theorem wf_initial_context[simp]:
-  wf_context (initial_context code st acc t)
+  wf_context (initial_context ctxt t)
 Proof
   rw[wf_context_def]
 QED
@@ -160,9 +174,11 @@ Definition initial_access_sets_def:
 End
 
 Definition initial_state_def:
-  initial_state c a b t =
+  initial_state c a b r z t =
   let acc = initial_access_sets t in
-  <| contexts := [initial_context (a t.to).code a acc t]
+  let ctxt = <| code := (a t.to).code; accounts := a; accesses := acc
+              ; retOffset := r; retSize := z |> in
+  <| contexts := [initial_context ctxt t]
    ; txParams := initial_tx_params c b t
    ; accesses := acc
    ; accounts := a (* TODO: transfer t.value *)
@@ -170,20 +186,19 @@ Definition initial_state_def:
 End
 
 Theorem initial_state_simp[simp]:
-    (initial_state c a b t).contexts =
-      [initial_context (a t.to).code a (initial_access_sets t) t]
-  ∧ (initial_state c a b t).accounts = a
-  ∧ (initial_state c a b t).accesses = initial_access_sets t
-  ∧ (initial_state c a b t).txParams = initial_tx_params c b t
+    (initial_state c a b r z t).accounts = a
+  ∧ (initial_state c a b r z t).accesses = initial_access_sets t
+  ∧ (initial_state c a b r z t).txParams = initial_tx_params c b t
 Proof
   rw[initial_state_def]
 QED
 
 Theorem wf_initial_state[simp]:
   wf_accounts a ⇒
-  wf_state (initial_state c a b t)
+  wf_state (initial_state c a b r z t)
 Proof
   rw[wf_accounts_def, wf_state_def]
+  \\ rw[initial_state_def]
 QED
 
 val _ = export_theory();

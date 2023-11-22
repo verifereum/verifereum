@@ -127,6 +127,14 @@ Definition update_accounts_def:
   update_accounts f s = return () (s with accounts updated_by f)
 End
 
+Definition set_accounts_def:
+  set_accounts a = update_accounts (K a)
+End
+
+Definition set_accesses_def:
+  set_accesses a s = return () (s with accesses := a)
+End
+
 Definition get_original_def:
   get_original s =
     if s.contexts = [] then
@@ -147,36 +155,68 @@ Definition b2w_def[simp]:
   b2w T = 1w ∧ b2w F = 0w
 End
 
+Definition get_num_contexts_def:
+  get_num_contexts s = return (LENGTH s.contexts) s
+End
+
+Definition push_context_def:
+  push_context c = do
+    value <<- c.callParams.value;
+    caller <<- c.callParams.caller;
+    callee <<- c.callParams.callee;
+    accounts <- get_accounts;
+    assert (value ≤ (accounts caller).balance) InsufficientBalance;
+    newCaller <<- accounts caller with balance updated_by combin$C $- value;
+    newCallee <<- accounts callee with balance updated_by $+ value;
+    update_accounts $ (caller =+ newCaller) o (callee =+ newCallee);
+    (λs. return () (s with contexts updated_by CONS c))
+  od
+End
+
+Definition pop_context_def:
+  pop_context s =
+    return (HD s.contexts) (s with contexts := TL s.contexts)
+End
+
 Definition finish_context_def:
-  finish_context success returnData returnOffset returnSize s =
-  if s.contexts = [] then
-    fail Impossible s
-  else if LENGTH s.contexts = 1 then
-    let context = HD s.contexts in
+  finish_context success returnData = do
+    n <- get_num_contexts;
+    assert (0 < n) Impossible;
+    if n = 1 then do
+      context <- get_current_context;
+      accounts <- get_accounts;
       finish <|
         output := returnData;
         events := context.logs;
         refund := context.gasRefund;
-        accounts := s.accounts
-      |> s
-  else
-    let callee = HD s.contexts in
-    let contexts = TL s.contexts in
-    let caller = HD contexts in
-      (* TODO: roll back things on failure? *)
-    let newCaller = caller with
-      <| returnData := returnData
-       ; logs       := caller.logs ++ callee.logs
-       ; gasRefund  := caller.gasRefund + callee.gasRefund
-       ; gasUsed    := caller.gasUsed + callee.gasUsed
-       (* TODO: revert if out of gas? or should this have been already detected? *)
-       ; pc         := caller.pc + 1
-       ; stack      := b2w success :: caller.stack
-       ; memory     :=
-           write_memory returnOffset (TAKE returnSize returnData) caller.memory
-       |> in
-    let newContexts = newCaller :: (TL contexts) in
-    return () (s with contexts := newContexts)
+        accounts := accounts
+      |>
+    od else do
+      callee <- pop_context;
+      caller <- get_current_context;
+      returnOffset <<- callee.callParams.retOffset;
+      returnSize <<- callee.callParams.retSize;
+      calleeGasLeft <<- callee.callParams.gasLimit - callee.gasUsed;
+      newCallerBase <<- caller with
+        <| returnData := returnData
+         ; gasUsed    := caller.gasUsed - calleeGasLeft
+         ; pc         := SUC caller.pc
+         ; stack      := b2w success :: caller.stack
+         ; memory     :=
+             write_memory returnOffset (TAKE returnSize returnData) caller.memory
+         |>;
+      newCaller <<- if success
+        then newCallerBase with
+             <| gasRefund updated_by $+ callee.gasRefund
+              ; logs updated_by combin$C APPEND callee.logs |>
+        else newCallerBase;
+      set_current_context newCaller;
+      if success then return () else do
+        set_accounts callee.callParams.accounts
+      ; set_accesses callee.callParams.accesses
+      od
+    od
+  od
 End
 
 Definition consume_gas_def:
@@ -331,24 +371,6 @@ Definition assert_not_static_def:
   od
 End
 
-Definition get_num_contexts_def:
-  get_num_contexts s = return (LENGTH s.contexts) s
-End
-
-Definition push_context_def:
-  push_context c = do
-    value <<- c.callParams.value;
-    caller <<- c.callParams.caller;
-    callee <<- c.callParams.callee;
-    accounts <- get_accounts;
-    assert (value ≤ (accounts caller).balance) InsufficientBalance;
-    newCaller <<- accounts caller with balance updated_by combin$C $- value;
-    newCallee <<- accounts callee with balance updated_by $+ value;
-    update_accounts $ (caller =+ newCaller) o (callee =+ newCallee);
-    (λs. return () (s with contexts updated_by CONS c))
-  od
-End
-
 (* TODO: move to separate theory *)
 Definition rlp_bytes_def:
   rlp_bytes (bytes : byte list) =
@@ -370,7 +392,7 @@ Definition rlp_list_def:
 End
 
 Definition step_inst_def:
-    step_inst Stop = finish_context T [] 0 0
+    step_inst Stop = finish_context T []
   ∧ step_inst Add = binop word_add
   ∧ step_inst Mul = binop word_mul
   ∧ step_inst Sub = binop word_sub
@@ -673,8 +695,14 @@ Definition step_inst_def:
         ; gasLimit := cappedGas + stipend
         ; data     := TAKE argsSize (DROP argsOffset newMemory)
       |>;
-      subContext <<-
-        initial_context toAccount.code accounts accesses subContextTx;
+      subContextParams <<- <|
+        code      := toAccount.code
+      ; accounts  := accounts
+      ; accesses  := accesses
+      ; retOffset := retOffset
+      ; retSize   := retSize
+      |>;
+      subContext <<- initial_context subContextParams subContextTx;
       n <- get_num_contexts;
       assert (n < context_limit) StackDepthLimit;
       push_context subContext;
@@ -682,6 +710,16 @@ Definition step_inst_def:
       if n = n1
       then refund_gas subContextTx.gasLimit
       else return ()
+    od
+  ∧ step_inst Return = do
+      context <- get_current_context;
+      assert (2 ≤ LENGTH context.stack) StackUnderflow;
+      offset <<- w2n $ EL 0 context.stack;
+      size <<- w2n $ EL 1 context.stack;
+      newMinSize <<- word_size (offset + size) * 32;
+      expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      returnData <<- TAKE size (DROP offset expandedMemory);
+      finish_context T returnData
     od
   ∧ step_inst _ = return () (* TODO *)
 End
@@ -709,7 +747,7 @@ Definition step_def:
     else do
       assert (context.pc < LENGTH code) Impossible;
       case parse_opcode (DROP context.pc code) of
-      | NONE => finish_context F [] 0 0
+      | NONE => finish_context F []
       | SOME op => do
           consume_gas (static_gas op);
           step_inst op;
