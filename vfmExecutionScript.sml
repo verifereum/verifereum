@@ -351,13 +351,6 @@ Definition update_refund_def:
   od
 End
 
-Definition assert_not_static_def:
-  assert_not_static = do
-    context <- get_current_context;
-    assert (¬context.callParams.static) WriteInStaticContext
-  od
-End
-
 (* TODO: move to separate theory *)
 Definition rlp_bytes_def:
   rlp_bytes (bytes : byte list) =
