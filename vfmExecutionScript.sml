@@ -1,4 +1,5 @@
-open HolKernel boolLib bossLib Parse monadsyntax
+open HolKernel boolLib bossLib Parse
+     monadsyntax byteTheory
      vfmTypesTheory vfmContextTheory;
 
 val _ = new_theory"vfmExecution";
@@ -74,30 +75,8 @@ val _ = monadsyntax.declare_monad (
 val () = monadsyntax.enable_monad "txn";
 val () = monadsyntax.enable_monadsyntax();
 
-(* TODO: use byteTheory after moving it to HOL *)
-Definition set_byte_def:
-  set_byte i b w =
-      word_slice 256 ((SUC i) * 8) w ||
-      w2w b << i ||
-      word_slice (i * 8) 0 w
-End
-
 Definition keccak256_def:
   keccak256 (bytes : byte list) = ARB : bytes32 (* TODO *)
-End
-
-Definition word_of_bytes_def:
-  (word_of_bytes be a [] = 0w) /\
-  (word_of_bytes be a (b::bs) =
-     set_byte a b (word_of_bytes be (SUC a) bs))
-End
-
-Definition words_of_bytes_def:
-  words_of_bytes be bytes = ARB (* TODO: wait for byteTheory *)
-End
-
-Definition word_to_bytes_def:
-  word_to_bytes w be = ARB (* TODO: wait for byteTheory *)
 End
 
 Definition write_memory_def:
@@ -458,7 +437,7 @@ Definition step_inst_def:
           ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let index = w2n (EL 0 context.stack) in
             let bytes = take_pad_0 32 (DROP index context.callParams.data) in
-            let newStack = word_of_bytes F 0 bytes :: TL context.stack in
+            let newStack = word_of_bytes F 0w bytes :: TL context.stack in
             set_current_context (context with stack := newStack)))
   ∧ step_inst CallDataSize = push_from_ctxt (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst CallDataCopy =
@@ -521,7 +500,7 @@ Definition step_inst_def:
             let newMinSize = word_size (SUC byteIndex) * 32 in
             let newMemory = PAD_RIGHT 0w newMinSize context.memory in
             let expansionCost = memory_expansion_cost context.memory newMemory in
-            let word = word_of_bytes F 0 (TAKE 32 (DROP byteIndex newMemory)) in
+            let word = word_of_bytes F 0w (TAKE 32 (DROP byteIndex newMemory)) in
             let newStack = word :: TL context.stack in
             let newContext =
               context with <| stack := newStack; memory := newMemory |>
@@ -599,7 +578,7 @@ Definition step_inst_def:
   ∧ step_inst (Push n ws) =
       bind get_current_context
         (λcontext.
-          let word = word_of_bytes F 0 ws in
+          let word = word_of_bytes F 0w ws in
           let newStack = word :: context.stack in
           ignore_bind (assert (LENGTH newStack ≤ stack_limit) StackOverflow) (
           set_current_context (context with stack := newStack)))
