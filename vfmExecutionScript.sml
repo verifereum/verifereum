@@ -343,6 +343,14 @@ Definition access_slot_def:
       (s with accesses := (s.accesses with storageKeys := x INSERT storageKeys))
 End
 
+Definition update_refund_def:
+  update_refund f = do
+    context <- get_current_context;
+    newContext <<- context with gasRefund updated_by f;
+    set_current_context newContext
+  od
+End
+
 Definition assert_not_static_def:
   assert_not_static = do
     context <- get_current_context;
@@ -525,7 +533,6 @@ Definition step_inst_def:
               (set_current_context newContext)))))
   ∧ step_inst SStore = do
       context <- get_current_context;
-      assert (¬context.callParams.static) WriteInStaticContext;
       assert (2 ≤ LENGTH context.stack) StackUnderflow;
       gasLeft <<- context.callParams.gasLimit - context.gasUsed;
       assert (2300 < gasLeft) OutOfGas;
@@ -543,12 +550,18 @@ Definition step_inst_def:
         then if originalValue = 0w then 20000 else 2900
         else 100;
       dynamicGas <<- baseDynamicGas + if slotWarm then 0 else 2100;
-      (* TODO: add gas refunds *)
+      refundUpdater <<-
+        if currentValue ≠ value ∧ originalValue ≠ 0w then
+          if currentValue = 0w then combin$C $- 15000
+          else if value = 0w then $+ 15000 else I
+        else I;
       newStorage <<- (key =+ value) account.storage;
       newAccount <<- account with storage := newStorage;
       newStack <<- DROP 2 context.stack;
-      newContext <<- context with stack := newStack;
+      newContext <<- context with
+        <| stack := newStack; gasRefund updated_by refundUpdater |>;
       consume_gas dynamicGas;
+      assert (¬context.callParams.static) WriteInStaticContext;
       update_accounts (address =+ newAccount);
       set_current_context newContext
     od
