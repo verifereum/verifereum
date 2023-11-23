@@ -622,7 +622,8 @@ Definition step_inst_def:
       topics <<- TAKE (w2n n) (DROP 2 context.stack);
       data <<- TAKE size (DROP offset newMemory);
       event <<- <| logger := logger; topics := topics; data := data |>;
-      newContext <<- context with logs := event :: context.logs;
+      newContext <<- context with
+        <| memory := newMemory; logs := event :: context.logs |>;
       set_current_context newContext
     od
   ∧ step_inst Create = do
@@ -674,6 +675,8 @@ Definition step_inst_def:
       assert (context.callParams.static ⇒ value = 0) WriteInStaticContext;
       consume_gas cappedGas;
       accesses <- get_current_accesses;
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext;
       subContextTx <<- <|
           from     := context.callParams.callee
         ; to       := address
@@ -726,6 +729,8 @@ Definition step_inst_def:
       assert (context.callParams.static ⇒ value = 0) WriteInStaticContext;
       consume_gas cappedGas;
       accesses <- get_current_accesses;
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext;
       subContextTx <<- <|
           from     := context.callParams.callee
         ; to       := context.callParams.callee
@@ -784,6 +789,8 @@ Definition step_inst_def:
       cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
       consume_gas cappedGas;
       accesses <- get_current_accesses;
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext;
       subContextTx <<- <|
           from     := context.callParams.caller
         ; to       := context.callParams.callee
@@ -833,6 +840,8 @@ Definition step_inst_def:
       cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
       consume_gas cappedGas;
       accesses <- get_current_accesses;
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext;
       subContextTx <<- <|
           from     := context.callParams.callee
         ; to       := address
@@ -857,7 +866,21 @@ Definition step_inst_def:
       then refund_gas subContextTx.gasLimit
       else return ()
     od
-  ∧ step_inst Revert = return () (* TODO *)
+  ∧ step_inst Revert = do
+      context <- get_current_context;
+      assert (2 ≤ LENGTH context.stack) StackUnderflow;
+      offset <<- w2n $ EL 0 context.stack;
+      size <<- w2n $ EL 1 context.stack;
+      newStack <<- DROP 2 context.stack;
+      newMinSize <<- word_size (offset + size) * 32;
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
+      consume_gas expansionCost;
+      returnData <<- TAKE size (DROP offset newMemory);
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext;
+      finish_context F returnData
+    od
 End
 
 Definition inc_pc_def:
