@@ -671,7 +671,7 @@ Definition step_inst_def:
       gasLeft <<- context.callParams.gasLimit - context.gasUsed;
       stipend <<- if 0 < value then 2300 else 0;
       cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
-      assert (¬context.callParams.static) WriteInStaticContext;
+      assert (context.callParams.static ⇒ value = 0) WriteInStaticContext;
       consume_gas cappedGas;
       accesses <- get_current_accesses;
       subContextTx <<- <|
@@ -697,7 +697,57 @@ Definition step_inst_def:
       then refund_gas subContextTx.gasLimit
       else return ()
     od
-  ∧ step_inst CallCode = return () (* TODO *)
+  ∧ step_inst CallCode = do (* TODO: abstract some of the duplication in Code *)
+      context <- get_current_context;
+      assert (7 ≤ LENGTH context.stack) StackUnderflow;
+      gas <<- w2n $ EL 0 context.stack;
+      address <<- w2w $ EL 1 context.stack;
+      value <<- w2n $ EL 2 context.stack;
+      argsOffset <<- w2n $ EL 3 context.stack;
+      argsSize <<- w2n $ EL 4 context.stack;
+      retOffset <<- w2n $ EL 5 context.stack;
+      retSize <<- w2n $ EL 6 context.stack;
+      newStack <<- DROP 7 context.stack;
+      newMinSize <<- MAX
+        (word_size (retOffset + retSize) * 32)
+        (word_size (argsOffset + argsSize) * 32);
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
+      addressWarm <- access_address address;
+      accessCost <<- if addressWarm then 100 else 2600;
+      positiveValueCost <<- if 0 < value then 9000 else 0;
+      accounts <- get_accounts;
+      codeAccount <<- accounts address;
+      consume_gas (expansionCost + accessCost + positiveValueCost);
+      gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+      stipend <<- if 0 < value then 2300 else 0;
+      cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
+      assert (context.callParams.static ⇒ value = 0) WriteInStaticContext;
+      consume_gas cappedGas;
+      accesses <- get_current_accesses;
+      subContextTx <<- <|
+          from     := context.callParams.callee
+        ; to       := context.callParams.callee
+        ; value    := value
+        ; gasLimit := cappedGas + stipend
+        ; data     := TAKE argsSize (DROP argsOffset newMemory)
+      |>;
+      subContextParams <<- <|
+        code      := codeAccount.code
+      ; accounts  := accounts
+      ; accesses  := accesses
+      ; retOffset := retOffset
+      ; retSize   := retSize
+      |>;
+      subContext <<- initial_context subContextParams subContextTx;
+      n <- get_num_contexts;
+      assert (n < context_limit) StackDepthLimit;
+      push_context subContext;
+      n1 <- get_num_contexts;
+      if n = n1
+      then refund_gas subContextTx.gasLimit
+      else return ()
+    od
   ∧ step_inst Return = do
       context <- get_current_context;
       assert (2 ≤ LENGTH context.stack) StackUnderflow;
