@@ -758,7 +758,53 @@ Definition step_inst_def:
       returnData <<- TAKE size (DROP offset expandedMemory);
       finish_context T returnData
     od
-  ∧ step_inst DelegateCall = return () (* TODO *)
+  ∧ step_inst DelegateCall = do
+      context <- get_current_context;
+      assert (6 ≤ LENGTH context.stack) StackUnderflow;
+      gas <<- w2n $ EL 0 context.stack;
+      address <<- w2w $ EL 1 context.stack;
+      argsOffset <<- w2n $ EL 2 context.stack;
+      argsSize <<- w2n $ EL 3 context.stack;
+      retOffset <<- w2n $ EL 4 context.stack;
+      retSize <<- w2n $ EL 5 context.stack;
+      newStack <<- DROP 6 context.stack;
+      newMinSize <<- MAX
+        (word_size (retOffset + retSize) * 32)
+        (word_size (argsOffset + argsSize) * 32);
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
+      addressWarm <- access_address address;
+      accessCost <<- if addressWarm then 100 else 2600;
+      accounts <- get_accounts;
+      toAccount <<- accounts address;
+      consume_gas (expansionCost + accessCost);
+      gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+      cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
+      consume_gas cappedGas;
+      accesses <- get_current_accesses;
+      subContextTx <<- <|
+          from     := context.callParams.caller
+        ; to       := context.callParams.callee
+        ; value    := context.callParams.value
+        ; gasLimit := cappedGas
+        ; data     := TAKE argsSize (DROP argsOffset newMemory)
+      |>;
+      subContextParams <<- <|
+        code      := toAccount.code
+      ; accounts  := accounts
+      ; accesses  := accesses
+      ; retOffset := retOffset
+      ; retSize   := retSize
+      |>;
+      subContext <<- initial_context subContextParams subContextTx;
+      n <- get_num_contexts;
+      assert (n < context_limit) StackDepthLimit;
+      push_context subContext;
+      n1 <- get_num_contexts;
+      if n = n1
+      then refund_gas subContextTx.gasLimit
+      else return ()
+    od
   ∧ step_inst Create2 = return () (* TODO *)
   ∧ step_inst StaticCall = return () (* TODO *)
   ∧ step_inst Revert = return () (* TODO *)
