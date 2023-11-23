@@ -10,13 +10,8 @@ Datatype:
   | StackOverflow
   | StackUnderflow
   | InvalidJumpDest
-  | StackDepthLimit
   | WriteInStaticContext
   | OutOfBoundsRead
-  | InsufficientBalance
-  | InvalidParameter
-  | InvalidContractPrefix
-  | AddressCollision
   | Impossible
 End
 
@@ -59,6 +54,10 @@ End
 
 Definition finish_def:
   finish r s = (INR (Finished r), s)
+End
+
+Definition revert_def:
+  revert r s = (INR (Reverted r), s)
 End
 
 Definition assert_def:
@@ -134,21 +133,62 @@ Definition b2w_def[simp]:
   b2w T = 1w ∧ b2w F = 0w
 End
 
+Definition consume_gas_def:
+  consume_gas n =
+  do
+    context <- get_current_context;
+    newContext <<- context with gasUsed := context.gasUsed + n;
+    assert (newContext.gasUsed ≤ context.callParams.gasLimit) OutOfGas;
+    set_current_context newContext
+  od
+End
+
+Definition refund_gas_def:
+  refund_gas n = do
+    context <- get_current_context;
+    assert (n ≤ context.gasUsed) Impossible;
+    newContext <<- context with gasUsed := context.gasUsed - n;
+    set_current_context newContext
+  od
+End
+
 Definition get_num_contexts_def:
   get_num_contexts s = return (LENGTH s.contexts) s
 End
 
 Definition push_context_def:
   push_context c = do
+    n <- get_num_contexts;
+    if n < context_limit
+    then λs. return () $ s with contexts updated_by CONS c
+    else do
+      context <- get_current_context;
+      set_current_context (context with stack := b2w F :: context.stack)
+    od
+  od
+End
+
+Definition start_context_def:
+  start_context shouldTransfer c = do
     value <<- c.callParams.value;
     caller <<- c.callParams.caller;
-    callee <<- c.callParams.callee;
     accounts <- get_accounts;
-    assert (value ≤ (accounts caller).balance) InsufficientBalance;
-    newCaller <<- accounts caller with balance updated_by combin$C $- value;
-    newCallee <<- accounts callee with balance updated_by $+ value;
-    update_accounts $ (caller =+ newCaller) o (callee =+ newCallee);
-    (λs. return () (s with contexts updated_by CONS c))
+    if shouldTransfer then
+      if value ≤ (accounts caller).balance then do
+        callee <<- c.callParams.callee;
+        newCaller <<- accounts caller with balance updated_by combin$C $- value;
+        newCallee <<- accounts callee with balance updated_by $+ value;
+        update_accounts $ (caller =+ newCaller) o (callee =+ newCallee);
+        push_context c
+      od else do
+        refund_gas c.callParams.gasLimit;
+        context <- get_current_context;
+        set_current_context $ context with
+          <| stack := b2w F :: context.stack
+           ; returnData := []
+           |>
+      od
+    else push_context c
   od
 End
 
@@ -164,12 +204,14 @@ Definition finish_context_def:
     if n = 1 then do
       context <- get_current_context;
       accounts <- get_accounts;
-      finish <|
-        output := returnData;
-        events := context.logs;
-        refund := context.gasRefund;
-        accounts := accounts
-      |>
+      if success then
+        finish <|
+          output := returnData;
+          events := context.logs;
+          refund := context.gasRefund;
+          accounts := accounts
+        |>
+      else revert returnData
     od else do
       callee <- pop_context;
       caller <- get_current_context;
@@ -195,25 +237,6 @@ Definition finish_context_def:
       ; set_accesses callee.callParams.accesses
       od
     od
-  od
-End
-
-Definition consume_gas_def:
-  consume_gas n =
-  do
-    context <- get_current_context;
-    newContext <<- context with gasUsed := context.gasUsed + n;
-    assert (newContext.gasUsed ≤ context.callParams.gasLimit) OutOfGas;
-    set_current_context newContext
-  od
-End
-
-Definition refund_gas_def:
-  refund_gas n = do
-    context <- get_current_context;
-    assert (n ≤ context.gasUsed) Impossible;
-    newContext <<- context with gasUsed := context.gasUsed - n;
-    set_current_context newContext
   od
 End
 
@@ -640,9 +663,17 @@ Definition step_inst_def:
       rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
       hash <<- keccak256 $ rlpBytes;
       address <<- w2w hash;
-      newStack <<- address :: DROP 3 context.stack;
-      set_current_context (context with stack := newStack)
-      (* TODO *)
+      (* TODO: check address is empty? *)
+      access_address address;
+      newStack <<- w2w address :: DROP 3 context.stack;
+      newMinSize <<- word_size (offset + size) * 32;
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
+      code <<- TAKE size (DROP offset newMemory);
+      assert (¬context.callParams.static) WriteInStaticContext;
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext
+      (* TODO: this should be done after running the code*)
     od
   ∧ step_inst Call = do
       context <- get_current_context;
@@ -693,13 +724,7 @@ Definition step_inst_def:
       ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      n <- get_num_contexts;
-      assert (n < context_limit) StackDepthLimit;
-      push_context subContext;
-      n1 <- get_num_contexts;
-      if n = n1
-      then refund_gas subContextTx.gasLimit
-      else return ()
+      start_context T subContext
     od
   ∧ step_inst CallCode = do (* TODO: abstract some of the duplication in Code *)
       context <- get_current_context;
@@ -747,13 +772,7 @@ Definition step_inst_def:
       ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      n <- get_num_contexts;
-      assert (n < context_limit) StackDepthLimit;
-      push_context subContext;
-      n1 <- get_num_contexts;
-      if n = n1
-      then refund_gas subContextTx.gasLimit
-      else return ()
+      start_context T subContext
     od
   ∧ step_inst Return = do
       context <- get_current_context;
@@ -807,13 +826,7 @@ Definition step_inst_def:
       ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      n <- get_num_contexts;
-      assert (n < context_limit) StackDepthLimit;
-      push_context subContext;
-      n1 <- get_num_contexts;
-      if n = n1
-      then refund_gas subContextTx.gasLimit
-      else return ()
+      start_context F subContext
     od
   ∧ step_inst Create2 = return () (* TODO *)
   ∧ step_inst StaticCall = do
@@ -858,13 +871,7 @@ Definition step_inst_def:
       ; static    := T
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      n <- get_num_contexts;
-      assert (n < context_limit) StackDepthLimit;
-      push_context subContext;
-      n1 <- get_num_contexts;
-      if n = n1
-      then refund_gas subContextTx.gasLimit
-      else return ()
+      start_context F subContext
     od
   ∧ step_inst Revert = do
       context <- get_current_context;
