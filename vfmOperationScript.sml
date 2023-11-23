@@ -82,7 +82,6 @@ Datatype:
   | Create2
   | StaticCall
   | Revert
-  | Invalid
 End
 
 Definition wf_opname_def[simp]:
@@ -168,7 +167,6 @@ Definition opcode_def:
   ∧ opcode Create2        = [n2w 0xf5]
   ∧ opcode StaticCall     = [n2w 0xfa]
   ∧ opcode Revert         = [n2w 0xfd]
-  ∧ opcode Invalid        = [n2w 0xfe]
 End
 
 Definition parse_opcode_def:
@@ -337,7 +335,6 @@ Theorem parse_opcode_cond_thm:
   if opc = n2w 0xf5 then SOME Create2 else
   if opc = n2w 0xfa then SOME StaticCall else
   if opc = n2w 0xfd then SOME Revert else
-  if opc = n2w 0xfe then SOME Invalid else
   NONE
 Proof
   simp[parse_opcode_def]
