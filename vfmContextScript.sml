@@ -96,6 +96,7 @@ Datatype:
    ; accesses  : access_sets
    ; retOffset : num
    ; retSize   : num
+   ; static    : bool
    |>
 End
 
@@ -105,7 +106,7 @@ Definition initial_call_params_def:
    ; callee    := t.to
    ; code      := ctxt.code
    ; value     := t.value
-   ; static    := F
+   ; static    := ctxt.static
    ; data      := t.data
    ; gasLimit  := t.gasLimit
    ; accounts  := ctxt.accounts
@@ -177,7 +178,7 @@ Definition initial_state_def:
   initial_state c a b r z t =
   let acc = initial_access_sets t in
   let ctxt = <| code := (a t.to).code; accounts := a; accesses := acc
-              ; retOffset := r; retSize := z |> in
+              ; retOffset := r; retSize := z; static := F |> in
   <| contexts := [initial_context ctxt t]
    ; txParams := initial_tx_params c b t
    ; accesses := acc
