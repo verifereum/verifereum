@@ -160,26 +160,38 @@ Definition push_context_def:
   push_context c = do
     n <- get_num_contexts;
     if n < context_limit
-    then λs. return () $ s with contexts updated_by CONS c
+    then λs. return T $ s with contexts updated_by CONS c
     else do
       context <- get_current_context;
-      set_current_context (context with stack := b2w F :: context.stack)
+      set_current_context (context with stack := b2w F :: context.stack);
+      return F
     od
   od
 End
 
 Definition start_context_def:
-  start_context shouldTransfer c = do
+  start_context shouldTransfer shouldIncNonce c = do
     value <<- c.callParams.value;
-    caller <<- c.callParams.caller;
+    callerAddress <<- c.callParams.caller;
     accounts <- get_accounts;
+    caller <<- accounts callerAddress;
     if shouldTransfer then
-      if value ≤ (accounts caller).balance then do
+      if value ≤ caller.balance ∧
+         (shouldIncNonce ⇒ SUC caller.nonce < 2 ** 64)
+      then do
         callee <<- c.callParams.callee;
-        newCaller <<- accounts caller with balance updated_by combin$C $- value;
+        incCaller <<- caller with nonce updated_by SUC;
+        ctxt <<- if shouldIncNonce
+        (* TODO: also if created address exists, change the code to immediately
+        * revert and consume all gas *)
+                 then c with callParams updated_by
+                   (λp. p with accounts updated_by (callerAddress =+ incCaller))
+                 else c;
+        success <- push_context ctxt;
+        newCaller <<- (if success ∧ shouldIncNonce then incCaller else caller)
+                      with balance updated_by combin$C $- value;
         newCallee <<- accounts callee with balance updated_by $+ value;
-        update_accounts $ (caller =+ newCaller) o (callee =+ newCallee);
-        push_context c
+        update_accounts $ (callerAddress =+ newCaller) o (callee =+ newCallee)
       od else do
         refund_gas c.callParams.gasLimit;
         context <- get_current_context;
@@ -188,7 +200,7 @@ Definition start_context_def:
            ; returnData := []
            |>
       od
-    else push_context c
+    else do push_context c; return () od
   od
 End
 
@@ -218,7 +230,8 @@ Definition finish_context_def:
       (returnOffset, returnSize) <<-
         case callee.callParams.outputTo of
         | Memory r => (r.offset, r.size)
-        (* TODO: handle code output *);
+        (* TODO: handle code output: add code,
+        *        put address (instead of b2w T) on stack *);
       calleeGasLeft <<- callee.callParams.gasLimit - callee.gasUsed;
       newCallerBase <<- caller with
         <| returnData := returnData
@@ -657,20 +670,22 @@ Definition step_inst_def:
       value <<- w2n $ EL 0 context.stack;
       offset <<- w2n $ EL 1 context.stack;
       size <<- w2n $ EL 2 context.stack;
-      sender <<- context.callParams.callee;
+      senderAddress <<- context.callParams.callee;
       accounts <- get_accounts;
-      nonce <<- (accounts sender).nonce;
-      rlpSender <<- rlp_bytes $ word_to_bytes sender T;
+      sender <<- accounts senderAddress;
+      nonce <<- sender.nonce;
+      rlpSender <<- rlp_bytes $ word_to_bytes senderAddress T;
       rlpNonce <<- rlp_bytes $ MAP n2w $ REVERSE $ n2l 256 $ nonce;
       rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
       hash <<- keccak256 $ rlpBytes;
       address <<- w2w hash;
-      (* TODO: check address is empty *)
       access_address address;
-      newStack <<- w2w address :: DROP 3 context.stack;
+      newStack <<- DROP 3 context.stack;
       newMinSize <<- word_size (offset + size) * 32;
       newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       expansionCost <<- memory_expansion_cost context.memory newMemory;
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext;
       consume_gas expansionCost;
       code <<- TAKE size (DROP offset newMemory);
       gasLeft <<- context.callParams.gasLimit - context.gasUsed;
@@ -679,7 +694,7 @@ Definition step_inst_def:
       consume_gas cappedGas;
       accesses <- get_current_accesses;
       subContextTx <<- <|
-          from     := context.callParams.callee
+          from     := senderAddress
         ; to       := 0w
         ; value    := value
         ; gasLimit := cappedGas
@@ -692,10 +707,8 @@ Definition step_inst_def:
         ; outputTo  := Code address
         ; static    := context.callParams.static
       |>;
-      (* TODO: run code with cappedGas *)
-      newContext <<- context with <| stack := newStack; memory := newMemory |>;
-      set_current_context newContext
-      (* TODO: this should be done after running the code*)
+      subContext <<- initial_context subContextParams subContextTx;
+      start_context T T subContext
     od
   ∧ step_inst Call = do
       context <- get_current_context;
@@ -745,7 +758,7 @@ Definition step_inst_def:
         ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      start_context T subContext
+      start_context T F subContext
     od
   ∧ step_inst CallCode = do (* TODO: abstract some of the duplication in Code *)
       context <- get_current_context;
@@ -792,7 +805,7 @@ Definition step_inst_def:
         ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      start_context T subContext
+      start_context T F subContext
     od
   ∧ step_inst Return = do
       context <- get_current_context;
@@ -845,7 +858,7 @@ Definition step_inst_def:
         ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      start_context F subContext
+      start_context F F subContext
     od
   ∧ step_inst Create2 = return () (* TODO *)
   ∧ step_inst StaticCall = do
@@ -889,7 +902,7 @@ Definition step_inst_def:
         ; static    := T
       |>;
       subContext <<- initial_context subContextParams subContextTx;
-      start_context F subContext
+      start_context F F subContext
     od
   ∧ step_inst Revert = do
       context <- get_current_context;
