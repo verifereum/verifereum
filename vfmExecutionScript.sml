@@ -215,8 +215,10 @@ Definition finish_context_def:
     od else do
       callee <- pop_context;
       caller <- get_current_context;
-      returnOffset <<- callee.callParams.retOffset;
-      returnSize <<- callee.callParams.retSize;
+      (returnOffset, returnSize) <<-
+        case callee.callParams.outputTo of
+        | Memory r => (r.offset, r.size)
+        (* TODO: handle code output *);
       calleeGasLeft <<- callee.callParams.gasLimit - callee.gasUsed;
       newCallerBase <<- caller with
         <| returnData := returnData
@@ -663,14 +665,34 @@ Definition step_inst_def:
       rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
       hash <<- keccak256 $ rlpBytes;
       address <<- w2w hash;
-      (* TODO: check address is empty? *)
+      (* TODO: check address is empty *)
       access_address address;
       newStack <<- w2w address :: DROP 3 context.stack;
       newMinSize <<- word_size (offset + size) * 32;
       newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       expansionCost <<- memory_expansion_cost context.memory newMemory;
+      consume_gas expansionCost;
       code <<- TAKE size (DROP offset newMemory);
+      gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+      cappedGas <<- gasLeft - gasLeft DIV 64;
       assert (¬context.callParams.static) WriteInStaticContext;
+      consume_gas cappedGas;
+      accesses <- get_current_accesses;
+      subContextTx <<- <|
+          from     := context.callParams.callee
+        ; to       := 0w
+        ; value    := value
+        ; gasLimit := cappedGas
+        ; data     := []
+      |>;
+      subContextParams <<- <|
+          code      := code
+        ; accounts  := accounts
+        ; accesses  := accesses
+        ; outputTo  := Code address
+        ; static    := context.callParams.static
+      |>;
+      (* TODO: run code with cappedGas *)
       newContext <<- context with <| stack := newStack; memory := newMemory |>;
       set_current_context newContext
       (* TODO: this should be done after running the code*)
@@ -716,12 +738,11 @@ Definition step_inst_def:
         ; data     := TAKE argsSize (DROP argsOffset newMemory)
       |>;
       subContextParams <<- <|
-        code      := toAccount.code
-      ; accounts  := accounts
-      ; accesses  := accesses
-      ; retOffset := retOffset
-      ; retSize   := retSize
-      ; static    := context.callParams.static
+          code      := toAccount.code
+        ; accounts  := accounts
+        ; accesses  := accesses
+        ; outputTo  := Memory <| offset := retOffset; size := retSize |>
+        ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
       start_context T subContext
@@ -764,12 +785,11 @@ Definition step_inst_def:
         ; data     := TAKE argsSize (DROP argsOffset newMemory)
       |>;
       subContextParams <<- <|
-        code      := codeAccount.code
-      ; accounts  := accounts
-      ; accesses  := accesses
-      ; retOffset := retOffset
-      ; retSize   := retSize
-      ; static    := context.callParams.static
+          code      := codeAccount.code
+        ; accounts  := accounts
+        ; accesses  := accesses
+        ; outputTo  := Memory <| offset := retOffset; size := retSize |>
+        ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
       start_context T subContext
@@ -818,12 +838,11 @@ Definition step_inst_def:
         ; data     := TAKE argsSize (DROP argsOffset newMemory)
       |>;
       subContextParams <<- <|
-        code      := toAccount.code
-      ; accounts  := accounts
-      ; accesses  := accesses
-      ; retOffset := retOffset
-      ; retSize   := retSize
-      ; static    := context.callParams.static
+          code      := toAccount.code
+        ; accounts  := accounts
+        ; accesses  := accesses
+        ; outputTo  := Memory <| offset := retOffset; size := retSize |>
+        ; static    := context.callParams.static
       |>;
       subContext <<- initial_context subContextParams subContextTx;
       start_context F subContext
@@ -863,12 +882,11 @@ Definition step_inst_def:
         ; data     := TAKE argsSize (DROP argsOffset newMemory)
       |>;
       subContextParams <<- <|
-        code      := toAccount.code
-      ; accounts  := accounts
-      ; accesses  := accesses
-      ; retOffset := retOffset
-      ; retSize   := retSize
-      ; static    := T
+          code      := toAccount.code
+        ; accounts  := accounts
+        ; accesses  := accesses
+        ; outputTo  := Memory <| offset := retOffset; size := retSize |>
+        ; static    := T
       |>;
       subContext <<- initial_context subContextParams subContextTx;
       start_context F subContext

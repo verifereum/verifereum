@@ -26,6 +26,19 @@ Datatype:
 End
 
 Datatype:
+  memory_range =
+  <| offset : num
+   ; size   : num
+   |>
+End
+
+Datatype:
+  return_destination =
+  | Memory memory_range
+  | Code address
+End
+
+Datatype:
   call_parameters =
   <| caller    : address
    ; callee    : address
@@ -34,8 +47,7 @@ Datatype:
    ; static    : bool
    ; gasLimit  : num
    ; data      : byte list
-   ; retOffset : num
-   ; retSize   : num
+   ; outputTo  : return_destination
    (* values at the start of the call, for rollback *)
    ; accounts  : evm_accounts
    ; accesses  : access_sets
@@ -94,8 +106,7 @@ Datatype:
   <| code      : byte list
    ; accounts  : evm_accounts
    ; accesses  : access_sets
-   ; retOffset : num
-   ; retSize   : num
+   ; outputTo  : return_destination
    ; static    : bool
    |>
 End
@@ -111,8 +122,7 @@ Definition initial_call_params_def:
    ; gasLimit  := t.gasLimit
    ; accounts  := ctxt.accounts
    ; accesses  := ctxt.accesses
-   ; retOffset := ctxt.retOffset
-   ; retSize   := ctxt.retSize
+   ; outputTo  := ctxt.outputTo
    |>
 End
 
@@ -175,28 +185,28 @@ Definition initial_access_sets_def:
 End
 
 Definition initial_state_def:
-  initial_state c a b r z t =
+  initial_state c a b r t =
   let acc = initial_access_sets t in
   let ctxt = <| code := (a t.to).code; accounts := a; accesses := acc
-              ; retOffset := r; retSize := z; static := F |> in
+              ; outputTo := r; static := F |> in
   <| contexts := [initial_context ctxt t]
    ; txParams := initial_tx_params c b t
    ; accesses := acc
-   ; accounts := a (* TODO: transfer t.value *)
+   ; accounts := a (* TODO: transfer t.value if needed? *)
    |>
 End
 
 Theorem initial_state_simp[simp]:
-    (initial_state c a b r z t).accounts = a
-  ∧ (initial_state c a b r z t).accesses = initial_access_sets t
-  ∧ (initial_state c a b r z t).txParams = initial_tx_params c b t
+    (initial_state c a b r t).accounts = a
+  ∧ (initial_state c a b r t).accesses = initial_access_sets t
+  ∧ (initial_state c a b r t).txParams = initial_tx_params c b t
 Proof
   rw[initial_state_def]
 QED
 
 Theorem wf_initial_state[simp]:
   wf_accounts a ⇒
-  wf_state (initial_state c a b r z t)
+  wf_state (initial_state c a b r t)
 Proof
   rw[wf_accounts_def, wf_state_def]
   \\ rw[initial_state_def]
