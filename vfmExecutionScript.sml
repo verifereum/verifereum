@@ -181,11 +181,17 @@ Definition start_context_def:
       then do
         callee <<- c.callParams.callee;
         incCaller <<- caller with nonce updated_by SUC;
+        code <<- case c.callParams.outputTo of Code address =>
+                   if (accounts address).code ≠ [] ∨
+                      (accounts address).nonce ≠ 0
+                   then [invalid_opcode]
+                   else c.callParams.code
+                 | _ => c.callParams.code;
         ctxt <<- if shouldIncNonce
-        (* TODO: also if created address exists, change the code to immediately
-        * revert and consume all gas *)
                  then c with callParams updated_by
-                   (λp. p with accounts updated_by (callerAddress =+ incCaller))
+                   (λp. p with <|
+                          accounts updated_by (callerAddress =+ incCaller)
+                        ; code := code |>)
                  else c;
         success <- push_context ctxt;
         newCaller <<- (if success ∧ shouldIncNonce then incCaller else caller)
@@ -201,57 +207,6 @@ Definition start_context_def:
            |>
       od
     else do push_context c; return () od
-  od
-End
-
-Definition pop_context_def:
-  pop_context s =
-    return (HD s.contexts) (s with contexts := TL s.contexts)
-End
-
-Definition finish_context_def:
-  finish_context success returnData = do
-    n <- get_num_contexts;
-    assert (0 < n) Impossible;
-    if n = 1 then do
-      context <- get_current_context;
-      accounts <- get_accounts;
-      if success then
-        finish <|
-          output := returnData;
-          events := context.logs;
-          refund := context.gasRefund;
-          accounts := accounts
-        |>
-      else revert returnData
-    od else do
-      callee <- pop_context;
-      caller <- get_current_context;
-      (returnOffset, returnSize) <<-
-        case callee.callParams.outputTo of
-        | Memory r => (r.offset, r.size)
-        (* TODO: handle code output: add code,
-        *        put address (instead of b2w T) on stack *);
-      calleeGasLeft <<- callee.callParams.gasLimit - callee.gasUsed;
-      newCallerBase <<- caller with
-        <| returnData := returnData
-         ; gasUsed    := caller.gasUsed - calleeGasLeft
-         ; pc         := SUC caller.pc
-         ; stack      := b2w success :: caller.stack
-         ; memory     :=
-             write_memory returnOffset (TAKE returnSize returnData) caller.memory
-         |>;
-      newCaller <<- if success
-        then newCallerBase with
-             <| gasRefund updated_by $+ callee.gasRefund
-              ; logs updated_by combin$C APPEND callee.logs |>
-        else newCallerBase;
-      set_current_context newCaller;
-      if success then return () else do
-        set_accounts callee.callParams.accounts
-      ; set_accesses callee.callParams.accesses
-      od
-    od
   od
 End
 
@@ -409,8 +364,22 @@ Definition rlp_list_def:
     [n2w (248 + LENGTH lengthBytes)] ++ lengthBytes ++ payload
 End
 
+Definition finish_current_def:
+  finish_current returnData = do
+    context <- get_current_context;
+    accounts <- get_accounts;
+    r <<- <|
+        output   := returnData
+      ; events   := context.logs
+      ; refund   := context.gasRefund
+      ; accounts := accounts
+    |>;
+    finish r
+  od
+End
+
 Definition step_inst_def:
-    step_inst Stop = finish_context T []
+    step_inst Stop = finish_current []
   ∧ step_inst Add = binop word_add
   ∧ step_inst Mul = binop word_mul
   ∧ step_inst Sub = binop word_sub
@@ -815,7 +784,7 @@ Definition step_inst_def:
       newMinSize <<- word_size (offset + size) * 32;
       expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       returnData <<- TAKE size (DROP offset expandedMemory);
-      finish_context T returnData
+      finish_current returnData
     od
   ∧ step_inst DelegateCall = do
       context <- get_current_context;
@@ -917,7 +886,7 @@ Definition step_inst_def:
       returnData <<- TAKE size (DROP offset newMemory);
       newContext <<- context with <| stack := newStack; memory := newMemory |>;
       set_current_context newContext;
-      finish_context F returnData
+      revert returnData
     od
 End
 
@@ -935,8 +904,13 @@ Definition inc_pc_def:
         set_current_context (context with <| pc := pc; jumpDest := NONE |>)))
 End
 
+Definition pop_context_def:
+  pop_context s =
+    return (HD s.contexts) (s with contexts := TL s.contexts)
+End
+
 Definition step_def:
-  step = do
+  step s = case do
     context <- get_current_context;
     code <<- context.callParams.code;
     if context.pc = LENGTH code
@@ -944,14 +918,77 @@ Definition step_def:
     else do
       assert (context.pc < LENGTH code) Impossible;
       case parse_opcode (DROP context.pc code) of
-      | NONE => finish_context F []
+      | NONE => do
+          consume_gas (context.callParams.gasLimit - context.gasUsed);
+          revert []
+        od
       | SOME op => do
           consume_gas (static_gas op);
           step_inst op;
           inc_pc (LENGTH (opcode op))
         od
     od
-  od
+  od s of
+  | (INL x, s) => (INL x, s)
+  | (INR e, s) =>
+      case s.contexts of
+      | [] => (INR (Excepted Impossible), s)
+      | [_] => (INR e, s)
+      | callee :: caller :: callStack =>
+        let calleeGasLeft = callee.callParams.gasLimit - callee.gasUsed in
+        let returnData = case e of Finished r => r.output
+                                 | Reverted d => d
+                                 | Excepted _ => [] in
+        let calleeSuccess = case e of Finished _ => T | _ => F in
+        let (newCallerBase, accountsUpdater, success) =
+          (case callee.callParams.outputTo of
+           | Memory r =>
+             (caller with
+                <| returnData := returnData
+                 ; stack      := b2w calleeSuccess :: caller.stack
+                 ; pc         := SUC caller.pc
+                 ; gasUsed    := caller.gasUsed - calleeGasLeft
+                 ; memory     :=
+                     write_memory r.offset (TAKE r.size returnData) caller.memory
+                 |>, I, calleeSuccess)
+           | Code address =>
+             let codeGas = LENGTH returnData * 200 in
+             let validCode = (returnData ≠ [] ⇒ HD returnData ≠ n2w 0xef) in
+             let callerGasLeft = caller.callParams.gasLimit - caller.gasUsed in
+             let success = (calleeSuccess ∧ validCode ∧ codeGas ≤ callerGasLeft) in
+             (caller with
+                <| returnData := if success then [] else returnData
+                 ; stack      := (if success then w2w address else b2w F)
+                                 :: caller.stack
+                 ; pc         := SUC caller.pc
+                 ; gasUsed    := if success
+                                 then caller.gasUsed + codeGas - calleeGasLeft
+                                 else if calleeSuccess
+                                 then caller.gasUsed - calleeGasLeft
+                                 else caller.callParams.gasLimit
+                 |>,
+              if success
+              then (address =+ (s.accounts address) with code := returnData)
+              else I,
+              success)) in
+        let newCaller =
+          if success
+          then newCallerBase with
+               <| gasRefund updated_by $+ callee.gasRefund
+                ; logs updated_by combin$C APPEND callee.logs |>
+          else newCallerBase in
+        let updatedState =
+          (s with <|
+              accounts updated_by accountsUpdater
+            ; contexts := newCaller :: callStack
+            |>) in
+        (INL (),
+         if success
+         then updatedState
+         else updatedState with <|
+             accounts := callee.callParams.accounts
+           ; accesses := callee.callParams.accesses
+           |>)
 End
 
 (* TODO: prove LENGTH memory is always a multiple of 32 bytes *)

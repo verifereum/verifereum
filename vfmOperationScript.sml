@@ -169,6 +169,10 @@ Definition opcode_def:
   ∧ opcode Revert         = [n2w 0xfd]
 End
 
+Definition invalid_opcode_def:
+  invalid_opcode : byte = n2w 0xfe
+End
+
 Definition parse_opcode_def:
   parse_opcode (opc:byte list) =
     some opn. wf_opname opn ∧ opcode opn ≼ opc
