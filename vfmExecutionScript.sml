@@ -829,7 +829,54 @@ Definition step_inst_def:
       subContext <<- initial_context subContextParams subContextTx;
       start_context F F subContext
     od
-  ∧ step_inst Create2 = return () (* TODO *)
+  ∧ step_inst Create2 = do
+      context <- get_current_context;
+      assert (4 ≤ LENGTH context.stack) StackUnderflow;
+      value <<- w2n $ EL 0 context.stack;
+      offset <<- w2n $ EL 1 context.stack;
+      size <<- w2n $ EL 2 context.stack;
+      salt <<- EL 3 context.stack;
+      newStack <<- DROP 4 context.stack;
+      senderAddress <<- context.callParams.callee;
+      accounts <- get_accounts;
+      sender <<- accounts senderAddress;
+      newMinSize <<- word_size (offset + size) * 32;
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      code <<- TAKE size (DROP offset newMemory);
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
+      minimumWordSize <<- word_size size;
+      readCodeCost <<- 6 * minimumWordSize;
+      consume_gas (readCodeCost + expansionCost);
+      address <<- w2w $ keccak256(
+        [n2w 0xff] ++
+        word_to_bytes senderAddress T ++
+        word_to_bytes salt T ++
+        word_to_bytes (keccak256 code) T);
+      access_address address;
+      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      set_current_context newContext;
+      gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+      cappedGas <<- gasLeft - gasLeft DIV 64;
+      assert (¬context.callParams.static) WriteInStaticContext;
+      consume_gas cappedGas;
+      accesses <- get_current_accesses;
+      subContextTx <<- <|
+          from     := senderAddress
+        ; to       := 0w
+        ; value    := value
+        ; gasLimit := cappedGas
+        ; data     := []
+      |>;
+      subContextParams <<- <|
+          code      := code
+        ; accounts  := accounts
+        ; accesses  := accesses
+        ; outputTo  := Code address
+        ; static    := context.callParams.static
+      |>;
+      subContext <<- initial_context subContextParams subContextTx;
+      start_context T T subContext
+    od
   ∧ step_inst StaticCall = do
       context <- get_current_context;
       assert (6 ≤ LENGTH context.stack) StackUnderflow;
