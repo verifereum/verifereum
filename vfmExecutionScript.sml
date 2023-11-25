@@ -2,7 +2,7 @@ open HolKernel boolLib bossLib Parse
      monadsyntax byteTheory
      vfmTypesTheory vfmContextTheory;
 
-val _ = new_theory"vfmExecution";
+val _ = new_theory "vfmExecution";
 
 Datatype:
   exception =
@@ -633,6 +633,7 @@ Definition step_inst_def:
         <| memory := newMemory; logs := event :: context.logs |>;
       set_current_context newContext
     od
+ (* TODO: abstract some of the duplication in Call and Create *)
   ∧ step_inst Create = do
       context <- get_current_context;
       assert (3 ≤ LENGTH context.stack) StackUnderflow;
@@ -729,7 +730,7 @@ Definition step_inst_def:
       subContext <<- initial_context subContextParams subContextTx;
       start_context T F subContext
     od
-  ∧ step_inst CallCode = do (* TODO: abstract some of the duplication in Code *)
+  ∧ step_inst CallCode = do
       context <- get_current_context;
       assert (7 ≤ LENGTH context.stack) StackUnderflow;
       gas <<- w2n $ EL 0 context.stack;
