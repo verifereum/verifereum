@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse
-     monadsyntax byteTheory
+     monadsyntax byteTheory recursiveLengthPrefixTheory
      vfmTypesTheory vfmContextTheory;
 
 val _ = new_theory "vfmExecution";
@@ -342,26 +342,6 @@ Definition update_refund_def:
     newContext <<- context with gasRefund updated_by f;
     set_current_context newContext
   od
-End
-
-(* TODO: move to separate theory *)
-Definition rlp_bytes_def:
-  rlp_bytes (bytes : byte list) =
-  if LENGTH bytes = 1 ∧ w2n (HD bytes) < 128 then bytes
-  else if LENGTH bytes < 56 then n2w (128 + LENGTH bytes) :: bytes
-  else
-    let lengthBytes = MAP n2w $ REVERSE $ n2l 256 $ LENGTH bytes
-  in
-    [n2w (183 + LENGTH lengthBytes)] ++ lengthBytes ++ bytes
-End
-
-Definition rlp_list_def:
-  rlp_list (payload : byte list) =
-  if LENGTH payload < 56 then n2w (192 + LENGTH payload) :: payload
-  else
-    let lengthBytes = MAP n2w $ REVERSE $ n2l 256 $ LENGTH payload
-  in
-    [n2w (248 + LENGTH lengthBytes)] ++ lengthBytes ++ payload
 End
 
 Definition finish_current_def:
