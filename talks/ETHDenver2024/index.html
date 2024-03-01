@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Verifereum</title>
+    <link rel=stylesheet href=index.css>
+  </head>
+  <body>
+    <section>
+      <h2>Verifereum</h2>
+      <p class=callout>
+        Formal <span class=highlight>verif</span>ication of implementation
+        correctness for applications that run on the Eth<span class=highlight>ereum</span>
+        virtual machine.
+      </p>
+      <dl>
+        <dt>Formal verification</dt><dd>machine checked proofs of mathematical theorems</dd>
+        <dt>Implementation</dt><dd>all the bytecode and onchain context comprising the application</dd>
+        <dt>Correctness</dt><dd>execution of the implementation conforms to any desirable properties we care to specify precisely</dd>
+        <dt>Application</dt><dd>aka protocol, dapp, (suite of) smart contract(s), e.g. Rocket Split, e.g. the suite of Rocket Pool smart contracts</dd>
+        <dt>Ethereum virtual machine (EVM)</dt><dd>the execution environment for applications on Ethereum and for many of its layer 2s and other related chains</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Goal</h2>
+      <p class=callout>
+        Prove any functional property of EVM bytecode in a partially specified context.
+      </p>
+      <p>For example, a conjecture about Rocket Pool Minipools:</p>
+      <div class=code>
+∀<span class=variable>m</span> <span class=variable>rocketStorage</span> <span class=variable>minipool</span> <span class=variable>delegate</span> <span class=variable>node</span> <span class=variable>withdrawal</span> <span class=variable>rETH</span> <span class=variable>tx</span> <span class=variable>result</span> <span class=variable>m'</span>.
+  lookupCode <span class=variable>m</span> <span class=variable>rocketStorage</span> = <span class=elided>&lt;rocket storage code&gt;</span> ∧
+  lookupCode <span class=variable>m</span> <span class=variable>minipool</span> = <span class=elided>&lt;minipool base code&gt;</span> ∧
+  lookupCode <span class=variable>m</span> <span class=variable>delegate</span> = <span class=elided>&lt;latest delegate code&gt;</span> ∧
+  staticCallAddr <span class=variable>m</span> <span class=variable>minipool</span> (abiEnc "getEffectiveDelegate" []) = SOME <span class=variable>delegate</span> ∧
+  staticCallAddr <span class=variable>m</span> <span class=variable>minipool</span> (abiEnc "getNodeAddress" []) = SOME <span class=variable>node</span> ∧
+  staticCallAddr <span class=variable>m</span> <span class=variable>rocketStorage</span>
+    (abiEnc "getNodeWithdrawalAddress" [("address", <span class=variable>node</span>)]) = SOME <span class=variable>withdrawal</span> ∧
+  staticCallAddr <span class=variable>m</span> <span class=variable>rocketStorage</span> (getRocketAddress "rocketTokenRETH") = SOME <span class=variable>rETH</span> ∧
+  executeTx <span class=variable>m</span> <span class=variable>tx</span> (Finished <span class=variable>result</span>) ∧ <span class=variable>result</span>.accounts = <span class=variable>m'</span>
+⇒
+  balance <span class=variable>m</span> <span class=variable>minipool</span> - balance <span class=variable>m'</span> <span class=variable>minipool</span> ≤
+    balance <span class=variable>m'</span> <span class=variable>rETH</span> - balance <span class=variable>m</span> <span class=variable>rETH</span> +
+    balance <span class=variable>m'</span> <span class=variable>withdrawal</span> - balance <span class=variable>m</span> <span class=variable>withdrawal</span>
+      </div>
+    </section>
+    <section>
+      <h2>Plan</h2>
+      <ol>
+        <li>Formal <span class=highlight>model of the EVM</span> in higher-order logic (HOL). Using the <a href=https://hol-theorem-prover.org>HOL Theorem Prover</a>.</li>
+        <li><span class=highlight>Separation logic</span> for EVM program execution in partially-specified contexts.</li>
+        <li><span class=highlight>Decompilation into logic</span>, to reason about extant bytecode.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>Status & Future</h2>
+      <p>
+      Currently I have defined most of the EVM in HOL.
+      </p>
+      <p class=narrow>
+      Next steps: run Ethereum client tests, add missing pieces (e.g.
+      precompiles), then separation logic, decompilation,
+      verify properties of a few existing contracts...
+      </p>
+      <p class=callout>
+      Directions after the work is done:<br><span class=highlight>Bug Bounties</span> and <span class=highlight>Audits</span>.
+      </p>
+    </section>
+    <section>
+      <h2>Join</h2>
+      <p class=callout>
+        Please join us: collaborators are very welcome.
+        Verifereum is 100% free software.
+      </p>
+      <p>
+        No experience is required. Just enthusiasm and willingness to learn and
+        contribute.
+      </p>
+      <p>
+        Check out the repository: <a href=https://github.com/xrchz/verifereum>https://github.com/xrchz/verifereum</a>.
+      </p>
+    </section>
+  </body>
+</html>

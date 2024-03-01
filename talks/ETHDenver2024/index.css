@@ -1,0 +1,60 @@
+html {
+  scroll-snap-type: y mandatory;
+}
+body {
+  color: indigo;
+  background-color: darkorange;
+  font-family: sans-serif;
+  font-size: 3.2vh;
+}
+section {
+  border: 0.1em solid darkred;
+  padding: 0.2em 0.8em;
+  margin: auto;
+  margin-bottom: 1em;
+  width: 96vw;
+  height: 96vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+span.highlight,
+h2 {
+  color: slateblue;
+}
+ul, dl, ol {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  height: 100%;
+  margin: 0;
+}
+dt {
+  color: darkred;
+  font-style: italic;
+}
+dd {
+  margin-bottom: 0.2em;
+}
+p.callout {
+  font-size: larger;
+}
+p.callout,
+p.narrow {
+  width: 60%;
+  text-align: center;
+}
+div.code {
+  white-space: pre;
+  font-family: monospace;
+}
+span.variable {
+  font-style: italic;
+  color: darkred;
+}
+span.elided {
+  color: purple;
+}
