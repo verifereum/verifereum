@@ -1,8 +1,19 @@
 open HolKernel boolLib bossLib Parse
-     monadsyntax byteTheory recursiveLengthPrefixTheory
+     monadsyntax byteTheory keccakTheory
+     recursiveLengthPrefixTheory
      vfmTypesTheory vfmContextTheory;
 
 val _ = new_theory "vfmExecution";
+
+(* TODO: move? *)
+Definition Keccak_256_bytes_def:
+  Keccak_256_bytes (bs:word8 list) : word8 list =
+    MAP bools_to_word $
+    chunks 8 $
+    Keccak_256 $
+    MAP ((=) 1) $ FLAT $
+    MAP (PAD_LEFT 0 8 o word_to_bin_list) bs
+End
 
 Datatype:
   exception =
@@ -73,10 +84,6 @@ val _ = monadsyntax.declare_monad (
 );
 val () = monadsyntax.enable_monad "txn";
 val () = monadsyntax.enable_monadsyntax();
-
-Definition keccak256_def:
-  keccak256 (bytes : byte list) = ARB : bytes32 (* TODO *)
-End
 
 Definition write_memory_def:
   write_memory byteIndex bytes memory =
@@ -627,7 +634,7 @@ Definition step_inst_def:
       rlpSender <<- rlp_bytes $ word_to_bytes senderAddress T;
       rlpNonce <<- rlp_bytes $ MAP n2w $ REVERSE $ n2l 256 $ nonce;
       rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
-      hash <<- keccak256 $ rlpBytes;
+      hash <<- word_of_bytes F (0w:bytes32) $ Keccak_256_bytes $ rlpBytes;
       address <<- w2w hash;
       access_address address;
       newStack <<- DROP 3 context.stack;
@@ -828,11 +835,11 @@ Definition step_inst_def:
       minimumWordSize <<- word_size size;
       readCodeCost <<- 6 * minimumWordSize;
       consume_gas (readCodeCost + expansionCost);
-      address <<- w2w $ keccak256(
+      address <<- w2w $ word_of_bytes F (0w:bytes32) $ Keccak_256_bytes(
         [n2w 0xff] ++
         word_to_bytes senderAddress T ++
         word_to_bytes salt T ++
-        word_to_bytes (keccak256 code) T);
+        Keccak_256_bytes code);
       access_address address;
       newContext <<- context with <| stack := newStack; memory := newMemory |>;
       set_current_context newContext;
