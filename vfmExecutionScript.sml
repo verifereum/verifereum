@@ -409,7 +409,7 @@ Definition step_inst_def:
   ∧ step_inst ShL = binop (λn w. word_lsl w (w2n n))
   ∧ step_inst ShR = binop (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
-  ∧ step_inst SHA3 = do
+  ∧ step_inst Keccak256 = do
       context <- get_current_context;
       assert (2 ≤ LENGTH context.stack) StackUnderflow;
       offset <<- w2n (EL 0 context.stack);
