@@ -409,7 +409,17 @@ Definition step_inst_def:
   ∧ step_inst ShL = binop (λn w. word_lsl w (w2n n))
   ∧ step_inst ShR = binop (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
-  ∧ step_inst SHA3 = return () (* TODO *)
+  ∧ step_inst SHA3 = do
+      context <- get_current_context;
+      assert (2 ≤ LENGTH context.stack) StackUnderflow;
+      offset <<- w2n (EL 0 context.stack);
+      size <<- w2n (EL 1 context.stack);
+      hash <<- word_of_bytes F (0w:bytes32) $ Keccak_256_bytes (TAKE size (DROP offset context.memory));
+      newStack <<- hash :: DROP 2 context.stack;
+      dynamicGas <<- 6 * (size + 31) DIV 32;
+      consume_gas dynamicGas;
+      set_current_context (context with stack := newStack)
+    od
   ∧ step_inst Address = push_from_ctxt (λc. w2w c.callParams.callee)
   ∧ step_inst Balance = do
       context <- get_current_context;
