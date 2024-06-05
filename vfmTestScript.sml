@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse
+open HolKernel boolLib bossLib Parse wordsLib
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory;
 
