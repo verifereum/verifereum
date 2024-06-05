@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse
-     vfmTypesTheory vfmExecutionTheory;
+     vfmTypesTheory vfmExecutionTheory
+     vfmStateTheory vfmContextTheory;
 
 val _ = new_theory "vfmTest";
 
@@ -142,6 +143,43 @@ Definition add_d0g0v0_Shanghai_post_def:
   else empty_account_state
 End
 
+
+Triviality wf_state_d0g0v0_Shanghai_pre:
+  ∀c b r. wf_state (initial_state c add_d0g0v0_Shanghai_pre b r add_d0g0v0_Shanghai_transaction)
+Proof
+  ‘wf_accounts (add_d0g0v0_Shanghai_pre :160 word -> account_state)’
+    by (EVAL_TAC >> rw[])
+  \\ rw[]
+QED
+
+
+Theorem d0g0v0_Shangai_correctness:
+  ∀c b r. (SND $
+    step (initial_state c add_d0g0v0_Shanghai_pre b r add_d0g0v0_Shanghai_transaction)).accounts = add_d0g0v0_Shanghai_post
+Proof
+  fs[FUN_EQ_THM]
+  \\ rpt strip_tac
+  \\ Cases_on ‘x = n2w 0x0000000000000000000000000000000000001000
+               ∨ x = n2w 0x0000000000000000000000000000000000001001
+              ∨ x = n2w 0x0000000000000000000000000000000000001002
+              ∨ x =  n2w 0x0000000000000000000000000000000000001003
+              ∨ x =  n2w 0x0000000000000000000000000000000000001004
+              ∨ x = n2w 0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b
+              ∨ x =  n2w 0xcccccccccccccccccccccccccccccccccccccccc’
+  \\ cheat
+  (*   ‘dimword (:160) = 1461501637330902918203684832716283019655932542976’ *)
+  (*     by (fs [SF wordsLib.SIZES_ss] ) *)
+
+
+  (*   \\ fs[step_def] *)
+
+  (*   \\ fs[initial_state_def, add_d0g0v0_Shanghai_pre_def, add_d0g0v0_Shanghai_transaction_def] *)
+  (*   \\ fs [step_def] *)
+  (*   \\ fs[bind_def, get_current_context_def, initial_context_def, return_def, initial_call_params_def] *)
+  (*   \\ EVAL_TAC *)
+  (*   \\ fs [get_current_context_def] *)
+  (*   \\ cheat *)
+QED
 (*
 Definition CrashingTransaction_transaction_def:
   CrashingTransaction_transaction =
