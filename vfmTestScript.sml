@@ -144,7 +144,7 @@ Definition add_d0g0v0_Shanghai_post_def:
 End
 
 
-Triviality wf_state_d0g0v0_Shanghai_pre:
+Triviality wf_state_add_d0g0v0_Shanghai_pre:
   ∀c b r. wf_state (initial_state c add_d0g0v0_Shanghai_pre b r add_d0g0v0_Shanghai_transaction)
 Proof
   ‘wf_accounts (add_d0g0v0_Shanghai_pre :160 word -> account_state)’
@@ -152,13 +152,24 @@ Proof
   \\ rw[]
 QED
 
+Theorem add_d0g0v0_Shanghai_pre_code:
+  (add_d0g0v0_Shanghai_pre add_d0g0v0_Shanghai_transaction.to).code =
+  hex_to_bytes "600060006000600060006004356110000162fffffff100"
+Proof
+  simp[add_d0g0v0_Shanghai_pre_def, add_d0g0v0_Shanghai_transaction_def]
+QED
 
-Theorem d0g0v0_Shangai_correctness:
+Theorem add_d0g0v0_Shanghai_correctness:
   ∀c b r. (SND $
     step (initial_state c add_d0g0v0_Shanghai_pre b r add_d0g0v0_Shanghai_transaction)).accounts = add_d0g0v0_Shanghai_post
 Proof
   fs[FUN_EQ_THM]
   \\ rpt strip_tac
+  \\ simp[step_def]
+  \\ simp[Once initial_state_def]
+  \\ simp[Once bind_def, get_current_context_def, Once return_def]
+  \\ simp[add_d0g0v0_Shanghai_pre_code]
+  (*
   \\ Cases_on ‘x = n2w 0x0000000000000000000000000000000000001000
                ∨ x = n2w 0x0000000000000000000000000000000000001001
               ∨ x = n2w 0x0000000000000000000000000000000000001002
@@ -166,6 +177,7 @@ Proof
               ∨ x =  n2w 0x0000000000000000000000000000000000001004
               ∨ x = n2w 0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b
               ∨ x =  n2w 0xcccccccccccccccccccccccccccccccccccccccc’
+  *)
   \\ cheat
   (*   ‘dimword (:160) = 1461501637330902918203684832716283019655932542976’ *)
   (*     by (fs [SF wordsLib.SIZES_ss] ) *)
