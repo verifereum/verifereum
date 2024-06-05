@@ -154,11 +154,26 @@ Definition initial_context_def:
    |>
 End
 
+Theorem initial_call_params[simp]:
+  (initial_call_params ctxt t).code = ctxt.code ∧
+  (initial_call_params ctxt t).gasLimit = t.gasLimit
+  (* TODO: as needed *)
+Proof
+  rw[initial_call_params_def]
+QED
+
 Theorem initial_context_simp[simp]:
-  (initial_context ctxt t).stack = []
+  (initial_context ctxt t).stack = [] ∧
+  (initial_context ctxt t).memory = [] ∧
+  (initial_context ctxt t).pc = 0 ∧
+  (initial_context ctxt t).jumpDest = NONE ∧
+  (initial_context ctxt t).returnData = [] ∧
+  (initial_context ctxt t).gasUsed = 0 ∧
+  (initial_context ctxt t).gasRefund = 0 ∧
+  (initial_context ctxt t).logs = [] ∧
+  (initial_context ctxt t).callParams = initial_call_params ctxt t
 Proof
   rw[initial_context_def]
-  (* TODO: add more if needed *)
 QED
 
 Theorem wf_initial_context[simp]:
