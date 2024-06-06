@@ -1,4 +1,5 @@
 open HolKernel boolLib bossLib Parse wordsLib
+     whileTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory;
 
@@ -160,11 +161,12 @@ Proof
 QED
 
 Theorem add_d0g0v0_Shanghai_correctness:
-  ∀c b r. (SND $
-    step (initial_state c add_d0g0v0_Shanghai_pre b r add_d0g0v0_Shanghai_transaction)).accounts = add_d0g0v0_Shanghai_post
+  ∀c b rd.
+    ∃r. run (initial_state c add_d0g0v0_Shanghai_pre b rd add_d0g0v0_Shanghai_transaction)
+    = SOME (Finished r) ∧ r.accounts = add_d0g0v0_Shanghai_post
 Proof
-  fs[FUN_EQ_THM]
-  \\ rpt strip_tac
+  rw[run_def, PULL_EXISTS]
+  \\ rw[Once OWHILE_THM]
   \\ simp[step_def]
   \\ simp[Once initial_state_def]
   \\ simp[Once bind_def, get_current_context_def, Once return_def]

@@ -1036,6 +1036,10 @@ Definition step_def:
            |>)
 End
 
+Definition run_def:
+  run s = OPTION_MAP (OUTR o FST) (OWHILE (ISL o FST) (step o SND) (INL (), s))
+End
+
 (* TODO: prove LENGTH memory is always a multiple of 32 bytes *)
 (* TODO: define gas-oblivious execution semantics (where Gas is an invalid op) *)
 
