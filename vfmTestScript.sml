@@ -1,17 +1,23 @@
 open HolKernel boolLib bossLib Parse wordsLib
      whileTheory
      vfmTypesTheory vfmExecutionTheory
-     vfmStateTheory vfmContextTheory;
+     vfmStateTheory vfmContextTheory
+     cv_transLib cv_stdTheory;
 
 val _ = new_theory "vfmTest";
 
 (* TODO: move/replace *)
 Definition hex_to_bytes_def:
     hex_to_bytes [] = [] : byte list
+  ∧ hex_to_bytes [c] = [n2w (UNHEX c)]
   ∧ hex_to_bytes (c1::c2::rest) =
       n2w (16 * UNHEX c1 + UNHEX c2)
       :: hex_to_bytes rest
 End
+
+val _ = cv_auto_trans hex_to_bytes_def;
+
+(* cv_eval “hex_to_bytes "693c61390000000000000000000000000000000000000000000000000000000000000000"” *)
 
 (* BlockchainTests/GeneralStateTests/VMTests/vmArithmeticTest/add.json *)
 
