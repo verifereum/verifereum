@@ -173,11 +173,126 @@ Definition invalid_opcode_def:
   invalid_opcode : byte = n2w 0xfe
 End
 
+open cv_transLib cv_stdTheory;
+
 Definition parse_opcode_def:
   parse_opcode (opc:byte list) =
     some opn. wf_opname opn ∧ opcode opn ≼ opc
 End
 
+Definition parse_opcode_exec_def:
+  parse_opcode_exec (opc:byte list)
+    = case opc of
+      | [n2w 0x00] => SOME Stop
+      | [n2w 0x01] => SOME Add
+      | [n2w 0x02] => SOME Mul
+      | [n2w 0x03] => SOME Sub
+      | [n2w 0x04] => SOME Div
+      | [n2w 0x05] => SOME SDiv
+      | [n2w 0x06] => SOME Mod
+      | [n2w 0x07] => SOME SMod
+      | [n2w 0x08] => SOME AddMod
+      | [n2w 0x09] => SOME MulMod
+      | [n2w 0x0a] => SOME Exp
+      | [n2w 0x0b] => SOME SignExtend
+      | [n2w 0x10] => SOME LT
+      | [n2w 0x11] => SOME GT
+      | [n2w 0x12] => SOME SLT
+      | [n2w 0x13] => SOME SGT
+      | [n2w 0x14] => SOME Eq
+      | [n2w 0x15] => SOME IsZero
+      | [n2w 0x16] => SOME And
+      | [n2w 0x17] => SOME Or
+      | [n2w 0x18] => SOME XOr
+      | [n2w 0x19] => SOME Not
+      | [n2w 0x1a] => SOME Byte
+      | [n2w 0x1b] => SOME ShL
+      | [n2w 0x1c] => SOME ShR
+      | [n2w 0x1d] => SOME SAR
+      | [n2w 0x20] => SOME Keccak256
+      | [n2w 0x30] => SOME Address
+      | [n2w 0x31] => SOME Balance
+      | [n2w 0x32] => SOME Origin
+      | [n2w 0x33] => SOME Caller
+      | [n2w 0x34] => SOME CallValue
+      | [n2w 0x35] => SOME CallDataLoad
+      | [n2w 0x36] => SOME CallDataSize
+      | [n2w 0x37] => SOME CallDataCopy
+      | [n2w 0x38] => SOME CodeSize
+      | [n2w 0x39] => SOME CodeCopy
+      | [n2w 0x3a] => SOME GasPrice
+      | [n2w 0x3b] => SOME ExtCodeSize
+      | [n2w 0x3c] => SOME ExtCodeCopy
+      | [n2w 0x3d] => SOME ReturnDataSize
+      | [n2w 0x3e] => SOME ReturnDataCopy
+      | [n2w 0x3f] => SOME ExtCodeHash
+      | [n2w 0x40] => SOME BlockHash
+      | [n2w 0x41] => SOME CoinBase
+      | [n2w 0x42] => SOME TimeStamp
+      | [n2w 0x43] => SOME Number
+      | [n2w 0x44] => SOME PrevRandao
+      | [n2w 0x45] => SOME GasLimit
+      | [n2w 0x46] => SOME ChainId
+      | [n2w 0x47] => SOME SelfBalance
+      | [n2w 0x48] => SOME BaseFee
+      | [n2w 0x50] => SOME Pop
+      | [n2w 0x51] => SOME MLoad
+      | [n2w 0x52] => SOME MStore
+      | [n2w 0x53] => SOME MStore8
+      | [n2w 0x54] => SOME SLoad
+      | [n2w 0x55] => SOME SStore
+      | [n2w 0x56] => SOME Jump
+      | [n2w 0x57] => SOME JumpI
+      | [n2w 0x58] => SOME PC
+      | [n2w 0x59] => SOME MSize
+      | [n2w 0x5a] => SOME Gas
+      | [n2w 0x5b] => SOME JumpDest
+      | [n2w 0xf0] => SOME Create
+      | [n2w 0xf1] => SOME Call
+      | [n2w 0xf2] => SOME CallCode
+      | [n2w 0xf3] => SOME Return
+      | [n2w 0xf4] => SOME DelegateCall
+      | [n2w 0xf5] => SOME Create2
+      | [n2w 0xfa] => SOME StaticCall
+      | op::rest => if n2w 0x5f ≤ op ∧ op ≤ n2w 0x7f then SOME $ Push (w2w op - n2w 0x5f) rest else
+                    if n2w 0x80 ≤ op ∧ op ≤ n2w 0x8f then SOME (Dup (w2w op - n2w 0x81)) else
+                    if n2w 0x90 ≤ op ∧ op ≤ n2w 0x9f then SOME (Swap (w2w op - n2w 0x91)) else
+                    if n2w 0xa0 ≤ op ∧ op ≤ n2w 0xa4 then SOME (Log (w2w op - n2w 0xa0)) else
+                    NONE
+      | _ => NONE
+End
+
+val _ = cv_trans parse_opcode_exec_def;
+
+        
+        open Tactic;
+
+Triviality parse_opcode_eqv_parse_opcode_exec:
+  ∀opc. parse_opcode opc = parse_opcode_exec opc
+Proof
+  Cases
+  \\ EVAL_TAC
+  strip_tac
+  \\ simp[parse_opcode_def]
+  \\ fs[some_def]
+  \\ Cases_on ‘opc’
+
+  \\ rw[]
+  \\ (
+  Cases_on ‘opn’ >> fs[opcode_def]
+  )
+  \\DEEP_INTRO_TAC some_intro
+  \\ Cases_on ‘x’
+  \\ (fs[opcode_def])
+  \\ rw[]
+  \\ Cases_on ‘opc’
+  \\ rw[opcode_def]
+  \\ rw[parse_opcode_def, parse_opcode_exec_def]
+  \\ ‘∃opn. wf_opname opn ∧ opcode opn = []’ by metis_tac []
+  \\ rw[some_intro]
+QED
+
+val _ = cv_auto_trans parse_opcode_def;
 (* TODO: parse_opcode_unique theorem *)
 
 Definition static_gas_def[simp]:
@@ -259,10 +374,10 @@ Definition static_gas_def[simp]:
   ∧ static_gas Revert         = 0
 End
 
-(*
+
 * finish if necessary
 Theorem parse_opcode_cond_thm:
-  parse_opcode (opc:byte) =
+  parse_opcode (opc::data: byte list) =
   if opc = n2w 0x00 then SOME Stop else
   if opc = n2w 0x01 then SOME Add else
   if opc = n2w 0x02 then SOME Mul else
@@ -327,7 +442,9 @@ Theorem parse_opcode_cond_thm:
   if opc = n2w 0x59 then SOME MSize else
   if opc = n2w 0x5a then SOME Gas else
   if opc = n2w 0x5b then SOME JumpDest else
-  if n2w 0x5f ≤ opc ∧ opc ≤ n2w 0x7f then SOME (Push (w2w opc - n2w 0x5f)) else
+  if opc = n2w 0x5f then SOME (Push 0w data) else
+
+≤ opc ∧ opc ≤ n2w 0x7f then SOME (Push (w2w opc - n2w 0x5f) data) else
   if n2w 0x80 ≤ opc ∧ opc ≤ n2w 0x8f then SOME (Dup (w2w opc - n2w 0x81)) else
   if n2w 0x90 ≤ opc ∧ opc ≤ n2w 0x9f then SOME (Swap (w2w opc - n2w 0x91)) else
   if n2w 0xa0 ≤ opc ∧ opc ≤ n2w 0xa4 then SOME (Log (w2w opc - n2w 0xa0)) else
@@ -344,9 +461,16 @@ Proof
   simp[parse_opcode_def]
   \\ DEEP_INTRO_TAC some_intro
   \\ rw[]
+  \\ TRY(rename1`opcode opc` \\ Cases_on`opc` \\  qpat_x_assum`_ _ _`mp_tac \\ simp_tac(srw_ss())[opcode_def] \\ blastLib.BBLAST_TAC)
+
+  
+  \\ TRY(rename1 ‘opcode opc‘ \\ Cases_on ‘opc’ \\ qhdtm_x_assum ‘opcode‘ mp_tac \\ simp_tac(srw_ss())[opcode_def])
+  \\ ntac 2 (pop_assum mp_tac)
+  \\ rpt (pop_assum kall_tac)       
   \\ TRY(rename1`opcode opc` \\ Cases_on`opc` \\ fs[opcode_def])
-  \\ pop_assum mp_tac \\ blastLib.BBLAST_TAC
+  \\ rpt (pop_assum mp_tac)
+   \\ blastLib.BBLAST_TAC
 End
-*)
+
 
 val _ = export_theory();
