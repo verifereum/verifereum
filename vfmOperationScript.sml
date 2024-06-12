@@ -260,7 +260,6 @@ Definition static_gas_def[simp]:
   ∧ static_gas Revert         = 0
 End
 
-
 Theorem parse_opcode_cond_thm:
   parse_opcode (opc::rest: byte list) =
   if opc = n2w 0x00 then SOME Stop else
@@ -410,53 +409,36 @@ Proof
   \\ DEEP_INTRO_TAC some_intro
   \\ CONJ_TAC
   >- (
-  Cases
-  \\ simp [rich_listTheory.IS_PREFIX_APPEND, opcode_def]
-  \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[wordsTheory.NUMERAL_LESS_THM, arithmeticTheory.LESS_OR_EQ]))
-  \\ strip_tac
-  \\ rw[rich_listTheory.TAKE_APPEND]
-  \\ fs[listTheory.LENGTH_NIL]
+    Cases
+    \\ simp [rich_listTheory.IS_PREFIX_APPEND, opcode_def]
+    \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[wordsTheory.NUMERAL_LESS_THM, arithmeticTheory.LESS_OR_EQ]))
+    \\ strip_tac
+    \\ rw[rich_listTheory.TAKE_APPEND]
+    \\ fs[listTheory.LENGTH_NIL]
   )
-
-  val def_cases =  opcode_def |> concl |> strip_conj |> List.map (fn tm => (EXISTS_TAC(rand (lhs tm)) \\ rw[opcode_def] \\ NO_TAC)
-                                                                handle HOL_ERR _ => ALL_TAC)
-val push_cases =  List.tabulate(33, (fn n =>
-                                       let val nn = numSyntax.term_of_int n
-                                       in (EXISTS_TAC “Push ^nn (TAKE ^nn rest)” \\ rw[opcode_def, wf_opname_def]
-                                           \\ rw[rich_listTheory.IS_PREFIX_EQ_TAKE] \\ EXISTS_TAC nn \\ rw[])
-                                          end))
-    \\ rw[]
-    \\ FIRST def_cases
-    \\ TRY (FIRST push_cases)
-
-  
-\\ TRY $ FIRST(
-     List.tabulate(16, (fn n =>
-                          let val nn = numSyntax.term_of_int n
-                          in (EXISTS_TAC “Dup ^nn” \\ rw[opcode_def, wf_opname_def] \\ NO_TAC) end))
-     )   
-
-\\ TRY $ FIRST(
-       List.tabulate(16, (fn n =>
-                            let val nn = numSyntax.term_of_int n in (EXISTS_TAC “Swap ^nn” \\ rw[opcode_def, wf_opname_def] \\ NO_TAC) end))
-       )
-\\ TRY $ FIRST(
-    List.tabulate(4, (fn n =>
-       let val nn = numSyntax.term_of_int n in (EXISTS_TAC “Log ^nn” \\ rw[opcode_def, wf_opname_def] \\ NO_TAC) end))
-    )
-
-\\ qexists ‘Create’ \\ rw[opcode_def]
-\\ qexists ‘Call’ \\ rw[opcode_def] 
-\\ qexists ‘CallCode’ \\ rw[opcode_def]
-\\ qexists ‘Return’ \\ rw[opcode_def]
-\\ qexists ‘DelegateCall’ \\ rw[opcode_def]
-\\ qexists ‘Create2’ \\ rw[opcode_def] 
-\\ qexists ‘StaticCall’ \\ rw[opcode_def]
-\\ qexists ‘Revert’ \\ rw[opcode_def]
-    
-
+  \\ let
+    val def_cases = opcode_def |> concl |> strip_conj |> List.map
+      (fn tm => (EXISTS_TAC(rand (lhs tm)) handle HOL_ERR _ => NO_TAC)
+                \\ rw[opcode_def] \\ NO_TAC)
+    val push_cases =  List.tabulate(33, (fn n =>
+          let val nn = numSyntax.term_of_int n
+          in EXISTS_TAC “Push ^nn (TAKE ^nn rest)” \\ rw[opcode_def, wf_opname_def]
+             \\ rw[rich_listTheory.IS_PREFIX_EQ_TAKE] \\ EXISTS_TAC nn \\ rw[]
+          end))
+    fun mk_x_cases m tm = List.tabulate(m, fn n =>
+      let val nn = numSyntax.term_of_int n in
+        EXISTS_TAC (mk_comb (tm, nn)) \\ rw[opcode_def, wf_opname_def] \\ NO_TAC
+      end)
+    val dup_cases = mk_x_cases 16 ``Dup``
+    val swap_cases = mk_x_cases 16 ``Swap``
+    val log_cases = mk_x_cases 4 ``Log``
+  in
+    rw[]
+    \\ TRY $ FIRST (def_cases @ push_cases @ dup_cases @ swap_cases @ log_cases)
+  end
 QED
 
+(*
 open cv_transLib cv_stdTheory;
 
 Definition parse_opcode_exec_def:
@@ -572,7 +554,6 @@ Proof
 QED
 
 val _ = cv_auto_trans parse_opcode_def;
-(* TODO: parse_opcode_unique theorem *)
 *)
 
 val _ = export_theory();
