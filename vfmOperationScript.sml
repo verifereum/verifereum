@@ -70,10 +70,10 @@ Datatype:
   | MSize
   | Gas
   | JumpDest
-  | Push (6 word) (word8 list)
-  | Dup (4 word)
-  | Swap (4 word)
-  | Log (3 word)
+  | Push num (word8 list)
+  | Dup num
+  | Swap num
+  | Log num
   | Create
   | Call
   | CallCode
@@ -85,10 +85,13 @@ Datatype:
 End
 
 Definition wf_opname_def[simp]:
-    wf_opname (Push n w) = (n ≤ n2w 32 ∧ LENGTH w = w2n n)
-  ∧ wf_opname (Log n) = (n ≤ n2w 4)
+    wf_opname (Push n w) = (n ≤ 32 ∧ LENGTH w = n)
+  ∧ wf_opname (Log n) = (n < 4)
+  ∧ wf_opname (Dup n) = (n < 16)
+  ∧ wf_opname (Swap n) = (n < 16)
   ∧ wf_opname _ = T
 End
+
 
 Definition opcode_def:
     opcode Stop           = [n2w 0x00]
@@ -155,10 +158,10 @@ Definition opcode_def:
   ∧ opcode MSize          = [n2w 0x59]
   ∧ opcode Gas            = [n2w 0x5a]
   ∧ opcode JumpDest       = [n2w 0x5b]
-  ∧ opcode (Push n w)     = [n2w 0x5f + w2w n] ++ w
-  ∧ opcode (Dup n)        = [n2w 0x80 + w2w n]
-  ∧ opcode (Swap n)       = [n2w 0x90 + w2w n]
-  ∧ opcode (Log n)        = [n2w 0xa0 + w2w n]
+  ∧ opcode (Push n w)     = [n2w 0x5f + n2w n] ++ w
+  ∧ opcode (Dup n)        = [n2w 0x80 + n2w n]
+  ∧ opcode (Swap n)       = [n2w 0x90 + n2w n]
+  ∧ opcode (Log n)        = [n2w 0xa0 + n2w n]
   ∧ opcode Create         = [n2w 0xf0]
   ∧ opcode Call           = [n2w 0xf1]
   ∧ opcode CallCode       = [n2w 0xf2]
@@ -243,7 +246,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas MSize          = 2
   ∧ static_gas Gas            = 2
   ∧ static_gas JumpDest       = 1
-  ∧ static_gas (Push n w)     = (if n = 0w then 2 else 3)
+  ∧ static_gas (Push n w)     = (if n = 0 then 2 else 3)
   ∧ static_gas (Dup n)        = 3
   ∧ static_gas (Swap n)       = 3
   ∧ static_gas (Log n)        = 375
@@ -257,7 +260,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas Revert         = 0
 End
 
-(*
+
 Theorem parse_opcode_cond_thm:
   parse_opcode (opc::rest: byte list) =
   if opc = n2w 0x00 then SOME Stop else
@@ -324,75 +327,75 @@ Theorem parse_opcode_cond_thm:
   if opc = n2w 0x59 then SOME MSize else
   if opc = n2w 0x5a then SOME Gas else
   if opc = n2w 0x5b then SOME JumpDest else
-  if opc = n2w 0x5f then SOME (Push 0w  (TAKE 0 rest)) else
-  if opc = n2w 0x60 then SOME (Push 1w  (TAKE 1 rest)) else
-  if opc = n2w 0x61 then SOME (Push 2w  (TAKE 2 rest)) else
-  if opc = n2w 0x62 then SOME (Push 3w  (TAKE 3 rest)) else
-  if opc = n2w 0x63 then SOME (Push 4w  (TAKE 4 rest)) else
-  if opc = n2w 0x64 then SOME (Push 5w  (TAKE 5 rest)) else
-  if opc = n2w 0x65 then SOME (Push 6w  (TAKE 6 rest)) else
-  if opc = n2w 0x66 then SOME (Push 7w  (TAKE 7 rest)) else
-  if opc = n2w 0x67 then SOME (Push 8w  (TAKE 8 rest)) else
-  if opc = n2w 0x68 then SOME (Push 9w  (TAKE 9 rest)) else
-  if opc = n2w 0x69 then SOME (Push 10w (TAKE 10 rest)) else
-  if opc = n2w 0x6a then SOME (Push 11w (TAKE 11 rest)) else
-  if opc = n2w 0x6b then SOME (Push 12w (TAKE 12 rest)) else
-  if opc = n2w 0x6c then SOME (Push 13w (TAKE 13 rest)) else
-  if opc = n2w 0x6d then SOME (Push 14w (TAKE 14 rest)) else
-  if opc = n2w 0x6e then SOME (Push 15w (TAKE 15 rest)) else
-  if opc = n2w 0x6f then SOME (Push 16w (TAKE 16 rest)) else
-  if opc = n2w 0x70 then SOME (Push 17w (TAKE 17 rest)) else
-  if opc = n2w 0x71 then SOME (Push 18w (TAKE 18 rest)) else
-  if opc = n2w 0x72 then SOME (Push 19w (TAKE 19 rest)) else
-  if opc = n2w 0x73 then SOME (Push 20w (TAKE 20 rest)) else
-  if opc = n2w 0x74 then SOME (Push 21w (TAKE 21 rest)) else
-  if opc = n2w 0x75 then SOME (Push 22w (TAKE 22 rest)) else
-  if opc = n2w 0x76 then SOME (Push 23w (TAKE 23 rest)) else
-  if opc = n2w 0x77 then SOME (Push 24w (TAKE 24 rest)) else
-  if opc = n2w 0x78 then SOME (Push 25w (TAKE 25 rest)) else
-  if opc = n2w 0x79 then SOME (Push 26w (TAKE 26 rest)) else
-  if opc = n2w 0x7a then SOME (Push 27w (TAKE 27 rest)) else
-  if opc = n2w 0x7b then SOME (Push 28w (TAKE 28 rest)) else
-  if opc = n2w 0x7c then SOME (Push 29w (TAKE 29 rest)) else
-  if opc = n2w 0x7d then SOME (Push 30w (TAKE 30 rest)) else
-  if opc = n2w 0x7e then SOME (Push 31w (TAKE 31 rest)) else
-  if opc = n2w 0x7f then SOME (Push 32w (TAKE 32 rest)) else
-  if opc = n2w 0x80 then SOME (Dup 0w) else
-  if opc = n2w 0x81 then SOME (Dup 1w) else
-  if opc = n2w 0x82 then SOME (Dup 2w) else
-  if opc = n2w 0x83 then SOME (Dup 3w) else
-  if opc = n2w 0x84 then SOME (Dup 4w) else
-  if opc = n2w 0x85 then SOME (Dup 5w) else
-  if opc = n2w 0x86 then SOME (Dup 6w) else
-  if opc = n2w 0x87 then SOME (Dup 7w) else
-  if opc = n2w 0x88 then SOME (Dup 8w) else
-  if opc = n2w 0x89 then SOME (Dup 9w) else
-  if opc = n2w 0x8a then SOME (Dup 10w) else
-  if opc = n2w 0x8b then SOME (Dup 11w) else
-  if opc = n2w 0x8c then SOME (Dup 12w) else
-  if opc = n2w 0x8d then SOME (Dup 13w) else
-  if opc = n2w 0x8e then SOME (Dup 14w) else
-  if opc = n2w 0x8f then SOME (Dup 15w) else
-  if opc = n2w 0x90 then SOME (Swap 0w) else
-  if opc = n2w 0x91 then SOME (Swap 1w) else
-  if opc = n2w 0x92 then SOME (Swap 2w) else
-  if opc = n2w 0x93 then SOME (Swap 3w) else
-  if opc = n2w 0x94 then SOME (Swap 4w) else
-  if opc = n2w 0x95 then SOME (Swap 5w) else
-  if opc = n2w 0x96 then SOME (Swap 6w) else
-  if opc = n2w 0x97 then SOME (Swap 7w) else
-  if opc = n2w 0x98 then SOME (Swap 8w) else
-  if opc = n2w 0x99 then SOME (Swap 9w) else
-  if opc = n2w 0x9a then SOME (Swap 10w) else
-  if opc = n2w 0x9b then SOME (Swap 11w) else
-  if opc = n2w 0x9c then SOME (Swap 12w) else
-  if opc = n2w 0x9d then SOME (Swap 13w) else
-  if opc = n2w 0x9e then SOME (Swap 14w) else
-  if opc = n2w 0x9f then SOME (Swap 15w) else
-  if opc = n2w 0xa0 then SOME (Log 0w) else
-  if opc = n2w 0xa1 then SOME (Log 1w) else
-  if opc = n2w 0xa2 then SOME (Log 2w) else
-  if opc = n2w 0xa3 then SOME (Log 3w) else
+  if opc = n2w 0x5f ∧ LENGTH rest >= 0 then SOME (Push 0  (TAKE 0 rest)) else
+  if opc = n2w 0x60 ∧ LENGTH rest >= 1 then SOME (Push 1  (TAKE 1 rest)) else
+  if opc = n2w 0x61 ∧ LENGTH rest >= 2 then SOME (Push 2  (TAKE 2 rest)) else
+  if opc = n2w 0x62 ∧ LENGTH rest >= 3 then SOME (Push 3  (TAKE 3 rest)) else
+  if opc = n2w 0x63 ∧ LENGTH rest >= 4 then SOME (Push 4  (TAKE 4 rest)) else
+  if opc = n2w 0x64 ∧ LENGTH rest >= 5 then SOME (Push 5  (TAKE 5 rest)) else
+  if opc = n2w 0x65 ∧ LENGTH rest >= 6 then SOME (Push 6  (TAKE 6 rest)) else
+  if opc = n2w 0x66 ∧ LENGTH rest >= 7 then SOME (Push 7  (TAKE 7 rest)) else
+  if opc = n2w 0x67 ∧ LENGTH rest >= 8 then SOME (Push 8  (TAKE 8 rest)) else
+  if opc = n2w 0x68 ∧ LENGTH rest >= 9 then SOME (Push 9  (TAKE 9 rest)) else
+  if opc = n2w 0x69 ∧ LENGTH rest >= 10 then SOME (Push 10 (TAKE 10 rest)) else
+  if opc = n2w 0x6a ∧ LENGTH rest >= 11 then SOME (Push 11 (TAKE 11 rest)) else
+  if opc = n2w 0x6b ∧ LENGTH rest >= 12 then SOME (Push 12 (TAKE 12 rest)) else
+  if opc = n2w 0x6c ∧ LENGTH rest >= 13 then SOME (Push 13 (TAKE 13 rest)) else
+  if opc = n2w 0x6d ∧ LENGTH rest >= 14 then SOME (Push 14 (TAKE 14 rest)) else
+  if opc = n2w 0x6e ∧ LENGTH rest >= 15 then SOME (Push 15 (TAKE 15 rest)) else
+  if opc = n2w 0x6f ∧ LENGTH rest >= 16 then SOME (Push 16 (TAKE 16 rest)) else
+  if opc = n2w 0x70 ∧ LENGTH rest >= 17 then SOME (Push 17 (TAKE 17 rest)) else
+  if opc = n2w 0x71 ∧ LENGTH rest >= 18 then SOME (Push 18 (TAKE 18 rest)) else
+  if opc = n2w 0x72 ∧ LENGTH rest >= 19 then SOME (Push 19 (TAKE 19 rest)) else
+  if opc = n2w 0x73 ∧ LENGTH rest >= 20 then SOME (Push 20 (TAKE 20 rest)) else
+  if opc = n2w 0x74 ∧ LENGTH rest >= 21 then SOME (Push 21 (TAKE 21 rest)) else
+  if opc = n2w 0x75 ∧ LENGTH rest >= 22 then SOME (Push 22 (TAKE 22 rest)) else
+  if opc = n2w 0x76 ∧ LENGTH rest >= 23 then SOME (Push 23 (TAKE 23 rest)) else
+  if opc = n2w 0x77 ∧ LENGTH rest >= 24 then SOME (Push 24 (TAKE 24 rest)) else
+  if opc = n2w 0x78 ∧ LENGTH rest >= 25 then SOME (Push 25 (TAKE 25 rest)) else
+  if opc = n2w 0x79 ∧ LENGTH rest >= 26 then SOME (Push 26 (TAKE 26 rest)) else
+  if opc = n2w 0x7a ∧ LENGTH rest >= 27 then SOME (Push 27 (TAKE 27 rest)) else
+  if opc = n2w 0x7b ∧ LENGTH rest >= 28 then SOME (Push 28 (TAKE 28 rest)) else
+  if opc = n2w 0x7c ∧ LENGTH rest >= 29 then SOME (Push 29 (TAKE 29 rest)) else
+  if opc = n2w 0x7d ∧ LENGTH rest >= 30 then SOME (Push 30 (TAKE 30 rest)) else
+  if opc = n2w 0x7e ∧ LENGTH rest >= 31 then SOME (Push 31 (TAKE 31 rest)) else
+  if opc = n2w 0x7f ∧ LENGTH rest >= 32 then SOME (Push 32 (TAKE 32 rest)) else
+  if opc = n2w 0x80 then SOME (Dup 0) else
+  if opc = n2w 0x81 then SOME (Dup 1) else
+  if opc = n2w 0x82 then SOME (Dup 2) else
+  if opc = n2w 0x83 then SOME (Dup 3) else
+  if opc = n2w 0x84 then SOME (Dup 4) else
+  if opc = n2w 0x85 then SOME (Dup 5) else
+  if opc = n2w 0x86 then SOME (Dup 6) else
+  if opc = n2w 0x87 then SOME (Dup 7) else
+  if opc = n2w 0x88 then SOME (Dup 8) else
+  if opc = n2w 0x89 then SOME (Dup 9) else
+  if opc = n2w 0x8a then SOME (Dup 10) else
+  if opc = n2w 0x8b then SOME (Dup 11) else
+  if opc = n2w 0x8c then SOME (Dup 12) else
+  if opc = n2w 0x8d then SOME (Dup 13) else
+  if opc = n2w 0x8e then SOME (Dup 14) else
+  if opc = n2w 0x8f then SOME (Dup 15) else
+  if opc = n2w 0x90 then SOME (Swap 0) else
+  if opc = n2w 0x91 then SOME (Swap 1) else
+  if opc = n2w 0x92 then SOME (Swap 2) else
+  if opc = n2w 0x93 then SOME (Swap 3) else
+  if opc = n2w 0x94 then SOME (Swap 4) else
+  if opc = n2w 0x95 then SOME (Swap 5) else
+  if opc = n2w 0x96 then SOME (Swap 6) else
+  if opc = n2w 0x97 then SOME (Swap 7) else
+  if opc = n2w 0x98 then SOME (Swap 8) else
+  if opc = n2w 0x99 then SOME (Swap 9) else
+  if opc = n2w 0x9a then SOME (Swap 10) else
+  if opc = n2w 0x9b then SOME (Swap 11) else
+  if opc = n2w 0x9c then SOME (Swap 12) else
+  if opc = n2w 0x9d then SOME (Swap 13) else
+  if opc = n2w 0x9e then SOME (Swap 14) else
+  if opc = n2w 0x9f then SOME (Swap 15) else
+  if opc = n2w 0xa0 then SOME (Log 0) else
+  if opc = n2w 0xa1 then SOME (Log 1) else
+  if opc = n2w 0xa2 then SOME (Log 2) else
+  if opc = n2w 0xa3 then SOME (Log 3) else
   if opc = n2w 0xf0 then SOME Create else
   if opc = n2w 0xf1 then SOME Call else
   if opc = n2w 0xf2 then SOME CallCode else
@@ -415,45 +418,43 @@ Proof
   \\ fs[listTheory.LENGTH_NIL]
   )
 
-
-    \\ rw[]
-  \\ FIRST(
-    List.concat [
-        opcode_def |> concl |> strip_conj |> List.map (fn tm => (EXISTS_TAC(rand (lhs tm)) \\ rw[opcode_def] \\ NO_TAC)
+  val def_cases =  opcode_def |> concl |> strip_conj |> List.map (fn tm => (EXISTS_TAC(rand (lhs tm)) \\ rw[opcode_def] \\ NO_TAC)
                                                                 handle HOL_ERR _ => ALL_TAC)
-        ,     List.tabulate(33, (fn n =>
-       let
-         val nn = numSyntax.term_of_int n
-       in (EXISTS_TAC “Push ^nn (TAKE ^nn rest)” \\ rw[opcode_def, wf_opname_def] \\ rw[rich_listTheory.IS_PREFIX_EQ_TAKE] \\ EXISTS_TAC nn \\ rw[] \\ NO_TAC)
-       end))
-      ]
-    ) 
+val push_cases =  List.tabulate(33, (fn n =>
+                                       let val nn = numSyntax.term_of_int n
+                                       in (EXISTS_TAC “Push ^nn (TAKE ^nn rest)” \\ rw[opcode_def, wf_opname_def]
+                                           \\ rw[rich_listTheory.IS_PREFIX_EQ_TAKE] \\ EXISTS_TAC nn \\ rw[])
+                                          end))
+    \\ rw[]
+    \\ FIRST def_cases
+    \\ TRY (FIRST push_cases)
 
-    )
-    
-  \\ FIRST(
-    List.tabulate(33, (fn n =>
-       let
-         val nn = numSyntax.term_of_int n
-       in (EXISTS_TAC “Push ^nn (TAKE ^nn rest)” \\ rw[opcode_def, wf_opname_def] \\ rw[rich_listTheory.IS_PREFIX_EQ_TAKE] \\ EXISTS_TAC nn \\ rw[])
-       end))
-    ) 
-\\ FIRST(
+  
+\\ TRY $ FIRST(
      List.tabulate(16, (fn n =>
                           let val nn = numSyntax.term_of_int n
-                          in (EXISTS_TAC “Dup ^nn” \\ rw[opcode_def, wf_opname_def]) end))
+                          in (EXISTS_TAC “Dup ^nn” \\ rw[opcode_def, wf_opname_def] \\ NO_TAC) end))
      )   
 
-\\ FIRST(
+\\ TRY $ FIRST(
        List.tabulate(16, (fn n =>
-                            let val nn = numSyntax.term_of_int n in (EXISTS_TAC “Swap ^nn” \\ rw[opcode_def, wf_opname_def]) end))
+                            let val nn = numSyntax.term_of_int n in (EXISTS_TAC “Swap ^nn” \\ rw[opcode_def, wf_opname_def] \\ NO_TAC) end))
        )
-
-\\ FIRST(
+\\ TRY $ FIRST(
     List.tabulate(4, (fn n =>
-       let val nn = numSyntax.term_of_int n in (EXISTS_TAC “Log ^nn” \\ rw[opcode_def, wf_opname_def]) end))
+       let val nn = numSyntax.term_of_int n in (EXISTS_TAC “Log ^nn” \\ rw[opcode_def, wf_opname_def] \\ NO_TAC) end))
     )
+
+\\ qexists ‘Create’ \\ rw[opcode_def]
+\\ qexists ‘Call’ \\ rw[opcode_def] 
+\\ qexists ‘CallCode’ \\ rw[opcode_def]
+\\ qexists ‘Return’ \\ rw[opcode_def]
+\\ qexists ‘DelegateCall’ \\ rw[opcode_def]
+\\ qexists ‘Create2’ \\ rw[opcode_def] 
+\\ qexists ‘StaticCall’ \\ rw[opcode_def]
+\\ qexists ‘Revert’ \\ rw[opcode_def]
     
+
 QED
 
 open cv_transLib cv_stdTheory;
