@@ -184,7 +184,7 @@ Definition parse_opcode_def:
 End
 
 Definition static_gas_def[simp]:
-    static_gas Stop           = 0:num
+    static_gas Stop           = 0n
   ∧ static_gas Add            = 3
   ∧ static_gas Mul            = 5
   ∧ static_gas Sub            = 3
@@ -260,7 +260,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas Create2        = 32000
   ∧ static_gas StaticCall     = 0
   ∧ static_gas Revert         = 0
-End               
+End
 
 
 Theorem parse_opcode_cond_thm:

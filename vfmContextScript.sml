@@ -69,11 +69,11 @@ Datatype:
 End
 
 Definition stack_limit_def[simp]:
-  stack_limit = 1024:num
+  stack_limit = 1024n
 End
 
 Definition context_limit_def[simp]:
-  context_limit = 1024:num
+  context_limit = 1024n
 End
 
 Definition wf_context_def:
