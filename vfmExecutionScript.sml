@@ -596,34 +596,34 @@ Definition step_inst_def:
   ∧ step_inst (Dup n) =
       bind (get_current_context)
         (λcontext.
-          ignore_bind (assert (w2n n ≤ LENGTH context.stack) StackUnderflow) (
-            let word = EL (w2n n) context.stack in
+          ignore_bind (assert (n ≤ LENGTH context.stack) StackUnderflow) (
+            let word = EL n context.stack in
             let newStack = word :: context.stack in
             ignore_bind (assert (LENGTH newStack ≤ stack_limit) StackOverflow) (
             set_current_context (context with stack := newStack))))
   ∧ step_inst (Swap n) =
       bind get_current_context
         (λcontext.
-          ignore_bind (assert (SUC (w2n n) ≤ LENGTH context.stack) StackUnderflow) (
+          ignore_bind (assert (SUC n ≤ LENGTH context.stack) StackUnderflow) (
             let top = HD context.stack in
-            let swap = EL (w2n n) (TL context.stack) in
-            let ignored = TAKE (w2n n) (TL context.stack) in
-            let rest = DROP (w2n n) (TL context.stack) in
+            let swap = EL n (TL context.stack) in
+            let ignored = TAKE n (TL context.stack) in
+            let rest = DROP n (TL context.stack) in
             let newStack = [swap] ++ ignored ++ [top] ++ rest in
               set_current_context (context with stack := newStack)))
   ∧ step_inst (Log n) = do
       context <- get_current_context;
       assert (¬context.callParams.static) WriteInStaticContext;
-      assert (2 + w2n n ≤ LENGTH context.stack) StackUnderflow;
+      assert (2 + n ≤ LENGTH context.stack) StackUnderflow;
       offset <<- w2n $ EL 0 context.stack;
       size <<- w2n $ EL 1 context.stack;
       newMinSize <<- word_size (offset + size) * 32;
       newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       expansionCost <<- memory_expansion_cost context.memory newMemory;
-      dynamicGas <<- 375 * w2n n + 8 * size + expansionCost;
+      dynamicGas <<- 375 * n + 8 * size + expansionCost;
       consume_gas dynamicGas;
       logger <<- context.callParams.callee;
-      topics <<- TAKE (w2n n) (DROP 2 context.stack);
+      topics <<- TAKE n (DROP 2 context.stack);
       data <<- TAKE size (DROP offset newMemory);
       event <<- <| logger := logger; topics := topics; data := data |>;
       newContext <<- context with
