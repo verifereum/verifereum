@@ -258,152 +258,153 @@ Definition static_gas_def[simp]:
   ∧ static_gas Create2        = 32000
   ∧ static_gas StaticCall     = 0
   ∧ static_gas Revert         = 0
-End
+End               
 
 Theorem parse_opcode_cond_thm:
-  parse_opcode (opc::rest: byte list) =
-  if opc = n2w 0x00 then SOME Stop else
-  if opc = n2w 0x01 then SOME Add else
-  if opc = n2w 0x02 then SOME Mul else
-  if opc = n2w 0x03 then SOME Sub else
-  if opc = n2w 0x04 then SOME Div else
-  if opc = n2w 0x05 then SOME SDiv else
-  if opc = n2w 0x06 then SOME Mod else
-  if opc = n2w 0x07 then SOME SMod else
-  if opc = n2w 0x08 then SOME AddMod else
-  if opc = n2w 0x09 then SOME MulMod else
-  if opc = n2w 0x0a then SOME Exp else
-  if opc = n2w 0x0b then SOME SignExtend else
-  if opc = n2w 0x10 then SOME LT else
-  if opc = n2w 0x11 then SOME GT else
-  if opc = n2w 0x12 then SOME SLT else
-  if opc = n2w 0x13 then SOME SGT else
-  if opc = n2w 0x14 then SOME Eq else
-  if opc = n2w 0x15 then SOME IsZero else
-  if opc = n2w 0x16 then SOME And else
-  if opc = n2w 0x17 then SOME Or else
-  if opc = n2w 0x18 then SOME XOr else
-  if opc = n2w 0x19 then SOME Not else
-  if opc = n2w 0x1a then SOME Byte else
-  if opc = n2w 0x1b then SOME ShL else
-  if opc = n2w 0x1c then SOME ShR else
-  if opc = n2w 0x1d then SOME SAR else
-  if opc = n2w 0x20 then SOME Keccak256 else
-  if opc = n2w 0x30 then SOME Address else
-  if opc = n2w 0x31 then SOME Balance else
-  if opc = n2w 0x32 then SOME Origin else
-  if opc = n2w 0x33 then SOME Caller else
-  if opc = n2w 0x34 then SOME CallValue else
-  if opc = n2w 0x35 then SOME CallDataLoad else
-  if opc = n2w 0x36 then SOME CallDataSize else
-  if opc = n2w 0x37 then SOME CallDataCopy else
-  if opc = n2w 0x38 then SOME CodeSize else
-  if opc = n2w 0x39 then SOME CodeCopy else
-  if opc = n2w 0x3a then SOME GasPrice else
-  if opc = n2w 0x3b then SOME ExtCodeSize else
-  if opc = n2w 0x3c then SOME ExtCodeCopy else
-  if opc = n2w 0x3d then SOME ReturnDataSize else
-  if opc = n2w 0x3e then SOME ReturnDataCopy else
-  if opc = n2w 0x3f then SOME ExtCodeHash else
-  if opc = n2w 0x40 then SOME BlockHash else
-  if opc = n2w 0x41 then SOME CoinBase else
-  if opc = n2w 0x42 then SOME TimeStamp else
-  if opc = n2w 0x43 then SOME Number else
-  if opc = n2w 0x44 then SOME PrevRandao else
-  if opc = n2w 0x45 then SOME GasLimit else
-  if opc = n2w 0x46 then SOME ChainId else
-  if opc = n2w 0x47 then SOME SelfBalance else
-  if opc = n2w 0x48 then SOME BaseFee else
-  if opc = n2w 0x50 then SOME Pop else
-  if opc = n2w 0x51 then SOME MLoad else
-  if opc = n2w 0x52 then SOME MStore else
-  if opc = n2w 0x53 then SOME MStore8 else
-  if opc = n2w 0x54 then SOME SLoad else
-  if opc = n2w 0x55 then SOME SStore else
-  if opc = n2w 0x56 then SOME Jump else
-  if opc = n2w 0x57 then SOME JumpI else
-  if opc = n2w 0x58 then SOME PC else
-  if opc = n2w 0x59 then SOME MSize else
-  if opc = n2w 0x5a then SOME Gas else
-  if opc = n2w 0x5b then SOME JumpDest else
-  if opc = n2w 0x5f ∧ LENGTH rest >= 0 then SOME (Push 0  (TAKE 0 rest)) else
-  if opc = n2w 0x60 ∧ LENGTH rest >= 1 then SOME (Push 1  (TAKE 1 rest)) else
-  if opc = n2w 0x61 ∧ LENGTH rest >= 2 then SOME (Push 2  (TAKE 2 rest)) else
-  if opc = n2w 0x62 ∧ LENGTH rest >= 3 then SOME (Push 3  (TAKE 3 rest)) else
-  if opc = n2w 0x63 ∧ LENGTH rest >= 4 then SOME (Push 4  (TAKE 4 rest)) else
-  if opc = n2w 0x64 ∧ LENGTH rest >= 5 then SOME (Push 5  (TAKE 5 rest)) else
-  if opc = n2w 0x65 ∧ LENGTH rest >= 6 then SOME (Push 6  (TAKE 6 rest)) else
-  if opc = n2w 0x66 ∧ LENGTH rest >= 7 then SOME (Push 7  (TAKE 7 rest)) else
-  if opc = n2w 0x67 ∧ LENGTH rest >= 8 then SOME (Push 8  (TAKE 8 rest)) else
-  if opc = n2w 0x68 ∧ LENGTH rest >= 9 then SOME (Push 9  (TAKE 9 rest)) else
-  if opc = n2w 0x69 ∧ LENGTH rest >= 10 then SOME (Push 10 (TAKE 10 rest)) else
-  if opc = n2w 0x6a ∧ LENGTH rest >= 11 then SOME (Push 11 (TAKE 11 rest)) else
-  if opc = n2w 0x6b ∧ LENGTH rest >= 12 then SOME (Push 12 (TAKE 12 rest)) else
-  if opc = n2w 0x6c ∧ LENGTH rest >= 13 then SOME (Push 13 (TAKE 13 rest)) else
-  if opc = n2w 0x6d ∧ LENGTH rest >= 14 then SOME (Push 14 (TAKE 14 rest)) else
-  if opc = n2w 0x6e ∧ LENGTH rest >= 15 then SOME (Push 15 (TAKE 15 rest)) else
-  if opc = n2w 0x6f ∧ LENGTH rest >= 16 then SOME (Push 16 (TAKE 16 rest)) else
-  if opc = n2w 0x70 ∧ LENGTH rest >= 17 then SOME (Push 17 (TAKE 17 rest)) else
-  if opc = n2w 0x71 ∧ LENGTH rest >= 18 then SOME (Push 18 (TAKE 18 rest)) else
-  if opc = n2w 0x72 ∧ LENGTH rest >= 19 then SOME (Push 19 (TAKE 19 rest)) else
-  if opc = n2w 0x73 ∧ LENGTH rest >= 20 then SOME (Push 20 (TAKE 20 rest)) else
-  if opc = n2w 0x74 ∧ LENGTH rest >= 21 then SOME (Push 21 (TAKE 21 rest)) else
-  if opc = n2w 0x75 ∧ LENGTH rest >= 22 then SOME (Push 22 (TAKE 22 rest)) else
-  if opc = n2w 0x76 ∧ LENGTH rest >= 23 then SOME (Push 23 (TAKE 23 rest)) else
-  if opc = n2w 0x77 ∧ LENGTH rest >= 24 then SOME (Push 24 (TAKE 24 rest)) else
-  if opc = n2w 0x78 ∧ LENGTH rest >= 25 then SOME (Push 25 (TAKE 25 rest)) else
-  if opc = n2w 0x79 ∧ LENGTH rest >= 26 then SOME (Push 26 (TAKE 26 rest)) else
-  if opc = n2w 0x7a ∧ LENGTH rest >= 27 then SOME (Push 27 (TAKE 27 rest)) else
-  if opc = n2w 0x7b ∧ LENGTH rest >= 28 then SOME (Push 28 (TAKE 28 rest)) else
-  if opc = n2w 0x7c ∧ LENGTH rest >= 29 then SOME (Push 29 (TAKE 29 rest)) else
-  if opc = n2w 0x7d ∧ LENGTH rest >= 30 then SOME (Push 30 (TAKE 30 rest)) else
-  if opc = n2w 0x7e ∧ LENGTH rest >= 31 then SOME (Push 31 (TAKE 31 rest)) else
-  if opc = n2w 0x7f ∧ LENGTH rest >= 32 then SOME (Push 32 (TAKE 32 rest)) else
-  if opc = n2w 0x80 then SOME (Dup 0) else
-  if opc = n2w 0x81 then SOME (Dup 1) else
-  if opc = n2w 0x82 then SOME (Dup 2) else
-  if opc = n2w 0x83 then SOME (Dup 3) else
-  if opc = n2w 0x84 then SOME (Dup 4) else
-  if opc = n2w 0x85 then SOME (Dup 5) else
-  if opc = n2w 0x86 then SOME (Dup 6) else
-  if opc = n2w 0x87 then SOME (Dup 7) else
-  if opc = n2w 0x88 then SOME (Dup 8) else
-  if opc = n2w 0x89 then SOME (Dup 9) else
-  if opc = n2w 0x8a then SOME (Dup 10) else
-  if opc = n2w 0x8b then SOME (Dup 11) else
-  if opc = n2w 0x8c then SOME (Dup 12) else
-  if opc = n2w 0x8d then SOME (Dup 13) else
-  if opc = n2w 0x8e then SOME (Dup 14) else
-  if opc = n2w 0x8f then SOME (Dup 15) else
-  if opc = n2w 0x90 then SOME (Swap 0) else
-  if opc = n2w 0x91 then SOME (Swap 1) else
-  if opc = n2w 0x92 then SOME (Swap 2) else
-  if opc = n2w 0x93 then SOME (Swap 3) else
-  if opc = n2w 0x94 then SOME (Swap 4) else
-  if opc = n2w 0x95 then SOME (Swap 5) else
-  if opc = n2w 0x96 then SOME (Swap 6) else
-  if opc = n2w 0x97 then SOME (Swap 7) else
-  if opc = n2w 0x98 then SOME (Swap 8) else
-  if opc = n2w 0x99 then SOME (Swap 9) else
-  if opc = n2w 0x9a then SOME (Swap 10) else
-  if opc = n2w 0x9b then SOME (Swap 11) else
-  if opc = n2w 0x9c then SOME (Swap 12) else
-  if opc = n2w 0x9d then SOME (Swap 13) else
-  if opc = n2w 0x9e then SOME (Swap 14) else
-  if opc = n2w 0x9f then SOME (Swap 15) else
-  if opc = n2w 0xa0 then SOME (Log 0) else
-  if opc = n2w 0xa1 then SOME (Log 1) else
-  if opc = n2w 0xa2 then SOME (Log 2) else
-  if opc = n2w 0xa3 then SOME (Log 3) else
-  if opc = n2w 0xf0 then SOME Create else
-  if opc = n2w 0xf1 then SOME Call else
-  if opc = n2w 0xf2 then SOME CallCode else
-  if opc = n2w 0xf3 then SOME Return else
-  if opc = n2w 0xf4 then SOME DelegateCall else
-  if opc = n2w 0xf5 then SOME Create2 else
-  if opc = n2w 0xfa then SOME StaticCall else
-  if opc = n2w 0xfd then SOME Revert else
-  NONE
+  parse_opcode (opcs : byte list)
+    = case opcs of
+     | n2w 0x00 :: rest => SOME Stop
+     | n2w 0x01 :: rest => SOME Add 
+     | n2w 0x02 :: rest => SOME Mul 
+     | n2w 0x03 :: rest => SOME Sub 
+     | n2w 0x04  :: rest => SOME Div 
+     | n2w 0x05  :: rest => SOME SDiv 
+     | n2w 0x06  :: rest => SOME Mod 
+     | n2w 0x07  :: rest => SOME SMod 
+     | n2w 0x08  :: rest => SOME AddMod 
+     | n2w 0x09  :: rest => SOME MulMod 
+     | n2w 0x0a  :: rest => SOME Exp 
+     | n2w 0x0b  :: rest => SOME SignExtend 
+     | n2w 0x10  :: rest => SOME LT 
+     | n2w 0x11  :: rest => SOME GT 
+     | n2w 0x12  :: rest => SOME SLT 
+     | n2w 0x13  :: resgt => SOME SGT 
+     | n2w 0x14  :: rest => SOME Eq 
+     | n2w 0x15  :: rest => SOME IsZero 
+     | n2w 0x16  :: rest => SOME And 
+     | n2w 0x17  :: rest => SOME Or 
+     | n2w 0x18  :: rest => SOME XOr 
+     | n2w 0x19  :: rest => SOME Not 
+     | n2w 0x1a  :: rest => SOME Byte 
+     | n2w 0x1b  :: rest => SOME ShL 
+     | n2w 0x1c  :: rest => SOME ShR 
+     | n2w 0x1d  :: rest => SOME SAR 
+     | n2w 0x20  :: rest => SOME Keccak256 
+     | n2w 0x30  :: rest => SOME Address 
+     | n2w 0x31  :: rest => SOME Balance 
+     | n2w 0x32  :: rest => SOME Origin 
+     | n2w 0x33  :: rest => SOME Caller 
+     | n2w 0x34  :: rest => SOME CallValue 
+     | n2w 0x35  :: rest => SOME CallDataLoad 
+     | n2w 0x36  :: rest => SOME CallDataSize 
+     | n2w 0x37  :: rest => SOME CallDataCopy 
+     | n2w 0x38  :: rest => SOME CodeSize 
+     | n2w 0x39  :: rest => SOME CodeCopy 
+     | n2w 0x3a  :: rest => SOME GasPrice 
+     | n2w 0x3b  :: rest => SOME ExtCodeSize 
+     | n2w 0x3c  :: rest => SOME ExtCodeCopy 
+     | n2w 0x3d  :: rest => SOME ReturnDataSize 
+     | n2w 0x3e  :: rest => SOME ReturnDataCopy 
+     | n2w 0x3f  :: rest => SOME ExtCodeHash 
+     | n2w 0x40  :: rest => SOME BlockHash 
+     | n2w 0x41  :: rest => SOME CoinBase 
+     | n2w 0x42  :: rest => SOME TimeStamp 
+     | n2w 0x43  :: rest => SOME Number 
+     | n2w 0x44  :: rest => SOME PrevRandao 
+     | n2w 0x45  :: rest => SOME GasLimit 
+     | n2w 0x46  :: rest => SOME ChainId 
+     | n2w 0x47  :: rest => SOME SelfBalance 
+     | n2w 0x48  :: rest => SOME BaseFee 
+     | n2w 0x50  :: rest => SOME Pop 
+     | n2w 0x51  :: rest => SOME MLoad 
+     | n2w 0x52  :: rest => SOME MStore 
+     | n2w 0x53  :: rest => SOME MStore8 
+     | n2w 0x54  :: rest => SOME SLoad 
+     | n2w 0x55  :: rest => SOME SStore 
+     | n2w 0x56  :: rest => SOME Jump 
+     | n2w 0x57  :: rest => SOME JumpI 
+     | n2w 0x58  :: rest => SOME PC 
+     | n2w 0x59  :: rest => SOME MSize 
+     | n2w 0x5a  :: rest => SOME Gas 
+     | n2w 0x5b  :: rest => SOME JumpDest 
+     | n2w 0x5f  :: rest => if LENGTH rest >= 0 then SOME $ Push 0  (TAKE 0 rest) else NONE 
+     | n2w 0x60  :: rest => if LENGTH rest >= 1 then SOME $ Push 1  (TAKE 1 rest) else NONE 
+     | n2w 0x61  :: rest => if LENGTH rest >= 2 then SOME $ Push 2  (TAKE 2 rest) else NONE 
+     | n2w 0x62  :: rest => if LENGTH rest >= 3 then SOME $ Push 3  (TAKE 3 rest) else NONE 
+     | n2w 0x63  :: rest => if LENGTH rest >= 4 then SOME $ Push 4  (TAKE 4 rest) else NONE 
+     | n2w 0x64  :: rest => if LENGTH rest >= 5 then SOME $ Push 5  (TAKE 5 rest) else NONE 
+     | n2w 0x65  :: rest => if LENGTH rest >= 6 then SOME $ Push 6  (TAKE 6 rest) else NONE 
+     | n2w 0x66  :: rest => if LENGTH rest >= 7 then SOME $ Push 7  (TAKE 7 rest) else NONE 
+     | n2w 0x67  :: rest => if LENGTH rest >= 8 then SOME $ Push 8  (TAKE 8 rest) else NONE 
+     | n2w 0x68  :: rest => if LENGTH rest >= 9 then SOME $ Push 9  (TAKE 9 rest) else NONE 
+     | n2w 0x69  :: rest => if LENGTH rest >= 10 then SOME $ Push 10 (TAKE 10 rest) else NONE 
+     | n2w 0x6a  :: rest => if LENGTH rest >= 11 then SOME $ Push 11 (TAKE 11 rest) else NONE 
+     | n2w 0x6b  :: rest => if LENGTH rest >= 12 then SOME $ Push 12 (TAKE 12 rest) else NONE 
+     | n2w 0x6c  :: rest => if LENGTH rest >= 13 then SOME $ Push 13 (TAKE 13 rest) else NONE 
+     | n2w 0x6d  :: rest => if LENGTH rest >= 14 then SOME $ Push 14 (TAKE 14 rest) else NONE 
+     | n2w 0x6e  :: rest => if LENGTH rest >= 15 then SOME $ Push 15 (TAKE 15 rest) else NONE 
+     | n2w 0x6f  :: rest => if LENGTH rest >= 16 then SOME $ Push 16 (TAKE 16 rest) else NONE 
+     | n2w 0x70  :: rest => if LENGTH rest >= 17 then SOME $ Push 17 (TAKE 17 rest) else NONE 
+     | n2w 0x71  :: rest => if LENGTH rest >= 18 then SOME $ Push 18 (TAKE 18 rest) else NONE 
+     | n2w 0x72  :: rest => if LENGTH rest >= 19 then SOME $ Push 19 (TAKE 19 rest) else NONE 
+     | n2w 0x73  :: rest => if LENGTH rest >= 20 then SOME $ Push 20 (TAKE 20 rest) else NONE 
+     | n2w 0x74  :: rest => if LENGTH rest >= 21 then SOME $ Push 21 (TAKE 21 rest) else NONE 
+     | n2w 0x75  :: rest => if LENGTH rest >= 22 then SOME $ Push 22 (TAKE 22 rest) else NONE 
+     | n2w 0x76  :: rest => if LENGTH rest >= 23 then SOME $ Push 23 (TAKE 23 rest) else NONE 
+     | n2w 0x77  :: rest => if LENGTH rest >= 24 then SOME $ Push 24 (TAKE 24 rest) else NONE 
+     | n2w 0x78  :: rest => if LENGTH rest >= 25 then SOME $ Push 25 (TAKE 25 rest) else NONE 
+     | n2w 0x79  :: rest => if LENGTH rest >= 26 then SOME $ Push 26 (TAKE 26 rest) else NONE 
+     | n2w 0x7a  :: rest => if LENGTH rest >= 27 then SOME $ Push 27 (TAKE 27 rest) else NONE 
+     | n2w 0x7b  :: rest => if LENGTH rest >= 28 then SOME $ Push 28 (TAKE 28 rest) else NONE 
+     | n2w 0x7c  :: rest => if LENGTH rest >= 29 then SOME $ Push 29 (TAKE 29 rest) else NONE 
+     | n2w 0x7d  :: rest => if LENGTH rest >= 30 then SOME $ Push 30 (TAKE 30 rest) else NONE 
+     | n2w 0x7e  :: rest => if LENGTH rest >= 31 then SOME $ Push 31 (TAKE 31 rest) else NONE 
+     | n2w 0x7f  :: rest => if LENGTH rest >= 32 then SOME $ Push 32 (TAKE 32 rest) else NONE 
+     | n2w 0x80  :: rest => SOME $ Dup 0 
+     | n2w 0x81  :: rest => SOME $ Dup 1 
+     | n2w 0x82  :: rest => SOME $ Dup 2 
+     | n2w 0x83  :: rest => SOME $ Dup 3 
+     | n2w 0x84  :: rest => SOME $ Dup 4 
+     | n2w 0x85  :: rest => SOME $ Dup 5 
+     | n2w 0x86  :: rest => SOME $ Dup 6 
+     | n2w 0x87  :: rest => SOME $ Dup 7 
+     | n2w 0x88  :: rest => SOME $ Dup 8 
+     | n2w 0x89  :: rest => SOME $ Dup 9 
+     | n2w 0x8a  :: rest => SOME $ Dup 10 
+     | n2w 0x8b  :: rest => SOME $ Dup 11 
+     | n2w 0x8c  :: rest => SOME $ Dup 12 
+     | n2w 0x8d  :: rest => SOME $ Dup 13 
+     | n2w 0x8e  :: rest => SOME $ Dup 14 
+     | n2w 0x8f  :: rest => SOME $ Dup 15 
+     | n2w 0x90  :: rest => SOME $ Swap 0 
+     | n2w 0x91  :: rest => SOME $ Swap 1 
+     | n2w 0x92  :: rest => SOME $ Swap 2 
+     | n2w 0x93  :: rest => SOME $ Swap 3 
+     | n2w 0x94  :: rest => SOME $ Swap 4 
+     | n2w 0x95  :: rest => SOME $ Swap 5 
+     | n2w 0x96  :: rest => SOME $ Swap 6 
+     | n2w 0x97  :: rest => SOME $ Swap 7 
+     | n2w 0x98  :: rest => SOME $ Swap 8 
+     | n2w 0x99  :: rest => SOME $ Swap 9
+     | n2w 0x9a  :: rest => SOME $ Swap 10 
+     | n2w 0x9b  :: rest => SOME $ Swap 11 
+     | n2w 0x9c  :: rest => SOME $ Swap 12 
+     | n2w 0x9d  :: rest => SOME $ Swap 13 
+     | n2w 0x9e  :: rest => SOME $ Swap 14
+     | n2w 0x9f  :: rest => SOME $ Swap 15
+     | n2w 0xa0  :: rest => SOME $ Log 0 
+     | n2w 0xa1  :: rest => SOME $ Log 1 
+     | n2w 0xa2  :: rest => SOME $ Log 2 
+     | n2w 0xa3  :: rest => SOME $ Log 3
+     | n2w 0xf0  :: rest => SOME Create 
+     | n2w 0xf1  :: rest => SOME Call 
+     | n2w 0xf2  :: rest => SOME CallCode 
+     | n2w 0xf3  :: rest => SOME Return 
+     | n2w 0xf4  :: rest => SOME DelegateCall 
+     | n2w 0xf5  :: rest => SOME Create2 
+     | n2w 0xfa  :: rest => SOME StaticCall 
+     | n2w 0xfd  :: rest => SOME Revert 
+     | _ => NONE
 Proof
   simp[parse_opcode_def]
   \\ DEEP_INTRO_TAC some_intro
@@ -416,13 +417,15 @@ Proof
     \\ rw[rich_listTheory.TAKE_APPEND]
     \\ fs[listTheory.LENGTH_NIL]
   )
+  \\ Cases_on ‘opcs’
+  \\ rw[wf_opname_def, opcode_def]
   \\ let
     val def_cases = opcode_def |> concl |> strip_conj |> List.map
       (fn tm => (EXISTS_TAC(rand (lhs tm)) handle HOL_ERR _ => NO_TAC)
                 \\ rw[opcode_def] \\ NO_TAC)
     val push_cases =  List.tabulate(33, (fn n =>
           let val nn = numSyntax.term_of_int n
-          in EXISTS_TAC “Push ^nn (TAKE ^nn rest)” \\ rw[opcode_def, wf_opname_def]
+          in EXISTS_TAC “Push ^nn (TAKE ^nn t)” \\ rw[opcode_def, wf_opname_def]
              \\ rw[rich_listTheory.IS_PREFIX_EQ_TAKE] \\ EXISTS_TAC nn \\ rw[]
           end))
     fun mk_x_cases m tm = List.tabulate(m, fn n =>
@@ -433,127 +436,11 @@ Proof
     val swap_cases = mk_x_cases 16 ``Swap``
     val log_cases = mk_x_cases 4 ``Log``
   in
-    rw[]
-    \\ TRY $ FIRST (def_cases @ push_cases @ dup_cases @ swap_cases @ log_cases)
+    TRY $ FIRST (def_cases @ push_cases @ dup_cases @ swap_cases @ log_cases)
   end
 QED
 
-(*
 open cv_transLib cv_stdTheory;
-
-Definition parse_opcode_exec_def:
-  parse_opcode_exec (opc:byte list)
-    = case opc of
-      | [n2w 0x00] => SOME Stop
-      | [n2w 0x01] => SOME Add
-      | [n2w 0x02] => SOME Mul
-      | [n2w 0x03] => SOME Sub
-      | [n2w 0x04] => SOME Div
-      | [n2w 0x05] => SOME SDiv
-      | [n2w 0x06] => SOME Mod
-      | [n2w 0x07] => SOME SMod
-      | [n2w 0x08] => SOME AddMod
-      | [n2w 0x09] => SOME MulMod
-      | [n2w 0x0a] => SOME Exp
-      | [n2w 0x0b] => SOME SignExtend
-      | [n2w 0x10] => SOME LT
-      | [n2w 0x11] => SOME GT
-      | [n2w 0x12] => SOME SLT
-      | [n2w 0x13] => SOME SGT
-      | [n2w 0x14] => SOME Eq
-      | [n2w 0x15] => SOME IsZero
-      | [n2w 0x16] => SOME And
-      | [n2w 0x17] => SOME Or
-      | [n2w 0x18] => SOME XOr
-      | [n2w 0x19] => SOME Not
-      | [n2w 0x1a] => SOME Byte
-      | [n2w 0x1b] => SOME ShL
-      | [n2w 0x1c] => SOME ShR
-      | [n2w 0x1d] => SOME SAR
-      | [n2w 0x20] => SOME Keccak256
-      | [n2w 0x30] => SOME Address
-      | [n2w 0x31] => SOME Balance
-      | [n2w 0x32] => SOME Origin
-      | [n2w 0x33] => SOME Caller
-      | [n2w 0x34] => SOME CallValue
-      | [n2w 0x35] => SOME CallDataLoad
-      | [n2w 0x36] => SOME CallDataSize
-      | [n2w 0x37] => SOME CallDataCopy
-      | [n2w 0x38] => SOME CodeSize
-      | [n2w 0x39] => SOME CodeCopy
-      | [n2w 0x3a] => SOME GasPrice
-      | [n2w 0x3b] => SOME ExtCodeSize
-      | [n2w 0x3c] => SOME ExtCodeCopy
-      | [n2w 0x3d] => SOME ReturnDataSize
-      | [n2w 0x3e] => SOME ReturnDataCopy
-      | [n2w 0x3f] => SOME ExtCodeHash
-      | [n2w 0x40] => SOME BlockHash
-      | [n2w 0x41] => SOME CoinBase
-      | [n2w 0x42] => SOME TimeStamp
-      | [n2w 0x43] => SOME Number
-      | [n2w 0x44] => SOME PrevRandao
-      | [n2w 0x45] => SOME GasLimit
-      | [n2w 0x46] => SOME ChainId
-      | [n2w 0x47] => SOME SelfBalance
-      | [n2w 0x48] => SOME BaseFee
-      | [n2w 0x50] => SOME Pop
-      | [n2w 0x51] => SOME MLoad
-      | [n2w 0x52] => SOME MStore
-      | [n2w 0x53] => SOME MStore8
-      | [n2w 0x54] => SOME SLoad
-      | [n2w 0x55] => SOME SStore
-      | [n2w 0x56] => SOME Jump
-      | [n2w 0x57] => SOME JumpI
-      | [n2w 0x58] => SOME PC
-      | [n2w 0x59] => SOME MSize
-      | [n2w 0x5a] => SOME Gas
-      | [n2w 0x5b] => SOME JumpDest
-      | [n2w 0xf0] => SOME Create
-      | [n2w 0xf1] => SOME Call
-      | [n2w 0xf2] => SOME CallCode
-      | [n2w 0xf3] => SOME Return
-      | [n2w 0xf4] => SOME DelegateCall
-      | [n2w 0xf5] => SOME Create2
-      | [n2w 0xfa] => SOME StaticCall
-      | op::rest => if n2w 0x5f ≤ op ∧ op ≤ n2w 0x7f then SOME $ Push (w2w op - n2w 0x5f) rest else
-                    if n2w 0x80 ≤ op ∧ op ≤ n2w 0x8f then SOME (Dup (w2w op - n2w 0x81)) else
-                    if n2w 0x90 ≤ op ∧ op ≤ n2w 0x9f then SOME (Swap (w2w op - n2w 0x91)) else
-                    if n2w 0xa0 ≤ op ∧ op ≤ n2w 0xa4 then SOME (Log (w2w op - n2w 0xa0)) else
-                    NONE
-      | _ => NONE
-End
-
-val _ = cv_trans parse_opcode_exec_def;
-
-
-        open Tactic;
-
-Triviality parse_opcode_eqv_parse_opcode_exec:
-  ∀opc. parse_opcode opc = parse_opcode_exec opc
-Proof
-  Cases
-  \\ EVAL_TAC
-  strip_tac
-  \\ simp[parse_opcode_def]
-  \\ fs[some_def]
-  \\ Cases_on ‘opc’
-
-  \\ rw[]
-  \\ (
-  Cases_on ‘opn’ >> fs[opcode_def]
-  )
-  \\DEEP_INTRO_TAC some_intro
-  \\ Cases_on ‘x’
-  \\ (fs[opcode_def])
-  \\ rw[]
-  \\ Cases_on ‘opc’
-  \\ rw[opcode_def]
-  \\ rw[parse_opcode_def, parse_opcode_exec_def]
-  \\ ‘∃opn. wf_opname opn ∧ opcode opn = []’ by metis_tac []
-  \\ rw[some_intro]
-QED
-
-val _ = cv_auto_trans parse_opcode_def;
-*)
+cv_auto_trans parse_opcode_cond_thm
 
 val _ = export_theory();
