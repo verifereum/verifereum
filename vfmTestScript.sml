@@ -2,10 +2,12 @@ open HolKernel boolLib bossLib Parse wordsLib
      whileTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory
-     cv_transLib cv_stdTheory;
+     vfmOperationTheory
+     cv_transLib cv_stdTheory cv_computeLib;
 
 val _ = new_theory "vfmTest";
 
+    
 (* TODO: move/replace *)
 Definition hex_to_bytes_def:
     hex_to_bytes [] = [] : byte list
@@ -166,6 +168,8 @@ Proof
   simp[add_d0g0v0_Shanghai_pre_def, add_d0g0v0_Shanghai_transaction_def]
 QED
 
+
+
 Theorem add_d0g0v0_Shanghai_correctness:
   ∀c b rd.
     ∃r. run (initial_state c add_d0g0v0_Shanghai_pre b rd add_d0g0v0_Shanghai_transaction)
@@ -176,29 +180,49 @@ Proof
   \\ simp[step_def]
   \\ simp[Once initial_state_def]
   \\ simp[Once bind_def, get_current_context_def, Once return_def]
-  \\ simp[add_d0g0v0_Shanghai_pre_code]
-  (*
-  \\ Cases_on ‘x = n2w 0x0000000000000000000000000000000000001000
-               ∨ x = n2w 0x0000000000000000000000000000000000001001
-              ∨ x = n2w 0x0000000000000000000000000000000000001002
-              ∨ x =  n2w 0x0000000000000000000000000000000000001003
-              ∨ x =  n2w 0x0000000000000000000000000000000000001004
-              ∨ x = n2w 0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b
-              ∨ x =  n2w 0xcccccccccccccccccccccccccccccccccccccccc’
-  *)
-  \\ cheat
-  (*   ‘dimword (:160) = 1461501637330902918203684832716283019655932542976’ *)
-  (*     by (fs [SF wordsLib.SIZES_ss] ) *)
+  \\ simp[add_d0g0v0_Shanghai_pre_code]  
+  \\ rw [cv_eval “hex_to_bytes "600060006000600060006004356110000162fffffff100"”]
+  \\ rw[cv_eval “ parse_opcode  [96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 4w; 53w;
+                  97w; 16w; 0w; 1w; 98w; 255w; 255w; 255w; 241w; 0w]”]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
+  \\ rw[Once bind_def, get_current_context_def, return_def]
+  \\ rw[Once ignore_bind_def, bind_def, assert_def, set_current_context_def, return_def,  add_d0g0v0_Shanghai_transaction_def]
+(* step instr *)
+  \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
+  \\ rw[Once bind_def, get_current_context_def]
+  \\ rw[return_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[set_current_context_def, return_def]
+  (* inc pc *)
+  \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
 
 
-  (*   \\ fs[step_def] *)
+  (* opcode 2 *)
+  \\ rw[Once OWHILE_THM]
+  \\ rw[step_def]
+  \\ rw[Once bind_def, get_current_context_def, return_def]
+  \\ fs[opcode_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[opcode_def]
+  \\ rw[cv_eval “parse_opcode
+                     [96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 4w; 53w; 97w;
+                      16w; 0w; 1w; 98w; 255w; 255w; 255w; 241w; 0w]”]
+  \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
+  \\ rw[Once bind_def, get_current_context_def]
+  \\ rw[Once return_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[set_current_context_def, Once return_def]
+  (* copy block till next from above *)
+    \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
+  \\ rw[Once bind_def, get_current_context_def]
+  \\ rw[return_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[set_current_context_def, return_def]
+  \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
+  (* here *)
 
-  (*   \\ fs[initial_state_def, add_d0g0v0_Shanghai_pre_def, add_d0g0v0_Shanghai_transaction_def] *)
-  (*   \\ fs [step_def] *)
-  (*   \\ fs[bind_def, get_current_context_def, initial_context_def, return_def, initial_call_params_def] *)
-  (*   \\ EVAL_TAC *)
-  (*   \\ fs [get_current_context_def] *)
-  (*   \\ cheat *)
+
 QED
 (*
 Definition CrashingTransaction_transaction_def:
