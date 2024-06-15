@@ -7,7 +7,7 @@ open HolKernel boolLib bossLib Parse wordsLib
 
 val _ = new_theory "vfmTest";
 
-    
+
 (* TODO: move/replace *)
 Definition hex_to_bytes_def:
     hex_to_bytes [] = [] : byte list
@@ -168,7 +168,11 @@ Proof
   simp[add_d0g0v0_Shanghai_pre_def, add_d0g0v0_Shanghai_transaction_def]
 QED
 
-
+fun cv_eval_match_tac pat =
+  goal_term (fn tm =>
+               let
+                 val t = find_term (can (match_term pat)) tm
+               in rewrite_tac [cv_eval t] end);
 
 Theorem add_d0g0v0_Shanghai_correctness:
   ∀c b rd.
@@ -180,7 +184,7 @@ Proof
   \\ simp[step_def]
   \\ simp[Once initial_state_def]
   \\ simp[Once bind_def, get_current_context_def, Once return_def]
-  \\ simp[add_d0g0v0_Shanghai_pre_code]  
+  \\ simp[add_d0g0v0_Shanghai_pre_code]
   \\ rw [cv_eval “hex_to_bytes "600060006000600060006004356110000162fffffff100"”]
   \\ rw[cv_eval “ parse_opcode  [96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 4w; 53w;
                   97w; 16w; 0w; 1w; 98w; 255w; 255w; 255w; 241w; 0w]”]
@@ -188,7 +192,8 @@ Proof
   \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
   \\ rw[Once bind_def, get_current_context_def, return_def]
   \\ rw[Once ignore_bind_def, bind_def, assert_def, set_current_context_def, return_def,  add_d0g0v0_Shanghai_transaction_def]
-(* step instr *)
+
+  (* step instr *)
   \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
   \\ rw[Once bind_def, get_current_context_def]
   \\ rw[return_def]
@@ -196,7 +201,6 @@ Proof
   \\ rw[set_current_context_def, return_def]
   (* inc pc *)
   \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
-
 
   (* opcode 2 *)
   \\ rw[Once OWHILE_THM]
@@ -213,17 +217,41 @@ Proof
   \\ rw[Once return_def]
   \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
   \\ rw[set_current_context_def, Once return_def]
+
   (* copy block till next from above *)
-    \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
   \\ rw[Once bind_def, get_current_context_def]
   \\ rw[return_def]
   \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
   \\ rw[set_current_context_def, return_def]
   \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
+
+  (* opcode 3 *)
+  \\ rw[Once OWHILE_THM]
+  \\ rw[step_def]
+  \\ rw[Once bind_def, get_current_context_def, return_def]
+  \\ fs[opcode_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[opcode_def]
+  \\ cv_eval_match_tac ``parse_opcode _``
+  \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
+  \\ rw[Once bind_def, get_current_context_def]
+  \\ rw[Once return_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[set_current_context_def, Once return_def]
+
+  (* copy block till next from above *)
+  \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
+  \\ rw[Once bind_def, get_current_context_def]
+  \\ rw[return_def]
+  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\ rw[set_current_context_def, return_def]
+  \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
+
   (* here *)
-
-
+  \\ cheat
 QED
+
 (*
 Definition CrashingTransaction_transaction_def:
   CrashingTransaction_transaction =
