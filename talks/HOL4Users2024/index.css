@@ -1,0 +1,73 @@
+html {
+  scroll-snap-type: y mandatory;
+}
+body {
+  color: mistyrose;
+  background-color: black;
+  font-family: sans-serif;
+  font-size: 3.2vh;
+}
+section {
+  border: 0.1em solid skyblue;
+  padding: 0.2em 0.8em;
+  margin: auto;
+  margin-bottom: 1em;
+  width: 96vw;
+  height: 96vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+span.highlight,
+h2 {
+  color: orange;
+}
+div.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-around;
+}
+div.center > p {
+  margin: 0.1em;
+}
+ul, dl, ol {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  height: 100%;
+  margin: 0;
+}
+dt {
+  color: skyblue;
+  font-style: italic;
+}
+dd {
+  margin-bottom: 0.2em;
+  max-width: 40em;
+}
+dd > ul {
+  padding-left: 0;
+}
+p.callout {
+  font-size: larger;
+}
+p.callout,
+p.narrow {
+  width: 60%;
+  text-align: center;
+}
+div.code, span.code {
+  white-space: pre;
+  font-family: monospace;
+}
+span.variable {
+  font-style: italic;
+  color: skyblue;
+}
+span.elided {
+  color: blue;
+}

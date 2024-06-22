@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Verifereum</title>
+    <link rel=stylesheet href=index.css>
+  </head>
+  <body>
+    <section>
+      <h2>Verifereum</h2>
+      <p class=callout>
+        Formal <span class=highlight>verif</span>ication of implementation
+        correctness for applications that run on the Eth<span class=highlight>ereum</span>
+        virtual machine
+      </p>
+      <div class=center><p>Ramana Kumar</p><p>HOL4 Users' Workshop 2024</p></div>
+    </section>
+    <section>
+      <h2>What is Ethereum?</h2>
+      <p class=callout>
+      The most popular public blockchain.<br>
+      An <span class=highlight>application platform</span> that is:
+      </p>
+      <dl>
+        <dt>Credibly neutral</dt>
+        <dd>
+          <ul>
+            <li>Capture resistant &mdash; nobody can change the rules for private benefit</li>
+            <li>Censorship resistant &mdash; anyone with an internet connection can use it</li>
+            <li>Transparent &mdash; anyone can examine and verify these properties</li>
+          </ul>
+        </dd>
+        <dt>Safe and live</dt>
+        <dd>
+          <ul>
+            <li>Decentralised</li>
+            <li>Incentivised (proof of stake consensus mechanism)</li>
+          </ul>
+        </dd>
+        <dt>Actively developed + in use</dt>
+        <dd>DEXes (decentralised exchanges) (Uniswap, Matcha, CoW, 1Inch), lending markets (Aave, Myso), Stable coins (USDC, USDT, DAI), Liquid Staking (Rocket Pool, Lido), names (ENS, Nouns), attestations (EAS), ‥.</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>How Ethereum works: accounts</h2>
+      <p class=callout>
+      Ethereum is a shared decentralised computer.<br>
+      There is global <span class=highlight>consensus on the state</span> of the machine.<br>
+      <span class=highlight>State updates</span> obey deterministic rules, driven by user txns.
+      </p>
+      <dl>
+        <dt>
+      The state is organised into <span class=highlight>accounts</span>, containing:
+        </dt>
+        <dd>
+      <ul>
+        <li>a 20 byte address</li>
+        <li>an ether balance</li>
+        <li>storage: a map from <span class=code>bytes32</span> to <span class=code>bytes32</span></li>
+        <li>(optionally) code: a sequence of bytes</li>
+      </ul>
+        </dd>
+        <dt>Externally-owned account (EOA)</dt><dd>has private key associated with address, but no code</dd>
+        <dt>Smart contract account</dt><dd>has code, but no private key</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>How Ethereum works: calls</h2>
+    </section>
+    <section>
+      <h2>What is Verifereum?</h2>
+    </section>
+    <section>
+      <h2>How Verifereum works</h2>
+    </section>
+    <section>
+      <h2>Get involved</h2>
+    </section>
+  </body>
+</html>
