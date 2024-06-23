@@ -64,6 +64,9 @@ div.code, span.code {
   white-space: pre;
   font-family: monospace;
 }
+span.italic {
+  font-style: italic;
+}
 span.variable {
   font-style: italic;
   color: skyblue;

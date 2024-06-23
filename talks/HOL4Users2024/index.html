@@ -37,11 +37,11 @@
           </ul>
         </dd>
         <dt>Actively developed + in use</dt>
-        <dd>DEXes (decentralised exchanges) (Uniswap, Matcha, CoW, 1Inch), lending markets (Aave, Myso), Stable coins (USDC, USDT, DAI), Liquid Staking (Rocket Pool, Lido), names (ENS, Nouns), attestations (EAS), ‥.</dd>
+        <dd>DEXes (decentralised exchanges) (Uniswap, Matcha, CoW, 1Inch), lending markets (Aave, Myso), Stable coins (USDC, USDT, DAI), Liquid Staking (Rocket Pool, Lido), names (ENS, Nouns), attestations (EAS), gamefi, socialfi, desci, ‥.</dd>
       </dl>
     </section>
     <section>
-      <h2>How Ethereum works: accounts</h2>
+      <h2>How Ethereum works</h2>
       <p class=callout>
       Ethereum is a shared decentralised computer.<br>
       There is global <span class=highlight>consensus on the state</span> of the machine.<br>
@@ -49,31 +49,90 @@
       </p>
       <dl>
         <dt>
-      The state is organised into <span class=highlight>accounts</span>, containing:
+          The state is organised into <span class=highlight>accounts</span>, containing:
         </dt>
         <dd>
-      <ul>
-        <li>a 20 byte address</li>
-        <li>an ether balance</li>
-        <li>storage: a map from <span class=code>bytes32</span> to <span class=code>bytes32</span></li>
-        <li>(optionally) code: a sequence of bytes</li>
-      </ul>
+          <ul>
+            <li>a 20 byte address</li>
+            <li>an ether balance</li>
+            <li>storage: a map from <span class=code>bytes32</span> to <span class=code>bytes32</span></li>
+            <li>(optionally) code: a sequence of bytes</li>
+          </ul>
         </dd>
         <dt>Externally-owned account (EOA)</dt><dd>has private key associated with address, but no code</dd>
         <dt>Smart contract account</dt><dd>has code, but no private key</dd>
       </dl>
     </section>
     <section>
-      <h2>How Ethereum works: calls</h2>
+      <h2>How Ethereum works: message calls</h2>
+      <p class=callout>
+      An account can be <span class=highlight>called</span> by another account.<br>
+      </p>
+      <dl>
+        <dt>Calls, used for both transfers and compute, contain:</dt>
+        <dd>
+          <ul>
+            <li>sender address</li>
+            <li>target address</li>
+            <li>(optional) ether value to transfer</li>
+            <li>(optional) data</li>
+          </ul>
+        </dd>
+        <dt>The target's code is executed with the call data as input</dt>
+        <dd>
+          <ul>
+            <li>execution context for stack-based <span class=highlight>virtual machine</span> with RAM</li>
+            <li>may spawn <span class=italic>internal</span> calls (new contexts), which return data</li>
+            <li>transactional: all or none of the storage and balance updates persist</li>
+          </ul>
+        </dd>
+        <dt>A <span class=highlight>transaction</span> (txn) from an EOA is a call</dt>
+        <dd>transaction info signed with the private key, including fee limit: fees (gas) are charged for execution and deducted from the sender account</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>How Ethereum works: blocks</h2>
+      state updates are an ordered sequence of transactions
+      these transactions are organised into blocks
+      this is for the sake of the consensus mechanism which ultimately designates certain blocks (at the head of a chain, since blocks refer to their parent) as final (i.e. canonical)
+      peer-to-peer network of nodes have a view on the current machine state, but all agree on history at least till the finalised block
+      transactions are broadcast. a (validating) node is randomly selected every slot to propose a block that specifies the included transactions and their order.
+    </section>
+    <section>
+      <h2>How Ethereum works: applications</h2>
+      example of a token: (simplified) DAI
+      multi-account example: 0xsplits
+    </section>
+    <section>
+      <h2>EVMs beyond Ethereum</h2>
+      layer 2s
     </section>
     <section>
       <h2>What is Verifereum?</h2>
+      formal verification for ethereum applications
+      why this domain is good for verification: well-specified, small programs, very high value exploits that are essentially impossible to undo, immutable by default
+      motivations: auditing market charges good money
+      many applications have large bug bounties
+      correct-by-construction application development may be worthwhile
     </section>
     <section>
       <h2>How Verifereum works</h2>
+      formal model of the EVM
+      program logic for reasoning about applications
+      decompilation of bytecode
+    </section>
+    <section>
+      <h2>Verifereum: current status</h2>
+      draft EVM model is mostly complete
+      working on evaluation-in-logic and passing external test suites
+      next steps after that would be verifying some simple contracts
     </section>
     <section>
       <h2>Get involved</h2>
+      repository
+      discord channel
+      possible company
+      also: ZKEVM competition
     </section>
   </body>
 </html>
