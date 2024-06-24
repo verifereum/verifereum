@@ -37,7 +37,7 @@
           </ul>
         </dd>
         <dt>Actively developed + in use</dt>
-        <dd>DEXes (decentralised exchanges) (Uniswap, Matcha, CoW, 1Inch), lending markets (Aave, Myso), Stable coins (USDC, USDT, DAI), Liquid Staking (Rocket Pool, Lido), names (ENS, Nouns), attestations (EAS), gamefi, socialfi, desci, ‥.</dd>
+        <dd>DEXes (decentralised exchanges) (Uniswap, Matcha, CoW, 1Inch), lending markets (Aave, Myso), Stable coins (USDC, USDT, DAI), Liquid Staking (Rocket Pool, Lido), names (ENS, Nouns), attestations (EAS), gamefi, socialfi, desci, …</dd>
       </dl>
     </section>
     <section>
@@ -87,25 +87,82 @@
           </ul>
         </dd>
         <dt>A <span class=highlight>transaction</span> (txn) from an EOA is a call</dt>
-        <dd>transaction info signed with the private key, including fee limit: fees (gas) are charged for execution and deducted from the sender account</dd>
+        <dd>transaction info, including fee limit, signed with the private key; fees (gas) are charged for execution and deducted from the sender account</dd>
+        <dt>Static calls (no state changes), aka <span class=highlight>view</span> functions, are free</dt>
+        <dd>used to read data from the blockchain; no sender required</dd>
       </dl>
     </section>
     <section>
       <h2>How Ethereum works: blocks</h2>
-      state updates are an ordered sequence of transactions
-      these transactions are organised into blocks
-      this is for the sake of the consensus mechanism which ultimately designates certain blocks (at the head of a chain, since blocks refer to their parent) as final (i.e. canonical)
-      peer-to-peer network of nodes have a view on the current machine state, but all agree on history at least till the finalised block
-      transactions are broadcast. a (validating) node is randomly selected every slot to propose a block that specifies the included transactions and their order.
+      <p class=callout>
+      The entire history of state updates is a sequence of txns.<br>
+      These are organised into <span class=highlight>blocks</span>.<br>
+      The consensus mechanism selects a block (which also refers to a parent block) as the canonical head of the chain.
+      </p>
+      <dl>
+        <dt>access/participation via a decentralised peer-to-peer network of <span class=highlight>nodes</span></dt>
+        <dd>
+          each node has a view on the current machine state, agreeing at least on the latest finalised block
+        </dd>
+        <dt>transactions are broadcast to the network</dt>
+        <dd>a <span class=highlight>validating</span> (proof of stake) node is randomly selected every slot (12 seconds) to propose a block that specifies the included transactions and their order
+        </dd>
+      </dl>
     </section>
     <section>
-      <h2>How Ethereum works: applications</h2>
-      example of a token: (simplified) DAI
-      multi-account example: 0xsplits
+      <h2>How Ethereum works: ABI</h2>
+      <p class=callout>
+      There are conventions for interpreting call data.<br>
+      The most popular <span class=italic>application binary interface</span> (ABI) is provided by the <span class=highlight>Solidity</span> high-level smart contract programming language.
+      </p>
+      <dl>
+        <dt>Byte encoding of typed data by convention</dt>
+        <dd><span class=code>uint256</span>, <span class=code>address</span> (<span class=code>bytes20</span>), <span class=code>bool[]</span>, …<br>
+          32 bytes per value of basic types, length-prefixed encoding of compound types
+        </dd>
+        <dt>Function selector: initial 4 bytes of call data</dt>
+        <dd>
+          convention: initial bytes of hash of function signature<br>
+          example: <span class=code>0xa543ccea</span> for <span class=code>setWithdrawalAddress(address,address,bool)</span>
+        </dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Example: ERC-20 token</h2>
+      <p class=callout>
+      Standard (<a href=https://eips.ethereum.org/EIPS/eip-20>https://eips.ethereum.org/EIPS/eip-20</a>) minimal interface for (fungible) tokens
+      </p>
+      <div class=code>function name() view returns (string)
+function symbol() view returns (string)
+function decimals() view returns (uint8)
+function totalSupply() view returns (uint256)
+
+function balanceOf(address _owner) view returns (uint256 balance)
+function transfer(address _to, uint256 _value) returns (bool success)
+
+function transferFrom(address _from, address _to, uint256 _value) returns (bool success)
+function approve(address _spender, uint256 _value) returns (bool success)
+function allowance(address _owner, address _spender) view returns (uint256 remaining)</div>
+    </section>
+    <section>
+      <h2>Example: 0xsplits Swapper</h2>
+      <a href=https://docs.splits.org/core/swapper>https://docs.splits.org/core/swapper</a>
+      <img width=768 src=https://docs.splits.org/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fswapper_diagram.2f2890db.png&w=3840&q=75>
     </section>
     <section>
       <h2>EVMs beyond Ethereum</h2>
-      layer 2s
+      <p class=callout>
+      The future of Ethereum applications is on <span class=highlight>layer 2 rollups</span>.<br>
+      These are blockchains that settle their state updates as data on Ethereum, typically using ZK SNARK proofs.
+      </p>
+      <dl>
+        <dt>The need for layer 2s is scaling</dt>
+        <dd>freedom to explore strategies&mdash;e.g. less decentralised&mdash;for higher throughput</dd>
+        <dt>Many layer 2s use the EVM for computation</dt>
+        <dd>or at least are EVM-compatible, but some use different models entirely</dd>
+        <dt>It remains to be seen what is most adopted</dt>
+        <dd>however, it looks like ETH as asset and Ethereum as settlement layer has strong network effects</dd>
+      </dl>
     </section>
     <section>
       <h2>What is Verifereum?</h2>

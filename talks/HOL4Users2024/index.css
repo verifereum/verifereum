@@ -25,6 +25,9 @@ span.highlight,
 h2 {
   color: orange;
 }
+a {
+  color: skyblue;
+}
 div.center {
   display: flex;
   flex-direction: column;
@@ -63,6 +66,8 @@ p.narrow {
 div.code, span.code {
   white-space: pre;
   font-family: monospace;
+  color: aliceblue;
+  background-color: #112;
 }
 span.italic {
   font-style: italic;
