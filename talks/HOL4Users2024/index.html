@@ -100,11 +100,11 @@
       The consensus mechanism selects a block (which also refers to a parent block) as the canonical head of the chain.
       </p>
       <dl>
-        <dt>access/participation via a decentralised peer-to-peer network of <span class=highlight>nodes</span></dt>
+        <dt>Access/participation via a decentralised peer-to-peer network of <span class=highlight>nodes</span></dt>
         <dd>
           each node has a view on the current machine state, agreeing at least on the latest finalised block
         </dd>
-        <dt>transactions are broadcast to the network</dt>
+        <dt>Transactions are broadcast to the network</dt>
         <dd>a <span class=highlight>validating</span> (proof of stake) node is randomly selected every slot (12 seconds) to propose a block that specifies the included transactions and their order
         </dd>
       </dl>
@@ -166,30 +166,56 @@ function allowance(address _owner, address _spender) view returns (uint256 remai
     </section>
     <section>
       <h2>What is Verifereum?</h2>
-      formal verification for ethereum applications
-      why this domain is good for verification: well-specified, small programs, very high value exploits that are essentially impossible to undo, immutable by default
-      motivations: auditing market charges good money
-      many applications have large bug bounties
-      correct-by-construction application development may be worthwhile
+      <p class=callout>
+      Infrastructure and techniques for formally verifying Ethereum applications in HOL4.
+      </p>
+      <dl>
+        <dt>This is a great domain for verification</dt>
+        <dd>
+          <ul>
+            <li><span class=highlight>well-specified</span> platform</li>
+            <li><span class=highlight>small</span> programs (more code is more expensive to deploy)</li>
+            <li>correctness has a very <span class=highlight>high value</span>: applications protect large sums</li>
+            <li>immutability by default: <span class=highlight>high cost to change</span>, so get it right before deploying</li>
+          </ul>
+        </dd>
+        <dt>Motivations</dt>
+        <dd>
+          <ul>
+            <li><span class=highlight>auditing</span> market charges good money: $1000s/day for a report</li>
+            <li>many applications have large ($100k&ndash;$10m) <span class=highlight>bug bounties</span></li>
+            <li>correct-by-construction application development</li>
+            <li>stronger optimisation (runtime gas usage, code size) with confidence</li>
+          </ul>
+        </dd>
+      </dl>
     </section>
     <section>
-      <h2>How Verifereum works</h2>
-      formal model of the EVM
-      program logic for reasoning about applications
-      decompilation of bytecode
+      <h2>How Verifereum works: the plan</h2>
+      <dl>
+        <dt>Formal model of the EVM</dt>
+        <dt>Program logic for reasoning about applications</dt>
+        <dt>Decompilation of bytecode into logic</dt>
+      </dl>
     </section>
     <section>
       <h2>Verifereum: current status</h2>
-      draft EVM model is mostly complete
-      working on evaluation-in-logic and passing external test suites
-      next steps after that would be verifying some simple contracts
+      <dl>
+        <dt>Draft EVM model is mostly complete</dt>
+        <dt>Currently: attempting to run external tests</dt>
+        <dd>working on evaluation-in-logic</dd>
+        <dt>Next: verify some simple contracts</dt>
     </section>
     <section>
       <h2>Get involved</h2>
-      repository
-      discord channel
-      possible company
-      also: ZKEVM competition
+      <dl>
+        <dt>Verifereum on GitHub</dt>
+        <dd><a href=https://github.com/verifereum/verifereum>https://github.com/verifereum/verifereum</a></dd>
+        <dt>#verifereum channel in CakeML Discord</dt>
+        <dt>Possibly starting a company</dt>
+        <dt>Other Ethereum verification work</dt>
+        <dd>ZKEVM competition</dd>
+      </dl>
     </section>
   </body>
 </html>
