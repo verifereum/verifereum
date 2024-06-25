@@ -86,8 +86,8 @@
             <li>transactional: all or none of the storage and balance updates persist</li>
           </ul>
         </dd>
-        <dt>A <span class=highlight>transaction</span> (txn) from an EOA is a call</dt>
-        <dd>transaction info, including fee limit, signed with the private key; fees (gas) are charged for execution and deducted from the sender account</dd>
+        <dt>A <span class=highlight>transaction</span> (txn) from an EOA is a call wrapped in extra info</dt>
+        <dd>transaction info, including fee limit, is signed with the private key; fees (gas) are charged for execution and deducted from the sender account</dd>
         <dt>Static calls (no state changes), aka <span class=highlight>view</span> functions, are free</dt>
         <dd>used to read data from the blockchain; no sender required</dd>
       </dl>
@@ -192,29 +192,84 @@ function allowance(address _owner, address _spender) view returns (uint256 remai
     </section>
     <section>
       <h2>How Verifereum works: the plan</h2>
+      <p class=callout>
+      Initial guiding star: be able to verify (or fail by finding bugs in) any application/protocol implemented as smart contracts on Ethereum (layer 1)
+      </p>
       <dl>
         <dt>Formal model of the EVM</dt>
+        <dd>
+          <ul>
+            <li>
+              machine state and update logic
+            </li>
+            <li>
+              keep updated: at least the live EVM version
+            </li>
+          </ul>
+        </dd>
         <dt>Program logic for reasoning about applications</dt>
+        <dd>
+          <ul>
+            <li>abstract away the rest of the machine</li>
+            <li>application-specific top-level theorems</li>
+          </ul>
+        </dd>
         <dt>Decompilation of bytecode into logic</dt>
+        <dd>
+          <ul>
+            <li>reason about bytecode at a high level</li>
+          </ul>
+        </dd>
       </dl>
     </section>
     <section>
       <h2>Verifereum: current status</h2>
       <dl>
-        <dt>Draft EVM model is mostly complete</dt>
-        <dt>Currently: attempting to run external tests</dt>
-        <dd>working on evaluation-in-logic</dd>
+        <dt>Past: draft EVM model is mostly complete</dt>
+        <dd>
+          <ul>
+            <li>
+              missing: precompiled (built-in) contracts
+            </li>
+            <li>
+              may need refactoring: relatively unused (for both proof and execution)
+            </li>
+          </ul>
+        </dd>
+        <dt>Now: attempting to run external tests</dt>
+        <dd>
+          <ul>
+            <li>currently trying to prove a very simple VM test</li>
+            <li>working on evaluation-in-logic: tests must prove automatically</li>
+            <li>aim: pass the whole test suite (as do the actual clients run by nodes)</li>
+          </ul>
+        </dd>
         <dt>Next: verify some simple contracts</dt>
+        <dd>
+          <ul>
+            <li>example: <a href=https://etherscan.io/token/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>WETH</a>, one of the simplest ERC20 tokens</li>
+            <li>example: <a href=https://rocketrebate.io>Rocket Rebate</a>, a simple contract I made</li>
+          </ul>
+        </dd>
     </section>
     <section>
       <h2>Get involved</h2>
       <dl>
-        <dt>Verifereum on GitHub</dt>
-        <dd><a href=https://github.com/verifereum/verifereum>https://github.com/verifereum/verifereum</a></dd>
-        <dt>#verifereum channel in CakeML Discord</dt>
+        <dt>Verifereum on GitHub and Discord</dt>
+        <dd>
+          <a href=https://github.com/verifereum/verifereum>https://github.com/verifereum/verifereum</a><br><br>
+            <span class=code>#verifereum</span> channel in CakeML Discord
+        </dd>
         <dt>Possibly starting a company</dt>
+        <dd>Verifereum as an alternative (or complement) to auditing</dd>
         <dt>Other Ethereum verification work</dt>
-        <dd>ZKEVM competition</dd>
+        <dd>
+          <ul>
+            <li>Ethereum Foundation programme with $20m budget</li>
+            <li>Goal: formal verification of ZKEVM (for use by ZK layer 2 rollups)</li>
+            <li>Lots of interest&mdash;in community coming together&mdash;in using Lean and RISC Zero</li>
+          </ul>
+        </dd>
       </dl>
     </section>
   </body>
