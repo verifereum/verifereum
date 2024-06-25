@@ -154,9 +154,10 @@ Definition initial_context_def:
    |>
 End
 
-Theorem initial_call_params[simp]:
+Theorem initial_call_params_simp[simp]:
   (initial_call_params ctxt t).code = ctxt.code ∧
-  (initial_call_params ctxt t).gasLimit = t.gasLimit
+  (initial_call_params ctxt t).gasLimit = t.gasLimit ∧
+  (initial_call_params ctxt t).outputTo = ctxt.outputTo
   (* TODO: as needed *)
 Proof
   rw[initial_call_params_def]

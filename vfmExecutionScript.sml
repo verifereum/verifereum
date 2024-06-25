@@ -150,6 +150,19 @@ Definition consume_gas_def:
   od
 End
 
+(* Theorem consume_gas_0: *)
+(*   ∀n. n.contexts ≠ [] ∧ (HD n.contexts).gasUsed < (HD n.contexts).callParams.gasLimit ⇒ consume_gas 0 n = (INL (), n) *)
+(* Proof *)
+(*   rw[consume_gas_def] *)
+(*   \\ rw[Once bind_def, get_current_context_def] *)
+(*   \\ rw[fail_def, return_def] *)
+(*   \\ rw[Once ignore_bind_def, Once bind_def, assert_def] *)
+(*   \\ rw[set_current_context_def] *)
+(*   \\ rw[return_def] *)
+(*   \\ rw[quantHeuristicsTheory.HD_TL_EQ_1] *)
+  
+(* \\ rw[transaction_state_component_equality] *)
+
 Definition refund_gas_def:
   refund_gas n = do
     context <- get_current_context;

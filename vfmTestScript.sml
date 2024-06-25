@@ -4,6 +4,7 @@ open HolKernel boolLib bossLib Parse wordsLib
      vfmStateTheory vfmContextTheory
      vfmOperationTheory
      cv_transLib cv_stdTheory cv_computeLib;
+open cv_primTheory byteTheory;
 
 val _ = new_theory "vfmTest";
 
@@ -174,6 +175,12 @@ fun cv_eval_match_tac pat =
                  val t = find_term (can (match_term pat)) tm
                in rewrite_tac [cv_eval t] end);
 
+fun eval_match_tac pat =
+  goal_term (fn tm =>
+               let
+                 val t = find_term (can (match_term pat)) tm
+               in rewrite_tac [EVAL t] end);
+
 Theorem lt_0_w2n_zero_bytes:
   (0 :num) >= w2n (word_of_bytes F (0w :256 word) [(0w :word8)])
 Proof
@@ -183,165 +190,184 @@ Proof
   \\ EVAL_TAC
 QED
 
-(* val specialized_w2n_thm = Q.ISPEC `(w :256 word)` wordsTheory.w2n_def; *)
-(* val _ = cv_auto_trans specialized_w2n_thm; *)
+Theorem memory_expansion_cost_d0g0v0:
+  memory_expansion_cost [] (PAD_RIGHT 0w (32 * word_size 0) []) + 2630 ≤ 80000000
+Proof
+EVAL_TAC
+QED
 
-(*      Q.ISPEC “:256” wordsTheory.w2n_def *)
-(* val _ = cv_auto_trans wordsTheory.w2n_def; *)
-(* EVAL “w2n (word_of_bytes F 0w [0w])” *)
-(* (* EVAL “w2n (set_byte 0w 0w 0w F)” *) *)
-(* (* Theorem _: *) *)
-(* (*   0n < w2n (word_of_bytes F 0w [0w]) *) *)
-(* (* Proof *) *)
-(* QED *)
+val _ = mk_word_size 256
 
-Theorem add_d0g0v0_Shanghai_correctness: 
+Theorem set_byte_0ws:
+  set_byte (0w:word256) 0w 0w e = 0w
+Proof
+  rw[set_byte_def]
+  \\ EVAL_TAC
+QED
+
+Theorem assert_simps:
+  assert T e s = (INL (), s) ∧
+  assert F e s = (INR (Excepted e), s)
+Proof
+  rw[assert_def]
+QED
+open  wordsTheory byteTheory arithmeticTheory;
+open wordsLib;
+
+
+
+Theorem set_byte_word128[compute]:
+  set_byte (a:128 word) b (w:128 word) be =
+    let w0  = w2w (w >>> 64): 64 word in
+    let w0' = if w2n a >= 64 then set_byte (w2w a - 64w) b w0 be else w0 in
+    let w1 = w2w w: 64 word in
+    let w1' = if w2n a < 64 then set_byte (w2w a) b w1 be else w1 in
+    (w2w w0':128 word) << 64 || (w2w w1': 128 word)
+Proof
+  cheat
+QED
+
+val _ = byteTheory.byte_index_def |> INST_TYPE [alpha |-> “:64”] |> cv_trans;
+val _ = cv_trans byteTheory.set_byte_64;
+val _ = cv_trans set_byte_word128;
+
+Theorem add_d0g0v0_Shanghai_correctness:
   ∀c b rd.
     ∃r. run (initial_state c add_d0g0v0_Shanghai_pre b rd add_d0g0v0_Shanghai_transaction)
     = SOME (Finished r) ∧ r.accounts = add_d0g0v0_Shanghai_post
 Proof
-  rw[run_def, PULL_EXISTS]
-  \\ rw[Once OWHILE_THM]
-  \\ simp[step_def]
-  \\ simp[Once initial_state_def]
-  \\ simp[Once bind_def, get_current_context_def, Once return_def]
-  \\ simp[add_d0g0v0_Shanghai_pre_code]
-  \\ rw [cv_eval “hex_to_bytes "600060006000600060006004356110000162fffffff100"”]
-  \\ rw[cv_eval “ parse_opcode  [96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 4w; 53w;
-                  97w; 16w; 0w; 1w; 98w; 255w; 255w; 255w; 241w; 0w]”]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ rw[Once ignore_bind_def, bind_def, assert_def, set_current_context_def, return_def,  add_d0g0v0_Shanghai_transaction_def]
+  rpt (
+    rw[run_def, Once OWHILE_THM, step_def]
+    (* context *)
+    \\rw[Once bind_def]
+    \\ eval_match_tac “get_current_context _”
+    \\rw[]
 
-  (* step instr *)
-  \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
-  \\ rw[Once bind_def, get_current_context_def]
-  \\ rw[return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[set_current_context_def, return_def]
-  (* inc pc *)
-  \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
+    \\qmatch_goalsub_abbrev_tac ‘pair_CASE (_ _ ctx) body’
 
-  (* opcode 2 *)
-  \\ rw[Once OWHILE_THM]
-  \\ rw[step_def]
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ fs[opcode_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[opcode_def]
-  \\ rw[cv_eval “parse_opcode
-                     [96w; 0w; 96w; 0w; 96w; 0w; 96w; 0w; 96w; 4w; 53w; 97w;
-                      16w; 0w; 1w; 98w; 255w; 255w; 255w; 241w; 0w]”]
-  \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-  \\ rw[Once bind_def, get_current_context_def]
-  \\ rw[Once return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[set_current_context_def, Once return_def]
+    (* assert T *)
+    \\rw[Once ignore_bind_def, Once bind_def, assert_def]
+    \\cv_eval_match_tac “parse_opcode _”
+    \\rw[]
 
-  (* copy block till next from above *)
-  \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
-  \\ rw[Once bind_def, get_current_context_def]
-  \\ rw[return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[set_current_context_def, return_def]
-  \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
+    \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
+    \\rw[Once bind_def]
+    \\eval_match_tac “get_current_context _”
+    \\qunabbrev_tac ‘ctx’
 
-  (* opcode 3 *)
+    \\rw[Once ignore_bind_def, Once bind_def, assert_def]
+    \\rw[Once ignore_bind_def, Once bind_def, set_current_context_def, return_def]
+    \\rw[Once ignore_bind_def, Once bind_def, step_inst_def]
+    \\eval_match_tac “get_current_context _”
+    \\rw[]
+    (* assert T *)
+    \\rw[Once ignore_bind_def, Once bind_def, assert_def]
+    \\rw[Once ignore_bind_def, Once bind_def, set_current_context_def, return_def]
+    (* inc_pair *)
+    \\rw[inc_pc_def]
+    \\rw[Once bind_def]
+    \\eval_match_tac “get_current_context _”
+    \\ rw[]
+    \\rw[Once ignore_bind_def, Once bind_def, set_current_context_def, return_def]
 
-  \\ rpt (
-    rw[Once OWHILE_THM]
-    \\ rw[step_def]
-    \\ rw[Once bind_def, get_current_context_def, return_def]
-    \\ fs[opcode_def]
-    \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-    \\ rw[opcode_def]
-    \\ cv_eval_match_tac ``parse_opcode _``
-    \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-    \\ rw[Once bind_def, get_current_context_def]
-    \\ rw[Once return_def]
-    \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-    \\ rw[set_current_context_def, Once return_def]
-         
-  (* copy block till next from above *)
-    \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]
-    \\ rw[Once bind_def, get_current_context_def]
-    \\ rw[return_def]
-    \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-    \\ rw[set_current_context_def, return_def]
-    \\ rw[inc_pc_def, Once bind_def, get_current_context_def, return_def, set_current_context_def]
+    \\unabbrev_all_tac
+    \\rw[]
     )
+  \\ rpt
+     (
+     rw[Once OWHILE_THM, step_def]
+     \\qmatch_goalsub_abbrev_tac ‘pair_CASE (_ _ _) body’
 
+     \\rw[Once bind_def]
+     \\eval_match_tac “get_current_context _”
+     \\rw[]
+     (* assert T *)
+     \\rw[Once ignore_bind_def, Once bind_def, assert_def]
+     \\cv_eval_match_tac “parse_opcode _”
+     \\rw[]
+     (* consume gas *)
+     \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
+     \\rw[Once bind_def]
+     \\eval_match_tac “get_current_context _”
+     \\rw[]
+     (* assert T *)
+     \\rw[Once ignore_bind_def, Once bind_def, assert_def]
+     \\rw[set_current_context_def, return_def]
 
-  
-  (* after a lot of repetion of the above one  *)
-  \\ rw[initial_context_def]
-  \\ rw[binop_def, stack_op_def]
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[set_current_context_def, return_def]
+     (* step_inst *)
+     \\rw[Once ignore_bind_def, Once bind_def]
+     \\rw[step_inst_def]
+     \\rw[binop_def, stack_op_def]
+     \\rw[Once bind_def, step_inst_def]
+     \\eval_match_tac “get_current_context _”
+     \\rw[]
+     (* assert T *)
+     \\rw[Once ignore_bind_def, Once bind_def, assert_def]
+     \\rw[set_current_context_def, return_def]
 
-  (* next step *)
-  \\ rw[Once OWHILE_THM]
-  \\ rw[step_def]
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ fs[opcode_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ cv_eval_match_tac “parse_opcode _”
-  \\ rw[]
-  \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[set_current_context_def, return_def]
-  \\ rw[step_inst_def]
-  \\ rw[inc_pc_def]
-  \\ rw[Once bind_def, get_current_context_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[Once bind_def, get_current_context_def]
-  \\ rw[return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[set_current_context_def, return_def]
-  \\ rw[Once bind_def, get_current_context_def]
-  \\ rw[return_def]
-  \\ rw[set_current_context_def, return_def]
-  (* next step *)
-  \\ rw[Once OWHILE_THM]
-  \\ rw[step_def]
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ fs[opcode_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ cv_eval_match_tac “parse_opcode _”
-  \\ rw[]
-  \\ rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\ rw[set_current_context_def, return_def]
-  \\ rw[Once ignore_bind_def, Once bind_def, step_inst_def]       
-  \\ rw[Once bind_def, get_current_context_def, return_def]
-  \\ fs[lt_0_w2n_zero_bytes]
-  \\ rw[Once ignore_bind_def, Once bind_def, assert_def]
-       (*  access account *)
+     \\rw[inc_pc_def, opcode_def]
+     \\rw[Once bind_def]
+     \\eval_match_tac “get_current_context _”
+     \\rw[]
+     \\rw[set_current_context_def, return_def]
+     \\unabbrev_all_tac
+     \\ rw[]
+     )
+
+  \\rw[set_byte_0ws]
+  \\rw[Once OWHILE_THM, step_def]
+  \\rw[Once bind_def]
+  \\eval_match_tac “get_current_context _”
+  \\rw[]
+  (* assert T *)
+  \\rw[Once ignore_bind_def, Once bind_def, assert_simps]
+  (* parse opcode *)
+  \\cv_eval_match_tac “parse_opcode _”
+  \\rw[]
+
+   (* CONSUME GAS *)
+  \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
+  \\rw[Once bind_def]
+  \\eval_match_tac “get_current_context _”
+  \\rw[]
+  (* assert T *)
+  \\rw[Once ignore_bind_def, Once bind_def, assert_def]
+  \\rw[set_current_context_def, return_def]
+
+  \\rw[Once ignore_bind_def, Once bind_def]
+  \\rw[step_inst_def]
+  \\rw[Once bind_def]
+  \\eval_match_tac “get_current_context _”
+  \\rw[]
+      (* assert T *)
+  \\rw[Once ignore_bind_def, Once bind_def, assert_simps]
   \\rw[Once bind_def, access_address_def]
+  (* return *)
   \\rw[return_def]
-  \\fs[initial_access_sets_def, initial_call_params_def]
+(* get accounts *)
   \\rw[Once bind_def, get_accounts_def]
   \\rw[return_def]
+  \\rw[Once ignore_bind_def, Once bind_def, memory_expansion_cost_def]
+  \\rw[memory_cost_def]
+  \\ ‘word_size 0 = 0’ by rw[word_size_def]
+  \\rw[]
+  \\rw[bitstringTheory.length_pad_right]
+      (* consume gas *)
   \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-  \\rw[Once bind_def, get_current_context_def]
-  \\rw[return_def]
-  \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-
+  \\eval_match_tac “get_current_context _”
+  \\rw[]
+  \\rw[Once bind_def, assert_simps]
   \\rw[set_current_context_def, return_def]
-  \\rw[Once ignore_bind_def, Once bind_def, assert_def]    
-  \\rw[start_context_def]  
-  \\rw[initial_call_params_def]
-  \\rw[Once bind_def, push_context_def, initial_context_def]
-  \\rw[update_accounts_def]
-  \\ EVAL_TAC
-  (* here *)
+      (* assert T *)
+  \\rw[Once ignore_bind_def, Once bind_def, assert_simps]
+  \\rw[Once ignore_bind_def, Once bind_def]
+  \\rw[Once bind_def]
+  \\eval_match_tac “get_current_context _”
+  \\rw[]
+
   \\ cheat
 QED
-
+Globals.max_print_depth := ~1;
 (*
 Definition CrashingTransaction_transaction_def:
   CrashingTransaction_transaction =
