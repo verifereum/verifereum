@@ -619,7 +619,21 @@ Definition step_inst_def:
   ∧ step_inst ReturnDataSize = push_from_ctxt (λc. n2w (LENGTH c.returnData))
   ∧ step_inst ReturnDataCopy =
       copy_to_memory_check T (λcontext accounts. context.returnData)
-  ∧ step_inst ExtCodeHash = return () (* TODO needs hash in state *)
+  ∧ step_inst ExtCodeHash =
+      bind get_current_context
+      (λcontext.
+        ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
+          let address = w2w (EL 0 context.stack) in
+          bind (access_address address) (λwarm.
+          let addressAccessCost = if warm then 100 else 2600 in
+          bind get_accounts (λaccounts.
+          let code = (accounts address).code in
+          (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
+          let hash = word_of_bytes F (0w:bytes32) $ Keccak_256_bytes $ code in
+          let newContext = context with stack := hash :: TL context.stack in
+            ignore_bind
+              (consume_gas addressAccessCost)
+              (set_current_context newContext)))))
   ∧ step_inst BlockHash = return () (* TODO needs hash in state *)
   ∧ step_inst CoinBase = push_from_tx (λc t a. w2w t.blockCoinBase)
   ∧ step_inst TimeStamp = push_from_tx (λc t a. n2w t.blockTimeStamp)
