@@ -4,11 +4,13 @@ open HolKernel boolLib bossLib Parse
 
 val _ = new_theory "vfmState";
 
+Type storage = “:bytes32 -> bytes32”;
+
 Datatype:
   account_state =
   <| nonce   : num
    ; balance : num
-   ; storage : bytes32 -> bytes32
+   ; storage : storage
    ; code    : byte list
    |>
 End
