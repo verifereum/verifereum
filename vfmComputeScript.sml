@@ -17,22 +17,22 @@ Definition to_storage_def:
 End
 
 Definition build_spt_def:
-  build_spt 0 m = LN ∧
-  build_spt (SUC n) m =
-    if m (n2w n) = 0w then build_spt n m
-    else insert n (m (n2w n)) (build_spt n m)
+  build_spt z 0 m = LN ∧
+  build_spt z (SUC n) m =
+    if m (n2w n) = z then build_spt z n m
+    else insert n (m (n2w n)) (build_spt z n m)
 End
 
 Theorem wf_build_spt[simp]:
-  ∀n m. wf (build_spt n m)
+  ∀n m. wf (build_spt z n m)
 Proof
   Induct \\ gvs[build_spt_def] \\ rw[wf_insert]
 QED
 
 Theorem lookup_build_spt:
-  ∀n k. lookup k (build_spt n m) =
+  ∀n k. lookup k (build_spt z n m) =
   if n ≤ k then NONE
-  else if m (n2w k) = 0w then NONE
+  else if m (n2w k) = z then NONE
   else SOME (m (n2w k))
 Proof
   Induct \\ gvs[build_spt_def]
@@ -43,7 +43,7 @@ QED
 
 Definition from_storage_def:
   from_storage (s: storage) =
-  from_sptree_sptree_spt ^from_bytes32 (build_spt (dimword (:256)) s)
+  from_sptree_sptree_spt ^from_bytes32 (build_spt 0w (dimword (:256)) s)
 End
 
 val from_to_storage_spt = from_to_thm_for “:bytes32 num_map”;
@@ -92,8 +92,39 @@ Proof
   \\ metis_tac[w2n_lt, NOT_LESS_EQUAL]
 QED
 
+val from_to_account_state = from_to_thm_for “:account_state”;
+val to_account_state = from_to_account_state |> concl |> rand;
+val from_account_state = from_to_account_state |> concl |> rator |> rand;
+
+Definition to_evm_accounts_def:
+  to_evm_accounts cv : evm_accounts =
+  let t = to_sptree_spt ^to_account_state cv in
+    FOLDR (λ(k,v) f. (n2w k =+ v) f) (λk. empty_account_state) (toSortedAList t)
+End
+
+Definition from_evm_accounts_def:
+  from_evm_accounts (a: evm_accounts) =
+  from_sptree_sptree_spt ^from_account_state
+    (build_spt empty_account_state (dimword (:160)) a)
+End
+
+val from_to_evm_accounts_spt = from_to_thm_for “:account_state num_map”;
+
+Theorem from_to_evm_accounts[cv_from_to]:
+  from_to from_evm_accounts to_evm_accounts
+Proof
+  rw[from_to_def, from_evm_accounts_def, to_evm_accounts_def]
+  \\ rw[from_to_evm_accounts_spt |> REWRITE_RULE[from_to_def]]
+  \\ qmatch_goalsub_abbrev_tac`toSortedAList t`
+  \\ DEP_REWRITE_TAC[Q.ISPEC`w2n`FOLDR_UPDATE_lookup]
+  \\ simp[ALL_DISTINCT_MAP_FST_toSortedAList, ALOOKUP_toSortedAList]
+  \\ simp[Abbr`t`, lookup_build_spt, domain_lookup, FUN_EQ_THM]
+  \\ rw[]
+  \\ metis_tac[w2n_lt, NOT_LESS_EQUAL]
+QED
+
 (*
-val _ = from_to_thm_for “:account_state”;
+val th = from_to_thm_for “:transaction_state”;
 
 val _ = cv_auto_trans step_def;
 *)
