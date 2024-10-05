@@ -344,16 +344,16 @@ Definition access_address_def:
   access_address a s =
   let addresses = s.accesses.addresses in
     return
-      (a ∈ addresses)
-      (s with accesses := (s.accesses with addresses := a INSERT addresses))
+      (a ∈ FDOM addresses)
+      (s with accesses := (s.accesses with addresses := addresses |+ (a,())))
 End
 
 Definition access_slot_def:
   access_slot x s =
   let storageKeys = s.accesses.storageKeys in
     return
-      (x ∈ storageKeys)
-      (s with accesses := (s.accesses with storageKeys := x INSERT storageKeys))
+      (x ∈ FDOM storageKeys)
+      (s with accesses := (s.accesses with storageKeys := storageKeys |+ (x,())))
 End
 
 Definition update_refund_def:

@@ -20,8 +20,8 @@ End
 
 Datatype:
   access_sets =
-  <| addresses   : address set
-   ; storageKeys : (address # bytes32) set
+  <| addresses   : address finite_domain
+   ; storageKeys : (address # bytes32) finite_domain
    |>
 End
 
@@ -193,10 +193,10 @@ End
 
 Definition initial_access_sets_def:
   initial_access_sets t =
-  <| addresses   := IMAGE (λe. e.account) (set t.accessList)
-   ; storageKeys := BIGUNION
-                      (IMAGE (λe. IMAGE (λk. (e.account, k)) e.keys)
-                             (set t.accessList))
+  <| addresses   := FEMPTY |++ MAP (λe. (e.account, ())) (t.accessList)
+   ; storageKeys := FOLDL FUNION FEMPTY
+                      (MAP (λe. MAP_KEYS (λk. (e.account, k)) e.keys)
+                           (t.accessList))
    |>
 End
 

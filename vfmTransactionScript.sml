@@ -1,13 +1,13 @@
 open HolKernel boolLib bossLib Parse
-     wordsTheory finite_mapTheory pred_setTheory
+     wordsTheory finite_mapTheory
      vfmTypesTheory;
-val _ = new_theory "vfmTransaction";
 
+val _ = new_theory "vfmTransaction";
 
 Datatype:
   access_list_entry =
   <| account : address
-   ; keys    : bytes32 set
+   ; keys    : bytes32 finite_domain
    |>
 End
 
