@@ -143,10 +143,33 @@ Proof
   \\ metis_tac[w2n_lt, NOT_LESS_EQUAL]
 QED
 
-val th = from_to_thm_for “:transaction_state”;
+val from_to_transaction_state = from_to_thm_for “:transaction_state”;
+
+val () = “consume_gas n s” |>
+  SIMP_CONV std_ss [consume_gas_def, bind_def, ignore_bind_def, LET_THM] |>
+  cv_auto_trans;
+
+val () = “refund_gas n s” |>
+  SIMP_CONV std_ss [refund_gas_def, bind_def, ignore_bind_def, LET_THM] |>
+  cv_auto_trans;
+
+val () = “push_context c s” |>
+  SIMP_CONV std_ss [
+    push_context_def, bind_def, ignore_bind_def, LET_THM,
+    COND_RATOR] |>
+  cv_auto_trans;
+
 
 (*
-val th = cv_auto_trans step_def;
+start_context may need a rewritten version more suited to cv_compute
+
+val () = “start_context x y c s” |>
+  SIMP_CONV std_ss [
+    start_context_def, bind_def, ignore_bind_def, LET_THM,
+    COND_RATOR, o_THM] |>
+  cv_auto_trans;
+
+val () = cv_auto_trans step_def;
 *)
 
 val _ = export_theory();
