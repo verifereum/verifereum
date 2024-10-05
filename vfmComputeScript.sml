@@ -5,6 +5,26 @@ open HolKernel boolLib bossLib Parse dep_rewrite
 
 val _ = new_theory "vfmCompute";
 
+(* TODO: move *)
+
+Definition to_fset_def:
+  to_fset to_a cv = fset_ABS (to_list to_a cv)
+End
+
+Definition from_fset_def:
+  from_fset from_a fs = from_list from_a (fset_REP fs)
+End
+
+Theorem from_to_fset[cv_from_to]:
+  from_to f t ==> from_to (from_fset f) (to_fset t)
+Proof
+  strip_tac
+  \\ drule from_to_list
+  \\ gs[from_fset_def, to_fset_def, from_to_def]
+QED
+
+(* -- *)
+
 val from_to_bytes32 = from_to_thm_for “:bytes32”;
 
 val to_bytes32 = from_to_bytes32 |> concl |> rand;
@@ -123,10 +143,10 @@ Proof
   \\ metis_tac[w2n_lt, NOT_LESS_EQUAL]
 QED
 
-(*
 val th = from_to_thm_for “:transaction_state”;
 
-val _ = cv_auto_trans step_def;
+(*
+val th = cv_auto_trans step_def;
 *)
 
 val _ = export_theory();
