@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse
-     wordsTheory finite_mapTheory
+     wordsTheory finite_setTheory
      vfmTypesTheory;
 
 val _ = new_theory "vfmTransaction";
@@ -7,7 +7,7 @@ val _ = new_theory "vfmTransaction";
 Datatype:
   access_list_entry =
   <| account : address
-   ; keys    : bytes32 finite_domain
+   ; keys    : bytes32 fset
    |>
 End
 

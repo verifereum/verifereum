@@ -1,8 +1,21 @@
 open HolKernel boolLib bossLib Parse
-     pred_setTheory finite_mapTheory
+     pred_setTheory finite_setTheory
      vfmTypesTheory vfmStateTheory vfmTransactionTheory vfmOperationTheory;
 
 val _ = new_theory "vfmContext";
+
+(* TODO: move, if desired at all *)
+Theorem fset_ABS_fromSet_set:
+  !l. fset_ABS l = fromSet (set l)
+Proof
+  Induct \\ gvs[GSYM fEMPTY_def, fromSet_INSERT]
+  \\ rw[Once fINSERT_def, fsequiv_def]
+  \\ AP_TERM_TAC
+  \\ mp_tac fset_QUOTIENT
+  \\ rewrite_tac[quotientTheory.QUOTIENT_def] \\ strip_tac
+  \\ metis_tac[fsequiv_def]
+QED
+(* -- *)
 
 Datatype:
   transaction_parameters =
@@ -20,8 +33,8 @@ End
 
 Datatype:
   access_sets =
-  <| addresses   : address finite_domain
-   ; storageKeys : (address # bytes32) finite_domain
+  <| addresses   : address fset
+   ; storageKeys : (address # bytes32) fset
    |>
 End
 
@@ -193,10 +206,10 @@ End
 
 Definition initial_access_sets_def:
   initial_access_sets t =
-  <| addresses   := FEMPTY |++ MAP (λe. (e.account, ())) (t.accessList)
-   ; storageKeys := FOLDL FUNION FEMPTY
-                      (MAP (λe. MAP_KEYS (λk. (e.account, k)) e.keys)
-                           (t.accessList))
+  <| addresses   := fIMAGE (λe. e.account) (fset_ABS t.accessList)
+   ; storageKeys := fBIGUNION
+                      (fIMAGE (λe. fIMAGE (λk. (e.account, k)) e.keys)
+                              (fset_ABS t.accessList))
    |>
 End
 
