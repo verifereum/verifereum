@@ -189,6 +189,24 @@ Definition push_context_def:
   od
 End
 
+Definition code_for_transfer_def:
+  code_for_transfer accounts (params: call_parameters) =
+    case params.outputTo
+    of Code address =>
+      if (accounts address).code ≠ [] ∨
+         (accounts address).nonce ≠ 0
+      then [invalid_opcode]
+      else params.code
+    | _ => params.code
+End
+
+Definition context_for_transfer_def:
+  context_for_transfer ctxt callerAddress incCaller code =
+  ctxt with callParams updated_by
+    (λp. p with <| accounts updated_by (callerAddress =+ incCaller)
+                 ; code := code |>)
+End
+
 Definition start_context_def:
   start_context shouldTransfer shouldIncNonce c = do
     value <<- c.callParams.value;
@@ -199,25 +217,17 @@ Definition start_context_def:
       if value ≤ caller.balance ∧
          (shouldIncNonce ⇒ SUC caller.nonce < 2 ** 64)
       then do
-        callee <<- c.callParams.callee;
+        calleeAddress <<- c.callParams.callee;
         incCaller <<- caller with nonce updated_by SUC;
-        code <<- case c.callParams.outputTo of Code address =>
-                   if (accounts address).code ≠ [] ∨
-                      (accounts address).nonce ≠ 0
-                   then [invalid_opcode]
-                   else c.callParams.code
-                 | _ => c.callParams.code;
+        code <<- code_for_transfer accounts c.callParams;
         ctxt <<- if shouldIncNonce
-                 then c with callParams updated_by
-                   (λp. p with <|
-                          accounts updated_by (callerAddress =+ incCaller)
-                        ; code := code |>)
+                 then context_for_transfer c callerAddress incCaller code
                  else c;
         success <- push_context ctxt;
         newCaller <<- (if success ∧ shouldIncNonce then incCaller else caller)
                       with balance updated_by combin$C $- value;
-        newCallee <<- accounts callee with balance updated_by $+ value;
-        update_accounts $ (callerAddress =+ newCaller) o (callee =+ newCallee)
+        newCallee <<- accounts calleeAddress with balance updated_by $+ value;
+        update_accounts $ (callerAddress =+ newCaller) o (calleeAddress =+ newCallee)
       od else do
         refund_gas c.callParams.gasLimit;
         context <- get_current_context;
