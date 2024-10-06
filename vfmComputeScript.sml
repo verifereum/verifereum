@@ -220,17 +220,17 @@ QED
 val from_to_transaction_state = from_to_thm_for “:transaction_state”;
 
 val () = “consume_gas n s” |>
-  SIMP_CONV std_ss [consume_gas_def, bind_def, ignore_bind_def, LET_THM] |>
+  SIMP_CONV std_ss [consume_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
 
 val () = “refund_gas n s” |>
-  SIMP_CONV std_ss [refund_gas_def, bind_def, ignore_bind_def, LET_THM] |>
+  SIMP_CONV std_ss [refund_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
 
 val () = “push_context c s” |>
   SIMP_CONV std_ss [
-    push_context_def, bind_def, ignore_bind_def, LET_THM,
-    COND_RATOR] |>
+    push_context_def, bind_def, ignore_bind_def,
+    LET_RATOR, COND_RATOR] |>
   cv_auto_trans;
 
 val () = code_for_transfer_def |>
@@ -254,12 +254,34 @@ QED
 
 val () = cv_auto_trans context_for_transfer_unfolded;
 
-(*
+Triviality incCaller_unfolded:
+  (caller: account_state) with nonce updated_by SUC =
+  caller with nonce := SUC caller.nonce
+Proof
+  rw[account_state_component_equality]
+QED
+
+Triviality update_accounts:
+  update_accounts ((a =+ b) o (c =+ d)) s =
+  return () (s with accounts :=
+    update_account (update_account s.accounts c d) a b)
+Proof
+  rw[update_accounts_def, return_def, update_account_def,
+     transaction_state_component_equality]
+QED
+
 val () = “start_context x y c s” |>
   SIMP_CONV std_ss [
-    start_context_def, bind_def, ignore_bind_def, LET_THM,
-    COND_RATOR] |>
+    start_context_def, bind_def, ignore_bind_def,
+    COND_RATOR, LET_RATOR, C_DEF,
+    incCaller_unfolded, update_accounts ] |>
+  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   cv_auto_trans;
+
+(*
+val () = cv_auto_trans get_current_accesses_def;
+
+val () = cv_auto_trans access_address_def;
 
 val () = cv_auto_trans step_def;
 *)
