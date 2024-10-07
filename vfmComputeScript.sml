@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse dep_rewrite
+open HolKernel boolLib bossLib Parse dep_rewrite blastLib
      cv_typeTheory cv_transLib cv_typeLib
      cvTheory cv_stdTheory
      pairTheory combinTheory wordsTheory alistTheory arithmeticTheory
@@ -8,20 +8,60 @@ val _ = new_theory "vfmCompute";
 
 (* TODO: move *)
 
-Definition to_fset_def:
-  to_fset to_a cv = fset_ABS (to_list to_a cv)
-End
+open finite_setTheory pred_setTheory
 
-Definition from_fset_def:
-  from_fset from_a fs = from_list from_a (fset_REP fs)
-End
-
-Theorem from_to_fset[cv_from_to]:
-  from_to f t ==> from_to (from_fset f) (to_fset t)
+Theorem wf_list_to_num_set:
+  !ls. wf (list_to_num_set ls)
 Proof
-  strip_tac
-  \\ drule from_to_list
-  \\ gs[from_fset_def, to_fset_def, from_to_def]
+  Induct \\ rw[list_to_num_set_def, wf_insert]
+QED
+
+Theorem MEM_fset_REP:
+  MEM x (fset_REP fs) <=> fIN x fs
+Proof
+  rw[fIN_def]
+QED
+
+val from_to_num_set = from_to_thm_for “:num_set”;
+val to_num_set = from_to_num_set |> concl |> rand;
+val from_num_set = from_to_num_set |> concl |> rator |> rand;
+
+Definition to_num_fset_def:
+  to_num_fset cv = fromSet (domain (^to_num_set cv))
+End
+
+Definition from_num_fset_def:
+  from_num_fset fs = ^from_num_set $ list_to_num_set $ fset_REP fs
+End
+
+Theorem from_to_num_fset[cv_from_to]:
+  from_to from_num_fset to_num_fset
+Proof
+  rw[from_to_def, from_num_fset_def, to_num_fset_def]
+  \\ rw[GSYM toSet_11, toSet_fromSet]
+  \\ mp_tac from_to_num_set
+  \\ gs[from_to_def, EXTENSION, GSYM fIN_IN, domain_list_to_num_set, fIN_def]
+QED
+
+Theorem fINSERT_num_cv_rep[cv_rep]:
+  from_num_fset (fINSERT e s) =
+  cv_insert (Num e) (from_unit ()) (from_num_fset s)
+Proof
+  rw[from_num_fset_def, GSYM cv_insert_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ rw[wf_insert, wf_list_to_num_set,
+        lookup_list_to_num_set, lookup_insert,
+        MEM_fset_REP]
+  \\ gs[]
+QED
+
+Theorem fIN_num_cv_rep[cv_rep]:
+  b2c (fIN e s) =
+  cv_ispair $ (cv_lookup (Num e) (from_num_fset s))
+Proof
+  rw[from_num_fset_def, GSYM cv_lookup_thm, from_option_def,
+     lookup_list_to_num_set, MEM_fset_REP]
 QED
 
 (* -- *)
@@ -109,14 +149,15 @@ QED
 Theorem from_to_storage[cv_from_to]:
   from_to from_storage to_storage
 Proof
-  rw[from_to_def, from_storage_def, to_storage_def]
+  rewrite_tac[from_to_def, from_storage_def, to_storage_def]
   \\ rw[from_to_storage_spt |> REWRITE_RULE[from_to_def]]
   \\ qmatch_goalsub_abbrev_tac`toSortedAList t`
   \\ DEP_REWRITE_TAC[Q.ISPEC`w2n`FOLDR_UPDATE_lookup]
   \\ simp[ALL_DISTINCT_MAP_FST_toSortedAList, ALOOKUP_toSortedAList]
   \\ simp[Abbr`t`, lookup_build_spt, domain_lookup, FUN_EQ_THM]
   \\ rw[]
-  \\ metis_tac[w2n_lt, NOT_LESS_EQUAL]
+  \\ qspec_then`k`mp_tac w2n_lt
+  \\ gs[]
 QED
 
 Theorem empty_storage_cv_rep[cv_rep]:
@@ -153,7 +194,8 @@ Proof
   \\ simp[ALL_DISTINCT_MAP_FST_toSortedAList, ALOOKUP_toSortedAList]
   \\ simp[Abbr`t`, lookup_build_spt, domain_lookup, FUN_EQ_THM]
   \\ rw[]
-  \\ metis_tac[w2n_lt, NOT_LESS_EQUAL]
+  \\ qspec_then`k`mp_tac w2n_lt
+  \\ gs[]
 QED
 
 val () = cv_auto_trans empty_account_state_def;
@@ -217,6 +259,63 @@ Proof
   \\ qpat_x_assum`_ = empty_account_state`mp_tac \\ rw[] \\ gs[]
 QED
 
+Definition from_address_fset_def:
+  from_address_fset (fs: address fset) = from_num_fset (fIMAGE w2n fs)
+End
+
+Definition to_address_fset_def:
+  to_address_fset cv = fIMAGE n2w $ to_num_fset cv
+End
+
+Theorem from_to_address_fset[cv_from_to]:
+  from_to from_address_fset to_address_fset
+Proof
+  mp_tac from_to_num_fset
+  \\ rw[from_to_def, from_address_fset_def, to_address_fset_def]
+  \\ gs[GSYM fIMAGE_COMPOSE, o_DEF]
+QED
+
+Definition from_address_bytes32_fset_def:
+  from_address_bytes32_fset (fs: (address # bytes32) fset) =
+    from_num_fset (fIMAGE (λ(a,b). w2n (word_join b a)) fs)
+End
+
+Definition to_address_bytes32_fset_def:
+  to_address_bytes32_fset cv : (address # bytes32) fset =
+  fIMAGE (λn.
+    let w : (256 + 160) word = n2w n in
+      ((160 >< 0) w,
+       (256 + 160 >< 160) w)
+  ) $ to_num_fset cv
+End
+
+Theorem from_to_address_bytes32_fset[cv_from_to]:
+  from_to from_address_bytes32_fset to_address_bytes32_fset
+Proof
+  mp_tac from_to_num_fset
+  \\ rw[from_to_def, from_address_bytes32_fset_def, to_address_bytes32_fset_def]
+  \\ gs[GSYM fIMAGE_COMPOSE, o_DEF, LAMBDA_PROD]
+  \\ qmatch_goalsub_abbrev_tac`fIMAGE f`
+  \\ `f = I` suffices_by rw[]
+  \\ simp[Abbr`f`, FUN_EQ_THM]
+  \\ Cases \\ simp[]
+  \\ BBLAST_TAC
+QED
+
+Theorem fINSERT_address_cv_rep[cv_rep]:
+  from_address_fset (fINSERT e s) =
+  cv_insert (from_word e) (from_unit ()) (from_address_fset s)
+Proof
+  rw[from_address_fset_def, fINSERT_num_cv_rep, from_word_def]
+QED
+
+Theorem fIN_address_cv_rep[cv_rep]:
+  b2c (fIN e s) =
+  cv_ispair (cv_lookup (from_word e) (from_address_fset s))
+Proof
+  rw[from_address_fset_def, GSYM fIN_num_cv_rep, from_word_def]
+QED
+
 val from_to_transaction_state = from_to_thm_for “:transaction_state”;
 
 val () = “consume_gas n s” |>
@@ -278,11 +377,11 @@ val () = “start_context x y c s” |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   cv_auto_trans;
 
-(*
 val () = cv_auto_trans get_current_accesses_def;
 
 val () = cv_auto_trans access_address_def;
 
+(*
 val () = cv_auto_trans step_def;
 *)
 
