@@ -275,26 +275,43 @@ Proof
   \\ gs[GSYM fIMAGE_COMPOSE, o_DEF]
 QED
 
-Definition from_address_bytes32_fset_def:
-  from_address_bytes32_fset (fs: (address # bytes32) fset) =
-    from_num_fset (fIMAGE (λ(a,b). w2n (word_join b a)) fs)
+Definition from_storage_key_def:
+  from_storage_key (s: storage_key) =
+  Num (w2n (case s of SK x y => word_join y x))
 End
 
-Definition to_address_bytes32_fset_def:
-  to_address_bytes32_fset cv : (address # bytes32) fset =
+Definition to_storage_key_def:
+  to_storage_key cv =
+  let w: (256 + 160) word = to_word cv in
+    SK ((160 >< 0) w) ((256 + 160 >< 160) w)
+End
+
+Theorem from_to_storage_key[cv_from_to]:
+  from_to from_storage_key to_storage_key
+Proof
+  rw[from_to_def, from_storage_key_def, to_storage_key_def, to_word_def]
+  \\ CASE_TAC \\ BBLAST_TAC
+QED
+
+Definition from_storage_key_fset_def:
+  from_storage_key_fset (fs: storage_key fset) =
+    from_num_fset (fIMAGE (λk. case k of SK a b => w2n (word_join b a)) fs)
+End
+
+Definition to_storage_key_fset_def:
+  to_storage_key_fset cv =
   fIMAGE (λn.
     let w : (256 + 160) word = n2w n in
-      ((160 >< 0) w,
-       (256 + 160 >< 160) w)
+      SK ((160 >< 0) w) ((256 + 160 >< 160) w)
   ) $ to_num_fset cv
 End
 
-Theorem from_to_address_bytes32_fset[cv_from_to]:
-  from_to from_address_bytes32_fset to_address_bytes32_fset
+Theorem from_to_storage_key_fset[cv_from_to]:
+  from_to from_storage_key_fset to_storage_key_fset
 Proof
   mp_tac from_to_num_fset
-  \\ rw[from_to_def, from_address_bytes32_fset_def, to_address_bytes32_fset_def]
-  \\ gs[GSYM fIMAGE_COMPOSE, o_DEF, LAMBDA_PROD]
+  \\ rw[from_to_def, from_storage_key_fset_def, to_storage_key_fset_def]
+  \\ gs[GSYM fIMAGE_COMPOSE, o_DEF]
   \\ qmatch_goalsub_abbrev_tac`fIMAGE f`
   \\ `f = I` suffices_by rw[]
   \\ simp[Abbr`f`, FUN_EQ_THM]
@@ -314,6 +331,35 @@ Theorem fIN_address_cv_rep[cv_rep]:
   cv_ispair (cv_lookup (from_word e) (from_address_fset s))
 Proof
   rw[from_address_fset_def, GSYM fIN_num_cv_rep, from_word_def]
+QED
+
+Theorem fINSERT_storage_key_cv_rep[cv_rep]:
+  from_storage_key_fset (fINSERT e s) =
+  cv_insert (from_storage_key e) (from_unit ()) (from_storage_key_fset s)
+Proof
+  rw[from_storage_key_fset_def, GSYM fINSERT_num_cv_rep,
+     from_storage_key_def] \\ CASE_TAC \\ rw[]
+QED
+
+Theorem fIN_storage_key_cv_rep[cv_rep]:
+  b2c (fIN e s) =
+  cv_ispair (cv_lookup (from_storage_key e) (from_storage_key_fset s))
+Proof
+  rw[from_storage_key_fset_def, GSYM fIN_num_cv_rep,
+     from_storage_key_def]
+  \\ AP_TERM_TAC
+  \\ CASE_TAC \\ rw[]
+  \\ rw[EQ_IMP_THM] >- (
+       goal_assum(first_assum o mp_then Any mp_tac)
+       \\ rw[] )
+  \\ pop_assum mp_tac \\ CASE_TAC
+  \\ qmatch_asmsub_rename_tac`fIN (SK e1 e2)`
+  \\ qmatch_goalsub_rename_tac`fIN (SK d1 d2)`
+  \\ strip_tac
+  \\ `(d1, d2) = (e1, e2)` suffices_by rw[]
+  \\ pop_assum mp_tac
+  \\ simp[]
+  \\ BBLAST_TAC
 QED
 
 val from_to_transaction_state = from_to_thm_for “:transaction_state”;
@@ -380,6 +426,8 @@ val () = “start_context x y c s” |>
 val () = cv_auto_trans get_current_accesses_def;
 
 val () = cv_auto_trans access_address_def;
+
+val () = cv_auto_trans access_slot_def;
 
 (*
 val () = cv_auto_trans step_def;

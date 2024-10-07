@@ -32,9 +32,13 @@ Datatype:
 End
 
 Datatype:
+  storage_key = SK address bytes32
+End
+
+Datatype:
   access_sets =
   <| addresses   : address fset
-   ; storageKeys : (address # bytes32) fset
+   ; storageKeys : storage_key fset
    |>
 End
 
@@ -208,7 +212,7 @@ Definition initial_access_sets_def:
   initial_access_sets t =
   <| addresses   := fIMAGE (λe. e.account) (fset_ABS t.accessList)
    ; storageKeys := fBIGUNION
-                      (fIMAGE (λe. fIMAGE (λk. (e.account, k)) e.keys)
+                      (fIMAGE (λe. fIMAGE (SK e.account) e.keys)
                               (fset_ABS t.accessList))
    |>
 End

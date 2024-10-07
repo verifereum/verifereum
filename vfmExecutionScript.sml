@@ -682,7 +682,7 @@ Definition step_inst_def:
           ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let key = EL 0 context.stack in
             let address = context.callParams.callee in
-            bind (access_slot (address, key)) (λwarm.
+            bind (access_slot (SK address key)) (λwarm.
             let dynamicGas = if warm then 100 else 2600 in
             bind get_accounts (λaccounts.
             let word = (accounts address).storage key in
@@ -703,7 +703,7 @@ Definition step_inst_def:
       currentValue <<- account.storage key;
       original <- get_original;
       originalValue <<- (original address).storage key;
-      slotWarm <- access_slot (address, key);
+      slotWarm <- access_slot (SK address key);
       baseDynamicGas <<-
         if originalValue = currentValue ∧ currentValue ≠ value
         then if originalValue = 0w then 20000 else 2900
