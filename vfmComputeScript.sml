@@ -165,6 +165,58 @@ Proof
   rw[from_storage_def] \\ EVAL_TAC
 QED
 
+Definition lookup_storage_def:
+  lookup_storage (s: storage) k = s k
+End
+
+Definition update_storage_def:
+  update_storage (s: storage) k v = (k =+ v) s
+End
+
+Definition cv_lookup_storage_def:
+  cv_lookup_storage (s:cv) (k:cv) =
+  let v = cv_lookup k s in
+    cv_if (cv_ispair v) (cv_snd v) (Num 0)
+End
+
+Theorem lookup_storage_cv_rep[cv_rep]:
+  from_word (lookup_storage s k) =
+  cv_lookup_storage (from_storage s) (from_word k)
+Proof
+  gs[lookup_storage_def, cv_lookup_storage_def, GSYM cv_lookup_thm,
+     from_word_def, from_storage_def, lookup_build_spt]
+  \\ qspec_then`k`mp_tac w2n_lt
+  \\ simp[]
+  \\ Cases_on`s k = 0w`
+  \\ gs[from_option_def, from_word_def]
+QED
+
+Definition cv_update_storage_def:
+  cv_update_storage (s:cv) (k:cv) (v:cv) =
+  cv_if (cv_eq v (Num 0))
+    (cv_delete k s)
+    (cv_insert k v s)
+End
+
+Theorem update_storage_cv_rep[cv_rep]:
+  from_storage (update_storage s k v) =
+  cv_update_storage (from_storage s) (from_word k) (from_word v)
+Proof
+  gs[from_storage_def, cv_update_storage_def,
+     update_storage_def, from_word_def, cv_eq_def]
+  \\ `Num (w2n v) = from_word v` by simp[from_word_def]
+  \\ pop_assum SUBST1_TAC
+  \\ gs[GSYM cv_insert_thm, GSYM cv_delete_thm]
+  \\ IF_CASES_TAC
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ simp[wf_delete, wf_insert, lookup_delete, lookup_insert,
+          lookup_build_spt, APPLY_UPDATE_THM]
+  \\ rw[] \\ gvs[]
+  \\ TRY (qspec_then`k`strip_assume_tac w2n_lt \\ gs[] \\ NO_TAC)
+  \\ qpat_x_assum`_ = 0w`mp_tac \\ rw[] \\ gs[]
+QED
+
 val from_to_account_state = from_to_thm_for “:account_state”;
 val to_account_state = from_to_account_state |> concl |> rand;
 val from_account_state = from_to_account_state |> concl |> rator |> rand;
@@ -290,6 +342,16 @@ Theorem from_to_storage_key[cv_from_to]:
 Proof
   rw[from_to_def, from_storage_key_def, to_storage_key_def, to_word_def]
   \\ CASE_TAC \\ BBLAST_TAC
+QED
+
+Theorem SK_cv_rep[cv_rep]:
+  from_storage_key (SK x y) =
+  cv_add (cv_mul (from_word y) (cv_exp (Num 2) (Num 160))) (from_word x)
+Proof
+  rw[from_storage_key_def]
+  \\ `160 = dimindex (:160)` by rw[]
+  \\ pop_assum SUBST1_TAC
+  \\ rw[GSYM cv_primTheory.cv_word_join_thm, from_word_def]
 QED
 
 Definition from_storage_key_fset_def:
@@ -472,6 +534,8 @@ val () = cv_auto_trans Keccak_256_bytes_def;
 (* TODO: figure out what to do with these - proofs too slow? *)
 open byteTheory
 
+(*
+this works but is slow and not needed here - might be needed elsewhere
 Theorem set_byte_128:
   set_byte a b (w: 128 word) be =
   let i = byte_index a be in
@@ -506,6 +570,7 @@ Proof
     \\ simp[] \\ BBLAST_TAC)
   \\ BBLAST_TAC
 QED
+*)
 
 Theorem set_byte_256:
   set_byte a b (w: 256 word) be =
@@ -582,6 +647,31 @@ Proof
   rw[step_create_pre_def, assert_def]
   \\ strip_tac \\ gs[]
 QED
+
+(*
+val () = step_inst_def |>
+  ONCE_REWRITE_RULE[FUN_EQ_THM] |>
+  SIMP_RULE std_ss [
+    stack_op_def,
+    binop_def,
+    monop_def,
+    with_zero_def,
+    push_from_ctxt_def,
+    push_from_tx_def,
+    copy_to_memory_def,
+    copy_to_memory_check_def,
+    store_to_memory_def,
+    update_accounts_def,
+    bind_def, ignore_bind_def, return_def, LET_RATOR
+  ] |>
+  ONCE_REWRITE_RULE [
+    GSYM lookup_account_def,
+    GSYM update_account_def,
+    GSYM lookup_storage_def, (* these are not quite working right yet *)
+    GSYM update_storage_def  (* might need to introduce them more carefully *)
+  ] |>
+  cv_auto_trans;
+*)
 
 (*
 val () = cv_auto_trans step_def;
