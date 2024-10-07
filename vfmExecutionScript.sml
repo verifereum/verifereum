@@ -441,6 +441,8 @@ Definition step_call_def:
                     else value
       ; gasLimit := cappedGas + stipend
       ; data     := TAKE argsSize (DROP argsOffset newMemory)
+      (* unused: for concreteness *)
+      ; nonce := 0; gasPrice := 0; accessList := []
     |>;
     subContextParams <<- <|
         code      := toAccount.code
@@ -500,6 +502,8 @@ Definition step_create_def:
       ; value    := value
       ; gasLimit := cappedGas
       ; data     := []
+      (* unused: for concreteness *)
+      ; nonce := 0; gasPrice := 0; accessList := []
     |>;
     subContextParams <<- <|
         code      := code

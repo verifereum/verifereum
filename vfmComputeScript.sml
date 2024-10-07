@@ -6,8 +6,6 @@ open HolKernel boolLib bossLib Parse dep_rewrite blastLib
 
 val _ = new_theory "vfmCompute";
 
-(* TODO: move *)
-
 open finite_setTheory pred_setTheory
 
 Theorem wf_list_to_num_set:
@@ -259,19 +257,19 @@ Proof
   \\ qpat_x_assum`_ = empty_account_state`mp_tac \\ rw[] \\ gs[]
 QED
 
-Definition from_address_fset_def:
-  from_address_fset (fs: address fset) = from_num_fset (fIMAGE w2n fs)
+Definition from_word_fset_def:
+  from_word_fset (fs: 'a word fset) = from_num_fset (fIMAGE w2n fs)
 End
 
-Definition to_address_fset_def:
-  to_address_fset cv = fIMAGE n2w $ to_num_fset cv
+Definition to_word_fset_def:
+  to_word_fset cv = fIMAGE n2w $ to_num_fset cv
 End
 
-Theorem from_to_address_fset[cv_from_to]:
-  from_to from_address_fset to_address_fset
+Theorem from_to_word_fset[cv_from_to]:
+  from_to from_word_fset to_word_fset
 Proof
   mp_tac from_to_num_fset
-  \\ rw[from_to_def, from_address_fset_def, to_address_fset_def]
+  \\ rw[from_to_def, from_word_fset_def, to_word_fset_def]
   \\ gs[GSYM fIMAGE_COMPOSE, o_DEF]
 QED
 
@@ -319,18 +317,18 @@ Proof
   \\ BBLAST_TAC
 QED
 
-Theorem fINSERT_address_cv_rep[cv_rep]:
-  from_address_fset (fINSERT e s) =
-  cv_insert (from_word e) (from_unit ()) (from_address_fset s)
+Theorem fINSERT_word_cv_rep[cv_rep]:
+  from_word_fset (fINSERT e s) =
+  cv_insert (from_word e) (from_unit ()) (from_word_fset s)
 Proof
-  rw[from_address_fset_def, fINSERT_num_cv_rep, from_word_def]
+  rw[from_word_fset_def, fINSERT_num_cv_rep, from_word_def]
 QED
 
-Theorem fIN_address_cv_rep[cv_rep]:
+Theorem fIN_word_cv_rep[cv_rep]:
   b2c (fIN e s) =
-  cv_ispair (cv_lookup (from_word e) (from_address_fset s))
+  cv_ispair (cv_lookup (from_word e) (from_word_fset s))
 Proof
-  rw[from_address_fset_def, GSYM fIN_num_cv_rep, from_word_def]
+  rw[from_word_fset_def, GSYM fIN_num_cv_rep, from_word_def]
 QED
 
 Theorem fINSERT_storage_key_cv_rep[cv_rep]:
@@ -429,7 +427,38 @@ val () = cv_auto_trans access_address_def;
 
 val () = cv_auto_trans access_slot_def;
 
+val () = “finish_current r s” |>
+  SIMP_CONV std_ss [
+    finish_current_def, bind_def, LET_RATOR
+  ]
+  |> cv_auto_trans;
+
+val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
+
+val from_to_transaction = from_to_thm_for “:transaction”;
+
+val step_call_pre_def = “step_call t s” |>
+  SIMP_CONV std_ss [
+    step_call_def, bind_def, ignore_bind_def, LET_RATOR
+  ]
+  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
+  |> cv_auto_trans_pre;
+
+Theorem step_call_pre[cv_pre]:
+  ∀t s. step_call_pre t s
+Proof
+  rw[step_call_pre_def, assert_def]
+  \\ strip_tac \\ gvs[]
+QED
+
 (*
+val step_create_pre_def = “step_create t s” |>
+  SIMP_CONV std_ss [
+    step_create_def, bind_def, ignore_bind_def, LET_RATOR
+  ]
+  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
+  |> cv_auto_trans_pre;
+
 val () = cv_auto_trans step_def;
 *)
 
