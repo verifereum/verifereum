@@ -889,7 +889,7 @@ Definition step_def:
                                  | Reverted d => d
                                  | Excepted _ => [] in
         let calleeSuccess = case e of Finished _ => T | _ => F in
-        let (newCallerBase, accountsUpdater, success) =
+        let (newCallerBase, success) =
           (case callee.callParams.outputTo of
            | Memory r =>
              (caller with
@@ -899,10 +899,10 @@ Definition step_def:
                  ; gasUsed    := caller.gasUsed - calleeGasLeft
                  ; memory     :=
                      write_memory r.offset (TAKE r.size returnData) caller.memory
-                 |>, I, calleeSuccess)
+                 |>, calleeSuccess)
            | Code address =>
              let codeGas = LENGTH returnData * 200 in
-             let validCode = (returnData ≠ [] ⇒ HD returnData ≠ n2w 0xef) in
+             let validCode = (case returnData of h::_ => h ≠ n2w 0xef | _ => T) in
              let callerGasLeft = caller.callParams.gasLimit - caller.gasUsed in
              let success = (calleeSuccess ∧ validCode ∧ codeGas ≤ callerGasLeft) in
              (caller with
@@ -916,9 +916,6 @@ Definition step_def:
                                  then caller.gasUsed - calleeGasLeft
                                  else caller.callParams.gasLimit
                  |>,
-              if success
-              then (address =+ (s.accounts address) with code := returnData)
-              else I,
               success)) in
         let newCaller =
           if success
@@ -926,11 +923,15 @@ Definition step_def:
                <| gasRefund updated_by $+ callee.gasRefund
                 ; logs updated_by combin$C APPEND callee.logs |>
           else newCallerBase in
+        let stateWithContext = s with contexts := newCaller :: callStack in
         let updatedState =
-          (s with <|
-              accounts updated_by accountsUpdater
-            ; contexts := newCaller :: callStack
-            |>) in
+          if success then
+            case callee.callParams.outputTo of
+            | Memory _ => stateWithContext
+            | Code address => let accounts = stateWithContext.accounts in
+              stateWithContext with accounts :=
+                (address =+ accounts address with code := returnData) accounts
+          else stateWithContext in
         (INL (),
          if success
          then updatedState

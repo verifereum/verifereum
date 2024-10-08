@@ -743,16 +743,13 @@ val () = “inc_pc n s” |>
     LET_RATOR, option_CASE_rator] |>
   cv_auto_trans;
 
-(*
-  rewrite to not be so higher-order
-
-  step_def |>
+val () =  step_def |>
   SIMP_RULE std_ss [
     bind_def, ignore_bind_def, LET_RATOR,
-    C_DEF
+    C_DEF, COND_RATOR, option_CASE_rator
   ] |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def]
-
-*)
+  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  cv_auto_trans;
 
 val _ = export_theory();
