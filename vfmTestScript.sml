@@ -38,10 +38,49 @@ Proof
   rw[from_evm_accounts_def, from_sptree_sptree_spt_def]
 QED
 
+open dep_rewrite sptreeTheory finite_setTheory listTheory
+
+Theorem fset_ABS_num_cv_rep[cv_rep]:
+  from_num_fset (fset_ABS l) =
+  cv_list_to_num_set (from_list Num l)
+Proof
+  rw[from_num_fset_def, GSYM cv_list_to_num_set_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ simp[wf_list_to_num_set, lookup_list_to_num_set, MEM_fset_REP]
+  \\ simp[fset_ABS_fromSet_set, IN_fromSet]
+QED
+
+Theorem from_list_from_word_MAP_w2n:
+  from_list from_word l =
+  from_list Num (MAP w2n l)
+Proof
+  Induct_on`l`
+  \\ rw[cv_typeTheory.from_list_def, cv_typeTheory.from_word_def]
+QED
+
+Theorem fset_ABS_word_cv_rep[cv_rep]:
+  from_word_fset (fset_ABS l) =
+  cv_list_to_num_set (from_list from_word l)
+Proof
+  rw[from_word_fset_def, from_num_fset_def,
+     from_list_from_word_MAP_w2n,
+     GSYM cv_list_to_num_set_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ simp[wf_list_to_num_set, lookup_list_to_num_set, MEM_fset_REP]
+  \\ simp[fset_ABS_fromSet_set, IN_fromSet, MEM_MAP]
+  \\ metis_tac[]
+QED
+
 (* TODO:
-initial_access_sets_def
+
+need cv_rep for fBIGUNION too, so that we can do this:
 
 val () = cv_auto_trans initial_state_def;
+
+also might need fIMAGE for the relevant types (word, storage_key)
+
 *)
 
 (*
