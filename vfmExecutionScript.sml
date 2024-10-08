@@ -517,6 +517,62 @@ Definition step_create_def:
   od
 End
 
+Definition step_sload_def:
+  step_sload s =
+  bind get_current_context
+    (λcontext.
+      ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
+        let key = EL 0 context.stack in
+        let address = context.callParams.callee in
+        bind (access_slot (SK address key)) (λwarm.
+        let dynamicGas = if warm then 100 else 2600 in
+        bind get_accounts (λaccounts.
+        let word = (accounts address).storage key in
+        let newStack = word :: TL context.stack in
+        let newContext = context with <| stack := newStack |> in
+        ignore_bind (consume_gas dynamicGas)
+          (set_current_context newContext))))) s
+End
+
+Definition step_sstore_def:
+  step_sstore = do
+    context <- get_current_context;
+    assert (2 ≤ LENGTH context.stack) StackUnderflow;
+    gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+    assert (2300 < gasLeft) OutOfGas;
+    key <<- EL 0 context.stack;
+    value <<- EL 1 context.stack;
+    address <<- context.callParams.callee;
+    accounts <- get_accounts;
+    account <<- accounts address;
+    currentValue <<- account.storage key;
+    original <- get_original;
+    originalValue <<- (original address).storage key;
+    slotWarm <- access_slot (SK address key);
+    baseDynamicGas <<-
+      if originalValue = currentValue ∧ currentValue ≠ value
+      then if originalValue = 0w then 20000 else 2900
+      else 100;
+    dynamicGas <<- baseDynamicGas + if slotWarm then 0 else 2100;
+    newStorage <<- (key =+ value) account.storage;
+    newAccount <<- account with storage := newStorage;
+    newStack <<- DROP 2 context.stack;
+    newContext <<- context with stack := newStack;
+    newContextRefunded <<-
+      if currentValue ≠ value ∧ originalValue ≠ 0w then
+        if currentValue = 0w then
+          newContext with gasRefund updated_by flip $- 15000
+        else if value = 0w then
+          newContext with gasRefund updated_by flip $+ 15000
+        else newContext
+      else newContext;
+    consume_gas dynamicGas;
+    assert (¬context.callParams.static) WriteInStaticContext;
+    update_accounts (address =+ newAccount);
+    set_current_context newContextRefunded
+  od
+End
+
 Definition step_inst_def:
     step_inst Stop = finish_current []
   ∧ step_inst Add = binop word_add
@@ -680,54 +736,8 @@ Definition step_inst_def:
                 (set_current_context newContext)))
   ∧ step_inst MStore = store_to_memory (combin$C word_to_bytes F)
   ∧ step_inst MStore8 = store_to_memory (SINGL o w2w)
-  ∧ step_inst SLoad =
-      bind get_current_context
-        (λcontext.
-          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-            let key = EL 0 context.stack in
-            let address = context.callParams.callee in
-            bind (access_slot (SK address key)) (λwarm.
-            let dynamicGas = if warm then 100 else 2600 in
-            bind get_accounts (λaccounts.
-            let word = (accounts address).storage key in
-            let newStack = word :: TL context.stack in
-            let newContext = context with <| stack := newStack |> in
-            ignore_bind (consume_gas dynamicGas)
-              (set_current_context newContext)))))
-  ∧ step_inst SStore = do
-      context <- get_current_context;
-      assert (2 ≤ LENGTH context.stack) StackUnderflow;
-      gasLeft <<- context.callParams.gasLimit - context.gasUsed;
-      assert (2300 < gasLeft) OutOfGas;
-      key <<- EL 0 context.stack;
-      value <<- EL 1 context.stack;
-      address <<- context.callParams.callee;
-      accounts <- get_accounts;
-      account <<- accounts address;
-      currentValue <<- account.storage key;
-      original <- get_original;
-      originalValue <<- (original address).storage key;
-      slotWarm <- access_slot (SK address key);
-      baseDynamicGas <<-
-        if originalValue = currentValue ∧ currentValue ≠ value
-        then if originalValue = 0w then 20000 else 2900
-        else 100;
-      dynamicGas <<- baseDynamicGas + if slotWarm then 0 else 2100;
-      refundUpdater <<-
-        if currentValue ≠ value ∧ originalValue ≠ 0w then
-          if currentValue = 0w then combin$C $- 15000
-          else if value = 0w then $+ 15000 else I
-        else I;
-      newStorage <<- (key =+ value) account.storage;
-      newAccount <<- account with storage := newStorage;
-      newStack <<- DROP 2 context.stack;
-      newContext <<- context with
-        <| stack := newStack; gasRefund updated_by refundUpdater |>;
-      consume_gas dynamicGas;
-      assert (¬context.callParams.static) WriteInStaticContext;
-      update_accounts (address =+ newAccount);
-      set_current_context newContext
-    od
+  ∧ step_inst SLoad = step_sload
+  ∧ step_inst SStore = step_sstore
   ∧ step_inst Jump =
       bind get_current_context
         (λcontext.

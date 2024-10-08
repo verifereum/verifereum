@@ -648,8 +648,59 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
+val step_sload_pre_def = “step_sload s” |>
+  SIMP_CONV std_ss [
+    step_sload_def, bind_def, ignore_bind_def,
+    LET_RATOR
+  ] |>
+  ONCE_REWRITE_RULE [
+    GSYM lookup_account_def
+  ] |>
+  ONCE_REWRITE_RULE [
+    GSYM lookup_storage_def
+  ] |>
+  cv_auto_trans_pre;
+
+Theorem step_sload_pre[cv_pre]:
+  ∀s. step_sload_pre s
+Proof
+  rw[step_sload_pre_def, assert_def]
+  \\ strip_tac \\ gs[]
+QED
+
+Triviality update_accounts:
+  update_accounts (k =+ v) s =
+  (INL (), s with accounts := update_account s.accounts k v)
+Proof
+  rw[update_accounts_def, return_def,
+     transaction_state_component_equality, update_account_def]
+QED
+
+val step_sstore_pre_def = “step_sstore s” |>
+  SIMP_CONV std_ss [
+    step_sstore_def,
+    bind_def, ignore_bind_def, LET_RATOR,
+    update_accounts, C_DEF
+  ] |>
+  ONCE_REWRITE_RULE [
+    GSYM lookup_account_def,
+    GSYM update_account_def
+  ] |>
+  ONCE_REWRITE_RULE [
+    GSYM lookup_storage_def,
+    GSYM update_storage_def
+  ] |>
+  cv_auto_trans_pre;
+
+Theorem step_sstore_pre[cv_pre]:
+  ∀s. step_sstore_pre s
+Proof
+  rw[step_sstore_pre_def, assert_def]
+  \\ strip_tac \\ gs[]
+QED
+
 (*
-val () = step_inst_def |>
+val step_inst_pre_def = step_inst_def |>
   ONCE_REWRITE_RULE[FUN_EQ_THM] |>
   SIMP_RULE std_ss [
     stack_op_def,
@@ -666,11 +717,18 @@ val () = step_inst_def |>
   ] |>
   ONCE_REWRITE_RULE [
     GSYM lookup_account_def,
-    GSYM update_account_def,
-    GSYM lookup_storage_def, (* these are not quite working right yet *)
-    GSYM update_storage_def  (* might need to introduce them more carefully *)
+    GSYM update_account_def
   ] |>
-  cv_auto_trans;
+  cv_auto_trans_pre;
+
+Theorem step_inst_pre[cv_pre]:
+  ∀i s. step_inst_pre i s
+Proof
+  simp[step_inst_pre_def]
+  \\ rpt gen_tac
+  \\ rpt conj_tac
+  \\ TRY(disch_then(assume_tac o ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
+  \\ rw[assert_def] \\ TRY (strip_tac \\ gs[])
 *)
 
 (*
