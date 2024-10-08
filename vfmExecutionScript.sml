@@ -595,7 +595,7 @@ Definition step_inst_def:
         (λcontext.
          ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
            let exponent = w2n (EL 1 context.stack) in
-           let exponentByteSize = SUC (LOG2 exponent DIV 8) in
+           let exponentByteSize = if exponent = 0 then 0 else SUC (LOG2 exponent DIV 8) in
            let dynamicGas = 50 * exponentByteSize in
            let base = w2n (EL 0 context.stack) in
            let result = n2w (base ** exponent) in
@@ -772,7 +772,7 @@ Definition step_inst_def:
   ∧ step_inst (Dup n) =
       bind (get_current_context)
         (λcontext.
-          ignore_bind (assert (n ≤ LENGTH context.stack) StackUnderflow) (
+          ignore_bind (assert (n < LENGTH context.stack) StackUnderflow) (
             let word = EL n context.stack in
             let newStack = word :: context.stack in
             ignore_bind (assert (LENGTH newStack ≤ stack_limit) StackOverflow) (
@@ -780,7 +780,7 @@ Definition step_inst_def:
   ∧ step_inst (Swap n) =
       bind get_current_context
         (λcontext.
-          ignore_bind (assert (SUC n ≤ LENGTH context.stack) StackUnderflow) (
+          ignore_bind (assert (SUC n < LENGTH context.stack) StackUnderflow) (
             let top = HD context.stack in
             let swap = EL n (TL context.stack) in
             let ignored = TAKE n (TL context.stack) in

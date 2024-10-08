@@ -699,7 +699,6 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-(*
 val step_inst_pre_def = step_inst_def |>
   ONCE_REWRITE_RULE[FUN_EQ_THM] |>
   SIMP_RULE std_ss [
@@ -727,12 +726,33 @@ Proof
   simp[step_inst_pre_def]
   \\ rpt gen_tac
   \\ rpt conj_tac
+  \\ rpt gen_tac
   \\ TRY(disch_then(assume_tac o ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
   \\ rw[assert_def] \\ TRY (strip_tac \\ gs[])
-*)
+  \\ qmatch_goalsub_abbrev_tac`LENGTH (TL ls)`
+  \\ Cases_on`ls` \\ gs[]
+QED
+
+val option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+val () = “inc_pc n s” |>
+  SIMP_CONV std_ss [
+    inc_pc_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator] |>
+  cv_auto_trans;
 
 (*
-val () = cv_auto_trans step_def;
+  rewrite to not be so higher-order
+
+  step_def |>
+  SIMP_RULE std_ss [
+    bind_def, ignore_bind_def, LET_RATOR,
+    C_DEF
+  ] |>
+  ONCE_REWRITE_RULE[GSYM lookup_account_def]
+
 *)
 
 val _ = export_theory();
