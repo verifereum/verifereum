@@ -40,17 +40,6 @@ QED
 
 open dep_rewrite sptreeTheory finite_setTheory listTheory
 
-Theorem fset_ABS_num_cv_rep[cv_rep]:
-  from_num_fset (fset_ABS l) =
-  cv_list_to_num_set (from_list Num l)
-Proof
-  rw[from_num_fset_def, GSYM cv_list_to_num_set_thm]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[spt_eq_thm]
-  \\ simp[wf_list_to_num_set, lookup_list_to_num_set, MEM_fset_REP]
-  \\ simp[GSYM fromSet_set, IN_fromSet]
-QED
-
 Theorem from_list_from_word_MAP_w2n:
   from_list from_word l =
   from_list Num (MAP w2n l)
@@ -73,18 +62,6 @@ Proof
   \\ metis_tac[]
 QED
 
-Theorem fUNION_num_cv_rep[cv_rep]:
-  from_num_fset (fUNION s1 s2) =
-  cv_union (from_num_fset s1) (from_num_fset s2)
-Proof
-  rw[from_num_fset_def, GSYM cv_union_thm]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[spt_eq_thm]
-  \\ simp[wf_list_to_num_set, wf_union,
-          lookup_list_to_num_set, lookup_union]
-  \\ rw[fUNION_def, MEM_fset_REP] \\ gs[]
-QED
-
 Theorem fIMAGE_fUNION:
   fIMAGE f (fUNION s1 s2) =
   fUNION (fIMAGE f s1) (fIMAGE f s2)
@@ -98,16 +75,6 @@ Theorem fUNION_storage_key_cv_rep[cv_rep]:
   cv_union (from_storage_key_fset s1) (from_storage_key_fset s2)
 Proof
   rw[from_storage_key_fset_def, fIMAGE_fUNION, fUNION_num_cv_rep]
-QED
-
-Theorem fEMPTY_num_cv_rep[cv_rep]:
-  from_num_fset fEMPTY = Num 0
-Proof
-  rw[from_num_fset_def,
-     Q.ISPEC`from_unit`(CONJUNCT1(GSYM from_sptree_sptree_spt_def))]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[spt_eq_thm]
-  \\ rw[lookup_list_to_num_set, wf_list_to_num_set, MEM_fset_REP]
 QED
 
 Theorem fEMPTY_storage_key_cv_rep[cv_rep]:

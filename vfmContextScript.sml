@@ -4,19 +4,6 @@ open HolKernel boolLib bossLib Parse
 
 val _ = new_theory "vfmContext";
 
-(* TODO: move, if desired at all *)
-Theorem fromSet_set:
-  !l. fromSet (set l) = fset_ABS l
-Proof
-  Induct \\ gvs[GSYM fEMPTY_def, fromSet_INSERT]
-  \\ rw[Once fINSERT_def, fsequiv_def]
-  \\ AP_TERM_TAC
-  \\ mp_tac fset_QUOTIENT
-  \\ rewrite_tac[quotientTheory.QUOTIENT_def] \\ strip_tac
-  \\ metis_tac[fsequiv_def]
-QED
-(* -- *)
-
 Datatype:
   transaction_parameters =
   <| origin         : address

@@ -2,68 +2,10 @@ open HolKernel boolLib bossLib Parse dep_rewrite blastLib
      cv_typeTheory cv_transLib cv_typeLib
      cvTheory cv_stdTheory
      pairTheory combinTheory listTheory wordsTheory alistTheory arithmeticTheory
-     sptreeTheory recursiveLengthPrefixTheory
+     finite_setTheory sptreeTheory recursiveLengthPrefixTheory
      vfmContextTheory vfmStateTheory vfmExecutionTheory;
 
 val _ = new_theory "vfmCompute";
-
-open finite_setTheory pred_setTheory
-
-Theorem wf_list_to_num_set:
-  !ls. wf (list_to_num_set ls)
-Proof
-  Induct \\ rw[list_to_num_set_def, wf_insert]
-QED
-
-Theorem MEM_fset_REP:
-  MEM x (fset_REP fs) <=> fIN x fs
-Proof
-  rw[fIN_def]
-QED
-
-val from_to_num_set = from_to_thm_for “:num_set”;
-val to_num_set = from_to_num_set |> concl |> rand;
-val from_num_set = from_to_num_set |> concl |> rator |> rand;
-
-Definition to_num_fset_def:
-  to_num_fset cv = fromSet (domain (^to_num_set cv))
-End
-
-Definition from_num_fset_def:
-  from_num_fset fs = ^from_num_set $ list_to_num_set $ fset_REP fs
-End
-
-Theorem from_to_num_fset[cv_from_to]:
-  from_to from_num_fset to_num_fset
-Proof
-  rw[from_to_def, from_num_fset_def, to_num_fset_def]
-  \\ rw[GSYM toSet_11, toSet_fromSet]
-  \\ mp_tac from_to_num_set
-  \\ gs[from_to_def, EXTENSION, GSYM fIN_IN, domain_list_to_num_set, fIN_def]
-QED
-
-Theorem fINSERT_num_cv_rep[cv_rep]:
-  from_num_fset (fINSERT e s) =
-  cv_insert (Num e) (from_unit ()) (from_num_fset s)
-Proof
-  rw[from_num_fset_def, GSYM cv_insert_thm]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[spt_eq_thm]
-  \\ rw[wf_insert, wf_list_to_num_set,
-        lookup_list_to_num_set, lookup_insert,
-        MEM_fset_REP]
-  \\ gs[]
-QED
-
-Theorem fIN_num_cv_rep[cv_rep]:
-  b2c (fIN e s) =
-  cv_ispair $ (cv_lookup (Num e) (from_num_fset s))
-Proof
-  rw[from_num_fset_def, GSYM cv_lookup_thm, from_option_def,
-     lookup_list_to_num_set, MEM_fset_REP]
-QED
-
-(* -- *)
 
 val from_to_bytes32 = from_to_thm_for “:bytes32”;
 
@@ -382,7 +324,7 @@ QED
 
 Theorem fINSERT_word_cv_rep[cv_rep]:
   from_word_fset (fINSERT e s) =
-  cv_insert (from_word e) (from_unit ()) (from_word_fset s)
+  cv_insert (from_word e) (Num 0) (from_word_fset s)
 Proof
   rw[from_word_fset_def, fINSERT_num_cv_rep, from_word_def]
 QED
@@ -396,7 +338,7 @@ QED
 
 Theorem fINSERT_storage_key_cv_rep[cv_rep]:
   from_storage_key_fset (fINSERT e s) =
-  cv_insert (from_storage_key e) (from_unit ()) (from_storage_key_fset s)
+  cv_insert (from_storage_key e) (Num 0) (from_storage_key_fset s)
 Proof
   rw[from_storage_key_fset_def, GSYM fINSERT_num_cv_rep,
      from_storage_key_def] \\ CASE_TAC \\ rw[]
