@@ -211,11 +211,8 @@ val () = initial_access_sets_def
     ]
  |> cv_auto_trans;
 
-open cv_typeLib
-
-val from_to_block = from_to_thm_for ``:block``;
-
 val () = cv_auto_trans initial_tx_params_def;
+
 val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   cv_auto_trans;
@@ -453,6 +450,50 @@ val () = add_d0g0v0_Cancun_post_def |>
 val () = cv_auto_trans add_d0g0v0_Cancun_transaction_def;
 val () = cv_auto_trans add_d0g0v0_Cancun_block_def;
 
+Definition run_n_def:
+  run_n n s = FUNPOW (step o SND) n (INL (), s)
+End
+
+val () = cv_auto_trans run_n_def;
+
+val WHILE_FUNPOW = keccakTheory.WHILE_FUNPOW
+
+Theorem run_SOME_run_n:
+  run s = SOME z ⇔
+  (∃n t. run_n n s = (INR z, t) ∧
+         ∀m. m < n ⇒ ISL (FST (run_n m s)))
+Proof
+  rw[run_def, run_n_def, EQ_IMP_THM]
+  >- (
+    imp_res_tac OWHILE_WHILE
+    \\ imp_res_tac OWHILE_ENDCOND
+    \\ qmatch_assum_rename_tac `~_ p`
+    \\ Cases_on`p` \\ gs[]
+    \\ qexists_tac`LEAST n. ~(ISL o FST) (FUNPOW (step o SND) n (INL (), s))`
+    \\ DEP_REWRITE_TAC[GSYM WHILE_FUNPOW]
+    \\ gs[combinTheory.o_DEF]
+    \\ numLib.LEAST_ELIM_TAC \\ gs[]
+    \\ conj_asm1_tac
+    >- (
+      spose_not_then strip_assume_tac
+      \\ qmatch_assum_abbrev_tac `OWHILE G f z = _`
+      \\ `∀n. G (FUNPOW f n z)` by  (
+        rw[Abbr`G`] \\ gs[sumTheory.NOT_ISR_ISL] )
+      \\ imp_res_tac OWHILE_EQ_NONE
+      \\ gs[] )
+    \\ rw[] )
+  \\ simp[OWHILE_def]
+  \\ conj_asm1_tac >- ( qexists_tac`n` \\ gs[] )
+  \\ numLib.LEAST_ELIM_TAC
+  \\ conj_tac >- metis_tac[]
+  \\ rw[]
+  \\ qmatch_goalsub_rename_tac`FUNPOW _ m`
+  \\ Cases_on`m < n` >- metis_tac[sumTheory.NOT_ISR_ISL]
+  \\ Cases_on`n < m` >- metis_tac[SIMP_CONV std_ss [] ``ISL (INR _)``, pairTheory.FST]
+  \\ `n = m` by gs[]
+  \\ gs[]
+QED
+
 (*
 Theorem add_d0g0v0_Cancun_correctness:
   ∃r. run (initial_state 1
@@ -462,8 +503,12 @@ Theorem add_d0g0v0_Cancun_correctness:
     add_d0g0v0_Cancun_transaction)
   = SOME (Finished r) ∧ r.accounts = add_d0g0v0_Cancun_post
 Proof
+  rw[run_SOME_run_n, PULL_EXISTS]
   rw[run_def, Once OWHILE_THM, PULL_EXISTS]
   \\ cv_eval_match_tac ``step _``
+  \\ rw[Once OWHILE_THM]
+  \\ cv_eval_match_tac ``step _``
+
   \\ cv_eval_match_tac ``(Memory _)``
   \\ cv_eval_match_tac ``(initial_state _ _ _ _ _)``
   initial_state_def
