@@ -450,11 +450,30 @@ val () = add_d0g0v0_Cancun_post_def |>
 val () = cv_auto_trans add_d0g0v0_Cancun_transaction_def;
 val () = cv_auto_trans add_d0g0v0_Cancun_block_def;
 
+Definition run_with_fuel_def:
+  run_with_fuel n (r, s) =
+  if ISR r then SOME (OUTR r, s, n)
+  else case n of
+  | 0 => NONE
+  | SUC m => run_with_fuel m (step s)
+End
+
+val run_with_fuel_pre_def = cv_auto_trans_pre run_with_fuel_def;
+
+val run_with_fuel_ind = theorem"run_with_fuel_ind";
+
+Theorem run_with_fuel_pre[cv_pre]:
+  ∀n v. run_with_fuel_pre n v
+Proof
+  simp[pairTheory.FORALL_PROD]
+  \\ ho_match_mp_tac run_with_fuel_ind
+  \\ rpt strip_tac
+  \\ rw[Once run_with_fuel_pre_def]
+QED
+
 Definition run_n_def:
   run_n n s = FUNPOW (step o SND) n (INL (), s)
 End
-
-val () = cv_auto_trans run_n_def;
 
 val WHILE_FUNPOW = keccakTheory.WHILE_FUNPOW
 
@@ -494,6 +513,44 @@ Proof
   \\ gs[]
 QED
 
+open arithmeticTheory
+
+Theorem run_with_fuel_to_zero_aux[local]:
+  ∀n x s z t m.
+    run_with_fuel n (x, s) = SOME (z, t, m) ∧
+    ISL (FST (x, s)) ∧ m = 0 ⇒
+    run_n n (SND (x, s)) = (INR z, t) ∧
+    (∀l. l < n ⇒ ISL (FST (run_n l (SND (x, s)))))
+Proof
+  ho_match_mp_tac run_with_fuel_ind
+  \\ gs[]
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ qhdtm_x_assum`run_with_fuel`mp_tac
+  \\ simp[Once run_with_fuel_def]
+  \\ Cases_on`r` \\ gs[]
+  \\ gs[num_case_eq, run_n_def]
+  \\ disch_then strip_assume_tac
+  \\ gvs[]
+  \\ simp[Once FUNPOW]
+  \\ Cases_on`step s` \\ gs[]
+  \\ qmatch_assum_rename_tac`step s = (x,y)`
+  \\ Cases_on`x` \\ gs[]
+  >- ( Cases \\ simp[Once FUNPOW] )
+  \\ qhdtm_x_assum`run_with_fuel`mp_tac
+  \\ rw[Once run_with_fuel_def]
+QED
+
+Theorem run_with_fuel_to_zero:
+  run_with_fuel n (INL (), s) = SOME (z, t, 0) ⇒
+  run_n n s = (INR z, t) ∧
+  (∀m. m < n ⇒ ISL (FST (run_n m s)))
+Proof
+  strip_tac
+  \\ drule run_with_fuel_to_zero_aux
+  \\ gs[]
+QED
+
 (*
 Theorem add_d0g0v0_Cancun_correctness:
   ∃r. run (initial_state 1
@@ -504,6 +561,21 @@ Theorem add_d0g0v0_Cancun_correctness:
   = SOME (Finished r) ∧ r.accounts = add_d0g0v0_Cancun_post
 Proof
   rw[run_SOME_run_n, PULL_EXISTS]
+  \\ qmatch_goalsub_abbrev_tac`run_n _ s`
+  \\ `∃n z t.
+        run_with_fuel n (INL (), s) = SOME (Finished z, t, 0) ∧
+        z.accounts = add_d0g0v0_Cancun_post`
+      suffices_by (
+    strip_tac
+    \\ drule run_with_fuel_to_zero
+    \\ strip_tac
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ gs[] )
+  \\ qunabbrev_tac`s`
+  \\ qexists_tac`12`
+  \\ cv_eval_match_tac``run_with_fuel _ _``
+
+  \\_t DEP_REWRITE_TAC[run_with_fuel_to_zero]
   rw[run_def, Once OWHILE_THM, PULL_EXISTS]
   \\ cv_eval_match_tac ``step _``
   \\ rw[Once OWHILE_THM]
