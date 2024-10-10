@@ -5,8 +5,8 @@ open HolKernel boolLib bossLib Parse
 val _ = new_theory "vfmContext";
 
 (* TODO: move, if desired at all *)
-Theorem fset_ABS_fromSet_set:
-  !l. fset_ABS l = fromSet (set l)
+Theorem fromSet_set:
+  !l. fromSet (set l) = fset_ABS l
 Proof
   Induct \\ gvs[GSYM fEMPTY_def, fromSet_INSERT]
   \\ rw[Once fINSERT_def, fsequiv_def]

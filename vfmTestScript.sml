@@ -48,7 +48,7 @@ Proof
   \\ AP_TERM_TAC
   \\ DEP_REWRITE_TAC[spt_eq_thm]
   \\ simp[wf_list_to_num_set, lookup_list_to_num_set, MEM_fset_REP]
-  \\ simp[fset_ABS_fromSet_set, IN_fromSet]
+  \\ simp[GSYM fromSet_set, IN_fromSet]
 QED
 
 Theorem from_list_from_word_MAP_w2n:
@@ -69,19 +69,189 @@ Proof
   \\ AP_TERM_TAC
   \\ DEP_REWRITE_TAC[spt_eq_thm]
   \\ simp[wf_list_to_num_set, lookup_list_to_num_set, MEM_fset_REP]
-  \\ simp[fset_ABS_fromSet_set, IN_fromSet, MEM_MAP]
+  \\ simp[GSYM fromSet_set, IN_fromSet, MEM_MAP]
   \\ metis_tac[]
 QED
 
-(* TODO:
+Theorem fUNION_num_cv_rep[cv_rep]:
+  from_num_fset (fUNION s1 s2) =
+  cv_union (from_num_fset s1) (from_num_fset s2)
+Proof
+  rw[from_num_fset_def, GSYM cv_union_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ simp[wf_list_to_num_set, wf_union,
+          lookup_list_to_num_set, lookup_union]
+  \\ rw[fUNION_def, MEM_fset_REP] \\ gs[]
+QED
 
-need cv_rep for fBIGUNION too, so that we can do this:
+Theorem fIMAGE_fUNION:
+  fIMAGE f (fUNION s1 s2) =
+  fUNION (fIMAGE f s1) (fIMAGE f s2)
+Proof
+  rw[finite_setTheory.EXTENSION, EQ_IMP_THM]
+  \\ metis_tac[]
+QED
 
-val () = cv_auto_trans initial_state_def;
+Theorem fUNION_storage_key_cv_rep[cv_rep]:
+  from_storage_key_fset (fUNION s1 s2) =
+  cv_union (from_storage_key_fset s1) (from_storage_key_fset s2)
+Proof
+  rw[from_storage_key_fset_def, fIMAGE_fUNION, fUNION_num_cv_rep]
+QED
 
-also might need fIMAGE for the relevant types (word, storage_key)
+Theorem fEMPTY_num_cv_rep[cv_rep]:
+  from_num_fset fEMPTY = Num 0
+Proof
+  rw[from_num_fset_def,
+     Q.ISPEC`from_unit`(CONJUNCT1(GSYM from_sptree_sptree_spt_def))]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ rw[lookup_list_to_num_set, wf_list_to_num_set, MEM_fset_REP]
+QED
 
-*)
+Theorem fEMPTY_storage_key_cv_rep[cv_rep]:
+  from_storage_key_fset fEMPTY = Num 0
+Proof
+  rw[from_storage_key_fset_def, fEMPTY_num_cv_rep]
+QED
+
+Theorem toSet_fset_ABS:
+  !l. toSet (fset_ABS l) = set l
+Proof
+  gen_tac \\
+  qspec_then`l`(SUBST1_TAC o SYM o Q.AP_TERM`toSet`)fromSet_set
+  \\ irule toSet_fromSet
+  \\ rw[]
+QED
+
+Theorem toSet_fUNION[simp]:
+  toSet (fUNION s1 s2) = (toSet s1) UNION (toSet s2)
+Proof
+  rw[pred_setTheory.EXTENSION, GSYM fIN_IN]
+QED
+
+Theorem fset_ABS_MAP:
+  fset_ABS (MAP f l) = fIMAGE f (fset_ABS l)
+Proof
+  rw[finite_setTheory.EXTENSION, fIN_IN, toSet_fset_ABS, MEM_MAP]
+  \\ metis_tac[]
+QED
+
+Theorem fset_REP_fEMPTY[simp]:
+  fset_REP fEMPTY = []
+Proof
+  rw[rich_listTheory.NIL_NO_MEM, MEM_fset_REP]
+QED
+
+Theorem fIN_fset_ABS:
+  fIN x (fset_ABS l) <=> MEM x l
+Proof
+  rw[fIN_def]
+  \\ mp_tac fset_QUOTIENT
+  \\ rewrite_tac[quotientTheory.QUOTIENT_def,fsequiv_def]
+  \\ rpt strip_tac
+  \\ `set (fset_REP (fset_ABS l)) = set l`
+  suffices_by (
+    rewrite_tac[pred_setTheory.EXTENSION]
+    \\ metis_tac[] )
+  \\ asm_simp_tac std_ss []
+QED
+
+Theorem fBIGUNION_fset_ABS_FOLDL_aux[local]:
+  !l s. FOLDL fUNION s l = fUNION s (fBIGUNION (fset_ABS l))
+Proof
+  Induct \\ rw[fBIGUNION_def, GSYM fEMPTY_def]
+  \\ rw[GSYM fUNION_ASSOC] \\ AP_TERM_TAC
+  \\ rw[finite_setTheory.EXTENSION]
+  \\ qmatch_goalsub_abbrev_tac`_ \/ fIN e s <=> fIN e hs`
+  \\ `hs = fUNION h s`
+  by (
+    rw[Once (GSYM toSet_11)]
+    \\ rw[Abbr`hs`, Abbr`s`, toSet_fset_ABS]
+    \\ rw[pred_setTheory.EXTENSION, MEM_FLAT, PULL_EXISTS, MEM_MAP]
+    \\ rw[MEM_fset_REP, fIN_fset_ABS, GSYM fIN_IN]
+    \\ metis_tac[] )
+  \\ rw[]
+QED
+
+Theorem fBIGUNION_fset_ABS_FOLDL:
+  fBIGUNION (fset_ABS l) = FOLDL fUNION fEMPTY l
+Proof
+  rw[fBIGUNION_fset_ABS_FOLDL_aux]
+QED
+
+Theorem fIMAGE_MAP:
+  fIMAGE f s = fset_ABS (MAP f (fset_REP s))
+Proof
+  rw[finite_setTheory.EXTENSION, fIN_fset_ABS, MEM_MAP, MEM_fset_REP]
+  \\ metis_tac[]
+QED
+
+(* TODO: does this already exist? *)
+Definition domain_list_def:
+  domain_list LN = [] ∧
+  domain_list (LS _) = [0n] ∧
+  domain_list (BN t1 t2) =
+     MAP (λn. 2 * n + 2) (domain_list t1) ++
+     MAP (λn. 2 * n + 1) (domain_list t2) ∧
+  domain_list (BS t1 v t2) =
+     0::
+     MAP (λn. 2 * n + 2) (domain_list t1) ++
+     MAP (λn. 2 * n + 1) (domain_list t2)
+End
+
+val () = cv_auto_trans domain_list_def;
+
+val cv_domain_list_thm = theorem"cv_domain_list_thm";
+
+Theorem set_domain_list:
+  set (domain_list t) = domain t
+Proof
+  Induct_on`t` \\ rw[domain_list_def, LIST_TO_SET_MAP]
+  \\ rw[pred_setTheory.EXTENSION] \\ metis_tac[]
+QED
+
+Definition MAP_word_join_num_def:
+  MAP_word_join_num x ls =
+  MAP (w2n : (256 + 160) word -> num o flip word_join x o n2w) ls
+End
+
+val () = MAP_word_join_num_def |> SIMP_RULE std_ss [combinTheory.C_DEF] |> cv_auto_trans;
+val cv_MAP_word_join_num_thm = theorem "cv_MAP_word_join_num_thm";
+
+Theorem from_storage_key_fset_fIMAGE_SK_cv_rep[cv_rep]:
+  from_storage_key_fset (fIMAGE (SK x) s) =
+  cv_list_to_num_set $
+    cv_MAP_word_join_num (from_word x) (cv_domain_list (from_word_fset s))
+Proof
+  rw[from_storage_key_fset_def, from_num_fset_def,
+     from_word_fset_def, GSYM cv_domain_list_thm,
+     GSYM cv_MAP_word_join_num_thm,
+     GSYM cv_list_to_num_set_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ simp[wf_list_to_num_set, lookup_list_to_num_set,
+          MEM_fset_REP, MAP_word_join_num_def, MEM_MAP,
+          set_domain_list, domain_list_to_num_set, PULL_EXISTS]
+  \\ metis_tac[]
+QED
+
+val () = initial_access_sets_def
+ |> SIMP_RULE std_ss [
+      GSYM fset_ABS_MAP,
+      fBIGUNION_fset_ABS_FOLDL
+    ]
+ |> cv_auto_trans;
+
+open cv_typeLib
+
+val from_to_block = from_to_thm_for ``:block``;
+
+val () = cv_auto_trans initial_tx_params_def;
+val () = initial_state_def |>
+  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  cv_auto_trans;
 
 (*
 https://github.com/ethereum/tests
