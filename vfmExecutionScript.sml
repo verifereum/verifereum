@@ -31,6 +31,7 @@ Datatype:
   <| output   : byte list
    ; events   : event list
    ; refund   : num
+   ; gasLeft  : num
    ; accounts : evm_accounts
    |>
 End
@@ -366,14 +367,6 @@ Definition access_slot_def:
       (s with accesses := (s.accesses with storageKeys := fINSERT x storageKeys))
 End
 
-Definition update_refund_def:
-  update_refund f = do
-    context <- get_current_context;
-    newContext <<- context with gasRefund updated_by f;
-    set_current_context newContext
-  od
-End
-
 Definition finish_current_def:
   finish_current returnData = do
     context <- get_current_context;
@@ -382,6 +375,7 @@ Definition finish_current_def:
         output   := returnData
       ; events   := context.logs
       ; refund   := context.gasRefund
+      ; gasLeft  := context.callParams.gasLimit - context.gasUsed
       ; accounts := accounts
     |>;
     finish r
