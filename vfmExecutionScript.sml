@@ -858,6 +858,16 @@ Definition pop_context_def:
     return (HD s.contexts) (s with contexts := TL s.contexts)
 End
 
+Definition is_call_def:
+  is_call Call = T ∧
+  is_call CallCode = T ∧
+  is_call DelegateCall = T ∧
+  is_call StaticCall = T ∧
+  is_call Create = T ∧
+  is_call Create2 = T ∧
+  is_call _ = F
+End
+
 Definition step_def:
   step s = case do
     context <- get_current_context;
@@ -874,7 +884,7 @@ Definition step_def:
       | SOME op => do
           consume_gas (static_gas op);
           step_inst op;
-          inc_pc (LENGTH (opcode op))
+          if is_call op then return () else inc_pc (LENGTH (opcode op))
         od
     od
   od s of
