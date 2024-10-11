@@ -115,6 +115,20 @@ Datatype:
    |>
 End
 
+Definition base_cost_def:
+  base_cost = 21000n
+End
+
+Definition call_data_cost_def:
+  call_data_cost is_zero =
+  if is_zero then 4n else 16
+End
+
+Definition intrinsic_cost_def:
+  intrinsic_cost (data: byte list) =
+  base_cost + SUM (MAP (λb. call_data_cost (b = 0w)) data)
+End
+
 Definition initial_call_params_def:
   initial_call_params ctxt t =
   <| caller    := t.from
@@ -123,7 +137,7 @@ Definition initial_call_params_def:
    ; value     := t.value
    ; static    := ctxt.static
    ; data      := t.data
-   ; gasLimit  := t.gasLimit
+   ; gasLimit  := t.gasLimit - intrinsic_cost t.data
    ; accounts  := ctxt.accounts
    ; accesses  := ctxt.accesses
    ; outputTo  := ctxt.outputTo
@@ -160,7 +174,7 @@ End
 
 Theorem initial_call_params_simp[simp]:
   (initial_call_params ctxt t).code = ctxt.code ∧
-  (initial_call_params ctxt t).gasLimit = t.gasLimit ∧
+  (initial_call_params ctxt t).gasLimit = t.gasLimit - intrinsic_cost t.data ∧
   (initial_call_params ctxt t).outputTo = ctxt.outputTo
   (* TODO: as needed *)
 Proof
@@ -206,30 +220,36 @@ End
 
 Definition initial_state_def:
   initial_state c a b r t =
+  let sender = (a t.from) in
+  let fee = t.gasLimit * t.gasPrice in
+  if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
+  if sender.balance < fee + t.value then NONE else
+  let updatedSender = sender with <|
+    nonce := SUC sender.nonce;
+    balance := sender.balance - fee - t.value
+  |> in
+  let recipient = a t.to in
+  let updatedRecipient = recipient with balance updated_by $+ t.value in
+  let accounts = (t.to =+ updatedRecipient) $ (t.from =+ updatedSender) a in
   let acc = initial_access_sets t in
-  let ctxt = <| code := (a t.to).code; accounts := a; accesses := acc
+  let ctxt = <| code := recipient.code; accounts := accounts; accesses := acc
               ; outputTo := r; static := F |> in
+  SOME $
   <| contexts := [initial_context ctxt t]
    ; txParams := initial_tx_params c b t
    ; accesses := acc
-   ; accounts := a (* TODO: transfer t.value if needed? *)
+   ; accounts := accounts
    |>
 End
 
-Theorem initial_state_simp[simp]:
-    (initial_state c a b r t).accounts = a
-  ∧ (initial_state c a b r t).accesses = initial_access_sets t
-  ∧ (initial_state c a b r t).txParams = initial_tx_params c b t
+Theorem wf_initial_state:
+  wf_accounts a ∧ initial_state c a b r t = SOME s
+  ⇒
+  wf_state s
 Proof
-  rw[initial_state_def]
-QED
-
-Theorem wf_initial_state[simp]:
-  wf_accounts a ⇒
-  wf_state (initial_state c a b r t)
-Proof
-  rw[wf_accounts_def, wf_state_def]
-  \\ rw[initial_state_def]
+  rw[wf_accounts_def, wf_state_def, initial_state_def] \\ rw[]
+  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
+  \\ rw[]
 QED
 
 val _ = export_theory();

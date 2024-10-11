@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse wordsLib
-     whileTheory
+     arithmeticTheory whileTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory
      vfmOperationTheory vfmComputeTheory
@@ -215,6 +215,8 @@ val () = cv_auto_trans initial_tx_params_def;
 
 val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
 (*
@@ -387,13 +389,6 @@ Definition add_d0g0v0_Cancun_post_def:
      |>
 End
 
-Triviality wf_state_add_d0g0v0_Cancun_pre:
-  ∀c b r. wf_state (initial_state c add_d0g0v0_Cancun_pre b r add_d0g0v0_Cancun_transaction)
-Proof
-  ‘wf_accounts add_d0g0v0_Cancun_pre’ by (EVAL_TAC >> rw[])
-  \\ rw[]
-QED
-
 Theorem add_d0g0v0_Cancun_pre_code:
   (add_d0g0v0_Cancun_pre add_d0g0v0_Cancun_transaction.to).code =
   hex_to_bytes "600060006000600060006004356110000162fffffff100"
@@ -414,34 +409,7 @@ fun eval_match_tac pat =
                  val t = find_term (can (match_term pat)) tm
                in rewrite_tac [EVAL t] end);
 
-Theorem lt_0_w2n_zero_bytes:
-  (0 :num) >= w2n (word_of_bytes F (0w :256 word) [(0w :word8)])
-Proof
-  cv_eval_match_tac ``word_of_bytes _ _ _``
-  \\ EVAL_TAC
-QED
-
-Theorem memory_expansion_cost_d0g0v0:
-  memory_expansion_cost [] (PAD_RIGHT 0w (32 * word_size 0) []) + 2630 ≤ 80000000
-Proof
-  EVAL_TAC
-QED
-
 val () = mk_word_size 256;
-
-Theorem set_byte_0ws:
-  set_byte (0w:word256) 0w 0w e = 0w
-Proof
-  rw[set_byte_def]
-  \\ EVAL_TAC
-QED
-
-Theorem assert_simps:
-  assert T e s = (INL (), s) ∧
-  assert F e s = (INR (Excepted e), s)
-Proof
-  rw[assert_def]
-QED
 
 val () = cv_auto_trans add_d0g0v0_Cancun_pre_def;
 val () = add_d0g0v0_Cancun_post_def |>
@@ -474,6 +442,8 @@ QED
 Definition run_n_def:
   run_n n s = FUNPOW (step o SND) n (INL (), s)
 End
+
+val () = cv_auto_trans run_n_def;
 
 val WHILE_FUNPOW = keccakTheory.WHILE_FUNPOW
 
@@ -513,8 +483,6 @@ Proof
   \\ gs[]
 QED
 
-open arithmeticTheory
-
 Theorem run_with_fuel_to_zero_aux[local]:
   ∀n x s z t m.
     run_with_fuel n (x, s) = SOME (z, t, m) ∧
@@ -552,28 +520,223 @@ Proof
 QED
 
 (*
-Theorem add_d0g0v0_Cancun_correctness:
-  ∃r. run (initial_state 1
+
+cv_eval ``
+  (HD (SND (run_n 16 (initial_state 1
     add_d0g0v0_Cancun_pre
     add_d0g0v0_Cancun_block
     (Memory <| offset := 0; size := 0 |>)
-    add_d0g0v0_Cancun_transaction)
-  = SOME (Finished r) ∧ r.accounts = add_d0g0v0_Cancun_post
+    add_d0g0v0_Cancun_transaction))).contexts).stack
+``
+
+cv_eval ``
+  (EL 0 (SND (run_n 11 (initial_state 1
+    add_d0g0v0_Cancun_pre
+    add_d0g0v0_Cancun_block
+    (Memory <| offset := 0; size := 0 |>)
+    add_d0g0v0_Cancun_transaction))).contexts).pc
+``
+
+initial_context_def
+
+val callee_code = cv_eval ``
+  (HD (SND (run_n 12 (initial_state 1
+    add_d0g0v0_Cancun_pre
+    add_d0g0v0_Cancun_block
+    (Memory <| offset := 0; size := 0 |>)
+    add_d0g0v0_Cancun_transaction))).contexts).callParams.code
+`` |> concl |> rand |> rhs
+
+cv_eval ``parse_opcode (DROP 0 ^callee_code)``
+Push32 -1
+Push32 -1
+Add
+Push1 0
+SStore
+Stop
+
+TypeBase.fields_of``:transaction_state`` |> map fst
+TypeBase.fields_of``:context`` |> map fst
+TypeBase.fields_of``:call_parameters`` |> map fst
+
+cv_eval ``parse_opcode (DROP 21 ^(rhs(concl add_d0g0v0_Cancun_pre_code)))``
+Push1 0
+Push1 0
+Push1 0
+Push1 0
+Push1 0
+Push1 4
+CallDataLoad
+Push2 16 0
+Add
+Push3 255 255 255
+Call
+Stop
+*)
+
+open cv_typeTheory cvTheory
+
+Definition refund_gas_def:
+  refund_gas (sender: address) refund accounts : evm_accounts =
+  (sender =+ accounts sender with balance updated_by $+ refund) accounts
+End
+
+val () = refund_gas_def |>
+  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  cv_auto_trans;
+
+(*
+Theorem add_d0g0v0_Cancun_correctness:
+  ∃s r.
+    initial_state 1
+      add_d0g0v0_Cancun_pre
+      add_d0g0v0_Cancun_block
+      (Memory <| offset := 0; size := 0 |>)
+      add_d0g0v0_Cancun_transaction = SOME s ∧
+    run s = SOME (Finished r) ∧
+    refund_gas add_d0g0v0_Cancun_transaction.from
+      r.refund r.accounts = add_d0g0v0_Cancun_post
 Proof
   rw[run_SOME_run_n, PULL_EXISTS]
-  \\ qmatch_goalsub_abbrev_tac`run_n _ s`
+  \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
+  \\ `s <> NONE`
+   by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
   \\ `∃n z t.
-        run_with_fuel n (INL (), s) = SOME (Finished z, t, 0) ∧
-        z.accounts = add_d0g0v0_Cancun_post`
+        run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
+        refund_gas
+          add_d0g0v0_Cancun_transaction.from z.refund
+          z.accounts = add_d0g0v0_Cancun_post`
       suffices_by (
     strip_tac
+    \\ Cases_on`s` \\ gs[]
     \\ drule run_with_fuel_to_zero
     \\ strip_tac
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ gs[] )
   \\ qunabbrev_tac`s`
-  \\ qexists_tac`12`
-  \\ cv_eval_match_tac``run_with_fuel _ _``
+  \\ qmatch_asmsub_abbrev_tac`Memory m`
+  \\ `m = memory_range 0 0` by (rw[Abbr`m`] \\ cv_eval_match_tac``_``)
+  \\ fs[Abbr`m`]
+  \\ qexists_tac`18`
+  \\ (fn goal as (_, gt) =>
+    let
+      val run_tm = find_term (can (match_term ``run_with_fuel _ _``)) gt
+      val raw_th = cv_eval_raw run_tm
+      val raw_th2 = raw_th |>
+      REWRITE_RULE[
+        cv_typeTheory.to_option_def,
+        cv_typeTheory.to_pair_def,
+        to_vfmExecution_outcome_def,
+        cv_typeTheory.cv_has_shape_def,
+        cvTheory.Num_11,
+        EVAL``2n = 0``,
+        EVAL``2n = 1``,
+        EVAL``1n = 0``,
+        to_vfmExecution_result_def,
+        to_evm_accounts_def,
+        cv_typeTheory.to_list_def,
+        cvTheory.cv_fst_def,
+        cvTheory.cv_snd_def,
+        cvTheory.c2n_def,
+        to_vfmContext_transaction_state_def,
+        to_vfmContext_transaction_parameters_def,
+        to_vfmContext_access_sets_def,
+        to_vfmContext_context_def,
+        to_vfmContext_call_parameters_def,
+        to_vfmContext_return_destination_def,
+        to_vfmContext_memory_range_def,
+        to_evm_accounts_def,
+        to_num_fset_def,
+        to_word_fset_def,
+        to_storage_key_fset_def,
+        to_word_def,
+        to_option_def,
+        cv_has_shape_def,
+        c2n_def, c2b_thm,
+        to_list_def, cv_fst_def, cv_snd_def
+      ]
+    in
+      rewrite_tac[UNDISCH raw_th2]
+    end goal)
+  \\ simp[] \\ EVAL_TAC
+  \\ rw[FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ IF_CASES_TAC
+  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ IF_CASES_TAC
+  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ IF_CASES_TAC
+  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ IF_CASES_TAC
+  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ IF_CASES_TAC
+  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ IF_CASES_TAC
+  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ rw[]
+
+  Globals.max_print_depth := 12
+
+val ts_tm = raw_th2 |> concl |> rhs |> rand |> rand
+
+ts_tm |>
+REWRITE_CONV[
+  to_vfmContext_transaction_state_def,
+  to_vfmContext_transaction_parameters_def,
+  to_vfmContext_access_sets_def,
+  to_vfmContext_context_def,
+  to_vfmContext_call_parameters_def,
+  to_vfmContext_return_destination_def,
+  to_vfmContext_memory_range_def,
+  to_evm_accounts_def,
+  to_num_fset_def,
+  to_word_fset_def,
+  to_storage_key_fset_def,
+  to_word_def,
+  to_option_def,
+  cv_has_shape_def,
+  c2n_def, c2b_thm,
+  to_list_def, cv_fst_def, cv_snd_def
+]
+          |> concl |> rhs
+
+val to_sptree_spt_cs = computeLib.bool_compset();
+val () = computeLib.add_thms [
+  to_sptree_spt_def,
+  cv_has_shape_def,
+  cv_snd_def,
+  cv_fst_def
+] to_sptree_spt_cs;
+
+val spt_tm = raw_th2 |> concl |>
+  find_term (can (match_term ``to_sptree_spt _ _``))
+
+rawterm_pp (fn () => (concl (EVAL spt_tm))) ()
+val probtm = rhs(concl(EVAL spt_tm))
+el 3 (snd (strip_comb probtm))
+term_size probtm
+
+computeLib.CBV_CONV to_sptree_spt_cs spt_tm
+spt_tm |> term_size
+PolyML.Exception.traceException((fn () =>
+  term_to_string (concl (EVAL spt_tm))),(fn (ss,e) => String.concat(ss)))
+(term_to_string (concl (EVAL spt_tm)); NONE)
+handle e => PolyML.Exception.exceptionLocation e
+showSig"Parse"
+(if aconv (concl (EVAL spt_tm)) T then SOME {endLine=0, endPosition=0, file="done", startLine=0,
+startPosition=0} else NONE) handle e => PolyML.Exception.exceptionLocation e
+
+showStruct"PolyML"
+
+showSig"INTEGER"
+Int.maxInt
+
+m``Num _ = Num _``
+f"cv_has_shape"
+Globals.max_print_depth := 13;
+Globals.max_print_depth := ~1;
+
+  add_d0g0v0_Cancun_pre_code
 
   \\_t DEP_REWRITE_TAC[run_with_fuel_to_zero]
   rw[run_def, Once OWHILE_THM, PULL_EXISTS]
