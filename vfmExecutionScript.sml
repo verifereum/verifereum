@@ -765,7 +765,7 @@ Definition step_inst_def:
   ∧ step_inst (Push n ws) =
       bind get_current_context
         (λcontext.
-          let word = word_of_bytes F 0w ws in
+          let word = word_of_bytes F 0w (REVERSE ws) in
           let newStack = word :: context.stack in
           ignore_bind (assert (LENGTH newStack ≤ stack_limit) StackOverflow) (
           set_current_context (context with stack := newStack)))
