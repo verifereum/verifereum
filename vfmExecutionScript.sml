@@ -731,7 +731,7 @@ Definition step_inst_def:
   ∧ step_inst ChainId = push_from_tx (λc t a. n2w t.chainId)
   ∧ step_inst SelfBalance =
       push_from_tx (λc t a. n2w (a c.callParams.callee).balance)
-  ∧ step_inst BaseFee = push_from_tx (λc t a. n2w t.baseFee)
+  ∧ step_inst BaseFee = push_from_tx (λc t a. n2w t.baseFeePerGas)
   ∧ step_inst Pop =
       bind get_current_context
         (λcontext.

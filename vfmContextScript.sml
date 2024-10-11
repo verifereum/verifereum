@@ -8,7 +8,7 @@ Datatype:
   transaction_parameters =
   <| origin         : address
    ; gasPrice       : num
-   ; baseFee        : num
+   ; baseFeePerGas  : num
    ; blockNumber    : num
    ; blockTimeStamp : num
    ; blockCoinBase  : address
@@ -96,12 +96,12 @@ End
 
 Datatype:
   block =
-  <| baseFee    : num
-   ; number     : num
-   ; timeStamp  : num
-   ; coinBase   : address
-   ; gasLimit   : num
-   ; prevRandao : bytes32
+  <| baseFeePerGas : num
+   ; number        : num
+   ; timeStamp     : num
+   ; coinBase      : address
+   ; gasLimit      : num
+   ; prevRandao    : bytes32
    |>
 End
 
@@ -148,7 +148,7 @@ Definition initial_tx_params_def:
   initial_tx_params c b t =
   <| origin         := t.from
    ; gasPrice       := t.gasPrice
-   ; baseFee        := b.baseFee
+   ; baseFeePerGas  := b.baseFeePerGas
    ; blockNumber    := b.number
    ; blockTimeStamp := b.timeStamp
    ; blockCoinBase  := b.coinBase
