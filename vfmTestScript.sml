@@ -228,7 +228,7 @@ BlockchainTests/GeneralStateTests/VMTests/vmArithmeticTest/add.json
 Definition add_d0g0v0_Cancun_block_def:
   add_d0g0v0_Cancun_block =
   <| number := 0x01
-   ; baseFee := 0x0a
+   ; baseFeePerGas := 0x0a
    ; timeStamp := 0x03e8
    ; coinBase := n2w 0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba
    ; gasLimit := 0x05f5e100
@@ -522,12 +522,35 @@ QED
 (*
 
 cv_eval ``
-  (HD (SND (run_n 16 (initial_state 1
+let s =
+(run_n 18 (THE (initial_state 1
     add_d0g0v0_Cancun_pre
     add_d0g0v0_Cancun_block
     (Memory <| offset := 0; size := 0 |>)
-    add_d0g0v0_Cancun_transaction))).contexts).stack
+    add_d0g0v0_Cancun_transaction))) in
+let c = EL 0 (SND s).contexts in
+  (c.callParams.gasLimit, c.gasUsed, c.gasRefund, c.stack,
+  c.callParams.outputTo, c.returnData)
 ``
+
+val cappedGas = 16777215
+val stipend = 0
+cappedGas + stipend
+val callerGasUsed = 16779845
+val accessCost = 2600
+val expansionCost = 0
+val callCost = callerGasUsed - 30
+val true = callCost - cappedGas = accessCost
+val executionCost = 22112
+val calleeGasLeft = cappedGas - executionCost
+val newGasUsed = callerGasUsed - calleeGasLeft
+
+val senderAfterMine = 838137707291124173
+val senderAfterCorrect = 0x0ba1a9ce0b9aa781
+val discrepancy = senderAfterCorrect - senderAfterMine
+val gasLimit = 79978808
+gasLimit - newGasUsed
+discrepancy
 
 cv_eval ``
   (EL 0 (SND (run_n 11 (initial_state 1
@@ -576,17 +599,16 @@ Stop
 
 open cv_typeTheory cvTheory
 
-Definition refund_gas_def:
-  refund_gas (sender: address) refund accounts : evm_accounts =
+Definition refund_fee_def:
+  refund_fee (sender: address) refund accounts : evm_accounts =
   (sender =+ accounts sender with balance updated_by $+ refund) accounts
 End
 
-val () = refund_gas_def |>
+val () = refund_fee_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
-(*
 Theorem add_d0g0v0_Cancun_correctness:
   ∃s r.
     initial_state 1
@@ -595,8 +617,12 @@ Theorem add_d0g0v0_Cancun_correctness:
       (Memory <| offset := 0; size := 0 |>)
       add_d0g0v0_Cancun_transaction = SOME s ∧
     run s = SOME (Finished r) ∧
-    refund_gas add_d0g0v0_Cancun_transaction.from
-      r.refund r.accounts = add_d0g0v0_Cancun_post
+    refund_fee
+      add_d0g0v0_Cancun_transaction.from
+      (* TODO: refund should be limited by gas used / 5 *)
+      (add_d0g0v0_Cancun_block.baseFeePerGas * (r.refund + r.gasLeft))
+      r.accounts
+    = add_d0g0v0_Cancun_post
 Proof
   rw[run_SOME_run_n, PULL_EXISTS]
   \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
@@ -604,8 +630,9 @@ Proof
    by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
   \\ `∃n z t.
         run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
-        refund_gas
-          add_d0g0v0_Cancun_transaction.from z.refund
+        refund_fee
+          add_d0g0v0_Cancun_transaction.from
+          (add_d0g0v0_Cancun_block.baseFeePerGas * (z.refund + z.gasLeft))
           z.accounts = add_d0g0v0_Cancun_post`
       suffices_by (
     strip_tac
@@ -661,22 +688,26 @@ Proof
     end goal)
   \\ simp[] \\ EVAL_TAC
   \\ rw[FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ IF_CASES_TAC
+  \\ Cases_on`x = 0x0000000000000000000000000000000000001000w`
   >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ IF_CASES_TAC
+  \\ Cases_on`x = 0x0000000000000000000000000000000000001001w`
   >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ IF_CASES_TAC
+  \\ Cases_on`x = 0x0000000000000000000000000000000000001002w`
   >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ IF_CASES_TAC
+  \\ Cases_on`x = 0x0000000000000000000000000000000000001003w`
   >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ IF_CASES_TAC
+  \\ Cases_on`x = 0x0000000000000000000000000000000000001004w`
   >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ IF_CASES_TAC
+  \\ gs[]
+  \\ Cases_on`x = 0xccccccccccccccccccccccccccccccccccccccccw`
   >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
+  \\ gs[]
   \\ rw[]
+  >- gs[account_state_component_equality, FUN_EQ_THM]
+  \\ EVAL_TAC
+QED
 
-  Globals.max_print_depth := 12
-
+(*
 val ts_tm = raw_th2 |> concl |> rhs |> rand |> rand
 
 ts_tm |>
@@ -722,183 +753,10 @@ PolyML.Exception.traceException((fn () =>
   term_to_string (concl (EVAL spt_tm))),(fn (ss,e) => String.concat(ss)))
 (term_to_string (concl (EVAL spt_tm)); NONE)
 handle e => PolyML.Exception.exceptionLocation e
-showSig"Parse"
 (if aconv (concl (EVAL spt_tm)) T then SOME {endLine=0, endPosition=0, file="done", startLine=0,
 startPosition=0} else NONE) handle e => PolyML.Exception.exceptionLocation e
 
-showStruct"PolyML"
-
-showSig"INTEGER"
 Int.maxInt
-
-m``Num _ = Num _``
-f"cv_has_shape"
-Globals.max_print_depth := 13;
-Globals.max_print_depth := ~1;
-
-  add_d0g0v0_Cancun_pre_code
-
-  \\_t DEP_REWRITE_TAC[run_with_fuel_to_zero]
-  rw[run_def, Once OWHILE_THM, PULL_EXISTS]
-  \\ cv_eval_match_tac ``step _``
-  \\ rw[Once OWHILE_THM]
-  \\ cv_eval_match_tac ``step _``
-
-  \\ cv_eval_match_tac ``(Memory _)``
-  \\ cv_eval_match_tac ``(initial_state _ _ _ _ _)``
-  initial_state_def
-  cv_in
-  ff"initial_state""cv"
-  step_def
-
-  \\ rw[step_def]
-  \\ rw[Once bind_def]
-  \\ eval_match_tac “get_current_context _”
-  \\ rw[]
-  \\ qmatch_goalsub_abbrev_tac ‘pair_CASE (_ _ ctx) body’
-  \\ cv_eval_match_tac ``parse_opcode _`` \\ rw[]
-  \\ rw[bind_def, ignore_bind_def, assert_def]
-  \\ cv_eval_match_tac ``step_inst _``
-
-  initial_state_def
-  type_of``c.outputTo``
-  TypeBase.fields_of``:memory_range`` |> map type_of
-  type_of``Memory``
-  initial_tx_params_def
-  \\ cv_eval_match_tac ``step _``
-
-  rpt (
-    rw[run_def, Once OWHILE_THM, step_def]
-    (* context *)
-    \\rw[Once bind_def]
-    \\ eval_match_tac “get_current_context _”
-    \\rw[]
-
-    \\qmatch_goalsub_abbrev_tac ‘pair_CASE (_ _ ctx) body’
-
-    (* assert T *)
-    \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-    \\cv_eval_match_tac “parse_opcode _”
-    \\rw[]
-
-    \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-    \\rw[Once bind_def]
-    \\eval_match_tac “get_current_context _”
-    \\qunabbrev_tac ‘ctx’
-
-    \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-    \\rw[Once ignore_bind_def, Once bind_def, set_current_context_def, return_def]
-    \\rw[Once ignore_bind_def, Once bind_def, step_inst_def]
-    \\eval_match_tac “get_current_context _”
-    \\rw[]
-    (* assert T *)
-    \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-    \\rw[Once ignore_bind_def, Once bind_def, set_current_context_def, return_def]
-    (* inc_pair *)
-    \\rw[inc_pc_def]
-    \\rw[Once bind_def]
-    \\eval_match_tac “get_current_context _”
-    \\ rw[]
-    \\rw[Once ignore_bind_def, Once bind_def, set_current_context_def, return_def]
-
-    \\unabbrev_all_tac
-    \\rw[]
-    )
-  \\ rpt
-     (
-     rw[Once OWHILE_THM, step_def]
-     \\qmatch_goalsub_abbrev_tac ‘pair_CASE (_ _ _) body’
-
-     \\rw[Once bind_def]
-     \\eval_match_tac “get_current_context _”
-     \\rw[]
-     (* assert T *)
-     \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-     \\cv_eval_match_tac “parse_opcode _”
-     \\rw[]
-     (* consume gas *)
-     \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-     \\rw[Once bind_def]
-     \\eval_match_tac “get_current_context _”
-     \\rw[]
-     (* assert T *)
-     \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-     \\rw[set_current_context_def, return_def]
-
-     (* step_inst *)
-     \\rw[Once ignore_bind_def, Once bind_def]
-     \\rw[step_inst_def]
-     \\rw[binop_def, stack_op_def]
-     \\rw[Once bind_def, step_inst_def]
-     \\eval_match_tac “get_current_context _”
-     \\rw[]
-     (* assert T *)
-     \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-     \\rw[set_current_context_def, return_def]
-
-     \\rw[inc_pc_def, opcode_def]
-     \\rw[Once bind_def]
-     \\eval_match_tac “get_current_context _”
-     \\rw[]
-     \\rw[set_current_context_def, return_def]
-     \\unabbrev_all_tac
-     \\ rw[]
-     )
-
-  \\rw[set_byte_0ws]
-  \\rw[Once OWHILE_THM, step_def]
-  \\rw[Once bind_def]
-  \\eval_match_tac “get_current_context _”
-  \\rw[]
-  (* assert T *)
-  \\rw[Once ignore_bind_def, Once bind_def, assert_simps]
-  (* parse opcode *)
-  \\cv_eval_match_tac “parse_opcode _”
-  \\rw[]
-
-   (* CONSUME GAS *)
-  \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-  \\rw[Once bind_def]
-  \\eval_match_tac “get_current_context _”
-  \\rw[]
-  (* assert T *)
-  \\rw[Once ignore_bind_def, Once bind_def, assert_def]
-  \\rw[set_current_context_def, return_def]
-
-  \\rw[Once ignore_bind_def, Once bind_def]
-  \\rw[step_inst_def]
-  \\rw[Once bind_def]
-  \\eval_match_tac “get_current_context _”
-  \\rw[]
-      (* assert T *)
-  \\rw[Once ignore_bind_def, Once bind_def, assert_simps]
-  \\rw[Once bind_def, access_address_def]
-  (* return *)
-  \\rw[return_def]
-(* get accounts *)
-  \\rw[Once bind_def, get_accounts_def]
-  \\rw[return_def]
-  \\rw[Once ignore_bind_def, Once bind_def, memory_expansion_cost_def]
-  \\rw[memory_cost_def]
-  \\ ‘word_size 0 = 0’ by rw[word_size_def]
-  \\rw[]
-  \\rw[bitstringTheory.length_pad_right]
-      (* consume gas *)
-  \\rw[Once ignore_bind_def, Once bind_def, consume_gas_def]
-  \\eval_match_tac “get_current_context _”
-  \\rw[]
-  \\rw[Once bind_def, assert_simps]
-  \\rw[set_current_context_def, return_def]
-      (* assert T *)
-  \\rw[Once ignore_bind_def, Once bind_def, assert_simps]
-  \\rw[Once ignore_bind_def, Once bind_def]
-  \\rw[Once bind_def]
-  \\eval_match_tac “get_current_context _”
-  \\rw[]
-
-  \\ cheat
-QED
-Globals.max_print_depth := ~1;
 *)
 
 (*
