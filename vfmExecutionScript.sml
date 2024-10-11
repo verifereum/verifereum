@@ -163,8 +163,8 @@ End
 
 (* \\ rw[transaction_state_component_equality] *)
 
-Definition refund_gas_def:
-  refund_gas n = do
+Definition unuse_gas_def:
+  unuse_gas n = do
     context <- get_current_context;
     assert (n ≤ context.gasUsed) Impossible;
     newContext <<- context with gasUsed := context.gasUsed - n;
@@ -229,7 +229,7 @@ Definition start_context_def:
         newCallee <<- accounts calleeAddress with balance updated_by $+ value;
         update_accounts $ (callerAddress =+ newCaller) o (calleeAddress =+ newCallee)
       od else do
-        refund_gas c.callParams.gasLimit;
+        unuse_gas c.callParams.gasLimit;
         context <- get_current_context;
         set_current_context $ context with
           <| stack := b2w F :: context.stack

@@ -371,8 +371,8 @@ val () = “consume_gas n s” |>
   SIMP_CONV std_ss [consume_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
 
-val () = “refund_gas n s” |>
-  SIMP_CONV std_ss [refund_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
+val () = “unuse_gas n s” |>
+  SIMP_CONV std_ss [unuse_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
 
 val () = “push_context c s” |>
