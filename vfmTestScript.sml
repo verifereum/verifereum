@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse wordsLib
+open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
      arithmeticTheory whileTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory
@@ -21,201 +21,126 @@ val _ = cv_auto_trans hex_to_bytes_def;
 
 (* cv_eval “hex_to_bytes "693c61390000000000000000000000000000000000000000000000000000000000000000"” *)
 
-Definition empty_accounts_def:
-  empty_accounts (a: address) = empty_account_state
+fun cv_eval_match_tac pat =
+  goal_term (fn tm =>
+               let
+                 val t = find_term (can (match_term pat)) tm
+               in rewrite_tac [cv_eval t] end);
+
+fun eval_match_tac pat =
+  goal_term (fn tm =>
+               let
+                 val t = find_term (can (match_term pat)) tm
+               in rewrite_tac [EVAL t] end);
+
+Definition run_with_fuel_def:
+  run_with_fuel n (r, s) =
+  if ISR r then SOME (OUTR r, s, n)
+  else case n of
+  | 0 => NONE
+  | SUC m => run_with_fuel m (step s)
 End
 
-Theorem build_spt_empty_accounts[simp]:
-  ∀n. build_spt empty_account_state n empty_accounts = LN
-Proof
-  Induct \\ rw[build_spt_def]
-  \\ gs[empty_accounts_def]
-QED
+val run_with_fuel_pre_def = cv_auto_trans_pre run_with_fuel_def;
 
-Theorem empty_accounts_cv_rep[cv_rep]:
-  from_evm_accounts empty_accounts = Num 0
-Proof
-  rw[from_evm_accounts_def, from_sptree_sptree_spt_def]
-QED
+val run_with_fuel_ind = theorem"run_with_fuel_ind";
 
-open dep_rewrite sptreeTheory finite_setTheory listTheory
-
-Theorem from_list_from_word_MAP_w2n:
-  from_list from_word l =
-  from_list Num (MAP w2n l)
+Theorem run_with_fuel_pre[cv_pre]:
+  ∀n v. run_with_fuel_pre n v
 Proof
-  Induct_on`l`
-  \\ rw[cv_typeTheory.from_list_def, cv_typeTheory.from_word_def]
-QED
-
-Theorem fset_ABS_word_cv_rep[cv_rep]:
-  from_word_fset (fset_ABS l) =
-  cv_list_to_num_set (from_list from_word l)
-Proof
-  rw[from_word_fset_def, from_num_fset_def,
-     from_list_from_word_MAP_w2n,
-     GSYM cv_list_to_num_set_thm]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[spt_eq_thm]
-  \\ simp[wf_list_to_num_set, lookup_list_to_num_set, MEM_fset_REP]
-  \\ simp[GSYM fromSet_set, IN_fromSet, MEM_MAP]
-  \\ metis_tac[]
-QED
-
-Theorem fIMAGE_fUNION:
-  fIMAGE f (fUNION s1 s2) =
-  fUNION (fIMAGE f s1) (fIMAGE f s2)
-Proof
-  rw[finite_setTheory.EXTENSION, EQ_IMP_THM]
-  \\ metis_tac[]
-QED
-
-Theorem fUNION_storage_key_cv_rep[cv_rep]:
-  from_storage_key_fset (fUNION s1 s2) =
-  cv_union (from_storage_key_fset s1) (from_storage_key_fset s2)
-Proof
-  rw[from_storage_key_fset_def, fIMAGE_fUNION, fUNION_num_cv_rep]
-QED
-
-Theorem fEMPTY_storage_key_cv_rep[cv_rep]:
-  from_storage_key_fset fEMPTY = Num 0
-Proof
-  rw[from_storage_key_fset_def, fEMPTY_num_cv_rep]
-QED
-
-Theorem toSet_fset_ABS:
-  !l. toSet (fset_ABS l) = set l
-Proof
-  gen_tac \\
-  qspec_then`l`(SUBST1_TAC o SYM o Q.AP_TERM`toSet`)fromSet_set
-  \\ irule toSet_fromSet
-  \\ rw[]
-QED
-
-Theorem toSet_fUNION[simp]:
-  toSet (fUNION s1 s2) = (toSet s1) UNION (toSet s2)
-Proof
-  rw[pred_setTheory.EXTENSION, GSYM fIN_IN]
-QED
-
-Theorem fset_ABS_MAP:
-  fset_ABS (MAP f l) = fIMAGE f (fset_ABS l)
-Proof
-  rw[finite_setTheory.EXTENSION, fIN_IN, toSet_fset_ABS, MEM_MAP]
-  \\ metis_tac[]
-QED
-
-Theorem fset_REP_fEMPTY[simp]:
-  fset_REP fEMPTY = []
-Proof
-  rw[rich_listTheory.NIL_NO_MEM, MEM_fset_REP]
-QED
-
-Theorem fIN_fset_ABS:
-  fIN x (fset_ABS l) <=> MEM x l
-Proof
-  rw[fIN_def]
-  \\ mp_tac fset_QUOTIENT
-  \\ rewrite_tac[quotientTheory.QUOTIENT_def,fsequiv_def]
+  simp[pairTheory.FORALL_PROD]
+  \\ ho_match_mp_tac run_with_fuel_ind
   \\ rpt strip_tac
-  \\ `set (fset_REP (fset_ABS l)) = set l`
-  suffices_by (
-    rewrite_tac[pred_setTheory.EXTENSION]
-    \\ metis_tac[] )
-  \\ asm_simp_tac std_ss []
+  \\ rw[Once run_with_fuel_pre_def]
 QED
 
-Theorem fBIGUNION_fset_ABS_FOLDL_aux[local]:
-  !l s. FOLDL fUNION s l = fUNION s (fBIGUNION (fset_ABS l))
+Definition run_n_def:
+  run_n n s = FUNPOW (step o SND) n (INL (), s)
+End
+
+val () = cv_auto_trans run_n_def;
+
+val WHILE_FUNPOW = keccakTheory.WHILE_FUNPOW
+
+Theorem run_SOME_run_n:
+  run s = SOME z ⇔
+  (∃n t. run_n n s = (INR z, t) ∧
+         ∀m. m < n ⇒ ISL (FST (run_n m s)))
 Proof
-  Induct \\ rw[fBIGUNION_def, GSYM fEMPTY_def]
-  \\ rw[GSYM fUNION_ASSOC] \\ AP_TERM_TAC
-  \\ rw[finite_setTheory.EXTENSION]
-  \\ qmatch_goalsub_abbrev_tac`_ \/ fIN e s <=> fIN e hs`
-  \\ `hs = fUNION h s`
-  by (
-    rw[Once (GSYM toSet_11)]
-    \\ rw[Abbr`hs`, Abbr`s`, toSet_fset_ABS]
-    \\ rw[pred_setTheory.EXTENSION, MEM_FLAT, PULL_EXISTS, MEM_MAP]
-    \\ rw[MEM_fset_REP, fIN_fset_ABS, GSYM fIN_IN]
-    \\ metis_tac[] )
+  rw[run_def, run_n_def, EQ_IMP_THM]
+  >- (
+    imp_res_tac OWHILE_WHILE
+    \\ imp_res_tac OWHILE_ENDCOND
+    \\ qmatch_assum_rename_tac `~_ p`
+    \\ Cases_on`p` \\ gs[]
+    \\ qexists_tac`LEAST n. ~(ISL o FST) (FUNPOW (step o SND) n (INL (), s))`
+    \\ DEP_REWRITE_TAC[GSYM WHILE_FUNPOW]
+    \\ gs[combinTheory.o_DEF]
+    \\ numLib.LEAST_ELIM_TAC \\ gs[]
+    \\ conj_asm1_tac
+    >- (
+      spose_not_then strip_assume_tac
+      \\ qmatch_assum_abbrev_tac `OWHILE G f z = _`
+      \\ `∀n. G (FUNPOW f n z)` by  (
+        rw[Abbr`G`] \\ gs[sumTheory.NOT_ISR_ISL] )
+      \\ imp_res_tac OWHILE_EQ_NONE
+      \\ gs[] )
+    \\ rw[] )
+  \\ simp[OWHILE_def]
+  \\ conj_asm1_tac >- ( qexists_tac`n` \\ gs[] )
+  \\ numLib.LEAST_ELIM_TAC
+  \\ conj_tac >- metis_tac[]
   \\ rw[]
+  \\ qmatch_goalsub_rename_tac`FUNPOW _ m`
+  \\ Cases_on`m < n` >- metis_tac[sumTheory.NOT_ISR_ISL]
+  \\ Cases_on`n < m` >- metis_tac[SIMP_CONV std_ss [] ``ISL (INR _)``, pairTheory.FST]
+  \\ `n = m` by gs[]
+  \\ gs[]
 QED
 
-Theorem fBIGUNION_fset_ABS_FOLDL:
-  fBIGUNION (fset_ABS l) = FOLDL fUNION fEMPTY l
+Theorem run_with_fuel_to_zero_aux[local]:
+  ∀n x s z t m.
+    run_with_fuel n (x, s) = SOME (z, t, m) ∧
+    ISL (FST (x, s)) ∧ m = 0 ⇒
+    run_n n (SND (x, s)) = (INR z, t) ∧
+    (∀l. l < n ⇒ ISL (FST (run_n l (SND (x, s)))))
 Proof
-  rw[fBIGUNION_fset_ABS_FOLDL_aux]
+  ho_match_mp_tac run_with_fuel_ind
+  \\ gs[]
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ qhdtm_x_assum`run_with_fuel`mp_tac
+  \\ simp[Once run_with_fuel_def]
+  \\ Cases_on`r` \\ gs[]
+  \\ gs[num_case_eq, run_n_def]
+  \\ disch_then strip_assume_tac
+  \\ gvs[]
+  \\ simp[Once FUNPOW]
+  \\ Cases_on`step s` \\ gs[]
+  \\ qmatch_assum_rename_tac`step s = (x,y)`
+  \\ Cases_on`x` \\ gs[]
+  >- ( Cases \\ simp[Once FUNPOW] )
+  \\ qhdtm_x_assum`run_with_fuel`mp_tac
+  \\ rw[Once run_with_fuel_def]
 QED
 
-Theorem fIMAGE_MAP:
-  fIMAGE f s = fset_ABS (MAP f (fset_REP s))
+Theorem run_with_fuel_to_zero:
+  run_with_fuel n (INL (), s) = SOME (z, t, 0) ⇒
+  run_n n s = (INR z, t) ∧
+  (∀m. m < n ⇒ ISL (FST (run_n m s)))
 Proof
-  rw[finite_setTheory.EXTENSION, fIN_fset_ABS, MEM_MAP, MEM_fset_REP]
-  \\ metis_tac[]
+  strip_tac
+  \\ drule run_with_fuel_to_zero_aux
+  \\ gs[]
 QED
 
-(* TODO: does this already exist? *)
-Definition domain_list_def:
-  domain_list LN = [] ∧
-  domain_list (LS _) = [0n] ∧
-  domain_list (BN t1 t2) =
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2) ∧
-  domain_list (BS t1 v t2) =
-     0::
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2)
+Definition refund_fee_def:
+  refund_fee (sender: address) refund accounts : evm_accounts =
+  (sender =+ accounts sender with balance updated_by $+ refund) accounts
 End
 
-val () = cv_auto_trans domain_list_def;
-
-val cv_domain_list_thm = theorem"cv_domain_list_thm";
-
-Theorem set_domain_list:
-  set (domain_list t) = domain t
-Proof
-  Induct_on`t` \\ rw[domain_list_def, LIST_TO_SET_MAP]
-  \\ rw[pred_setTheory.EXTENSION] \\ metis_tac[]
-QED
-
-Definition MAP_word_join_num_def:
-  MAP_word_join_num x ls =
-  MAP (w2n : (256 + 160) word -> num o flip word_join x o n2w) ls
-End
-
-val () = MAP_word_join_num_def |> SIMP_RULE std_ss [combinTheory.C_DEF] |> cv_auto_trans;
-val cv_MAP_word_join_num_thm = theorem "cv_MAP_word_join_num_thm";
-
-Theorem from_storage_key_fset_fIMAGE_SK_cv_rep[cv_rep]:
-  from_storage_key_fset (fIMAGE (SK x) s) =
-  cv_list_to_num_set $
-    cv_MAP_word_join_num (from_word x) (cv_domain_list (from_word_fset s))
-Proof
-  rw[from_storage_key_fset_def, from_num_fset_def,
-     from_word_fset_def, GSYM cv_domain_list_thm,
-     GSYM cv_MAP_word_join_num_thm,
-     GSYM cv_list_to_num_set_thm]
-  \\ AP_TERM_TAC
-  \\ DEP_REWRITE_TAC[spt_eq_thm]
-  \\ simp[wf_list_to_num_set, lookup_list_to_num_set,
-          MEM_fset_REP, MAP_word_join_num_def, MEM_MAP,
-          set_domain_list, domain_list_to_num_set, PULL_EXISTS]
-  \\ metis_tac[]
-QED
-
-val () = initial_access_sets_def
- |> SIMP_RULE std_ss [
-      GSYM fset_ABS_MAP,
-      fBIGUNION_fset_ABS_FOLDL
-    ]
- |> cv_auto_trans;
-
-val () = cv_auto_trans initial_tx_params_def;
-
-val () = initial_state_def |>
+val () = refund_fee_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
@@ -397,127 +322,12 @@ Proof
        update_account_def]
 QED
 
-fun cv_eval_match_tac pat =
-  goal_term (fn tm =>
-               let
-                 val t = find_term (can (match_term pat)) tm
-               in rewrite_tac [cv_eval t] end);
-
-fun eval_match_tac pat =
-  goal_term (fn tm =>
-               let
-                 val t = find_term (can (match_term pat)) tm
-               in rewrite_tac [EVAL t] end);
-
-val () = mk_word_size 256;
-
 val () = cv_auto_trans add_d0g0v0_Cancun_pre_def;
 val () = add_d0g0v0_Cancun_post_def |>
   ONCE_REWRITE_RULE[GSYM update_storage_def] |>
   cv_auto_trans;
 val () = cv_auto_trans add_d0g0v0_Cancun_transaction_def;
 val () = cv_auto_trans add_d0g0v0_Cancun_block_def;
-
-Definition run_with_fuel_def:
-  run_with_fuel n (r, s) =
-  if ISR r then SOME (OUTR r, s, n)
-  else case n of
-  | 0 => NONE
-  | SUC m => run_with_fuel m (step s)
-End
-
-val run_with_fuel_pre_def = cv_auto_trans_pre run_with_fuel_def;
-
-val run_with_fuel_ind = theorem"run_with_fuel_ind";
-
-Theorem run_with_fuel_pre[cv_pre]:
-  ∀n v. run_with_fuel_pre n v
-Proof
-  simp[pairTheory.FORALL_PROD]
-  \\ ho_match_mp_tac run_with_fuel_ind
-  \\ rpt strip_tac
-  \\ rw[Once run_with_fuel_pre_def]
-QED
-
-Definition run_n_def:
-  run_n n s = FUNPOW (step o SND) n (INL (), s)
-End
-
-val () = cv_auto_trans run_n_def;
-
-val WHILE_FUNPOW = keccakTheory.WHILE_FUNPOW
-
-Theorem run_SOME_run_n:
-  run s = SOME z ⇔
-  (∃n t. run_n n s = (INR z, t) ∧
-         ∀m. m < n ⇒ ISL (FST (run_n m s)))
-Proof
-  rw[run_def, run_n_def, EQ_IMP_THM]
-  >- (
-    imp_res_tac OWHILE_WHILE
-    \\ imp_res_tac OWHILE_ENDCOND
-    \\ qmatch_assum_rename_tac `~_ p`
-    \\ Cases_on`p` \\ gs[]
-    \\ qexists_tac`LEAST n. ~(ISL o FST) (FUNPOW (step o SND) n (INL (), s))`
-    \\ DEP_REWRITE_TAC[GSYM WHILE_FUNPOW]
-    \\ gs[combinTheory.o_DEF]
-    \\ numLib.LEAST_ELIM_TAC \\ gs[]
-    \\ conj_asm1_tac
-    >- (
-      spose_not_then strip_assume_tac
-      \\ qmatch_assum_abbrev_tac `OWHILE G f z = _`
-      \\ `∀n. G (FUNPOW f n z)` by  (
-        rw[Abbr`G`] \\ gs[sumTheory.NOT_ISR_ISL] )
-      \\ imp_res_tac OWHILE_EQ_NONE
-      \\ gs[] )
-    \\ rw[] )
-  \\ simp[OWHILE_def]
-  \\ conj_asm1_tac >- ( qexists_tac`n` \\ gs[] )
-  \\ numLib.LEAST_ELIM_TAC
-  \\ conj_tac >- metis_tac[]
-  \\ rw[]
-  \\ qmatch_goalsub_rename_tac`FUNPOW _ m`
-  \\ Cases_on`m < n` >- metis_tac[sumTheory.NOT_ISR_ISL]
-  \\ Cases_on`n < m` >- metis_tac[SIMP_CONV std_ss [] ``ISL (INR _)``, pairTheory.FST]
-  \\ `n = m` by gs[]
-  \\ gs[]
-QED
-
-Theorem run_with_fuel_to_zero_aux[local]:
-  ∀n x s z t m.
-    run_with_fuel n (x, s) = SOME (z, t, m) ∧
-    ISL (FST (x, s)) ∧ m = 0 ⇒
-    run_n n (SND (x, s)) = (INR z, t) ∧
-    (∀l. l < n ⇒ ISL (FST (run_n l (SND (x, s)))))
-Proof
-  ho_match_mp_tac run_with_fuel_ind
-  \\ gs[]
-  \\ rpt gen_tac \\ strip_tac
-  \\ rpt gen_tac \\ strip_tac
-  \\ qhdtm_x_assum`run_with_fuel`mp_tac
-  \\ simp[Once run_with_fuel_def]
-  \\ Cases_on`r` \\ gs[]
-  \\ gs[num_case_eq, run_n_def]
-  \\ disch_then strip_assume_tac
-  \\ gvs[]
-  \\ simp[Once FUNPOW]
-  \\ Cases_on`step s` \\ gs[]
-  \\ qmatch_assum_rename_tac`step s = (x,y)`
-  \\ Cases_on`x` \\ gs[]
-  >- ( Cases \\ simp[Once FUNPOW] )
-  \\ qhdtm_x_assum`run_with_fuel`mp_tac
-  \\ rw[Once run_with_fuel_def]
-QED
-
-Theorem run_with_fuel_to_zero:
-  run_with_fuel n (INL (), s) = SOME (z, t, 0) ⇒
-  run_n n s = (INR z, t) ∧
-  (∀m. m < n ⇒ ISL (FST (run_n m s)))
-Proof
-  strip_tac
-  \\ drule run_with_fuel_to_zero_aux
-  \\ gs[]
-QED
 
 (*
 
@@ -598,16 +408,6 @@ Stop
 *)
 
 open cv_typeTheory cvTheory
-
-Definition refund_fee_def:
-  refund_fee (sender: address) refund accounts : evm_accounts =
-  (sender =+ accounts sender with balance updated_by $+ refund) accounts
-End
-
-val () = refund_fee_def |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  cv_auto_trans;
 
 Theorem add_d0g0v0_Cancun_correctness:
   ∃s r.
