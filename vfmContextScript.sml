@@ -137,7 +137,7 @@ Definition initial_call_params_def:
    ; value     := t.value
    ; static    := ctxt.static
    ; data      := t.data
-   ; gasLimit  := t.gasLimit - intrinsic_cost t.data
+   ; gasLimit  := t.gasLimit
    ; accounts  := ctxt.accounts
    ; accesses  := ctxt.accesses
    ; outputTo  := ctxt.outputTo
@@ -174,7 +174,7 @@ End
 
 Theorem initial_call_params_simp[simp]:
   (initial_call_params ctxt t).code = ctxt.code ∧
-  (initial_call_params ctxt t).gasLimit = t.gasLimit - intrinsic_cost t.data ∧
+  (initial_call_params ctxt t).gasLimit = t.gasLimit ∧
   (initial_call_params ctxt t).outputTo = ctxt.outputTo
   (* TODO: as needed *)
 Proof
@@ -218,6 +218,22 @@ Definition initial_access_sets_def:
    |>
 End
 
+Definition apply_intrinsic_cost_def:
+  apply_intrinsic_cost c =
+  c with callParams updated_by (λp.
+    p with gasLimit updated_by (λl.
+      l - intrinsic_cost p.data
+    )
+  )
+End
+
+Theorem wf_context_apply_intrinsic_cost[simp]:
+  wf_context (apply_intrinsic_cost c) =
+  wf_context c
+Proof
+  rw[apply_intrinsic_cost_def, wf_context_def]
+QED
+
 Definition initial_state_def:
   initial_state c a b r t =
   let sender = (a t.from) in
@@ -235,7 +251,7 @@ Definition initial_state_def:
   let ctxt = <| code := recipient.code; accounts := accounts; accesses := acc
               ; outputTo := r; static := F |> in
   SOME $
-  <| contexts := [initial_context ctxt t]
+  <| contexts := [apply_intrinsic_cost $ initial_context ctxt t]
    ; txParams := initial_tx_params c b t
    ; accesses := acc
    ; accounts := accounts
