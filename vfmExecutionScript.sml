@@ -421,13 +421,15 @@ Definition step_call_def:
       if 0 < value ∧ toAccountEmpty then 25000 else 0
     else 0;
     consume_gas (expansionCost + accessCost + transferCost + positiveValueCost);
-    gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+    assert (context.callParams.static ⇒ value = 0) WriteInStaticContext;
+    spentContext <- get_current_context;
+    gasLeft <<- context.callParams.gasLimit - spentContext.gasUsed;
     stipend <<- if 0 < value then 2300 else 0;
     cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
-    assert (context.callParams.static ⇒ value = 0) WriteInStaticContext;
     consume_gas cappedGas;
+    spentCappedContext <- get_current_context;
     accesses <- get_current_accesses;
-    newContext <<- context with <| stack := newStack; memory := newMemory |>;
+    newContext <<- spentCappedContext with <| stack := newStack; memory := newMemory |>;
     set_current_context newContext;
     subContextTx <<- <|
         from     := if call_type = Delegate
@@ -554,22 +556,38 @@ Definition step_sstore_def:
       then if originalValue = 0w then 20000 else 2900
       else 100;
     dynamicGas <<- baseDynamicGas + if slotWarm then 0 else 2100;
+    consume_gas dynamicGas;
+    spentContext <- get_current_context;
+    newStack <<- DROP 2 spentContext.stack;
+    newContext <<- spentContext with stack := newStack;
+    newContextRefunded <<-
+      if value ≠ currentValue then
+        if currentValue = originalValue then
+          if originalValue ≠ 0w ∧ value = 0w then
+            newContext with gasRefund updated_by $+ 4800
+          else newContext
+        else
+          let c =
+            if originalValue ≠ 0w then
+              if currentValue = 0w then
+                newContext with gasRefund updated_by $- 4800
+              else if value = 0w then
+                newContext with gasRefund updated_by $+ 4800
+              else newContext
+            else newContext
+          in
+            if value = originalValue then
+              if originalValue = 0w then
+                c with gasRefund updated_by $+ (20000 - 100)
+              else
+                c with gasRefund updated_by $+ (5000 - 2100 - 100)
+            else c
+      else newContext;
+    set_current_context newContextRefunded;
+    assert (¬context.callParams.static) WriteInStaticContext;
     newStorage <<- (key =+ value) account.storage;
     newAccount <<- account with storage := newStorage;
-    newStack <<- DROP 2 context.stack;
-    newContext <<- context with stack := newStack;
-    newContextRefunded <<-
-      if currentValue ≠ value ∧ originalValue ≠ 0w then
-        if currentValue = 0w then
-          newContext with gasRefund updated_by flip $- 15000
-        else if value = 0w then
-          newContext with gasRefund updated_by flip $+ 15000
-        else newContext
-      else newContext;
-    consume_gas dynamicGas;
-    assert (¬context.callParams.static) WriteInStaticContext;
-    update_accounts (address =+ newAccount);
-    set_current_context newContextRefunded
+    update_accounts (address =+ newAccount)
   od
 End
 
