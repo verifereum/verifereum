@@ -135,15 +135,20 @@ Proof
   \\ gs[]
 QED
 
-Definition refund_fee_def:
-  refund_fee (sender: address) refund accounts : evm_accounts =
-  (sender =+ accounts sender with balance updated_by $+ refund) accounts
+Definition update_beacon_block_def:
+  update_beacon_block b accounts =
+  let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
+  let buffer_length = 8191n in
+  let timestamp_idx = b.timeStamp MOD buffer_length in
+  let root_idx = timestamp_idx + buffer_length in
+  let a = lookup_account accounts addr in
+  let s0 = a.storage in
+  let s1 = update_storage s0 (n2w timestamp_idx) (n2w b.timeStamp) in
+  let s2 = update_storage s1 (n2w root_idx) b.parentBeaconBlockRoot in
+  update_account accounts addr $ a with storage := s2
 End
 
-val () = refund_fee_def |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  cv_auto_trans;
+val () = cv_auto_trans update_beacon_block_def;
 
 (*
 https://github.com/ethereum/tests
@@ -192,21 +197,6 @@ fun cv_eval_run_with_fuel_tac (goal as (_, gt)) = let
 in
   rewrite_tac[UNDISCH raw_th2]
 end goal;
-
-Definition update_beacon_block_def:
-  update_beacon_block b accounts =
-  let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
-  let buffer_length = 8191n in
-  let timestamp_idx = b.timeStamp MOD buffer_length in
-  let root_idx = timestamp_idx + buffer_length in
-  let a = lookup_account accounts addr in
-  let s0 = a.storage in
-  let s1 = update_storage s0 (n2w timestamp_idx) (n2w b.timeStamp) in
-  let s2 = update_storage s1 (n2w root_idx) b.parentBeaconBlockRoot in
-  update_account accounts addr $ a with storage := s2
-End
-
-val () = cv_auto_trans update_beacon_block_def;
 
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
@@ -289,46 +279,41 @@ val () = cv_auto_trans transaction_def;
 val () = cv_auto_trans block_def;
 val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
 
+(* TODO: move *)
+val () = cv_auto_trans empty_return_destination_def;
+(* -- *)
+
 Theorem add_d0g0v0_Cancun_correctness:
-  ∃s r.
-    initial_state 1
+  ∃r.
+    run_transaction 1
       add_d0g0v0_Cancun_pre
       add_d0g0v0_Cancun_block
-      (Memory <| offset := 0; size := 0 |>)
-      add_d0g0v0_Cancun_transaction = SOME s ∧
-    run s = SOME (Finished r) ∧
-    update_beacon_block add_d0g0v0_Cancun_block $ (* TODO: proper block processing *)
-    refund_fee
-      add_d0g0v0_Cancun_transaction.from
-      (* TODO: refund should be limited by gas used / 5 *)
-      (add_d0g0v0_Cancun_block.baseFeePerGas * (r.refund + r.gasLeft))
-      r.accounts
-    = add_d0g0v0_Cancun_post
+      add_d0g0v0_Cancun_transaction
+    = SOME (Finished r) ∧
+    update_beacon_block add_d0g0v0_Cancun_block r.accounts = add_d0g0v0_Cancun_post
 Proof
-  rw[run_SOME_run_n, PULL_EXISTS]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
-  \\ `s <> NONE` by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
-  \\ `∃n z t.
-        run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
-        update_beacon_block add_d0g0v0_Cancun_block $
-        refund_fee
-          add_d0g0v0_Cancun_transaction.from
-          (add_d0g0v0_Cancun_block.baseFeePerGas * (z.refund + z.gasLeft))
-          z.accounts = add_d0g0v0_Cancun_post`
-      suffices_by (
+  rw[run_transaction_def]
+  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
+  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
+  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
+  \\ simp[run_SOME_run_n, PULL_EXISTS]
+  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
+  \\ rewrite_tac[CONJ_ASSOC]
+  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
+  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
+              P r` suffices_by (
     strip_tac
-    \\ Cases_on`s` \\ gs[]
     \\ drule run_with_fuel_to_zero
     \\ strip_tac
+    \\ qunabbrev_tac`Q`
+    \\ simp[]
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ gs[] )
-  \\ qunabbrev_tac`s`
-  \\ qmatch_asmsub_abbrev_tac`Memory m`
-  \\ `m = memory_range 0 0` by (rw[Abbr`m`] \\ cv_eval_match_tac``_``)
-  \\ fs[Abbr`m`]
+  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
+  \\ qunabbrev_tac`x`
   \\ qexists_tac`18`
   \\ cv_eval_run_with_fuel_tac
-  \\ simp[] \\ EVAL_TAC
+  \\ simp[Abbr`P`] \\ EVAL_TAC
   \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
@@ -419,45 +404,36 @@ Call
 *)
 
 Theorem add_d1g0v0_Cancun_correctness:
-  ∃s r.
-    initial_state 1
+  ∃r.
+    run_transaction 1
       add_d1g0v0_Cancun_pre
       add_d1g0v0_Cancun_block
-      (Memory <| offset := 0; size := 0 |>)
-      add_d1g0v0_Cancun_transaction = SOME s ∧
-    run s = SOME (Finished r) ∧
-    update_beacon_block add_d1g0v0_Cancun_block $ (* TODO: proper block processing *)
-    refund_fee
-      add_d1g0v0_Cancun_transaction.from
-      (* TODO: refund should be limited by gas used / 5 *)
-      (add_d1g0v0_Cancun_block.baseFeePerGas * (r.refund + r.gasLeft))
-      r.accounts
-    = add_d1g0v0_Cancun_post
+      add_d1g0v0_Cancun_transaction
+    = SOME (Finished r) ∧
+    update_beacon_block add_d1g0v0_Cancun_block r.accounts = add_d1g0v0_Cancun_post
 Proof
-  rw[run_SOME_run_n, PULL_EXISTS]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
-  \\ `s <> NONE` by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
-  \\ `∃n z t.
-        run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
-        update_beacon_block add_d1g0v0_Cancun_block $
-        refund_fee
-          add_d1g0v0_Cancun_transaction.from
-          (add_d1g0v0_Cancun_block.baseFeePerGas * (z.refund + z.gasLeft))
-          z.accounts = add_d1g0v0_Cancun_post`
-      suffices_by (
+  rw[run_transaction_def]
+  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
+  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
+  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
+  \\ simp[run_SOME_run_n, PULL_EXISTS]
+  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
+  \\ rewrite_tac[CONJ_ASSOC]
+  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
+  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
+              P r` suffices_by (
     strip_tac
-    \\ Cases_on`s` \\ gs[]
     \\ drule run_with_fuel_to_zero
     \\ strip_tac
+    \\ qunabbrev_tac`Q`
+    \\ simp[]
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ gs[] )
-  \\ qunabbrev_tac`s`
-  \\ qmatch_asmsub_abbrev_tac`Memory m`
-  \\ `m = memory_range 0 0` by (rw[Abbr`m`] \\ cv_eval_match_tac``_``)
-  \\ fs[Abbr`m`]
+  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
+  \\ qunabbrev_tac`x`
   \\ qexists_tac`18`
   \\ cv_eval_run_with_fuel_tac
-  \\ simp[] \\ EVAL_TAC
+  \\ simp[Abbr`P`] \\ EVAL_TAC
   \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
@@ -515,45 +491,36 @@ val () = cv_auto_trans block_def;
 val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
 
 Theorem add_d2g0v0_Cancun_correctness:
-  ∃s r.
-    initial_state 1
+  ∃r.
+    run_transaction 1
       add_d2g0v0_Cancun_pre
       add_d2g0v0_Cancun_block
-      (Memory <| offset := 0; size := 0 |>)
-      add_d2g0v0_Cancun_transaction = SOME s ∧
-    run s = SOME (Finished r) ∧
-    update_beacon_block add_d2g0v0_Cancun_block $ (* TODO: proper block processing *)
-    refund_fee
-      add_d2g0v0_Cancun_transaction.from
-      (* TODO: refund should be limited by gas used / 5 *)
-      (add_d2g0v0_Cancun_block.baseFeePerGas * (r.refund + r.gasLeft))
-      r.accounts
-    = add_d2g0v0_Cancun_post
+      add_d2g0v0_Cancun_transaction
+    = SOME (Finished r) ∧
+    update_beacon_block add_d2g0v0_Cancun_block r.accounts = add_d2g0v0_Cancun_post
 Proof
-  rw[run_SOME_run_n, PULL_EXISTS]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
-  \\ `s <> NONE` by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
-  \\ `∃n z t.
-        run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
-        update_beacon_block add_d2g0v0_Cancun_block $
-        refund_fee
-          add_d2g0v0_Cancun_transaction.from
-          (add_d2g0v0_Cancun_block.baseFeePerGas * (z.refund + z.gasLeft))
-          z.accounts = add_d2g0v0_Cancun_post`
-      suffices_by (
+  rw[run_transaction_def]
+  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
+  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
+  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
+  \\ simp[run_SOME_run_n, PULL_EXISTS]
+  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
+  \\ rewrite_tac[CONJ_ASSOC]
+  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
+  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
+              P r` suffices_by (
     strip_tac
-    \\ Cases_on`s` \\ gs[]
     \\ drule run_with_fuel_to_zero
     \\ strip_tac
+    \\ qunabbrev_tac`Q`
+    \\ simp[]
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ gs[] )
-  \\ qunabbrev_tac`s`
-  \\ qmatch_asmsub_abbrev_tac`Memory m`
-  \\ `m = memory_range 0 0` by (rw[Abbr`m`] \\ cv_eval_match_tac``_``)
-  \\ fs[Abbr`m`]
+  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
+  \\ qunabbrev_tac`x`
   \\ qexists_tac`18`
   \\ cv_eval_run_with_fuel_tac
-  \\ simp[] \\ EVAL_TAC
+  \\ simp[Abbr`P`] \\ EVAL_TAC
   \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
@@ -611,45 +578,36 @@ val () = cv_auto_trans block_def;
 val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
 
 Theorem add_d3g0v0_Cancun_correctness:
-  ∃s r.
-    initial_state 1
+  ∃r.
+    run_transaction 1
       add_d3g0v0_Cancun_pre
       add_d3g0v0_Cancun_block
-      (Memory <| offset := 0; size := 0 |>)
-      add_d3g0v0_Cancun_transaction = SOME s ∧
-    run s = SOME (Finished r) ∧
-    update_beacon_block add_d3g0v0_Cancun_block $ (* TODO: proper block processing *)
-    refund_fee
-      add_d3g0v0_Cancun_transaction.from
-      (* TODO: refund should be limited by gas used / 5 *)
-      (add_d3g0v0_Cancun_block.baseFeePerGas * (r.refund + r.gasLeft))
-      r.accounts
-    = add_d3g0v0_Cancun_post
+      add_d3g0v0_Cancun_transaction
+    = SOME (Finished r) ∧
+    update_beacon_block add_d3g0v0_Cancun_block r.accounts = add_d3g0v0_Cancun_post
 Proof
-  rw[run_SOME_run_n, PULL_EXISTS]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
-  \\ `s <> NONE` by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
-  \\ `∃n z t.
-        run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
-        update_beacon_block add_d3g0v0_Cancun_block $
-        refund_fee
-          add_d3g0v0_Cancun_transaction.from
-          (add_d3g0v0_Cancun_block.baseFeePerGas * (z.refund + z.gasLeft))
-          z.accounts = add_d3g0v0_Cancun_post`
-      suffices_by (
+  rw[run_transaction_def]
+  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
+  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
+  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
+  \\ simp[run_SOME_run_n, PULL_EXISTS]
+  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
+  \\ rewrite_tac[CONJ_ASSOC]
+  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
+  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
+              P r` suffices_by (
     strip_tac
-    \\ Cases_on`s` \\ gs[]
     \\ drule run_with_fuel_to_zero
     \\ strip_tac
+    \\ qunabbrev_tac`Q`
+    \\ simp[]
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ gs[] )
-  \\ qunabbrev_tac`s`
-  \\ qmatch_asmsub_abbrev_tac`Memory m`
-  \\ `m = memory_range 0 0` by (rw[Abbr`m`] \\ cv_eval_match_tac``_``)
-  \\ fs[Abbr`m`]
+  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
+  \\ qunabbrev_tac`x`
   \\ qexists_tac`18`
   \\ cv_eval_run_with_fuel_tac
-  \\ simp[] \\ EVAL_TAC
+  \\ simp[Abbr`P`] \\ EVAL_TAC
   \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
@@ -707,45 +665,36 @@ val () = cv_auto_trans block_def;
 val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
 
 Theorem add_d4g0v0_Cancun_correctness:
-  ∃s r.
-    initial_state 1
+  ∃r.
+    run_transaction 1
       add_d4g0v0_Cancun_pre
       add_d4g0v0_Cancun_block
-      (Memory <| offset := 0; size := 0 |>)
-      add_d4g0v0_Cancun_transaction = SOME s ∧
-    run s = SOME (Finished r) ∧
-    update_beacon_block add_d4g0v0_Cancun_block $ (* TODO: proper block processing *)
-    refund_fee
-      add_d4g0v0_Cancun_transaction.from
-      (* TODO: refund should be limited by gas used / 5 *)
-      (add_d4g0v0_Cancun_block.baseFeePerGas * (r.refund + r.gasLeft))
-      r.accounts
-    = add_d4g0v0_Cancun_post
+      add_d4g0v0_Cancun_transaction
+    = SOME (Finished r) ∧
+    update_beacon_block add_d4g0v0_Cancun_block r.accounts = add_d4g0v0_Cancun_post
 Proof
-  rw[run_SOME_run_n, PULL_EXISTS]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
-  \\ `s <> NONE` by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
-  \\ `∃n z t.
-        run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
-        update_beacon_block add_d4g0v0_Cancun_block $
-        refund_fee
-          add_d4g0v0_Cancun_transaction.from
-          (add_d4g0v0_Cancun_block.baseFeePerGas * (z.refund + z.gasLeft))
-          z.accounts = add_d4g0v0_Cancun_post`
-      suffices_by (
+  rw[run_transaction_def]
+  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
+  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
+  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
+  \\ simp[run_SOME_run_n, PULL_EXISTS]
+  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
+  \\ rewrite_tac[CONJ_ASSOC]
+  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
+  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
+              P r` suffices_by (
     strip_tac
-    \\ Cases_on`s` \\ gs[]
     \\ drule run_with_fuel_to_zero
     \\ strip_tac
+    \\ qunabbrev_tac`Q`
+    \\ simp[]
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ gs[] )
-  \\ qunabbrev_tac`s`
-  \\ qmatch_asmsub_abbrev_tac`Memory m`
-  \\ `m = memory_range 0 0` by (rw[Abbr`m`] \\ cv_eval_match_tac``_``)
-  \\ fs[Abbr`m`]
+  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
+  \\ qunabbrev_tac`x`
   \\ qexists_tac`18`
   \\ cv_eval_run_with_fuel_tac
-  \\ simp[] \\ EVAL_TAC
+  \\ simp[Abbr`P`] \\ EVAL_TAC
   \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]

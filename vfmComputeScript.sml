@@ -894,4 +894,9 @@ val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
+val () = refund_fee_def |>
+  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  cv_auto_trans;
+
 val _ = export_theory();

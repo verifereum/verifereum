@@ -967,6 +967,35 @@ Definition run_def:
   run s = OPTION_MAP (OUTR o FST) (OWHILE (ISL o FST) (step o SND) (INL (), s))
 End
 
+Definition empty_return_destination_def:
+  empty_return_destination = Memory <| offset := 0; size := 0 |>
+End
+
+Definition refund_fee_def:
+  refund_fee (sender: address) gasLimit gasLeft refund gasPrice accounts : evm_accounts =
+  let gasUsed = gasLimit - gasLeft in
+  let cappedRefund = MIN (gasUsed DIV 5) refund in
+  let refundEther = (gasLeft + cappedRefund) * gasPrice in
+  (sender =+ accounts sender with balance updated_by $+ refundEther) accounts
+End
+
+Definition run_transaction_def:
+  run_transaction chainId accounts blk tx =
+  OPTION_MAP (λoutcome.
+      case outcome of
+      | Finished r => Finished $ r with accounts updated_by
+          refund_fee tx.from tx.gasLimit r.gasLeft r.refund blk.baseFeePerGas
+      | _ => outcome) $
+  OPTION_BIND (initial_state chainId accounts blk empty_return_destination tx) run
+End
+
+(*
+TODO: add transactions to block
+Definition run_block_def:
+  run_block b =
+End
+*)
+
 (* TODO: prove LENGTH memory is always a multiple of 32 bytes *)
 (* TODO: define gas-oblivious execution semantics (where Gas is an invalid op) *)
 
