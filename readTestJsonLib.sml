@@ -3,8 +3,11 @@ structure readTestJsonLib = struct
 
   val jq_path = "/usr/bin/jq";
 
-  fun run_jq args =
-    TextIO.inputAll(Unix.textInstreamOf(Unix.execute(jq_path, args)))
+  fun run_jq args = let
+    val ins = Unix.textInstreamOf(Unix.execute(jq_path, args))
+  in
+    TextIO.inputAll ins before TextIO.closeIn ins
+  end
 
   fun unquote s = String.substring(s, 1, String.size s - 2)
 
