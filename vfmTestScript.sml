@@ -150,6 +150,10 @@ End
 
 val () = cv_auto_trans update_beacon_block_def;
 
+(* TODO: move *)
+val () = cv_auto_trans empty_return_destination_def;
+(* -- *)
+
 (*
 https://github.com/ethereum/tests
 commit 08839f5 (taken from the develop branch)
@@ -200,6 +204,50 @@ end goal;
 
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
+fun mk_statement test_name =
+  Term[QUOTE(String.concat[
+         "∃r. run_transaction 1 ",
+         test_name, "_pre ",
+         test_name, "_block ",
+         test_name, "_transaction ",
+         "= SOME (Finished r) ∧ ",
+         "update_beacon_block ",
+         test_name, "_block r.accounts = ",
+         test_name, "_post"])]
+
+(*
+  set_goal([], thm_term)
+  val num_steps = 3
+  Globals.max_print_depth := 12
+*)
+fun mk_tactic num_steps =
+  rw[run_transaction_def]
+  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
+  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
+  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
+  \\ simp[run_SOME_run_n, PULL_EXISTS]
+  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
+  \\ rewrite_tac[CONJ_ASSOC]
+  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
+  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
+              P r` suffices_by (
+    strip_tac
+    \\ drule run_with_fuel_to_zero
+    \\ strip_tac
+    \\ qunabbrev_tac`Q`
+    \\ simp[]
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ gs[] )
+  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
+  \\ qunabbrev_tac`x`
+  \\ exists_tac (numSyntax.term_of_int num_steps)
+  \\ cv_eval_run_with_fuel_tac
+  \\ simp[Abbr`P`] \\ EVAL_TAC
+  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
+  \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
+  \\ rw[] \\ gs[]
+  \\ EVAL_TAC
+
 fun accounts_term (ls:
    {address: string,
      balance: string,
@@ -227,148 +275,75 @@ fun accounts_term (ls:
         "|>"
       ]) "empty_accounts" ls
 
+fun mk_prove_test test_path = let
+  val test_names = get_test_names test_path;
+  fun prove_test test_index num_steps = let
+    val test_name = List.nth(test_names, test_index);
+    val test = get_test test_path test_name;
+
+    val block = #block test;
+    val block_def = new_definition(
+      test_name ^ "_block_def",
+      Term[QUOTE(String.concat[
+        test_name, "_block = <|",
+        " number := ", #number block,
+        ";baseFeePerGas := ", #baseFeePerGas block,
+        ";timeStamp := ", #timeStamp block,
+        ";coinBase := n2w ", #coinBase block,
+        ";hash := n2w ", #hash block,
+        ";gasLimit := ", #gasLimit block,
+        ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
+        ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
+        "|>"
+      ])]);
+
+    val transaction = #transaction test;
+    val transaction_def = new_definition(
+      test_name ^ "_transaction_def",
+      Term[QUOTE(String.concat[
+        test_name, "_transaction = <|",
+        " from := n2w ", #sender transaction,
+        ";to := n2w ", #to transaction,
+        ";data := hex_to_bytes \"", trim2 $ #data transaction,
+        "\";nonce := ", #nonce transaction,
+        ";value := ", #value transaction,
+        ";gasPrice := ", #gasPrice transaction,
+        ";gasLimit := ", #gasLimit transaction,
+        ";accessList := [] |>"
+      ])]);
+
+    val pre = #pre test;
+    val pre_def = new_definition(
+      test_name ^ "_pre_def",
+      Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
+
+    val post = #post test;
+    val post_def = new_definition(
+      test_name ^ "_post_def",
+      Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
+
+    val () = cv_auto_trans pre_def;
+    val () = cv_auto_trans post_def;
+    val () = cv_auto_trans transaction_def;
+    val () = cv_auto_trans block_def;
+    val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
+
+    val thm_name = test_name ^ "_correctness";
+    val thm_term = mk_statement test_name;
+  in
+    store_thm(thm_name, thm_term, mk_tactic num_steps)
+  end
+in (List.length test_names, prove_test) end
+
 val test_path = "tests/add.json";
-val test_names = get_test_names test_path;
-val test_name = el 1 test_names;
-val test = get_test test_path test_name;
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, C prove_test 18)
 
-val block = #block test;
-val block_def = new_definition(
-  test_name ^ "_block_def",
-  Term[QUOTE(String.concat[
-    test_name, "_block = <|",
-    " number := ", #number block,
-    ";baseFeePerGas := ", #baseFeePerGas block,
-    ";timeStamp := ", #timeStamp block,
-    ";coinBase := n2w ", #coinBase block,
-    ";hash := n2w ", #hash block,
-    ";gasLimit := ", #gasLimit block,
-    ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
-    ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-    "|>"
-  ])]);
-
-val transaction = #transaction test;
-val transaction_def = new_definition(
-  test_name ^ "_transaction_def",
-  Term[QUOTE(String.concat[
-    test_name, "_transaction = <|",
-    " from := n2w ", #sender transaction,
-    ";to := n2w ", #to transaction,
-    ";data := hex_to_bytes \"", trim2 $ #data transaction,
-    "\";nonce := ", #nonce transaction,
-    ";value := ", #value transaction,
-    ";gasPrice := ", #gasPrice transaction,
-    ";gasLimit := ", #gasLimit transaction,
-    ";accessList := [] |>"
-  ])]);
-
-val pre = #pre test;
-val pre_def = new_definition(
-  test_name ^ "_pre_def",
-  Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
-
-val post = #post test;
-val post_def = new_definition(
-  test_name ^ "_post_def",
-  Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
-
-val () = cv_auto_trans pre_def;
-val () = cv_auto_trans post_def;
-val () = cv_auto_trans transaction_def;
-val () = cv_auto_trans block_def;
-val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
-
-(* TODO: move *)
-val () = cv_auto_trans empty_return_destination_def;
-(* -- *)
-
-Theorem add_d0g0v0_Cancun_correctness:
-  ∃r.
-    run_transaction 1
-      add_d0g0v0_Cancun_pre
-      add_d0g0v0_Cancun_block
-      add_d0g0v0_Cancun_transaction
-    = SOME (Finished r) ∧
-    update_beacon_block add_d0g0v0_Cancun_block r.accounts = add_d0g0v0_Cancun_post
-Proof
-  rw[run_transaction_def]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
-  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
-  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
-  \\ simp[run_SOME_run_n, PULL_EXISTS]
-  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
-  \\ rewrite_tac[CONJ_ASSOC]
-  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
-  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
-              P r` suffices_by (
-    strip_tac
-    \\ drule run_with_fuel_to_zero
-    \\ strip_tac
-    \\ qunabbrev_tac`Q`
-    \\ simp[]
-    \\ goal_assum(first_assum o mp_then Any mp_tac)
-    \\ gs[] )
-  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
-  \\ qunabbrev_tac`x`
-  \\ qexists_tac`18`
-  \\ cv_eval_run_with_fuel_tac
-  \\ simp[Abbr`P`] \\ EVAL_TAC
-  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
-  \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
-  \\ rw[] \\ gs[]
-  \\ EVAL_TAC
-QED
-
-val test_name = el 2 test_names;
-val test = get_test test_path test_name;
-
-val block = #block test;
-val block_def = new_definition(
-  test_name ^ "_block_def",
-  Term[QUOTE(String.concat[
-    test_name, "_block = <|",
-    " number := ", #number block,
-    ";baseFeePerGas := ", #baseFeePerGas block,
-    ";timeStamp := ", #timeStamp block,
-    ";coinBase := n2w ", #coinBase block,
-    ";hash := n2w ", #hash block,
-    ";gasLimit := ", #gasLimit block,
-    ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
-    ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-    "|>"
-  ])]);
-
-val transaction = #transaction test;
-val transaction_def = new_definition(
-  test_name ^ "_transaction_def",
-  Term[QUOTE(String.concat[
-    test_name, "_transaction = <|",
-    " from := n2w ", #sender transaction,
-    ";to := n2w ", #to transaction,
-    ";data := hex_to_bytes \"", trim2 $ #data transaction,
-    "\";nonce := ", #nonce transaction,
-    ";value := ", #value transaction,
-    ";gasPrice := ", #gasPrice transaction,
-    ";gasLimit := ", #gasLimit transaction,
-    ";accessList := [] |>"
-  ])]);
-
-val pre = #pre test;
-val pre_def = new_definition(
-  test_name ^ "_pre_def",
-  Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
-
-val post = #post test;
-val post_def = new_definition(
-  test_name ^ "_post_def",
-  Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
-
-val () = cv_auto_trans pre_def;
-val () = cv_auto_trans post_def;
-val () = cv_auto_trans transaction_def;
-val () = cv_auto_trans block_def;
-val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
+(*
+TODO: does not work yet, evm might have bugs
+val test_path = "tests/loopExp.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+*)
 
 (*
 
@@ -402,303 +377,5 @@ Push3 255 255 255
 Call
 
 *)
-
-Theorem add_d1g0v0_Cancun_correctness:
-  ∃r.
-    run_transaction 1
-      add_d1g0v0_Cancun_pre
-      add_d1g0v0_Cancun_block
-      add_d1g0v0_Cancun_transaction
-    = SOME (Finished r) ∧
-    update_beacon_block add_d1g0v0_Cancun_block r.accounts = add_d1g0v0_Cancun_post
-Proof
-  rw[run_transaction_def]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
-  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
-  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
-  \\ simp[run_SOME_run_n, PULL_EXISTS]
-  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
-  \\ rewrite_tac[CONJ_ASSOC]
-  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
-  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
-              P r` suffices_by (
-    strip_tac
-    \\ drule run_with_fuel_to_zero
-    \\ strip_tac
-    \\ qunabbrev_tac`Q`
-    \\ simp[]
-    \\ goal_assum(first_assum o mp_then Any mp_tac)
-    \\ gs[] )
-  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
-  \\ qunabbrev_tac`x`
-  \\ qexists_tac`18`
-  \\ cv_eval_run_with_fuel_tac
-  \\ simp[Abbr`P`] \\ EVAL_TAC
-  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
-  \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
-  \\ rw[] \\ gs[]
-  \\ EVAL_TAC
-QED
-
-val test_name = el 3 test_names;
-val test = get_test test_path test_name;
-
-val block = #block test;
-val block_def = new_definition(
-  test_name ^ "_block_def",
-  Term[QUOTE(String.concat[
-    test_name, "_block = <|",
-    " number := ", #number block,
-    ";baseFeePerGas := ", #baseFeePerGas block,
-    ";timeStamp := ", #timeStamp block,
-    ";coinBase := n2w ", #coinBase block,
-    ";hash := n2w ", #hash block,
-    ";gasLimit := ", #gasLimit block,
-    ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
-    ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-    "|>"
-  ])]);
-
-val transaction = #transaction test;
-val transaction_def = new_definition(
-  test_name ^ "_transaction_def",
-  Term[QUOTE(String.concat[
-    test_name, "_transaction = <|",
-    " from := n2w ", #sender transaction,
-    ";to := n2w ", #to transaction,
-    ";data := hex_to_bytes \"", trim2 $ #data transaction,
-    "\";nonce := ", #nonce transaction,
-    ";value := ", #value transaction,
-    ";gasPrice := ", #gasPrice transaction,
-    ";gasLimit := ", #gasLimit transaction,
-    ";accessList := [] |>"
-  ])]);
-
-val pre = #pre test;
-val pre_def = new_definition(
-  test_name ^ "_pre_def",
-  Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
-
-val post = #post test;
-val post_def = new_definition(
-  test_name ^ "_post_def",
-  Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
-
-val () = cv_auto_trans pre_def;
-val () = cv_auto_trans post_def;
-val () = cv_auto_trans transaction_def;
-val () = cv_auto_trans block_def;
-val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
-
-Theorem add_d2g0v0_Cancun_correctness:
-  ∃r.
-    run_transaction 1
-      add_d2g0v0_Cancun_pre
-      add_d2g0v0_Cancun_block
-      add_d2g0v0_Cancun_transaction
-    = SOME (Finished r) ∧
-    update_beacon_block add_d2g0v0_Cancun_block r.accounts = add_d2g0v0_Cancun_post
-Proof
-  rw[run_transaction_def]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
-  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
-  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
-  \\ simp[run_SOME_run_n, PULL_EXISTS]
-  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
-  \\ rewrite_tac[CONJ_ASSOC]
-  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
-  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
-              P r` suffices_by (
-    strip_tac
-    \\ drule run_with_fuel_to_zero
-    \\ strip_tac
-    \\ qunabbrev_tac`Q`
-    \\ simp[]
-    \\ goal_assum(first_assum o mp_then Any mp_tac)
-    \\ gs[] )
-  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
-  \\ qunabbrev_tac`x`
-  \\ qexists_tac`18`
-  \\ cv_eval_run_with_fuel_tac
-  \\ simp[Abbr`P`] \\ EVAL_TAC
-  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
-  \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
-  \\ rw[] \\ gs[]
-  \\ EVAL_TAC
-QED
-
-val test_name = el 4 test_names;
-val test = get_test test_path test_name;
-
-val block = #block test;
-val block_def = new_definition(
-  test_name ^ "_block_def",
-  Term[QUOTE(String.concat[
-    test_name, "_block = <|",
-    " number := ", #number block,
-    ";baseFeePerGas := ", #baseFeePerGas block,
-    ";timeStamp := ", #timeStamp block,
-    ";coinBase := n2w ", #coinBase block,
-    ";hash := n2w ", #hash block,
-    ";gasLimit := ", #gasLimit block,
-    ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
-    ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-    "|>"
-  ])]);
-
-val transaction = #transaction test;
-val transaction_def = new_definition(
-  test_name ^ "_transaction_def",
-  Term[QUOTE(String.concat[
-    test_name, "_transaction = <|",
-    " from := n2w ", #sender transaction,
-    ";to := n2w ", #to transaction,
-    ";data := hex_to_bytes \"", trim2 $ #data transaction,
-    "\";nonce := ", #nonce transaction,
-    ";value := ", #value transaction,
-    ";gasPrice := ", #gasPrice transaction,
-    ";gasLimit := ", #gasLimit transaction,
-    ";accessList := [] |>"
-  ])]);
-
-val pre = #pre test;
-val pre_def = new_definition(
-  test_name ^ "_pre_def",
-  Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
-
-val post = #post test;
-val post_def = new_definition(
-  test_name ^ "_post_def",
-  Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
-
-val () = cv_auto_trans pre_def;
-val () = cv_auto_trans post_def;
-val () = cv_auto_trans transaction_def;
-val () = cv_auto_trans block_def;
-val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
-
-Theorem add_d3g0v0_Cancun_correctness:
-  ∃r.
-    run_transaction 1
-      add_d3g0v0_Cancun_pre
-      add_d3g0v0_Cancun_block
-      add_d3g0v0_Cancun_transaction
-    = SOME (Finished r) ∧
-    update_beacon_block add_d3g0v0_Cancun_block r.accounts = add_d3g0v0_Cancun_post
-Proof
-  rw[run_transaction_def]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
-  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
-  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
-  \\ simp[run_SOME_run_n, PULL_EXISTS]
-  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
-  \\ rewrite_tac[CONJ_ASSOC]
-  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
-  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
-              P r` suffices_by (
-    strip_tac
-    \\ drule run_with_fuel_to_zero
-    \\ strip_tac
-    \\ qunabbrev_tac`Q`
-    \\ simp[]
-    \\ goal_assum(first_assum o mp_then Any mp_tac)
-    \\ gs[] )
-  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
-  \\ qunabbrev_tac`x`
-  \\ qexists_tac`18`
-  \\ cv_eval_run_with_fuel_tac
-  \\ simp[Abbr`P`] \\ EVAL_TAC
-  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
-  \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
-  \\ rw[] \\ gs[]
-  \\ EVAL_TAC
-QED
-
-val test_name = el 5 test_names;
-val test = get_test test_path test_name;
-
-val block = #block test;
-val block_def = new_definition(
-  test_name ^ "_block_def",
-  Term[QUOTE(String.concat[
-    test_name, "_block = <|",
-    " number := ", #number block,
-    ";baseFeePerGas := ", #baseFeePerGas block,
-    ";timeStamp := ", #timeStamp block,
-    ";coinBase := n2w ", #coinBase block,
-    ";hash := n2w ", #hash block,
-    ";gasLimit := ", #gasLimit block,
-    ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
-    ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-    "|>"
-  ])]);
-
-val transaction = #transaction test;
-val transaction_def = new_definition(
-  test_name ^ "_transaction_def",
-  Term[QUOTE(String.concat[
-    test_name, "_transaction = <|",
-    " from := n2w ", #sender transaction,
-    ";to := n2w ", #to transaction,
-    ";data := hex_to_bytes \"", trim2 $ #data transaction,
-    "\";nonce := ", #nonce transaction,
-    ";value := ", #value transaction,
-    ";gasPrice := ", #gasPrice transaction,
-    ";gasLimit := ", #gasLimit transaction,
-    ";accessList := [] |>"
-  ])]);
-
-val pre = #pre test;
-val pre_def = new_definition(
-  test_name ^ "_pre_def",
-  Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
-
-val post = #post test;
-val post_def = new_definition(
-  test_name ^ "_post_def",
-  Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
-
-val () = cv_auto_trans pre_def;
-val () = cv_auto_trans post_def;
-val () = cv_auto_trans transaction_def;
-val () = cv_auto_trans block_def;
-val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
-
-Theorem add_d4g0v0_Cancun_correctness:
-  ∃r.
-    run_transaction 1
-      add_d4g0v0_Cancun_pre
-      add_d4g0v0_Cancun_block
-      add_d4g0v0_Cancun_transaction
-    = SOME (Finished r) ∧
-    update_beacon_block add_d4g0v0_Cancun_block r.accounts = add_d4g0v0_Cancun_post
-Proof
-  rw[run_transaction_def]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
-  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
-  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
-  \\ simp[run_SOME_run_n, PULL_EXISTS]
-  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
-  \\ rewrite_tac[CONJ_ASSOC]
-  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
-  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
-              P r` suffices_by (
-    strip_tac
-    \\ drule run_with_fuel_to_zero
-    \\ strip_tac
-    \\ qunabbrev_tac`Q`
-    \\ simp[]
-    \\ goal_assum(first_assum o mp_then Any mp_tac)
-    \\ gs[] )
-  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
-  \\ qunabbrev_tac`x`
-  \\ qexists_tac`18`
-  \\ cv_eval_run_with_fuel_tac
-  \\ simp[Abbr`P`] \\ EVAL_TAC
-  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
-  \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
-  \\ rw[] \\ gs[]
-  \\ EVAL_TAC
-QED
 
 val _ = export_theory();
