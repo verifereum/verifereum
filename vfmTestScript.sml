@@ -217,7 +217,7 @@ fun mk_statement test_name =
 
 (*
   set_goal([], thm_term)
-  val num_steps = 19
+  val num_steps = 18
   Globals.max_print_depth := 12
 *)
 fun mk_tactic num_steps =
@@ -276,7 +276,7 @@ fun accounts_term (ls:
       ]) "empty_accounts" ls
 
 (*
-  val test_index = 2
+  val test_index = 1
 *)
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
@@ -338,6 +338,8 @@ fun mk_prove_test test_path = let
   end
 in (List.length test_names, prove_test) end
 
+(* TODO: automate finding the num_stps *)
+
 val test_path = "tests/add.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, C prove_test 18)
@@ -345,6 +347,12 @@ val thms = List.tabulate (num_tests, C prove_test 18)
 val test_path = "tests/iszero.json"
 val (num_tests, prove_test) = mk_prove_test test_path;
 val num_steps = [17, 17, 19];
+val thms = List.tabulate (num_tests, fn i =>
+  prove_test i (List.nth(num_steps, i)));
+
+val test_path = "tests/pc.json"
+val (num_tests, prove_test) = mk_prove_test test_path;
+val num_steps = [15, 18];
 val thms = List.tabulate (num_tests, fn i =>
   prove_test i (List.nth(num_steps, i)));
 
