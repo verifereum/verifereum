@@ -662,7 +662,7 @@ Definition step_inst_def:
           ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
             let index = w2n (EL 0 context.stack) in
             let bytes = take_pad_0 32 (DROP index context.callParams.data) in
-            let newStack = word_of_bytes F 0w bytes :: TL context.stack in
+            let newStack = word_of_bytes F 0w (REVERSE bytes) :: TL context.stack in
             set_current_context (context with stack := newStack)))
   ∧ step_inst CallDataSize = push_from_ctxt (λc. n2w (LENGTH c.callParams.data))
   ∧ step_inst CallDataCopy =
@@ -739,7 +739,7 @@ Definition step_inst_def:
             let newMinSize = word_size (SUC byteIndex) * 32 in
             let newMemory = PAD_RIGHT 0w newMinSize context.memory in
             let expansionCost = memory_expansion_cost context.memory newMemory in
-            let word = word_of_bytes F 0w (TAKE 32 (DROP byteIndex newMemory)) in
+            let word = word_of_bytes F 0w $ REVERSE $ TAKE 32 $ DROP byteIndex newMemory in
             let newStack = word :: TL context.stack in
             let newContext =
               context with <| stack := newStack; memory := newMemory |>
