@@ -1,8 +1,9 @@
 open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
-     arithmeticTheory whileTheory
+     arithmeticTheory combinTheory whileTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory
      vfmOperationTheory vfmComputeTheory
+     readTestJsonLib
      cv_transLib cv_stdTheory cv_computeLib
      cv_primTheory byteTheory;
 
@@ -150,262 +151,84 @@ commit 08839f5 (taken from the develop branch)
 BlockchainTests/GeneralStateTests/VMTests/vmArithmeticTest/add.json
 *)
 
-Definition add_d0g0v0_Cancun_block_def:
-  add_d0g0v0_Cancun_block =
-  <| number := 0x01
-   ; baseFeePerGas := 0x0a
-   ; timeStamp := 0x03e8
-   ; coinBase := n2w 0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba
-   ; gasLimit := 0x05f5e100
-   ; prevRandao := n2w 0x00 (* not sure - using the difficulty *)
-  |>
-End
+fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
-Definition add_d0g0v0_Cancun_transaction_def:
-  add_d0g0v0_Cancun_transaction =
-  <| from := n2w 0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b
-   ; to   := n2w 0xcccccccccccccccccccccccccccccccccccccccc
-   ; data := hex_to_bytes $ CONCAT [
-               "693c61390000000000000000000000000000";
-               "000000000000000000000000000000000000" ]
-   ; nonce := 0x00
-   ; value := 0x01
-   ; gasPrice := 0x0a
-   ; gasLimit := 0x04c4b400
-   ; accessList := []
-   |>
-End
+fun accounts_term (ls:
+   {address: string,
+     balance: string,
+     code: string, nonce: string, storage: {key: string, value: string} list}
+   list) =
+  List.foldl
+    (fn (a, s) =>
+      String.concat [
+        "update_account (",
+        s,
+        ")(n2w ", #address a, ") <|",
+        " nonce := ", #nonce a,
+        ";balance := ", #balance a,
+        ";code := hex_to_bytes \"", trim2 $ #code a,
+        "\";storage := ",
+        List.foldl
+          (fn (e, s) =>
+            String.concat [
+              "update_storage (",
+              s,
+              ") (n2w ", #key e, ") (n2w ", #value e, ")"
+            ])
+            "empty_storage"
+            (#storage a),
+        "|>"
+      ]) "empty_accounts" ls
 
-Definition add_d0g0v0_Cancun_pre_def:
-  add_d0g0v0_Cancun_pre =
-  update_account (
-  update_account (
-  update_account (
-  update_account (
-  update_account (
-  update_account (
-  update_account empty_accounts
-    (n2w 0x0000000000000000000000000000000000001000)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                 ["7ffffffffffffffffffffffffffffffffffffff"
-                 ;"fffffffffffffffffffffffffff7fffffffffff"
-                 ;"fffffffffffffffffffffffffffffffffffffff"
-                 ;"fffffffffffffff0160005500"]
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001001)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                 ["60047fffffffffffffffffffffffffffffffffff"
-                 ;"ffffffffffffffffffffffffffffff0160005500"]
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001002)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                 ["60017fffffffffffffffffffffffffffffffffff"
-                 ;"ffffffffffffffffffffffffffffff0160005500"]
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001003)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes "600060000160005500"
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001004)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                  ["7fffffffffffffffffffffffffffffffffffffff"
-                  ;"ffffffffffffffffffffffffff60010160005500"]
-     |>
-  )
-    (n2w 0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := []
-     |>
-  )
-    (n2w 0xcccccccccccccccccccccccccccccccccccccccc)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes "600060006000600060006004356110000162fffffff100"
-     |>
-End
+val test_path = "tests/add.json";
+val test_names = get_test_names test_path;
+val test_name = el 1 test_names;
+val test = get_test test_path test_name;
 
-Definition add_d0g0v0_Cancun_post_def:
-  add_d0g0v0_Cancun_post =
-  update_account (
-  update_account (
-  update_account (
-  update_account (
-  update_account (
-  update_account (
-  update_account empty_accounts
-    (n2w 0x0000000000000000000000000000000000001000)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := (n2w 0x00 =+ n2w 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe) empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                 ["7ffffffffffffffffffffffffffffffffffffff"
-                 ;"fffffffffffffffffffffffffff7fffffffffff"
-                 ;"fffffffffffffffffffffffffffffffffffffff"
-                 ;"fffffffffffffff0160005500"]
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001001)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                 ["60047fffffffffffffffffffffffffffffffffff"
-                 ;"ffffffffffffffffffffffffffffff0160005500"]
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001002)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                 ["60017fffffffffffffffffffffffffffffffffff"
-                 ;"ffffffffffffffffffffffffffffff0160005500"]
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001003)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes "600060000160005500"
-     |>
-  )
-    (n2w 0x0000000000000000000000000000000000001004)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9ce
-     ; storage := empty_storage
-     ; code := hex_to_bytes $ CONCAT
-                  ["7fffffffffffffffffffffffffffffffffffffff"
-                  ;"ffffffffffffffffffffffffff60010160005500"]
-     |>
-  )
-    (n2w 0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b)
-    <| nonce := 0x01
-     ; balance := 0x0ba1a9ce0b9aa781
-     ; storage := empty_storage
-     ; code := []
-     |>
-  )
-    (n2w 0xcccccccccccccccccccccccccccccccccccccccc)
-    <| nonce := 0x00
-     ; balance := 0x0ba1a9ce0ba1a9cf
-     ; storage := empty_storage
-     ; code := hex_to_bytes "600060006000600060006004356110000162fffffff100"
-     |>
-End
+val block = #block test;
+val block_def = new_definition(
+  test_name ^ "_block_def",
+  Term[QUOTE(String.concat[
+    test_name, "_block = <|",
+    " number := ", #number block,
+    ";baseFeePerGas := ", #baseFeePerGas block,
+    ";timeStamp := ", #timeStamp block,
+    ";coinBase := n2w ", #coinBase block,
+    ";gasLimit := ", #gasLimit block,
+    ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
+    "|>"
+  ])]);
 
-Theorem add_d0g0v0_Cancun_pre_code:
-  (add_d0g0v0_Cancun_pre add_d0g0v0_Cancun_transaction.to).code =
-  hex_to_bytes "600060006000600060006004356110000162fffffff100"
-Proof
-  simp[add_d0g0v0_Cancun_pre_def, add_d0g0v0_Cancun_transaction_def,
-       update_account_def]
-QED
+val transaction = #transaction test;
+val transaction_def = new_definition(
+  test_name ^ "_transaction_def",
+  Term[QUOTE(String.concat[
+    test_name, "_transaction = <|",
+    " from := n2w ", #sender transaction,
+    ";to := n2w ", #to transaction,
+    ";data := hex_to_bytes \"", trim2 $ #data transaction,
+    "\";nonce := ", #nonce transaction,
+    ";value := ", #value transaction,
+    ";gasPrice := ", #gasPrice transaction,
+    ";gasLimit := ", #gasLimit transaction,
+    ";accessList := [] |>"
+  ])]);
 
-val () = cv_auto_trans add_d0g0v0_Cancun_pre_def;
-val () = add_d0g0v0_Cancun_post_def |>
-  ONCE_REWRITE_RULE[GSYM update_storage_def] |>
-  cv_auto_trans;
-val () = cv_auto_trans add_d0g0v0_Cancun_transaction_def;
-val () = cv_auto_trans add_d0g0v0_Cancun_block_def;
+val pre = #pre test;
+val pre_def = new_definition(
+  test_name ^ "_pre_def",
+  Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
 
-(*
+val post = #post test;
+val post_def = new_definition(
+  test_name ^ "_post_def",
+  Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
 
-cv_eval ``
-let s =
-(run_n 18 (THE (initial_state 1
-    add_d0g0v0_Cancun_pre
-    add_d0g0v0_Cancun_block
-    (Memory <| offset := 0; size := 0 |>)
-    add_d0g0v0_Cancun_transaction))) in
-let c = EL 0 (SND s).contexts in
-  (c.callParams.gasLimit, c.gasUsed, c.gasRefund, c.stack,
-  c.callParams.outputTo, c.returnData)
-``
-
-val cappedGas = 16777215
-val stipend = 0
-cappedGas + stipend
-val callerGasUsed = 16779845
-val accessCost = 2600
-val expansionCost = 0
-val callCost = callerGasUsed - 30
-val true = callCost - cappedGas = accessCost
-val executionCost = 22112
-val calleeGasLeft = cappedGas - executionCost
-val newGasUsed = callerGasUsed - calleeGasLeft
-
-val senderAfterMine = 838137707291124173
-val senderAfterCorrect = 0x0ba1a9ce0b9aa781
-val discrepancy = senderAfterCorrect - senderAfterMine
-val gasLimit = 79978808
-gasLimit - newGasUsed
-discrepancy
-
-cv_eval ``
-  (EL 0 (SND (run_n 11 (initial_state 1
-    add_d0g0v0_Cancun_pre
-    add_d0g0v0_Cancun_block
-    (Memory <| offset := 0; size := 0 |>)
-    add_d0g0v0_Cancun_transaction))).contexts).pc
-``
-
-initial_context_def
-
-val callee_code = cv_eval ``
-  (HD (SND (run_n 12 (initial_state 1
-    add_d0g0v0_Cancun_pre
-    add_d0g0v0_Cancun_block
-    (Memory <| offset := 0; size := 0 |>)
-    add_d0g0v0_Cancun_transaction))).contexts).callParams.code
-`` |> concl |> rand |> rhs
-
-cv_eval ``parse_opcode (DROP 0 ^callee_code)``
-Push32 -1
-Push32 -1
-Add
-Push1 0
-SStore
-Stop
-
-TypeBase.fields_of``:transaction_state`` |> map fst
-TypeBase.fields_of``:context`` |> map fst
-TypeBase.fields_of``:call_parameters`` |> map fst
-
-cv_eval ``parse_opcode (DROP 21 ^(rhs(concl add_d0g0v0_Cancun_pre_code)))``
-Push1 0
-Push1 0
-Push1 0
-Push1 0
-Push1 0
-Push1 4
-CallDataLoad
-Push2 16 0
-Add
-Push3 255 255 255
-Call
-Stop
-*)
+val () = cv_auto_trans pre_def;
+val () = cv_auto_trans post_def;
+val () = cv_auto_trans transaction_def;
+val () = cv_auto_trans block_def;
+val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
 
 open cv_typeTheory cvTheory
 
@@ -487,24 +310,10 @@ Proof
       rewrite_tac[UNDISCH raw_th2]
     end goal)
   \\ simp[] \\ EVAL_TAC
-  \\ rw[FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ Cases_on`x = 0x0000000000000000000000000000000000001000w`
-  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ Cases_on`x = 0x0000000000000000000000000000000000001001w`
-  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ Cases_on`x = 0x0000000000000000000000000000000000001002w`
-  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ Cases_on`x = 0x0000000000000000000000000000000000001003w`
-  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ Cases_on`x = 0x0000000000000000000000000000000000001004w`
-  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ gs[]
-  \\ Cases_on`x = 0xccccccccccccccccccccccccccccccccccccccccw`
-  >- gs[account_state_component_equality, FUN_EQ_THM, combinTheory.APPLY_UPDATE_THM]
-  \\ gs[]
-  \\ rw[]
-  >- gs[account_state_component_equality, FUN_EQ_THM]
-  \\ EVAL_TAC
+  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM]
+  \\ rw[] \\ gs[]
+  \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
+  \\ cheat (* TODO: need to add on-chain beacon roots (EIP-4788) *)
 QED
 
 (*

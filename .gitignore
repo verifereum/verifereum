@@ -2,3 +2,4 @@
 .hollogs
 .holobjs
 *Theory.sig
+tests/*.json
