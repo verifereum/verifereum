@@ -10,6 +10,7 @@ Datatype:
    ; gasPrice       : num
    ; baseFeePerGas  : num
    ; blockNumber    : num
+   ; blockHash      : bytes32
    ; blockTimeStamp : num
    ; blockCoinBase  : address
    ; blockGasLimit  : num
@@ -96,12 +97,14 @@ End
 
 Datatype:
   block =
-  <| baseFeePerGas : num
-   ; number        : num
-   ; timeStamp     : num
-   ; coinBase      : address
-   ; gasLimit      : num
-   ; prevRandao    : bytes32
+  <| baseFeePerGas         : num
+   ; number                : num
+   ; timeStamp             : num
+   ; coinBase              : address
+   ; gasLimit              : num
+   ; prevRandao            : bytes32
+   ; hash                  : bytes32
+   ; parentBeaconBlockRoot : bytes32
    |>
 End
 
@@ -150,6 +153,7 @@ Definition initial_tx_params_def:
    ; gasPrice       := t.gasPrice
    ; baseFeePerGas  := b.baseFeePerGas
    ; blockNumber    := b.number
+   ; blockHash      := b.hash
    ; blockTimeStamp := b.timeStamp
    ; blockCoinBase  := b.coinBase
    ; blockGasLimit  := b.gasLimit

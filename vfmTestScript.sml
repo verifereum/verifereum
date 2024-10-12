@@ -194,8 +194,10 @@ val block_def = new_definition(
     ";baseFeePerGas := ", #baseFeePerGas block,
     ";timeStamp := ", #timeStamp block,
     ";coinBase := n2w ", #coinBase block,
+    ";hash := n2w ", #hash block,
     ";gasLimit := ", #gasLimit block,
     ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
+    ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
     "|>"
   ])]);
 
@@ -232,6 +234,21 @@ val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
 
 open cv_typeTheory cvTheory
 
+Definition update_beacon_block_def:
+  update_beacon_block b accounts =
+  let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
+  let buffer_length = 8191n in
+  let timestamp_idx = b.timeStamp MOD buffer_length in
+  let root_idx = timestamp_idx + buffer_length in
+  let a = lookup_account accounts addr in
+  let s0 = a.storage in
+  let s1 = update_storage s0 (n2w timestamp_idx) (n2w b.timeStamp) in
+  let s2 = update_storage s1 (n2w root_idx) b.parentBeaconBlockRoot in
+  update_account accounts addr $ a with storage := s2
+End
+
+val () = cv_auto_trans update_beacon_block_def;
+
 Theorem add_d0g0v0_Cancun_correctness:
   ∃s r.
     initial_state 1
@@ -240,6 +257,7 @@ Theorem add_d0g0v0_Cancun_correctness:
       (Memory <| offset := 0; size := 0 |>)
       add_d0g0v0_Cancun_transaction = SOME s ∧
     run s = SOME (Finished r) ∧
+    update_beacon_block add_d0g0v0_Cancun_block $ (* TODO: proper block processing *)
     refund_fee
       add_d0g0v0_Cancun_transaction.from
       (* TODO: refund should be limited by gas used / 5 *)
@@ -249,10 +267,10 @@ Theorem add_d0g0v0_Cancun_correctness:
 Proof
   rw[run_SOME_run_n, PULL_EXISTS]
   \\ qmatch_goalsub_abbrev_tac`SOME _ = s`
-  \\ `s <> NONE`
-   by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
+  \\ `s <> NONE` by ( qunabbrev_tac`s` \\ cv_eval_match_tac``_``)
   \\ `∃n z t.
         run_with_fuel n (INL (), THE s) = SOME (Finished z, t, 0) ∧
+        update_beacon_block add_d0g0v0_Cancun_block $
         refund_fee
           add_d0g0v0_Cancun_transaction.from
           (add_d0g0v0_Cancun_block.baseFeePerGas * (z.refund + z.gasLeft))
@@ -310,10 +328,10 @@ Proof
       rewrite_tac[UNDISCH raw_th2]
     end goal)
   \\ simp[] \\ EVAL_TAC
-  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM]
-  \\ rw[] \\ gs[]
+  \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
-  \\ cheat (* TODO: need to add on-chain beacon roots (EIP-4788) *)
+  \\ rw[] \\ gs[]
+  \\ EVAL_TAC
 QED
 
 (*

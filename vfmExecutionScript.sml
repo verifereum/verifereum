@@ -716,7 +716,7 @@ Definition step_inst_def:
             ignore_bind
               (consume_gas addressAccessCost)
               (set_current_context newContext)))))
-  ∧ step_inst BlockHash = return () (* TODO needs hash in state *)
+  ∧ step_inst BlockHash = push_from_tx (λc t a. t.blockHash)
   ∧ step_inst CoinBase = push_from_tx (λc t a. w2w t.blockCoinBase)
   ∧ step_inst TimeStamp = push_from_tx (λc t a. n2w t.blockTimeStamp)
   ∧ step_inst Number = push_from_tx (λc t a. n2w t.blockNumber)
