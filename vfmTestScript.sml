@@ -1,4 +1,5 @@
 open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
+     listTheory pairTheory optionTheory sumTheory
      arithmeticTheory combinTheory whileTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory
@@ -21,6 +22,12 @@ End
 val _ = cv_auto_trans hex_to_bytes_def;
 
 (* cv_eval “hex_to_bytes "693c61390000000000000000000000000000000000000000000000000000000000000000"” *)
+
+Theorem FOLDL_OPTION_BIND_NONE:
+  FOLDL (λx y. OPTION_BIND x (f x y)) NONE ls = NONE
+Proof
+  Induct_on`ls` \\ rw[]
+QED
 
 fun cv_eval_match_tac pat =
   goal_term (fn tm =>
@@ -235,7 +242,7 @@ Definition run_transaction_with_fuel_def:
   OPTION_BIND
     (initial_state chainId acc blk empty_return_destination tx)
     (λs. OPTION_MAP
-           (λ(r, t, m). (post_transaction_accounting blk tx r s t, m))
+           (λ(r, t, m). (post_transaction_accounting blk tx r s.accounts t, m))
            (run_with_fuel n (INL (),
                              s with accounts updated_by
                              transfer_value tx.from tx.to tx.value)))
@@ -260,8 +267,6 @@ Definition run_block_with_fuel_def:
 End
 
 val () = cv_auto_trans run_block_with_fuel_def;
-
-open listTheory pairTheory optionTheory sumTheory
 
 Theorem run_transaction_SOME_with_fuel:
   run_transaction c b a tx = SOME p ⇔
@@ -332,12 +337,6 @@ Proof
   rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD]
   \\ drule_then irule run_with_fuel_equal
   \\ gs[]
-QED
-
-Theorem FOLDL_OPTION_BIND_NONE:
-  FOLDL (λx y. OPTION_BIND x (f x y)) NONE ls = NONE
-Proof
-  Induct_on`ls` \\ rw[]
 QED
 
 Theorem run_block_SOME_with_fuel:
@@ -454,7 +453,7 @@ fun mk_statement test_name =
 (*
   set_goal([], thm_term)
   val num_steps = 18
-  Globals.max_print_depth := 12
+  Globals.max_print_depth := 16
 *)
 fun mk_tactic num_steps =
   rw[run_block_SOME_with_fuel]
@@ -583,6 +582,46 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 *)
 
 (*
+
+initial_state_def
+
+cv_eval ``
+let acc = add_d0g0v0_Cancun_pre in
+let blk = add_d0g0v0_Cancun_block in
+let tx = add_d0g0v0_Cancun_transaction in
+let (r, t, n) = THE $
+  run_with_fuel 18 (INL (),
+    (THE $
+     initial_state 1 acc blk
+       empty_return_destination
+       tx) with accounts updated_by
+           transfer_value tx.from tx.to tx.value) in
+let c = HD t.contexts in
+let sb1 = (lookup_account acc tx.from).balance in
+let sb2 = (lookup_account t.accounts tx.from).balance in
+  (tx.gasLimit, tx.gasPrice, blk.baseFeePerGas,
+   c.gasUsed, c.gasRefund, c.logs, c.returnData,
+   tx.value,
+   sb1 - sb2,
+   sb1 - sb2 - (tx.gasLimit * tx.gasPrice)
+   )
+``
+
+val gasLimit = 80000000
+val gasUsed = 24742
+val gasLeft = gasLimit - gasUsed
+val refundEther = gasLeft * 10
+val gasRefund = 0
+val totalGasUsed = gasUsed - gasRefund
+val priorityFeePerGas = 0
+val transactionFee = totalGasUsed * priorityFeePerGas
+
+val discrepancy = 838137708090876753 - 838137708090664833
+initial_state_def
+post_transaction_accounting_def
+
+discrepancy - gasLeft
+cv_eval``intrinsic_cost add_d0g0v0_Cancun_transaction.data``
 
 cv_eval ``
 let s =
