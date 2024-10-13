@@ -64,15 +64,16 @@ val () = cv_auto_trans run_n_def;
 val WHILE_FUNPOW = keccakTheory.WHILE_FUNPOW
 
 Theorem run_SOME_run_n:
-  run s = SOME z ⇔
-  (∃n t. run_n n s = (INR z, t) ∧
-         ∀m. m < n ⇒ ISL (FST (run_n m s)))
+  run s = SOME p ⇔
+  ISR (FST p) ∧
+  ∃n. run_n n s = p ∧
+      ∀m. m < n ⇒ ISL (FST (run_n m s))
 Proof
-  rw[run_def, run_n_def, EQ_IMP_THM]
-  >- (
-    imp_res_tac OWHILE_WHILE
+  simp[run_def, run_n_def, EQ_IMP_THM]
+  \\ conj_tac >- (
+    strip_tac
+    \\ imp_res_tac OWHILE_WHILE
     \\ imp_res_tac OWHILE_ENDCOND
-    \\ qmatch_assum_rename_tac `~_ p`
     \\ Cases_on`p` \\ gs[]
     \\ qexists_tac`LEAST n. ~(ISL o FST) (FUNPOW (step o SND) n (INL (), s))`
     \\ DEP_REWRITE_TAC[GSYM WHILE_FUNPOW]
@@ -88,13 +89,14 @@ Proof
       \\ gs[] )
     \\ rw[] )
   \\ simp[OWHILE_def]
+  \\ strip_tac
   \\ conj_asm1_tac >- ( qexists_tac`n` \\ gs[] )
   \\ numLib.LEAST_ELIM_TAC
   \\ conj_tac >- metis_tac[]
   \\ rw[]
   \\ qmatch_goalsub_rename_tac`FUNPOW _ m`
   \\ Cases_on`m < n` >- metis_tac[sumTheory.NOT_ISR_ISL]
-  \\ Cases_on`n < m` >- metis_tac[SIMP_CONV std_ss [] ``ISL (INR _)``, pairTheory.FST]
+  \\ Cases_on`n < m` >- metis_tac[sumTheory.NOT_ISL_ISR, pairTheory.FST]
   \\ `n = m` by gs[]
   \\ gs[]
 QED
@@ -135,24 +137,255 @@ Proof
   \\ gs[]
 QED
 
-Definition update_beacon_block_def:
-  update_beacon_block b accounts =
-  let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
-  let buffer_length = 8191n in
-  let timestamp_idx = b.timeStamp MOD buffer_length in
-  let root_idx = timestamp_idx + buffer_length in
-  let a = lookup_account accounts addr in
-  let s0 = a.storage in
-  let s1 = update_storage s0 (n2w timestamp_idx) (n2w b.timeStamp) in
-  let s2 = update_storage s1 (n2w root_idx) b.parentBeaconBlockRoot in
-  update_account accounts addr $ a with storage := s2
-End
+Theorem run_with_fuel_add:
+  ∀n q r a b c m.
+  run_with_fuel n (q,r) = SOME (a,b,c) ⇒
+  run_with_fuel (n + m) (q,r) = SOME (a,b,c + m)
+Proof
+  ho_match_mp_tac run_with_fuel_ind
+  \\ rw[]
+  \\ Cases_on`r` \\ gvs[run_with_fuel_def, num_case_eq]
+  \\ first_x_assum(qspec_then`m`(goal_assum o C (mp_then Any mp_tac)))
+  \\ simp[]
+QED
 
-val () = cv_auto_trans update_beacon_block_def;
+Theorem run_with_fuel_sub:
+  ∀n q r a b c.
+  run_with_fuel n (q,r) = SOME (a,b,c) ⇒
+  run_with_fuel (n - c) (q,r) = SOME (a,b,0)
+Proof
+  ho_match_mp_tac run_with_fuel_ind
+  \\ rw[]
+  \\ Cases_on`r` \\ gvs[run_with_fuel_def, num_case_eq]
+  \\ Cases_on`m < c` \\ gs[] >- (
+    `m - c = 0` by simp[]
+    \\ Cases_on`step s`
+    \\ gs[run_with_fuel_def] )
+  \\ first_x_assum(goal_assum o C (mp_then Any mp_tac))
+  \\ simp[]
+QED
+
+Theorem run_with_fuel_equal:
+  ∀n q r a b c m.
+    run_with_fuel n (q,r) = SOME (a,b,c) ∧
+    run_with_fuel m (q,r) = SOME (x,y,c) ⇒
+    n = m
+Proof
+  ho_match_mp_tac run_with_fuel_ind
+  \\ rw[] \\ gs[run_with_fuel_def]
+  \\ ntac 2 (pop_assum mp_tac)
+  \\ rw[CaseEq"num"]
+  \\ Cases_on`r` \\ gs[]
+QED
+
+Theorem run_n_with_fuel:
+  ∀n q p s r t.
+  (∀m. m < n ⇒ ISL (FST (run_n m s))) ∧ run_n n s = (INR r, t)
+     ∧ s = SND (q, p) ∧ (ISL (FST (q, p))) ⇒
+  run_with_fuel n (q, p) = SOME (r, t, 0)
+Proof
+  ho_match_mp_tac run_with_fuel_ind \\ rw[]
+  \\ gs[run_n_def, run_with_fuel_def, CaseEq"bool", CaseEq"num"]
+  \\ Cases_on`n` \\ gs[]
+  \\ gs[FUNPOW]
+  \\ Cases_on`step s` \\ gs[]
+  \\ qmatch_assum_rename_tac`step s = (x,z)`
+  \\ qmatch_asmsub_rename_tac`FUNPOW _ m`
+  \\ Cases_on`m = 0` \\ gvs[]
+  >- rw[run_with_fuel_def]
+  \\ first_assum(qspec_then`SUC 0`mp_tac)
+  \\ impl_tac >- simp[]
+  \\ simp_tac (srw_ss()) [FUNPOW_SUC]
+  \\ rw[] \\ gs[]
+  \\ first_x_assum irule
+  \\ Cases_on`x` \\ gs[]
+  \\ qx_gen_tac`n` \\ strip_tac
+  \\ first_x_assum(qspec_then`SUC n`mp_tac)
+  \\ simp[FUNPOW]
+QED
 
 (* TODO: move *)
+
+val post_transaction_accounting_pre_def = post_transaction_accounting_def
+  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
+  |> ONCE_REWRITE_RULE[GSYM update_account_def]
+  |> ONCE_REWRITE_RULE[GSYM update_account_def]
+  |> cv_auto_trans_pre;
+
+Theorem post_transaction_accounting_pre[cv_pre]:
+  ∀blk tx result s t.
+    post_transaction_accounting_pre blk tx result s t
+Proof
+  rw[post_transaction_accounting_pre_def]
+  \\ strip_tac \\ gs[]
+QED
+
+val () = update_beacon_block_def
+  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
+  |> ONCE_REWRITE_RULE[GSYM update_storage_def]
+  |> ONCE_REWRITE_RULE[GSYM update_account_def]
+  |> cv_auto_trans;
+
 val () = cv_auto_trans empty_return_destination_def;
+
 (* -- *)
+
+Definition run_transaction_with_fuel_def:
+  run_transaction_with_fuel n chainId blk acc tx =
+  OPTION_BIND
+    (initial_state chainId acc blk empty_return_destination tx)
+    (λs. OPTION_MAP
+           (λ(r, t, m). (post_transaction_accounting blk tx r s t, m))
+           (run_with_fuel n (INL (),
+                             s with accounts updated_by
+                             transfer_value tx.from tx.to tx.value)))
+End
+
+val () = cv_auto_trans run_transaction_with_fuel_def;
+
+Definition run_transactions_with_fuel_def:
+  run_transactions_with_fuel n c b a rs [] = SOME (rs, a, n) ∧
+  run_transactions_with_fuel n c b a rs (tx::txs) =
+  case run_transaction_with_fuel n c b a tx of
+  | NONE => NONE
+  | SOME ((r, a), n) => run_transactions_with_fuel n c b a (r::rs) txs
+End
+
+val () = cv_auto_trans run_transactions_with_fuel_def;
+
+Definition run_block_with_fuel_def:
+  run_block_with_fuel n chainId a b =
+  OPTION_MAP (λ(rs, a, n). (REVERSE rs, a ,n)) $
+  run_transactions_with_fuel n chainId b (update_beacon_block b a) [] b.transactions
+End
+
+val () = cv_auto_trans run_block_with_fuel_def;
+
+open listTheory pairTheory optionTheory sumTheory
+
+Theorem run_transaction_SOME_with_fuel:
+  run_transaction c b a tx = SOME p ⇔
+  ∃n. run_transaction_with_fuel n c b a tx = SOME (p, 0)
+Proof
+  rw[run_transaction_def, run_transaction_with_fuel_def]
+  \\ reverse(rw[EQ_IMP_THM])
+  \\ gvs[option_case_eq, pair_case_eq, CaseEq"sum", EXISTS_PROD]
+  \\ gs[run_SOME_run_n]
+  >- (
+    PairCases_on`z` \\ gvs[]
+    \\ drule run_with_fuel_to_zero
+    \\ strip_tac
+    \\ simp[PULL_EXISTS]
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ simp[] )
+  \\ first_assum (mp_then (Pat`run_n`) mp_tac run_n_with_fuel)
+  \\ simp[]
+  \\ disch_then(qspec_then`INL ()`mp_tac)
+  \\ simp[] \\ strip_tac
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
+Theorem run_transactions_with_fuel_append:
+  run_transactions_with_fuel n c b a (rs ++ xs) ls =
+  OPTION_MAP (λ(x,y,z). (x ++ xs,y,z)) $
+  run_transactions_with_fuel n c b a rs ls
+Proof
+  qid_spec_tac`rs`
+  \\ qid_spec_tac`a`
+  \\ qid_spec_tac`n`
+  \\ Induct_on`ls`
+  \\ rw[run_transactions_with_fuel_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ once_rewrite_tac[rich_listTheory.CONS_APPEND]
+  \\ rewrite_tac[listTheory.APPEND_ASSOC]
+  \\ simp[]
+QED
+
+Theorem run_transaction_with_fuel_add:
+  run_transaction_with_fuel n c b a t = SOME (x, m) ⇒
+  run_transaction_with_fuel (n + d) c b a t = SOME (x, m + d)
+Proof
+  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD]
+  \\ drule run_with_fuel_add
+  \\ disch_then(qspec_then`d`mp_tac)
+  \\ simp[]
+QED
+
+Theorem run_transaction_with_fuel_sub:
+  run_transaction_with_fuel n c b a t = SOME (x, m) ⇒
+  run_transaction_with_fuel (n - m) c b a t = SOME (x, 0)
+Proof
+  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD]
+  \\ drule run_with_fuel_sub
+  \\ simp[]
+QED
+
+Theorem run_transaction_with_fuel_equal:
+  run_transaction_with_fuel n c b a t = SOME (x, m) ∧
+  run_transaction_with_fuel p c b a t = SOME (y, m)
+  ⇒
+  n = p
+Proof
+  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD]
+  \\ drule_then irule run_with_fuel_equal
+  \\ gs[]
+QED
+
+Theorem FOLDL_OPTION_BIND_NONE:
+  FOLDL (λx y. OPTION_BIND x (f x y)) NONE ls = NONE
+Proof
+  Induct_on`ls` \\ rw[]
+QED
+
+Theorem run_block_SOME_with_fuel:
+  run_block c a b = SOME r ⇔
+  ∃n. run_block_with_fuel n c a b = SOME (FST r, SND r, 0)
+Proof
+  rw[run_block_def, run_block_with_fuel_def]
+  \\ qspec_tac(`update_beacon_block b a`,`a`)
+  \\ qid_spec_tac`r`
+  \\ rewrite_tac[METIS_PROVE [REVERSE_DEF]
+       ``run_transactions_with_fuel n c b a [] =
+         run_transactions_with_fuel n c b a (REVERSE [])``]
+  \\ qspec_tac(`[]:transaction_result list`,`rs`)
+  \\ qspec_tac(`b.transactions`,`ls`)
+  \\ Induct
+  \\ gs[UNCURRY, FORALL_PROD, EXISTS_PROD, PULL_EXISTS]
+  >- rw[run_transactions_with_fuel_def, EQ_IMP_THM]
+  \\ rw[run_transactions_with_fuel_def]
+  \\ qmatch_goalsub_rename_tac`run_transaction c b a tx`
+  \\ Cases_on`run_transaction c b a tx` \\ gs[]
+  \\ simp[FOLDL_OPTION_BIND_NONE]
+  >- (
+    rw[option_case_eq, pair_case_eq]
+    \\ drule run_transaction_with_fuel_sub
+    \\ strip_tac
+    \\ metis_tac[run_transaction_SOME_with_fuel, NOT_SOME_NONE] )
+  \\ gs[run_transaction_SOME_with_fuel]
+  \\ PairCases_on`x` \\ gs[]
+  \\ gs[option_case_eq, pair_case_eq, PULL_EXISTS, REVERSE_SNOC]
+  \\ simp[EQ_IMP_THM, PULL_EXISTS]
+  \\ conj_tac
+  >- (
+    qx_gen_tac`n1`
+    \\ rpt strip_tac
+    \\ drule run_transaction_with_fuel_add
+    \\ disch_then(qspec_then`n1`mp_tac)
+    \\ strip_tac
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ gs[] )
+  \\ qx_gen_tac`n1`
+  \\ rpt strip_tac
+  \\ drule run_transaction_with_fuel_sub
+  \\ strip_tac
+  \\ drule (Q.GENL[`p`,`y`]run_transaction_with_fuel_equal)
+  \\ disch_then(qspec_then`n`mp_tac)
+  \\ rw[] \\ gvs[]
+  \\ metis_tac[]
+QED
 
 (*
 https://github.com/ethereum/tests
@@ -160,28 +393,34 @@ commit 08839f5 (taken from the develop branch)
 BlockchainTests/GeneralStateTests/VMTests/vmArithmeticTest/add.json
 *)
 
+val to_vfmExecution_transaction_result_def =
+  theorem"to_vfmExecution_transaction_result_def";
+
 open cv_typeTheory cvTheory
 
-fun cv_eval_run_with_fuel_tac (goal as (_, gt)) = let
-  val run_tm = find_term (can (match_term ``run_with_fuel _ _``)) gt
+(*
+  val (_, gt) = top_goal()
+  Globals.max_print_depth := 12
+*)
+fun cv_eval_run_block_with_fuel_tac (goal as (_, gt)) = let
+  val run_tm = find_term (can (match_term ``run_block_with_fuel _ _ _ _``)) gt
   val raw_th = cv_eval_raw run_tm
   val raw_th2 = raw_th |>
   REWRITE_RULE[
     cv_typeTheory.to_option_def,
     cv_typeTheory.to_pair_def,
-    to_vfmExecution_outcome_def,
+    to_vfmExecution_transaction_result_def,
     cv_typeTheory.cv_has_shape_def,
     cvTheory.Num_11,
     EVAL``2n = 0``,
     EVAL``2n = 1``,
     EVAL``1n = 0``,
-    to_vfmExecution_result_def,
     to_evm_accounts_def,
     cv_typeTheory.to_list_def,
     cvTheory.cv_fst_def,
     cvTheory.cv_snd_def,
     cvTheory.c2n_def,
-    to_vfmContext_transaction_state_def,
+    to_vfmContext_execution_state_def,
     to_vfmContext_transaction_parameters_def,
     to_vfmContext_access_sets_def,
     to_vfmContext_context_def,
@@ -199,21 +438,18 @@ fun cv_eval_run_with_fuel_tac (goal as (_, gt)) = let
     to_list_def, cv_fst_def, cv_snd_def
   ]
 in
-  rewrite_tac[UNDISCH raw_th2]
+  rewrite_tac[raw_th2]
 end goal;
 
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
 fun mk_statement test_name =
   Term[QUOTE(String.concat[
-         "∃r. run_transaction 1 ",
+         "∃rs. run_block 1 ",
          test_name, "_pre ",
          test_name, "_block ",
-         test_name, "_transaction ",
-         "= SOME (Finished r) ∧ ",
-         "update_beacon_block ",
-         test_name, "_block r.accounts = ",
-         test_name, "_post"])]
+         "= SOME (rs, ",
+         test_name, "_post)"])]
 
 (*
   set_goal([], thm_term)
@@ -221,28 +457,11 @@ fun mk_statement test_name =
   Globals.max_print_depth := 12
 *)
 fun mk_tactic num_steps =
-  rw[run_transaction_def]
-  \\ qmatch_goalsub_abbrev_tac`SOME _ = x`
-  \\ `x <> NONE` by ( qunabbrev_tac`x` \\ cv_eval_match_tac``_``)
-  \\ `∃s. x = SOME s` by (Cases_on `x` \\ rw[])
-  \\ simp[run_SOME_run_n, PULL_EXISTS]
-  \\ simp_tac (srw_ss() ++ DNF_ss)[CaseEq "outcome"]
-  \\ rewrite_tac[CONJ_ASSOC]
-  \\ qho_match_abbrev_tac`∃n t r. Q n t r ∧ P r`
-  \\ `∃n t r. run_with_fuel n (INL (), s) = SOME (Finished r, t, 0) ∧
-              P r` suffices_by (
-    strip_tac
-    \\ drule run_with_fuel_to_zero
-    \\ strip_tac
-    \\ qunabbrev_tac`Q`
-    \\ simp[]
-    \\ goal_assum(first_assum o mp_then Any mp_tac)
-    \\ gs[] )
-  \\ `s = THE x` by rw[] \\ pop_assum SUBST1_TAC
-  \\ qunabbrev_tac`x`
+  rw[run_block_SOME_with_fuel]
+  \\ CONV_TAC SWAP_EXISTS_CONV
   \\ exists_tac (numSyntax.term_of_int num_steps)
-  \\ cv_eval_run_with_fuel_tac
-  \\ simp[Abbr`P`] \\ EVAL_TAC
+  \\ cv_eval_run_block_with_fuel_tac
+  \\ simp[] \\ EVAL_TAC
   \\ rw[FUN_EQ_THM, APPLY_UPDATE_THM] \\ rw[] \\ gs[]
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
@@ -276,29 +495,13 @@ fun accounts_term (ls:
       ]) "empty_accounts" ls
 
 (*
-  val test_index = 1
+  val test_index = 0
 *)
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
   fun prove_test test_index num_steps = let
     val test_name = List.nth(test_names, test_index);
     val test = get_test test_path test_name;
-
-    val block = #block test;
-    val block_def = new_definition(
-      test_name ^ "_block_def",
-      Term[QUOTE(String.concat[
-        test_name, "_block = <|",
-        " number := ", #number block,
-        ";baseFeePerGas := ", #baseFeePerGas block,
-        ";timeStamp := ", #timeStamp block,
-        ";coinBase := n2w ", #coinBase block,
-        ";hash := n2w ", #hash block,
-        ";gasLimit := ", #gasLimit block,
-        ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
-        ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-        "|>"
-      ])]);
 
     val transaction = #transaction test;
     val transaction_def = new_definition(
@@ -313,6 +516,23 @@ fun mk_prove_test test_path = let
         ";gasPrice := ", #gasPrice transaction,
         ";gasLimit := ", #gasLimit transaction,
         ";accessList := [] |>"
+      ])]);
+
+    val block = #block test;
+    val block_def = new_definition(
+      test_name ^ "_block_def",
+      Term[QUOTE(String.concat[
+        test_name, "_block = <|",
+        " number := ", #number block,
+        ";baseFeePerGas := ", #baseFeePerGas block,
+        ";timeStamp := ", #timeStamp block,
+        ";coinBase := n2w ", #coinBase block,
+        ";hash := n2w ", #hash block,
+        ";gasLimit := ", #gasLimit block,
+        ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
+        ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
+        ";transactions := [", test_name, "_transaction]",
+        "|>"
       ])]);
 
     val pre = #pre test;
