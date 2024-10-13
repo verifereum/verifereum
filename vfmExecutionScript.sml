@@ -963,39 +963,47 @@ Datatype:
    |>
 End
 
+Definition post_transaction_accounting_def:
+  post_transaction_accounting blk tx result (s: execution_state) t =
+  let (gasUsed, refund, logs, returnData) =
+    if NULL t.contexts then (0, 0, [], []) (* impossible: just for totality *)
+    else let ctxt = HD t.contexts in
+      (ctxt.gasUsed, ctxt.gasRefund, ctxt.logs, ctxt.returnData) in
+  let gasLeft = tx.gasLimit - gasUsed in
+  let gasRefund = if result ≠ NONE then 0
+                  else MIN (gasUsed DIV 5) refund in
+  let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
+  let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
+  let gasUsed = gasUsed - gasRefund in
+  let transactionFee = gasUsed * priorityFeePerGas in
+  let accounts = if result = NONE then t.accounts else s.accounts in
+  let sender = accounts tx.from in
+  let feeRecipient = accounts blk.coinBase in
+  let newAccounts =
+    (tx.from =+ sender with balance updated_by $+ refundEther) $
+    (blk.coinBase =+ feeRecipient with balance updated_by $+ transactionFee)
+    accounts in
+  let logs = if result = NONE then logs else [] in
+  let tr = <| gasUsed := gasUsed;
+              logs := logs;
+              result := result;
+              output := returnData |> in
+  (tr, accounts)
+End
+
 Definition run_transaction_def:
-  run_transaction chainId accounts blk tx =
+  run_transaction chainId blk accounts tx =
   OPTION_BIND
     (initial_state chainId accounts blk empty_return_destination tx)
     (λs.
         case run (s with accounts updated_by
                   transfer_value tx.from tx.to tx.value) of
-        | SOME (INR r, t) =>
-          let context = HD t.contexts in
-          let gasLeft = tx.gasLimit - context.gasUsed in
-          let gasRefund = if r ≠ NONE then 0
-                          else MIN (context.gasUsed DIV 5) context.gasRefund in
-          let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
-          let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
-          let gasUsed = context.gasUsed - gasRefund in
-          let transactionFee = gasUsed * priorityFeePerGas in
-          let accounts = if r = NONE then t.accounts else s.accounts in
-          let sender = accounts tx.from in
-          let feeRecipient = accounts blk.coinBase in
-          let newAccounts =
-            (tx.from =+ sender with balance updated_by $+ refundEther) $
-            (blk.coinBase =+ feeRecipient with balance updated_by $+ transactionFee)
-            accounts in
-          let logs = if r = NONE then context.logs else [] in
-          SOME (<| gasUsed := gasUsed;
-                   logs := logs;
-                   result := r;
-                   output := context.returnData |>, accounts)
+        | SOME (INR r, t) => SOME (post_transaction_accounting blk tx r s t)
         | _ => NONE)
 End
 
 Definition update_beacon_block_def:
-  update_beacon_block b accounts =
+  update_beacon_block b (accounts: evm_accounts) =
   let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
   let buffer_length = 8191n in
   let timestamp_idx = b.timeStamp MOD buffer_length in
@@ -1009,12 +1017,11 @@ End
 
 Definition run_block_def:
   run_block chainId accounts b =
-  let acc = update_beacon_block b accounts in
-  FOLDR
-    (λtx x.
+  FOLDL
+    (λx tx.
        OPTION_BIND x (λ(ls, a).
          OPTION_MAP (λ(r, a). (SNOC r ls, a)) $
-         run_transaction chainId a b tx))
+         run_transaction chainId b a tx))
     (SOME ([], update_beacon_block b accounts))
     b.transactions
 End
