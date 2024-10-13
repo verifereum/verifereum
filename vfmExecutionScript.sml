@@ -278,29 +278,27 @@ Definition take_pad_0_def:
 End
 
 Definition copy_to_memory_check_def:
-  copy_to_memory_check checkSize f =
-    bind get_current_context
-      (λcontext.
-        ignore_bind (assert (3 ≤ LENGTH context.stack) StackUnderflow) (
-        let destOffset = w2n $ EL 0 context.stack in
-        let offset = w2n $ EL 1 context.stack in
-        let size = w2n $ EL 2 context.stack in
-        let minimumWordSize = word_size size in
-        bind get_accounts (λaccounts.
-        let sourceBytes = f context accounts in
-        ignore_bind
-          (assert (¬checkSize ∨ offset + size ≤ LENGTH sourceBytes) OutOfBoundsRead) (
-        let bytes = take_pad_0 size (DROP offset sourceBytes) in
-        let expandedMemory = PAD_RIGHT 0w (minimumWordSize * 32) context.memory in
-        let newMemory = write_memory destOffset bytes expandedMemory in
-        let expansionCost = memory_expansion_cost context.memory newMemory in
-        let dynamicGas = 3 * minimumWordSize + expansionCost in
-        let newStack = DROP 3 context.stack in
-        let newContext = context with
-          <| stack := newStack; memory := newMemory |>
-        in
-          ignore_bind (consume_gas dynamicGas)
-            (set_current_context newContext)))))
+  copy_to_memory_check checkSize f = do
+    context <- get_current_context;
+    assert (3 ≤ LENGTH context.stack) StackUnderflow;
+    destOffset <<- w2n $ EL 0 context.stack;
+    offset <<- w2n $ EL 1 context.stack;
+    size <<- w2n $ EL 2 context.stack;
+    minimumWordSize <<- word_size size;
+    accounts <- get_accounts;
+    sourceBytes <<- f context accounts;
+    assert (¬checkSize ∨ offset + size ≤ LENGTH sourceBytes) OutOfBoundsRead;
+    bytes <<- take_pad_0 size (DROP offset sourceBytes);
+    expandedMemory <<- PAD_RIGHT 0w (minimumWordSize * 32) context.memory;
+    newMemory <<- write_memory destOffset bytes expandedMemory;
+    expansionCost <<- memory_expansion_cost context.memory newMemory;
+    dynamicGas <<- 3 * minimumWordSize + expansionCost;
+    newStack <<- DROP 3 context.stack;
+    consume_gas dynamicGas;
+    spentContext <- get_current_context;
+    set_current_context $ spentContext
+      with <| stack := newStack; memory := newMemory |>
+  od
 End
 
 Definition copy_to_memory_def:
@@ -308,22 +306,21 @@ Definition copy_to_memory_def:
 End
 
 Definition store_to_memory_def:
-  store_to_memory f =
-    bind (get_current_context)
-      (λcontext.
-        ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
-          let byteIndex = w2n (EL 0 context.stack) in
-          let value = EL 1 context.stack in
-          let newMinSize = word_size (SUC byteIndex) * 32 in
-          let expandedMemory = PAD_RIGHT 0w newMinSize context.memory in
-          let newMemory = write_memory byteIndex (f value) expandedMemory in
-          let expansionCost = memory_expansion_cost context.memory newMemory in
-          let newStack = DROP 2 context.stack in
-          let newContext =
-            context with <| stack := newStack; memory := newMemory |>
-          in
-            ignore_bind (consume_gas expansionCost)
-              (set_current_context newContext)))
+  store_to_memory f = do
+    context <- get_current_context;
+    assert (2 ≤ LENGTH context.stack) StackUnderflow;
+    byteIndex <<- w2n (EL 0 context.stack);
+    value <<- EL 1 context.stack;
+    newMinSize <<- word_size (SUC byteIndex) * 32;
+    expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+    newMemory <<- write_memory byteIndex (f value) expandedMemory;
+    expansionCost <<- memory_expansion_cost context.memory newMemory;
+    newStack <<- DROP 2 context.stack;
+    consume_gas expansionCost;
+    spentContext <- get_current_context;
+    set_current_context $ spentContext
+      with <| stack := newStack; memory := newMemory |>
+  od
 End
 
 Definition get_current_accesses_def:

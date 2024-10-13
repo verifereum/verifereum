@@ -387,14 +387,14 @@ Proof
   \\ metis_tac[]
 QED
 
+val to_vfmExecution_transaction_result_def =
+  theorem"to_vfmExecution_transaction_result_def";
+
 (*
 https://github.com/ethereum/tests
 commit 08839f5 (taken from the develop branch)
 BlockchainTests/GeneralStateTests/VMTests/vmArithmeticTest/add.json
 *)
-
-val to_vfmExecution_transaction_result_def =
-  theorem"to_vfmExecution_transaction_result_def";
 
 (*
   val (_, gt) = top_goal()
@@ -451,7 +451,7 @@ fun mk_statement test_name =
 
 (*
   set_goal([], thm_term)
-  val num_steps = 15
+  val num_steps = 14
   Globals.max_print_depth := 16
 *)
 fun mk_tactic num_steps =
@@ -562,20 +562,31 @@ val test_path = "tests/add.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, C prove_test 18)
 
-val test_path = "tests/iszero.json"
+val test_path = "tests/iszero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val num_steps = [17, 17, 19];
 val thms = List.tabulate (num_tests, fn i =>
   prove_test i (List.nth(num_steps, i)));
 
-val test_path = "tests/pc.json"
+val test_path = "tests/pc.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val num_steps = [15, 18];
 val thms = List.tabulate (num_tests, fn i =>
   prove_test i (List.nth(num_steps, i)));
 
 (*
-TODO: does not work yet, evm might have bugs
+val test_path = "tests/calldatacopy.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+*)
+
+(* TODO: does not work yet (wrong sender final balance)
+* probably wrong gas usage somewhere
+val test_path = "tests/jump.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+*)
+
+(*
+TODO: does not work yet (fails out of gas), evm might have bugs
 val test_path = "tests/loopExp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 *)
