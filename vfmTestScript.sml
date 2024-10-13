@@ -451,7 +451,7 @@ fun mk_statement test_name =
 
 (*
   set_goal([], thm_term)
-  val num_steps = 12
+  val num_steps = 13
   Globals.max_print_depth := 16
 *)
 fun mk_tactic num_steps =
@@ -464,6 +464,36 @@ fun mk_tactic num_steps =
   \\ gs[account_state_component_equality, FUN_EQ_THM, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
   \\ EVAL_TAC
+
+val run_block_with_fuel =
+  run_block_with_fuel_def |> SPEC_ALL |> concl |> lhs
+  |> strip_comb |> fst;
+
+fun find_num_steps thm_term =
+let
+  val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
+  fun f n =
+  let
+    val n_tm = numSyntax.term_of_int n
+    val run_tm = list_mk_comb(run_block_with_fuel, n_tm::args)
+    val raw_th = cv_eval_raw run_tm
+    val r_tm = raw_th |>
+      REWRITE_RULE[to_option_def, to_pair_def, c2n_def] |>
+      concl |> rhs
+  in
+    if optionSyntax.is_none r_tm
+    then f $ 2 * n
+    else
+      r_tm |> optionSyntax.dest_some |>
+        pairSyntax.dest_pair |> snd |>
+        pairSyntax.dest_pair |> snd |>
+        numSyntax.int_of_term |>
+        curry op - n
+  end
+  val n = 20
+in
+  f n
+end
 
 fun accounts_term (ls:
    {address: string,
@@ -497,7 +527,7 @@ fun accounts_term (ls:
 *)
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
-  fun prove_test test_index num_steps = let
+  fun prove_test test_index = let
     val test_name = List.nth(test_names, test_index);
     val test = get_test test_path test_name;
 
@@ -551,49 +581,39 @@ fun mk_prove_test test_path = let
 
     val thm_name = test_name ^ "_correctness";
     val thm_term = mk_statement test_name;
+
+    val num_steps = find_num_steps thm_term
   in
     store_thm(thm_name, thm_term, mk_tactic num_steps)
   end
 in (List.length test_names, prove_test) end
 
-(* TODO: automate finding the num_stps *)
-
 val test_path = "tests/add.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, C prove_test 18)
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = "tests/iszero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val num_steps = [17, 17, 19];
-val thms = List.tabulate (num_tests, fn i =>
-  prove_test i (List.nth(num_steps, i)));
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = "tests/pc.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val num_steps = [15, 18];
-val thms = List.tabulate (num_tests, fn i =>
-  prove_test i (List.nth(num_steps, i)));
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = "tests/slt.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val num_steps = [20, 20, 18, 18];
-val thms = List.tabulate (num_tests, fn i =>
-  prove_test i (List.nth(num_steps, i)));
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = "tests/pop.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val num_steps = [17, 12]
-val thms = List.tabulate (num_tests, fn i =>
-  prove_test i (List.nth(num_steps, i)));
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = "tests/jump.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 (*
 val test_path = "tests/calldatacopy.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-*)
-
-(* TODO: does not work yet (wrong sender final balance)
-* probably wrong gas usage somewhere
-val test_path = "tests/jump.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 *)
 
