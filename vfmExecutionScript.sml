@@ -964,19 +964,21 @@ Datatype:
 End
 
 Definition post_transaction_accounting_def:
-  post_transaction_accounting blk tx result (s: execution_state) t =
-  let (gasUsed, refund, logs, returnData) =
-    if NULL t.contexts then (0, 0, [], []) (* impossible: just for totality *)
+  post_transaction_accounting blk tx result acc t =
+  let (gasLimit, gasUsed, refund, logs, returnData) =
+    if NULL t.contexts ∨ ¬NULL (TL t.contexts)
+    then (0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = HD t.contexts in
-      (ctxt.gasUsed, ctxt.gasRefund, ctxt.logs, ctxt.returnData) in
-  let gasLeft = tx.gasLimit - gasUsed in
+      (ctxt.callParams.gasLimit, ctxt.gasUsed,
+       ctxt.gasRefund, ctxt.logs, ctxt.returnData) in
+  let gasLeft = gasLimit - gasUsed in
   let gasRefund = if result ≠ NONE then 0
                   else MIN (gasUsed DIV 5) refund in
   let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
-  let gasUsed = gasUsed - gasRefund in
-  let transactionFee = gasUsed * priorityFeePerGas in
-  let accounts = if result = NONE then t.accounts else s.accounts in
+  let totalGasUsed = gasUsed - gasRefund in
+  let transactionFee = totalGasUsed * priorityFeePerGas in
+  let accounts = if result = NONE then t.accounts else acc in
   let sender = accounts tx.from in
   let feeRecipient = accounts blk.coinBase in
   let newAccounts =
@@ -984,11 +986,11 @@ Definition post_transaction_accounting_def:
     (blk.coinBase =+ feeRecipient with balance updated_by $+ transactionFee)
     accounts in
   let logs = if result = NONE then logs else [] in
-  let tr = <| gasUsed := gasUsed;
+  let tr = <| gasUsed := totalGasUsed;
               logs := logs;
               result := result;
               output := returnData |> in
-  (tr, accounts)
+  (tr, newAccounts)
 End
 
 Definition run_transaction_def:
@@ -998,7 +1000,8 @@ Definition run_transaction_def:
     (λs.
         case run (s with accounts updated_by
                   transfer_value tx.from tx.to tx.value) of
-        | SOME (INR r, t) => SOME (post_transaction_accounting blk tx r s t)
+        | SOME (INR r, t) => SOME $
+            post_transaction_accounting blk tx r s.accounts t
         | _ => NONE)
 End
 
