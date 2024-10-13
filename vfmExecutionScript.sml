@@ -972,11 +972,12 @@ Definition post_transaction_accounting_def:
       (ctxt.callParams.gasLimit, ctxt.gasUsed,
        ctxt.gasRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
+  let txGasUsed = tx.gasLimit - gasLeft in
   let gasRefund = if result ≠ NONE then 0
-                  else MIN (gasUsed DIV 5) refund in
+                  else MIN (txGasUsed DIV 5) refund in
   let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
-  let totalGasUsed = gasUsed - gasRefund in
+  let totalGasUsed = txGasUsed - gasRefund in
   let transactionFee = totalGasUsed * priorityFeePerGas in
   let accounts = if result = NONE then t.accounts else acc in
   let sender = accounts tx.from in

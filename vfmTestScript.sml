@@ -6,6 +6,7 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
      vfmOperationTheory vfmComputeTheory
      readTestJsonLib
      cv_transLib cv_stdTheory cv_computeLib
+     cv_typeTheory cvTheory
      cv_primTheory byteTheory;
 
 val _ = new_theory "vfmTest";
@@ -395,8 +396,6 @@ BlockchainTests/GeneralStateTests/VMTests/vmArithmeticTest/add.json
 val to_vfmExecution_transaction_result_def =
   theorem"to_vfmExecution_transaction_result_def";
 
-open cv_typeTheory cvTheory
-
 (*
   val (_, gt) = top_goal()
   Globals.max_print_depth := 12
@@ -452,7 +451,7 @@ fun mk_statement test_name =
 
 (*
   set_goal([], thm_term)
-  val num_steps = 18
+  val num_steps = 15
   Globals.max_print_depth := 16
 *)
 fun mk_tactic num_steps =
@@ -586,9 +585,9 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 initial_state_def
 
 cv_eval ``
-let acc = add_d0g0v0_Cancun_pre in
-let blk = add_d0g0v0_Cancun_block in
-let tx = add_d0g0v0_Cancun_transaction in
+let acc = pc_d0g0v0_Cancun_pre in
+let blk = pc_d0g0v0_Cancun_block in
+let tx = pc_d0g0v0_Cancun_transaction in
 let (r, t, n) = THE $
   run_with_fuel 18 (INL (),
     (THE $
@@ -599,7 +598,8 @@ let (r, t, n) = THE $
 let c = HD t.contexts in
 let sb1 = (lookup_account acc tx.from).balance in
 let sb2 = (lookup_account t.accounts tx.from).balance in
-  (tx.gasLimit, tx.gasPrice, blk.baseFeePerGas,
+  (n, tx.gasLimit, c.callParams.gasLimit,
+   tx.gasPrice, blk.baseFeePerGas,
    c.gasUsed, c.gasRefund, c.logs, c.returnData,
    tx.value,
    sb1 - sb2,
@@ -607,11 +607,14 @@ let sb2 = (lookup_account t.accounts tx.from).balance in
    )
 ``
 
-val gasLimit = 80000000
-val gasUsed = 24742
+val txGasLimit = 80000000
+val gasPrice = 10
+val gasLimit = 79978808
+val gasUsed = 7631
+val refund = 4800
 val gasLeft = gasLimit - gasUsed
-val refundEther = gasLeft * 10
-val gasRefund = 0
+val gasRefund = Int.min (gasUsed div 5, refund)
+val refundEther = (gasLeft + gasRefund) * gasPrice
 val totalGasUsed = gasUsed - gasRefund
 val priorityFeePerGas = 0
 val transactionFee = totalGasUsed * priorityFeePerGas
@@ -620,8 +623,11 @@ val discrepancy = 838137708090876753 - 838137708090664833
 initial_state_def
 post_transaction_accounting_def
 
+val discrepancy = 17592185804185 - 17592185771445
+val gas_discrepancy = discrepancy div gasPrice
+
 discrepancy - gasLeft
-cv_eval``intrinsic_cost add_d0g0v0_Cancun_transaction.data``
+cv_eval``intrinsic_cost pc_d0g0v0_Cancun_transaction.data``
 
 cv_eval ``
 let s =
