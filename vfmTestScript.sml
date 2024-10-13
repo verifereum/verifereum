@@ -451,7 +451,7 @@ fun mk_statement test_name =
 
 (*
   set_goal([], thm_term)
-  val num_steps = 14
+  val num_steps = 12
   Globals.max_print_depth := 16
 *)
 fun mk_tactic num_steps =
@@ -493,7 +493,7 @@ fun accounts_term (ls:
       ]) "empty_accounts" ls
 
 (*
-  val test_index = 0
+  val test_index = 1
 *)
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
@@ -574,6 +574,18 @@ val num_steps = [15, 18];
 val thms = List.tabulate (num_tests, fn i =>
   prove_test i (List.nth(num_steps, i)));
 
+val test_path = "tests/slt.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val num_steps = [20, 20, 18, 18];
+val thms = List.tabulate (num_tests, fn i =>
+  prove_test i (List.nth(num_steps, i)));
+
+val test_path = "tests/pop.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val num_steps = [17, 12]
+val thms = List.tabulate (num_tests, fn i =>
+  prove_test i (List.nth(num_steps, i)));
+
 (*
 val test_path = "tests/calldatacopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -593,14 +605,32 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 
 (*
 
-initial_state_def
+cv_eval ``
+let acc = pop_d1g0v0_Cancun_pre in
+let blk = pop_d1g0v0_Cancun_block in
+let tx = pop_d1g0v0_Cancun_transaction in
+let s = (THE $ initial_state 1 acc blk
+               empty_return_destination tx) with accounts updated_by
+           transfer_value tx.from tx.to tx.value in
+let (r, s) = run_n 11 s in
+let accesses = s.accesses in
+let c = EL 0 s.contexts in
+  (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed, c.callParams.gasLimit,
+   fIN 4097w accesses.addresses)
+``
+
+(79978796 - 26) - ((79978796 - 26) div 64)
+val subLimit = 78726543
+val usedBefore = 26
+val parentUsed = 78729169
+parentUsed - usedBefore - subLimit
 
 cv_eval ``
-let acc = pc_d0g0v0_Cancun_pre in
-let blk = pc_d0g0v0_Cancun_block in
-let tx = pc_d0g0v0_Cancun_transaction in
+let acc = pop_d1g0v0_Cancun_pre in
+let blk = pop_d1g0v0_Cancun_block in
+let tx = pop_d1g0v0_Cancun_transaction in
 let (r, t, n) = THE $
-  run_with_fuel 18 (INL (),
+  run_with_fuel 12 (INL (),
     (THE $
      initial_state 1 acc blk
        empty_return_destination
@@ -609,8 +639,8 @@ let (r, t, n) = THE $
 let c = HD t.contexts in
 let sb1 = (lookup_account acc tx.from).balance in
 let sb2 = (lookup_account t.accounts tx.from).balance in
-  (n, tx.gasLimit, c.callParams.gasLimit,
-   tx.gasPrice, blk.baseFeePerGas,
+  (r, n, tx.gasLimit, c.callParams.gasLimit,
+   tx.gasPrice, blk.baseFeePerGas, c.stack,
    c.gasUsed, c.gasRefund, c.logs, c.returnData,
    tx.value,
    sb1 - sb2,

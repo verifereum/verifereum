@@ -864,8 +864,8 @@ Definition step_def:
           revert
         od
       | SOME op => do
-          consume_gas (static_gas op);
           step_inst op;
+          consume_gas (static_gas op);
           if is_call op then return () else inc_pc (LENGTH (opcode op))
         od
     od
@@ -876,10 +876,13 @@ Definition step_def:
       | [] => (INR (SOME Impossible), s)
       | [_] => (INR e, s)
       | callee :: caller :: callStack =>
-        let calleeGasLeft = callee.callParams.gasLimit - callee.gasUsed in
-        let returnData = if e = NONE ∨ e = SOME Reverted
-                         then callee.returnData
-                         else [] in
+        let exceptionalHalt = (e ≠ NONE ∧ e ≠ SOME Reverted) in
+        let calleeGasLeft =
+          if exceptionalHalt then 0
+          else callee.callParams.gasLimit - callee.gasUsed in
+        let returnData =
+          if exceptionalHalt then []
+          else callee.returnData in
         let calleeSuccess = (e = NONE) in
         let (newCallerBase, success) =
           (case callee.callParams.outputTo of
