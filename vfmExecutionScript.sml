@@ -479,20 +479,20 @@ Definition step_create_def:
 End
 
 Definition step_sload_def:
-  step_sload s =
-  bind get_current_context
-    (λcontext.
-      ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-        let key = EL 0 context.stack in
-        let address = context.callParams.callee in
-        bind (access_slot (SK address key)) (λwarm.
-        let dynamicGas = if warm then 100 else 2600 in
-        bind get_accounts (λaccounts.
-        let word = (accounts address).storage key in
-        let newStack = word :: TL context.stack in
-        let newContext = context with <| stack := newStack |> in
-        ignore_bind (consume_gas dynamicGas)
-          (set_current_context newContext))))) s
+  step_sload = do
+    context <- get_current_context;
+    assert (1 ≤ LENGTH context.stack) StackUnderflow;
+    key <<- EL 0 context.stack;
+    address <<- context.callParams.callee;
+    warm <- access_slot (SK address key);
+    dynamicGas <<- if warm then 100 else 2100;
+    accounts <- get_accounts;
+    word <<- (accounts address).storage key;
+    newStack <<- word :: TL context.stack;
+    consume_gas dynamicGas;
+    spentContext <- get_current_context;
+    set_current_context $ spentContext with stack := newStack
+  od
 End
 
 Definition step_sstore_def:

@@ -637,6 +637,10 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests - 2, prove_test);
 (* TODO: some cv_eval problem in the 2nd one? *)
 
+val test_path = "tests/sstore_sload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (*
 * TODO: fix
 val test_path = "tests/calldatacopy.json";
