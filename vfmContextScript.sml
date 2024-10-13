@@ -87,7 +87,7 @@ Definition wf_context_def:
 End
 
 Datatype:
-  transaction_state =
+  execution_state =
   <| contexts : context list
    ; txParams : transaction_parameters
    ; accesses : access_sets
@@ -105,6 +105,7 @@ Datatype:
    ; prevRandao            : bytes32
    ; hash                  : bytes32
    ; parentBeaconBlockRoot : bytes32
+   ; transactions          : transaction list
    |>
 End
 
@@ -241,18 +242,16 @@ QED
 Definition initial_state_def:
   initial_state c a b r t =
   let sender = (a t.from) in
-  let fee = t.gasLimit * t.gasPrice in
+  let fee = t.gasLimit * t.gasPrice in (* TODO: add blob gas fee *)
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
   if sender.balance < fee + t.value then NONE else
   let updatedSender = sender with <|
     nonce := SUC sender.nonce;
-    balance := sender.balance - fee - t.value
+    balance := sender.balance - fee
   |> in
-  let recipient = a t.to in
-  let updatedRecipient = recipient with balance updated_by $+ t.value in
-  let accounts = (t.to =+ updatedRecipient) $ (t.from =+ updatedSender) a in
+  let accounts = (t.from =+ updatedSender) a in
   let acc = initial_access_sets t in
-  let ctxt = <| code := recipient.code; accounts := accounts; accesses := acc
+  let ctxt = <| code := (a t.to).code; accounts := accounts; accesses := acc
               ; outputTo := r; static := F |> in
   SOME $
   <| contexts := [apply_intrinsic_cost $ initial_context ctxt t]

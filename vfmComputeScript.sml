@@ -550,7 +550,7 @@ Proof
   \\ metis_tac[]
 QED
 
-val from_to_transaction_state = from_to_thm_for “:transaction_state”;
+val from_to_execution_state = from_to_thm_for “:execution_state”;
 
 val () = “consume_gas n s” |>
   SIMP_CONV std_ss [consume_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
@@ -600,7 +600,7 @@ Triviality update_accounts:
     update_account (update_account s.accounts c d) a b)
 Proof
   rw[update_accounts_def, return_def, update_account_def,
-     transaction_state_component_equality]
+     execution_state_component_equality]
 QED
 
 val () = “start_context x y c s” |>
@@ -611,6 +611,12 @@ val () = “start_context x y c s” |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   cv_auto_trans;
 
+val () = “set_return_data r s” |>
+  SIMP_CONV std_ss [
+    set_return_data_def, bind_def, LET_RATOR
+  ] |>
+  cv_auto_trans;
+
 val () = cv_auto_trans get_current_accesses_def;
 
 val () = cv_auto_trans access_address_def;
@@ -619,9 +625,8 @@ val () = cv_auto_trans access_slot_def;
 
 val () = “finish_current r s” |>
   SIMP_CONV std_ss [
-    finish_current_def, bind_def, LET_RATOR
-  ]
-  |> cv_auto_trans;
+    finish_current_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
 
 val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
 
@@ -800,7 +805,7 @@ Triviality update_accounts:
   (INL (), s with accounts := update_account s.accounts k v)
 Proof
   rw[update_accounts_def, return_def,
-     transaction_state_component_equality, update_account_def]
+     execution_state_component_equality, update_account_def]
 QED
 
 val step_sstore_pre_def = “step_sstore s” |>
@@ -891,11 +896,12 @@ val () = cv_auto_trans initial_tx_params_def;
 val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
-val () = refund_fee_def |>
+val () = transfer_value_def |>
+  SIMP_RULE std_ss [combinTheory.C_DEF] |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 

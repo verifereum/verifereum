@@ -23,37 +23,21 @@ Datatype:
   | InvalidJumpDest
   | WriteInStaticContext
   | OutOfBoundsRead
+  | Reverted
   | Impossible
 End
 
-Datatype:
-  result =
-  <| output   : byte list
-   ; events   : event list
-   ; refund   : num
-   ; gasLeft  : num
-   ; accounts : evm_accounts
-   |>
-End
-
-Datatype:
-  outcome =
-  | Excepted exception
-  | Reverted (byte list)
-  | Finished result
-End
-
-Type transaction_result = “:(α + outcome) # transaction_state”;
+Type execution_result = “:(α + exception option) # execution_state”;
 
 Definition bind_def:
-  bind g f s =
+  bind g f s : α execution_result =
     case g s of
     | (INR e, s) => (INR e, s)
     | (INL x, s) => f x s
 End
 
 Definition return_def:
-  return (x:α) s = (INL x, s) : α transaction_result
+  return (x:α) s = (INL x, s) : α execution_result
 End
 
 Definition ignore_bind_def:
@@ -61,29 +45,29 @@ Definition ignore_bind_def:
 End
 
 Definition fail_def:
-  fail e s = (INR (Excepted e), s)
+  fail e s = (INR (SOME e), s) : α execution_result
 End
 
 Definition finish_def:
-  finish r s = (INR (Finished r), s)
+  finish s = (INR NONE, s) : α execution_result
 End
 
 Definition revert_def:
-  revert r s = (INR (Reverted r), s)
+  revert s = (INR (SOME Reverted), s) : α execution_result
 End
 
 Definition assert_def:
-  assert b e s = (if b then INL () else INR (Excepted e), s)
+  assert b e s = (if b then INL () else INR (SOME e), s) : unit execution_result
 End
 
 val _ = monadsyntax.declare_monad (
-  "txn",
+  "evm_execution",
   { bind = “bind”, unit = “return”,
     ignorebind = SOME “ignore_bind”, choice = NONE,
     fail = SOME “fail”, guard = SOME “assert”
   }
 );
-val () = monadsyntax.enable_monad "txn";
+val () = monadsyntax.enable_monad "evm_execution";
 val () = monadsyntax.enable_monadsyntax();
 
 Definition write_memory_def:
@@ -151,24 +135,19 @@ Definition consume_gas_def:
   od
 End
 
-(* Theorem consume_gas_0: *)
-(*   ∀n. n.contexts ≠ [] ∧ (HD n.contexts).gasUsed < (HD n.contexts).callParams.gasLimit ⇒ consume_gas 0 n = (INL (), n) *)
-(* Proof *)
-(*   rw[consume_gas_def] *)
-(*   \\ rw[Once bind_def, get_current_context_def] *)
-(*   \\ rw[fail_def, return_def] *)
-(*   \\ rw[Once ignore_bind_def, Once bind_def, assert_def] *)
-(*   \\ rw[set_current_context_def] *)
-(*   \\ rw[return_def] *)
-(*   \\ rw[quantHeuristicsTheory.HD_TL_EQ_1] *)
-
-(* \\ rw[transaction_state_component_equality] *)
-
 Definition unuse_gas_def:
   unuse_gas n = do
     context <- get_current_context;
     assert (n ≤ context.gasUsed) Impossible;
     newContext <<- context with gasUsed := context.gasUsed - n;
+    set_current_context newContext
+  od
+End
+
+Definition set_return_data_def:
+  set_return_data rd = do
+    context <- get_current_context;
+    newContext <<- context with returnData := rd;
     set_current_context newContext
   od
 End
@@ -368,18 +347,7 @@ Definition access_slot_def:
 End
 
 Definition finish_current_def:
-  finish_current returnData = do
-    context <- get_current_context;
-    accounts <- get_accounts;
-    r <<- <|
-        output   := returnData
-      ; events   := context.logs
-      ; refund   := context.gasRefund
-      ; gasLeft  := context.callParams.gasLimit - context.gasUsed
-      ; accounts := accounts
-    |>;
-    finish r
-  od
+  finish_current returnData = do set_return_data returnData; finish od
 End
 
 Datatype:
@@ -845,9 +813,13 @@ Definition step_inst_def:
       expansionCost <<- memory_expansion_cost context.memory newMemory;
       consume_gas expansionCost;
       returnData <<- TAKE size (DROP offset newMemory);
-      newContext <<- context with <| stack := newStack; memory := newMemory |>;
+      newContext <<- context with <|
+                       stack := newStack;
+                       memory := newMemory;
+                       returnData := returnData
+                     |>;
       set_current_context newContext;
-      revert returnData
+      revert
     od
 End
 
@@ -891,7 +863,8 @@ Definition step_def:
       case parse_opcode (DROP context.pc code) of
       | NONE => do
           consume_gas (context.callParams.gasLimit - context.gasUsed);
-          revert []
+          set_return_data [];
+          revert
         od
       | SOME op => do
           consume_gas (static_gas op);
@@ -903,14 +876,14 @@ Definition step_def:
   | (INL x, s) => (INL x, s)
   | (INR e, s) =>
       case s.contexts of
-      | [] => (INR (Excepted Impossible), s)
+      | [] => (INR (SOME Impossible), s)
       | [_] => (INR e, s)
       | callee :: caller :: callStack =>
         let calleeGasLeft = callee.callParams.gasLimit - callee.gasUsed in
-        let returnData = case e of Finished r => r.output
-                                 | Reverted d => d
-                                 | Excepted _ => [] in
-        let calleeSuccess = case e of Finished _ => T | _ => F in
+        let returnData = if e = NONE ∨ e = SOME Reverted
+                         then callee.returnData
+                         else [] in
+        let calleeSuccess = (e = NONE) in
         let (newCallerBase, success) =
           (case callee.callParams.outputTo of
            | Memory r =>
@@ -964,39 +937,86 @@ Definition step_def:
 End
 
 Definition run_def:
-  run s = OPTION_MAP (OUTR o FST) (OWHILE (ISL o FST) (step o SND) (INL (), s))
+  run s = OWHILE (ISL o FST) (step o SND) (INL (), s)
 End
 
 Definition empty_return_destination_def:
   empty_return_destination = Memory <| offset := 0; size := 0 |>
 End
 
-Definition refund_fee_def:
-  refund_fee (sender: address) gasLimit gasLeft refund gasPrice accounts : evm_accounts =
-  let gasUsed = gasLimit - gasLeft in
-  let cappedRefund = MIN (gasUsed DIV 5) refund in
-  let refundEther = (gasLeft + cappedRefund) * gasPrice in
-  (sender =+ accounts sender with balance updated_by $+ refundEther) accounts
+Definition transfer_value_def:
+  transfer_value (fromAddress: address) toAddress value accounts =
+  if value = 0 then accounts else
+    let sender = accounts fromAddress in
+    let recipient = accounts toAddress in
+    let newSender = sender with balance updated_by flip $- value in
+    let newRecipient = recipient with balance updated_by $+ value in
+    (toAddress =+ newRecipient) $ (fromAddress =+ newSender) accounts
+End
+
+Datatype:
+  transaction_result =
+  <| gasUsed  : num
+   ; logs     : event list
+   ; output   : byte list
+   ; result   : exception option
+   |>
 End
 
 Definition run_transaction_def:
   run_transaction chainId accounts blk tx =
-  OPTION_MAP (λoutcome.
-      case outcome of
-      | Finished r => Finished $ r with accounts updated_by
-          refund_fee tx.from tx.gasLimit r.gasLeft r.refund blk.baseFeePerGas
-      | _ => outcome) $
-  OPTION_BIND (initial_state chainId accounts blk empty_return_destination tx) run
+  OPTION_BIND
+    (initial_state chainId accounts blk empty_return_destination tx)
+    (λs.
+        case run (s with accounts updated_by
+                  transfer_value tx.from tx.to tx.value) of
+        | SOME (INR r, t) =>
+          let context = HD t.contexts in
+          let gasLeft = tx.gasLimit - context.gasUsed in
+          let gasRefund = if r ≠ NONE then 0
+                          else MIN (context.gasUsed DIV 5) context.gasRefund in
+          let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
+          let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
+          let gasUsed = context.gasUsed - gasRefund in
+          let transactionFee = gasUsed * priorityFeePerGas in
+          let accounts = if r = NONE then t.accounts else s.accounts in
+          let sender = accounts tx.from in
+          let feeRecipient = accounts blk.coinBase in
+          let newAccounts =
+            (tx.from =+ sender with balance updated_by $+ refundEther) $
+            (blk.coinBase =+ feeRecipient with balance updated_by $+ transactionFee)
+            accounts in
+          let logs = if r = NONE then context.logs else [] in
+          SOME (<| gasUsed := gasUsed;
+                   logs := logs;
+                   result := r;
+                   output := context.returnData |>, accounts)
+        | _ => NONE)
 End
 
-(*
-TODO: add transactions to block
+Definition update_beacon_block_def:
+  update_beacon_block b accounts =
+  let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
+  let buffer_length = 8191n in
+  let timestamp_idx = b.timeStamp MOD buffer_length in
+  let root_idx = timestamp_idx + buffer_length in
+  let a = accounts addr in
+  let s0 = a.storage in
+  let s1 = (n2w timestamp_idx =+ n2w b.timeStamp) s0 in
+  let s2 = (n2w root_idx =+ b.parentBeaconBlockRoot) s1 in
+  (addr =+ a with storage := s2) accounts
+End
+
 Definition run_block_def:
-  run_block b =
+  run_block chainId accounts b =
+  let acc = update_beacon_block b accounts in
+  FOLDR
+    (λtx x.
+       OPTION_BIND x (λ(ls, a).
+         OPTION_MAP (λ(r, a). (SNOC r ls, a)) $
+         run_transaction chainId a b tx))
+    (SOME ([], update_beacon_block b accounts))
+    b.transactions
 End
-*)
-
-(* TODO: prove LENGTH memory is always a multiple of 32 bytes *)
-(* TODO: define gas-oblivious execution semantics (where Gas is an invalid op) *)
 
 val _ = export_theory();
