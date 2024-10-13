@@ -255,12 +255,28 @@ val thms = List.tabulate (num_tests - 1, prove_test);
 
 val test_path = "tests/mload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests - 2, prove_test);
+val thms = List.tabulate (1, prove_test);
 (* TODO: some cv_eval problem in the 2nd one? *)
 
 val test_path = "tests/sstore_sload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = "tests/jumpi.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = "tests/codecopy.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (1, prove_test);
+(* TODO: same cv_eval problem as with mload? *)
+
+(*
+TODO: does not have explicit postStates so can't handle for now...
+val test_path = "tests/jumpToPush.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
 
 (*
 * TODO: fix
@@ -277,16 +293,18 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 (*
 
 cv_eval ``
-let acc = mload_d0g0v0_Cancun_pre in
-let blk = mload_d0g0v0_Cancun_block in
-let tx = mload_d0g0v0_Cancun_transaction in
+let acc = codecopy_d0g0v0_Cancun_pre in
+let blk = codecopy_d0g0v0_Cancun_block in
+let tx = codecopy_d0g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 acc blk
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
 let (r, s) = run_n 18 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
-   c.callParams.gasLimit, c.memory)
+   c.callParams.gasLimit, c.memory,
+   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 0w)
+   )
 ``
 
 (79978796 - 26) - ((79978796 - 26) div 64)
