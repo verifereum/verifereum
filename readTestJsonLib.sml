@@ -34,11 +34,15 @@ structure readTestJsonLib = struct
              else ()
     val bk = tt ^ ".blocks[0]"
     val bh = bk ^ ".blockHeader"
+    val bhkeys = rjq [bh ^ " | keys"] |> strls
+    val () = if List.exists (String.isSuffix "andao") bhkeys
+             then raise Fail "Unexpected key (looks like randao) in blockheader"
+             else ()
     val number = rjq [bh ^ ".number"] |> trimws
     val hash = rjq [bh ^ ".hash"] |> trimws
     val blockGasLimit = rjq [bh ^ ".gasLimit"] |> trimws
     val baseFeePerGas = rjq [bh ^ ".baseFeePerGas"] |> trimws
-    val prevRandao = rjq [bh ^ ".difficulty"] |> trimws
+    val prevRandao = rjq [bh ^ ".difficulty"] |> trimws (* TODO: correct? *)
     val parentBeaconBlockRoot = rjq [bh ^ ".parentBeaconBlockRoot"] |> trimws
     val timeStamp = rjq [bh ^ ".timestamp"] |> trimws
     val coinBase = rjq [bh ^ ".coinbase"] |> trimws
