@@ -491,7 +491,7 @@ val run_block_with_fuel =
 fun find_num_steps thm_term =
 let
   val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
-  fun f n =
+  fun loop n =
   let
     val n_tm = numSyntax.term_of_int n
     val run_tm = list_mk_comb(run_block_with_fuel, n_tm::args)
@@ -501,7 +501,7 @@ let
       concl |> rhs
   in
     if optionSyntax.is_none r_tm
-    then f $ 2 * n
+    then loop $ 2 * n
     else
       r_tm |> optionSyntax.dest_some |>
         pairSyntax.dest_pair |> snd |>
@@ -511,7 +511,7 @@ let
   end
   val n = 20
 in
-  f n
+  loop n
 end
 
 fun accounts_term (ls:
@@ -542,7 +542,7 @@ fun accounts_term (ls:
       ]) "empty_accounts" ls
 
 (*
-  val test_index = 1
+  val test_index = 0
 *)
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
@@ -632,6 +632,11 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests - 1, prove_test);
 (* TODO: the last one fails - evm bug somewhere *)
 
+val test_path = "tests/mload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests - 2, prove_test);
+(* TODO: some cv_eval problem in the 2nd one? *)
+
 (*
 * TODO: fix
 val test_path = "tests/calldatacopy.json";
@@ -647,17 +652,16 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 (*
 
 cv_eval ``
-let acc = pop_d1g0v0_Cancun_pre in
-let blk = pop_d1g0v0_Cancun_block in
-let tx = pop_d1g0v0_Cancun_transaction in
+let acc = mload_d0g0v0_Cancun_pre in
+let blk = mload_d0g0v0_Cancun_block in
+let tx = mload_d0g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 acc blk
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 11 s in
-let accesses = s.accesses in
+let (r, s) = run_n 18 s in
 let c = EL 0 s.contexts in
-  (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed, c.callParams.gasLimit,
-   fIN 4097w accesses.addresses)
+  (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
+   c.callParams.gasLimit, c.memory)
 ``
 
 (79978796 - 26) - ((79978796 - 26) div 64)

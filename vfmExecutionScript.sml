@@ -696,21 +696,20 @@ Definition step_inst_def:
         (λcontext.
           ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
            set_current_context (context with stack := TL context.stack)))
-  ∧ step_inst MLoad =
-      bind get_current_context
-        (λcontext.
-          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-            let byteIndex = w2n (EL 0 context.stack) in
-            let newMinSize = word_size (SUC byteIndex) * 32 in
-            let newMemory = PAD_RIGHT 0w newMinSize context.memory in
-            let expansionCost = memory_expansion_cost context.memory newMemory in
-            let word = word_of_bytes F 0w $ REVERSE $ TAKE 32 $ DROP byteIndex newMemory in
-            let newStack = word :: TL context.stack in
-            let newContext =
-              context with <| stack := newStack; memory := newMemory |>
-            in
-              ignore_bind (consume_gas expansionCost)
-                (set_current_context newContext)))
+  ∧ step_inst MLoad = do
+      context <- get_current_context;
+      assert (1 ≤ LENGTH context.stack) StackUnderflow;
+      byteIndex <<- w2n (EL 0 context.stack);
+      newMinSize <<- word_size (SUC byteIndex) * 32;
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
+      expansionCost <<- memory_expansion_cost context.memory newMemory;
+      word <<- word_of_bytes F 0w $ TAKE 32 $ DROP byteIndex newMemory;
+      newStack <<- word :: TL context.stack;
+      consume_gas expansionCost;
+      spentContext <- get_current_context;
+      set_current_context $ spentContext with
+        <| stack := newStack; memory := newMemory |>
+    od
   ∧ step_inst MStore = store_to_memory (combin$C word_to_bytes F)
   ∧ step_inst MStore8 = store_to_memory (SINGL o w2w)
   ∧ step_inst SLoad = step_sload
