@@ -284,10 +284,6 @@ Definition memory_expansion_cost_def:
   memory_expansion_cost old new = memory_cost new - memory_cost old
 End
 
-Definition take_pad_0_def:
-  take_pad_0 z l = PAD_RIGHT 0w z (TAKE z l)
-End
-
 Definition copy_to_memory_check_def:
   copy_to_memory_check checkSize f = do
     context <- get_current_context;
@@ -870,10 +866,9 @@ Definition step_def:
     context <- get_current_context;
     code <<- context.callParams.code;
     parsed <<- context.callParams.parsed;
-    if context.pc = LENGTH code
+    if LENGTH code ≤ context.pc
     then step_inst Stop
     else do
-      assert (context.pc < LENGTH code) Impossible;
       case FLOOKUP parsed context.pc of
       | NONE => do
           consume_gas (context.callParams.gasLimit - context.gasUsed);

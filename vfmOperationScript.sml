@@ -1,8 +1,9 @@
 open HolKernel boolLib bossLib Parse
      wordsLib blastLib
-     optionTheory vfmTypesTheory
+     listTheory rich_listTheory optionTheory
+     arithmeticTheory wordsTheory
+     vfmTypesTheory
      cv_transLib cv_stdTheory;
-
 
 val _ = new_theory "vfmOperation";
 
@@ -94,7 +95,6 @@ Definition wf_opname_def[simp]:
   ∧ wf_opname _ = T
 End
 
-
 Definition opcode_def:
     opcode Stop           = [n2w 0x00]
   ∧ opcode Add            = [n2w 0x01]
@@ -180,7 +180,8 @@ End
 
 Definition parse_opcode_def:
   parse_opcode (opc:byte list) =
-    some opn. wf_opname opn ∧ opcode opn ≼ opc
+    some opn. wf_opname opn ∧
+      ∃n. opcode opn ≼ opc ++ REPLICATE n 0w
 End
 
 Definition static_gas_def[simp]:
@@ -262,10 +263,47 @@ Definition static_gas_def[simp]:
   ∧ static_gas Revert         = 0
 End
 
+Definition take_pad_0_def:
+  take_pad_0 z l = PAD_RIGHT 0w z (TAKE z l)
+End
+
+Theorem take_pad_0_0[simp]:
+  take_pad_0 0 l = []
+Proof
+  rw[take_pad_0_def, PAD_RIGHT]
+QED
+
+Theorem LENGTH_take_pad_0[simp]:
+  LENGTH (take_pad_0 z l) = z
+Proof
+  rw[take_pad_0_def, bitstringTheory.length_pad_right, LENGTH_TAKE_EQ]
+QED
+
+Theorem take_pad_0_IS_PREFIX:
+  ∃m. take_pad_0 n t ≼ t ++ REPLICATE m 0w
+Proof
+  rw[take_pad_0_def, PAD_RIGHT, IS_PREFIX_APPEND]
+  \\ `t = TAKE n t ++ DROP n t` by simp[]
+  \\ pop_assum(fn th => CONV_TAC(STRIP_QUANT_CONV(LAND_CONV(ONCE_REWRITE_CONV[th]))))
+  \\ simp[REPLICATE_GENLIST, LENGTH_TAKE_EQ]
+  \\ rw[DROP_LENGTH_TOO_LONG]
+  \\ qexists_tac`n - LENGTH t` \\ rw[]
+QED
+
+(* TODO: move *)
+
+Theorem REPLICATE_EQ_CONS:
+  REPLICATE n x = y :: r <=> y = x /\ ?m. n = SUC m /\ r = REPLICATE m x
+Proof
+  Cases_on`n` \\ rw[rich_listTheory.REPLICATE, EQ_IMP_THM]
+QED
+
+(* -- *)
+
 Theorem parse_opcode_cond_thm:
   parse_opcode (opcs: byte list) =
   case opcs of
-  | [] => NONE
+  | [] => SOME Stop
   | opc::rest =>
       if opc = n2w 0x00 then SOME Stop else
       if opc = n2w 0x01 then SOME Add else
@@ -331,39 +369,39 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0x59 then SOME MSize else
       if opc = n2w 0x5a then SOME Gas else
       if opc = n2w 0x5b then SOME JumpDest else
-      if opc = n2w 0x5f ∧ LENGTH rest >= 0 then SOME (Push 0  (TAKE 0 rest)) else
-      if opc = n2w 0x60 ∧ LENGTH rest >= 1 then SOME (Push 1  (TAKE 1 rest)) else
-      if opc = n2w 0x61 ∧ LENGTH rest >= 2 then SOME (Push 2  (TAKE 2 rest)) else
-      if opc = n2w 0x62 ∧ LENGTH rest >= 3 then SOME (Push 3  (TAKE 3 rest)) else
-      if opc = n2w 0x63 ∧ LENGTH rest >= 4 then SOME (Push 4  (TAKE 4 rest)) else
-      if opc = n2w 0x64 ∧ LENGTH rest >= 5 then SOME (Push 5  (TAKE 5 rest)) else
-      if opc = n2w 0x65 ∧ LENGTH rest >= 6 then SOME (Push 6  (TAKE 6 rest)) else
-      if opc = n2w 0x66 ∧ LENGTH rest >= 7 then SOME (Push 7  (TAKE 7 rest)) else
-      if opc = n2w 0x67 ∧ LENGTH rest >= 8 then SOME (Push 8  (TAKE 8 rest)) else
-      if opc = n2w 0x68 ∧ LENGTH rest >= 9 then SOME (Push 9  (TAKE 9 rest)) else
-      if opc = n2w 0x69 ∧ LENGTH rest >= 10 then SOME (Push 10 (TAKE 10 rest)) else
-      if opc = n2w 0x6a ∧ LENGTH rest >= 11 then SOME (Push 11 (TAKE 11 rest)) else
-      if opc = n2w 0x6b ∧ LENGTH rest >= 12 then SOME (Push 12 (TAKE 12 rest)) else
-      if opc = n2w 0x6c ∧ LENGTH rest >= 13 then SOME (Push 13 (TAKE 13 rest)) else
-      if opc = n2w 0x6d ∧ LENGTH rest >= 14 then SOME (Push 14 (TAKE 14 rest)) else
-      if opc = n2w 0x6e ∧ LENGTH rest >= 15 then SOME (Push 15 (TAKE 15 rest)) else
-      if opc = n2w 0x6f ∧ LENGTH rest >= 16 then SOME (Push 16 (TAKE 16 rest)) else
-      if opc = n2w 0x70 ∧ LENGTH rest >= 17 then SOME (Push 17 (TAKE 17 rest)) else
-      if opc = n2w 0x71 ∧ LENGTH rest >= 18 then SOME (Push 18 (TAKE 18 rest)) else
-      if opc = n2w 0x72 ∧ LENGTH rest >= 19 then SOME (Push 19 (TAKE 19 rest)) else
-      if opc = n2w 0x73 ∧ LENGTH rest >= 20 then SOME (Push 20 (TAKE 20 rest)) else
-      if opc = n2w 0x74 ∧ LENGTH rest >= 21 then SOME (Push 21 (TAKE 21 rest)) else
-      if opc = n2w 0x75 ∧ LENGTH rest >= 22 then SOME (Push 22 (TAKE 22 rest)) else
-      if opc = n2w 0x76 ∧ LENGTH rest >= 23 then SOME (Push 23 (TAKE 23 rest)) else
-      if opc = n2w 0x77 ∧ LENGTH rest >= 24 then SOME (Push 24 (TAKE 24 rest)) else
-      if opc = n2w 0x78 ∧ LENGTH rest >= 25 then SOME (Push 25 (TAKE 25 rest)) else
-      if opc = n2w 0x79 ∧ LENGTH rest >= 26 then SOME (Push 26 (TAKE 26 rest)) else
-      if opc = n2w 0x7a ∧ LENGTH rest >= 27 then SOME (Push 27 (TAKE 27 rest)) else
-      if opc = n2w 0x7b ∧ LENGTH rest >= 28 then SOME (Push 28 (TAKE 28 rest)) else
-      if opc = n2w 0x7c ∧ LENGTH rest >= 29 then SOME (Push 29 (TAKE 29 rest)) else
-      if opc = n2w 0x7d ∧ LENGTH rest >= 30 then SOME (Push 30 (TAKE 30 rest)) else
-      if opc = n2w 0x7e ∧ LENGTH rest >= 31 then SOME (Push 31 (TAKE 31 rest)) else
-      if opc = n2w 0x7f ∧ LENGTH rest >= 32 then SOME (Push 32 (TAKE 32 rest)) else
+      if opc = n2w 0x5f then SOME (Push 0  (take_pad_0 0  rest)) else
+      if opc = n2w 0x60 then SOME (Push 1  (take_pad_0 1  rest)) else
+      if opc = n2w 0x61 then SOME (Push 2  (take_pad_0 2  rest)) else
+      if opc = n2w 0x62 then SOME (Push 3  (take_pad_0 3  rest)) else
+      if opc = n2w 0x63 then SOME (Push 4  (take_pad_0 4  rest)) else
+      if opc = n2w 0x64 then SOME (Push 5  (take_pad_0 5  rest)) else
+      if opc = n2w 0x65 then SOME (Push 6  (take_pad_0 6  rest)) else
+      if opc = n2w 0x66 then SOME (Push 7  (take_pad_0 7  rest)) else
+      if opc = n2w 0x67 then SOME (Push 8  (take_pad_0 8  rest)) else
+      if opc = n2w 0x68 then SOME (Push 9  (take_pad_0 9  rest)) else
+      if opc = n2w 0x69 then SOME (Push 10 (take_pad_0 10 rest)) else
+      if opc = n2w 0x6a then SOME (Push 11 (take_pad_0 11 rest)) else
+      if opc = n2w 0x6b then SOME (Push 12 (take_pad_0 12 rest)) else
+      if opc = n2w 0x6c then SOME (Push 13 (take_pad_0 13 rest)) else
+      if opc = n2w 0x6d then SOME (Push 14 (take_pad_0 14 rest)) else
+      if opc = n2w 0x6e then SOME (Push 15 (take_pad_0 15 rest)) else
+      if opc = n2w 0x6f then SOME (Push 16 (take_pad_0 16 rest)) else
+      if opc = n2w 0x70 then SOME (Push 17 (take_pad_0 17 rest)) else
+      if opc = n2w 0x71 then SOME (Push 18 (take_pad_0 18 rest)) else
+      if opc = n2w 0x72 then SOME (Push 19 (take_pad_0 19 rest)) else
+      if opc = n2w 0x73 then SOME (Push 20 (take_pad_0 20 rest)) else
+      if opc = n2w 0x74 then SOME (Push 21 (take_pad_0 21 rest)) else
+      if opc = n2w 0x75 then SOME (Push 22 (take_pad_0 22 rest)) else
+      if opc = n2w 0x76 then SOME (Push 23 (take_pad_0 23 rest)) else
+      if opc = n2w 0x77 then SOME (Push 24 (take_pad_0 24 rest)) else
+      if opc = n2w 0x78 then SOME (Push 25 (take_pad_0 25 rest)) else
+      if opc = n2w 0x79 then SOME (Push 26 (take_pad_0 26 rest)) else
+      if opc = n2w 0x7a then SOME (Push 27 (take_pad_0 27 rest)) else
+      if opc = n2w 0x7b then SOME (Push 28 (take_pad_0 28 rest)) else
+      if opc = n2w 0x7c then SOME (Push 29 (take_pad_0 29 rest)) else
+      if opc = n2w 0x7d then SOME (Push 30 (take_pad_0 30 rest)) else
+      if opc = n2w 0x7e then SOME (Push 31 (take_pad_0 31 rest)) else
+      if opc = n2w 0x7f then SOME (Push 32 (take_pad_0 32 rest)) else
       if opc = n2w 0x80 then SOME (Dup 0) else
       if opc = n2w 0x81 then SOME (Dup 1) else
       if opc = n2w 0x82 then SOME (Dup 2) else
@@ -410,35 +448,52 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0xfd then SOME Revert else
       NONE
 Proof
-  simp[parse_opcode_def]
+  rewrite_tac[parse_opcode_def]
   \\ DEEP_INTRO_TAC some_intro
+  \\ simp_tac std_ss [CaseEq"list", CaseEq"bool", PULL_EXISTS]
   \\ CONJ_TAC
   >- (
-    Cases
-    \\ simp [rich_listTheory.IS_PREFIX_APPEND, opcode_def]
-    \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[wordsTheory.NUMERAL_LESS_THM, arithmeticTheory.LESS_OR_EQ]))
-    \\ strip_tac
-    \\ rw[rich_listTheory.TAKE_APPEND]
-    \\ fs[listTheory.LENGTH_NIL]
-  )
-  \\ Cases_on ‘opcs’
-  \\ rw[wf_opname_def, opcode_def]
+    Cases \\ simp_tac (srw_ss()) [
+      opcode_def, IS_PREFIX_APPEND, PULL_EXISTS,
+      APPEND_EQ_CONS, REPLICATE_EQ_CONS
+    ]
+    >- srw_tac[DNF_ss][]
+    \\ rpt gen_tac
+    \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ]))
+    \\ strip_tac \\ gvs[take_pad_0_def, PAD_RIGHT]
+    \\ pop_assum mp_tac
+    \\ simp[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_REPLICATE, LENGTH_TAKE_EQ,
+            EL_TAKE, LENGTH_REPLICATE, GSYM AND_IMP_INTRO]
+    \\ rw[] \\ rw[]
+    \\ TRY(first_x_assum(qspec_then`x`mp_tac) \\ simp[] \\ NO_TAC)
+    \\ gvs[LENGTH_EQ_NUM_compute]
+    \\ first_x_assum(qspec_then`0`mp_tac) \\ simp[])
+  \\ Cases_on ‘opcs’ \\ simp[wf_opname_def, opcode_def]
+  >- (
+    qexists_tac`Stop` \\ rw[opcode_def]
+    \\ qexists_tac`SUC 0` \\ rw[rich_listTheory.REPLICATE] )
+  \\ strip_tac
+  \\ CCONTR_TAC \\ gvs[]
+  \\ pop_assum mp_tac \\ simp[PULL_EXISTS]
   \\ let
     val def_cases = opcode_def |> concl |> strip_conj |> List.map
       (fn tm => (EXISTS_TAC(rand (lhs tm)) handle HOL_ERR _ => NO_TAC)
                 \\ rw[opcode_def] \\ NO_TAC)
     val push_cases =  List.tabulate(33, (fn n =>
-          let val nn = numSyntax.term_of_int n
-          in EXISTS_TAC “Push ^nn (TAKE ^nn t)” \\ rw[opcode_def, wf_opname_def]
-             \\ rw[rich_listTheory.IS_PREFIX_EQ_TAKE] \\ EXISTS_TAC nn \\ rw[]
+          let
+            val nn = numSyntax.term_of_int n
+          in
+            EXISTS_TAC “Push ^nn (take_pad_0 ^nn t)”
+            \\ simp[wf_opname_def, opcode_def, take_pad_0_IS_PREFIX]
+            \\ NO_TAC
           end))
     fun mk_x_cases m tm = List.tabulate(m, fn n =>
       let val nn = numSyntax.term_of_int n in
         EXISTS_TAC (mk_comb (tm, nn)) \\ rw[opcode_def, wf_opname_def] \\ NO_TAC
       end)
-    val dup_cases = mk_x_cases 16 ``Dup``
-    val swap_cases = mk_x_cases 16 ``Swap``
-    val log_cases = mk_x_cases 4 ``Log``
+    val dup_cases = mk_x_cases 16 “Dup”
+    val swap_cases = mk_x_cases 16 “Swap”
+    val log_cases = mk_x_cases 4 “Log”
   in
     TRY $ FIRST (def_cases @ push_cases @ dup_cases @ swap_cases @ log_cases)
   end
