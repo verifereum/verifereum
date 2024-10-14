@@ -749,7 +749,8 @@ Definition step_inst_def:
               set_current_context newContext))
   ∧ step_inst PC = push_from_ctxt (λc. n2w c.pc)
   ∧ step_inst MSize = push_from_ctxt (λc. n2w $ LENGTH c.memory)
-  ∧ step_inst Gas = push_from_ctxt (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
+  ∧ step_inst Gas = push_from_ctxt (λc. n2w $
+      c.callParams.gasLimit - c.gasUsed - static_gas Gas)
   ∧ step_inst JumpDest = return ()
   ∧ step_inst (Push n ws) =
       bind get_current_context
