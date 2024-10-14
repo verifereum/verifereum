@@ -232,11 +232,9 @@ val test_path = mk_test_path "vmTests/calldataload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "vmTests/calldatasize.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "vmTests/dup.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -340,99 +338,30 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 (*
 
 cv_eval ``
-let acc = jump_d9g0v0_Cancun_pre in
-let blk = jump_d9g0v0_Cancun_block in
-let tx = jump_d9g0v0_Cancun_transaction in
+let acc = calldatasize_d0g0v0_Cancun_pre in
+let blk = calldatasize_d0g0v0_Cancun_block in
+let tx = calldatasize_d0g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 acc blk
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 14 s in
+let (r, s) = run_n 4 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
-   c.callParams.gasLimit, c.memory,
+   c.callParams.gasLimit, FLOOKUP c.callParams.parsed c.pc,
+   (*DROP c.pc c.callParams.code, c.memory,*)
    (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 0w)
    )
 ``
 
-(79978796 - 26) - ((79978796 - 26) div 64)
-val subLimit = 78726543
-val usedBefore = 26
-val parentUsed = 78729169
-parentUsed - usedBefore - subLimit
-
-cv_eval ``
-let acc = pop_d1g0v0_Cancun_pre in
-let blk = pop_d1g0v0_Cancun_block in
-let tx = pop_d1g0v0_Cancun_transaction in
-let (r, t, n) = THE $
-  run_with_fuel 12 (INL (),
-    (THE $
-     initial_state 1 acc blk
-       empty_return_destination
-       tx) with accounts updated_by
-           transfer_value tx.from tx.to tx.value) in
-let c = HD t.contexts in
-let sb1 = (lookup_account acc tx.from).balance in
-let sb2 = (lookup_account t.accounts tx.from).balance in
-  (r, n, tx.gasLimit, c.callParams.gasLimit,
-   tx.gasPrice, blk.baseFeePerGas, c.stack,
-   c.gasUsed, c.gasRefund, c.logs, c.returnData,
-   tx.value,
-   sb1 - sb2,
-   sb1 - sb2 - (tx.gasLimit * tx.gasPrice)
-   )
-``
-
-val txGasLimit = 80000000
-val gasPrice = 10
-val gasLimit = 79978808
-val gasUsed = 7631
-val refund = 4800
-val gasLeft = gasLimit - gasUsed
-val gasRefund = Int.min (gasUsed div 5, refund)
-val refundEther = (gasLeft + gasRefund) * gasPrice
-val totalGasUsed = gasUsed - gasRefund
-val priorityFeePerGas = 0
-val transactionFee = totalGasUsed * priorityFeePerGas
-
-val discrepancy = 838137708090876753 - 838137708090664833
-initial_state_def
-post_transaction_accounting_def
-
-val discrepancy = 17592185804185 - 17592185771445
-val gas_discrepancy = discrepancy div gasPrice
-
-discrepancy - gasLeft
-cv_eval``intrinsic_cost pc_d0g0v0_Cancun_transaction.data``
-
-cv_eval ``
-let s =
-(run_n 7 (THE (initial_state 1
-    add_d1g0v0_Cancun_pre
-    add_d1g0v0_Cancun_block
-    (Memory <| offset := 0; size := 0 |>)
-    add_d1g0v0_Cancun_transaction))) in
-let c = EL 0 (SND s).contexts in
-  (c.callParams.gasLimit, c.gasUsed, c.callParams.data, c.stack,
-  c.callParams.outputTo, c.returnData)
-``
-
-cv_eval ``parse_opcode $ DROP 21 $
-  (lookup_account
-     add_d1g0v0_Cancun_pre
-     add_d1g0v0_Cancun_transaction.to).code``
-
-Push1 0
-Push1 0
-Push1 0
-Push1 0
-Push1 0
-Push1 4
+Push1 36
 CallDataLoad
-Push2 16 0
-Add
-Push3 255 255 255
-Call
+Push1 0
+Keccak256
+
+
+3 + 3 + 3 + 39
+
+24777 - 22105
 
 *)
 
