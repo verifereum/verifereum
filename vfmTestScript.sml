@@ -250,8 +250,7 @@ val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = "tests/jump.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests - 1, prove_test);
-(* TODO: the last one fails - evm bug somewhere *)
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = "tests/mload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -293,13 +292,13 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 (*
 
 cv_eval ``
-let acc = codecopy_d0g0v0_Cancun_pre in
-let blk = codecopy_d0g0v0_Cancun_block in
-let tx = codecopy_d0g0v0_Cancun_transaction in
+let acc = jump_d9g0v0_Cancun_pre in
+let blk = jump_d9g0v0_Cancun_block in
+let tx = jump_d9g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 acc blk
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 18 s in
+let (r, s) = run_n 14 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
    c.callParams.gasLimit, c.memory,

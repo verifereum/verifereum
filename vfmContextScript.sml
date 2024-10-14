@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse
-     pred_setTheory finite_setTheory
+     listTheory rich_listTheory pred_setTheory finite_setTheory
      vfmTypesTheory vfmStateTheory vfmTransactionTheory vfmOperationTheory;
 
 val _ = new_theory "vfmContext";
@@ -48,6 +48,7 @@ Datatype:
   <| caller    : address
    ; callee    : address
    ; code      : byte list
+   ; parsed    : num |-> opname
    ; value     : num
    ; static    : bool
    ; gasLimit  : num
@@ -133,11 +134,25 @@ Definition intrinsic_cost_def:
   base_cost + SUM (MAP (λb. call_data_cost (b = 0w)) data)
 End
 
+Definition parse_code_def:
+  parse_code pc m code =
+  if NULL code then m else
+  case parse_opcode code of
+  | NONE => m
+  | SOME op =>
+    let n = LENGTH $ opcode op in
+    parse_code (pc + n) (m |+ (pc, op)) (DROP n code)
+Termination
+  WF_REL_TAC`measure (LENGTH o SND o SND)`
+  \\ rw[LENGTH_DROP, LENGTH_NOT_NULL]
+End
+
 Definition initial_call_params_def:
   initial_call_params ctxt t =
   <| caller    := t.from
    ; callee    := t.to
    ; code      := ctxt.code
+   ; parsed    := parse_code 0 FEMPTY ctxt.code
    ; value     := t.value
    ; static    := ctxt.static
    ; data      := t.data

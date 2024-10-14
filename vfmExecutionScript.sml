@@ -184,7 +184,9 @@ Definition context_for_transfer_def:
   context_for_transfer ctxt callerAddress incCaller code =
   ctxt with callParams updated_by
     (λp. p with <| accounts updated_by (callerAddress =+ incCaller)
-                 ; code := code |>)
+                 ; code := code
+                 ; parsed := parse_code 0 FEMPTY code
+                 |>)
 End
 
 Definition start_context_def:
@@ -827,8 +829,9 @@ Definition inc_pc_def:
       | NONE => set_current_context (context with pc := context.pc + n)
       | SOME pc =>
         let code = context.callParams.code in
+        let parsed = context.callParams.parsed in
         ignore_bind (assert
-          (pc < LENGTH code ∧ parse_opcode (DROP pc code) = SOME JumpDest)
+          (pc < LENGTH code ∧ FLOOKUP parsed pc = SOME JumpDest)
           InvalidJumpDest) (
         set_current_context (context with <| pc := pc; jumpDest := NONE |>)))
 End
@@ -852,11 +855,12 @@ Definition step_def:
   step s = case do
     context <- get_current_context;
     code <<- context.callParams.code;
+    parsed <<- context.callParams.parsed;
     if context.pc = LENGTH code
     then step_inst Stop
     else do
       assert (context.pc < LENGTH code) Impossible;
-      case parse_opcode (DROP context.pc code) of
+      case FLOOKUP parsed context.pc of
       | NONE => do
           consume_gas (context.callParams.gasLimit - context.gasUsed);
           set_return_data [];

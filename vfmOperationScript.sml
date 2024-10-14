@@ -262,7 +262,6 @@ Definition static_gas_def[simp]:
   ∧ static_gas Revert         = 0
 End
 
-
 Theorem parse_opcode_cond_thm:
   parse_opcode (opcs: byte list) =
   case opcs of
@@ -446,5 +445,11 @@ Proof
 QED
 
 val _ = cv_auto_trans parse_opcode_cond_thm
+
+Theorem opcode_not_null[simp]:
+  ¬ NULL (opcode op)
+Proof
+  Cases_on`op` \\ rw[opcode_def]
+QED
 
 val _ = export_theory();

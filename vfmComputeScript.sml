@@ -576,7 +576,8 @@ Theorem context_for_transfer_unfolded:
     ctxt.callParams with <|
       accounts := update_account
         ctxt.callParams.accounts callerAddress incCaller;
-      code := code
+      code := code;
+      parsed := parse_code 0 FEMPTY code
     |>
 Proof
   rw[context_for_transfer_def,
