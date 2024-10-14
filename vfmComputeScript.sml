@@ -838,6 +838,7 @@ val step_inst_pre_def = step_inst_def |>
     stack_op_def,
     binop_def,
     monop_def,
+    modop_def,
     with_zero_def,
     push_from_ctxt_def,
     push_from_tx_def,

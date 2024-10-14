@@ -260,6 +260,15 @@ Definition with_zero_def:
   with_zero f x y = if y = 0w then 0w else f x y
 End
 
+Definition modop_def:
+  modop f (l: bytes32 list) : bytes32 =
+  let a = w2n $ EL 0 l in
+  let b = w2n $ EL 1 l in
+  let n = w2n $ EL 2 l in
+    if n = 0 then 0w
+    else n2w $ (f a b) MOD n
+End
+
 Definition word_size_def:
   word_size byteSize = (byteSize + 31) DIV 32
 End
@@ -561,14 +570,8 @@ Definition step_inst_def:
   ∧ step_inst SDiv = binop $ with_zero word_quot
   ∧ step_inst Mod = binop $ with_zero word_mod
   ∧ step_inst SMod = binop $ with_zero word_rem
-  ∧ step_inst AddMod = stack_op 3
-      (λl. with_zero word_mod
-             (word_add (EL 0 l) (EL 1 l))
-             (EL 2 l))
-  ∧ step_inst MulMod = stack_op 3
-      (λl. with_zero word_mod
-             (word_mul (EL 0 l) (EL 1 l))
-             (EL 2 l))
+  ∧ step_inst AddMod = stack_op 3 $ modop $+
+  ∧ step_inst MulMod = stack_op 3 $ modop $*
   ∧ step_inst Exp =
       bind get_current_context
         (λcontext.
