@@ -799,6 +799,8 @@ Definition step_inst_def:
       newMinSize <<- word_size (offset + size) * 32;
       expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       returnData <<- TAKE size (DROP offset expandedMemory);
+      expansionCost <<- memory_expansion_cost context.memory expandedMemory;
+      consume_gas expansionCost;
       finish_current returnData
     od
   ∧ step_inst DelegateCall = step_call Delegate
