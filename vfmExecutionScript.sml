@@ -762,7 +762,7 @@ Definition step_inst_def:
             let top = HD context.stack in
             let swap = EL n (TL context.stack) in
             let ignored = TAKE n (TL context.stack) in
-            let rest = DROP n (TL context.stack) in
+            let rest = DROP (SUC n) (TL context.stack) in
             let newStack = [swap] ++ ignored ++ [top] ++ rest in
               set_current_context (context with stack := newStack)))
   ∧ step_inst (Log n) = do
