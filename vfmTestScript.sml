@@ -224,15 +224,33 @@ in (List.length test_names, prove_test) end
 
 fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/VMTests/" ^ s;
 
-val test_path = mk_test_path "vmTests/dup.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
 val test_path = mk_test_path "vmTests/calldatacopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix error
+val test_path = mk_test_path "vmTests/calldataload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "vmTests/calldatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "vmTests/dup.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmTests/push.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmTests/random.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
 val test_path = mk_test_path "vmTests/swap.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -241,6 +259,38 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "vmArithmeticTest/add.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "vmArithmeticTest/addmod.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "vmArithmeticTest/arith.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "vmArithmeticTest/div.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmArithmeticTest/divByZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "vmArithmeticTest/exp.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "vmArithmeticTest/expPower2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
 
 val test_path = mk_test_path "vmBitwiseLogicOperation/iszero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
