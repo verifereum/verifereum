@@ -12,12 +12,6 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 val _ = new_theory "vfmTest";
 
 (*
-https://github.com/ethereum/tests
-commit 08839f5 (taken from the develop branch)
-BlockchainTests/GeneralStateTests/VMTests/*/*.json
-*)
-
-(*
   val (_, gt) = top_goal()
   Globals.max_print_depth := 12
 *)
@@ -112,6 +106,7 @@ val run_block_with_fuel =
 fun find_num_steps thm_term =
 let
   val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
+  val n = 14
   fun loop n =
   let
     val n_tm = numSyntax.term_of_int n
@@ -130,7 +125,6 @@ let
         numSyntax.int_of_term |>
         curry op - n
   end
-  val n = 20
 in
   loop n
 end
@@ -228,64 +222,74 @@ fun mk_prove_test test_path = let
   end
 in (List.length test_names, prove_test) end
 
-val test_path = "tests/add.json";
+fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/VMTests/" ^ s;
+
+val test_path = mk_test_path "vmTests/dup.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-val test_path = "tests/iszero.json";
+val test_path = mk_test_path "vmTests/calldatacopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-val test_path = "tests/pc.json";
+(* TODO: fix error
+val test_path = mk_test_path "vmTests/swap.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "vmArithmeticTest/add.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-val test_path = "tests/slt.json";
+val test_path = mk_test_path "vmBitwiseLogicOperation/iszero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-val test_path = "tests/pop.json";
+val test_path = mk_test_path "vmBitwiseLogicOperation/slt.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-val test_path = "tests/jump.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-val test_path = "tests/mload.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (1, prove_test);
-(* TODO: some cv_eval problem in the 2nd one? *)
-
-val test_path = "tests/sstore_sload.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-val test_path = "tests/jumpi.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-val test_path = "tests/codecopy.json";
+val test_path = mk_test_path "vmIOandFlowOperations/codecopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (1, prove_test);
 (* TODO: same cv_eval problem as with mload? *)
 
+val test_path = mk_test_path "vmIOandFlowOperations/pc.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/pop.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/jump.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/jumpi.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/mload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (1, prove_test);
+(* TODO: some cv_eval problem in the 2nd one? *)
+
+val test_path = mk_test_path "vmIOandFlowOperations/sstore_sload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (*
 TODO: does not have explicit postStates so can't handle for now...
-val test_path = "tests/jumpToPush.json";
+val test_path = mk_test_path "vmIOandFlowOperations/jumpToPush.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
 (*
-* TODO: fix
-val test_path = "tests/calldatacopy.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-*)
-
-(*
 TODO: does not work yet (fails out of gas), evm might have bugs
-val test_path = "tests/loopExp.json";
+val test_path = mk_test_path "vmPerformance/loopExp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 *)
 
