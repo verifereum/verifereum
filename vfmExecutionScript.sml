@@ -572,18 +572,19 @@ Definition step_inst_def:
   ∧ step_inst SMod = binop $ with_zero word_rem
   ∧ step_inst AddMod = stack_op 3 $ modop $+
   ∧ step_inst MulMod = stack_op 3 $ modop $*
-  ∧ step_inst Exp =
-      bind get_current_context
-        (λcontext.
-         ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
-           let exponent = w2n (EL 1 context.stack) in
-           let exponentByteSize = if exponent = 0 then 0 else SUC (LOG2 exponent DIV 8) in
-           let dynamicGas = 50 * exponentByteSize in
-           let base = w2n (EL 0 context.stack) in
-           let result = n2w (base ** exponent) in
-           let newStack = result :: DROP 2 context.stack in
-           ignore_bind (consume_gas dynamicGas)
-             (set_current_context (context with stack := newStack))))
+  ∧ step_inst Exp = do
+      context <- get_current_context;
+      assert (2 ≤ LENGTH context.stack) StackUnderflow;
+      exponent <<- w2n (EL 1 context.stack);
+      exponentByteSize <<- if exponent = 0 then 0 else SUC (LOG2 exponent DIV 8);
+      dynamicGas <<- 50 * exponentByteSize;
+      base <<- w2n (EL 0 context.stack);
+      result <<- n2w (base ** exponent);
+      newStack <<- result :: DROP 2 context.stack;
+      consume_gas dynamicGas;
+      spentContext <- get_current_context;
+      set_current_context $ spentContext with stack := newStack
+    od
   ∧ step_inst SignExtend = binop (λn. word_sign_extend (w2n n))
   ∧ step_inst LT = binop (λx y. b2w (w2n x < w2n y))
   ∧ step_inst GT = binop (λx y. b2w (w2n x > w2n y))
