@@ -25,6 +25,7 @@ Datatype:
   | OutOfBoundsRead
   | Reverted
   | Impossible
+  | MissingHashes
 End
 
 Type execution_result = “:(α + exception option) # execution_state”;
@@ -690,7 +691,18 @@ Definition step_inst_def:
             ignore_bind
               (consume_gas addressAccessCost)
               (set_current_context newContext)))))
-  ∧ step_inst BlockHash = push_from_tx (λc t a. t.blockHash)
+  ∧ step_inst BlockHash = do
+      tx <- get_tx_params;
+      context <- get_current_context;
+      assert (1 ≤ LENGTH context.stack) StackUnderflow;
+      number <<- w2n $ EL 0 context.stack;
+      inRange <<- number < tx.blockNumber ∧ tx.blockNumber - 256 ≤ number;
+      index <<- tx.blockNumber - number - 1;
+      assert (inRange ⇒ index < LENGTH tx.prevHashes) MissingHashes;
+      hash <<- if inRange then EL index tx.prevHashes else 0w;
+      newStack <<- hash :: TL context.stack;
+      set_current_context (context with stack := newStack)
+    od
   ∧ step_inst CoinBase = push_from_tx (λc t a. w2w t.blockCoinBase)
   ∧ step_inst TimeStamp = push_from_tx (λc t a. n2w t.blockTimeStamp)
   ∧ step_inst Number = push_from_tx (λc t a. n2w t.blockNumber)
@@ -1007,9 +1019,9 @@ Definition post_transaction_accounting_def:
 End
 
 Definition run_transaction_def:
-  run_transaction chainId blk accounts tx =
+  run_transaction chainId prevHashes blk accounts tx =
   OPTION_BIND
-    (initial_state chainId accounts blk empty_return_destination tx)
+    (initial_state chainId prevHashes blk accounts empty_return_destination tx)
     (λs.
         case run (s with accounts updated_by
                   transfer_value tx.from tx.to tx.value) of
@@ -1032,12 +1044,12 @@ Definition update_beacon_block_def:
 End
 
 Definition run_block_def:
-  run_block chainId accounts b =
+  run_block chainId prevHashes accounts b =
   FOLDL
     (λx tx.
        OPTION_BIND x (λ(ls, a).
          OPTION_MAP (λ(r, a). (SNOC r ls, a)) $
-         run_transaction chainId b a tx))
+         run_transaction chainId prevHashes b a tx))
     (SOME ([], update_beacon_block b accounts))
     b.transactions
 End

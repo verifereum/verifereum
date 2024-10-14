@@ -10,11 +10,11 @@ Datatype:
    ; gasPrice       : num
    ; baseFeePerGas  : num
    ; blockNumber    : num
-   ; blockHash      : bytes32
    ; blockTimeStamp : num
    ; blockCoinBase  : address
    ; blockGasLimit  : num
    ; prevRandao     : bytes32
+   ; prevHashes     : bytes32 list
    ; chainId        : num
    |>
 End
@@ -164,16 +164,16 @@ Definition initial_call_params_def:
 End
 
 Definition initial_tx_params_def:
-  initial_tx_params c b t =
+  initial_tx_params c h b t =
   <| origin         := t.from
    ; gasPrice       := t.gasPrice
    ; baseFeePerGas  := b.baseFeePerGas
    ; blockNumber    := b.number
-   ; blockHash      := b.hash
    ; blockTimeStamp := b.timeStamp
    ; blockCoinBase  := b.coinBase
    ; blockGasLimit  := b.gasLimit
    ; prevRandao     := b.prevRandao
+   ; prevHashes     := h
    ; chainId        := c
    |>
 End
@@ -255,7 +255,7 @@ Proof
 QED
 
 Definition initial_state_def:
-  initial_state c a b r t =
+  initial_state c h b a r t =
   let sender = (a t.from) in
   let fee = t.gasLimit * t.gasPrice in (* TODO: add blob gas fee *)
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
@@ -270,14 +270,14 @@ Definition initial_state_def:
               ; outputTo := r; static := F |> in
   SOME $
   <| contexts := [apply_intrinsic_cost $ initial_context ctxt t]
-   ; txParams := initial_tx_params c b t
+   ; txParams := initial_tx_params c h b t
    ; accesses := acc
    ; accounts := accounts
    |>
 End
 
 Theorem wf_initial_state:
-  wf_accounts a ∧ initial_state c a b r t = SOME s
+  wf_accounts a ∧ initial_state c h b a r t = SOME s
   ⇒
   wf_state s
 Proof

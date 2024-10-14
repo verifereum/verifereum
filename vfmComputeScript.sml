@@ -1114,9 +1114,9 @@ val () = update_beacon_block_def
 val () = cv_auto_trans empty_return_destination_def;
 
 Definition run_transaction_with_fuel_def:
-  run_transaction_with_fuel n chainId blk acc tx =
+  run_transaction_with_fuel n chainId hs blk acc tx =
   OPTION_BIND
-    (initial_state chainId acc blk empty_return_destination tx)
+    (initial_state chainId hs blk acc empty_return_destination tx)
     (λs. OPTION_MAP
            (λ(r, t, m). (post_transaction_accounting blk tx r s.accounts t, m))
            (run_with_fuel n (INL (),
@@ -1127,26 +1127,26 @@ End
 val () = cv_auto_trans run_transaction_with_fuel_def;
 
 Definition run_transactions_with_fuel_def:
-  run_transactions_with_fuel n c b a rs [] = SOME (rs, a, n) ∧
-  run_transactions_with_fuel n c b a rs (tx::txs) =
-  case run_transaction_with_fuel n c b a tx of
+  run_transactions_with_fuel n c h b a rs [] = SOME (rs, a, n) ∧
+  run_transactions_with_fuel n c h b a rs (tx::txs) =
+  case run_transaction_with_fuel n c h b a tx of
   | NONE => NONE
-  | SOME ((r, a), n) => run_transactions_with_fuel n c b a (r::rs) txs
+  | SOME ((r, a), n) => run_transactions_with_fuel n c h b a (r::rs) txs
 End
 
 val () = cv_auto_trans run_transactions_with_fuel_def;
 
 Definition run_block_with_fuel_def:
-  run_block_with_fuel n chainId a b =
+  run_block_with_fuel n chainId h a b =
   OPTION_MAP (λ(rs, a, n). (REVERSE rs, a ,n)) $
-  run_transactions_with_fuel n chainId b (update_beacon_block b a) [] b.transactions
+  run_transactions_with_fuel n chainId h b (update_beacon_block b a) [] b.transactions
 End
 
 val () = cv_auto_trans run_block_with_fuel_def;
 
 Theorem run_transaction_SOME_with_fuel:
-  run_transaction c b a tx = SOME p ⇔
-  ∃n. run_transaction_with_fuel n c b a tx = SOME (p, 0)
+  run_transaction c h b a tx = SOME p ⇔
+  ∃n. run_transaction_with_fuel n c h b a tx = SOME (p, 0)
 Proof
   rw[run_transaction_def, run_transaction_with_fuel_def]
   \\ reverse(rw[EQ_IMP_THM])
@@ -1168,9 +1168,9 @@ Proof
 QED
 
 Theorem run_transactions_with_fuel_append:
-  run_transactions_with_fuel n c b a (rs ++ xs) ls =
+  run_transactions_with_fuel n c h b a (rs ++ xs) ls =
   OPTION_MAP (λ(x,y,z). (x ++ xs,y,z)) $
-  run_transactions_with_fuel n c b a rs ls
+  run_transactions_with_fuel n c h b a rs ls
 Proof
   qid_spec_tac`rs`
   \\ qid_spec_tac`a`
@@ -1186,8 +1186,8 @@ Proof
 QED
 
 Theorem run_transaction_with_fuel_add:
-  run_transaction_with_fuel n c b a t = SOME (x, m) ⇒
-  run_transaction_with_fuel (n + d) c b a t = SOME (x, m + d)
+  run_transaction_with_fuel n c h b a t = SOME (x, m) ⇒
+  run_transaction_with_fuel (n + d) c h b a t = SOME (x, m + d)
 Proof
   rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD]
   \\ drule run_with_fuel_add
@@ -1196,8 +1196,8 @@ Proof
 QED
 
 Theorem run_transaction_with_fuel_sub:
-  run_transaction_with_fuel n c b a t = SOME (x, m) ⇒
-  run_transaction_with_fuel (n - m) c b a t = SOME (x, 0)
+  run_transaction_with_fuel n c h b a t = SOME (x, m) ⇒
+  run_transaction_with_fuel (n - m) c h b a t = SOME (x, 0)
 Proof
   rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD]
   \\ drule run_with_fuel_sub
@@ -1205,8 +1205,8 @@ Proof
 QED
 
 Theorem run_transaction_with_fuel_equal:
-  run_transaction_with_fuel n c b a t = SOME (x, m) ∧
-  run_transaction_with_fuel p c b a t = SOME (y, m)
+  run_transaction_with_fuel n c h b a t = SOME (x, m) ∧
+  run_transaction_with_fuel p c h b a t = SOME (y, m)
   ⇒
   n = p
 Proof
@@ -1224,23 +1224,23 @@ QED
 (* -- *)
 
 Theorem run_block_SOME_with_fuel:
-  run_block c a b = SOME r ⇔
-  ∃n. run_block_with_fuel n c a b = SOME (FST r, SND r, 0)
+  run_block c h a b = SOME r ⇔
+  ∃n. run_block_with_fuel n c h a b = SOME (FST r, SND r, 0)
 Proof
   rw[run_block_def, run_block_with_fuel_def]
   \\ qspec_tac(`update_beacon_block b a`,`a`)
   \\ qid_spec_tac`r`
   \\ rewrite_tac[METIS_PROVE [REVERSE_DEF]
-       ``run_transactions_with_fuel n c b a [] =
-         run_transactions_with_fuel n c b a (REVERSE [])``]
+       ``run_transactions_with_fuel n c h b a [] =
+         run_transactions_with_fuel n c h b a (REVERSE [])``]
   \\ qspec_tac(`[]:transaction_result list`,`rs`)
   \\ qspec_tac(`b.transactions`,`ls`)
   \\ Induct
   \\ gs[UNCURRY, FORALL_PROD, EXISTS_PROD, PULL_EXISTS]
   >- rw[run_transactions_with_fuel_def, EQ_IMP_THM]
   \\ rw[run_transactions_with_fuel_def]
-  \\ qmatch_goalsub_rename_tac`run_transaction c b a tx`
-  \\ Cases_on`run_transaction c b a tx` \\ gs[]
+  \\ qmatch_goalsub_rename_tac`run_transaction c h b a tx`
+  \\ Cases_on`run_transaction c h b a tx` \\ gs[]
   \\ simp[FOLDL_OPTION_BIND_NONE]
   >- (
     rw[option_case_eq, pair_case_eq]

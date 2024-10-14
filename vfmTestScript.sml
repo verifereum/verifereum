@@ -11,12 +11,18 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 
 val _ = new_theory "vfmTest";
 
+val run_block_with_fuel_pat =
+  run_block_with_fuel_def |> SPEC_ALL |> concl |> lhs;
+
+val run_block_with_fuel =
+  run_block_with_fuel_pat |> strip_comb |> fst;
+
 (*
   val (_, gt) = top_goal()
   Globals.max_print_depth := 12
 *)
 fun cv_eval_run_block_with_fuel_tac (goal as (_, gt)) = let
-  val run_tm = find_term (can (match_term ``run_block_with_fuel _ _ _ _``)) gt
+  val run_tm = find_term (can (match_term run_block_with_fuel_pat)) gt
   val raw_th = cv_eval_raw run_tm
   val raw_th2 = raw_th |>
   REWRITE_RULE[
@@ -58,7 +64,7 @@ fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
 fun mk_statement test_name =
   Term[QUOTE(String.concat[
-         "∃rs. run_block 1 ",
+         "∃rs. run_block 1 [] ", (* TODO: add prev hashes if needed *)
          test_name, "_pre ",
          test_name, "_block ",
          "= SOME (rs, ",
@@ -98,10 +104,6 @@ fun mk_tactic num_steps =
        \\ rewrite_tac[]))
   \\ simp_tac (std_ss ++ WORD_ss) []
   \\ rewrite_tac account_rwts
-
-val run_block_with_fuel =
-  run_block_with_fuel_def |> SPEC_ALL |> concl |> lhs
-  |> strip_comb |> fst;
 
 fun find_num_steps thm_term =
 let
@@ -338,30 +340,40 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 (*
 
 cv_eval ``
-let acc = calldatasize_d0g0v0_Cancun_pre in
-let blk = calldatasize_d0g0v0_Cancun_block in
-let tx = calldatasize_d0g0v0_Cancun_transaction in
+let acc = random_d5g0v0_Cancun_pre in
+let blk = random_d5g0v0_Cancun_block in
+let tx = random_d5g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 acc blk
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 4 s in
+let (r, s) = run_n 14 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
-   c.callParams.gasLimit, FLOOKUP c.callParams.parsed c.pc,
+   c.callParams.gasLimit,
+   c.pc,
+   (*c.callParams.parsed,*)
+   FLOOKUP c.callParams.parsed c.pc,
    (*DROP c.pc c.callParams.code, c.memory,*)
    (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 0w)
    )
 ``
 
-Push1 36
-CallDataLoad
-Push1 0
-Keccak256
+cv_eval ``random_d5g0v0_Cancun_block.number``
 
+0x1005
 
-3 + 3 + 3 + 39
-
-24777 - 22105
+0: Push1 0
+2: Push1 0
+4: Push1 0
+6: Push1 0
+8: Push1 0
+10: Push1 4
+12: CallDataLoad
+13: Push2 16 0
+16: Add
+17: Gas
+18: Call
+19: Stop
 
 *)
 
