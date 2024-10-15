@@ -212,7 +212,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas ShR            = 3
   ∧ static_gas SAR            = 3
   ∧ static_gas Keccak256      = 30
-  ∧ static_gas Address        = 30
+  ∧ static_gas Address        = 2
   ∧ static_gas Balance        = 0
   ∧ static_gas Origin         = 2
   ∧ static_gas Caller         = 2

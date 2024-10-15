@@ -226,6 +226,14 @@ in (List.length test_names, prove_test) end
 
 fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/VMTests/" ^ s;
 
+val test_path = mk_test_path "vmTests/blockInfo.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+(*
+val thms = List.tabulate (num_tests, prove_test);
+*)
+val thms = [prove_test 0, prove_test 2, prove_test 3,
+            prove_test 4] (* TODO: figure out difficulty/prevRandao *)
+
 val test_path = mk_test_path "vmTests/calldatacopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -239,6 +247,10 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "vmTests/dup.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmTests/envInfo.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
@@ -338,13 +350,13 @@ val thms = List.tabulate (num_tests, prove_test);
 (*
 
 cv_eval ``
-let acc = random_d5g0v0_Cancun_pre in
-let blk = random_d5g0v0_Cancun_block in
-let tx = random_d5g0v0_Cancun_transaction in
-let s = (THE $ initial_state 1 acc blk
+let acc = envInfo_d0g0v0_Cancun_pre in
+let blk = envInfo_d0g0v0_Cancun_block in
+let tx = envInfo_d0g0v0_Cancun_transaction in
+let s = (THE $ initial_state 1 [] blk acc
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 14 s in
+let (r, s) = run_n 12 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
    c.callParams.gasLimit,
@@ -356,22 +368,20 @@ let c = EL 0 s.contexts in
    )
 ``
 
-cv_eval ``random_d5g0v0_Cancun_block.number``
+3 + 3 + 3 + 3 + 3 + 3 + 3 + 3 + 3 + 3
 
-0x1005
+cv_eval``static_gas Address``
 
-0: Push1 0
-2: Push1 0
-4: Push1 0
-6: Push1 0
-8: Push1 0
-10: Push1 4
-12: CallDataLoad
-13: Push2 16 0
-16: Add
-17: Gas
-18: Call
-19: Stop
+cv_eval ``parse_code 0 FEMPTY $
+  (lookup_account envInfo_d0g0v0_Cancun_pre
+   envInfo_d0g0v0_Cancun_transaction.to).code``
+
+(244845750 - 244715550) div 4650
+
+cv_eval ``
+  (lookup_account envInfo_d0g0v0_Cancun_post
+   0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BAw).balance
+   ``
 
 *)
 
