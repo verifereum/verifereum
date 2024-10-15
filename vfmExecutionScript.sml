@@ -441,13 +441,13 @@ Definition step_create_def:
     rlpSender <<- rlp_bytes $ word_to_bytes senderAddress T;
     rlpNonce <<- rlp_bytes $ MAP n2w $ REVERSE $ n2l 256 $ nonce;
     rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
-    hash <<- word_of_bytes F (0w:bytes32) $ Keccak_256_bytes $ rlpBytes;
+    hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $ rlpBytes;
     newMinSize <<- word_size (offset + size) * 32;
     newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
     newStack <<- DROP (3 + saltOffset) context.stack;
     code <<- TAKE size (DROP offset newMemory);
     address <<-
-      if two then w2w $ word_of_bytes F (0w:bytes32) $ Keccak_256_bytes(
+      if two then w2w $ word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes(
         [n2w 0xff] ++
         word_to_bytes senderAddress T ++
         word_to_bytes salt T ++
@@ -604,7 +604,7 @@ Definition step_inst_def:
       size <<- w2n (EL 1 context.stack);
       newMinSize <<- word_size (offset + size) * 32;
       expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-      hash <<- word_of_bytes F (0w:bytes32) $ Keccak_256_bytes $
+      hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $
                TAKE size (DROP offset expandedMemory);
       newStack <<- hash :: DROP 2 context.stack;
       newMemory <<- if 0 < size then expandedMemory else context.memory;
@@ -686,7 +686,7 @@ Definition step_inst_def:
           bind get_accounts (λaccounts.
           let code = (accounts address).code in
           (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
-          let hash = word_of_bytes F (0w:bytes32) $ Keccak_256_bytes $ code in
+          let hash = word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $ code in
           let newContext = context with stack := hash :: TL context.stack in
             ignore_bind
               (consume_gas addressAccessCost)
