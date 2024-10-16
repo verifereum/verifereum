@@ -262,6 +262,16 @@ val test_path = mk_test_path "vmTests/random.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+val test_path = mk_test_path "vmTests/sha3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: need to implement SelfDestruct
+val test_path = mk_test_path "vmTests/suicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
 val test_path = mk_test_path "vmTests/swap.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -286,11 +296,10 @@ val test_path = mk_test_path "vmArithmeticTest/divByZero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval oom problem?
+(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmArithmeticTest/exp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "vmArithmeticTest/expPower2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -304,10 +313,10 @@ val test_path = mk_test_path "vmBitwiseLogicOperation/slt.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmIOandFlowOperations/codecopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (1, prove_test);
-(* TODO: same cv_eval problem as with mload? *)
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "vmIOandFlowOperations/pc.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -325,10 +334,10 @@ val test_path = mk_test_path "vmIOandFlowOperations/jumpi.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmIOandFlowOperations/mload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (1, prove_test);
-(* TODO: some cv_eval problem in the 2nd one? *)
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "vmIOandFlowOperations/sstore_sload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -341,36 +350,78 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: cv_eval oom after about 5 of them
+(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmPerformance/loopExp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (*
 
 cv_eval ``
-let acc = envInfo_d0g0v0_Cancun_pre in
-let blk = envInfo_d0g0v0_Cancun_block in
-let tx = envInfo_d0g0v0_Cancun_transaction in
+let acc = sha3_d3g0v0_Cancun_pre in
+let blk = sha3_d3g0v0_Cancun_block in
+let tx = sha3_d3g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 [] blk acc
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 12 s in
+let (r, s) = run_n 15 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
    c.callParams.gasLimit,
    c.pc,
    (*c.callParams.parsed,*)
    FLOOKUP c.callParams.parsed c.pc,
-   (*DROP c.pc c.callParams.code, c.memory,*)
+   (*DROP c.pc c.callParams.code,*) c.memory,
    (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 0w)
    )
 ``
 
-3 + 3 + 3 + 3 + 3 + 3 + 3 + 3 + 3 + 3
+val offset = ``1000n``
+val size = ``0xfffffn``
+val newMinSize = cv_eval ``word_size (^offset + ^size) * 32`` |> concl |> rhs
+val oldMemory = ``[]:byte list``
+val expandedMemory_thm = cv_eval ``PAD_RIGHT 0w ^newMinSize ^oldMemory``
+val expandedMemory = expandedMemory_thm |> concl |> rhs
 
-cv_eval``static_gas Address``
+> val eval_th = computeLib.EVAL_CONV ``LENGTH ^expandedMemory``
+val eval_th =
+   ⊢ LENGTH
+       [0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w;
+        0w; ... ] = 1049600: thm
+val raw_cv_eval_th = cv_eval_raw ``LENGTH ^expandedMemory``
+> val cv_eval_th = cv_eval ``LENGTH ^expandedMemory``
+
+val oldCost = cv_eval ``memory_cost ^oldMemory``
+val newLength = cv_eval ``LENGTH ^expandedMemory``
+val expansionCost = cv_eval ``memory_expansion_cost ^oldMemory ^expandedMemory``
+  |> concl |> rhs
+
+dest_term  ``0w``
+
+val () = Globals.max_print_depth := 20
+val () = cv_memLib.verbosity_level := cv_memLib.Verbose
+val size = ``1049600n``;
+val zeros_tm = ``PAD_RIGHT 0n ^size []``;
+
+Definition long_list_def:
+  long_list = ^zeros_tm
+End
+
+val res = cv_trans_deep_embedding computeLib.EVAL_CONV long_list_def;
+f"long_list"
+
+val eval_zeros = time computeLib.EVAL_CONV zeros_tm;
+val cv_eval_zeros = time cv_eval zeros_tm;
+val zeros_v = cv_eval_zeros |> concl |> rhs;
+val length_tm = ``LENGTH ^zeros_v``;
+
+val rep = cv_repLib.cv_rep_for [] length_tm;
+
+val eval_length = time computeLib.EVAL_CONV length_tm;
+val cv_eval_length_raw = cv_eval_raw length_tm;
+
+f"cv_length"
+f"cv_len"
 
 cv_eval ``parse_code 0 FEMPTY $
   (lookup_account envInfo_d0g0v0_Cancun_pre
