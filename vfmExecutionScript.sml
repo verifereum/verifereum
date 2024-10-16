@@ -604,13 +604,13 @@ Definition step_inst_def:
       size <<- w2n (EL 1 context.stack);
       newMinSize <<- word_size (offset + size) * 32;
       expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-      hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $
-               TAKE size (DROP offset expandedMemory);
-      newStack <<- hash :: DROP 2 context.stack;
       newMemory <<- if 0 < size then expandedMemory else context.memory;
       expansionCost <<- memory_expansion_cost context.memory newMemory;
       dynamicGas <<- 6 * word_size size + expansionCost;
       consume_gas dynamicGas;
+      hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $
+               TAKE size (DROP offset expandedMemory);
+      newStack <<- hash :: DROP 2 context.stack;
       spentContext <- get_current_context;
       set_current_context $ spentContext
         with <| stack := newStack; memory := newMemory |>
