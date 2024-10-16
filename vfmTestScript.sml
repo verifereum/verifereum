@@ -193,7 +193,7 @@ fun mk_prove_test test_path = let
         ";coinBase := n2w ", #coinBase block,
         ";hash := n2w ", #hash block,
         ";gasLimit := ", #gasLimit block,
-        ";prevRandao := n2w ", #prevRandao block, (* TODO: not sure - using the difficulty *)
+        ";prevRandao := n2w ", #prevRandao block,
         ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
         ";transactions := [", test_name, "_transaction]",
         "|>"
@@ -228,11 +228,7 @@ fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/VMTests/" ^ s;
 
 val test_path = mk_test_path "vmTests/blockInfo.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-(*
 val thms = List.tabulate (num_tests, prove_test);
-*)
-val thms = [prove_test 0, prove_test 2, prove_test 3,
-            prove_test 4] (* TODO: figure out difficulty/prevRandao *)
 
 val test_path = mk_test_path "vmTests/calldatacopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
