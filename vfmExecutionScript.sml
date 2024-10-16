@@ -841,6 +841,7 @@ Definition step_inst_def:
       set_current_context newContext;
       revert
     od
+  ∧ step_inst SelfDestruct = return () (* TODO *)
 End
 
 Definition inc_pc_def:
