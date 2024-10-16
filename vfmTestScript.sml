@@ -81,7 +81,7 @@ val account_rwts = [
 ];
 
 (*
-  set_goal([], thm_term)
+  set_goal([], thm_term);
   Globals.max_print_depth := 16
 *)
 fun mk_tactic num_steps =
@@ -262,11 +262,10 @@ val test_path = mk_test_path "vmTests/sha3.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: need to implement SelfDestruct
 val test_path = mk_test_path "vmTests/suicide.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-*)
+val thms = List.tabulate (2, prove_test);
+(* TODO: last test fails, maybe involves a contract *)
 
 val test_path = mk_test_path "vmTests/swap.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -354,17 +353,22 @@ val thms = List.tabulate (num_tests, prove_test);
 (*
 
 cv_eval ``
-let acc = sha3_d3g0v0_Cancun_pre in
-let blk = sha3_d3g0v0_Cancun_block in
-let tx = sha3_d3g0v0_Cancun_transaction in
+let acc = suicide_d0g0v0_Cancun_pre in
+let blk = suicide_d0g0v0_Cancun_block in
+let tx = suicide_d0g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 [] blk acc
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 15 s in
+let (r, s) = run_n 10 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
    c.callParams.gasLimit,
    c.pc,
+   [fIN 4096w c.callParams.accesses.addresses;
+    fIN 4097w c.callParams.accesses.addresses;
+    fIN 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCw
+    c.callParams.accesses.addresses;
+   ],
    (*c.callParams.parsed,*)
    FLOOKUP c.callParams.parsed c.pc,
    (*DROP c.pc c.callParams.code,*) c.memory,
@@ -424,6 +428,7 @@ cv_eval ``parse_code 0 FEMPTY $
    envInfo_d0g0v0_Cancun_transaction.to).code``
 
 (244845750 - 244715550) div 4650
+35184372088832 - 17592186044416
 
 cv_eval ``
   (lookup_account envInfo_d0g0v0_Cancun_post
