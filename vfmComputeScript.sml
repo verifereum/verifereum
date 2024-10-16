@@ -864,8 +864,6 @@ End
 
 val () = cv_auto_trans run_n_def;
 
-val WHILE_FUNPOW = keccakTheory.WHILE_FUNPOW
-
 Theorem run_SOME_run_n:
   run s = SOME p ⇔
   ISR (FST p) ∧
