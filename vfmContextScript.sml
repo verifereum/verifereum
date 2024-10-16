@@ -231,7 +231,8 @@ End
 
 Definition initial_access_sets_def:
   initial_access_sets t =
-  <| addresses   := fIMAGE (λe. e.account) (fset_ABS t.accessList)
+  <| addresses   := fINSERT t.from $ fINSERT t.to $
+                    fIMAGE (λe. e.account) $ fset_ABS t.accessList
    ; storageKeys := fBIGUNION
                       (fIMAGE (λe. fIMAGE (SK e.account) e.keys)
                               (fset_ABS t.accessList))
