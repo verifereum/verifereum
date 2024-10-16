@@ -359,6 +359,10 @@ Datatype:
   call_type = Normal | Code | Delegate | Static
 End
 
+Definition account_empty_def:
+  account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
+End
+
 Definition step_call_def:
   step_call call_type = do
     context <- get_current_context;
@@ -382,8 +386,7 @@ Definition step_call_def:
     positiveValueCost <<- if 0 < value then 9000 else 0;
     accounts <- get_accounts;
     toAccount <<- accounts address;
-    toAccountEmpty <<-
-      toAccount.balance = 0 ∧ toAccount.nonce = 0 ∧ toAccount.code = [];
+    toAccountEmpty <<- account_empty toAccount;
     transferCost <<- if call_type = Normal then
       if 0 < value ∧ toAccountEmpty then 25000 else 0
     else 0;
@@ -556,6 +559,16 @@ Definition step_sstore_def:
     newAccount <<- account with storage := newStorage;
     update_accounts (address =+ newAccount)
   od
+End
+
+Definition transfer_value_def:
+  transfer_value (fromAddress: address) toAddress value accounts =
+  if value = 0 then accounts else
+    let sender = accounts fromAddress in
+    let recipient = accounts toAddress in
+    let newSender = sender with balance updated_by flip $- value in
+    let newRecipient = recipient with balance updated_by $+ value in
+    (toAddress =+ newRecipient) $ (fromAddress =+ newSender) accounts
 End
 
 Definition step_inst_def:
@@ -841,7 +854,23 @@ Definition step_inst_def:
       set_current_context newContext;
       revert
     od
-  ∧ step_inst SelfDestruct = return () (* TODO *)
+  ∧ step_inst SelfDestruct = do
+      context <- get_current_context;
+      assert (1 ≤ LENGTH context.stack) StackUnderflow;
+      assert (¬context.callParams.static) WriteInStaticContext;
+      address <<- w2w $ EL 0 context.stack;
+      accounts <- get_accounts;
+      sender <<- context.callParams.callee;
+      balance <<- (accounts sender).balance;
+      addressWarm <- access_address address;
+      targetEmpty <<- account_empty $ accounts address;
+      transferCost <<- if 0 < balance ∧ targetEmpty then 25000 else 0;
+      accessCost <<- if addressWarm then 0 else 2600;
+      dynamicGas <<- transferCost + accessCost;
+      consume_gas dynamicGas;
+      set_accounts $ transfer_value sender address balance accounts;
+      (* TODO: destroy created contract if this is a contract creation *)
+    od
 End
 
 Definition inc_pc_def:
@@ -967,16 +996,6 @@ End
 
 Definition empty_return_destination_def:
   empty_return_destination = Memory <| offset := 0; size := 0 |>
-End
-
-Definition transfer_value_def:
-  transfer_value (fromAddress: address) toAddress value accounts =
-  if value = 0 then accounts else
-    let sender = accounts fromAddress in
-    let recipient = accounts toAddress in
-    let newSender = sender with balance updated_by flip $- value in
-    let newRecipient = recipient with balance updated_by $+ value in
-    (toAddress =+ newRecipient) $ (fromAddress =+ newSender) accounts
 End
 
 Datatype:

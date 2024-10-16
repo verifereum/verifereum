@@ -748,6 +748,13 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
+val () = transfer_value_def |>
+  SIMP_RULE std_ss [combinTheory.C_DEF] |>
+  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  cv_auto_trans;
+
 val step_inst_pre_def = step_inst_def |>
   ONCE_REWRITE_RULE[FUN_EQ_THM] |>
   SIMP_RULE std_ss [
@@ -813,13 +820,6 @@ val () = cv_auto_trans initial_tx_params_def;
 
 val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  cv_auto_trans;
-
-val () = transfer_value_def |>
-  SIMP_RULE std_ss [combinTheory.C_DEF] |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
