@@ -1,1 +1,1 @@
-INCLUDES=$(HOLDIR)/examples/Crypto/Keccak
+INCLUDES=$(HOLDIR)/examples/Crypto/Keccak $(HOLDIR)/examples/json
