@@ -264,8 +264,7 @@ val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "vmTests/suicide.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (2, prove_test);
-(* TODO: last test fails, maybe involves a contract *)
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "vmTests/swap.json";
 val (num_tests, prove_test) = mk_prove_test test_path;

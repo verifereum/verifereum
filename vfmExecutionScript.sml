@@ -563,7 +563,7 @@ End
 
 Definition transfer_value_def:
   transfer_value (fromAddress: address) toAddress value accounts =
-  if value = 0 then accounts else
+  if value = 0 ∨ fromAddress = toAddress then accounts else
     let sender = accounts fromAddress in
     let recipient = accounts toAddress in
     let newSender = sender with balance updated_by flip $- value in
