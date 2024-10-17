@@ -320,11 +320,65 @@ val test_path = mk_test_path "vmArithmeticTest/mul.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+val test_path = mk_test_path "vmArithmeticTest/mulmod.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmArithmeticTest/not.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmArithmeticTest/sdiv.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: cv_eval oom problem? *)
+val test_path = mk_test_path "vmArithmeticTest/signextend.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmArithmeticTest/smod.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmArithmeticTest/sub.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: cv_eval oom problem? *)
+val test_path = mk_test_path "vmArithmeticTest/twoOps.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmBitwiseLogicOperation/and.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmBitwiseLogicOperation/byte.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmBitwiseLogicOperation/eq.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmBitwiseLogicOperation/gt.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 val test_path = mk_test_path "vmBitwiseLogicOperation/iszero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+val test_path = mk_test_path "vmBitwiseLogicOperation/sgt.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 val test_path = mk_test_path "vmBitwiseLogicOperation/slt.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmBitwiseLogicOperation/xor.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
@@ -333,28 +387,11 @@ val test_path = mk_test_path "vmIOandFlowOperations/codecopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-val test_path = mk_test_path "vmIOandFlowOperations/pc.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-val test_path = mk_test_path "vmIOandFlowOperations/pop.json";
+val test_path = mk_test_path "vmIOandFlowOperations/gas.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "vmIOandFlowOperations/jump.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-val test_path = mk_test_path "vmIOandFlowOperations/jumpi.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-(* TODO: cv_eval oom problem? *)
-val test_path = mk_test_path "vmIOandFlowOperations/mload.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-val test_path = mk_test_path "vmIOandFlowOperations/sstore_sload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
@@ -365,6 +402,46 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
+val test_path = mk_test_path "vmIOandFlowOperations/jumpi.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/loop_stacklimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/loopsConditionals.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: cv_eval oom problem? *)
+val test_path = mk_test_path "vmIOandFlowOperations/mload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/msize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/mstore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/mstore8.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/pc.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/pop.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+val test_path = mk_test_path "vmIOandFlowOperations/sstore_sload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmPerformance/loopExp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -373,28 +450,52 @@ val thms = List.tabulate (num_tests, prove_test);
 (*
 
 cv_eval ``
-let acc = suicide_d0g0v0_Cancun_pre in
-let blk = suicide_d0g0v0_Cancun_block in
-let tx = suicide_d0g0v0_Cancun_transaction in
+let acc = msize_d4g0v0_Cancun_pre in
+let blk = msize_d4g0v0_Cancun_block in
+let tx = msize_d4g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 [] blk acc
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 10 s in
+let (r, s) = run_n 12 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
    c.callParams.gasLimit,
    c.pc,
+   (*
    [fIN 4096w c.callParams.accesses.addresses;
     fIN 4097w c.callParams.accesses.addresses;
     fIN 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCw
     c.callParams.accesses.addresses;
    ],
+   *)
    (*c.callParams.parsed,*)
    FLOOKUP c.callParams.parsed c.pc,
-   (*DROP c.pc c.callParams.code,*) c.memory,
+   (*DROP c.pc c.callParams.code,*) LENGTH c.memory,
+   c.memory,
    (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 0w)
    )
 ``
+
+Globals.max_print_depth := 50;
+
+val v = ``31w : bytes32``;
+val ls = ``SINGL (w2w ^v) : byte list``
+val byteIndex = ``1n``
+val newMinSize = cv_eval ``(SUC $ word_size ^byteIndex) * 32``;
+EVAL``word_size (^byteIndex + LENGTH ^ls)``
+
+val byteIndex = 0x5a |> numSyntax.term_of_int;
+val value =  0xeeee |> numSyntax.term_of_int;
+val values = cv_eval ``REVERSE $ word_to_bytes ((n2w ^value):bytes32) F``
+  |> concl |> rhs;
+val wordSize = cv_eval ``word_size $ ^byteIndex + LENGTH ^values`` |> concl |> rhs;
+val newMinSize = cv_eval ``^wordSize * 32`` |> concl |> rhs;
+val oldMemory = ``[0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w;
+       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 255w; 255w; 255w; 255w; 255w] :
+       byte list``
+val expandedMemory = cv_eval ``PAD_RIGHT 0w ^newMinSize ^oldMemory`` |> concl |> rhs;
+val newMemory = cv_eval ``LENGTH $ write_memory ^byteIndex ^values ^expandedMemory``
+
 
 val offset = ``1000n``
 val size = ``0xfffffn``

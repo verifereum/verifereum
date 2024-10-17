@@ -319,9 +319,10 @@ Definition store_to_memory_def:
     assert (2 ≤ LENGTH context.stack) StackUnderflow;
     byteIndex <<- w2n (EL 0 context.stack);
     value <<- EL 1 context.stack;
-    newMinSize <<- word_size (SUC byteIndex) * 32;
+    bytes <<- f value;
+    newMinSize <<- (word_size $ byteIndex + LENGTH bytes) * 32;
     expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-    newMemory <<- write_memory byteIndex (f value) expandedMemory;
+    newMemory <<- write_memory byteIndex bytes expandedMemory;
     expansionCost <<- memory_expansion_cost context.memory newMemory;
     newStack <<- DROP 2 context.stack;
     consume_gas expansionCost;
