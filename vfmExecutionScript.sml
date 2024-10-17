@@ -735,7 +735,7 @@ Definition step_inst_def:
       context <- get_current_context;
       assert (1 ≤ LENGTH context.stack) StackUnderflow;
       byteIndex <<- w2n (EL 0 context.stack);
-      newMinSize <<- word_size (SUC byteIndex) * 32;
+      newMinSize <<- word_size (byteIndex + 32) * 32;
       newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       expansionCost <<- memory_expansion_cost context.memory newMemory;
       word <<- word_of_bytes F 0w $ REVERSE $ TAKE 32 $ DROP byteIndex newMemory;
