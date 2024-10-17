@@ -108,9 +108,12 @@ fun mk_tactic num_steps =
 fun find_num_steps thm_term =
 let
   val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
+  val name = last args |> dest_const |> fst
+  fun msg pre n = pre ^ " num steps " ^ Int.toString n ^ " for " ^ name ^ "\n"
   val n = 14
   fun loop n =
   let
+    val () = TextIO.print $ msg "Trying" n
     val n_tm = numSyntax.term_of_int n
     val run_tm = list_mk_comb(run_block_with_fuel, n_tm::args)
     val raw_th = cv_eval_raw run_tm
@@ -127,8 +130,10 @@ let
         numSyntax.int_of_term |>
         curry op - n
   end
+  val num_steps = loop n
+  val () = TextIO.print $ msg "Found" num_steps
 in
-  loop n
+  num_steps
 end
 
 type account = {
@@ -471,7 +476,6 @@ val test_path = mk_test_path "vmIOandFlowOperations/mstore.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmIOandFlowOperations/mstore8.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -499,7 +503,7 @@ val test_path = mk_test_path "vmPerformance/loopExp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval very slow... *)
+(* TODO: very long test... find the num_steps manually to avoid excessive runs *)
 val test_path = mk_test_path "vmPerformance/loopMul.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
