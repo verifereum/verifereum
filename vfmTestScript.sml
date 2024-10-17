@@ -339,7 +339,6 @@ val test_path = mk_test_path "vmArithmeticTest/divByZero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmArithmeticTest/exp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);

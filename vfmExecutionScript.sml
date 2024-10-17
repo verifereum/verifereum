@@ -15,6 +15,158 @@ Definition Keccak_256_bytes_def:
     MAP (PAD_LEFT 0 8 o word_to_bin_list) bs
 End
 
+(* TODO: move *)
+
+open arithmeticTheory wordsTheory wordsLib dividesTheory dep_rewrite
+
+Definition word_exp_def:
+  word_exp (b: 'a word) (e: 'a word) =
+  if e = 0w then 1w else
+  if word_mod e 2w = 0w then
+    let x = word_exp b (word_div e 2w) in
+      word_mul x x
+  else word_mul b (word_exp b (e - 1w))
+Termination
+  WF_REL_TAC`measure (w2n o SND)`
+  \\ Cases_on`dimword(:'a) = 2`
+  >- ( `2w = 0w` by simp[] \\ pop_assum SUBST1_TAC \\ gs[word_mod_def] )
+  \\ `2 < dimword(:'a)`
+  by ( CCONTR_TAC
+    \\ gs[NOT_LESS, NUMERAL_LESS_THM,
+          LESS_OR_EQ, ONE_LT_dimword, ZERO_LT_dimword] )
+  \\ qx_gen_tac`e` \\ rw[]
+  \\ qspec_then`2w` mp_tac WORD_DIVISION
+  \\ impl_tac >- rw[n2w_11]
+  \\ disch_then(qspec_then`e`mp_tac)
+  \\ rewrite_tac[word_div_def, word_mul_n2w, word_lo_n2w, GSYM WORD_LO]
+  \\ `w2n e < dimword (:'a)` by simp[w2n_lt]
+  \\ `w2n e DIV 2 < dimword(:'a)` by simp[DIV_LT_X]
+  \\ Cases_on`e`
+  \\ gs[word_lo_n2w]
+End
+
+Theorem MOD_MOD_LESS:
+  0 < y /\ y < z ==> x MOD y MOD z = x MOD y
+Proof
+  strip_tac
+  \\ irule LESS_MOD
+  \\ irule LESS_TRANS
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ irule MOD_LESS
+  \\ simp[]
+QED
+
+Theorem word_exp_EXP:
+  ∀b e. word_exp b e = n2w $ w2n b ** w2n e
+Proof
+  recInduct word_exp_ind
+  \\ rw[]
+  \\ simp[Once word_exp_def]
+  \\ IF_CASES_TAC >- gs[]
+  \\ Cases_on`dimword(:'a) = 2`
+  >- (
+    gs[word_mod_def, word_div_def]
+    \\ `w2n b < 2 ∧ w2n e < 2` by metis_tac[w2n_lt]
+    \\ gs[NUMERAL_LESS_THM]
+    \\ Cases_on`b` \\ gs[] )
+  \\ `2 < dimword(:'a)`
+  by (
+    CCONTR_TAC
+    \\ gs[NOT_LESS, LESS_OR_EQ, NUMERAL_LESS_THM,
+          ONE_LT_dimword, ZERO_LT_dimword] )
+  \\ `w2n e < dimword (:'a)` by simp[w2n_lt]
+  \\ `w2n e DIV 2 < dimword(:'a)` by simp[DIV_LT_X]
+  \\ Cases_on`e` \\ gs[word_mod_def, word_div_def]
+  \\ Cases_on`b` \\ gs[]
+  \\ gs[GSYM EXP_EXP_MULT]
+  \\ DEP_REWRITE_TAC[MOD_MOD_LESS]
+  \\ gs[]
+  \\ IF_CASES_TAC \\ gs[]
+  >- (
+    AP_THM_TAC \\ AP_TERM_TAC
+    \\ DEP_REWRITE_TAC[DIVIDES_DIV, DIVIDES_MOD_0]
+    \\ simp[] )
+  \\ simp[word_mul_n2w]
+  \\ AP_THM_TAC \\ AP_TERM_TAC
+  \\ rewrite_tac[GSYM word_sub_def]
+  \\ DEP_REWRITE_TAC[GSYM n2w_sub]
+  \\ Cases_on`n` \\ gs[EXP]
+QED
+
+Definition word_exp_aux_def:
+  word_exp_aux (b:'a word) (e:'a word) a =
+  if e = 0w then a else
+  if word_mod e 2w = 0w then
+    word_exp_aux (word_mul b b) (word_div e 2w) a
+  else
+    word_exp_aux b (word_sub e 1w) (word_mul b a)
+Termination
+  WF_REL_TAC`measure (w2n o FST o SND)`
+  \\ Cases_on`dimword(:'a) = 2`
+  >- ( `2w = 0w` by simp[] \\ pop_assum SUBST1_TAC \\ gs[word_mod_def] )
+  \\ `2 < dimword(:'a)`
+  by ( CCONTR_TAC
+    \\ gs[NOT_LESS, NUMERAL_LESS_THM,
+          LESS_OR_EQ, ONE_LT_dimword, ZERO_LT_dimword] )
+  \\ qx_gen_tac`e` \\ rw[]
+  \\ Cases_on`e`
+  \\ gs[word_div_def, word_mod_def, MOD_MOD_LESS]
+  \\ DEP_REWRITE_TAC[LESS_MOD]
+  \\ conj_asm2_tac \\ gs[DIV_LT_X]
+End
+
+Theorem word_exp_aux_EXP:
+  !b e a. word_exp_aux b e a = n2w $ w2n a * w2n b ** w2n e
+Proof
+  recInduct word_exp_aux_ind
+  \\ rpt strip_tac
+  \\ simp[Once word_exp_aux_def]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ Cases_on`dimword(:'a) = 2`
+  >- (
+    `2w = 0w` by simp[] \\ pop_assum SUBST1_TAC
+    \\ gs[word_mod_def]
+    \\ rewrite_tac[GSYM word_sub_def]
+    \\ Cases_on`e`
+    \\ DEP_REWRITE_TAC[GSYM n2w_sub]
+    \\ conj_asm1_tac \\ gs[]
+    \\ Cases_on`n` \\ gs[EXP]
+    \\ Cases_on`a` \\ Cases_on`b`
+    \\ gs[word_mul_n2w])
+  \\ `2 < dimword(:'a)`
+  by ( CCONTR_TAC
+    \\ gs[NOT_LESS, NUMERAL_LESS_THM,
+          LESS_OR_EQ, ONE_LT_dimword, ZERO_LT_dimword] )
+  \\ Cases_on`e` \\ gs[word_mod_def, word_div_def]
+  \\ reverse IF_CASES_TAC \\ gs[MOD_MOD_LESS]
+  >- (
+    rewrite_tac[GSYM word_sub_def]
+    \\ `1 ≤ n` by simp[]
+    \\ asm_simp_tac std_ss [GSYM n2w_sub, w2n_n2w]
+    \\ `(n - 1) MOD dimword(:'a) = n - 1`
+    by ( DEP_REWRITE_TAC[LESS_MOD] \\ simp[] )
+    \\ pop_assum SUBST_ALL_TAC
+    \\ Cases_on`a` \\ Cases_on`b`
+    \\ gs[word_mul_n2w]
+    \\ Cases_on`n` \\ gs[EXP] )
+  \\ `(n DIV 2) MOD dimword(:'a) = n DIV 2`
+  by ( DEP_REWRITE_TAC[LESS_MOD] \\ gs[DIV_LT_X] )
+  \\ pop_assum SUBST_ALL_TAC
+  \\ Cases_on`a` \\ Cases_on`b`
+  \\ gs[word_mul_n2w]
+  \\ gs[GSYM EXP_EXP_MULT]
+  \\ DEP_REWRITE_TAC[DIVIDES_DIV]
+  \\ gs[DIVIDES_MOD_0]
+QED
+
+Theorem word_exp_aux:
+  word_exp b e = word_exp_aux b e 1w
+Proof
+  rw[word_exp_EXP, word_exp_aux_EXP]
+QED
+
+(* -- *)
+
 Datatype:
   exception =
   | OutOfGas
@@ -586,11 +738,13 @@ Definition step_inst_def:
   ∧ step_inst Exp = do
       context <- get_current_context;
       assert (2 ≤ LENGTH context.stack) StackUnderflow;
-      exponent <<- w2n (EL 1 context.stack);
-      exponentByteSize <<- if exponent = 0 then 0 else SUC (LOG2 exponent DIV 8);
+      exponent <<- EL 1 context.stack;
+      exponentByteSize <<-
+        if exponent = 0w then 0
+        else SUC (LOG2 (w2n exponent) DIV 8);
       dynamicGas <<- 50 * exponentByteSize;
-      base <<- w2n (EL 0 context.stack);
-      result <<- n2w (base ** exponent);
+      base <<- EL 0 context.stack;
+      result <<- word_exp base exponent;
       newStack <<- result :: DROP 2 context.stack;
       consume_gas dynamicGas;
       spentContext <- get_current_context;
