@@ -131,11 +131,20 @@ in
   loop n
 end
 
-fun accounts_term (ls:
-   {address: string,
-     balance: string,
-     code: string, nonce: string, storage: {key: string, value: string} list}
-   list) =
+type account = {
+  address: string, balance: string, code: string,
+  nonce: string, storage: {key: string, value: string} list
+};
+
+val max_inline_code_size = 128;
+
+val codeCache: (string, string) Redblackmap.dict ref =
+  ref $ Redblackmap.mkDict String.compare;
+
+fun mk_code_syntax code =
+  "REVERSE $ hex_to_rev_bytes [] \"" ^ trim2 code ^ "\"";
+
+fun accounts_term (ls: account list) =
   List.foldl
     (fn (a, s) =>
       String.concat [
@@ -144,8 +153,10 @@ fun accounts_term (ls:
         ")(n2w ", #address a, ") <|",
         " nonce := ", #nonce a,
         ";balance := ", #balance a,
-        ";code := hex_to_bytes \"", trim2 $ #code a,
-        "\";storage := ",
+        ";code := ", case Redblackmap.peek(!codeCache, #code a) of
+                          NONE => mk_code_syntax $ #code a
+                        | SOME name => name,
+        ";storage := ",
         List.foldl
           (fn (e, s) =>
             String.concat [
@@ -157,6 +168,33 @@ fun accounts_term (ls:
             (#storage a),
         "|>"
       ]) "empty_accounts" ls
+
+fun mk_code_name prefix address =
+  prefix ^ address  ^ "_code";
+
+fun mk_code_def prefix (a: account) =
+let
+  val code = #code a
+in
+  if Redblackmap.inDomain(!codeCache, code) then NONE else
+  if String.size code <= max_inline_code_size then NONE else
+  let
+    val address = #address a
+    val code_name = mk_code_name prefix address
+    val defn = Term[QUOTE(String.concat[code_name, " = ", mk_code_syntax code])]
+    val thm = new_definition(code_name ^ "_def", defn)
+    val () = codeCache := Redblackmap.insert(!codeCache, code, code_name)
+  in
+    SOME thm
+  end
+end
+
+fun mk_code_defs prefix acc (ls: account list) =
+  List.foldl
+    (fn (a, l) =>
+      case mk_code_def prefix a
+        of NONE => l
+         | SOME def => def::l) acc ls
 
 (*
   val test_index = 0
@@ -174,7 +212,7 @@ fun mk_prove_test test_path = let
         test_name, "_transaction = <|",
         " from := n2w ", #sender transaction,
         ";to := n2w ", #to transaction,
-        ";data := hex_to_bytes \"", trim2 $ #data transaction,
+        ";data := REVERSE $ hex_to_rev_bytes [] \"", trim2 $ #data transaction,
         "\";nonce := ", #nonce transaction,
         ";value := ", #value transaction,
         ";gasPrice := ", #gasPrice transaction,
@@ -200,20 +238,26 @@ fun mk_prove_test test_path = let
       ])]);
 
     val pre = #pre test;
-    val pre_def = new_definition(
-      test_name ^ "_pre_def",
-      Term[QUOTE(test_name ^ "_pre = " ^ accounts_term pre)]);
+    val pre_name = test_name ^ "_pre";
+    val pre_prefix = pre_name ^ "_";
+    val code_defs = mk_code_defs pre_prefix [] pre;
+    val pre_def = new_definition(pre_name,
+      Term[QUOTE(pre_name ^ " = " ^ accounts_term pre)]);
 
     val post = #post test;
-    val post_def = new_definition(
-      test_name ^ "_post_def",
-      Term[QUOTE(test_name ^ "_post = " ^ accounts_term post)]);
+    val post_name = test_name ^ "_post";
+    val post_prefix = post_name ^ "_";
+    val code_defs = mk_code_defs post_prefix code_defs post;
+    val post_def = new_definition(post_name,
+      Term[QUOTE(post_name ^ " = " ^ accounts_term post)]);
 
+    val () = List.app cv_auto_trans code_defs;
     val () = cv_auto_trans pre_def;
     val () = cv_auto_trans post_def;
     val () = cv_auto_trans transaction_def;
     val () = cv_auto_trans block_def;
     val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
+    val () = computeLib.add_funs code_defs;
 
     val thm_name = test_name ^ "_correctness";
     val thm_term = mk_statement test_name;
@@ -427,6 +471,7 @@ val test_path = mk_test_path "vmIOandFlowOperations/mstore.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmIOandFlowOperations/mstore8.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -438,25 +483,41 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "vmIOandFlowOperations/pop.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmIOandFlowOperations/return.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 val test_path = mk_test_path "vmIOandFlowOperations/sstore_sload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: add log tests - may need to check logs in theorem statement *)
 
 (* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmPerformance/loopExp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: cv_eval very slow... *)
+val test_path = mk_test_path "vmPerformance/loopMul.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmPerformance/performanceTester.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (*
 
 cv_eval ``
-let acc = msize_d4g0v0_Cancun_pre in
-let blk = msize_d4g0v0_Cancun_block in
-let tx = msize_d4g0v0_Cancun_transaction in
+let acc = blockInfo_d0g0v0_Cancun_pre in
+let blk = blockInfo_d0g0v0_Cancun_block in
+let tx = blockInfo_d0g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 [] blk acc
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 12 s in
+let (r, s) = run_n 6 s in
 let c = EL 0 s.contexts in
   (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
    c.callParams.gasLimit,
@@ -475,86 +536,6 @@ let c = EL 0 s.contexts in
    (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 0w)
    )
 ``
-
-Globals.max_print_depth := 50;
-
-val v = ``31w : bytes32``;
-val ls = ``SINGL (w2w ^v) : byte list``
-val byteIndex = ``1n``
-val newMinSize = cv_eval ``(SUC $ word_size ^byteIndex) * 32``;
-EVAL``word_size (^byteIndex + LENGTH ^ls)``
-
-val byteIndex = 0x5a |> numSyntax.term_of_int;
-val value =  0xeeee |> numSyntax.term_of_int;
-val values = cv_eval ``REVERSE $ word_to_bytes ((n2w ^value):bytes32) F``
-  |> concl |> rhs;
-val wordSize = cv_eval ``word_size $ ^byteIndex + LENGTH ^values`` |> concl |> rhs;
-val newMinSize = cv_eval ``^wordSize * 32`` |> concl |> rhs;
-val oldMemory = ``[0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w;
-       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 255w; 255w; 255w; 255w; 255w] :
-       byte list``
-val expandedMemory = cv_eval ``PAD_RIGHT 0w ^newMinSize ^oldMemory`` |> concl |> rhs;
-val newMemory = cv_eval ``LENGTH $ write_memory ^byteIndex ^values ^expandedMemory``
-
-
-val offset = ``1000n``
-val size = ``0xfffffn``
-val newMinSize = cv_eval ``word_size (^offset + ^size) * 32`` |> concl |> rhs
-val oldMemory = ``[]:byte list``
-val expandedMemory_thm = cv_eval ``PAD_RIGHT 0w ^newMinSize ^oldMemory``
-val expandedMemory = expandedMemory_thm |> concl |> rhs
-
-> val eval_th = computeLib.EVAL_CONV ``LENGTH ^expandedMemory``
-val eval_th =
-   ⊢ LENGTH
-       [0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w;
-        0w; ... ] = 1049600: thm
-val raw_cv_eval_th = cv_eval_raw ``LENGTH ^expandedMemory``
-> val cv_eval_th = cv_eval ``LENGTH ^expandedMemory``
-
-val oldCost = cv_eval ``memory_cost ^oldMemory``
-val newLength = cv_eval ``LENGTH ^expandedMemory``
-val expansionCost = cv_eval ``memory_expansion_cost ^oldMemory ^expandedMemory``
-  |> concl |> rhs
-
-dest_term  ``0w``
-
-val () = Globals.max_print_depth := 20
-val () = cv_memLib.verbosity_level := cv_memLib.Verbose
-val size = ``1049600n``;
-val zeros_tm = ``PAD_RIGHT 0n ^size []``;
-
-Definition long_list_def:
-  long_list = ^zeros_tm
-End
-
-val res = cv_trans_deep_embedding computeLib.EVAL_CONV long_list_def;
-f"long_list"
-
-val eval_zeros = time computeLib.EVAL_CONV zeros_tm;
-val cv_eval_zeros = time cv_eval zeros_tm;
-val zeros_v = cv_eval_zeros |> concl |> rhs;
-val length_tm = ``LENGTH ^zeros_v``;
-
-val rep = cv_repLib.cv_rep_for [] length_tm;
-
-val eval_length = time computeLib.EVAL_CONV length_tm;
-val cv_eval_length_raw = cv_eval_raw length_tm;
-
-f"cv_length"
-f"cv_len"
-
-cv_eval ``parse_code 0 FEMPTY $
-  (lookup_account envInfo_d0g0v0_Cancun_pre
-   envInfo_d0g0v0_Cancun_transaction.to).code``
-
-(244845750 - 244715550) div 4650
-35184372088832 - 17592186044416
-
-cv_eval ``
-  (lookup_account envInfo_d0g0v0_Cancun_post
-   0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BAw).balance
-   ``
 
 *)
 

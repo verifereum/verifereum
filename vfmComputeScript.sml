@@ -824,17 +824,19 @@ val () = initial_state_def |>
   cv_auto_trans;
 
 (* TODO: move/replace *)
-Definition hex_to_bytes_def:
-    hex_to_bytes [] = [] : byte list
-  ∧ hex_to_bytes [c] = [n2w (UNHEX c)]
-  ∧ hex_to_bytes (c1::c2::rest) =
-      n2w (16 * UNHEX c1 + UNHEX c2)
-      :: hex_to_bytes rest
+Definition hex_to_rev_bytes_def:
+    hex_to_rev_bytes acc [] = acc : byte list
+  ∧ hex_to_rev_bytes acc [c] = CONS (n2w (UNHEX c)) acc
+  ∧ hex_to_rev_bytes acc (c1::c2::rest) =
+    hex_to_rev_bytes (CONS (n2w (16 * UNHEX c1 + UNHEX c2)) acc) rest
 End
 
-val _ = cv_auto_trans hex_to_bytes_def;
+val _ = cv_auto_trans hex_to_rev_bytes_def;
 
-(* cv_eval “hex_to_bytes "693c61390000000000000000000000000000000000000000000000000000000000000000"” *)
+(*
+cv_eval “REVERSE $ hex_to_rev_bytes []
+           "693c61390000000000000000000000000000000000000000000000000000000000000000"”;
+*)
 (* -- *)
 
 Definition run_with_fuel_def:
