@@ -225,9 +225,8 @@ val () = monadsyntax.enable_monadsyntax();
 
 Definition write_memory_def:
   write_memory byteIndex bytes memory =
-  let expandedMemory = PAD_RIGHT 0w (SUC byteIndex) memory in
-  TAKE byteIndex expandedMemory ++ bytes
-  ++ DROP (byteIndex + LENGTH bytes) expandedMemory
+  TAKE byteIndex memory ++ bytes
+  ++ DROP (byteIndex + LENGTH bytes) memory
 End
 
 Definition get_current_context_def:
@@ -444,7 +443,7 @@ Definition copy_to_memory_check_def:
     destOffset <<- w2n $ EL 0 context.stack;
     offset <<- w2n $ EL 1 context.stack;
     size <<- w2n $ EL 2 context.stack;
-    minimumWordSize <<- word_size size;
+    minimumWordSize <<- if 0 < size then word_size $ offset + size else 0;
     accounts <- get_accounts;
     sourceBytes <<- f context accounts;
     assert (¬checkSize ∨ offset + size ≤ LENGTH sourceBytes) OutOfBoundsRead;
@@ -815,51 +814,48 @@ Definition step_inst_def:
   ∧ step_inst CodeCopy =
       copy_to_memory (λcontext accounts. context.callParams.code)
   ∧ step_inst GasPrice = push_from_tx (λc t a. n2w t.gasPrice)
-  ∧ step_inst ExtCodeSize =
-      bind (get_current_context)
-        (λcontext.
-          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-            let address = w2w (EL 0 context.stack) in
-            bind (access_address address) (λwarm.
-            let dynamicGas = if warm then 100 else 2600 in
-            bind get_accounts (λaccounts.
-            let code = (accounts address).code in
-            let newStack = n2w (LENGTH code) :: TL context.stack in
-            let newContext = context with stack := newStack in
-              ignore_bind
-                (consume_gas dynamicGas)
-                (set_current_context newContext)))))
-  ∧ step_inst ExtCodeCopy =
-      bind get_current_context
-        (λcontext.
-          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-            let address = w2w (EL 0 context.stack) in
-            bind (access_address address) (λwarm.
-            let addressAccessCost = if warm then 100 else 2600 in
-            let newContext = context with stack := TL context.stack in
-              ignore_bind
-                (consume_gas addressAccessCost)
-                (ignore_bind
-                  (set_current_context newContext)
-                  (copy_to_memory (λc accounts. (accounts address).code))))))
+  ∧ step_inst ExtCodeSize = do
+      context <- get_current_context;
+      assert (1 ≤ LENGTH context.stack) StackUnderflow;
+      address <<- w2w $ EL 0 context.stack;
+      warm <- access_address address;
+      addressAccessCost <<- if warm then 100 else 2600;
+      accounts <- get_accounts;
+      code <<- (accounts address).code;
+      newStack <<- n2w (LENGTH code) :: TL context.stack;
+      consume_gas addressAccessCost;
+      spentContext <- get_current_context;
+      set_current_context $ spentContext with stack := newStack
+    od
+  ∧ step_inst ExtCodeCopy = do
+      context <- get_current_context;
+      assert (4 ≤ LENGTH context.stack) StackUnderflow;
+      address <<- w2w $ EL 0 context.stack;
+      warm <- access_address address;
+      addressAccessCost <<- if warm then 100 else 2600;
+      consume_gas addressAccessCost;
+      spentContext <- get_current_context;
+      set_current_context $ spentContext with stack := TL context.stack;
+      copy_to_memory (λc accounts. (accounts address).code)
+    od
   ∧ step_inst ReturnDataSize = push_from_ctxt (λc. n2w (LENGTH c.returnData))
   ∧ step_inst ReturnDataCopy =
       copy_to_memory_check T (λcontext accounts. context.returnData)
-  ∧ step_inst ExtCodeHash =
-      bind get_current_context
-      (λcontext.
-        ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-          let address = w2w (EL 0 context.stack) in
-          bind (access_address address) (λwarm.
-          let addressAccessCost = if warm then 100 else 2600 in
-          bind get_accounts (λaccounts.
-          let code = (accounts address).code in
-          (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
-          let hash = word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $ code in
-          let newContext = context with stack := hash :: TL context.stack in
-            ignore_bind
-              (consume_gas addressAccessCost)
-              (set_current_context newContext)))))
+  ∧ step_inst ExtCodeHash = do
+      context <- get_current_context;
+      assert (1 ≤ LENGTH context.stack) StackUnderflow;
+      address <<- w2w $ EL 0 context.stack;
+      warm <- access_address address;
+      addressAccessCost <<- if warm then 100 else 2600;
+      accounts <- get_accounts;
+      code <<- (accounts address).code;
+      (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
+      hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $ code;
+      newStack <<- hash :: TL context.stack;
+      consume_gas addressAccessCost;
+      spentContext <- get_current_context;
+      set_current_context $ spentContext with stack := newStack
+    od
   ∧ step_inst BlockHash = do
       tx <- get_tx_params;
       context <- get_current_context;

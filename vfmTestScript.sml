@@ -534,54 +534,178 @@ val test_path = mk_test_path "byteNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fails
 val test_path = mk_test_path "callNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (1, prove_test);
+(*
+* TODO: needs precompile ecRecover
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "callcodeNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (1, prove_test);
+(*
+* TODO: needs precompile ecRecover
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "calldatacopyNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "calldataloadNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "codecopyNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "createNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO add
-callcodeNonConst.json
-calldatacopyNonConst.json
-calldataloadNonConst.json
-codecopyNonConst.json
-createNonConst.json
-delegatecallNonConst.json
-divNonConst.json
-eqNonConst.json
-expNonConst.json
-extcodecopyNonConst.json
-extcodesizeNonConst.json
-gtNonConst.json
-iszeroNonConst.json
-jumpNonConst.json
-jumpiNonConst.json
+(* TODO: fix
+val test_path = mk_test_path "delegatecallNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "divNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "eqNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "expNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "extcodecopyNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "extcodesizeNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "gtNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "iszeroNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix (gas after revert?)
+val test_path = mk_test_path "jumpNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix (gas after revert?)
+val test_path = mk_test_path "jumpiNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO support logs
 log0NonConst.json
 log1NonConst.json
 log2NonConst.json
 log3NonConst.json
-ltNonConst.json
-mloadNonConst.json
-modNonConst.json
-mstore8NonConst.json
-mstoreNonConst.json
-mulNonConst.json
-mulmodNonConst.json
-notNonConst.json
-orNonConst.json
-returnNonConst.json
-sdivNonConst.json
-sgtNonConst.json
-sha3NonConst.json
-signextNonConst.json
-sloadNonConst.json
-sltNonConst.json
-smodNonConst.json
-sstoreNonConst.json
-subNonConst.json
-suicideNonConst.json
-xorNonConst.json
 *)
+
+val test_path = mk_test_path "ltNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "mloadNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "modNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "mstore8NonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "mstoreNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "mulNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "mulmodNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "notNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "orNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returnNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sdivNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sgtNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sha3NonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "signextNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "sloadNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sltNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "smodNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstoreNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "subNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "xorNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 (*
 
