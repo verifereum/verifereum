@@ -443,7 +443,7 @@ Definition copy_to_memory_check_def:
     destOffset <<- w2n $ EL 0 context.stack;
     offset <<- w2n $ EL 1 context.stack;
     size <<- w2n $ EL 2 context.stack;
-    minimumWordSize <<- if 0 < size then word_size $ offset + size else 0;
+    minimumWordSize <<- if 0 < size then word_size $ destOffset + size else 0;
     accounts <- get_accounts;
     sourceBytes <<- f context accounts;
     assert (¬checkSize ∨ offset + size ≤ LENGTH sourceBytes) OutOfBoundsRead;
