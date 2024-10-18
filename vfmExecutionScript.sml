@@ -439,20 +439,22 @@ End
 Definition copy_to_memory_check_def:
   copy_to_memory_check checkSize f = do
     context <- get_current_context;
-    assert (3 ≤ LENGTH context.stack) StackUnderflow;
-    destOffset <<- w2n $ EL 0 context.stack;
-    offset <<- w2n $ EL 1 context.stack;
-    size <<- w2n $ EL 2 context.stack;
-    minimumWordSize <<- if 0 < size then word_size $ destOffset + size else 0;
+    stack <<- context.stack;
+    assert (3 ≤ LENGTH stack) StackUnderflow;
+    destOffset <<- w2n $ EL 0 stack;
+    offset <<- w2n $ EL 1 stack;
+    size <<- w2n $ EL 2 stack;
+    minimumWordSize <<- word_size size;
+    newMinSize <<- (if 0 < size then word_size $ destOffset + size else 0) * 32;
     accounts <- get_accounts;
     sourceBytes <<- f context accounts;
     assert (¬checkSize ∨ offset + size ≤ LENGTH sourceBytes) OutOfBoundsRead;
     bytes <<- take_pad_0 size (DROP offset sourceBytes);
-    expandedMemory <<- PAD_RIGHT 0w (minimumWordSize * 32) context.memory;
+    expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
     newMemory <<- write_memory destOffset bytes expandedMemory;
     expansionCost <<- memory_expansion_cost context.memory newMemory;
     dynamicGas <<- 3 * minimumWordSize + expansionCost;
-    newStack <<- DROP 3 context.stack;
+    newStack <<- DROP 3 stack;
     consume_gas dynamicGas;
     spentContext <- get_current_context;
     set_current_context $ spentContext
