@@ -260,7 +260,7 @@ fun mk_prove_test test_path = let
     val post_def = new_definition(post_name,
       Term[QUOTE(post_name ^ " = " ^ accounts_term post)]);
 
-    val () = List.app cv_auto_trans code_defs;
+    val () = List.app (cv_trans_deep_embedding EVAL) code_defs;
     val () = cv_auto_trans pre_def;
     val () = cv_auto_trans post_def;
     val () = cv_auto_trans transaction_def;
