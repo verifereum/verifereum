@@ -110,7 +110,7 @@ let
   val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
   val name = last args |> dest_const |> fst
   fun msg pre n = pre ^ " num steps " ^ Int.toString n ^ " for " ^ name ^ "\n"
-  val n = 48
+  val n = 1024
   fun loop n =
   let
     val () = TextIO.print $ msg "Trying" n
@@ -706,6 +706,163 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "xorNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stAttackTest/" ^ s;
+
+(* TODO: long test, find num steps manually?
+val test_path = mk_test_path "ContractCreationSpam.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fails to parse transaction def?
+val test_path = mk_test_path "CrashingTransaction.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stBadOpcode/" ^ s;
+
+val test_path = mk_test_path "eip2315NotRemoved.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "invalidAddr.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "invalidDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "measureGas.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: add
+opc0CDiffPlaces.json
+opc0DDiffPlaces.json
+opc0EDiffPlaces.json
+opc0FDiffPlaces.json
+opc1EDiffPlaces.json
+opc1FDiffPlaces.json
+opc21DiffPlaces.json
+opc22DiffPlaces.json
+opc23DiffPlaces.json
+opc24DiffPlaces.json
+opc25DiffPlaces.json
+opc26DiffPlaces.json
+opc27DiffPlaces.json
+opc28DiffPlaces.json
+opc29DiffPlaces.json
+opc2ADiffPlaces.json
+opc2BDiffPlaces.json
+opc2CDiffPlaces.json
+opc2DDiffPlaces.json
+opc2EDiffPlaces.json
+opc2FDiffPlaces.json
+opc49DiffPlaces.json
+opc4ADiffPlaces.json
+opc4BDiffPlaces.json
+opc4CDiffPlaces.json
+opc4DDiffPlaces.json
+opc4EDiffPlaces.json
+opc4FDiffPlaces.json
+opc5CDiffPlaces.json
+opc5DDiffPlaces.json
+opc5EDiffPlaces.json
+opc5FDiffPlaces.json
+opcA5DiffPlaces.json
+opcA6DiffPlaces.json
+opcA7DiffPlaces.json
+opcA8DiffPlaces.json
+opcA9DiffPlaces.json
+opcAADiffPlaces.json
+opcABDiffPlaces.json
+opcACDiffPlaces.json
+opcADDiffPlaces.json
+opcAEDiffPlaces.json
+opcAFDiffPlaces.json
+opcB0DiffPlaces.json
+opcB1DiffPlaces.json
+opcB2DiffPlaces.json
+opcB3DiffPlaces.json
+opcB4DiffPlaces.json
+opcB5DiffPlaces.json
+opcB6DiffPlaces.json
+opcB7DiffPlaces.json
+opcB8DiffPlaces.json
+opcB9DiffPlaces.json
+opcBADiffPlaces.json
+opcBBDiffPlaces.json
+opcBCDiffPlaces.json
+opcBDDiffPlaces.json
+opcBEDiffPlaces.json
+opcBFDiffPlaces.json
+opcC0DiffPlaces.json
+opcC1DiffPlaces.json
+opcC2DiffPlaces.json
+opcC3DiffPlaces.json
+opcC4DiffPlaces.json
+opcC5DiffPlaces.json
+opcC6DiffPlaces.json
+opcC7DiffPlaces.json
+opcC8DiffPlaces.json
+opcC9DiffPlaces.json
+opcCADiffPlaces.json
+opcCBDiffPlaces.json
+opcCCDiffPlaces.json
+opcCDDiffPlaces.json
+opcCEDiffPlaces.json
+opcCFDiffPlaces.json
+opcD0DiffPlaces.json
+opcD1DiffPlaces.json
+opcD2DiffPlaces.json
+opcD3DiffPlaces.json
+opcD4DiffPlaces.json
+opcD5DiffPlaces.json
+opcD6DiffPlaces.json
+opcD7DiffPlaces.json
+opcD8DiffPlaces.json
+opcD9DiffPlaces.json
+opcDADiffPlaces.json
+opcDBDiffPlaces.json
+opcDCDiffPlaces.json
+opcDDDiffPlaces.json
+opcDEDiffPlaces.json
+opcDFDiffPlaces.json
+opcE0DiffPlaces.json
+opcE1DiffPlaces.json
+opcE2DiffPlaces.json
+opcE3DiffPlaces.json
+opcE4DiffPlaces.json
+opcE5DiffPlaces.json
+opcE6DiffPlaces.json
+opcE7DiffPlaces.json
+opcE8DiffPlaces.json
+opcE9DiffPlaces.json
+opcEADiffPlaces.json
+opcEBDiffPlaces.json
+opcECDiffPlaces.json
+opcEDDiffPlaces.json
+opcEEDiffPlaces.json
+opcEFDiffPlaces.json
+opcF6DiffPlaces.json
+opcF7DiffPlaces.json
+opcF8DiffPlaces.json
+opcF9DiffPlaces.json
+opcFBDiffPlaces.json
+opcFCDiffPlaces.json
+opcFEDiffPlaces.json
+operationDiffGas.json
+undefinedOpcodeFirstByte.json
+*)
 
 (*
 
