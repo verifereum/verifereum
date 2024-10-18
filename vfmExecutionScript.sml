@@ -794,7 +794,8 @@ Definition step_inst_def:
       balance <<- (accounts address).balance;
       newStack <<- n2w balance :: TL context.stack;
       consume_gas dynamicGas;
-      set_current_context (context with stack := newStack)
+      spentContext <- get_current_context;
+      set_current_context $ spentContext with stack := newStack
     od
   ∧ step_inst Origin = push_from_tx (λc t a. w2w t.origin)
   ∧ step_inst Caller = push_from_ctxt (λc. w2w c.callParams.caller)
