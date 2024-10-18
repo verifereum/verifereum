@@ -110,7 +110,7 @@ let
   val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
   val name = last args |> dest_const |> fst
   fun msg pre n = pre ^ " num steps " ^ Int.toString n ^ " for " ^ name ^ "\n"
-  val n = 14
+  val n = 48
   fun loop n =
   let
     val () = TextIO.print $ msg "Trying" n
@@ -510,6 +510,78 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "vmPerformance/performanceTester.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stArgsZeroOneBalance/" ^ s;
+
+val test_path = mk_test_path "addNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "addmodNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "andNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "balanceNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "byteNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fails
+val test_path = mk_test_path "callNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO add
+callcodeNonConst.json
+calldatacopyNonConst.json
+calldataloadNonConst.json
+codecopyNonConst.json
+createNonConst.json
+delegatecallNonConst.json
+divNonConst.json
+eqNonConst.json
+expNonConst.json
+extcodecopyNonConst.json
+extcodesizeNonConst.json
+gtNonConst.json
+iszeroNonConst.json
+jumpNonConst.json
+jumpiNonConst.json
+log0NonConst.json
+log1NonConst.json
+log2NonConst.json
+log3NonConst.json
+ltNonConst.json
+mloadNonConst.json
+modNonConst.json
+mstore8NonConst.json
+mstoreNonConst.json
+mulNonConst.json
+mulmodNonConst.json
+notNonConst.json
+orNonConst.json
+returnNonConst.json
+sdivNonConst.json
+sgtNonConst.json
+sha3NonConst.json
+signextNonConst.json
+sloadNonConst.json
+sltNonConst.json
+smodNonConst.json
+sstoreNonConst.json
+subNonConst.json
+suicideNonConst.json
+xorNonConst.json
+*)
 
 (*
 
