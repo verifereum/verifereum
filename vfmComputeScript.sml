@@ -375,6 +375,13 @@ Proof
   rw[from_word_fset_def, GSYM fIN_num_cv_rep, from_word_def]
 QED
 
+Theorem fUNION_word_cv_rep[cv_rep]:
+  from_word_fset (fUNION s1 s2) =
+  cv_union (from_word_fset s1) (from_word_fset s2)
+Proof
+  rw[from_word_fset_def, fIMAGE_fUNION, fUNION_num_cv_rep]
+QED
+
 Theorem fINSERT_storage_key_cv_rep[cv_rep]:
   from_storage_key_fset (fINSERT e s) =
   cv_insert (from_storage_key e) (Num 0) (from_storage_key_fset s)

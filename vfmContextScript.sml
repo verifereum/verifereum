@@ -229,10 +229,18 @@ Definition wf_state_def:
     wf_accounts s.accounts
 End
 
+Definition precompile_addresses_def:
+  precompile_addresses : address fset =
+  fset_ABS (GENLIST (n2w o SUC) 10)
+End
+
 Definition initial_access_sets_def:
   initial_access_sets t =
-  <| addresses   := fINSERT t.from $ fINSERT t.to $
-                    fIMAGE (λe. e.account) $ fset_ABS t.accessList
+  <| addresses   :=
+       fUNION (
+         fINSERT t.from $ fINSERT t.to $
+         fIMAGE (λe. e.account) $ fset_ABS t.accessList
+       ) precompile_addresses
    ; storageKeys := fBIGUNION
                       (fIMAGE (λe. fIMAGE (SK e.account) e.keys)
                               (fset_ABS t.accessList))
