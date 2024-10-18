@@ -693,7 +693,7 @@ Definition step_sstore_def:
           let c =
             if originalValue ≠ 0w then
               if currentValue = 0w then
-                newContext with gasRefund updated_by $- 4800
+                newContext with gasRefund updated_by flip $- 4800
               else if value = 0w then
                 newContext with gasRefund updated_by $+ 4800
               else newContext
