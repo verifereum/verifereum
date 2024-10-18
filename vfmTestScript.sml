@@ -82,16 +82,20 @@ val account_rwts = [
 
 (*
   set_goal([], thm_term);
-  Globals.max_print_depth := 16
+  Globals.max_print_depth := 12
 *)
 fun mk_tactic num_steps =
   rw[run_block_SOME_with_fuel]
   \\ CONV_TAC SWAP_EXISTS_CONV
   \\ exists_tac (numSyntax.term_of_int num_steps)
   \\ cv_eval_run_block_with_fuel_tac
-  \\ simp[] \\ EVAL_TAC
+  \\ rewrite_tac[LET_THM]
+  \\ CONV_TAC(PATH_CONV"blrrrlr"(BETA_CONV THENC EVAL))
+  \\ rewrite_tac[SOME_11, PAIR_EQ]
+  \\ Ho_Rewrite.REWRITE_TAC[UNWIND_THM1]
   \\ rewrite_tac[FUN_EQ_THM] \\ gen_tac
   \\ rewrite_tac[APPLY_UPDATE_THM]
+  \\ CONV_TAC(RAND_CONV EVAL)
   \\ rpt ( IF_CASES_TAC >- (
        BasicProvers.VAR_EQ_TAC
        \\ simp_tac (std_ss ++ WORD_ss) []
@@ -99,10 +103,10 @@ fun mk_tactic num_steps =
        \\ rpt gen_tac
        \\ rpt ( IF_CASES_TAC >- (
                   BasicProvers.VAR_EQ_TAC
-                  \\ simp_tac (std_ss ++ WORD_ss) []
+                  \\ CONV_TAC(DEPTH_CONV word_EQ_CONV)
+                  \\ rewrite_tac[]
                 ))
        \\ rewrite_tac[]))
-  \\ simp_tac (std_ss ++ WORD_ss) []
   \\ rewrite_tac account_rwts
 
 fun find_num_steps thm_term =
