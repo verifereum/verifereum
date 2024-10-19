@@ -1189,13 +1189,15 @@ End
 
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
+  let exceptionalHalt = (result ≠ NONE ∧ result ≠ SOME Reverted) in
   let (gasLimit, gasUsed, refund, logs, returnData) =
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
     then (0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = HD t.contexts in
       (ctxt.callParams.gasLimit, ctxt.gasUsed,
-       ctxt.gasRefund, ctxt.logs, ctxt.returnData) in
-  let gasLeft = gasLimit - gasUsed in
+       ctxt.gasRefund, ctxt.logs,
+       if exceptionalHalt then [] else ctxt.returnData) in
+  let gasLeft = if exceptionalHalt then 0 else gasLimit - gasUsed in
   let txGasUsed = tx.gasLimit - gasLeft in
   let gasRefund = if result ≠ NONE then 0
                   else MIN (txGasUsed DIV 5) refund in

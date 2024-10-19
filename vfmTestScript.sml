@@ -568,9 +568,11 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix
 val test_path = mk_test_path "delegatecallNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (1, prove_test);
+(*
+* TODO: needs precompile ecRecover
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
@@ -602,17 +604,13 @@ val test_path = mk_test_path "iszeroNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix (gas after revert?)
 val test_path = mk_test_path "jumpNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix (gas after revert?)
 val test_path = mk_test_path "jumpiNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO support logs
 log0NonConst.json
@@ -743,8 +741,13 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
+(* TODO: fix
+val test_path = mk_test_path "opc0CDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
 (* TODO: add
-opc0CDiffPlaces.json
 opc0DDiffPlaces.json
 opc0EDiffPlaces.json
 opc0FDiffPlaces.json
