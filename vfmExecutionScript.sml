@@ -758,7 +758,13 @@ Definition step_inst_def:
       spentContext <- get_current_context;
       set_current_context $ spentContext with stack := newStack
     od
-  ∧ step_inst SignExtend = binop (λn. word_sign_extend (w2n n))
+  ∧ step_inst SignExtend = binop (λn w.
+      if n > 31w then w else
+      let m = 31 - w2n n in
+      let bs = DROP m $ word_to_bytes w T in
+      let sign = if NULL bs then 0w else HD bs >> 7 in
+      let sw = if sign = 0w then 0w else 255w in
+        word_of_bytes T 0w $ REPLICATE m sw ++ bs)
   ∧ step_inst LT = binop (λx y. b2w (w2n x < w2n y))
   ∧ step_inst GT = binop (λx y. b2w (w2n x > w2n y))
   ∧ step_inst SLT = binop (λx y. b2w $ word_lt x y)

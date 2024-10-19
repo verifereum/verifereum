@@ -796,7 +796,7 @@ Proof
   \\ rpt conj_tac
   \\ rpt gen_tac
   \\ TRY(disch_then(assume_tac o ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
-  \\ rw[assert_def] \\ TRY (strip_tac \\ gs[])
+  \\ rw[assert_def] \\ TRY (strip_tac \\ gs[NULL_EQ])
   \\ qmatch_goalsub_abbrev_tac`LENGTH (TL ls)`
   \\ Cases_on`ls` \\ gs[]
 QED
