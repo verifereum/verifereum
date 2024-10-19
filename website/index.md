@@ -46,7 +46,7 @@ We are most of the way through the EVM base sequence
 3. TODO: Build decompilation-into-logic automation
 
 ## Verification track
-1. Started: Formal specification of Vyper semantics in HOL4
+1. [Started](https://github.com/xrchz/vyper-hol): Formal specification of Vyper semantics in HOL4
 2. TODO: Define a copy of the compiler frontend in logic
 3. TODO: ... (steps to be filled in) ...
 
