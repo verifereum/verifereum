@@ -85,6 +85,7 @@ Datatype:
   | Create2
   | StaticCall
   | Revert
+  | Invalid
   | SelfDestruct
 End
 
@@ -173,11 +174,8 @@ Definition opcode_def:
   ∧ opcode Create2        = [n2w 0xf5]
   ∧ opcode StaticCall     = [n2w 0xfa]
   ∧ opcode Revert         = [n2w 0xfd]
+  ∧ opcode Invalid        = [n2w 0xfe]
   ∧ opcode SelfDestruct   = [n2w 0xff]
-End
-
-Definition invalid_opcode_def:
-  invalid_opcode : byte = n2w 0xfe
 End
 
 Definition parse_opcode_def:
@@ -263,6 +261,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas Create2        = 32000
   ∧ static_gas StaticCall     = 0
   ∧ static_gas Revert         = 0
+  ∧ static_gas Invalid        = 0
   ∧ static_gas SelfDestruct   = 5000
 End
 
@@ -449,6 +448,7 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0xf5 then SOME Create2 else
       if opc = n2w 0xfa then SOME StaticCall else
       if opc = n2w 0xfd then SOME Revert else
+      if opc = n2w 0xfe then SOME Invalid else
       if opc = n2w 0xff then SOME SelfDestruct else
       NONE
 Proof

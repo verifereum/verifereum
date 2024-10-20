@@ -327,7 +327,7 @@ Definition code_for_transfer_def:
     of Code address =>
       if (accounts address).code ≠ [] ∨
          (accounts address).nonce ≠ 0
-      then [invalid_opcode]
+      then opcode Invalid
       else params.code
     | _ => params.code
 End
@@ -1033,6 +1033,12 @@ Definition step_inst_def:
       set_current_context newContext;
       revert
     od
+  ∧ step_inst Invalid = do
+      context <- get_current_context;
+      consume_gas (context.callParams.gasLimit - context.gasUsed);
+      set_return_data [];
+      revert
+    od
   ∧ step_inst SelfDestruct = do
       context <- get_current_context;
       stack <<- context.stack;
@@ -1092,11 +1098,7 @@ Definition step_def:
     then step_inst Stop
     else do
       case FLOOKUP parsed context.pc of
-      | NONE => do
-          consume_gas (context.callParams.gasLimit - context.gasUsed);
-          set_return_data [];
-          revert
-        od
+      | NONE => step_inst Invalid
       | SOME op => do
           step_inst op;
           consume_gas (static_gas op);
