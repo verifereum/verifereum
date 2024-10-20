@@ -214,11 +214,14 @@ fun mk_prove_test test_path = let
     val test_name = List.nth(test_names, test_index);
     val test = get_test test_path test_name;
 
+    val test_name_escaped =
+      String.translate(fn c => if c = #"-" then "_" else String.str c) test_name
+
     val transaction = #transaction test;
     val transaction_def = new_definition(
-      test_name ^ "_transaction_def",
+      test_name_escaped ^ "_transaction_def",
       Term[QUOTE(String.concat[
-        test_name, "_transaction = <|",
+        test_name_escaped, "_transaction = <|",
         " from := n2w ", #sender transaction,
         ";to := n2w ", #to transaction,
         ";data := REVERSE $ hex_to_rev_bytes [] \"", trim2 $ #data transaction,
@@ -231,9 +234,9 @@ fun mk_prove_test test_path = let
 
     val block = #block test;
     val block_def = new_definition(
-      test_name ^ "_block_def",
+      test_name_escaped ^ "_block_def",
       Term[QUOTE(String.concat[
-        test_name, "_block = <|",
+        test_name_escaped, "_block = <|",
         " number := ", #number block,
         ";baseFeePerGas := ", #baseFeePerGas block,
         ";timeStamp := ", #timeStamp block,
@@ -242,19 +245,19 @@ fun mk_prove_test test_path = let
         ";gasLimit := ", #gasLimit block,
         ";prevRandao := n2w ", #prevRandao block,
         ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-        ";transactions := [", test_name, "_transaction]",
+        ";transactions := [", test_name_escaped, "_transaction]",
         "|>"
       ])]);
 
     val pre = #pre test;
-    val pre_name = test_name ^ "_pre";
+    val pre_name = test_name_escaped ^ "_pre";
     val pre_prefix = pre_name ^ "_";
     val code_defs = mk_code_defs pre_prefix [] pre;
     val pre_def = new_definition(pre_name,
       Term[QUOTE(pre_name ^ " = " ^ accounts_term pre)]);
 
     val post = #post test;
-    val post_name = test_name ^ "_post";
+    val post_name = test_name_escaped ^ "_post";
     val post_prefix = post_name ^ "_";
     val code_defs = mk_code_defs post_prefix code_defs post;
     val post_def = new_definition(post_name,
@@ -268,8 +271,8 @@ fun mk_prove_test test_path = let
     val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
     val () = computeLib.add_funs code_defs;
 
-    val thm_name = test_name ^ "_correctness";
-    val thm_term = mk_statement test_name;
+    val thm_name = test_name_escaped ^ "_correctness";
+    val thm_term = mk_statement test_name_escaped;
 
     val num_steps = find_num_steps thm_term
   in

@@ -27,7 +27,7 @@ structure readTestJsonLib = struct
 
   fun get_test json_path test_name = let
     fun rjq a = run_jq $ ["-rcM"] @ a @ [json_path]
-    val tt = "." ^ test_name
+    val tt = ".[\"" ^ test_name ^ "\"]"
     val nblocks = rjq [tt ^ ".blocks | length"] |> num
     val ntxns = rjq [tt ^ ".blocks[0].transactions | length"] |> num
     val () = if nblocks <> 1 orelse ntxns <> 1
