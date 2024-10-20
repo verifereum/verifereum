@@ -432,7 +432,7 @@ Definition memory_cost_def:
 End
 
 Definition memory_expansion_cost_def:
-  memory_expansion_cost oldMemory newMinSize =
+  memory_expansion_cost (oldMemory: byte list) newMinSize =
   let oldSize = LENGTH oldMemory in
   let newSize = MAX oldSize newMinSize in
     memory_cost newSize - memory_cost oldSize
@@ -790,10 +790,9 @@ Definition step_inst_def:
       expansionCost <<- memory_expansion_cost context.memory newMinSize;
       dynamicGas <<- 6 * word_size size + expansionCost;
       consume_gas dynamicGas;
-      expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-      newMemory <<- if 0 < size then expandedMemory else context.memory;
+      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $
-               REVERSE $ TAKE size (DROP offset expandedMemory);
+               REVERSE $ TAKE size (DROP offset newMemory);
       newStack <<- hash :: DROP 2 stack;
       spentContext <- get_current_context;
       set_current_context $ spentContext

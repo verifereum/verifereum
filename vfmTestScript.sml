@@ -82,7 +82,7 @@ val account_rwts = [
 
 (*
   set_goal([], thm_term);
-  Globals.max_print_depth := 12
+  Globals.max_print_depth := 32
 *)
 fun mk_tactic num_steps =
   rw[run_block_SOME_with_fuel]
@@ -96,17 +96,20 @@ fun mk_tactic num_steps =
   \\ rewrite_tac[FUN_EQ_THM] \\ gen_tac
   \\ rewrite_tac[APPLY_UPDATE_THM]
   \\ CONV_TAC(RAND_CONV EVAL)
-  \\ rpt ( IF_CASES_TAC >- (
+  \\ rpt (
+     IF_CASES_TAC >- (
        BasicProvers.VAR_EQ_TAC
        \\ simp_tac (std_ss ++ WORD_ss) []
        \\ rewrite_tac account_rwts
        \\ rpt gen_tac
-       \\ rpt ( IF_CASES_TAC >- (
-                  BasicProvers.VAR_EQ_TAC
-                  \\ CONV_TAC(DEPTH_CONV word_EQ_CONV)
-                  \\ rewrite_tac[]
-                ))
-       \\ rewrite_tac[]))
+       \\ rpt (
+          IF_CASES_TAC >- (
+            BasicProvers.VAR_EQ_TAC
+            \\ CONV_TAC(DEPTH_CONV word_EQ_CONV)
+            \\ rewrite_tac[]
+          ))
+       \\ rewrite_tac[]
+    ))
   \\ rewrite_tac account_rwts
 
 fun find_num_steps thm_term =
@@ -212,10 +215,10 @@ fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
   fun prove_test test_index = let
     val test_name = List.nth(test_names, test_index);
-    val test = get_test test_path test_name;
-
     val test_name_escaped =
       String.translate(fn c => if c = #"-" then "_" else String.str c) test_name
+
+    val test = get_test test_path test_name;
 
     val transaction = #transaction test;
     val transaction_def = new_definition(
@@ -274,6 +277,7 @@ fun mk_prove_test test_path = let
     val thm_name = test_name_escaped ^ "_correctness";
     val thm_term = mk_statement test_name_escaped;
 
+    (* TODO: save the result to give to mk_tactic *)
     val num_steps = find_num_steps thm_term
   in
     store_thm(thm_name, thm_term, mk_tactic num_steps)
@@ -314,6 +318,7 @@ val test_path = mk_test_path "vmTests/random.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: cv_eval oom in d3g0v0 *)
 val test_path = mk_test_path "vmTests/sha3.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -728,11 +733,13 @@ val test_path = mk_test_path "eip2315NotRemoved.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: fix at least d31g0v0
 val test_path = mk_test_path "invalidAddr.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+*)
 
-(* TODO: fix
+(* TODO: fix at least d24g0v0
 val test_path = mk_test_path "invalidDiffPlaces.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -953,17 +960,53 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
+val test_path = mk_test_path "callcallcallcode_001_OOGE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_OOGMAfter.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_OOGMBefore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_SuicideEnd.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "callcallcallcode_001_SuicideMiddle.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "callcallcallcode_ABCB_RECURSIVE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "callcallcode_01.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "callcallcode_01_OOGE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcode_01_SuicideEnd.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "callcallcodecall_010.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
 (*
-callcallcallcode_001_OOGE.json
-callcallcallcode_001_OOGMAfter.json
-callcallcallcode_001_OOGMBefore.json
-callcallcallcode_001_SuicideEnd.json
-callcallcallcode_001_SuicideMiddle.json
-callcallcallcode_ABCB_RECURSIVE.json
-callcallcode_01.json
-callcallcode_01_OOGE.json
-callcallcode_01_SuicideEnd.json
-callcallcodecall_010.json
 callcallcodecall_010_OOGE.json
 callcallcodecall_010_OOGMAfter.json
 callcallcodecall_010_OOGMBefore.json
