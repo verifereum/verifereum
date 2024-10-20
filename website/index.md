@@ -8,7 +8,7 @@
 - Formal model of the [Ethereum Virtual Machine (EVM)](https://ethereum.org/en/developers/docs/evm/) in the [HOL4 theorem prover (higher-order logic)](https://hol-theorem-prover.org)
 - Operational semantics of the EVM, as a definitional interpreter
 - Executable in logic
-- Faithful and up to date: pass the EVM test suite, written in readable style for cross-checking against the official specification
+- Faithful and up to date: pass the EVM test suite, written in readable style for cross-checking against the [official specification](https://github.com/ethereums/execution-specs/)
 - Program logic for verifying smart contract applications
 - [Decompilation into logic](https://www.cl.cam.ac.uk/~mom22/decompilation/) and/or [compiler verification](https://cakeml.org) (e.g. for [Vyper](https://vyperrlang.org)) for verifying implementations at the bytecode level
 
