@@ -1,20 +1,11 @@
-# What is it?
+# What
 
 - Mathematical verification of Ethereum applications
 - Proven functional correctness of smart contracts
 
-## Technical ideas
+# Why
 
-- Formal model of the [Ethereum Virtual Machine (EVM)](https://ethereum.org/en/developers/docs/evm/) in the [HOL4 theorem prover (higher-order logic)](https://hol-theorem-prover.org)
-- Operational semantics of the EVM, as a definitional interpreter
-- Executable in logic
-- Faithful and up to date: pass the EVM test suite, written in readable style for cross-checking against the [official specification](https://github.com/ethereum/execution-specs/)
-- Program logic for verifying smart contract applications
-- [Decompilation into logic](https://www.cl.cam.ac.uk/~mom22/decompilation/) and/or [compiler verification](https://cakeml.org) (e.g. for [Vyper](https://vyperlang.org)) for verifying implementations at the bytecode level
-
-# Why this project?
-
-- Auditing is not exhaustive; with a theorem you can rule out _all_ exploits (of a certain class)
+- Auditing is not exhaustive; theorems rule out _all_ exploits (of a certain class)
 - There is a lot of value custodied by Ethereum applications: the stakes are high for implementation bugs
 - The Ethereum specification is simple, unambiguous, and easy to reason about: it is a perfect fit for formal verification
 
@@ -24,13 +15,22 @@
 - Ask [Ramana (aka xrchz)](https://github.com/xrchz) about ideas of things to work on
 - See the roadmap below for ideas
 
-## Approach to collaboration
+## Collaboration
 
-Verifereum is a free software project with no legal or formal barriers to collaboration at any level of experience or commitment, as long as all results remain accessible to everyone.
+Verifereum is a free software project with no legal or formal barriers to collaboration at any level of experience or commitment, as long as all results remain accessible to everyone
+
+# Technical approach
+
+- Formal model of the [Ethereum Virtual Machine (EVM)](https://ethereum.org/en/developers/docs/evm/) in the [HOL4 theorem prover (higher-order logic)](https://hol-theorem-prover.org)
+- Operational semantics of the EVM, as a definitional interpreter
+- Executable in logic
+- Faithful and up to date: pass the EVM test suite, written in readable style for cross-checking against the [official specification](https://github.com/ethereum/execution-specs/)
+- Program logic for verifying smart contract applications
+- [Decompilation into logic](https://www.cl.cam.ac.uk/~mom22/decompilation/) and/or [compiler verification](https://cakeml.org) (e.g. for [Vyper](https://vyperlang.org)) for verifying implementations at the bytecode level
 
 # Roadmap and status
 
-Status: Under heavy development and seeking collaborators!
+Status: [Under heavy development](https://github.com/verifereum/verifereum/commits/main/) and seeking collaborators!
 
 We are most of the way through the EVM base sequence
 
