@@ -448,7 +448,7 @@ Definition copy_to_memory_check_def:
     offset <<- w2n $ EL 1 stack;
     size <<- w2n $ EL 2 stack;
     minimumWordSize <<- word_size size;
-    newMinSize <<- (if 0 < size then word_size $ destOffset + size else 0) * 32;
+    newMinSize <<- if 0 < size then (word_size $ destOffset + size) * 32 else 0;
     accounts <- get_accounts;
     sourceBytes <<- f context accounts;
     assert (¬checkSize ∨ offset + size ≤ LENGTH sourceBytes) OutOfBoundsRead;
@@ -535,9 +535,9 @@ Definition step_call_def:
     retOffset <<- w2n $ EL (4 + valueOffset) stack;
     retSize <<- w2n $ EL (5 + valueOffset) stack;
     newStack <<- DROP (6 + valueOffset) stack;
-    newMinSize <<- MAX
-      (word_size (retOffset + retSize) * 32)
-      (word_size (argsOffset + argsSize) * 32);
+    newMinSize <<- if retSize = 0 ∧ argsSize = 0 then 0 else
+      MAX (word_size (retOffset + retSize) * 32)
+          (word_size (argsOffset + argsSize) * 32);
     expansionCost <<- memory_expansion_cost context.memory newMinSize;
     addressWarm <- access_address address;
     accessCost <<- if addressWarm then 100 else 2600;
@@ -605,7 +605,7 @@ Definition step_create_def:
     rlpNonce <<- rlp_bytes $ MAP n2w $ REVERSE $ n2l 256 $ nonce;
     rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
     hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $ rlpBytes;
-    newMinSize <<- word_size (offset + size) * 32;
+    newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
     expansionCost <<- memory_expansion_cost context.memory newMinSize;
     newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
     newStack <<- DROP (3 + saltOffset) stack;
@@ -787,7 +787,7 @@ Definition step_inst_def:
       assert (2 ≤ LENGTH stack) StackUnderflow;
       offset <<- w2n (EL 0 stack);
       size <<- w2n (EL 1 stack);
-      newMinSize <<- word_size (offset + size) * 32;
+      newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
       expansionCost <<- memory_expansion_cost context.memory newMinSize;
       dynamicGas <<- 6 * word_size size + expansionCost;
       consume_gas dynamicGas;
@@ -981,7 +981,7 @@ Definition step_inst_def:
       assert (2 + n ≤ LENGTH stack) StackUnderflow;
       offset <<- w2n $ EL 0 stack;
       size <<- w2n $ EL 1 stack;
-      newMinSize <<- word_size (offset + size) * 32;
+      newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
       expansionCost <<- memory_expansion_cost context.memory newMinSize;
       dynamicGas <<- 375 * n + 8 * size + expansionCost;
       consume_gas dynamicGas;
@@ -1003,7 +1003,7 @@ Definition step_inst_def:
       assert (2 ≤ LENGTH stack) StackUnderflow;
       offset <<- w2n $ EL 0 stack;
       size <<- w2n $ EL 1 stack;
-      newMinSize <<- word_size (offset + size) * 32;
+      newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
       expansionCost <<- memory_expansion_cost context.memory newMinSize;
       consume_gas expansionCost;
       expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
@@ -1020,7 +1020,7 @@ Definition step_inst_def:
       offset <<- w2n $ EL 0 stack;
       size <<- w2n $ EL 1 stack;
       newStack <<- DROP 2 stack;
-      newMinSize <<- word_size (offset + size) * 32;
+      newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
       expansionCost <<- memory_expansion_cost context.memory newMinSize;
       consume_gas expansionCost;
       newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
