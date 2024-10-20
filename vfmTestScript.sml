@@ -868,6 +868,159 @@ operationDiffGas.json
 undefinedOpcodeFirstByte.json
 *)
 
+fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/stBugs/" ^ s;
+
+(* TODO: fix
+val test_path = mk_test_path "randomStatetestDEFAULT-Tue_07_58_41-15153-575192.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path
+"randomStatetestDEFAULT-Tue_07_58_41-15153-575192_london.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "returndatacopyPythonBug_Tue_03_48_41-1432.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "staticcall_createfails.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/stCallCodes/" ^ s;
+
+val test_path = mk_test_path "call_OOG_additionalGasCosts1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "call_OOG_additionalGasCosts2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcall_00.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcall_00_OOGE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcall_00_OOGE_valueTransfer.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcall_00_SuicideEnd.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcall_000.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcall_000_OOGE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcall_000_OOGMAfter.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcall_000_OOGMBefore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcall_000_SuicideEnd.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "callcallcall_000_SuicideMiddle.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "callcallcall_ABCB_RECURSIVE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "callcallcallcode_001.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(*
+callcallcallcode_001_OOGE.json
+callcallcallcode_001_OOGMAfter.json
+callcallcallcode_001_OOGMBefore.json
+callcallcallcode_001_SuicideEnd.json
+callcallcallcode_001_SuicideMiddle.json
+callcallcallcode_ABCB_RECURSIVE.json
+callcallcode_01.json
+callcallcode_01_OOGE.json
+callcallcode_01_SuicideEnd.json
+callcallcodecall_010.json
+callcallcodecall_010_OOGE.json
+callcallcodecall_010_OOGMAfter.json
+callcallcodecall_010_OOGMBefore.json
+callcallcodecall_010_SuicideEnd.json
+callcallcodecall_010_SuicideMiddle.json
+callcallcodecall_ABCB_RECURSIVE.json
+callcallcodecallcode_011.json
+callcallcodecallcode_011_OOGE.json
+callcallcodecallcode_011_OOGMAfter.json
+callcallcodecallcode_011_OOGMBefore.json
+callcallcodecallcode_011_SuicideEnd.json
+callcallcodecallcode_011_SuicideMiddle.json
+callcallcodecallcode_ABCB_RECURSIVE.json
+callcodeDynamicCode.json
+callcodeDynamicCode2SelfCall.json
+callcodeEmptycontract.json
+callcodeInInitcodeToEmptyContract.json
+callcodeInInitcodeToExisContractWithVTransferNEMoney.json
+callcodeInInitcodeToExistingContract.json
+callcodeInInitcodeToExistingContractWithValueTransfer.json
+callcode_checkPC.json
+callcodecall_10.json
+callcodecall_10_OOGE.json
+callcodecall_10_SuicideEnd.json
+callcodecallcall_100.json
+callcodecallcall_100_OOGE.json
+callcodecallcall_100_OOGMAfter.json
+callcodecallcall_100_OOGMBefore.json
+callcodecallcall_100_SuicideEnd.json
+callcodecallcall_100_SuicideMiddle.json
+callcodecallcall_ABCB_RECURSIVE.json
+callcodecallcallcode_101.json
+callcodecallcallcode_101_OOGE.json
+callcodecallcallcode_101_OOGMAfter.json
+callcodecallcallcode_101_OOGMBefore.json
+callcodecallcallcode_101_SuicideEnd.json
+callcodecallcallcode_101_SuicideMiddle.json
+callcodecallcallcode_ABCB_RECURSIVE.json
+callcodecallcode_11.json
+callcodecallcode_11_OOGE.json
+callcodecallcode_11_SuicideEnd.json
+callcodecallcodecall_110.json
+callcodecallcodecall_110_OOGE.json
+callcodecallcodecall_110_OOGMAfter.json
+callcodecallcodecall_110_OOGMBefore.json
+callcodecallcodecall_110_SuicideEnd.json
+callcodecallcodecall_110_SuicideMiddle.json
+callcodecallcodecall_ABCB_RECURSIVE.json
+callcodecallcodecallcode_111.json
+callcodecallcodecallcode_111_OOGE.json
+callcodecallcodecallcode_111_OOGMAfter.json
+callcodecallcodecallcode_111_OOGMBefore.json
+callcodecallcodecallcode_111_SuicideEnd.json
+callcodecallcodecallcode_111_SuicideMiddle.json
+callcodecallcodecallcode_ABCB_RECURSIVE.json
+*)
+
 (*
 
 cv_eval ``
