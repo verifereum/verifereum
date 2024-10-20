@@ -8,11 +8,10 @@ val _ = new_theory "vfmExecution";
 (* TODO: move? *)
 Definition Keccak_256_bytes_def:
   Keccak_256_bytes (bs:word8 list) : word8 list =
-    MAP bools_to_word $
-    chunks 8 $
+    MAP bools_to_word $ chunks 8 $
     Keccak_256 $
     MAP ((=) 1) $ FLAT $
-    MAP (PAD_LEFT 0 8 o word_to_bin_list) bs
+    MAP (PAD_RIGHT 0 8 o word_to_bin_list) bs
 End
 
 (* TODO: move *)
@@ -604,14 +603,14 @@ Definition step_create_def:
     rlpSender <<- rlp_bytes $ word_to_bytes senderAddress T;
     rlpNonce <<- rlp_bytes $ MAP n2w $ REVERSE $ n2l 256 $ nonce;
     rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
-    hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $ rlpBytes;
+    hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes;
     newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
     expansionCost <<- memory_expansion_cost context.memory newMinSize;
     newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
     newStack <<- DROP (3 + saltOffset) stack;
     code <<- TAKE size (DROP offset newMemory);
     address <<-
-      if two then w2w $ word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes(
+      if two then w2w $ word_of_bytes T (0w:bytes32) $ Keccak_256_bytes(
         [n2w 0xff] ++
         word_to_bytes senderAddress T ++
         word_to_bytes salt T ++
@@ -793,8 +792,8 @@ Definition step_inst_def:
       consume_gas dynamicGas;
       expandedMemory <<- PAD_RIGHT 0w newMinSize context.memory;
       newMemory <<- if 0 < size then expandedMemory else context.memory;
-      hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $
-               TAKE size (DROP offset expandedMemory);
+      hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $
+               REVERSE $ TAKE size (DROP offset expandedMemory);
       newStack <<- hash :: DROP 2 stack;
       spentContext <- get_current_context;
       set_current_context $ spentContext
@@ -872,7 +871,7 @@ Definition step_inst_def:
       accounts <- get_accounts;
       code <<- (accounts address).code;
       (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
-      hash <<- word_of_bytes F (0w:bytes32) $ REVERSE $ Keccak_256_bytes $ code;
+      hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ code;
       newStack <<- hash :: TL stack;
       consume_gas addressAccessCost;
       spentContext <- get_current_context;
@@ -952,7 +951,7 @@ Definition step_inst_def:
   ∧ step_inst (Push n ws) =
       bind get_current_context
         (λcontext.
-          let word = word_of_bytes F 0w (REVERSE ws) in
+          let word = word_of_bytes F 0w $ REVERSE ws in
           let newStack = word :: context.stack in
           ignore_bind (assert (LENGTH newStack ≤ stack_limit) StackOverflow) (
           set_current_context (context with stack := newStack)))
