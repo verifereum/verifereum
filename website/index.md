@@ -39,6 +39,7 @@ We are most of the way through the EVM base sequence
    1. TODO: specify the precompiles (ecRecover, etc.)
 2. Mostly Done: Make the EVM model executable (fast) in logic
 3. WIP: Pass the [EVM test suite](https://github.com/ethereum/tests/)
+4. TODO: Make the definitions more tidy and readable
 
 ## Decompilation track
 1. TODO: Build a program logic (Hoare or Separation logic) for EVM bytecode programs
