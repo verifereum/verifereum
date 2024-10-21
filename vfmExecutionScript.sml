@@ -608,7 +608,8 @@ Definition step_create_def:
     sender <<- accounts senderAddress;
     nonce <<- sender.nonce;
     rlpSender <<- rlp_bytes $ word_to_bytes senderAddress T;
-    rlpNonce <<- rlp_bytes $ MAP n2w $ REVERSE $ n2l 256 $ nonce;
+    rlpNonce <<- rlp_bytes $ if nonce = 0 then [] else
+                             MAP n2w $ REVERSE $ n2l 256 $ nonce;
     rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
     hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes;
     newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
