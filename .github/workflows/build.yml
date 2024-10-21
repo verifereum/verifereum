@@ -1,0 +1,74 @@
+name: Veriferium Test Suite
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+    - '**'
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest PolyML commit hash
+        id: polyml-version
+        run:
+          echo "hash=$(git ls-remote https://github.com/polyml/polyml.git HEAD | cut -f1 )" >> $GITHUB_OUTPUT
+
+      - name: Cache PolyML
+        uses: actions/cache@v3
+        id: cache-polyml
+        with:
+          path: $HOME/polyml-install
+          key: polyml-${{ runner.os }}-${{ steps.polyml-version.outputs.hash }}
+
+      - name: Build and Install PolyML
+        if: steps.cache-polyml.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/polyml/polyml.git
+          cd polyml
+          ./configure --prefix=$HOME/polyml-install
+          make
+          make install
+
+      - name: Add polyml to PATH
+        run: echo "$HOME/polyml-install/bin" >> "$GITHUB_PATH"
+
+      - name: Verify polyML setup
+        run: poly -v
+
+
+      - name: Get latest HOL commit hash
+        id: hol4-version
+        run:
+          echo "hash=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git HEAD | cut -f1 )" >> $GITHUB_OUTPUT
+
+      - name: Cache HOL4
+        uses: actions/cache@v3
+        id: cache-hol4
+        with:
+          path: $HOME/HOL
+          key: hol-${{ runner.os }}-${{ steps.hol4-version.outputs.hash }}
+
+      - name: Setup and Build HOL4
+        if: steps.cache-hol4.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/HOL-Theorem-Prover/HOL.git $HOME/HOL
+          cd $HOME/HOL
+          poly < tools/smart-configure.sml
+          bin/build
+
+      - name: Add HOL to PATH and export HOLDIR
+        run: |
+          echo "$HOME/HOL/bin" >> "$GITHUB_PATH"
+          echo "HOLDIR=$HOME/HOL" >> "$GITHUB_ENV"
+
+      - name: Verify HOL is executable
+        run: hol --help
+
+      - name: Build Veriferium
+        run: Holmake
