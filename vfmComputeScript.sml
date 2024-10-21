@@ -511,13 +511,6 @@ QED
 
 val () = cv_auto_trans context_for_transfer_unfolded;
 
-Triviality incCaller_unfolded:
-  (caller: account_state) with nonce updated_by SUC =
-  caller with nonce := SUC caller.nonce
-Proof
-  rw[account_state_component_equality]
-QED
-
 Triviality update_accounts:
   update_accounts ((a =+ b) o (c =+ d)) s =
   return () (s with accounts :=
@@ -527,11 +520,17 @@ Proof
      execution_state_component_equality]
 QED
 
-val () = “start_context x y c s” |>
+Triviality LET_PROD_RATOR:
+  (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
+Proof
+  rw[LET_THM, UNCURRY]
+QED
+
+val () = “start_context b c s” |>
   SIMP_CONV std_ss [
     start_context_def, bind_def, ignore_bind_def,
-    COND_RATOR, LET_RATOR, C_DEF,
-    incCaller_unfolded, update_accounts ] |>
+    COND_RATOR, LET_RATOR, LET_PROD_RATOR, C_DEF,
+    update_accounts ] |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   cv_auto_trans;
 

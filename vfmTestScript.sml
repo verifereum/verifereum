@@ -117,7 +117,7 @@ let
   val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
   val name = last args |> dest_const |> fst
   fun msg pre n = pre ^ " num steps " ^ Int.toString n ^ " for " ^ name ^ "\n"
-  val n = 1024
+  val n = 65536
   fun loop n =
   let
     val () = TextIO.print $ msg "Trying" n
@@ -570,9 +570,10 @@ val test_path = mk_test_path "codecopyNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "createNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (1, prove_test);
+(* TODO: need check for existing account?
 val thms = List.tabulate (num_tests, prove_test);
 *)
 

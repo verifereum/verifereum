@@ -341,16 +341,17 @@ Definition context_for_transfer_def:
 End
 
 Definition start_context_def:
-  start_context shouldTransfer shouldIncNonce c = do
+  start_context shouldTransfer c = do
     value <<- c.callParams.value;
-    callerAddress <<- c.callParams.caller;
     accounts <- get_accounts;
+    callerAddress <<- c.callParams.caller;
     caller <<- accounts callerAddress;
+    createAddress <<- case c.callParams.outputTo of Code a => SOME a | _ => NONE;
+    shouldIncNonce <<- IS_SOME createAddress;
     if shouldTransfer then
       if value ≤ caller.balance ∧
          (shouldIncNonce ⇒ SUC caller.nonce < 2 ** 64)
       then do
-        calleeAddress <<- c.callParams.callee;
         incCaller <<- caller with nonce updated_by SUC;
         code <<- code_for_transfer accounts c.callParams;
         ctxt <<- if shouldIncNonce
@@ -359,8 +360,14 @@ Definition start_context_def:
         success <- push_context ctxt;
         newCaller <<- (if success ∧ shouldIncNonce then incCaller else caller)
                       with balance updated_by flip $- value;
-        newCallee <<- accounts calleeAddress with balance updated_by $+ value;
-        update_accounts $ (callerAddress =+ newCaller) o (calleeAddress =+ newCallee)
+        (calleeAddress, newCallee) <<-
+          case createAddress of
+          | NONE => let a = c.callParams.callee in
+                      (a, (accounts a) with balance updated_by $+ value)
+          | SOME a => (a, (accounts a) with
+                          <| nonce updated_by SUC; balance updated_by $+ value |>);
+        update_accounts $
+          (callerAddress =+ newCaller) o (calleeAddress =+ newCallee)
       od else do
         unuse_gas c.callParams.gasLimit;
         context <- get_current_context;
@@ -582,7 +589,7 @@ Definition step_call_def:
       ; static    := if call_type = Static then T else context.callParams.static
     |>;
     subContext <<- initial_context subContextParams subContextTx;
-    start_context (call_type = Normal ∨ call_type = Code) F subContext
+    start_context (call_type = Normal ∨ call_type = Code) subContext
   od
 End
 
@@ -644,7 +651,7 @@ Definition step_create_def:
       ; static    := context.callParams.static
     |>;
     subContext <<- initial_context subContextParams subContextTx;
-    start_context T T subContext
+    start_context T subContext
   od
 End
 
