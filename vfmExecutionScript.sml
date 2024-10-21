@@ -878,7 +878,8 @@ Definition step_inst_def:
       accounts <- get_accounts;
       code <<- (accounts address).code;
       (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
-      hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ code;
+      hash <<- if fIN address precompile_addresses then 0w
+               else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ code;
       newStack <<- hash :: TL stack;
       consume_gas addressAccessCost;
       spentContext <- get_current_context;
