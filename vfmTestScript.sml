@@ -734,7 +734,7 @@ val test_path = mk_test_path "eip2315NotRemoved.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix at least d31g0v0
+(* TODO: needs precompiles
 val test_path = mk_test_path "invalidAddr.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -758,8 +758,13 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
+(* TODO: fix
+val test_path = mk_test_path "opc0DDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
 (* TODO: add
-opc0DDiffPlaces.json
 opc0EDiffPlaces.json
 opc0FDiffPlaces.json
 opc1EDiffPlaces.json
@@ -1063,6 +1068,183 @@ callcodecallcodecallcode_111_OOGMBefore.json
 callcodecallcodecallcode_111_SuicideEnd.json
 callcodecallcodecallcode_111_SuicideMiddle.json
 callcodecallcodecallcode_ABCB_RECURSIVE.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stCallCreateCallCodeTest/" ^ s;
+
+(* TODO: fix
+val test_path = mk_test_path "Call1024BalanceTooLow.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "Call1024OOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: cache num_steps *)
+(* TODO: fix
+val test_path = mk_test_path "Call1024PreCalls.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "CallLoseGasOOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(*
+CallRecursiveBombPreCall.json
+Callcode1024BalanceTooLow.json
+Callcode1024OOG.json
+CallcodeLoseGasOOG.json
+callOutput1.json
+callOutput2.json
+callOutput3.json
+callOutput3Fail.json
+callOutput3partial.json
+callOutput3partialFail.json
+callWithHighValue.json
+callWithHighValueAndGasOOG.json
+callWithHighValueAndOOGatTxLevel.json
+callWithHighValueOOGinCall.json
+callcodeOutput1.json
+callcodeOutput2.json
+callcodeOutput3.json
+callcodeOutput3Fail.json
+callcodeOutput3partial.json
+callcodeOutput3partialFail.json
+callcodeWithHighValue.json
+callcodeWithHighValueAndGasOOG.json
+contractCreationMakeCallThatAskMoreGasThenTransactionProvided.json
+createFailBalanceTooLow.json
+createInitFailBadJumpDestination.json
+createInitFailBadJumpDestination2.json
+createInitFailStackSizeLargerThan1024.json
+createInitFailStackUnderflow.json
+createInitFailUndefinedInstruction.json
+createInitFailUndefinedInstruction2.json
+createInitFail_OOGduringInit.json
+createInitFail_OOGduringInit2.json
+createInitOOGforCREATE.json
+createJS_ExampleContract.json
+createJS_NoCollision.json
+createNameRegistratorPerTxs.json
+createNameRegistratorPerTxsNotEnoughGas.json
+createNameRegistratorPreStore1NotEnoughGas.json
+createNameRegistratorendowmentTooHigh.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stCallDelegateCodesCallCodeHomestead/" ^ s;
+
+(* TODO: fix
+val test_path = mk_test_path "callcallcallcode_001.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(*
+callcallcallcode_001_OOGE.json
+callcallcallcode_001_OOGMAfter.json
+callcallcallcode_001_OOGMBefore.json
+callcallcallcode_001_SuicideEnd.json
+callcallcallcode_001_SuicideMiddle.json
+callcallcallcode_ABCB_RECURSIVE.json
+callcallcode_01.json
+callcallcode_01_OOGE.json
+callcallcode_01_SuicideEnd.json
+callcallcodecall_010.json
+callcallcodecall_010_OOGE.json
+callcallcodecall_010_OOGMAfter.json
+callcallcodecall_010_OOGMBefore.json
+callcallcodecall_010_SuicideEnd.json
+callcallcodecall_010_SuicideMiddle.json
+callcallcodecall_ABCB_RECURSIVE.json
+callcallcodecallcode_011.json
+callcallcodecallcode_011_OOGE.json
+callcallcodecallcode_011_OOGMAfter.json
+callcallcodecallcode_011_OOGMBefore.json
+callcallcodecallcode_011_SuicideEnd.json
+callcallcodecallcode_011_SuicideMiddle.json
+callcallcodecallcode_ABCB_RECURSIVE.json
+callcodecall_10.json
+callcodecall_10_OOGE.json
+callcodecall_10_SuicideEnd.json
+callcodecallcall_100.json
+callcodecallcall_100_OOGE.json
+callcodecallcall_100_OOGMAfter.json
+callcodecallcall_100_OOGMBefore.json
+callcodecallcall_100_SuicideEnd.json
+callcodecallcall_100_SuicideMiddle.json
+callcodecallcall_ABCB_RECURSIVE.json
+callcodecallcallcode_101.json
+callcodecallcallcode_101_OOGE.json
+callcodecallcallcode_101_OOGMAfter.json
+callcodecallcallcode_101_OOGMBefore.json
+callcodecallcallcode_101_SuicideEnd.json
+callcodecallcallcode_101_SuicideMiddle.json
+callcodecallcallcode_ABCB_RECURSIVE.json
+callcodecallcode_11.json
+callcodecallcode_11_OOGE.json
+callcodecallcode_11_SuicideEnd.json
+callcodecallcodecall_110.json
+callcodecallcodecall_110_OOGE.json
+callcodecallcodecall_110_OOGMAfter.json
+callcodecallcodecall_110_OOGMBefore.json
+callcodecallcodecall_110_SuicideEnd.json
+callcodecallcodecall_110_SuicideMiddle.json
+callcodecallcodecall_ABCB_RECURSIVE.json
+callcodecallcodecallcode_111.json
+callcodecallcodecallcode_111_OOGE.json
+callcodecallcodecallcode_111_OOGMAfter.json
+callcodecallcodecallcode_111_OOGMBefore.json
+callcodecallcodecallcode_111_SuicideEnd.json
+callcodecallcodecallcode_111_SuicideMiddle.json
+callcodecallcodecallcode_ABCB_RECURSIVE.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stCallDelegateCodesHomestead/" ^ s;
+(* TODO *)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stChainId/" ^ s;
+
+val test_path = mk_test_path "chainId.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "chainIdGasCost.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stCodeCopyTest/" ^ s;
+
+val test_path = mk_test_path "ExtCodeCopyTargetRangeLongerThanCodeTests.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ExtCodeCopyTestsParis.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stCodeSizeLimit/" ^ s;
+
+(* TODO: need to support create transactions
+val test_path = mk_test_path "codesizeInit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "codesizeOOGInvalidSize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+codesizeValid.json
+create2CodeSizeLimit.json
+createCodeSizeLimit.json
 *)
 
 (*
