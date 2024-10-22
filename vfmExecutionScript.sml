@@ -24,7 +24,6 @@ Datatype:
   | OutOfBoundsRead
   | Reverted
   | Impossible
-  | MissingHashes
 End
 
 Type execution_result = “:(α + exception option) # execution_state”;
@@ -69,12 +68,6 @@ val _ = monadsyntax.declare_monad (
 );
 val () = monadsyntax.enable_monad "evm_execution";
 val () = monadsyntax.enable_monadsyntax();
-
-Definition write_memory_def:
-  write_memory byteIndex bytes memory =
-  TAKE byteIndex memory ++ bytes
-  ++ DROP (byteIndex + LENGTH bytes) memory
-End
 
 Definition get_current_context_def:
   get_current_context s =
@@ -228,52 +221,52 @@ Definition start_context_def:
   od
 End
 
-Definition stack_op_def:
-  stack_op n f =
+Definition pop_stack_def:
+  pop_stack n =
   do
     context <- get_current_context;
     stack <<- context.stack;
     assert (n ≤ LENGTH stack) StackUnderflow;
-    newStack <<- f (TAKE n stack) :: DROP n stack;
-    set_current_context (context with stack := newStack)
+    return (TAKE n stack)
   od
 End
 
-Definition monop_def:
-  monop f = stack_op 1 (λl. f (EL 0 l))
-End
-
-Definition binop_def:
-  binop f = stack_op 2 (λl. f (EL 0 l) (EL 1 l))
-End
-
-Definition push_from_tx_def:
-  push_from_tx f =
-  do
+Definition push_stack_def:
+  push_stack v = do
     context <- get_current_context;
-    txParams <- get_tx_params;
-    accounts <- get_accounts;
-    newStack <<- f context txParams accounts :: context.stack;
-    assert (LENGTH newStack ≤ stack_limit) StackOverflow;
-    set_current_context (context with stack := newStack)
+    stack <<- context.stack;
+    assert (LENGTH stack < stack_limit) StackOverflow;
+    set_current_context $
+    context with stack := v :: context.stack
   od
 End
 
-Definition push_from_ctxt_def:
-  push_from_ctxt f = push_from_tx (λctxt txParams accts. f ctxt)
+Definition step_stop_def:
+  step_stop = do set_return_data []; finish od
+End
+
+Definition step_binop_def:
+  step_binop op f = do
+    args <- pop_stack 2;
+    consume_gas (static_gas op);
+    push_stack $ f (EL 0 args) (EL 1 args);
+  od
+End
+
+Definition step_modop_def:
+  step_modop op f = do
+    args <- pop_stack 3;
+    consume_gas (static_gas op);
+    a <<- w2n $ EL 0 args;
+    b <<- w2n $ EL 1 args;
+    n <<- w2n $ EL 2 args;
+    push_stack $ if n = 0 then 0w else
+      n2w $ (f a b) MOD n
+  od
 End
 
 Definition with_zero_def:
   with_zero f x y = if y = 0w then 0w else f x y
-End
-
-Definition modop_def:
-  modop f (l: bytes32 list) : bytes32 =
-  let a = w2n $ EL 0 l in
-  let b = w2n $ EL 1 l in
-  let n = w2n $ EL 2 l in
-    if n = 0 then 0w
-    else n2w $ (f a b) MOD n
 End
 
 Definition word_size_def:
@@ -287,10 +280,120 @@ Definition memory_cost_def:
 End
 
 Definition memory_expansion_cost_def:
-  memory_expansion_cost (oldMemory: byte list) newMinSize =
-  let oldSize = LENGTH oldMemory in
+  memory_expansion_cost oldSize newMinSize =
   let newSize = MAX oldSize newMinSize in
     memory_cost newSize - memory_cost oldSize
+End
+
+Definition step_callParams_def:
+  step_callParams op f = do
+    consume_gas $ static_gas op;
+    context <- get_current_context;
+    push_stack $ f context.callParams
+  od
+End
+
+Definition step_txParams_def:
+  step_txParams op f = do
+    consume_gas $ static_gas op;
+    txParams <- get_tx_params;
+    push_stack $ f txParams
+  od
+End
+
+Definition sign_extend_def:
+  sign_extend (n:bytes32) (w:bytes32) : bytes32 =
+  if n > 31w then w else
+  let m = 31 - w2n n in
+  let bs = DROP m $ word_to_bytes w T in
+  let sign = if NULL bs then 0w else HD bs >> 7 in
+  let sw = if sign = 0w then 0w else 255w in
+    word_of_bytes T 0w $ REPLICATE m sw ++ bs
+End
+
+Definition step_exp_def:
+  step_exp = do
+    args <- pop_stack 2;
+    base <<- EL 0 args;
+    exponent <<- EL 1 args;
+    exponentByteSize <<-
+      if exponent = 0w then 0
+      else SUC (LOG2 (w2n exponent) DIV 8);
+    dynamicGas <<- 50 * exponentByteSize;
+    consume_gas $ static_gas Exp + dynamicGas;
+    result <<- word_exp base exponent;
+    push_stack $ result
+  od
+End
+
+Datatype:
+  memory_expansion_info = <| cost: num; expand_by: num |>
+End
+
+Definition memory_expansion_info_def:
+  memory_expansion_info offset size = do
+    context <- get_current_context;
+    oldSize <<- LENGTH context.memory;
+    newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
+    return $
+      <| cost := memory_expansion_cost oldSize newMinSize
+       ; expand_by := MAX oldSize newMinSize |>
+  od
+End
+
+Definition expand_memory_def:
+  expand_memory expand_by = do
+    context <- get_current_context;
+    set_current_context $
+    context with memory := context.memory ++ REPLICATE expand_by 0w
+  od
+End
+
+Definition read_memory_def:
+  read_memory offset size = do
+    context <- get_current_context;
+    return $ TAKE size (DROP offset context.memory)
+  od
+End
+
+Definition write_memory_def:
+  write_memory byteIndex bytes = do
+    context <- get_current_context;
+    memory <<- context.memory;
+    set_current_context $
+      context with memory :=
+        TAKE byteIndex memory ++ bytes
+        ++ DROP (byteIndex + LENGTH bytes) memory
+  od
+End
+
+Definition step_keccak256_def:
+  step_keccak256 = do
+    args <- pop_stack 2;
+    offset <<- w2n (EL 0 args);
+    size <<- w2n (EL 1 args);
+    mx <- memory_expansion_info offset size;
+    dynamicGas <<- 6 * word_size size + mx.cost;
+    consume_gas $ static_gas Keccak256 + dynamicGas;
+    expand_memory mx.expand_by;
+    data <- read_memory offset size;
+    hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ REVERSE $ data;
+    push_stack hash
+  od
+End
+
+Definition push_from_tx_def:
+  push_from_tx f =
+  do
+    context <- get_current_context;
+    txParams <- get_tx_params;
+    accounts <- get_accounts;
+    push_stack $ f context txParams accounts
+  od
+End
+
+Definition push_from_ctxt_def:
+  push_from_ctxt f = push_from_tx (λctxt txParams accts. f ctxt)
 End
 
 Definition copy_to_memory_check_def:
@@ -351,7 +454,7 @@ Definition access_address_def:
   access_address a s =
   let addresses = s.accesses.addresses in
     return
-      (fIN a addresses)
+      (if fIN a addresses then 100n else 2600)
       (s with accesses := (s.accesses with addresses := fINSERT a addresses))
 End
 
@@ -359,7 +462,7 @@ Definition access_slot_def:
   access_slot x s =
   let storageKeys = s.accesses.storageKeys in
     return
-      (fIN x storageKeys)
+      (if fIN x storageKeys then 100n else 2100)
       (s with accesses := (s.accesses with storageKeys := fINSERT x storageKeys))
 End
 
@@ -475,13 +578,15 @@ Definition step_create_def:
     access_address address;
     minimumWordSize <<- word_size size;
     readCodeCost <<- if two then 6 * minimumWordSize else 0;
-    newContext <<- context with <| stack := newStack; memory := newMemory |>;
-    set_current_context newContext;
     consume_gas (readCodeCost + expansionCost);
-    gasLeft <<- context.callParams.gasLimit - context.gasUsed;
+    spentContext0 <- get_current_context;
+    gasLeft <<- spentContext0.callParams.gasLimit - spentContext0.gasUsed;
     cappedGas <<- gasLeft - gasLeft DIV 64;
-    assert (¬context.callParams.static) WriteInStaticContext;
     consume_gas cappedGas;
+    assert (¬context.callParams.static) WriteInStaticContext;
+    spentContext <- get_current_context;
+    set_current_context $
+      spentContext with <| stack := newStack; memory := newMemory |>;
     accesses <- get_current_accesses;
     subContextTx <<- <|
         from     := senderAddress
@@ -506,75 +611,80 @@ End
 
 Definition step_sload_def:
   step_sload = do
+    args <- pop_stack 1;
+    key <<- EL 0 args;
     context <- get_current_context;
-    stack <<- context.stack;
-    assert (1 ≤ LENGTH stack) StackUnderflow;
-    key <<- EL 0 stack;
     address <<- context.callParams.callee;
-    warm <- access_slot (SK address key);
-    dynamicGas <<- if warm then 100 else 2100;
+    accessCost <- access_slot (SK address key);
+    consume_gas $ static_gas SLoad + accessCost;
     accounts <- get_accounts;
     word <<- (accounts address).storage key;
-    newStack <<- word :: TL stack;
-    consume_gas dynamicGas;
-    spentContext <- get_current_context;
-    set_current_context $ spentContext with stack := newStack
+    push_stack word
   od
+End
+
+Definition update_gas_refund_def:
+  update_gas_refund (add, sub) = do
+    context <- get_current_context;
+    set_current_context $
+      context with gasRefund updated_by (λx. x + add - sub)
+  od
+End
+
+Definition assert_static_def:
+  assert_static = do
+    context <- get_current_context;
+    assert (¬context.callParams.static) WriteInStaticContext
+  od
+End
+
+Definition write_storage_def:
+  write_storage address key value =
+  update_accounts (λaccounts.
+    let account = accounts address in
+    let newAccount = account with storage updated_by (key =+ value);
+    in (address =+ newAccount) accounts)
 End
 
 Definition step_sstore_def:
   step_sstore = do
+    args <- pop_stack 2;
+    key <<- EL 0 args;
+    value <<- EL 1 args;
     context <- get_current_context;
-    stack <<- context.stack;
-    assert (2 ≤ LENGTH stack) StackUnderflow;
     gasLeft <<- context.callParams.gasLimit - context.gasUsed;
-    assert (2300 < gasLeft) OutOfGas;
-    key <<- EL 0 stack;
-    value <<- EL 1 stack;
+    assert (2300 ≤ gasLeft) OutOfGas;
     address <<- context.callParams.callee;
     accounts <- get_accounts;
-    account <<- accounts address;
-    currentValue <<- account.storage key;
+    currentValue <<- (accounts address).storage key;
     original <- get_original;
     originalValue <<- (original address).storage key;
-    slotWarm <- access_slot (SK address key);
+    accessCost <- access_slot (SK address key);
     baseDynamicGas <<-
       if originalValue = currentValue ∧ currentValue ≠ value
       then if originalValue = 0w then 20000 else 2900
       else 100;
-    dynamicGas <<- baseDynamicGas + if slotWarm then 0 else 2100;
+    dynamicGas <<- baseDynamicGas + if accessCost > 100 then accessCost else 0;
+    refundUpdates <<-
+      if currentValue ≠ value then
+        let storageSetRefund =
+          if originalValue = value then
+            if originalValue = 0w then
+              20000 - 100
+            else
+              5000 - 2100 - 100
+          else 0
+        in
+          if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w then
+            (storageSetRefund + 15000, 0)
+          else if originalValue ≠ 0w ∧ currentValue = 0w then
+            (storageSetRefund, 15000)
+          else (storageSetRefund, 0)
+      else (0, 0);
+    update_gas_refund refundUpdates;
     consume_gas dynamicGas;
-    spentContext <- get_current_context;
-    newStack <<- DROP 2 spentContext.stack;
-    newContext <<- spentContext with stack := newStack;
-    newContextRefunded <<-
-      if value ≠ currentValue then
-        if currentValue = originalValue then
-          if originalValue ≠ 0w ∧ value = 0w then
-            newContext with gasRefund updated_by $+ 4800
-          else newContext
-        else
-          let c =
-            if originalValue ≠ 0w then
-              if currentValue = 0w then
-                newContext with gasRefund updated_by flip $- 4800
-              else if value = 0w then
-                newContext with gasRefund updated_by $+ 4800
-              else newContext
-            else newContext
-          in
-            if value = originalValue then
-              if originalValue = 0w then
-                c with gasRefund updated_by $+ (20000 - 100)
-              else
-                c with gasRefund updated_by $+ (5000 - 2100 - 100)
-            else c
-      else newContext;
-    set_current_context newContextRefunded;
-    assert (¬context.callParams.static) WriteInStaticContext;
-    newStorage <<- (key =+ value) account.storage;
-    newAccount <<- account with storage := newStorage;
-    update_accounts (address =+ newAccount)
+    assert_static;
+    write_storage address key value
   od
 End
 
@@ -588,222 +698,286 @@ Definition transfer_value_def:
     (toAddress =+ newRecipient) $ (fromAddress =+ newSender) accounts
 End
 
+Definition step_balance_def:
+  step_balance = do
+    args <- pop_stack 1;
+    address <<- w2w $ EL 0 args;
+    accessCost <- access_address address;
+    consume_gas $ static_gas Balance + accessCost;
+    accounts <- get_accounts;
+    balance <<- n2w $ (accounts address).balance;
+    push_stack balance
+  od
+End
+
+Definition step_call_data_load_def:
+  step_call_data_load = do
+    args <- pop_stack 1;
+    index <<- w2n $ EL 0 args;
+    consume_gas $ static_gas CallDataLoad;
+    context <- get_current_context;
+    bytes <<- take_pad_0 32 (DROP index context.callParams.data);
+    push_stack $ word_of_bytes F 0w (REVERSE bytes)
+  od
+End
+
+Definition copy_to_memory_def:
+  copy_to_memory gas offset sourceOffset size getSource = do
+    minimumWordSize <<- word_size size;
+    mx <- memory_expansion_info offset size;
+    dynamicGas <<- 3 * minimumWordSize + mx.cost;
+    consume_gas $ gas + dynamicGas;
+    sourceBytes <- getSource;
+    bytes <<- take_pad_0 size (DROP sourceOffset sourceBytes);
+    expand_memory mx.expand_by;
+    write_memory offset bytes;
+  od
+End
+
+Definition step_copy_to_memory_def:
+  step_copy_to_memory op getSource = do
+    args <- pop_stack 3;
+    offset <<- w2n $ EL 0 args;
+    sourceOffset <<- w2n $ EL 1 args;
+    size <<- w2n $ EL 2 args;
+    copy_to_memory (static_gas op) offset sourceOffset size getSource
+  od
+End
+
+Definition get_return_data_def:
+  get_return_data offset size = do
+    context <- get_current_context;
+    data <<- context.returnData;
+    assert (offset + size ≤ LENGTH data) OutOfBoundsRead;
+    return data
+  od
+End
+
+Definition step_return_data_copy_def:
+  step_return_data_copy = do
+    args <- pop_stack 3;
+    offset <<- w2n $ EL 0 args;
+    sourceOffset <<- w2n $ EL 1 args;
+    size <<- w2n $ EL 2 args;
+    copy_to_memory (static_gas ReturnDataCopy)
+    offset sourceOffset size (get_return_data sourceOffset size)
+  od
+End
+
+Definition step_ext_code_size_def:
+  step_ext_code_size = do
+    args <- pop_stack 1;
+    address <<- w2w $ EL 0 args;
+    accessCost <- access_address address;
+    consume_gas $ static_gas ExtCodeSize + accessCost;
+    accounts <- get_accounts;
+    code <<- (accounts address).code;
+    push_stack $ n2w (LENGTH code)
+  od
+End
+
+Definition get_code_def:
+  get_code address = do
+    accounts <- get_accounts;
+    return $ (accounts address).code
+  od
+End
+
+Definition get_current_code_def:
+  get_current_code = do
+    context <- get_current_context;
+    return $ context.callParams.code
+  od
+End
+
+Definition get_call_data_def:
+  get_call_data = do
+    context <- get_current_context;
+    return $ context.callParams.data
+  od
+End
+
+Definition step_ext_code_copy_def:
+  step_ext_code_copy = do
+    args <- pop_stack 4;
+    address <<- w2w $ EL 0 args;
+    offset <<- w2n $ EL 1 args;
+    sourceOffset <<- w2n $ EL 2 args;
+    size <<- w2n $ EL 3 args;
+    accessCost <- access_address address;
+    copy_to_memory (static_gas ExtCodeCopy + accessCost)
+      offset sourceOffset size (get_code address)
+  od
+End
+
+Definition step_ext_code_hash_def:
+  step_ext_code_hash = do
+    args <- pop_stack 1;
+    address <<- w2w $ EL 0 args;
+    accessCost <- access_address address;
+    consume_gas $ static_gas ExtCodeHash + accessCost;
+    accounts <- get_accounts;
+    code <<- (accounts address).code;
+    (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
+    hash <<- if fIN address precompile_addresses then 0w
+             else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ code;
+    push_stack hash
+  od
+End
+
+Definition step_return_data_size_def:
+  step_return_data_size = do
+    consume_gas $ static_gas ReturnDataSize;
+    context <- get_current_context;
+    push_stack $ n2w $ LENGTH context.returnData
+  od
+End
+
+Definition step_block_hash_def:
+  step_block_hash = do
+    args <- pop_stack 1;
+    number <<- w2n $ EL 0 args;
+    consume_gas $ static_gas BlockHash;
+    tx <- get_tx_params;
+    inRange <<- number < tx.blockNumber ∧ tx.blockNumber - 256 ≤ number;
+    index <<- tx.blockNumber - number - 1;
+    hash <<- if inRange ∧ index < LENGTH tx.prevHashes
+             then EL index tx.prevHashes else 0w;
+    push_stack hash
+  od
+End
+
+Definition step_self_balance_def:
+  step_self_balance = do
+    consume_gas $ static_gas SelfBalance;
+    accounts <- get_accounts;
+    context <- get_current_context;
+    address <<- context.callParams.callee;
+    balance <<- n2w (accounts address).balance;
+    push_stack balance
+  od
+End
+
+Definition step_mload_def:
+  step_mload = do
+    args <- pop_stack 1;
+    offset <<- w2n (EL 0 args);
+    mx <- memory_expansion_info offset 32;
+    consume_gas $ static_gas MLoad + mx.cost;
+    expand_memory mx.expand_by;
+    bytes <- read_memory offset 32;
+    word <<- word_of_bytes F 0w $ REVERSE bytes;
+    push_stack word
+  od
+End
+
+Definition step_mstore_def:
+  step_mstore op = do
+    args <- pop_stack 2;
+    offset <<- w2n $ EL 0 args;
+    value <<- EL 1 args;
+    size <<- if op = MStore8 then 1 else 32;
+    bytes <<- if op = MStore8 then [w2w value] else word_to_bytes value F;
+    mx <- memory_expansion_info offset size;
+    consume_gas $ static_gas op + mx.cost;
+    expand_memory mx.expand_by;
+    write_memory offset bytes;
+  od
+End
+
+Definition set_jump_dest_def:
+  set_jump_dest jumpDest = do
+    context <- get_current_context;
+    set_current_context $
+      context with jumpDest := jumpDest
+  od
+End
+
+Definition step_jump_def:
+  step_jump = do
+    args <- pop_stack 1;
+    dest <<- w2n $ EL 0 args;
+    consume_gas $ static_gas Jump;
+    set_jump_dest $ SOME dest;
+  od
+End
+
+Definition step_jumpi_def:
+  step_jumpi = do
+    args <- pop_stack 2;
+    dest <<- w2n $ EL 0 args;
+    jumpDest <<- if EL 1 args = 0w then NONE else SOME dest;
+    set_jump_dest jumpDest
+  od
+End
+
 Definition step_inst_def:
-    step_inst Stop = finish_current []
-  ∧ step_inst Add = binop word_add
-  ∧ step_inst Mul = binop word_mul
-  ∧ step_inst Sub = binop word_sub
-  ∧ step_inst Div = binop $ with_zero word_div
-  ∧ step_inst SDiv = binop $ with_zero word_quot
-  ∧ step_inst Mod = binop $ with_zero word_mod
-  ∧ step_inst SMod = binop $ with_zero word_rem
-  ∧ step_inst AddMod = stack_op 3 $ modop $+
-  ∧ step_inst MulMod = stack_op 3 $ modop $*
-  ∧ step_inst Exp = do
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (2 ≤ LENGTH stack) StackUnderflow;
-      exponent <<- EL 1 stack;
-      exponentByteSize <<-
-        if exponent = 0w then 0
-        else SUC (LOG2 (w2n exponent) DIV 8);
-      dynamicGas <<- 50 * exponentByteSize;
-      base <<- EL 0 stack;
-      result <<- word_exp base exponent;
-      newStack <<- result :: DROP 2 stack;
-      consume_gas dynamicGas;
-      spentContext <- get_current_context;
-      set_current_context $ spentContext with stack := newStack
-    od
-  ∧ step_inst SignExtend = binop (λn w.
-      if n > 31w then w else
-      let m = 31 - w2n n in
-      let bs = DROP m $ word_to_bytes w T in
-      let sign = if NULL bs then 0w else HD bs >> 7 in
-      let sw = if sign = 0w then 0w else 255w in
-        word_of_bytes T 0w $ REPLICATE m sw ++ bs)
-  ∧ step_inst LT = binop (λx y. b2w (w2n x < w2n y))
-  ∧ step_inst GT = binop (λx y. b2w (w2n x > w2n y))
-  ∧ step_inst SLT = binop (λx y. b2w $ word_lt x y)
-  ∧ step_inst SGT = binop (λx y. b2w $ word_gt x y)
-  ∧ step_inst Eq = binop (λx y. b2w (x = y))
-  ∧ step_inst IsZero = monop (λx. b2w (x = 0w))
-  ∧ step_inst And = binop word_and
-  ∧ step_inst Or = binop word_or
-  ∧ step_inst XOr = binop word_xor
-  ∧ step_inst Not = monop word_1comp
-  ∧ step_inst Byte = binop (λi w. w2w $ get_byte i w T)
-  ∧ step_inst ShL = binop (λn w. word_lsl w (w2n n))
-  ∧ step_inst ShR = binop (λn w. word_lsr w (w2n n))
-  ∧ step_inst SAR = binop (λn w. word_asr w (w2n n))
-  ∧ step_inst Keccak256 = do
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (2 ≤ LENGTH stack) StackUnderflow;
-      offset <<- w2n (EL 0 stack);
-      size <<- w2n (EL 1 stack);
-      newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
-      expansionCost <<- memory_expansion_cost context.memory newMinSize;
-      dynamicGas <<- 6 * word_size size + expansionCost;
-      consume_gas dynamicGas;
-      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-      hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $
-               REVERSE $ TAKE size (DROP offset newMemory);
-      newStack <<- hash :: DROP 2 stack;
-      spentContext <- get_current_context;
-      set_current_context $ spentContext
-        with <| stack := newStack; memory := newMemory |>
-    od
-  ∧ step_inst Address = push_from_ctxt (λc. w2w c.callParams.callee)
-  ∧ step_inst Balance = do
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (1 ≤ LENGTH stack) StackUnderflow;
-      address <<- w2w (EL 0 stack);
-      warm <- access_address address;
-      dynamicGas <<- if warm then 100 else 2600;
-      accounts <- get_accounts;
-      balance <<- (accounts address).balance;
-      newStack <<- n2w balance :: TL stack;
-      consume_gas dynamicGas;
-      spentContext <- get_current_context;
-      set_current_context $ spentContext with stack := newStack
-    od
-  ∧ step_inst Origin = push_from_tx (λc t a. w2w t.origin)
-  ∧ step_inst Caller = push_from_ctxt (λc. w2w c.callParams.caller)
-  ∧ step_inst CallValue = push_from_ctxt (λc. n2w c.callParams.value)
-  ∧ step_inst CallDataLoad =
-      bind (get_current_context)
-        (λcontext.
-          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-            let index = w2n (EL 0 context.stack) in
-            let bytes = take_pad_0 32 (DROP index context.callParams.data) in
-            let newStack = word_of_bytes F 0w (REVERSE bytes) :: TL context.stack in
-            set_current_context (context with stack := newStack)))
-  ∧ step_inst CallDataSize = push_from_ctxt (λc. n2w (LENGTH c.callParams.data))
-  ∧ step_inst CallDataCopy =
-      copy_to_memory (λcontext accounts. context.callParams.data)
-  ∧ step_inst CodeSize = push_from_ctxt (λc. n2w (LENGTH c.callParams.code))
-  ∧ step_inst CodeCopy =
-      copy_to_memory (λcontext accounts. context.callParams.code)
-  ∧ step_inst GasPrice = push_from_tx (λc t a. n2w t.gasPrice)
-  ∧ step_inst ExtCodeSize = do
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (1 ≤ LENGTH stack) StackUnderflow;
-      address <<- w2w $ EL 0 stack;
-      warm <- access_address address;
-      addressAccessCost <<- if warm then 100 else 2600;
-      accounts <- get_accounts;
-      code <<- (accounts address).code;
-      newStack <<- n2w (LENGTH code) :: TL stack;
-      consume_gas addressAccessCost;
-      spentContext <- get_current_context;
-      set_current_context $ spentContext with stack := newStack
-    od
-  ∧ step_inst ExtCodeCopy = do
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (4 ≤ LENGTH stack) StackUnderflow;
-      address <<- w2w $ EL 0 stack;
-      warm <- access_address address;
-      addressAccessCost <<- if warm then 100 else 2600;
-      consume_gas addressAccessCost;
-      spentContext <- get_current_context;
-      set_current_context $ spentContext with stack := TL stack;
-      copy_to_memory (λc accounts. (accounts address).code)
-    od
-  ∧ step_inst ReturnDataSize = push_from_ctxt (λc. n2w (LENGTH c.returnData))
-  ∧ step_inst ReturnDataCopy =
-      copy_to_memory_check T (λcontext accounts. context.returnData)
-  ∧ step_inst ExtCodeHash = do
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (1 ≤ LENGTH stack) StackUnderflow;
-      address <<- w2w $ EL 0 stack;
-      warm <- access_address address;
-      addressAccessCost <<- if warm then 100 else 2600;
-      accounts <- get_accounts;
-      code <<- (accounts address).code;
-      (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
-      hash <<- if fIN address precompile_addresses then 0w
-               else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ code;
-      newStack <<- hash :: TL stack;
-      consume_gas addressAccessCost;
-      spentContext <- get_current_context;
-      set_current_context $ spentContext with stack := newStack
-    od
-  ∧ step_inst BlockHash = do
-      tx <- get_tx_params;
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (1 ≤ LENGTH stack) StackUnderflow;
-      number <<- w2n $ EL 0 stack;
-      inRange <<- number < tx.blockNumber ∧ tx.blockNumber - 256 ≤ number;
-      index <<- tx.blockNumber - number - 1;
-      assert (inRange ⇒ index < LENGTH tx.prevHashes) MissingHashes;
-      hash <<- if inRange then EL index tx.prevHashes else 0w;
-      newStack <<- hash :: TL stack;
-      set_current_context (context with stack := newStack)
-    od
-  ∧ step_inst CoinBase = push_from_tx (λc t a. w2w t.blockCoinBase)
-  ∧ step_inst TimeStamp = push_from_tx (λc t a. n2w t.blockTimeStamp)
-  ∧ step_inst Number = push_from_tx (λc t a. n2w t.blockNumber)
-  ∧ step_inst PrevRandao = push_from_tx (λc t a. t.prevRandao)
-  ∧ step_inst GasLimit = push_from_tx (λc t a. n2w t.blockGasLimit)
-  ∧ step_inst ChainId = push_from_tx (λc t a. n2w t.chainId)
-  ∧ step_inst SelfBalance =
-      push_from_tx (λc t a. n2w (a c.callParams.callee).balance)
-  ∧ step_inst BaseFee = push_from_tx (λc t a. n2w t.baseFeePerGas)
-  ∧ step_inst Pop =
-      bind get_current_context
-        (λcontext.
-          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-           set_current_context (context with stack := TL context.stack)))
-  ∧ step_inst MLoad = do
-      context <- get_current_context;
-      stack <<- context.stack;
-      assert (1 ≤ LENGTH stack) StackUnderflow;
-      byteIndex <<- w2n (EL 0 stack);
-      newMinSize <<- word_size (byteIndex + 32) * 32;
-      expansionCost <<- memory_expansion_cost context.memory newMinSize;
-      consume_gas expansionCost;
-      newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-      word <<- word_of_bytes F 0w $ REVERSE $ TAKE 32 $ DROP byteIndex newMemory;
-      newStack <<- word :: TL stack;
-      spentContext <- get_current_context;
-      set_current_context $ spentContext with
-        <| stack := newStack; memory := newMemory |>
-    od
-  ∧ step_inst MStore = store_to_memory (REVERSE o flip word_to_bytes F)
-  ∧ step_inst MStore8 = store_to_memory (SINGL o w2w)
+    step_inst Stop = do set_return_data []; finish od
+  ∧ step_inst Add = step_binop Add word_add
+  ∧ step_inst Mul = step_binop Mul word_mul
+  ∧ step_inst Sub = step_binop Sub word_sub
+  ∧ step_inst Div = step_binop Div $ with_zero word_div
+  ∧ step_inst SDiv = step_binop SDiv $ with_zero word_quot
+  ∧ step_inst Mod = step_binop Mod $ with_zero word_mod
+  ∧ step_inst SMod = step_binop SMod $ with_zero word_rem
+  ∧ step_inst AddMod = step_modop AddMod word_add
+  ∧ step_inst MulMod = step_modop MulMod word_mul
+  ∧ step_inst Exp = step_exp
+  ∧ step_inst SignExtend = step_binop SignExtend sign_extend
+  ∧ step_inst LT = step_binop LT (λx y. b2w (w2n x < w2n y))
+  ∧ step_inst GT = step_binop GT (λx y. b2w (w2n x > w2n y))
+  ∧ step_inst SLT = step_binop SLT (λx y. b2w $ word_lt x y)
+  ∧ step_inst SGT = step_binop SGT (λx y. b2w $ word_gt x y)
+  ∧ step_inst Eq = step_binop Eq (λx y. b2w (x = y))
+  ∧ step_inst IsZero = step_monop IsZero (λx. b2w (x = 0w))
+  ∧ step_inst And = step_binop And word_and
+  ∧ step_inst Or = step_binop Or binop word_or
+  ∧ step_inst XOr = step_binop XOr word_xor
+  ∧ step_inst Not = step_monop Not word_1comp
+  ∧ step_inst Byte = step_binop Byte (λi w. w2w $ get_byte i w T)
+  ∧ step_inst ShL = step_binop ShL (λn w. word_lsl w (w2n n))
+  ∧ step_inst ShR = step_binop ShR (λn w. word_lsr w (w2n n))
+  ∧ step_inst SAR = step_binop SAR (λn w. word_asr w (w2n n))
+  ∧ step_inst Keccak256 = step_keccak256
+  ∧ step_inst Address = step_callParams Address (λc. w2w c.callee)
+  ∧ step_inst Balance = step_balance
+  ∧ step_inst Origin = step_txParams Origin (λt. w2w t.origin)
+  ∧ step_inst Caller = step_callParams Caller (λc. w2w c.caller)
+  ∧ step_inst CallValue = step_callParams CallValue (λc. n2w c.value)
+  ∧ step_inst CallDataLoad = step_call_data_load
+  ∧ step_inst CallDataSize = step_callParams CallDataSize (λc. n2w (LENGTH c.data))
+  ∧ step_inst CallDataCopy = step_copy_to_memory CallDataCopy get_call_data
+  ∧ step_inst CodeSize = step_callParams CodeSize (λc. n2w (LENGTH c.code))
+  ∧ step_inst CodeCopy = step_copy_to_memory CodeCopy get_current_code
+  ∧ step_inst GasPrice = step_txParams GasPrice (λt. n2w t.gasPrice)
+  ∧ step_inst ExtCodeSize = step_ext_code_size
+  ∧ step_inst ExtCodeCopy = step_ext_code_copy
+  ∧ step_inst ReturnDataSize = step_return_data_size
+  ∧ step_inst ReturnDataCopy = step_return_data_copy
+  ∧ step_inst ExtCodeHash = step_ext_code_hash
+  ∧ step_inst BlockHash = step_block_hash
+  ∧ step_inst CoinBase = step_txParams CoinBase (λt. w2w t.blockCoinBase)
+  ∧ step_inst TimeStamp = step_txParams TimeStamp (λt. n2w t.blockTimeStamp)
+  ∧ step_inst Number = step_txParams Number (λt. n2w t.blockNumber)
+  ∧ step_inst PrevRandao = step_txParams PrevRandao (λt. t.prevRandao)
+  ∧ step_inst GasLimit = step_txParams GasLimit (λt. n2w t.blockGasLimit)
+  ∧ step_inst ChainId = step_txParams ChainId (λt. n2w t.chainId)
+  ∧ step_inst SelfBalance = step_self_balance
+  ∧ step_inst BaseFee = step_txParams BaseFee (λt. n2w t.baseFeePerGas)
+  ∧ step_inst Pop = do pop_stack 1; return () od
+  ∧ step_inst MLoad = step_mload
+  ∧ step_inst MStore = step_mstore MStore
+  ∧ step_inst MStore8 = step_mstore MStore8
   ∧ step_inst SLoad = step_sload
   ∧ step_inst SStore = step_sstore
-  ∧ step_inst Jump =
-      bind get_current_context
-        (λcontext.
-          ignore_bind (assert (1 ≤ LENGTH context.stack) StackUnderflow) (
-            let dest = w2n $ EL 0 context.stack in
-            let newContext =
-              context with <| stack := TL context.stack; jumpDest := SOME dest |>
-            in
-              set_current_context newContext))
-  ∧ step_inst JumpI =
-      bind get_current_context
-        (λcontext.
-          ignore_bind (assert (2 ≤ LENGTH context.stack) StackUnderflow) (
-            let dest = w2n $ EL 0 context.stack in
-            let jumpDest = if EL 1 context.stack ≠ 0w then SOME dest else NONE in
-            let newStack = DROP 2 context.stack in
-            let newContext =
-              context with <| stack := newStack; jumpDest := jumpDest |>
-            in
-              set_current_context newContext))
+  ∧ step_inst Jump = step_jump
+  ∧ step_inst JumpI = step_jumpi
+
   ∧ step_inst PC = push_from_ctxt (λc. n2w c.pc)
   ∧ step_inst MSize = push_from_ctxt (λc. n2w $ LENGTH c.memory)
   ∧ step_inst Gas = push_from_ctxt (λc. n2w $
       c.callParams.gasLimit - c.gasUsed - static_gas Gas)
-  ∧ step_inst JumpDest = return ()
+  ∧ step_inst JumpDest = consume_gas $ static_gas JumpDest
   ∧ step_inst (Push n ws) =
       bind get_current_context
         (λcontext.
@@ -956,8 +1130,8 @@ Definition step_def:
       | NONE => step_inst Invalid
       | SOME op => do
           step_inst op;
-          consume_gas (static_gas op);
-          if is_call op then return () else inc_pc (LENGTH (opcode op))
+          if is_call op then return ()
+          else inc_pc (LENGTH (opcode op))
         od
     od
   od s of
