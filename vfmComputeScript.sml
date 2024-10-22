@@ -761,9 +761,9 @@ val () = transfer_value_def |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
-val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_aux_def;
+val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec_def;
 
-val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_aux;
+val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec;
 
 val step_inst_pre_def = step_inst_def |>
   ONCE_REWRITE_RULE[FUN_EQ_THM] |>
