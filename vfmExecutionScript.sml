@@ -497,9 +497,15 @@ Definition step_copy_to_memory_def:
 End
 
 Definition get_return_data_def:
-  get_return_data offset size = do
+  get_return_data = do
     context <- get_current_context;
-    data <<- context.returnData;
+    return context.returnData
+  od
+End
+
+Definition get_return_data_check_def:
+  get_return_data_check offset size = do
+    data <- get_return_data;
     assert (offset + size ≤ LENGTH data) OutOfBoundsRead;
     return data
   od
@@ -512,7 +518,7 @@ Definition step_return_data_copy_def:
     sourceOffset <<- w2n $ EL 1 args;
     size <<- w2n $ EL 2 args;
     copy_to_memory (static_gas ReturnDataCopy)
-    offset sourceOffset size (get_return_data sourceOffset size)
+    offset sourceOffset size (get_return_data_check sourceOffset size)
   od
 End
 
@@ -687,10 +693,10 @@ Definition step_swap_def:
   od
 End
 
-Definition push_log_def:
-  push_log e = do
+Definition push_logs_def:
+  push_logs ls = do
     context <- get_current_context;
-    set_current_context $ context with logs updated_by (CONS e)
+    set_current_context $ context with logs updated_by (flip APPEND ls)
   od
 End
 
@@ -708,7 +714,7 @@ Definition step_log_def:
     address <- get_callee;
     data <- read_memory offset size;
     event <<- <| logger := address; topics := topics; data := data |>;
-    push_log event
+    push_logs [event]
   od
 End
 
@@ -1051,23 +1057,19 @@ Definition step_inst_def:
 End
 
 Definition inc_pc_def:
-  inc_pc n =
-  bind (get_current_context)
-    (λcontext.
-      case context.jumpDest of
-      | NONE => set_current_context (context with pc := context.pc + n)
-      | SOME pc =>
-        let code = context.callParams.code in
-        let parsed = context.callParams.parsed in
-        ignore_bind (assert
-          (pc < LENGTH code ∧ FLOOKUP parsed pc = SOME JumpDest)
-          InvalidJumpDest) (
-        set_current_context (context with <| pc := pc; jumpDest := NONE |>)))
-End
-
-Definition pop_context_def:
-  pop_context s =
-    return (HD s.contexts) (s with contexts := TL s.contexts)
+  inc_pc n = do
+    context <- get_current_context;
+    case context.jumpDest of
+    | NONE => set_current_context $ context with pc := context.pc + n
+    | SOME pc => do
+        code <<- context.callParams.code;
+        parsed <<- context.callParams.parsed;
+        assert (pc < LENGTH code ∧
+                FLOOKUP parsed pc = SOME JumpDest) InvalidJumpDest;
+        set_current_context $
+          context with <| pc := pc; jumpDest := NONE |>
+      od
+  od
 End
 
 Definition is_call_def:
@@ -1078,6 +1080,34 @@ Definition is_call_def:
   is_call Create = T ∧
   is_call Create2 = T ∧
   is_call _ = F
+End
+
+Definition pop_context_def:
+  pop_context s =
+  if s.contexts = [] then fail Impossible s
+  else return (HD s.contexts) (s with contexts updated_by TL)
+End
+
+Definition pop_and_incorporate_context_def:
+  pop_and_incorporate_context success = do
+    calleeGasLeft <- get_gas_left;
+    callee <- pop_context;
+    unuse_gas calleeGasLeft;
+    if success then do
+      push_logs callee.logs;
+      update_gas_refund (callee.gasRefund, 0)
+    od else do
+      set_accesses callee.callParams.accesses;
+      set_accounts callee.callParams.accounts
+    od
+  od
+End
+
+Definition get_output_to_def:
+  get_output_to = do
+    context <- get_current_context;
+    return context.callParams.outputTo
+  od
 End
 
 Definition step_def:
@@ -1098,18 +1128,42 @@ Definition step_def:
     od
   od s of
   | (INL x, s) => (INL x, s)
-  | (INR e, s) =>
+  | (INR e, s) => do
+      (* do extra stuff for a create, i.e. e = NONE and outputTo = Code *)
+      exceptionalHalt <<- (e ≠ NONE ∧ e ≠ SOME Reverted);
+      if exceptionalHalt then do
+        gasLeft <- get_gas_left;
+        consume_gas gasLeft;
+        set_return_data [];
+      od else return ();
+      success <<- (e = NONE);
+      output <- get_return_data;
+      outputTo <- get_output_to;
+      pop_and_incorporate_context success;
+      (* TODO: increment pc *)
+      case outputTo of
+      | Code address =>
+          if success then do
+            set_return_data [];
+            push_stack $ w2w address;
+          od else do
+            set_return_data output;
+            push_stack $ b2w F
+          od
+      | Memory r => do
+          set_return_data output;
+          push_stack $ b2w success;
+          write_memory r.offset (TAKE r.size output)
+        od;
+      (* TODO: continue if not the last context, else reraise *)
+    od s
+
+
+
       case s.contexts of
       | [] => (INR (SOME Impossible), s)
       | [_] => (INR e, s)
       | callee :: caller :: callStack =>
-        let exceptionalHalt = (e ≠ NONE ∧ e ≠ SOME Reverted) in
-        let calleeGasLeft =
-          if exceptionalHalt then 0
-          else callee.callParams.gasLimit - callee.gasUsed in
-        let returnData =
-          if exceptionalHalt then []
-          else callee.returnData in
         let calleeSuccess = (e = NONE) in
         let (newCallerBase, success) =
           (case callee.callParams.outputTo of
