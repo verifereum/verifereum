@@ -902,49 +902,55 @@ Definition step_call_def:
   od
 End
 
+*)
+
+Definition address_for_create_def:
+  address_for_create (address: address) nonce : address =
+    let rlpSender = rlp_bytes $ word_to_bytes address T in
+    let rlpNonce = rlp_bytes $ if nonce = 0n then [] else
+                   MAP n2w $ REVERSE $ n2l 256 $ nonce in
+    let rlpBytes = rlp_list $ rlpSender ++ rlpNonce in
+    let hash = word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes in
+    w2w hash
+End
+
+Definition address_for_create2_def:
+  address_for_create2 (address: address) (salt: bytes32) (code: byte list) : address =
+  w2w $ word_of_bytes T (0w: bytes32) $ Keccak_256_bytes $
+    [0xffw] ++ word_to_bytes address T ++
+    word_to_bytes salt T ++ Keccak_256_bytes code
+End
+
 Definition step_create_def:
   step_create two = do
-    context <- get_current_context;
-    stack <<- context.stack;
-    saltOffset <<- if two then 1 else 0;
-    assert (3 + saltOffset ≤ LENGTH stack) StackUnderflow;
-    value <<- w2n $ EL 0 stack;
-    offset <<- w2n $ EL 1 stack;
-    size <<- w2n $ EL 2 stack;
-    salt <<- if two then EL 3 stack else 0w;
-    senderAddress <<- context.callParams.callee;
+    args <- pop_stack (if two then 4 else 3);
+    value <<- w2n $ EL 0 args;
+    offset <<- w2n $ EL 1 args;
+    size <<- w2n $ EL 2 args;
+    salt <<- if two then EL 3 args else 0w;
+    mx <- memory_expansion_info offset size;
+    staticGas = static_gas (if two then Create2 else Create);
+    readCodeCost <<- if two then 6 * (word_size size) else 0;
+    consume_gas $ staticGas + readCodeCost + mx.cost;
+    expand_memory mx.expand_by;
+    code <- read_memory offset size;
+    senderAddress <- get_callee;
     accounts <- get_accounts;
     sender <<- accounts senderAddress;
     nonce <<- sender.nonce;
-    rlpSender <<- rlp_bytes $ word_to_bytes senderAddress T;
-    rlpNonce <<- rlp_bytes $ if nonce = 0 then [] else
-                             MAP n2w $ REVERSE $ n2l 256 $ nonce;
-    rlpBytes <<- rlp_list $ rlpSender ++ rlpNonce;
-    hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes;
-    newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
-    expansionCost <<- memory_expansion_cost context.memory newMinSize;
-    newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-    newStack <<- DROP (3 + saltOffset) stack;
-    code <<- TAKE size (DROP offset newMemory);
-    address <<-
-      if two then w2w $ word_of_bytes T (0w:bytes32) $ Keccak_256_bytes(
-        [n2w 0xff] ++
-        word_to_bytes senderAddress T ++
-        word_to_bytes salt T ++
-        Keccak_256_bytes code)
-      else w2w hash;
+    address <<- if two
+                then address_for_create2 senderAddress salt code
+                else address_for_create senderAddress nonce;
     access_address address;
-    minimumWordSize <<- word_size size;
-    readCodeCost <<- if two then 6 * minimumWordSize else 0;
-    consume_gas (readCodeCost + expansionCost);
-    spentContext0 <- get_current_context;
-    gasLeft <<- spentContext0.callParams.gasLimit - spentContext0.gasUsed;
+    gasLeft <- get_gas_left;
     cappedGas <<- gasLeft - gasLeft DIV 64;
     consume_gas cappedGas;
-    assert (¬context.callParams.static) WriteInStaticContext;
-    spentContext <- get_current_context;
-    set_current_context $
-      spentContext with <| stack := newStack; memory := newMemory |>;
+    assert_static;
+    set_return_data [];
+
+    (* TODO: coordinate with step_def on how to handle pre-execution errors *)
+    (* TODO: replace the below as necessary *)
+
     accesses <- get_current_accesses;
     subContextTx <<- <|
         from     := senderAddress
@@ -966,8 +972,6 @@ Definition step_create_def:
     start_context T subContext
   od
 End
-
-*)
 
 Definition step_inst_def:
     step_inst Stop = do set_return_data []; finish od
@@ -1040,15 +1044,17 @@ Definition step_inst_def:
   ∧ step_inst (Dup n) = step_dup n
   ∧ step_inst (Swap n) = step_swap n
   ∧ step_inst (Log n) = step_log n
-  (*
   ∧ step_inst Create = step_create F
+  (*
   ∧ step_inst Call = step_call Normal
   ∧ step_inst CallCode = step_call Code
   *)
   ∧ step_inst Return = step_return T
   (*
   ∧ step_inst DelegateCall = step_call Delegate
+  *)
   ∧ step_inst Create2 = step_create T
+  (*
   ∧ step_inst StaticCall = step_call Static
   *)
   ∧ step_inst Revert = step_return F
