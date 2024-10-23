@@ -322,23 +322,6 @@ Definition step_keccak256_def:
   od
 End
 
-Definition get_num_contexts_def:
-  get_num_contexts s = return (LENGTH s.contexts) s
-End
-
-Definition push_context_def:
-  push_context c = do
-    n <- get_num_contexts;
-    if n < context_limit
-    then λs. return T $ s with contexts updated_by CONS c
-    else do
-      context <- get_current_context;
-      set_current_context (context with stack := b2w F :: context.stack);
-      return F
-    od
-  od
-End
-
 Definition access_address_def:
   access_address a s =
   let addresses = s.accesses.addresses in
@@ -376,10 +359,17 @@ Definition update_gas_refund_def:
   od
 End
 
+Definition get_static_def:
+  get_static = do
+    context <- get_current_context;
+    return context.callParams.static
+  od
+End
+
 Definition assert_static_def:
   assert_static = do
-    context <- get_current_context;
-    assert (¬context.callParams.static) WriteInStaticContext
+    static <- get_static;
+    assert (¬static) WriteInStaticContext
   od
 End
 
@@ -759,15 +749,6 @@ End
 
 (*
 
-Definition unuse_gas_def:
-  unuse_gas n = do
-    context <- get_current_context;
-    assert (n ≤ context.gasUsed) Impossible;
-    newContext <<- context with gasUsed := context.gasUsed - n;
-    set_current_context newContext
-  od
-End
-
 Definition code_for_transfer_def:
   code_for_transfer accounts (params: call_parameters) =
     case params.outputTo
@@ -786,6 +767,19 @@ Definition context_for_transfer_def:
                  ; code := code
                  ; parsed := parse_code 0 FEMPTY code
                  |>)
+End
+
+Definition push_context_def:
+  push_context c = do
+    n <- get_num_contexts;
+    if n < context_limit
+    then λs. return T $ s with contexts updated_by CONS c
+    else do
+      context <- get_current_context;
+      set_current_context (context with stack := b2w F :: context.stack);
+      return F
+    od
+  od
 End
 
 Definition start_context_def:
@@ -826,10 +820,6 @@ Definition start_context_def:
       od
     else do push_context c; return () od
   od
-End
-
-Definition get_current_accesses_def:
-  get_current_accesses s = return s.accesses s
 End
 
 Datatype:
@@ -904,6 +894,23 @@ End
 
 *)
 
+Definition get_accesses_def:
+  get_accesses s = return s.accesses s
+End
+
+Definition unuse_gas_def:
+  unuse_gas n = do
+    context <- get_current_context;
+    assert (n ≤ context.gasUsed) Impossible;
+    newContext <<- context with gasUsed := context.gasUsed - n;
+    set_current_context newContext
+  od
+End
+
+Definition get_num_contexts_def:
+  get_num_contexts s = return (LENGTH s.contexts) s
+End
+
 Definition address_for_create_def:
   address_for_create (address: address) nonce : address =
     let rlpSender = rlp_bytes $ word_to_bytes address T in
@@ -921,6 +928,10 @@ Definition address_for_create2_def:
     word_to_bytes salt T ++ Keccak_256_bytes code
 End
 
+Definition push_context_def:
+  push_context c s = return () $ s with contexts updated_by CONS c
+End
+
 Definition step_create_def:
   step_create two = do
     args <- pop_stack (if two then 4 else 3);
@@ -929,7 +940,7 @@ Definition step_create_def:
     size <<- w2n $ EL 2 args;
     salt <<- if two then EL 3 args else 0w;
     mx <- memory_expansion_info offset size;
-    staticGas = static_gas (if two then Create2 else Create);
+    staticGas <<- static_gas (if two then Create2 else Create);
     readCodeCost <<- if two then 6 * (word_size size) else 0;
     consume_gas $ staticGas + readCodeCost + mx.cost;
     expand_memory mx.expand_by;
@@ -947,29 +958,52 @@ Definition step_create_def:
     consume_gas cappedGas;
     assert_static;
     set_return_data [];
-
-    (* TODO: coordinate with step_def on how to handle pre-execution errors *)
-    (* TODO: replace the below as necessary *)
-
-    accesses <- get_current_accesses;
-    subContextTx <<- <|
-        from     := senderAddress
-      ; to       := 0w
-      ; value    := value
-      ; gasLimit := cappedGas
-      ; data     := []
-      (* unused: for concreteness *)
-      ; nonce := 0; gasPrice := 0; accessList := []
-    |>;
-    subContextParams <<- <|
-        code      := code
-      ; accounts  := accounts
-      ; accesses  := accesses
-      ; outputTo  := Code address
-      ; static    := context.callParams.static
-    |>;
-    subContext <<- initial_context subContextParams subContextTx;
-    start_context T subContext
+    depth <- get_num_contexts;
+    toCreate <<- accounts address;
+    if sender.balance < value ∨
+       SUC nonce ≥ 2 ** 64 ∨
+       SUC depth ≥ 1024
+    then
+      do
+        unuse_gas cappedGas;
+        push_stack $ b2w F
+      od
+    else if ¬(account_empty toCreate)
+    then
+      do
+        update_accounts $
+          (senderAddress =+ sender with nonce updated_by SUC);
+        push_stack $ b2w F
+      od
+    else
+      do
+        update_accounts $
+          (senderAddress =+ sender with nonce updated_by SUC);
+        subContextTx <<- <|
+            from     := senderAddress
+          ; to       := 0w
+          ; value    := value
+          ; gasLimit := cappedGas
+          ; data     := []
+          (* unused: for concreteness *)
+          ; nonce := 0; gasPrice := 0; accessList := []
+        |>;
+        superAccounts <- get_accounts;
+        subAccounts <<-
+          transfer_value senderAddress address value $
+          (address =+ toCreate with nonce updated_by SUC)
+          superAccounts;
+        accesses <- get_accesses;
+        static <- get_static;
+        subContextParams <<- <|
+            code      := code
+          ; accounts  := subAccounts
+          ; accesses  := accesses
+          ; outputTo  := Code address
+          ; static    := static
+        |>;
+        push_context $ initial_context subContextParams subContextTx
+      od
   od
 End
 
