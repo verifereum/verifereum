@@ -141,6 +141,20 @@ Definition get_callee_def:
   od
 End
 
+Definition get_caller_def:
+  get_caller = do
+    context <- get_current_context;
+    return context.callParams.caller
+  od
+End
+
+Definition get_value_def:
+  get_value = do
+    context <- get_current_context;
+    return context.callParams.value
+  od
+End
+
 Definition set_return_data_def:
   set_return_data rd = do
     context <- get_current_context;
@@ -366,8 +380,8 @@ Definition get_static_def:
   od
 End
 
-Definition assert_static_def:
-  assert_static = do
+Definition assert_not_static_def:
+  assert_not_static = do
     static <- get_static;
     assert (¬static) WriteInStaticContext
   od
@@ -421,7 +435,7 @@ Definition step_sstore_def:
       else (0, 0);
     update_gas_refund refundUpdates;
     consume_gas dynamicGas;
-    assert_static;
+    assert_not_static;
     write_storage address key value
   od
 End
@@ -690,7 +704,7 @@ Definition step_log_def:
     dynamicGas <<- 375 * n + 8 * size + mx.cost;
     consume_gas $ (static_gas $ Log n) + dynamicGas;
     expand_memory mx.expand_by;
-    assert_static;
+    assert_not_static;
     address <- get_callee;
     data <- read_memory offset size;
     event <<- <| logger := address; topics := topics; data := data |>;
@@ -736,7 +750,7 @@ Definition step_self_destruct_def:
     beneficiaryEmpty <<- account_empty $ accounts address;
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty then 25000 else 0;
     consume_gas $ zero_warm accessCost + transferCost;
-    assert_static;
+    assert_not_static;
     set_accounts $ transfer_value sender address balance accounts;
     if sender = address then
       update_accounts $ (λaccounts.
@@ -746,153 +760,6 @@ Definition step_self_destruct_def:
     finish
   od
 End
-
-(*
-
-Definition code_for_transfer_def:
-  code_for_transfer accounts (params: call_parameters) =
-    case params.outputTo
-    of Code address =>
-      if (accounts address).code ≠ [] ∨
-         (accounts address).nonce ≠ 0
-      then opcode Invalid
-      else params.code
-    | _ => params.code
-End
-
-Definition context_for_transfer_def:
-  context_for_transfer ctxt callerAddress incCaller code =
-  ctxt with callParams updated_by
-    (λp. p with <| accounts updated_by (callerAddress =+ incCaller)
-                 ; code := code
-                 ; parsed := parse_code 0 FEMPTY code
-                 |>)
-End
-
-Definition push_context_def:
-  push_context c = do
-    n <- get_num_contexts;
-    if n < context_limit
-    then λs. return T $ s with contexts updated_by CONS c
-    else do
-      context <- get_current_context;
-      set_current_context (context with stack := b2w F :: context.stack);
-      return F
-    od
-  od
-End
-
-Definition start_context_def:
-  start_context shouldTransfer c = do
-    value <<- c.callParams.value;
-    accounts <- get_accounts;
-    callerAddress <<- c.callParams.caller;
-    caller <<- accounts callerAddress;
-    createAddress <<- case c.callParams.outputTo of Code a => SOME a | _ => NONE;
-    shouldIncNonce <<- IS_SOME createAddress;
-    if shouldTransfer then
-      if value ≤ caller.balance ∧
-         (shouldIncNonce ⇒ SUC caller.nonce < 2 ** 64)
-      then do
-        incCaller <<- caller with nonce updated_by SUC;
-        code <<- code_for_transfer accounts c.callParams;
-        ctxt <<- if shouldIncNonce
-                 then context_for_transfer c callerAddress incCaller code
-                 else c;
-        success <- push_context ctxt;
-        newCaller <<- (if success ∧ shouldIncNonce then incCaller else caller)
-                      with balance updated_by flip $- value;
-        (calleeAddress, newCallee) <<-
-          case createAddress of
-          | NONE => let a = c.callParams.callee in
-                      (a, (accounts a) with balance updated_by $+ value)
-          | SOME a => (a, (accounts a) with
-                          <| nonce updated_by SUC; balance updated_by $+ value |>);
-        update_accounts $
-          (callerAddress =+ newCaller) o (calleeAddress =+ newCallee)
-      od else do
-        unuse_gas c.callParams.gasLimit;
-        context <- get_current_context;
-        set_current_context $ context with
-          <| stack := b2w F :: context.stack
-           ; returnData := []
-           |>
-      od
-    else do push_context c; return () od
-  od
-End
-
-Datatype:
-  call_type = Normal | Code | Delegate | Static
-End
-
-Definition step_call_def:
-  step_call call_type = do
-    context <- get_current_context;
-    stack <<- context.stack;
-    valueOffset <<- if call_type = Delegate ∨ call_type = Static then 0 else 1;
-    assert (6 + valueOffset ≤ LENGTH stack) StackUnderflow;
-    gas <<- w2n $ EL 0 stack;
-    address <<- w2w $ EL 1 stack;
-    value <<- if valueOffset = 0 then 0 else w2n $ EL 2 stack;
-    argsOffset <<- w2n $ EL (2 + valueOffset) stack;
-    argsSize <<- w2n $ EL (3 + valueOffset) stack;
-    retOffset <<- w2n $ EL (4 + valueOffset) stack;
-    retSize <<- w2n $ EL (5 + valueOffset) stack;
-    newStack <<- DROP (6 + valueOffset) stack;
-    newMinSize <<- if retSize = 0 ∧ argsSize = 0 then 0 else
-      MAX (word_size (retOffset + retSize) * 32)
-          (word_size (argsOffset + argsSize) * 32);
-    expansionCost <<- memory_expansion_cost context.memory newMinSize;
-    addressWarm <- access_address address;
-    accessCost <<- if addressWarm then 100 else 2600;
-    positiveValueCost <<- if 0 < value then 9000 else 0;
-    accounts <- get_accounts;
-    toAccount <<- accounts address;
-    toAccountEmpty <<- account_empty toAccount;
-    transferCost <<- if call_type = Normal then
-      if 0 < value ∧ toAccountEmpty then 25000 else 0
-    else 0;
-    consume_gas (expansionCost + accessCost + transferCost + positiveValueCost);
-    assert (context.callParams.static ⇒ value = 0) WriteInStaticContext;
-    newMemory <<- PAD_RIGHT 0w newMinSize context.memory;
-    spentContext <- get_current_context;
-    gasLeft <<- context.callParams.gasLimit - spentContext.gasUsed;
-    stipend <<- if 0 < value then 2300 else 0;
-    cappedGas <<- MIN gas (gasLeft - gasLeft DIV 64);
-    consume_gas cappedGas;
-    spentCappedContext <- get_current_context;
-    accesses <- get_current_accesses;
-    newContext <<- spentCappedContext with <| stack := newStack; memory := newMemory |>;
-    set_current_context newContext;
-    subContextTx <<- <|
-        from     := if call_type = Delegate
-                    then context.callParams.caller
-                    else context.callParams.callee
-      ; to       := if call_type = Code ∨ call_type = Delegate
-                    then context.callParams.callee
-                    else address
-      ; value    := if call_type = Delegate
-                    then context.callParams.value
-                    else value
-      ; gasLimit := cappedGas + stipend
-      ; data     := TAKE argsSize (DROP argsOffset newMemory)
-      (* unused: for concreteness *)
-      ; nonce := 0; gasPrice := 0; accessList := []
-    |>;
-    subContextParams <<- <|
-        code      := toAccount.code
-      ; accounts  := accounts
-      ; accesses  := accesses
-      ; outputTo  := Memory <| offset := retOffset; size := retSize |>
-      ; static    := if call_type = Static then T else context.callParams.static
-    |>;
-    subContext <<- initial_context subContextParams subContextTx;
-    start_context (call_type = Normal ∨ call_type = Code) subContext
-  od
-End
-
-*)
 
 Definition get_accesses_def:
   get_accesses s = return s.accesses s
@@ -956,13 +823,13 @@ Definition step_create_def:
     gasLeft <- get_gas_left;
     cappedGas <<- gasLeft - gasLeft DIV 64;
     consume_gas cappedGas;
-    assert_static;
+    assert_not_static;
     set_return_data [];
     depth <- get_num_contexts;
     toCreate <<- accounts address;
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
-       SUC depth ≥ 1024
+       SUC depth > 1024
     then
       do
         unuse_gas cappedGas;
@@ -1004,6 +871,99 @@ Definition step_create_def:
         |>;
         push_context $ initial_context subContextParams subContextTx
       od
+  od
+End
+
+Definition call_has_value_def:
+  call_has_value op = (op = Call ∨ op = CallCode)
+End
+
+Definition max_expansion_range_def:
+  max_expansion_range (o1, s1) (o2, s2:num) =
+  let v1 = if s1 = 0 then 0 else o1 + s1 in
+  let v2 = if s2 = 0 then 0 else o2 + s2 in
+    if v1 < v2 then (o2, s2) else (o1, s1)
+End
+
+Definition call_gas_def:
+  call_gas value gas gasLeft memoryCost otherCost =
+  let stipend = if value = 0n then 0 else 2300 in
+  let gas = if gasLeft < memoryCost + otherCost then gas
+            else MIN gas (
+              let left = gasLeft - memoryCost - otherCost in
+                left - (left DIV 64)
+              ) in
+    (gas + otherCost, gas + stipend)
+End
+
+Definition step_call_def:
+  step_call op = do
+    valueOffset <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + valueOffset);
+    gas <<- w2n $ EL 0 args;
+    address <<- w2w $ EL 1 args;
+    value <<- if 0 < valueOffset then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + valueOffset) args;
+    argsSize <<- w2n $ EL (3 + valueOffset) args;
+    retOffset <<- w2n $ EL (4 + valueOffset) args;
+    retSize <<- w2n $ EL (5 + valueOffset) args;
+    (offset, size) <<- max_expansion_range
+      (argsOffset, argsSize) (retOffset, retSize);
+    mx <- memory_expansion_info offset size;
+    accessCost <- access_address address;
+    positiveValueCost <<- if 0 < value then 9000 else 0;
+    accounts <- get_accounts;
+    toAccount <<- accounts address;
+    createCost <<- if op = Call ∧ 0 < value ∧ account_empty toAccount
+                   then 25000 else 0;
+    gasLeft <- get_gas_left;
+    (dynamicGas, stipend) <<- call_gas value gas gasLeft mx.cost $
+                                accessCost + positiveValueCost + createCost;
+    consume_gas $ static_gas op + dynamicGas + mx.cost;
+    if 0 < value then assert_not_static else return ();
+    expand_memory mx.expand_by;
+    sender <- get_callee;
+    if (accounts sender).balance < value then do
+      push_stack $ b2w F;
+      set_return_data [];
+      unuse_gas stipend
+    od else do
+      set_return_data [];
+      depth <- get_num_contexts;
+      if SUC depth > 1024 then do
+        unuse_gas stipend;
+        push_stack $ b2w F
+      od else do
+        data <- read_memory argsOffset argsSize;
+        code <<- toAccount.code;
+        subAccounts <<-
+          if op ≠ DelegateCall ∧ 0 < value then
+            transfer_value sender address value accounts
+          else accounts;
+        caller <- get_caller;
+        callValue <- get_value;
+        subContextTx <<- <|
+            from     := if op = DelegateCall then caller else sender
+          ; to       := if op = CallCode ∨ op = DelegateCall
+                        then sender else address
+          ; value    := if op = DelegateCall then callValue else value
+          ; gasLimit := stipend
+          ; data     := data
+          (* unused: for concreteness *)
+          ; nonce := 0; gasPrice := 0; accessList := []
+        |>;
+        static <- get_static;
+        accesses <- get_accesses;
+        subContextParams <<- <|
+            code     := toAccount.code
+          ; accounts := subAccounts
+          ; accesses := accesses
+          ; outputTo := Memory <| offset := retOffset; size := retSize |>
+          ; static   := (op = StaticCall ∨ static)
+        |>;
+        push_context $ initial_context subContextParams subContextTx;
+      od
+    od
   od
 End
 
@@ -1079,18 +1039,12 @@ Definition step_inst_def:
   ∧ step_inst (Swap n) = step_swap n
   ∧ step_inst (Log n) = step_log n
   ∧ step_inst Create = step_create F
-  (*
-  ∧ step_inst Call = step_call Normal
-  ∧ step_inst CallCode = step_call Code
-  *)
+  ∧ step_inst Call = step_call Call
+  ∧ step_inst CallCode = step_call CallCode
   ∧ step_inst Return = step_return T
-  (*
-  ∧ step_inst DelegateCall = step_call Delegate
-  *)
+  ∧ step_inst DelegateCall = step_call DelegateCall
   ∧ step_inst Create2 = step_create T
-  (*
-  ∧ step_inst StaticCall = step_call Static
-  *)
+  ∧ step_inst StaticCall = step_call StaticCall
   ∧ step_inst Revert = step_return F
   ∧ step_inst Invalid = step_invalid
   ∧ step_inst SelfDestruct = step_self_destruct
