@@ -863,9 +863,9 @@ Definition step_self_destruct_def:
   od
 End
 
-Definition abort_create_def:
-  abort_create cappedGas = do
-    unuse_gas cappedGas;
+Definition abort_unuse_def:
+  abort_unuse n = do
+    unuse_gas n;
     push_stack $ b2w F
   od
 End
@@ -943,11 +943,54 @@ Definition step_create_def:
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
        SUC depth > 1024
-    then abort_create cappedGas
+    then abort_unuse cappedGas
     else if ¬(account_empty toCreate)
     then abort_create_exists senderAddress sender
     else proceed_create senderAddress sender
            address value code toCreate cappedGas
+  od
+End
+
+Definition abort_call_value_def:
+  abort_call_value stipend = do
+    push_stack $ b2w F;
+    set_return_data [];
+    unuse_gas stipend
+  od
+End
+
+Definition proceed_call_def:
+  proceed_call op sender address value
+    argsOffset argsSize code stipend
+    accounts outputTo =
+  do
+    data <- read_memory argsOffset argsSize;
+    subAccounts <<-
+      if op ≠ DelegateCall ∧ 0 < value then
+        transfer_value sender address value accounts
+      else accounts;
+    caller <- get_caller;
+    callValue <- get_value;
+    subContextTx <<- <|
+        from     := if op = DelegateCall then caller else sender
+      ; to       := if op = CallCode ∨ op = DelegateCall
+                    then sender else address
+      ; value    := if op = DelegateCall then callValue else value
+      ; gasLimit := stipend
+      ; data     := data
+      (* unused: for concreteness *)
+      ; nonce := 0; gasPrice := 0; accessList := []
+    |>;
+    static <- get_static;
+    accesses <- get_accesses;
+    subContextParams <<- <|
+        code     := code
+      ; accounts := subAccounts
+      ; accesses := accesses
+      ; outputTo := outputTo
+      ; static   := (op = StaticCall ∨ static)
+    |>;
+    push_context $ initial_context subContextParams subContextTx;
   od
 End
 
@@ -978,46 +1021,16 @@ Definition step_call_def:
     if 0 < value then assert_not_static else return ();
     expand_memory mx.expand_by;
     sender <- get_callee;
-    if (lookup_account sender accounts).balance < value then do
-      push_stack $ b2w F;
-      set_return_data [];
-      unuse_gas stipend
-    od else do
+    if (lookup_account sender accounts).balance < value
+    then abort_call_value stipend
+    else do
       set_return_data [];
       depth <- get_num_contexts;
-      if SUC depth > 1024 then do
-        unuse_gas stipend;
-        push_stack $ b2w F
-      od else do
-        data <- read_memory argsOffset argsSize;
-        code <<- toAccount.code;
-        subAccounts <<-
-          if op ≠ DelegateCall ∧ 0 < value then
-            transfer_value sender address value accounts
-          else accounts;
-        caller <- get_caller;
-        callValue <- get_value;
-        subContextTx <<- <|
-            from     := if op = DelegateCall then caller else sender
-          ; to       := if op = CallCode ∨ op = DelegateCall
-                        then sender else address
-          ; value    := if op = DelegateCall then callValue else value
-          ; gasLimit := stipend
-          ; data     := data
-          (* unused: for concreteness *)
-          ; nonce := 0; gasPrice := 0; accessList := []
-        |>;
-        static <- get_static;
-        accesses <- get_accesses;
-        subContextParams <<- <|
-            code     := toAccount.code
-          ; accounts := subAccounts
-          ; accesses := accesses
-          ; outputTo := Memory <| offset := retOffset; size := retSize |>
-          ; static   := (op = StaticCall ∨ static)
-        |>;
-        push_context $ initial_context subContextParams subContextTx;
-      od
+      if SUC depth > 1024
+      then abort_unuse stipend
+      else proceed_call op sender address value
+             argsOffset argsSize toAccount.code stipend
+             accounts (Memory <| offset := retOffset; size := retSize |>)
     od
   od
 End
@@ -1288,8 +1301,8 @@ Definition update_beacon_block_def:
   let root_idx = timestamp_idx + buffer_length in
   let a = lookup_account addr accounts in
   let s0 = a.storage in
-  let s1 = (n2w timestamp_idx =+ n2w b.timeStamp) s0 in
-  let s2 = (n2w root_idx =+ b.parentBeaconBlockRoot) s1 in
+  let s1 = update_storage (n2w timestamp_idx) (n2w b.timeStamp) s0 in
+  let s2 = update_storage (n2w root_idx) (b.parentBeaconBlockRoot) s1 in
   update_account addr (a with storage := s2) accounts
 End
 

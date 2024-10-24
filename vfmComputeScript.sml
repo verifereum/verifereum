@@ -1,9 +1,9 @@
 open HolKernel boolLib bossLib Parse dep_rewrite blastLib
      cv_typeTheory cv_transLib cv_typeLib cvTheory cv_stdTheory
-     pairTheory combinTheory optionTheory sumTheory listTheory
-     wordsTheory alistTheory arithmeticTheory finite_setTheory
-     sptreeTheory whileTheory recursiveLengthPrefixTheory
-     vfmContextTheory vfmStateTheory vfmExecutionTheory;
+     pairTheory combinTheory optionTheory sumTheory listTheory byteTheory
+     wordsTheory alistTheory arithmeticTheory finite_setTheory sptreeTheory
+     whileTheory recursiveLengthPrefixTheory vfmContextTheory vfmStateTheory
+     vfmExecutionTheory;
 
 val _ = new_theory "vfmCompute";
 
@@ -458,25 +458,7 @@ QED
 
 val from_to_execution_state = from_to_thm_for “:execution_state”;
 
-val () = cv_auto_trans numposrepTheory.n2l_n2lA;
-
-val rlp_bytes_alt =
-  rlp_bytes_def |> ONCE_REWRITE_RULE[
-    METIS_PROVE[]“A ∧ B ⇔ (if A then B else F)”
-  ];
-
-val rlp_bytes_pre_def = cv_auto_trans_pre rlp_bytes_alt;
-
-Theorem rlp_bytes_pre[cv_pre]:
-  ∀b. rlp_bytes_pre b
-Proof
-  rw[rlp_bytes_pre_def, LENGTH_EQ_NUM_compute]
-QED
-
-val () = cv_auto_trans Keccak_256_bytes_def;
-
 (* TODO: figure out what to do with these - proofs too slow? *)
-open byteTheory
 
 (*
 this works but is slow and not needed here - might be needed elsewhere
@@ -577,6 +559,31 @@ QED
 val () = cv_auto_trans set_byte_256;
 
 val () = cv_auto_trans (INST_TYPE [alpha |-> “:256”] word_of_bytes_def);
+
+val sign_extend_pre_def = cv_auto_trans_pre sign_extend_def;
+
+Theorem sign_extend_pre[cv_pre]:
+  sign_extend_pre n w
+Proof
+  rw[sign_extend_pre_def, NULL_EQ]
+QED
+
+val () = cv_auto_trans numposrepTheory.n2l_n2lA;
+
+val rlp_bytes_alt =
+  rlp_bytes_def |> ONCE_REWRITE_RULE[
+    METIS_PROVE[]“A ∧ B ⇔ (if A then B else F)”
+  ];
+
+val rlp_bytes_pre_def = cv_auto_trans_pre rlp_bytes_alt;
+
+Theorem rlp_bytes_pre[cv_pre]:
+  ∀b. rlp_bytes_pre b
+Proof
+  rw[rlp_bytes_pre_def, LENGTH_EQ_NUM_compute]
+QED
+
+val () = cv_auto_trans Keccak_256_bytes_def;
 
 val () = cv_auto_trans address_for_create_def;
 
@@ -723,13 +730,27 @@ fun step_x_pre_tac pre_def =
   \\ drule pop_stack_INL_LENGTH
   \\ rw[] \\ strip_tac \\ gvs[]
 
+Triviality LET_PROD_RATOR:
+  (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
+Proof
+  rw[LET_THM, UNCURRY]
+QED
+
+Triviality LET_UNCURRY:
+  (let (x,y) = M in N x y) = let p = M; x = FST p; y = SND p in N x y
+Proof
+  rw[UNCURRY]
+QED
+
 fun mconv def =
   SIMP_CONV std_ss [
     def, copy_to_memory_def,
     bind_def,
     ignore_bind_def,
+    COND_RATOR,
     LET_RATOR,
-    COND_RATOR
+    LET_PROD_RATOR,
+    LET_UNCURRY
 ];
 
 fun trans_step_x need_pre def = let
@@ -751,6 +772,10 @@ in
 end
 val tf = trans_step_x false;
 val tt = trans_step_x true;
+
+val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec_def;
+
+val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec;
 
 val th = tt step_exp_def;
 val th = tt step_keccak256_def;
@@ -776,9 +801,9 @@ val th = tt step_return_def;
 val th = tf step_invalid_def;
 val th = tt step_self_destruct_def;
 
-val () = “abort_create n s” |>
+val () = “abort_unuse n s” |>
   SIMP_CONV std_ss [
-    abort_create_def, bind_def, ignore_bind_def
+    abort_unuse_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
 val () = “abort_create_exists x y s” |>
@@ -793,161 +818,84 @@ val () = “proceed_create a b c d e f g s” |>
 
 val th = tt step_create_def;
 
-(*
-TODO: step_call_def
-TODO: ...
-*)
-
-Triviality LET_PROD_RATOR:
-  (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
-Proof
-  rw[LET_THM, UNCURRY]
-QED
-
-Triviality LET_UNCURRY:
-  (let (x,y) = M in N x y) = let p = M; x = FST p; y = SND p in N x y
-Proof
-  rw[UNCURRY]
-QED
-
-val step_call_pre_def = “step_call t s” |>
+val () = “abort_call_value x s” |>
   SIMP_CONV std_ss [
-    step_call_def, bind_def, ignore_bind_def,
-    LET_RATOR, LET_PROD_RATOR, LET_UNCURRY, COND_RATOR
-  ]
-  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
-  |> cv_auto_trans_pre;
+    abort_call_value_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
 
-Theorem step_call_pre[cv_pre]:
-  ∀t s. step_call_pre t s
-Proof
-  rw[step_call_pre_def, assert_def, pop_stack_def, bind_def,
-     ignore_bind_def, return_def, CaseEq"prod", CaseEq"sum"]
-  \\ rw[LENGTH_TAKE_EQ]
-  \\ strip_tac \\ gvs[]
-QED
-
-val step_create_pre_def = “step_create t s” |>
+val () = “proceed_call a b c d e f g h i j s” |>
   SIMP_CONV std_ss [
-    step_create_def, bind_def, ignore_bind_def, LET_RATOR
-  ]
-  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
-  |> cv_auto_trans_pre;
+    proceed_call_def, bind_def, ignore_bind_def, LET_RATOR
+  ] |> cv_auto_trans;
 
-Theorem step_create_pre[cv_pre]:
-  ∀t s. step_create_pre t s
-Proof
-  rw[step_create_pre_def, assert_def]
-  \\ strip_tac \\ gs[]
-QED
-
-val step_sload_pre_def = “step_sload s” |>
-  SIMP_CONV std_ss [
-    step_sload_def, bind_def, ignore_bind_def,
-    LET_RATOR
-  ] |>
-  ONCE_REWRITE_RULE [
-    GSYM lookup_account_def
-  ] |>
-  ONCE_REWRITE_RULE [
-    GSYM lookup_storage_def
-  ] |>
-  cv_auto_trans_pre;
-
-Theorem step_sload_pre[cv_pre]:
-  ∀s. step_sload_pre s
-Proof
-  rw[step_sload_pre_def, assert_def]
-  \\ strip_tac \\ gs[]
-QED
-
-val step_sstore_pre_def = “step_sstore s” |>
-  SIMP_CONV std_ss [
-    step_sstore_def,
-    bind_def, ignore_bind_def, LET_RATOR,
-    update_accounts, C_DEF
-  ] |>
-  ONCE_REWRITE_RULE [
-    GSYM lookup_account_def,
-    GSYM update_account_def
-  ] |>
-  ONCE_REWRITE_RULE [
-    GSYM lookup_storage_def,
-    GSYM update_storage_def
-  ] |>
-  cv_auto_trans_pre;
-
-Theorem step_sstore_pre[cv_pre]:
-  ∀s. step_sstore_pre s
-Proof
-  rw[step_sstore_pre_def, assert_def]
-  \\ strip_tac \\ gs[]
-QED
-
-val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec_def;
-
-val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec;
+val th = tt step_call_def;
 
 val step_inst_pre_def = step_inst_def |>
   ONCE_REWRITE_RULE[FUN_EQ_THM] |>
   SIMP_RULE std_ss [
-    stack_op_def,
-    binop_def,
-    monop_def,
-    modop_def,
+    step_monop_def,
+    step_binop_def,
+    step_modop_def,
     with_zero_def,
-    push_from_ctxt_def,
-    push_from_tx_def,
+    step_context_def,
+    step_callParams_def,
+    step_txParams_def,
+    step_copy_to_memory_def,
     copy_to_memory_def,
-    copy_to_memory_check_def,
-    store_to_memory_def,
-    update_accounts_def,
-    bind_def, ignore_bind_def, return_def, LET_RATOR
-  ] |>
-  ONCE_REWRITE_RULE [
-    GSYM lookup_account_def,
-    GSYM update_account_def
-  ] |>
-  cv_auto_trans_pre;
+    bind_def, ignore_bind_def, LET_RATOR
+  ] |> cv_auto_trans_pre;
 
 Theorem step_inst_pre[cv_pre]:
-  ∀i s. step_inst_pre i s
+  step_inst_pre i s
 Proof
   simp[step_inst_pre_def]
   \\ rpt gen_tac
   \\ rpt conj_tac
   \\ rpt gen_tac
   \\ TRY(disch_then(assume_tac o ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
-  \\ rw[assert_def] \\ TRY (strip_tac \\ gs[NULL_EQ])
-  \\ qmatch_goalsub_abbrev_tac`LENGTH (TL ls)`
-  \\ Cases_on`ls` \\ gs[]
+  \\ rpt strip_tac \\ gvs[]
+  \\ drule pop_stack_INL_LENGTH \\ gvs[]
 QED
 
 val option_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
 
-val () = “inc_pc n s” |>
+val return_destination_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
+
+val () = “inc_pc_or_jump n s” |>
   SIMP_CONV std_ss [
-    inc_pc_def, bind_def, ignore_bind_def,
+    inc_pc_or_jump_def, bind_def, ignore_bind_def,
     LET_RATOR, option_CASE_rator] |>
   cv_auto_trans;
+
+val () = “pop_and_incorporate_context b s” |>
+  SIMP_CONV std_ss [
+    pop_and_incorporate_context_def,
+    bind_def, ignore_bind_def, COND_RATOR
+  ] |> cv_auto_trans;
+
+val () = “handle_exception e s” |>
+  SIMP_CONV std_ss [
+    handle_exception_def,
+    bind_def, ignore_bind_def, LET_RATOR,
+    update_accounts_def, COND_RATOR,
+    return_destination_CASE_rator
+  ] |> cv_auto_trans;
 
 val () =  step_def |>
   SIMP_RULE std_ss [
     bind_def, ignore_bind_def, LET_RATOR,
-    C_DEF, COND_RATOR, option_CASE_rator
-  ] |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  cv_auto_trans;
+    COND_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
 
 val () = initial_access_sets_def
  |> SIMP_RULE std_ss [
       GSYM fset_ABS_MAP,
       fBIGUNION_fset_ABS_FOLDL
-    ]
- |> cv_auto_trans;
+    ] |> cv_auto_trans;
 
 val () = cv_auto_trans initial_tx_params_def;
 
@@ -1141,9 +1089,6 @@ Proof
 QED
 
 val post_transaction_accounting_pre_def = post_transaction_accounting_def
-  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
-  |> ONCE_REWRITE_RULE[GSYM update_account_def]
-  |> ONCE_REWRITE_RULE[GSYM update_account_def]
   |> cv_auto_trans_pre;
 
 Theorem post_transaction_accounting_pre[cv_pre]:
@@ -1154,11 +1099,7 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-val () = update_beacon_block_def
-  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
-  |> ONCE_REWRITE_RULE[GSYM update_storage_def]
-  |> ONCE_REWRITE_RULE[GSYM update_account_def]
-  |> cv_auto_trans;
+val () = update_beacon_block_def |> cv_auto_trans;
 
 val () = cv_auto_trans empty_return_destination_def;
 
