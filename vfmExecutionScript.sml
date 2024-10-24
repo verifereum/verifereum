@@ -26,6 +26,16 @@ Definition word_size_def:
   word_size byteSize = (byteSize + 31) DIV 32
 End
 
+Definition sign_extend_def:
+  sign_extend (n:bytes32) (w:bytes32) : bytes32 =
+  if n > 31w then w else
+  let m = 31 - w2n n in
+  let bs = DROP m $ word_to_bytes w T in
+  let sign = if NULL bs then 0w else HD bs >> 7 in
+  let sw = if sign = 0w then 0w else 255w in
+    word_of_bytes T 0w $ REPLICATE m sw ++ bs
+End
+
 Definition account_empty_def:
   account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
 End
@@ -491,16 +501,6 @@ Definition step_txParams_def:
     txParams <- get_tx_params;
     push_stack $ f txParams
   od
-End
-
-Definition sign_extend_def:
-  sign_extend (n:bytes32) (w:bytes32) : bytes32 =
-  if n > 31w then w else
-  let m = 31 - w2n n in
-  let bs = DROP m $ word_to_bytes w T in
-  let sign = if NULL bs then 0w else HD bs >> 7 in
-  let sw = if sign = 0w then 0w else 255w in
-    word_of_bytes T 0w $ REPLICATE m sw ++ bs
 End
 
 Definition step_exp_def:
