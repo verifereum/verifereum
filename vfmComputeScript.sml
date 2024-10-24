@@ -107,23 +107,15 @@ Proof
   rw[from_storage_def] \\ EVAL_TAC
 QED
 
-Definition lookup_storage_def:
-  lookup_storage (s: storage) k = s k
-End
-
-Definition update_storage_def:
-  update_storage (s: storage) k v = (k =+ v) s
-End
-
 Definition cv_lookup_storage_def:
-  cv_lookup_storage (s:cv) (k:cv) =
+  cv_lookup_storage (k:cv) (s:cv) =
   let v = cv_lookup k s in
     cv_if (cv_ispair v) (cv_snd v) (Num 0)
 End
 
 Theorem lookup_storage_cv_rep[cv_rep]:
-  from_word (lookup_storage s k) =
-  cv_lookup_storage (from_storage s) (from_word k)
+  from_word (lookup_storage k s) =
+  cv_lookup_storage (from_word k) (from_storage s)
 Proof
   gs[lookup_storage_def, cv_lookup_storage_def, GSYM cv_lookup_thm,
      from_word_def, from_storage_def, lookup_build_spt]
@@ -134,15 +126,15 @@ Proof
 QED
 
 Definition cv_update_storage_def:
-  cv_update_storage (s:cv) (k:cv) (v:cv) =
+  cv_update_storage (k:cv) (v:cv) (s:cv) =
   cv_if (cv_eq v (Num 0))
     (cv_delete k s)
     (cv_insert k v s)
 End
 
 Theorem update_storage_cv_rep[cv_rep]:
-  from_storage (update_storage s k v) =
-  cv_update_storage (from_storage s) (from_word k) (from_word v)
+  from_storage (update_storage k v s) =
+  cv_update_storage (from_word k) (from_word v) (from_storage s)
 Proof
   gs[from_storage_def, cv_update_storage_def,
      update_storage_def, from_word_def, cv_eq_def]
@@ -195,19 +187,15 @@ val () = cv_auto_trans empty_account_state_def;
 
 val cv_empty_account_state_thm = theorem "cv_empty_account_state_thm";
 
-Definition lookup_account_def:
-  lookup_account (accounts: evm_accounts) address = accounts address
-End
-
 Definition cv_lookup_account_def:
-  cv_lookup_account (a:cv) (k:cv) =
+  cv_lookup_account (k:cv) (a:cv) =
   let v = cv_lookup k a in
     cv_if (cv_ispair v) (cv_snd v) (cv_empty_account_state (Num 0))
 End
 
 Theorem lookup_account_cv_rep[cv_rep]:
-  ^from_account_state (lookup_account a k) =
-  cv_lookup_account (from_evm_accounts a) (from_word k)
+  ^from_account_state (lookup_account k a) =
+  cv_lookup_account (from_word k) (from_evm_accounts a)
 Proof
   gs[lookup_account_def, cv_lookup_account_def, GSYM cv_lookup_thm,
      from_word_def, from_evm_accounts_def, lookup_build_spt]
@@ -217,21 +205,16 @@ Proof
   \\ gs[from_option_def, cv_empty_account_state_thm]
 QED
 
-Definition update_account_def:
-  update_account (accounts: evm_accounts) address new_account =
-    (address =+ new_account) accounts
-End
-
 Definition cv_update_account_def:
-  cv_update_account (a:cv) (k:cv) (v:cv) =
+  cv_update_account (k:cv) (v:cv) (a:cv) =
   cv_if (cv_eq v (cv_empty_account_state (Num 0)))
     (cv_delete k a)
     (cv_insert k v a)
 End
 
 Theorem update_account_cv_rep[cv_rep]:
-  from_evm_accounts (update_account a k v) =
-  cv_update_account (from_evm_accounts a) (from_word k) (^from_account_state v)
+  from_evm_accounts (update_account k v a) =
+  cv_update_account (from_word k) (^from_account_state v) (from_evm_accounts a)
 Proof
   gs[from_evm_accounts_def, cv_update_account_def,
      update_account_def, from_word_def, cv_eq_def]
@@ -636,7 +619,7 @@ val () = “get_static s” |>
   |> cv_auto_trans;
 
 val () = “get_code s” |>
-  SIMP_CONV std_ss [get_code_def, bind_def, Once $ GSYM lookup_account_def]
+  SIMP_CONV std_ss [get_code_def, bind_def]
   |> cv_auto_trans;
 
 val () = “get_current_code s” |>
@@ -713,19 +696,9 @@ val () = “write_memory x y s” |>
     write_memory_def, bind_def, LET_RATOR
   ] |> cv_auto_trans;
 
-Triviality storage_updated_by_update:
-  x with storage updated_by (y =+ z) =
-  x with storage updated_by (λs. update_storage s y z)
-Proof
-  rw[account_state_component_equality, update_storage_def]
-QED
-
 val () = “write_storage x y z s” |>
   SIMP_CONV std_ss [
     write_storage_def,
-    Once $ GSYM lookup_account_def,
-    Once $ GSYM update_account_def,
-    Once $ GSYM update_storage_def,
     update_accounts_def,
     storage_updated_by_update
   ] |> cv_auto_trans;
@@ -737,9 +710,6 @@ val () = “assert_not_static s” |>
 
 val () = transfer_value_def |>
   SIMP_RULE std_ss [combinTheory.C_DEF] |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
 val () = “step_stop s” |>
@@ -757,15 +727,20 @@ fun step_x_pre_tac pre_def =
   \\ rw[] \\ strip_tac \\ gvs[]
 
 fun mconv def =
-  SIMP_CONV std_ss [def, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR];
+  SIMP_CONV std_ss [
+    def, copy_to_memory_def,
+    bind_def,
+    ignore_bind_def,
+    LET_RATOR,
+    COND_RATOR
+];
 
-fun trans_step_x need_pre conv def = let
+fun trans_step_x need_pre def = let
   val const = def |> SPEC_ALL |> concl |> lhs
   val stype = #1 $ dom_rng $ type_of const
   val s = mk_var("s", stype)
   val tm = mk_comb(const, s)
-  val def_conv = mconv def THENC conv
-  val xdef = def_conv tm
+  val xdef = mconv def tm
 in
   if need_pre then let
     val pre_def = cv_auto_trans_pre xdef
@@ -777,44 +752,37 @@ in
   else
     (cv_auto_trans xdef; TRUTH)
 end
+val tf = trans_step_x false;
+val tt = trans_step_x true;
 
-val laconv = ONCE_REWRITE_CONV[GSYM lookup_account_def];
-val lsconv = ONCE_REWRITE_CONV[GSYM lookup_storage_def];
-val ctmconv = mconv copy_to_memory_def;
+val th = tt step_exp_def;
+val th = tt step_keccak256_def;
+val th = tt step_sload_def;
+val th = tt step_sstore_def;
+val th = tt step_balance_def;
+val th = tt step_call_data_load_def;
+val th = tt step_return_data_copy_def;
+val th = tt step_ext_code_size_def;
+val th = tt step_ext_code_copy_def;
+val th = tt step_ext_code_hash_def;
+val th = tt step_block_hash_def;
+val th = tf step_self_balance_def;
+val th = tt step_mload_def;
+val th = tt step_mstore_def;
+val th = tt step_jump_def;
+val th = tt step_jumpi_def;
+val th = tf step_push_def;
+val th = tt step_dup_def;
+val th = tt step_swap_def;
+val th = tt step_log_def;
+val th = tt step_return_def;
+val th = tf step_invalid_def;
+val th = tt step_self_destruct_def;
 
-val tf = trans_step_x false ALL_CONV;
-val tfl = trans_step_x false laconv;
-val tx = trans_step_x true ALL_CONV;
-val txl = trans_step_x true laconv
-val txls = trans_step_x true (laconv THENC lsconv)
-val txc = trans_step_x true ctmconv
-
-val th = tx   step_exp_def;
-val th = tx   step_keccak256_def;
-val th = txls step_sload_def;
-val th = txls step_sstore_def;
-val th = txl  step_balance_def;
-val th = tx   step_call_data_load_def;
-val th = txc  step_return_data_copy_def;
-val th = txl  step_ext_code_size_def;
-val th = txc  step_ext_code_copy_def;
-val th = txl  step_ext_code_hash_def;
-val th = tx   step_block_hash_def;
-val th = tfl  step_self_balance_def;
-val th = tx   step_mload_def;
-val th = tx   step_mstore_def;
-val th = tx   step_jump_def;
-val th = tx   step_jumpi_def;
-val th = tf   step_push_def;
-val th = tx   step_dup_def;
-val th = tx   step_swap_def;
-val th = tx   step_log_def;
-val th = tx   step_return_def;
-val th = tf   step_invalid_def;
 (*
-TODO: step_self_destruct_def
 TODO: step_create_def
 TODO: step_call_def
+TODO: ...
 *)
 
 Triviality LET_PROD_RATOR:

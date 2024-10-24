@@ -14,6 +14,23 @@ Definition Keccak_256_bytes_def:
     MAP (PAD_RIGHT 0 8 o word_to_bin_list) bs
 End
 
+Definition lookup_account_def:
+  lookup_account address (accounts: evm_accounts) = accounts address
+End
+
+Definition update_account_def:
+  update_account address new_account (accounts: evm_accounts) =
+    (address =+ new_account) accounts
+End
+
+Definition lookup_storage_def:
+  lookup_storage k (s: storage) = s k
+End
+
+Definition update_storage_def:
+  update_storage k v (s: storage) = (k =+ v) s
+End
+
 Definition b2w_def[simp]:
   b2w T = 1w ∧ b2w F = 0w
 End
@@ -280,7 +297,7 @@ End
 Definition get_code_def:
   get_code address = do
     accounts <- get_accounts;
-    return $ (accounts address).code
+    return $ (lookup_account address accounts).code
   od
 End
 
@@ -437,9 +454,9 @@ End
 Definition write_storage_def:
   write_storage address key value =
   update_accounts (λaccounts.
-    let account = accounts address in
-    let newAccount = account with storage updated_by (key =+ value);
-    in (address =+ newAccount) accounts)
+    let account = lookup_account address accounts in
+    let newAccount = account with storage updated_by (update_storage key value);
+    in update_account address newAccount accounts)
 End
 
 Definition assert_not_static_def:
@@ -452,11 +469,12 @@ End
 Definition transfer_value_def:
   transfer_value (fromAddress: address) toAddress value accounts =
   if value = 0 ∨ fromAddress = toAddress then accounts else
-    let sender = accounts fromAddress in
-    let recipient = accounts toAddress in
+    let sender = lookup_account fromAddress accounts in
+    let recipient = lookup_account toAddress accounts in
     let newSender = sender with balance updated_by flip $- value in
     let newRecipient = recipient with balance updated_by $+ value in
-    (toAddress =+ newRecipient) $ (fromAddress =+ newSender) accounts
+      update_account toAddress newRecipient $
+      update_account fromAddress newSender $ accounts
 End
 
 Definition step_stop_def:
@@ -549,7 +567,7 @@ Definition step_sload_def:
     accessCost <- access_slot (SK address key);
     consume_gas $ static_gas SLoad + accessCost;
     accounts <- get_accounts;
-    word <<- (accounts address).storage key;
+    word <<- lookup_storage key (lookup_account address accounts).storage;
     push_stack word
   od
 End
@@ -563,9 +581,9 @@ Definition step_sstore_def:
     assert (2300 ≤ gasLeft) OutOfGas;
     address <- get_callee;
     accounts <- get_accounts;
-    currentValue <<- (accounts address).storage key;
+    currentValue <<- lookup_storage key (lookup_account address accounts).storage;
     original <- get_original;
-    originalValue <<- (original address).storage key;
+    originalValue <<- lookup_storage key (lookup_account address original).storage;
     accessCost <- access_slot (SK address key);
     baseDynamicGas <<-
       if originalValue = currentValue ∧ currentValue ≠ value
@@ -602,7 +620,7 @@ Definition step_balance_def:
     accessCost <- access_address address;
     consume_gas $ static_gas Balance + accessCost;
     accounts <- get_accounts;
-    balance <<- n2w $ (accounts address).balance;
+    balance <<- n2w $ (lookup_account address accounts).balance;
     push_stack balance
   od
 End
@@ -646,7 +664,7 @@ Definition step_ext_code_size_def:
     accessCost <- access_address address;
     consume_gas $ static_gas ExtCodeSize + accessCost;
     accounts <- get_accounts;
-    code <<- (accounts address).code;
+    code <<- (lookup_account address accounts).code;
     push_stack $ n2w (LENGTH code)
   od
 End
@@ -671,7 +689,7 @@ Definition step_ext_code_hash_def:
     accessCost <- access_address address;
     consume_gas $ static_gas ExtCodeHash + accessCost;
     accounts <- get_accounts;
-    code <<- (accounts address).code;
+    code <<- (lookup_account address accounts).code;
     (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
     hash <<- if fIN address precompile_addresses then 0w
              else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ code;
@@ -698,7 +716,7 @@ Definition step_self_balance_def:
     consume_gas $ static_gas SelfBalance;
     accounts <- get_accounts;
     address <- get_callee;
-    balance <<- n2w (accounts address).balance;
+    balance <<- n2w (lookup_account address accounts).balance;
     push_stack balance
   od
 End
@@ -826,18 +844,19 @@ Definition step_self_destruct_def:
   step_self_destruct = do
     args <- pop_stack 1;
     address <<- w2w $ EL 0 args;
-    sender <- get_callee;
-    accessCost <- access_address sender;
+    senderAddress <- get_callee;
+    accessCost <- access_address senderAddress;
     accounts <- get_accounts;
-    balance <<- (accounts sender).balance;
-    beneficiaryEmpty <<- account_empty $ accounts address;
+    sender <<- lookup_account senderAddress accounts;
+    balance <<- sender.balance;
+    beneficiaryEmpty <<- account_empty $ lookup_account address accounts;
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty then 25000 else 0;
     consume_gas $ zero_warm accessCost + transferCost;
     assert_not_static;
-    set_accounts $ transfer_value sender address balance accounts;
-    if sender = address then
-      update_accounts $ (λaccounts.
-        (sender =+ (accounts sender with balance := 0)) accounts)
+    set_accounts $ transfer_value senderAddress address balance accounts;
+    if senderAddress = address then
+      update_accounts $
+        update_account senderAddress (sender with balance := 0)
     else return ();
     (* TODO: destroy created contract if this is a contract creation *)
     finish
@@ -859,7 +878,7 @@ Definition step_create_def:
     code <- read_memory offset size;
     senderAddress <- get_callee;
     accounts <- get_accounts;
-    sender <<- accounts senderAddress;
+    sender <<- lookup_account senderAddress accounts;
     nonce <<- sender.nonce;
     address <<- if two
                 then address_for_create2 senderAddress salt code
@@ -871,7 +890,7 @@ Definition step_create_def:
     assert_not_static;
     set_return_data [];
     depth <- get_num_contexts;
-    toCreate <<- accounts address;
+    toCreate <<- lookup_account address accounts;
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
        SUC depth > 1024
@@ -884,13 +903,13 @@ Definition step_create_def:
     then
       do
         update_accounts $
-          (senderAddress =+ sender with nonce updated_by SUC);
+          update_account senderAddress $ sender with nonce updated_by SUC;
         push_stack $ b2w F
       od
     else
       do
         update_accounts $
-          (senderAddress =+ sender with nonce updated_by SUC);
+          update_account senderAddress $ sender with nonce updated_by SUC;
         subContextTx <<- <|
             from     := senderAddress
           ; to       := 0w
@@ -903,8 +922,9 @@ Definition step_create_def:
         superAccounts <- get_accounts;
         subAccounts <<-
           transfer_value senderAddress address value $
-          (address =+ toCreate with nonce updated_by SUC)
-          superAccounts;
+          update_account address
+            (toCreate with nonce updated_by SUC)
+            superAccounts;
         accesses <- get_accesses;
         static <- get_static;
         subContextParams <<- <|
@@ -936,7 +956,7 @@ Definition step_call_def:
     accessCost <- access_address address;
     positiveValueCost <<- if 0 < value then 9000 else 0;
     accounts <- get_accounts;
-    toAccount <<- accounts address;
+    toAccount <<- lookup_account address accounts;
     createCost <<- if op = Call ∧ 0 < value ∧ account_empty toAccount
                    then 25000 else 0;
     gasLeft <- get_gas_left;
@@ -946,7 +966,7 @@ Definition step_call_def:
     if 0 < value then assert_not_static else return ();
     expand_memory mx.expand_by;
     sender <- get_callee;
-    if (accounts sender).balance < value then do
+    if (lookup_account sender accounts).balance < value then do
       push_stack $ b2w F;
       set_return_data [];
       unuse_gas stipend
@@ -1146,7 +1166,8 @@ Definition handle_exception_def:
     | Code address =>
         if success then do
           update_accounts $ (λaccounts.
-            (address =+ (accounts address with code := code))
+            update_account address
+              (lookup_account address accounts with code := code)
               accounts) ;
           set_return_data [];
           push_stack $ w2w address;
@@ -1219,11 +1240,13 @@ Definition post_transaction_accounting_def:
   let totalGasUsed = txGasUsed - gasRefund in
   let transactionFee = totalGasUsed * priorityFeePerGas in
   let accounts = if result = NONE then t.accounts else acc in
-  let sender = accounts tx.from in
-  let feeRecipient = accounts blk.coinBase in
+  let sender = lookup_account tx.from accounts in
+  let feeRecipient = lookup_account blk.coinBase accounts in
   let newAccounts =
-    (tx.from =+ sender with balance updated_by $+ refundEther) $
-    (blk.coinBase =+ feeRecipient with balance updated_by $+ transactionFee)
+    update_account tx.from
+      (sender with balance updated_by $+ refundEther) $
+    update_account blk.coinBase
+      (feeRecipient with balance updated_by $+ transactionFee)
     accounts in
   let logs = if result = NONE then logs else [] in
   let tr = <| gasUsed := totalGasUsed;
@@ -1251,11 +1274,11 @@ Definition update_beacon_block_def:
   let buffer_length = 8191n in
   let timestamp_idx = b.timeStamp MOD buffer_length in
   let root_idx = timestamp_idx + buffer_length in
-  let a = accounts addr in
+  let a = lookup_account addr accounts in
   let s0 = a.storage in
   let s1 = (n2w timestamp_idx =+ n2w b.timeStamp) s0 in
   let s2 = (n2w root_idx =+ b.parentBeaconBlockRoot) s1 in
-  (addr =+ a with storage := s2) accounts
+  update_account addr (a with storage := s2) accounts
 End
 
 Definition run_block_def:
