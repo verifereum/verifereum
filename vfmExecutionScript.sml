@@ -14,6 +14,73 @@ Definition Keccak_256_bytes_def:
     MAP (PAD_RIGHT 0 8 o word_to_bin_list) bs
 End
 
+Definition b2w_def[simp]:
+  b2w T = 1w ∧ b2w F = 0w
+End
+
+Definition with_zero_def:
+  with_zero f x y = if y = 0w then 0w else f x y
+End
+
+Definition word_size_def:
+  word_size byteSize = (byteSize + 31) DIV 32
+End
+
+Definition account_empty_def:
+  account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
+End
+
+Definition memory_cost_def:
+  memory_cost byteSize =
+  let wordSize = word_size byteSize in
+  (wordSize * wordSize) DIV 512 + (3 * wordSize)
+End
+
+Definition memory_expansion_cost_def:
+  memory_expansion_cost oldSize newMinSize =
+  let newSize = MAX oldSize newMinSize in
+    memory_cost newSize - memory_cost oldSize
+End
+
+Definition call_has_value_def:
+  call_has_value op = (op = Call ∨ op = CallCode)
+End
+
+Definition max_expansion_range_def:
+  max_expansion_range (o1, s1) (o2, s2:num) =
+  let v1 = if s1 = 0 then 0 else o1 + s1 in
+  let v2 = if s2 = 0 then 0 else o2 + s2 in
+    if v1 < v2 then (o2, s2) else (o1, s1)
+End
+
+Definition call_gas_def:
+  call_gas value gas gasLeft memoryCost otherCost =
+  let stipend = if value = 0n then 0 else 2300 in
+  let gas = if gasLeft < memoryCost + otherCost then gas
+            else MIN gas (
+              let left = gasLeft - memoryCost - otherCost in
+                left - (left DIV 64)
+              ) in
+    (gas + otherCost, gas + stipend)
+End
+
+Definition address_for_create_def:
+  address_for_create (address: address) nonce : address =
+    let rlpSender = rlp_bytes $ word_to_bytes address T in
+    let rlpNonce = rlp_bytes $ if nonce = 0n then [] else
+                   MAP n2w $ REVERSE $ n2l 256 $ nonce in
+    let rlpBytes = rlp_list $ rlpSender ++ rlpNonce in
+    let hash = word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes in
+    w2w hash
+End
+
+Definition address_for_create2_def:
+  address_for_create2 (address: address) (salt: bytes32) (code: byte list) : address =
+  w2w $ word_of_bytes T (0w: bytes32) $ Keccak_256_bytes $
+    [0xffw] ++ word_to_bytes address T ++
+    word_to_bytes salt T ++ Keccak_256_bytes code
+End
+
 Datatype:
   exception =
   | OutOfGas
@@ -59,6 +126,10 @@ Definition assert_def:
   assert b e s = (if b then INL () else INR (SOME e), s) : unit execution_result
 End
 
+Definition reraise_def:
+  reraise e s = (INR e, s) : α execution_result
+End
+
 val _ = monadsyntax.declare_monad (
   "evm_execution",
   { bind = “bind”, unit = “return”,
@@ -77,6 +148,28 @@ Definition get_current_context_def:
     return (HD s.contexts) s
 End
 
+Definition set_current_context_def:
+  set_current_context c s =
+  if s.contexts = [] then
+    fail Impossible s
+  else
+    return () (s with contexts := c::(TL s.contexts))
+End
+
+Definition get_num_contexts_def:
+  get_num_contexts s = return (LENGTH s.contexts) s
+End
+
+Definition push_context_def:
+  push_context c s = return () $ s with contexts updated_by CONS c
+End
+
+Definition pop_context_def:
+  pop_context s =
+  if s.contexts = [] then fail Impossible s
+  else return (HD s.contexts) (s with contexts updated_by TL)
+End
+
 Definition get_tx_params_def:
   get_tx_params s = return s.txParams s
 End
@@ -93,6 +186,10 @@ Definition set_accounts_def:
   set_accounts a = update_accounts (K a)
 End
 
+Definition get_accesses_def:
+  get_accesses s = return s.accesses s
+End
+
 Definition set_accesses_def:
   set_accesses a s = return () (s with accesses := a)
 End
@@ -103,28 +200,6 @@ Definition get_original_def:
       fail Impossible s
     else
       return (LAST s.contexts).callParams.accounts s
-End
-
-Definition set_current_context_def:
-  set_current_context c s =
-  if s.contexts = [] then
-    fail Impossible s
-  else
-    return () (s with contexts := c::(TL s.contexts))
-End
-
-Definition b2w_def[simp]:
-  b2w T = 1w ∧ b2w F = 0w
-End
-
-Definition consume_gas_def:
-  consume_gas n =
-  do
-    context <- get_current_context;
-    newContext <<- context with gasUsed := context.gasUsed + n;
-    assert (newContext.gasUsed ≤ context.callParams.gasLimit) OutOfGas;
-    set_current_context newContext
-  od
 End
 
 Definition get_gas_left_def:
@@ -155,10 +230,94 @@ Definition get_value_def:
   od
 End
 
+Definition get_output_to_def:
+  get_output_to = do
+    context <- get_current_context;
+    return context.callParams.outputTo
+  od
+End
+
+Definition get_return_data_def:
+  get_return_data = do
+    context <- get_current_context;
+    return context.returnData
+  od
+End
+
+Definition get_return_data_check_def:
+  get_return_data_check offset size = do
+    data <- get_return_data;
+    assert (offset + size ≤ LENGTH data) OutOfBoundsRead;
+    return data
+  od
+End
+
 Definition set_return_data_def:
   set_return_data rd = do
     context <- get_current_context;
     newContext <<- context with returnData := rd;
+    set_current_context newContext
+  od
+End
+
+Definition get_static_def:
+  get_static = do
+    context <- get_current_context;
+    return context.callParams.static
+  od
+End
+
+Definition get_code_def:
+  get_code address = do
+    accounts <- get_accounts;
+    return $ (accounts address).code
+  od
+End
+
+Definition get_current_code_def:
+  get_current_code = do
+    context <- get_current_context;
+    return $ context.callParams.code
+  od
+End
+
+Definition get_call_data_def:
+  get_call_data = do
+    context <- get_current_context;
+    return $ context.callParams.data
+  od
+End
+
+Definition push_logs_def:
+  push_logs ls = do
+    context <- get_current_context;
+    set_current_context $ context with logs updated_by (flip APPEND ls)
+  od
+End
+
+Definition update_gas_refund_def:
+  update_gas_refund (add, sub) = do
+    context <- get_current_context;
+    set_current_context $
+      context with gasRefund updated_by (λx. x + add - sub)
+  od
+End
+
+Definition consume_gas_def:
+  consume_gas n =
+  do
+    context <- get_current_context;
+    newContext <<- context with gasUsed := context.gasUsed + n;
+    assert (newContext.gasUsed ≤ context.callParams.gasLimit) OutOfGas;
+    set_current_context newContext
+  od
+End
+
+Definition unuse_gas_def:
+  unuse_gas n = do
+    context <- get_current_context;
+    assert (n ≤ context.gasUsed) Impossible;
+    newContext <<- context with gasUsed := context.gasUsed - n;
     set_current_context newContext
   od
 End
@@ -181,6 +340,105 @@ Definition push_stack_def:
     set_current_context $
     context with stack := v :: context.stack
   od
+End
+
+Definition access_address_def:
+  access_address a s =
+  let addresses = s.accesses.addresses in
+    return
+      (if fIN a addresses then 100n else 2600)
+      (s with accesses := (s.accesses with addresses := fINSERT a addresses))
+End
+
+Definition access_slot_def:
+  access_slot x s =
+  let storageKeys = s.accesses.storageKeys in
+    return
+      (if fIN x storageKeys then 100n else 2100)
+      (s with accesses := (s.accesses with storageKeys := fINSERT x storageKeys))
+End
+
+Definition zero_warm_def:
+  zero_warm accessCost = if accessCost > 100 then accessCost else 0n
+End
+
+Datatype:
+  memory_expansion_info = <| cost: num; expand_by: num |>
+End
+
+Definition memory_expansion_info_def:
+  memory_expansion_info offset size = do
+    context <- get_current_context;
+    oldSize <<- LENGTH context.memory;
+    newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
+    return $
+      <| cost := memory_expansion_cost oldSize newMinSize
+       ; expand_by := MAX oldSize newMinSize |>
+  od
+End
+
+Definition expand_memory_def:
+  expand_memory expand_by = do
+    context <- get_current_context;
+    set_current_context $
+    context with memory := context.memory ++ REPLICATE expand_by 0w
+  od
+End
+
+Definition read_memory_def:
+  read_memory offset size = do
+    context <- get_current_context;
+    return $ TAKE size (DROP offset context.memory)
+  od
+End
+
+Definition write_memory_def:
+  write_memory byteIndex bytes = do
+    context <- get_current_context;
+    memory <<- context.memory;
+    set_current_context $
+      context with memory :=
+        TAKE byteIndex memory ++ bytes
+        ++ DROP (byteIndex + LENGTH bytes) memory
+  od
+End
+
+Definition copy_to_memory_def:
+  copy_to_memory gas offset sourceOffset size getSource = do
+    minimumWordSize <<- word_size size;
+    mx <- memory_expansion_info offset size;
+    dynamicGas <<- 3 * minimumWordSize + mx.cost;
+    consume_gas $ gas + dynamicGas;
+    sourceBytes <- getSource;
+    bytes <<- take_pad_0 size (DROP sourceOffset sourceBytes);
+    expand_memory mx.expand_by;
+    write_memory offset bytes;
+  od
+End
+
+Definition write_storage_def:
+  write_storage address key value =
+  update_accounts (λaccounts.
+    let account = accounts address in
+    let newAccount = account with storage updated_by (key =+ value);
+    in (address =+ newAccount) accounts)
+End
+
+Definition assert_not_static_def:
+  assert_not_static = do
+    static <- get_static;
+    assert (¬static) WriteInStaticContext
+  od
+End
+
+Definition transfer_value_def:
+  transfer_value (fromAddress: address) toAddress value accounts =
+  if value = 0 ∨ fromAddress = toAddress then accounts else
+    let sender = accounts fromAddress in
+    let recipient = accounts toAddress in
+    let newSender = sender with balance updated_by flip $- value in
+    let newRecipient = recipient with balance updated_by $+ value in
+    (toAddress =+ newRecipient) $ (fromAddress =+ newSender) accounts
 End
 
 Definition step_stop_def:
@@ -213,26 +471,6 @@ Definition step_modop_def:
     push_stack $ if n = 0 then 0w else
       n2w $ (f a b) MOD n
   od
-End
-
-Definition with_zero_def:
-  with_zero f x y = if y = 0w then 0w else f x y
-End
-
-Definition word_size_def:
-  word_size byteSize = (byteSize + 31) DIV 32
-End
-
-Definition memory_cost_def:
-  memory_cost byteSize =
-  let wordSize = word_size byteSize in
-  (wordSize * wordSize) DIV 512 + (3 * wordSize)
-End
-
-Definition memory_expansion_cost_def:
-  memory_expansion_cost oldSize newMinSize =
-  let newSize = MAX oldSize newMinSize in
-    memory_cost newSize - memory_cost oldSize
 End
 
 Definition step_context_def:
@@ -280,47 +518,6 @@ Definition step_exp_def:
   od
 End
 
-Datatype:
-  memory_expansion_info = <| cost: num; expand_by: num |>
-End
-
-Definition memory_expansion_info_def:
-  memory_expansion_info offset size = do
-    context <- get_current_context;
-    oldSize <<- LENGTH context.memory;
-    newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
-    return $
-      <| cost := memory_expansion_cost oldSize newMinSize
-       ; expand_by := MAX oldSize newMinSize |>
-  od
-End
-
-Definition expand_memory_def:
-  expand_memory expand_by = do
-    context <- get_current_context;
-    set_current_context $
-    context with memory := context.memory ++ REPLICATE expand_by 0w
-  od
-End
-
-Definition read_memory_def:
-  read_memory offset size = do
-    context <- get_current_context;
-    return $ TAKE size (DROP offset context.memory)
-  od
-End
-
-Definition write_memory_def:
-  write_memory byteIndex bytes = do
-    context <- get_current_context;
-    memory <<- context.memory;
-    set_current_context $
-      context with memory :=
-        TAKE byteIndex memory ++ bytes
-        ++ DROP (byteIndex + LENGTH bytes) memory
-  od
-End
-
 Definition step_keccak256_def:
   step_keccak256 = do
     args <- pop_stack 2;
@@ -336,22 +533,6 @@ Definition step_keccak256_def:
   od
 End
 
-Definition access_address_def:
-  access_address a s =
-  let addresses = s.accesses.addresses in
-    return
-      (if fIN a addresses then 100n else 2600)
-      (s with accesses := (s.accesses with addresses := fINSERT a addresses))
-End
-
-Definition access_slot_def:
-  access_slot x s =
-  let storageKeys = s.accesses.storageKeys in
-    return
-      (if fIN x storageKeys then 100n else 2100)
-      (s with accesses := (s.accesses with storageKeys := fINSERT x storageKeys))
-End
-
 Definition step_sload_def:
   step_sload = do
     args <- pop_stack 1;
@@ -363,40 +544,6 @@ Definition step_sload_def:
     word <<- (accounts address).storage key;
     push_stack word
   od
-End
-
-Definition update_gas_refund_def:
-  update_gas_refund (add, sub) = do
-    context <- get_current_context;
-    set_current_context $
-      context with gasRefund updated_by (λx. x + add - sub)
-  od
-End
-
-Definition get_static_def:
-  get_static = do
-    context <- get_current_context;
-    return context.callParams.static
-  od
-End
-
-Definition assert_not_static_def:
-  assert_not_static = do
-    static <- get_static;
-    assert (¬static) WriteInStaticContext
-  od
-End
-
-Definition write_storage_def:
-  write_storage address key value =
-  update_accounts (λaccounts.
-    let account = accounts address in
-    let newAccount = account with storage updated_by (key =+ value);
-    in (address =+ newAccount) accounts)
-End
-
-Definition zero_warm_def:
-  zero_warm accessCost = if accessCost > 100 then accessCost else 0n
 End
 
 Definition step_sstore_def:
@@ -440,16 +587,6 @@ Definition step_sstore_def:
   od
 End
 
-Definition transfer_value_def:
-  transfer_value (fromAddress: address) toAddress value accounts =
-  if value = 0 ∨ fromAddress = toAddress then accounts else
-    let sender = accounts fromAddress in
-    let recipient = accounts toAddress in
-    let newSender = sender with balance updated_by flip $- value in
-    let newRecipient = recipient with balance updated_by $+ value in
-    (toAddress =+ newRecipient) $ (fromAddress =+ newSender) accounts
-End
-
 Definition step_balance_def:
   step_balance = do
     args <- pop_stack 1;
@@ -473,19 +610,6 @@ Definition step_call_data_load_def:
   od
 End
 
-Definition copy_to_memory_def:
-  copy_to_memory gas offset sourceOffset size getSource = do
-    minimumWordSize <<- word_size size;
-    mx <- memory_expansion_info offset size;
-    dynamicGas <<- 3 * minimumWordSize + mx.cost;
-    consume_gas $ gas + dynamicGas;
-    sourceBytes <- getSource;
-    bytes <<- take_pad_0 size (DROP sourceOffset sourceBytes);
-    expand_memory mx.expand_by;
-    write_memory offset bytes;
-  od
-End
-
 Definition step_copy_to_memory_def:
   step_copy_to_memory op getSource = do
     args <- pop_stack 3;
@@ -493,21 +617,6 @@ Definition step_copy_to_memory_def:
     sourceOffset <<- w2n $ EL 1 args;
     size <<- w2n $ EL 2 args;
     copy_to_memory (static_gas op) offset sourceOffset size getSource
-  od
-End
-
-Definition get_return_data_def:
-  get_return_data = do
-    context <- get_current_context;
-    return context.returnData
-  od
-End
-
-Definition get_return_data_check_def:
-  get_return_data_check offset size = do
-    data <- get_return_data;
-    assert (offset + size ≤ LENGTH data) OutOfBoundsRead;
-    return data
   od
 End
 
@@ -531,27 +640,6 @@ Definition step_ext_code_size_def:
     accounts <- get_accounts;
     code <<- (accounts address).code;
     push_stack $ n2w (LENGTH code)
-  od
-End
-
-Definition get_code_def:
-  get_code address = do
-    accounts <- get_accounts;
-    return $ (accounts address).code
-  od
-End
-
-Definition get_current_code_def:
-  get_current_code = do
-    context <- get_current_context;
-    return $ context.callParams.code
-  od
-End
-
-Definition get_call_data_def:
-  get_call_data = do
-    context <- get_current_context;
-    return $ context.callParams.data
   od
 End
 
@@ -693,13 +781,6 @@ Definition step_swap_def:
   od
 End
 
-Definition push_logs_def:
-  push_logs ls = do
-    context <- get_current_context;
-    set_current_context $ context with logs updated_by (flip APPEND ls)
-  od
-End
-
 Definition step_log_def:
   step_log n = do
     args <- pop_stack $ 2 + n;
@@ -741,10 +822,6 @@ Definition step_invalid_def:
   od
 End
 
-Definition account_empty_def:
-  account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
-End
-
 Definition step_self_destruct_def:
   step_self_destruct = do
     args <- pop_stack 1;
@@ -765,44 +842,6 @@ Definition step_self_destruct_def:
     (* TODO: destroy created contract if this is a contract creation *)
     finish
   od
-End
-
-Definition get_accesses_def:
-  get_accesses s = return s.accesses s
-End
-
-Definition unuse_gas_def:
-  unuse_gas n = do
-    context <- get_current_context;
-    assert (n ≤ context.gasUsed) Impossible;
-    newContext <<- context with gasUsed := context.gasUsed - n;
-    set_current_context newContext
-  od
-End
-
-Definition get_num_contexts_def:
-  get_num_contexts s = return (LENGTH s.contexts) s
-End
-
-Definition address_for_create_def:
-  address_for_create (address: address) nonce : address =
-    let rlpSender = rlp_bytes $ word_to_bytes address T in
-    let rlpNonce = rlp_bytes $ if nonce = 0n then [] else
-                   MAP n2w $ REVERSE $ n2l 256 $ nonce in
-    let rlpBytes = rlp_list $ rlpSender ++ rlpNonce in
-    let hash = word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes in
-    w2w hash
-End
-
-Definition address_for_create2_def:
-  address_for_create2 (address: address) (salt: bytes32) (code: byte list) : address =
-  w2w $ word_of_bytes T (0w: bytes32) $ Keccak_256_bytes $
-    [0xffw] ++ word_to_bytes address T ++
-    word_to_bytes salt T ++ Keccak_256_bytes code
-End
-
-Definition push_context_def:
-  push_context c s = return () $ s with contexts updated_by CONS c
 End
 
 Definition step_create_def:
@@ -878,28 +917,6 @@ Definition step_create_def:
         push_context $ initial_context subContextParams subContextTx
       od
   od
-End
-
-Definition call_has_value_def:
-  call_has_value op = (op = Call ∨ op = CallCode)
-End
-
-Definition max_expansion_range_def:
-  max_expansion_range (o1, s1) (o2, s2:num) =
-  let v1 = if s1 = 0 then 0 else o1 + s1 in
-  let v2 = if s2 = 0 then 0 else o2 + s2 in
-    if v1 < v2 then (o2, s2) else (o1, s1)
-End
-
-Definition call_gas_def:
-  call_gas value gas gasLeft memoryCost otherCost =
-  let stipend = if value = 0n then 0 else 2300 in
-  let gas = if gasLeft < memoryCost + otherCost then gas
-            else MIN gas (
-              let left = gasLeft - memoryCost - otherCost in
-                left - (left DIV 64)
-              ) in
-    (gas + otherCost, gas + stipend)
 End
 
 Definition step_call_def:
@@ -1089,12 +1106,6 @@ Definition is_call_def:
   is_call _ = F
 End
 
-Definition pop_context_def:
-  pop_context s =
-  if s.contexts = [] then fail Impossible s
-  else return (HD s.contexts) (s with contexts updated_by TL)
-End
-
 Definition pop_and_incorporate_context_def:
   pop_and_incorporate_context success = do
     calleeGasLeft <- get_gas_left;
@@ -1108,17 +1119,6 @@ Definition pop_and_incorporate_context_def:
       set_accounts callee.callParams.accounts
     od
   od
-End
-
-Definition get_output_to_def:
-  get_output_to = do
-    context <- get_current_context;
-    return context.callParams.outputTo
-  od
-End
-
-Definition reraise_def:
-  reraise e s = (INR e, s) : α execution_result
 End
 
 Definition handle_exception_def:
