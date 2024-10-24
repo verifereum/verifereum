@@ -475,100 +475,6 @@ QED
 
 val from_to_execution_state = from_to_thm_for “:execution_state”;
 
-val () = “consume_gas n s” |>
-  SIMP_CONV std_ss [consume_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
-  cv_auto_trans;
-
-val () = “unuse_gas n s” |>
-  SIMP_CONV std_ss [unuse_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
-  cv_auto_trans;
-
-val () = “push_context c s” |>
-  SIMP_CONV std_ss [
-    push_context_def, bind_def, ignore_bind_def,
-    LET_RATOR, COND_RATOR] |>
-  cv_auto_trans;
-
-val () = code_for_transfer_def |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  cv_auto_trans;
-
-Theorem context_for_transfer_unfolded:
-  context_for_transfer ctxt callerAddress incCaller code =
-  ctxt with callParams :=
-    ctxt.callParams with <|
-      accounts := update_account
-        ctxt.callParams.accounts callerAddress incCaller;
-      code := code;
-      parsed := parse_code 0 FEMPTY code
-    |>
-Proof
-  rw[context_for_transfer_def,
-     context_component_equality,
-     call_parameters_component_equality,
-     update_account_def]
-QED
-
-val () = cv_auto_trans context_for_transfer_unfolded;
-
-Triviality update_accounts:
-  update_accounts ((a =+ b) o (c =+ d)) s =
-  return () (s with accounts :=
-    update_account (update_account s.accounts c d) a b)
-Proof
-  rw[update_accounts_def, return_def, update_account_def,
-     execution_state_component_equality]
-QED
-
-Triviality LET_PROD_RATOR:
-  (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
-Proof
-  rw[LET_THM, UNCURRY]
-QED
-
-val () = “start_context b c s” |>
-  SIMP_CONV std_ss [
-    start_context_def, bind_def, ignore_bind_def,
-    COND_RATOR, LET_RATOR, LET_PROD_RATOR, C_DEF,
-    update_accounts ] |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  cv_auto_trans;
-
-val () = “set_return_data r s” |>
-  SIMP_CONV std_ss [
-    set_return_data_def, bind_def, LET_RATOR
-  ] |>
-  cv_auto_trans;
-
-val () = cv_auto_trans get_current_accesses_def;
-
-val () = cv_auto_trans access_address_def;
-
-val () = cv_auto_trans access_slot_def;
-
-val () = “finish_current r s” |>
-  SIMP_CONV std_ss [
-    finish_current_def, bind_def, ignore_bind_def
-  ] |> cv_auto_trans;
-
-val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
-
-val from_to_transaction = from_to_thm_for “:transaction”;
-
-val step_call_pre_def = “step_call t s” |>
-  SIMP_CONV std_ss [
-    step_call_def, bind_def, ignore_bind_def, LET_RATOR
-  ]
-  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
-  |> cv_auto_trans_pre;
-
-Theorem step_call_pre[cv_pre]:
-  ∀t s. step_call_pre t s
-Proof
-  rw[step_call_pre_def, assert_def]
-  \\ strip_tac \\ gvs[]
-QED
-
 val () = cv_auto_trans numposrepTheory.n2l_n2lA;
 
 val rlp_bytes_alt =
@@ -689,6 +595,200 @@ val () = cv_auto_trans set_byte_256;
 
 val () = cv_auto_trans (INST_TYPE [alpha |-> “:256”] word_of_bytes_def);
 
+val () = cv_auto_trans address_for_create_def;
+
+val () = cv_auto_trans address_for_create2_def;
+
+val () = “get_gas_left s” |>
+  SIMP_CONV std_ss [get_gas_left_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_callee s” |>
+  SIMP_CONV std_ss [get_callee_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_caller s” |>
+  SIMP_CONV std_ss [get_caller_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_value s” |>
+  SIMP_CONV std_ss [get_value_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_output_to s” |>
+  SIMP_CONV std_ss [get_output_to_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_return_data s” |>
+  SIMP_CONV std_ss [get_return_data_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_return_data_check x y s” |>
+  SIMP_CONV std_ss [get_return_data_check_def, bind_def, ignore_bind_def]
+  |> cv_auto_trans;
+
+val () = “set_return_data r s” |>
+  SIMP_CONV std_ss [set_return_data_def, bind_def, LET_RATOR]
+  |> cv_auto_trans;
+
+val () = “get_static s” |>
+  SIMP_CONV std_ss [get_static_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_code s” |>
+  SIMP_CONV std_ss [get_code_def, bind_def, Once $ GSYM lookup_account_def]
+  |> cv_auto_trans;
+
+val () = “get_current_code s” |>
+  SIMP_CONV std_ss [get_current_code_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “get_call_data s” |>
+  SIMP_CONV std_ss [get_call_data_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “push_logs ls s” |>
+  SIMP_CONV std_ss [push_logs_def, bind_def, C_DEF]
+  |> cv_auto_trans;
+
+val () = “update_gas_refund (a, b) s” |>
+  SIMP_CONV std_ss [update_gas_refund_def, bind_def]
+  |> cv_auto_trans;
+
+val () = “consume_gas n s” |>
+  SIMP_CONV std_ss [consume_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
+  cv_auto_trans;
+
+val () = “unuse_gas n s” |>
+  SIMP_CONV std_ss [unuse_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
+  cv_auto_trans;
+
+val () = “pop_stack n s” |>
+  SIMP_CONV std_ss [pop_stack_def, bind_def, ignore_bind_def, LET_RATOR] |>
+  cv_auto_trans;
+
+val () = “push_stack v s” |>
+  SIMP_CONV std_ss [
+    push_stack_def, bind_def, ignore_bind_def, LET_RATOR
+  ] |> cv_auto_trans;
+
+Theorem pop_stack_INL_LENGTH:
+  pop_stack n s = (INL x, y) ⇒
+  LENGTH x = n ∧
+  s.contexts ≠ [] ∧
+  n ≤ LENGTH (HD s.contexts).stack
+Proof
+  rw[pop_stack_def, bind_def, ignore_bind_def, get_current_context_def,
+     fail_def, return_def, assert_def, CaseEq"sum", CaseEq"prod"]
+  \\ rw[LENGTH_TAKE_EQ]
+QED
+
+val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
+
+val from_to_transaction = from_to_thm_for “:transaction”;
+
+val from_to_memory_expansion_info = from_to_thm_for “:memory_expansion_info”;
+
+val () = “memory_expansion_info x y s” |>
+  SIMP_CONV std_ss [
+    memory_expansion_info_def, bind_def, ignore_bind_def, LET_RATOR
+  ] |> cv_auto_trans;
+
+val () = “expand_memory x s” |>
+  SIMP_CONV std_ss [
+    expand_memory_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val () = “read_memory x y s” |>
+  SIMP_CONV std_ss [
+    read_memory_def, bind_def
+  ] |> cv_auto_trans;
+
+val () = “write_memory x y s” |>
+  SIMP_CONV std_ss [
+    write_memory_def, bind_def, LET_RATOR
+  ] |> cv_auto_trans;
+
+Triviality storage_updated_by_update:
+  x with storage updated_by (y =+ z) =
+  x with storage updated_by (λs. update_storage s y z)
+Proof
+  rw[account_state_component_equality, update_storage_def]
+QED
+
+val () = “write_storage x y z s” |>
+  SIMP_CONV std_ss [
+    write_storage_def,
+    Once $ GSYM lookup_account_def,
+    Once $ GSYM update_account_def,
+    Once $ GSYM update_storage_def,
+    update_accounts_def,
+    storage_updated_by_update
+  ] |> cv_auto_trans;
+
+val () = “assert_not_static s” |>
+  SIMP_CONV std_ss [
+    assert_not_static_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val () = transfer_value_def |>
+  SIMP_RULE std_ss [combinTheory.C_DEF] |>
+  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  ONCE_REWRITE_RULE[GSYM update_account_def] |>
+  cv_auto_trans;
+
+val () = “step_stop s” |>
+  SIMP_CONV std_ss [
+    step_stop_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val step_exp_pre_def = “step_exp s” |>
+  SIMP_CONV std_ss [
+    step_exp_def, bind_def, ignore_bind_def, LET_RATOR
+  ] |> cv_auto_trans_pre;
+
+Theorem step_exp_pre[cv_pre]:
+  ∀s. step_exp_pre s
+Proof
+  rw[step_exp_pre_def]
+  \\ drule pop_stack_INL_LENGTH
+  \\ rw[] \\ strip_tac \\ gvs[]
+QED
+
+(*
+TODO: up to HERE
+*)
+
+Triviality LET_PROD_RATOR:
+  (let (x,y) = M in N x y) b = let (x,y) = M in N x y b
+Proof
+  rw[LET_THM, UNCURRY]
+QED
+
+Triviality LET_UNCURRY:
+  (let (x,y) = M in N x y) = let p = M; x = FST p; y = SND p in N x y
+Proof
+  rw[UNCURRY]
+QED
+
+val step_call_pre_def = “step_call t s” |>
+  SIMP_CONV std_ss [
+    step_call_def, bind_def, ignore_bind_def,
+    LET_RATOR, LET_PROD_RATOR, LET_UNCURRY, COND_RATOR
+  ]
+  |> ONCE_REWRITE_RULE[GSYM lookup_account_def]
+  |> cv_auto_trans_pre;
+
+Theorem step_call_pre[cv_pre]:
+  ∀t s. step_call_pre t s
+Proof
+  rw[step_call_pre_def, assert_def, pop_stack_def, bind_def,
+     ignore_bind_def, return_def, CaseEq"prod", CaseEq"sum"]
+  \\ rw[LENGTH_TAKE_EQ]
+  \\ strip_tac \\ gvs[]
+QED
+
 val step_create_pre_def = “step_create t s” |>
   SIMP_CONV std_ss [
     step_create_def, bind_def, ignore_bind_def, LET_RATOR
@@ -723,14 +823,6 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-Triviality update_accounts:
-  update_accounts (k =+ v) s =
-  (INL (), s with accounts := update_account s.accounts k v)
-Proof
-  rw[update_accounts_def, return_def,
-     execution_state_component_equality, update_account_def]
-QED
-
 val step_sstore_pre_def = “step_sstore s” |>
   SIMP_CONV std_ss [
     step_sstore_def,
@@ -753,13 +845,6 @@ Proof
   rw[step_sstore_pre_def, assert_def]
   \\ strip_tac \\ gs[]
 QED
-
-val () = transfer_value_def |>
-  SIMP_RULE std_ss [combinTheory.C_DEF] |>
-  ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  ONCE_REWRITE_RULE[GSYM update_account_def] |>
-  cv_auto_trans;
 
 val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec_def;
 
