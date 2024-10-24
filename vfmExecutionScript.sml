@@ -1056,8 +1056,8 @@ Definition step_inst_def:
   ∧ step_inst SelfDestruct = step_self_destruct
 End
 
-Definition inc_pc_def:
-  inc_pc n = do
+Definition inc_pc_or_jump_def:
+  inc_pc_or_jump n = do
     context <- get_current_context;
     case context.jumpDest of
     | NONE => set_current_context $ context with pc := context.pc + n
@@ -1069,6 +1069,13 @@ Definition inc_pc_def:
         set_current_context $
           context with <| pc := pc; jumpDest := NONE |>
       od
+  od
+End
+
+Definition inc_pc_def:
+  inc_pc = do
+    context <- get_current_context;
+    set_current_context $ context with pc updated_by SUC
   od
 End
 
@@ -1110,6 +1117,53 @@ Definition get_output_to_def:
   od
 End
 
+Definition reraise_def:
+  reraise e s = (INR e, s) : α execution_result
+End
+
+Definition handle_exception_def:
+  handle_exception e = do
+    code <- get_return_data;
+    outputTo <- get_output_to;
+    success <<- (e = NONE);
+    if success ∧ case outputTo of Code _ => T | _ => F then do
+      codeLen <<- LENGTH code;
+      codeGas <<- 200 * codeLen;
+      validCode <<- (case code of h::_ => h ≠ n2w 0xef | _ => T);
+      consume_gas codeGas;
+      assert (codeLen ≤ 0x6000) OutOfGas
+    od else return ();
+    exceptionalHalt <<- (e ≠ NONE ∧ e ≠ SOME Reverted);
+    if exceptionalHalt then do
+      gasLeft <- get_gas_left;
+      consume_gas gasLeft;
+      set_return_data [];
+    od else return ();
+    output <- get_return_data;
+    pop_and_incorporate_context success;
+    inc_pc;
+    case outputTo of
+    | Code address =>
+        if success then do
+          update_accounts $ (λaccounts.
+            (address =+ (accounts address with code := code))
+              accounts) ;
+          set_return_data [];
+          push_stack $ w2w address;
+        od else do
+          set_return_data output;
+          push_stack $ b2w F
+        od
+    | Memory r => do
+        set_return_data output;
+        push_stack $ b2w success;
+        write_memory r.offset (TAKE r.size output)
+      od;
+    n <- get_num_contexts;
+    if 1 < n then return () else reraise e
+  od
+End
+
 Definition step_def:
   step s = case do
     context <- get_current_context;
@@ -1123,98 +1177,12 @@ Definition step_def:
       | SOME op => do
           step_inst op;
           if is_call op then return ()
-          else inc_pc (LENGTH (opcode op))
+          else inc_pc_or_jump (LENGTH (opcode op))
         od
     od
   od s of
-  | (INL x, s) => (INL x, s)
-  | (INR e, s) => do
-      (* do extra stuff for a create, i.e. e = NONE and outputTo = Code *)
-      exceptionalHalt <<- (e ≠ NONE ∧ e ≠ SOME Reverted);
-      if exceptionalHalt then do
-        gasLeft <- get_gas_left;
-        consume_gas gasLeft;
-        set_return_data [];
-      od else return ();
-      success <<- (e = NONE);
-      output <- get_return_data;
-      outputTo <- get_output_to;
-      pop_and_incorporate_context success;
-      (* TODO: increment pc *)
-      case outputTo of
-      | Code address =>
-          if success then do
-            set_return_data [];
-            push_stack $ w2w address;
-          od else do
-            set_return_data output;
-            push_stack $ b2w F
-          od
-      | Memory r => do
-          set_return_data output;
-          push_stack $ b2w success;
-          write_memory r.offset (TAKE r.size output)
-        od;
-      (* TODO: continue if not the last context, else reraise *)
-    od s
-
-
-
-      case s.contexts of
-      | [] => (INR (SOME Impossible), s)
-      | [_] => (INR e, s)
-      | callee :: caller :: callStack =>
-        let calleeSuccess = (e = NONE) in
-        let (newCallerBase, success) =
-          (case callee.callParams.outputTo of
-           | Memory r =>
-             (caller with
-                <| returnData := returnData
-                 ; stack      := b2w calleeSuccess :: caller.stack
-                 ; pc         := SUC caller.pc
-                 ; gasUsed    := caller.gasUsed - calleeGasLeft
-                 ; memory     :=
-                     write_memory r.offset (TAKE r.size returnData) caller.memory
-                 |>, calleeSuccess)
-           | Code address =>
-             let codeGas = LENGTH returnData * 200 in
-             let validCode = (case returnData of h::_ => h ≠ n2w 0xef | _ => T) in
-             let callerGasLeft = caller.callParams.gasLimit - caller.gasUsed in
-             let success = (calleeSuccess ∧ validCode ∧ codeGas ≤ callerGasLeft) in
-             (caller with
-                <| returnData := if success then [] else returnData
-                 ; stack      := (if success then w2w address else b2w F)
-                                 :: caller.stack
-                 ; pc         := SUC caller.pc
-                 ; gasUsed    := if success
-                                 then caller.gasUsed + codeGas - calleeGasLeft
-                                 else if calleeSuccess
-                                 then caller.gasUsed - calleeGasLeft
-                                 else caller.callParams.gasLimit
-                 |>,
-              success)) in
-        let newCaller =
-          if success
-          then newCallerBase with
-               <| gasRefund updated_by $+ callee.gasRefund
-                ; logs updated_by flip APPEND callee.logs |>
-          else newCallerBase in
-        let stateWithContext = s with contexts := newCaller :: callStack in
-        let updatedState =
-          if success then
-            case callee.callParams.outputTo of
-            | Memory _ => stateWithContext
-            | Code address => let accounts = stateWithContext.accounts in
-              stateWithContext with accounts :=
-                (address =+ accounts address with code := returnData) accounts
-          else stateWithContext in
-        (INL (),
-         if success
-         then updatedState
-         else updatedState with <|
-             accounts := callee.callParams.accounts
-           ; accesses := callee.callParams.accesses
-           |>)
+  | (INR e, s) => handle_exception e s
+  | else_continue => else_continue
 End
 
 Definition run_def:
@@ -1236,15 +1204,13 @@ End
 
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
-  let exceptionalHalt = (result ≠ NONE ∧ result ≠ SOME Reverted) in
   let (gasLimit, gasUsed, refund, logs, returnData) =
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
     then (0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = HD t.contexts in
       (ctxt.callParams.gasLimit, ctxt.gasUsed,
-       ctxt.gasRefund, ctxt.logs,
-       if exceptionalHalt then [] else ctxt.returnData) in
-  let gasLeft = if exceptionalHalt then 0 else gasLimit - gasUsed in
+       ctxt.gasRefund, ctxt.logs, ctxt.returnData) in
+  let gasLeft = gasLimit - gasUsed in
   let txGasUsed = tx.gasLimit - gasLeft in
   let gasRefund = if result ≠ NONE then 0
                   else MIN (txGasUsed DIV 5) refund in
