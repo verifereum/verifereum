@@ -697,11 +697,8 @@ val () = “write_memory x y s” |>
   ] |> cv_auto_trans;
 
 val () = “write_storage x y z s” |>
-  SIMP_CONV std_ss [
-    write_storage_def,
-    update_accounts_def,
-    storage_updated_by_update
-  ] |> cv_auto_trans;
+  SIMP_CONV std_ss [ write_storage_def, update_accounts_def ]
+  |> cv_auto_trans;
 
 val () = “assert_not_static s” |>
   SIMP_CONV std_ss [
@@ -779,8 +776,24 @@ val th = tt step_return_def;
 val th = tf step_invalid_def;
 val th = tt step_self_destruct_def;
 
+val () = “abort_create n s” |>
+  SIMP_CONV std_ss [
+    abort_create_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val () = “abort_create_exists x y s” |>
+  SIMP_CONV std_ss [
+    abort_create_exists_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val () = “proceed_create a b c d e f g s” |>
+  SIMP_CONV std_ss [
+    proceed_create_def, bind_def, ignore_bind_def, LET_RATOR
+  ] |> cv_auto_trans;
+
+val th = tt step_create_def;
+
 (*
-TODO: step_create_def
 TODO: step_call_def
 TODO: ...
 *)

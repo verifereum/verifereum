@@ -863,6 +863,55 @@ Definition step_self_destruct_def:
   od
 End
 
+Definition abort_create_def:
+  abort_create cappedGas = do
+    unuse_gas cappedGas;
+    push_stack $ b2w F
+  od
+End
+
+Definition abort_create_exists_def:
+  abort_create_exists senderAddress sender = do
+    update_accounts $
+      update_account senderAddress $ sender with nonce updated_by SUC;
+    push_stack $ b2w F
+  od
+End
+
+Definition proceed_create_def:
+  proceed_create senderAddress sender
+    address value code toCreate cappedGas =
+  do
+    update_accounts $
+      update_account senderAddress $ sender with nonce updated_by SUC;
+    subContextTx <<- <|
+        from     := senderAddress
+      ; to       := 0w
+      ; value    := value
+      ; gasLimit := cappedGas
+      ; data     := []
+      (* unused: for concreteness *)
+      ; nonce := 0; gasPrice := 0; accessList := []
+    |>;
+    superAccounts <- get_accounts;
+    subAccounts <<-
+      transfer_value senderAddress address value $
+      update_account address
+        (toCreate with nonce updated_by SUC)
+        superAccounts;
+    accesses <- get_accesses;
+    static <- get_static;
+    subContextParams <<- <|
+        code      := code
+      ; accounts  := subAccounts
+      ; accesses  := accesses
+      ; outputTo  := Code address
+      ; static    := static
+    |>;
+    push_context $ initial_context subContextParams subContextTx
+  od
+End
+
 Definition step_create_def:
   step_create two = do
     args <- pop_stack (if two then 4 else 3);
@@ -894,48 +943,11 @@ Definition step_create_def:
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
        SUC depth > 1024
-    then
-      do
-        unuse_gas cappedGas;
-        push_stack $ b2w F
-      od
+    then abort_create cappedGas
     else if ¬(account_empty toCreate)
-    then
-      do
-        update_accounts $
-          update_account senderAddress $ sender with nonce updated_by SUC;
-        push_stack $ b2w F
-      od
-    else
-      do
-        update_accounts $
-          update_account senderAddress $ sender with nonce updated_by SUC;
-        subContextTx <<- <|
-            from     := senderAddress
-          ; to       := 0w
-          ; value    := value
-          ; gasLimit := cappedGas
-          ; data     := []
-          (* unused: for concreteness *)
-          ; nonce := 0; gasPrice := 0; accessList := []
-        |>;
-        superAccounts <- get_accounts;
-        subAccounts <<-
-          transfer_value senderAddress address value $
-          update_account address
-            (toCreate with nonce updated_by SUC)
-            superAccounts;
-        accesses <- get_accesses;
-        static <- get_static;
-        subContextParams <<- <|
-            code      := code
-          ; accounts  := subAccounts
-          ; accesses  := accesses
-          ; outputTo  := Code address
-          ; static    := static
-        |>;
-        push_context $ initial_context subContextParams subContextTx
-      od
+    then abort_create_exists senderAddress sender
+    else proceed_create senderAddress sender
+           address value code toCreate cappedGas
   od
 End
 
