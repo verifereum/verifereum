@@ -298,6 +298,14 @@ Definition get_call_data_def:
   od
 End
 
+Definition set_jump_dest_def:
+  set_jump_dest jumpDest = do
+    context <- get_current_context;
+    set_current_context $
+      context with jumpDest := jumpDest
+  od
+End
+
 Definition push_logs_def:
   push_logs ls = do
     context <- get_current_context;
@@ -719,14 +727,6 @@ Definition step_mstore_def:
     consume_gas $ static_gas op + mx.cost;
     expand_memory mx.expand_by;
     write_memory offset bytes;
-  od
-End
-
-Definition set_jump_dest_def:
-  set_jump_dest jumpDest = do
-    context <- get_current_context;
-    set_current_context $
-      context with jumpDest := jumpDest
   od
 End
 

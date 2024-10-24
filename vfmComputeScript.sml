@@ -647,6 +647,10 @@ val () = “get_call_data s” |>
   SIMP_CONV std_ss [get_call_data_def, bind_def]
   |> cv_auto_trans;
 
+val () = “set_jump_dest j s” |>
+  SIMP_CONV std_ss [set_jump_dest_def, bind_def]
+  |> cv_auto_trans;
+
 val () = “push_logs ls s” |>
   SIMP_CONV std_ss [push_logs_def, bind_def, C_DEF]
   |> cv_auto_trans;
@@ -743,21 +747,74 @@ val () = “step_stop s” |>
     step_stop_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
-val step_exp_pre_def = “step_exp s” |>
-  SIMP_CONV std_ss [
-    step_exp_def, bind_def, ignore_bind_def, LET_RATOR
-  ] |> cv_auto_trans_pre;
-
-Theorem step_exp_pre[cv_pre]:
-  ∀s. step_exp_pre s
-Proof
-  rw[step_exp_pre_def]
+(*
+  set_goal([], pre_a)
+*)
+fun step_x_pre_tac pre_def =
+  rw[pre_def, assert_def, LENGTH_TL]
+  \\ TRY strip_tac \\ gvs[]
   \\ drule pop_stack_INL_LENGTH
   \\ rw[] \\ strip_tac \\ gvs[]
-QED
 
+fun mconv def =
+  SIMP_CONV std_ss [def, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR];
+
+fun trans_step_x need_pre conv def = let
+  val const = def |> SPEC_ALL |> concl |> lhs
+  val stype = #1 $ dom_rng $ type_of const
+  val s = mk_var("s", stype)
+  val tm = mk_comb(const, s)
+  val def_conv = mconv def THENC conv
+  val xdef = def_conv tm
+in
+  if need_pre then let
+    val pre_def = cv_auto_trans_pre xdef
+    val pre_a = pre_def |> SPEC_ALL |> concl |> lhs
+    val pre_name = pre_a |> strip_comb |> #1 |> dest_const |> #1
+  in
+    store_thm(pre_name ^ "[cv_pre]", pre_a, step_x_pre_tac pre_def)
+  end
+  else
+    (cv_auto_trans xdef; TRUTH)
+end
+
+val laconv = ONCE_REWRITE_CONV[GSYM lookup_account_def];
+val lsconv = ONCE_REWRITE_CONV[GSYM lookup_storage_def];
+val ctmconv = mconv copy_to_memory_def;
+
+val tf = trans_step_x false ALL_CONV;
+val tfl = trans_step_x false laconv;
+val tx = trans_step_x true ALL_CONV;
+val txl = trans_step_x true laconv
+val txls = trans_step_x true (laconv THENC lsconv)
+val txc = trans_step_x true ctmconv
+
+val th = tx   step_exp_def;
+val th = tx   step_keccak256_def;
+val th = txls step_sload_def;
+val th = txls step_sstore_def;
+val th = txl  step_balance_def;
+val th = tx   step_call_data_load_def;
+val th = txc  step_return_data_copy_def;
+val th = txl  step_ext_code_size_def;
+val th = txc  step_ext_code_copy_def;
+val th = txl  step_ext_code_hash_def;
+val th = tx   step_block_hash_def;
+val th = tfl  step_self_balance_def;
+val th = tx   step_mload_def;
+val th = tx   step_mstore_def;
+val th = tx   step_jump_def;
+val th = tx   step_jumpi_def;
+val th = tf   step_push_def;
+val th = tx   step_dup_def;
+val th = tx   step_swap_def;
+val th = tx   step_log_def;
+val th = tx   step_return_def;
+val th = tf   step_invalid_def;
 (*
-TODO: up to HERE
+TODO: step_self_destruct_def
+TODO: step_create_def
+TODO: step_call_def
 *)
 
 Triviality LET_PROD_RATOR:
