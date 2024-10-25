@@ -894,17 +894,15 @@ Definition proceed_create_def:
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
     |>;
-    superAccounts <- get_accounts;
-    subAccounts <<-
-      transfer_value senderAddress address value $
-      update_account address
-        (toCreate with nonce updated_by SUC)
-        superAccounts;
+    rollback <- get_accounts;
+    update_accounts $
+      transfer_value senderAddress address value o
+      update_account address (toCreate with nonce updated_by SUC);
     accesses <- get_accesses;
     static <- get_static;
     subContextParams <<- <|
         code      := code
-      ; accounts  := subAccounts
+      ; accounts  := rollback
       ; accesses  := accesses
       ; outputTo  := Code address
       ; static    := static
@@ -966,10 +964,9 @@ Definition proceed_call_def:
     accounts outputTo =
   do
     data <- read_memory argsOffset argsSize;
-    subAccounts <<-
-      if op ≠ DelegateCall ∧ 0 < value then
-        transfer_value sender address value accounts
-      else accounts;
+    if op ≠ DelegateCall ∧ 0 < value then
+      update_accounts $ transfer_value sender address value
+    else return ();
     caller <- get_caller;
     callValue <- get_value;
     subContextTx <<- <|
@@ -986,7 +983,7 @@ Definition proceed_call_def:
     accesses <- get_accesses;
     subContextParams <<- <|
         code     := code
-      ; accounts := subAccounts
+      ; accounts := accounts
       ; accesses := accesses
       ; outputTo := outputTo
       ; static   := (op = StaticCall ∨ static)

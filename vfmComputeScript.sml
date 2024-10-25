@@ -813,7 +813,7 @@ val () = “abort_create_exists x y s” |>
 
 val () = “proceed_create a b c d e f g s” |>
   SIMP_CONV std_ss [
-    proceed_create_def, bind_def, ignore_bind_def, LET_RATOR
+    proceed_create_def, bind_def, ignore_bind_def, LET_RATOR, o_DEF
   ] |> cv_auto_trans;
 
 val th = tt step_create_def;
@@ -825,7 +825,7 @@ val () = “abort_call_value x s” |>
 
 val () = “proceed_call a b c d e f g h i j s” |>
   SIMP_CONV std_ss [
-    proceed_call_def, bind_def, ignore_bind_def, LET_RATOR
+    proceed_call_def, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR
   ] |> cv_auto_trans;
 
 val th = tt step_call_def;
