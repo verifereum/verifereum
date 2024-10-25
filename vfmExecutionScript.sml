@@ -1185,6 +1185,8 @@ Definition handle_exception_def:
       set_return_data [];
     od else return ();
     output <- get_return_data;
+    n <- get_num_contexts;
+    if n ≤ 1 then reraise e else do
     pop_and_incorporate_context success;
     inc_pc;
     case outputTo of
@@ -1204,9 +1206,8 @@ Definition handle_exception_def:
         set_return_data output;
         push_stack $ b2w success;
         write_memory r.offset (TAKE r.size output)
-      od;
-    n <- get_num_contexts;
-    if 1 < n then return () else reraise e
+      od
+    od
   od
 End
 
