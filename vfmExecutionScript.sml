@@ -741,7 +741,8 @@ Definition step_mstore_def:
     offset <<- w2n $ EL 0 args;
     value <<- EL 1 args;
     size <<- if op = MStore8 then 1 else 32;
-    bytes <<- if op = MStore8 then [w2w value] else word_to_bytes value F;
+    bytes <<- if op = MStore8 then [w2w value]
+              else REVERSE $ word_to_bytes value F;
     mx <- memory_expansion_info offset size;
     consume_gas $ static_gas op + mx.cost;
     expand_memory mx.expand_by;
