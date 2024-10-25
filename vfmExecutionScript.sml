@@ -854,14 +854,14 @@ Definition step_self_destruct_def:
   step_self_destruct = do
     args <- pop_stack 1;
     address <<- w2w $ EL 0 args;
+    accessCost <- access_address address;
     senderAddress <- get_callee;
-    accessCost <- access_address senderAddress;
     accounts <- get_accounts;
     sender <<- lookup_account senderAddress accounts;
     balance <<- sender.balance;
     beneficiaryEmpty <<- account_empty $ lookup_account address accounts;
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty then 25000 else 0;
-    consume_gas $ zero_warm accessCost + transferCost;
+    consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     assert_not_static;
     set_accounts $ transfer_value senderAddress address balance accounts;
     if senderAddress = address then
@@ -908,13 +908,12 @@ Definition proceed_create_def:
       transfer_value senderAddress address value o
       update_account address (toCreate with nonce updated_by SUC);
     accesses <- get_accesses;
-    static <- get_static;
     subContextParams <<- <|
         code      := code
       ; accounts  := rollback
       ; accesses  := accesses
       ; outputTo  := Code address
-      ; static    := static
+      ; static    := F
     |>;
     push_context $ initial_context subContextParams subContextTx
   od
@@ -929,8 +928,10 @@ Definition step_create_def:
     salt <<- if two then EL 3 args else 0w;
     mx <- memory_expansion_info offset size;
     staticGas <<- static_gas (if two then Create2 else Create);
-    readCodeCost <<- if two then 6 * (word_size size) else 0;
-    consume_gas $ staticGas + readCodeCost + mx.cost;
+    callDataWords <<- word_size size;
+    initCodeCost <<- 2 * callDataWords;
+    readCodeCost <<- if two then 6 * callDataWords else 0;
+    consume_gas $ staticGas + initCodeCost + readCodeCost + mx.cost;
     expand_memory mx.expand_by;
     code <- read_memory offset size;
     senderAddress <- get_callee;
@@ -940,6 +941,7 @@ Definition step_create_def:
     address <<- if two
                 then address_for_create2 senderAddress salt code
                 else address_for_create senderAddress nonce;
+    assert (LENGTH code ≤ 2 * 0x6000) OutOfGas;
     access_address address;
     gasLeft <- get_gas_left;
     cappedGas <<- gasLeft - gasLeft DIV 64;
