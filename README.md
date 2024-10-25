@@ -1,5 +1,9 @@
-# verifereum
+# Verifereum
 Prove functional correctness of Ethereum smart contracts in higher-order logic.
+
+See [https://verifereum.org](https://verifereum.org).
+
+When you clone this repository don't forget to `git submodule update --init` too.
 
 Work in progress.
 
