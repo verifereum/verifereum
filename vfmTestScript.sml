@@ -737,19 +737,19 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix at least d24g0v0
+(* TODO: fix from d34g0v0
 val test_path = mk_test_path "invalidDiffPlaces.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix
+(* TODO: too slow from d9g0v0
 val test_path = mk_test_path "measureGas.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix
+(* TODO: fix from d10g0v0
 val test_path = mk_test_path "opc0CDiffPlaces.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -947,11 +947,9 @@ val test_path = mk_test_path "callcallcall_000_SuicideEnd.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "callcallcall_000_SuicideMiddle.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "callcallcall_ABCB_RECURSIVE.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -979,11 +977,9 @@ val test_path = mk_test_path "callcallcallcode_001_SuicideEnd.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "callcallcallcode_001_SuicideMiddle.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "callcallcallcode_ABCB_RECURSIVE.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1009,13 +1005,35 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
+val test_path = mk_test_path "callcallcodecall_010_OOGE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcodecall_010_OOGMAfter.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcodecall_010_OOGMBefore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcodecall_010_OOGMBefore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcodecall_010_SuicideEnd.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcodecall_010_SuicideMiddle.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcodecall_ABCB_RECURSIVE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (*
-callcallcodecall_010_OOGE.json
-callcallcodecall_010_OOGMAfter.json
-callcallcodecall_010_OOGMBefore.json
-callcallcodecall_010_SuicideEnd.json
-callcallcodecall_010_SuicideMiddle.json
-callcallcodecall_ABCB_RECURSIVE.json
 callcallcodecallcode_011.json
 callcallcodecallcode_011_OOGE.json
 callcallcodecallcode_011_OOGMAfter.json
@@ -1091,19 +1109,63 @@ val test_path = mk_test_path "CallLoseGasOOG.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: fix
+val test_path = mk_test_path "CallRecursiveBombPreCall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "Callcode1024BalanceTooLow.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "Callcode1024OOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallcodeLoseGasOOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callOutput1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callOutput2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callOutput3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callOutput3Fail.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callOutput3partial.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callOutput3partialFail.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "callWithHighValue.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "callWithHighValueAndGasOOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
 (*
-CallRecursiveBombPreCall.json
-Callcode1024BalanceTooLow.json
-Callcode1024OOG.json
-CallcodeLoseGasOOG.json
-callOutput1.json
-callOutput2.json
-callOutput3.json
-callOutput3Fail.json
-callOutput3partial.json
-callOutput3partialFail.json
-callWithHighValue.json
-callWithHighValueAndGasOOG.json
 callWithHighValueAndOOGatTxLevel.json
 callWithHighValueOOGinCall.json
 callcodeOutput1.json
@@ -1247,17 +1309,32 @@ createCodeSizeLimit.json
 (*
 
 cv_eval ``
-let acc = blockInfo_d0g0v0_Cancun_pre in
-let blk = blockInfo_d0g0v0_Cancun_block in
-let tx = blockInfo_d0g0v0_Cancun_transaction in
+let acc = pc_d0g0v0_Cancun_pre in
+let blk = pc_d0g0v0_Cancun_block in
+let tx = pc_d0g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 [] blk acc
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 6 s in
+let (r, s) = run_n 12 s in
+  (*
+let (e, t) =  step_inst SignExtend s
+in ISR e
+*)
 let c = EL 0 s.contexts in
-  (LENGTH s.contexts, c.stack, c.returnData, c.gasUsed,
+  (ISL r, LENGTH s.contexts,
+   c.stack,
+   c.callParams.data,
+   c.returnData,
+   c.gasUsed,
    c.callParams.gasLimit,
-   c.pc,
+   c.gasRefund,
+   (*
+   (EL 1 s.contexts).gasUsed,
+   *)
+   c.jumpDest,
+   (*
+   word_of_bytes F (0w:bytes32) $ REVERSE (lookup_account s.accounts 0xc0dew).code,
+   *)
    (*
    [fIN 4096w c.callParams.accesses.addresses;
     fIN 4097w c.callParams.accesses.addresses;
@@ -1269,8 +1346,73 @@ let c = EL 0 s.contexts in
    FLOOKUP c.callParams.parsed c.pc,
    (*DROP c.pc c.callParams.code,*) LENGTH c.memory,
    c.memory,
-   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 0w)
+   c.callParams.static,
+   c.callParams.callee,
+   (lookup_storage 0w (lookup_account c.callParams.callee s.accounts).storage),
+   (lookup_storage 1w (lookup_account c.callParams.callee s.accounts).storage)
+   (*
+   (lookup_account 0x1007w s.accounts).balance
+   (lookup_storage (lookup_account s.accounts 0x100fw).storage 0w),
+   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 1w),
+   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 2w),
+   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 256w)
+   *)
    )
+``
+
+cv_eval ``run_transaction_with_fuel 16 1 []
+  envInfo_d7g0v0_Cancun_block
+  envInfo_d7g0v0_Cancun_pre
+  envInfo_d7g0v0_Cancun_transaction
+``
+
+TypeBase.fields_of``:execution_state`` |> map (fn x => (fst x, #ty $ snd x))
+TypeBase.fields_of``:access_sets`` |> map (fn x => (fst x, #ty $ snd x))
+TypeBase.fields_of``:transaction_parameters`` |> map (fn x => (fst x, #ty $ snd x))
+TypeBase.fields_of``:context`` |> map (fn x => (fst x, #ty $ snd x))
+TypeBase.fields_of``:call_parameters`` |> map (fn x => (fst x, #ty $ snd x))
+
+Theorem fEMPTY_word_cv_rep[cv_rep]:
+  from_word_fset fEMPTY = Num 0
+Proof
+  rw[from_word_fset_def, fEMPTY_num_cv_rep]
+QED
+
+cv_eval
+``
+let ea = <| addresses := fEMPTY; storageKeys := fEMPTY |> in
+let cp = <|
+         caller := 0w;
+         callee := 0w;
+         code := [];
+         parsed := FEMPTY;
+         value := 0;
+         static := F;
+         gasLimit := 0;
+         data := [];
+         outputTo := empty_return_destination;
+         accounts := empty_accounts;
+         accesses := ea |> in
+let c = <|
+  stack := [0x10000000000000001w; 32768w];
+       memory := [];
+       pc := 0;
+       jumpDest := NONE;
+       returnData := [];
+       gasUsed := 0;
+       gasRefund := 0;
+       logs := [];
+       callParams := cp |> in
+let (x, y) =  step_inst SignExtend
+  <| contexts := [ c; c ]
+   ; txParams := <| origin := 0w; gasPrice := 0; baseFeePerGas := 0;
+                    blockNumber := 0; blockTimeStamp := 0;
+                    blockCoinBase := 0w; blockGasLimit := 0;
+                    prevRandao := 0w; prevHashes := []; chainId := 0 |>
+   ; accesses := ea
+   ; accounts := empty_accounts |>
+in
+  (ISR x, (HD y.contexts).stack)
 ``
 
 *)

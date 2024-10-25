@@ -588,7 +588,7 @@ Definition step_sstore_def:
     accessCost <- access_slot (SK address key);
     baseDynamicGas <<-
       if originalValue = currentValue ∧ currentValue ≠ value
-      then if originalValue = 0w then 20000 else 2900
+      then if originalValue = 0w then 20000 else 5000 - 2100
       else 100;
     dynamicGas <<- baseDynamicGas + zero_warm accessCost;
     refundUpdates <<-
@@ -602,9 +602,9 @@ Definition step_sstore_def:
           else 0
         in
           if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w then
-            (storageSetRefund + 15000, 0)
+            (storageSetRefund + 4800, 0)
           else if originalValue ≠ 0w ∧ currentValue = 0w then
-            (storageSetRefund, 15000)
+            (storageSetRefund, 4800)
           else (storageSetRefund, 0)
       else (0, 0);
     update_gas_refund refundUpdates;
@@ -976,7 +976,7 @@ Definition proceed_call_def:
     accounts outputTo =
   do
     data <- read_memory argsOffset argsSize;
-    if op ≠ DelegateCall ∧ 0 < value then
+    if 0 < value then
       update_accounts $ transfer_value sender address value
     else return ();
     caller <- get_caller;
