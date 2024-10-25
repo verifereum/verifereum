@@ -232,7 +232,7 @@ End
 Definition get_gas_left_def:
   get_gas_left = do
     context <- get_current_context;
-    return $ context.gasUsed - context.callParams.gasLimit
+    return $ context.callParams.gasLimit - context.gasUsed
   od
 End
 
@@ -363,7 +363,8 @@ Definition pop_stack_def:
     context <- get_current_context;
     stack <<- context.stack;
     assert (n ≤ LENGTH stack) StackUnderflow;
-    return (TAKE n stack)
+    set_current_context $ context with stack := DROP n stack;
+    return $ TAKE n stack
   od
 End
 
@@ -408,7 +409,7 @@ Definition memory_expansion_info_def:
     newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
     return $
       <| cost := memory_expansion_cost oldSize newMinSize
-       ; expand_by := MAX oldSize newMinSize |>
+       ; expand_by := MAX oldSize newMinSize - oldSize |>
   od
 End
 
@@ -1118,8 +1119,20 @@ Definition step_inst_def:
   ∧ step_inst SelfDestruct = step_self_destruct
 End
 
+Definition is_call_def:
+  is_call Call = T ∧
+  is_call CallCode = T ∧
+  is_call DelegateCall = T ∧
+  is_call StaticCall = T ∧
+  is_call Create = T ∧
+  is_call Create2 = T ∧
+  is_call _ = F
+End
+
 Definition inc_pc_or_jump_def:
-  inc_pc_or_jump n = do
+  inc_pc_or_jump op =
+  if is_call op then return () else do
+    n <<- LENGTH (opcode op);
     context <- get_current_context;
     case context.jumpDest of
     | NONE => set_current_context $ context with pc := context.pc + n
@@ -1139,16 +1152,6 @@ Definition inc_pc_def:
     context <- get_current_context;
     set_current_context $ context with pc updated_by SUC
   od
-End
-
-Definition is_call_def:
-  is_call Call = T ∧
-  is_call CallCode = T ∧
-  is_call DelegateCall = T ∧
-  is_call StaticCall = T ∧
-  is_call Create = T ∧
-  is_call Create2 = T ∧
-  is_call _ = F
 End
 
 Definition pop_and_incorporate_context_def:
@@ -1178,8 +1181,7 @@ Definition handle_exception_def:
       consume_gas codeGas;
       assert (codeLen ≤ 0x6000) OutOfGas
     od else return ();
-    exceptionalHalt <<- (e ≠ NONE ∧ e ≠ SOME Reverted);
-    if exceptionalHalt then do
+    if ¬success ∧ e ≠ SOME Reverted then do
       gasLeft <- get_gas_left;
       consume_gas gasLeft;
       set_return_data [];
@@ -1222,8 +1224,7 @@ Definition step_def:
       | NONE => step_inst Invalid
       | SOME op => do
           step_inst op;
-          if is_call op then return ()
-          else inc_pc_or_jump (LENGTH (opcode op))
+          inc_pc_or_jump op
         od
     od
   od s of
