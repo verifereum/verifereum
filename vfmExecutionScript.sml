@@ -864,11 +864,12 @@ Definition step_self_destruct_def:
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     assert_not_static;
     set_accounts $ transfer_value senderAddress address balance accounts;
-    if senderAddress = address then
+    createdInThisTx <<- F; (* TODO *)
+    if createdInThisTx ∧ senderAddress = address then
       update_accounts $
         update_account senderAddress (sender with balance := 0)
     else return ();
-    (* TODO: destroy created contract if this is a contract creation *)
+    (* TODO: destroy contract if created in this transaction *)
     finish
   od
 End
