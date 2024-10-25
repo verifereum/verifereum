@@ -764,6 +764,7 @@ Definition step_jumpi_def:
     args <- pop_stack 2;
     dest <<- w2n $ EL 0 args;
     jumpDest <<- if EL 1 args = 0w then NONE else SOME dest;
+    consume_gas $ static_gas JumpI;
     set_jump_dest jumpDest
   od
 End
