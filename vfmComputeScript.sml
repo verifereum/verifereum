@@ -868,7 +868,7 @@ val return_destination_CASE_rator =
 val () = “inc_pc_or_jump n s” |>
   SIMP_CONV std_ss [
     inc_pc_or_jump_def, bind_def, ignore_bind_def,
-    LET_RATOR, option_CASE_rator] |>
+    LET_RATOR, COND_RATOR, option_CASE_rator] |>
   cv_auto_trans;
 
 val () = “pop_and_incorporate_context b s” |>

@@ -160,9 +160,7 @@ fun accounts_term (ls: account list) =
   List.foldl
     (fn (a, s) =>
       String.concat [
-        "update_account (",
-        s,
-        ")(n2w ", #address a, ") <|",
+        "update_account (n2w ", #address a, ") <|",
         " nonce := ", #nonce a,
         ";balance := ", #balance a,
         ";code := ", case Redblackmap.peek(!codeCache, #code a) of
@@ -172,13 +170,12 @@ fun accounts_term (ls: account list) =
         List.foldl
           (fn (e, s) =>
             String.concat [
-              "update_storage (",
-              s,
-              ") (n2w ", #key e, ") (n2w ", #value e, ")"
+              "update_storage (n2w ", #key e,
+              ") (n2w ", #value e, ") (", s, ")"
             ])
             "empty_storage"
             (#storage a),
-        "|>"
+        "|> (", s, ")"
       ]) "empty_accounts" ls
 
 fun mk_code_name prefix address =
@@ -256,14 +253,14 @@ fun mk_prove_test test_path = let
     val pre_name = test_name_escaped ^ "_pre";
     val pre_prefix = pre_name ^ "_";
     val code_defs = mk_code_defs pre_prefix [] pre;
-    val pre_def = new_definition(pre_name,
+    val pre_def = new_definition(pre_name ^ "_def",
       Term[QUOTE(pre_name ^ " = " ^ accounts_term pre)]);
 
     val post = #post test;
     val post_name = test_name_escaped ^ "_post";
     val post_prefix = post_name ^ "_";
     val code_defs = mk_code_defs post_prefix code_defs post;
-    val post_def = new_definition(post_name,
+    val post_def = new_definition(post_name ^ "_def",
       Term[QUOTE(post_name ^ " = " ^ accounts_term post)]);
 
     val () = List.app (cv_trans_deep_embedding EVAL) code_defs;
