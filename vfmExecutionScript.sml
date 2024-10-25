@@ -775,6 +775,13 @@ Definition step_push_def:
   od
 End
 
+Definition step_pop_def:
+  step_pop = do
+    pop_stack 1;
+    consume_gas $ static_gas Pop
+  od
+End
+
 Definition step_dup_def:
   step_dup n = do
     consume_gas $ static_gas $ Dup n;
@@ -1088,7 +1095,7 @@ Definition step_inst_def:
   ∧ step_inst ChainId = step_txParams ChainId (λt. n2w t.chainId)
   ∧ step_inst SelfBalance = step_self_balance
   ∧ step_inst BaseFee = step_txParams BaseFee (λt. n2w t.baseFeePerGas)
-  ∧ step_inst Pop = do pop_stack 1; return () od
+  ∧ step_inst Pop = step_pop
   ∧ step_inst MLoad = step_mload
   ∧ step_inst MStore = step_mstore MStore
   ∧ step_inst MStore8 = step_mstore MStore8

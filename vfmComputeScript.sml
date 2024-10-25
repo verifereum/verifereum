@@ -794,6 +794,7 @@ val th = tt step_mstore_def;
 val th = tt step_jump_def;
 val th = tt step_jumpi_def;
 val th = tf step_push_def;
+val th = tf step_pop_def;
 val th = tt step_dup_def;
 val th = tt step_swap_def;
 val th = tt step_log_def;
