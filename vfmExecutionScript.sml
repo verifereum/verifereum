@@ -976,7 +976,7 @@ Definition proceed_call_def:
     accounts outputTo =
   do
     data <- read_memory argsOffset argsSize;
-    if 0 < value then
+    if op ≠ CallCode (* otherwise to := sender *) ∧ 0 < value then
       update_accounts $ transfer_value sender address value
     else return ();
     caller <- get_caller;
