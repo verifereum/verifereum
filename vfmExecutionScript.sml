@@ -958,11 +958,11 @@ Definition step_create_def:
     consume_gas cappedGas;
     assert_not_static;
     set_return_data [];
-    depth <- get_num_contexts;
+    sucDepth <- get_num_contexts;
     toCreate <<- lookup_account address accounts;
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
-       SUC depth > 1024
+       sucDepth > 1024
     then abort_unuse cappedGas
     else if ¬(account_empty toCreate)
     then abort_create_exists senderAddress sender
@@ -1045,8 +1045,8 @@ Definition step_call_def:
     then abort_call_value stipend
     else do
       set_return_data [];
-      depth <- get_num_contexts;
-      if SUC depth > 1024
+      sucDepth <- get_num_contexts;
+      if sucDepth > 1024
       then abort_unuse stipend
       else proceed_call op sender address value
              argsOffset argsSize toAccount.code stipend

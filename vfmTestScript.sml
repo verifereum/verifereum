@@ -734,11 +734,9 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix from d34g0v0
 val test_path = mk_test_path "invalidDiffPlaces.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO: too slow from d9g0v0
 val test_path = mk_test_path "measureGas.json";
