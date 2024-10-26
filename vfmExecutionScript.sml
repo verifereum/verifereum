@@ -874,10 +874,18 @@ Definition step_self_destruct_def:
   od
 End
 
+Definition inc_pc_def:
+  inc_pc = do
+    context <- get_current_context;
+    set_current_context $ context with pc updated_by SUC
+  od
+End
+
 Definition abort_unuse_def:
   abort_unuse n = do
     unuse_gas n;
-    push_stack $ b2w F
+    push_stack $ b2w F;
+    inc_pc
   od
 End
 
@@ -885,7 +893,8 @@ Definition abort_create_exists_def:
   abort_create_exists senderAddress sender = do
     update_accounts $
       update_account senderAddress $ sender with nonce updated_by SUC;
-    push_stack $ b2w F
+    push_stack $ b2w F;
+    inc_pc
   od
 End
 
@@ -966,7 +975,8 @@ Definition abort_call_value_def:
   abort_call_value stipend = do
     push_stack $ b2w F;
     set_return_data [];
-    unuse_gas stipend
+    unuse_gas stipend;
+    inc_pc
   od
 End
 
@@ -1153,13 +1163,6 @@ Definition inc_pc_or_jump_def:
         set_current_context $
           context with <| pc := pc; jumpDest := NONE |>
       od
-  od
-End
-
-Definition inc_pc_def:
-  inc_pc = do
-    context <- get_current_context;
-    set_current_context $ context with pc updated_by SUC
   od
 End
 
