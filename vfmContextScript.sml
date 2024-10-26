@@ -137,11 +137,11 @@ End
 Definition parse_code_def:
   parse_code pc m code =
   if NULL code then m else
-  case parse_opcode code of
-  | NONE => m
-  | SOME op =>
-    let n = LENGTH $ opcode op in
-    parse_code (pc + n) (m |+ (pc, op)) (DROP n code)
+  let op = case parse_opcode code of
+                NONE => Invalid
+              | SOME op => op in
+  let n = LENGTH $ opcode op in
+  parse_code (pc + n) (m |+ (pc, op)) (DROP n code)
 Termination
   WF_REL_TAC`measure (LENGTH o SND o SND)`
   \\ rw[LENGTH_DROP, LENGTH_NOT_NULL]
