@@ -11,54 +11,96 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 
 val _ = new_theory "vfmTest";
 
+Theorem run_transactions_with_fuel_sub:
+  !ts n a rs qs m j.
+  run_transactions_with_fuel n c h b a rs ts = SOME (qs,d,m) /\ j <= m ==>
+  m ≤ n ∧
+  run_transactions_with_fuel (n - j) c h b a rs ts = SOME (qs,d,m - j)
+Proof
+  Induct
+  \\ simp[run_transactions_with_fuel_def]
+  \\ qx_gen_tac`x` \\ rpt gen_tac
+  \\ gvs[CaseEq"option", CaseEq"prod", PULL_EXISTS]
+  \\ qx_genl_tac[`p`,`f`,`e`] \\ strip_tac
+  \\ first_x_assum drule
+  \\ disch_then(fn th => assume_tac th \\ qspec_then`0`mp_tac th)
+  \\ impl_tac \\ simp[] \\ strip_tac
+  \\ drule run_transaction_with_fuel_sub
+  \\ strip_tac
+  \\ drule run_transaction_with_fuel_add
+  \\ disch_then(qspec_then`p - j`mp_tac)
+  \\ simp[]
+  \\ `p < n`
+  by (
+    CCONTR_TAC
+    \\ `n - p = 0` by gs[]
+    \\ gs[]
+    \\ qhdtm_x_assum`run_transaction_with_fuel`mp_tac
+    \\ simp[run_transaction_with_fuel_def, run_with_fuel_def] )
+  \\ simp[]
+QED
+
+Theorem run_block_with_fuel_sub:
+  run_block_with_fuel n c h a b = SOME (x, y, m) ==>
+  run_block_with_fuel (n - m) c h a b = SOME (x, y, 0)
+Proof
+  rw[run_block_with_fuel_def, EXISTS_PROD]
+  \\ drule run_transactions_with_fuel_sub
+  \\ disch_then(qspec_then`m`mp_tac)
+  \\ simp[]
+QED
+
+Theorem run_block_with_fuel_cv_sub:
+  run_block_with_fuel n c h a b =
+  to_option (to_pair f (to_pair g cv$c2n))
+    (Pair (Num z) (Pair x (Pair y (Num m))))
+  ⇒
+  run_block_with_fuel (n - m) c h a b =
+  to_option (to_pair f (to_pair g cv$c2n))
+    (Pair (Num z) (Pair x (Pair y (Num 0))))
+Proof
+  rw[to_option_def, to_pair_def]
+  \\ irule run_block_with_fuel_sub
+  \\ rw[]
+QED
+
 val run_block_with_fuel_pat =
   run_block_with_fuel_def |> SPEC_ALL |> concl |> lhs;
 
 val run_block_with_fuel =
   run_block_with_fuel_pat |> strip_comb |> fst;
 
-(*
-  val (_, gt) = top_goal()
-  Globals.max_print_depth := 12
-*)
-fun cv_eval_run_block_with_fuel_tac (goal as (_, gt)) = let
-  val run_tm = find_term (can (match_term run_block_with_fuel_pat)) gt
-  val raw_th = cv_eval_raw run_tm
-  val raw_th2 = raw_th |>
-  REWRITE_RULE[
-    cv_typeTheory.to_option_def,
-    cv_typeTheory.to_pair_def,
-    to_vfmExecution_transaction_result_def,
-    cv_typeTheory.cv_has_shape_def,
-    cvTheory.Num_11,
-    EVAL``2n = 0``,
-    EVAL``2n = 1``,
-    EVAL``1n = 0``,
-    to_evm_accounts_def,
-    cv_typeTheory.to_list_def,
-    cvTheory.cv_fst_def,
-    cvTheory.cv_snd_def,
-    cvTheory.c2n_def,
-    to_vfmContext_execution_state_def,
-    to_vfmContext_transaction_parameters_def,
-    to_vfmContext_access_sets_def,
-    to_vfmContext_context_def,
-    to_vfmContext_call_parameters_def,
-    to_vfmContext_return_destination_def,
-    to_vfmContext_memory_range_def,
-    to_evm_accounts_def,
-    to_num_fset_def,
-    to_word_fset_def,
-    to_storage_key_fset_def,
-    to_word_def,
-    to_option_def,
-    cv_has_shape_def,
-    c2n_def, c2b_thm,
-    to_list_def, cv_fst_def, cv_snd_def
-  ]
-in
-  rewrite_tac[raw_th2]
-end goal;
+val cv_eval_run_block_with_fuel_rwts = [
+  cv_typeTheory.to_option_def,
+  cv_typeTheory.to_pair_def,
+  to_vfmExecution_transaction_result_def,
+  cv_typeTheory.cv_has_shape_def,
+  cvTheory.Num_11,
+  EVAL``2n = 0``,
+  EVAL``2n = 1``,
+  EVAL``1n = 0``,
+  to_evm_accounts_def,
+  cv_typeTheory.to_list_def,
+  cvTheory.cv_fst_def,
+  cvTheory.cv_snd_def,
+  cvTheory.c2n_def,
+  to_vfmContext_execution_state_def,
+  to_vfmContext_transaction_parameters_def,
+  to_vfmContext_access_sets_def,
+  to_vfmContext_context_def,
+  to_vfmContext_call_parameters_def,
+  to_vfmContext_return_destination_def,
+  to_vfmContext_memory_range_def,
+  to_evm_accounts_def,
+  to_num_fset_def,
+  to_word_fset_def,
+  to_storage_key_fset_def,
+  to_word_def,
+  to_option_def,
+  cv_has_shape_def,
+  c2n_def, c2b_thm,
+  to_list_def, cv_fst_def, cv_snd_def
+];
 
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
@@ -84,11 +126,12 @@ val account_rwts = [
   set_goal([], thm_term);
   Globals.max_print_depth := 32
 *)
-fun mk_tactic num_steps =
+fun mk_tactic num_steps eval_th =
   rw[run_block_SOME_with_fuel]
   \\ CONV_TAC SWAP_EXISTS_CONV
-  \\ exists_tac (numSyntax.term_of_int num_steps)
-  \\ cv_eval_run_block_with_fuel_tac
+  \\ exists_tac num_steps
+  \\ rewrite_tac[eval_th]
+  \\ rewrite_tac cv_eval_run_block_with_fuel_rwts
   \\ rewrite_tac[LET_THM]
   \\ CONV_TAC(PATH_CONV"blrrrlr"(BETA_CONV THENC EVAL))
   \\ rewrite_tac[SOME_11, PAIR_EQ]
@@ -130,17 +173,16 @@ let
   in
     if optionSyntax.is_none r_tm
     then loop $ 2 * n
-    else
-      r_tm |> optionSyntax.dest_some |>
-        pairSyntax.dest_pair |> snd |>
-        pairSyntax.dest_pair |> snd |>
-        numSyntax.int_of_term |>
-        curry op - n
+    else (raw_th, n)
   end
-  val num_steps = loop n
-  val () = TextIO.print $ msg "Found" num_steps
+  val (raw_th, n) = loop n
+  val zero_th = MATCH_MP run_block_with_fuel_cv_sub raw_th
+                |> CONV_RULE (PATH_CONV "lrllllr" numLib.REDUCE_CONV)
+  val num_steps = zero_th |> concl |> lhs |> strip_comb |>
+                  #2 |> el 1
+  val () = TextIO.print $ msg "Found" $ numSyntax.int_of_term num_steps
 in
-  num_steps
+  (num_steps, zero_th)
 end
 
 type account = {
@@ -274,10 +316,9 @@ fun mk_prove_test test_path = let
     val thm_name = test_name_escaped ^ "_correctness";
     val thm_term = mk_statement test_name_escaped;
 
-    (* TODO: save the result to give to mk_tactic *)
-    val num_steps = find_num_steps thm_term
+    val (num_steps, eval_th) = find_num_steps thm_term
   in
-    store_thm(thm_name, thm_term, mk_tactic num_steps)
+    store_thm(thm_name, thm_term, mk_tactic num_steps eval_th)
   end
 in (List.length test_names, prove_test) end
 
