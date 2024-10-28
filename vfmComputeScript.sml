@@ -1104,28 +1104,29 @@ val () = update_beacon_block_def |> cv_auto_trans;
 
 val () = cv_auto_trans empty_return_destination_def;
 
+val run_create_pre_def = run_create_def
+  |> SIMP_RULE std_ss [o_DEF]
+  |> cv_auto_trans_pre;
+
+Theorem run_create_pre[cv_pre]:
+  run_create_pre c p b a t
+Proof
+  rw[run_create_pre_def, initial_state_def]
+QED
+
 Definition run_transaction_with_fuel_def:
   run_transaction_with_fuel n chainId hs blk acc tx =
-  case initial_state chainId hs blk acc empty_return_destination tx of
-    NONE => NONE
-  | SOME s =>
-    OPTION_MAP
-     (λ(r, t, m). (post_transaction_accounting blk tx r s.accounts t, m))
-     (run_with_fuel n (INL (),
-                       s with accounts updated_by
-                       transfer_value
-                         tx.from (HD s.contexts).callParams.callee tx.value))
+  case run_create chainId hs blk acc tx of
+     | NONE => NONE
+     | SOME (INL r) => SOME (r, n)
+     | SOME (INR (a, s)) =>
+         case run_with_fuel n (INL (), s) of
+            | SOME (r, t, m) =>
+                SOME $ (post_transaction_accounting blk tx r a t, m)
+            | _ => NONE
 End
 
-val run_transaction_with_fuel_pre_def =
-  run_transaction_with_fuel_def |> cv_auto_trans_pre;
-
-Theorem run_transaction_with_fuel_pre[cv_pre]:
-  run_transaction_with_fuel_pre n c h b a t
-Proof
-  rw[run_transaction_with_fuel_pre_def, initial_state_def]
-  \\ rw[execution_state_component_equality]
-QED
+val () = run_transaction_with_fuel_def |> cv_auto_trans;
 
 Definition run_transactions_with_fuel_def:
   run_transactions_with_fuel n c h b a rs [] = SOME (rs, a, n) ∧
@@ -1189,7 +1190,8 @@ Theorem run_transaction_with_fuel_add:
   run_transaction_with_fuel n c h b a t = SOME (x, m) ⇒
   run_transaction_with_fuel (n + d) c h b a t = SOME (x, m + d)
 Proof
-  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD, CaseEq"option"]
+  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD,
+     CaseEq"option", CaseEq"sum", CaseEq"prod"]
   \\ drule run_with_fuel_add
   \\ disch_then(qspec_then`d`mp_tac)
   \\ simp[]
@@ -1199,7 +1201,8 @@ Theorem run_transaction_with_fuel_sub:
   run_transaction_with_fuel n c h b a t = SOME (x, m) ⇒
   run_transaction_with_fuel (n - m) c h b a t = SOME (x, 0)
 Proof
-  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD, CaseEq"option"]
+  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD,
+     CaseEq"option", CaseEq"sum", CaseEq"prod"]
   \\ drule run_with_fuel_sub
   \\ simp[]
 QED
@@ -1210,7 +1213,8 @@ Theorem run_transaction_with_fuel_equal:
   ⇒
   n = p
 Proof
-  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD, CaseEq"option"]
+  rw[run_transaction_with_fuel_def, PULL_EXISTS, FORALL_PROD,
+     CaseEq"option", CaseEq"sum", CaseEq"prod"] \\ gvs[]
   \\ drule_then irule run_with_fuel_equal
   \\ gs[]
 QED

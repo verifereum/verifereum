@@ -86,6 +86,7 @@ Datatype:
   | InvalidJumpDest
   | WriteInStaticContext
   | OutOfBoundsRead
+  | AddressCollision
   | Reverted
   | Impossible
 End
@@ -1222,10 +1223,6 @@ Definition run_def:
   run s = OWHILE (ISL o FST) (step o SND) (INL (), s)
 End
 
-Definition empty_return_destination_def:
-  empty_return_destination = Memory <| offset := 0; size := 0 |>
-End
-
 Datatype:
   transaction_result =
   <| gasUsed  : num
@@ -1268,17 +1265,37 @@ Definition post_transaction_accounting_def:
   (tr, newAccounts)
 End
 
+Definition run_create_def:
+  run_create chainId prevHashes blk accounts tx =
+  case initial_state chainId prevHashes blk accounts tx of
+    NONE => NONE
+  | SOME s => SOME $
+    let ctxt = HD s.contexts in
+    let calleeAddress = ctxt.callParams.callee in
+    if IS_SOME tx.to then
+      INR $ (s.accounts, s with accounts updated_by
+             transfer_value tx.from calleeAddress tx.value)
+    else
+      let callee = lookup_account calleeAddress s.accounts in
+      if ¬(callee.nonce = 0 ∧ NULL callee.code) then
+        INL $ post_transaction_accounting blk tx (SOME AddressCollision) s.accounts
+              (s with contexts := [ctxt with gasUsed := ctxt.callParams.gasLimit])
+      else
+        INR $ (s.accounts, s with accounts updated_by (
+          transfer_value tx.from calleeAddress tx.value o
+          update_account calleeAddress (callee with nonce updated_by SUC)
+        ))
+End
+
 Definition run_transaction_def:
   run_transaction chainId prevHashes blk accounts tx =
-  OPTION_BIND
-    (initial_state chainId prevHashes blk accounts empty_return_destination tx)
-    (λs.
-        case run (s with accounts updated_by
-                  transfer_value
-                    tx.from (HD s.contexts).callParams.callee tx.value) of
-        | SOME (INR r, t) => SOME $
-            post_transaction_accounting blk tx r s.accounts t
-        | _ => NONE)
+  case run_create chainId prevHashes blk accounts tx of
+     | SOME (INL result) => SOME result
+     | SOME (INR (acc, s1)) => (case run s1 of
+       | SOME (INR r, s2) => SOME $
+          post_transaction_accounting blk tx r acc s2
+       | _ => NONE)
+     | _ => NONE
 End
 
 Definition update_beacon_block_def:

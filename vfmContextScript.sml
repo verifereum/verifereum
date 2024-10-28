@@ -297,8 +297,12 @@ Proof
   rw[apply_intrinsic_cost_def, wf_context_def]
 QED
 
+Definition empty_return_destination_def:
+  empty_return_destination = Memory <| offset := 0; size := 0 |>
+End
+
 Definition initial_state_def:
-  initial_state c h b a r t =
+  initial_state c h b a t =
   let sender = lookup_account t.from a in
   let fee = t.gasLimit * t.gasPrice in (* TODO: add blob gas fee *)
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
@@ -313,8 +317,9 @@ Definition initial_state_def:
   let code = case t.to of
                   SOME addr => (lookup_account addr a).code
                 | NONE => t.data in
+  let rd = if IS_SOME t.to then empty_return_destination else Code callee in
   let ctxt = <| code := code; accounts := accounts; accesses := acc
-              ; outputTo := r; static := F |> in
+              ; outputTo := rd; static := F |> in
   SOME $
   <| contexts := [apply_intrinsic_cost $ initial_context callee ctxt t]
    ; txParams := initial_tx_params c h b t
@@ -324,7 +329,7 @@ Definition initial_state_def:
 End
 
 Theorem wf_initial_state:
-  wf_accounts a ∧ initial_state c h b a r t = SOME s
+  wf_accounts a ∧ initial_state c h b a t = SOME s
   ⇒
   wf_state s
 Proof
