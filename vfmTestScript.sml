@@ -2278,6 +2278,23 @@ val test_path = mk_test_path "ExtCodeCopyTestsParis.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+
+(* Precompile tests *)
+fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/stPreCompiledContracts/" ^ s;
+
+(* val test_path = mk_test_path "idPrecomps.json"; *)
+(* val (num_tests, prove_test) = mk_prove_test test_path; *)
+(* val thms = List.tabulate (num_tests, prove_test); *)
+
+val test_path = mk_test_path "identity_to_smaller.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "identity_to_bigger.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stCodeSizeLimit/" ^ s;
 

@@ -981,11 +981,30 @@ Definition abort_call_value_def:
   od
 End
 
+
+Definition precompile_identity_def:
+  precompile_identity = do
+    input <- get_call_data;
+    dynamic_gas <<- 3 * word_size (LENGTH input);
+    consume_gas (15 + dynamic_gas);
+    set_return_data input;
+    finish
+  od
+End
+
+Definition dispatch_precompiles_def:
+  dispatch_precompiles = do
+    callee <- get_callee;
+    if callee = 0x4w then precompile_identity
+    else fail Impossible
+  od
+End
+
+
 Definition proceed_call_def:
   proceed_call op sender address value
     argsOffset argsSize code stipend
-    accounts outputTo =
-  do
+    accounts outputTo = do
     data <- read_memory argsOffset argsSize;
     if op ≠ CallCode (* otherwise to := sender *) ∧ 0 < value then
       update_accounts $ transfer_value sender address value
@@ -1014,7 +1033,12 @@ Definition proceed_call_def:
       ; outputTo := outputTo
       ; static   := (op = StaticCall ∨ static)
     |>;
-    push_context $ initial_context callee subContextParams subContextTx;
+
+    context <<- initial_context callee subContextParams subContextTx;
+    push_context context;
+    if fIN address precompile_addresses
+    then dispatch_precompiles
+    else return ()
   od
 End
 
@@ -1250,14 +1274,14 @@ Definition step_def:
     if LENGTH code ≤ context.pc
     then step_inst Stop
     else do
-      case FLOOKUP parsed context.pc of
-      | NONE => step_inst Invalid
-      | SOME op => do
-          step_inst op;
-          inc_pc_or_jump op
-        od
-    od
-  od handle_step
+        case FLOOKUP parsed context.pc of
+        | NONE => step_inst Invalid
+        | SOME op => do
+                      step_inst op;
+                      inc_pc_or_jump op
+                    od
+      od
+    od handle_step
 End
 
 Definition run_def:
