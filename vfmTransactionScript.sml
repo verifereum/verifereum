@@ -14,7 +14,7 @@ End
 Datatype:
   transaction =
   <| from       : address
-   ; to         : address
+   ; to         : address option
    ; data       : byte list
    ; nonce      : num
    ; value      : num
