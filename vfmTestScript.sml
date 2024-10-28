@@ -30,13 +30,22 @@ Proof
   \\ drule run_transaction_with_fuel_add
   \\ disch_then(qspec_then`p - j`mp_tac)
   \\ simp[]
-  \\ `p < n`
+  \\ `p ≤ n`
   by (
     CCONTR_TAC
-    \\ `n - p = 0` by gs[]
-    \\ gs[]
     \\ qhdtm_x_assum`run_transaction_with_fuel`mp_tac
-    \\ simp[run_transaction_with_fuel_def, run_with_fuel_def] )
+    \\ qhdtm_x_assum`run_transaction_with_fuel`mp_tac
+    \\ simp[run_transaction_with_fuel_def, run_with_fuel_def,
+            run_create_def, CaseEq"bool", CaseEq"num", PULL_EXISTS,
+            CaseEq"option", CaseEq"sum", CaseEq"prod"]
+    \\ rpt gen_tac
+    \\ strip_tac \\ gvs[]
+    \\ qmatch_asmsub_abbrev_tac`run_with_fuel _ pp`
+    \\ Cases_on`pp`
+    \\ drule run_with_fuel_sub
+    \\ gs[run_with_fuel_def, CaseEq"bool", CaseEq"num"]
+    \\ strip_tac \\ gvs[]
+    \\ metis_tac[NOT_ISL_ISR])
   \\ simp[]
 QED
 
@@ -246,6 +255,10 @@ fun mk_code_defs prefix acc (ls: account list) =
         of NONE => l
          | SOME def => def::l) acc ls
 
+fun mk_tx_to s =
+  if String.size s = 0 then "NONE"
+  else "SOME (n2w " ^ s ^ ")"
+
 (*
   val test_index = 0;
   Globals.max_print_depth := 32
@@ -265,7 +278,7 @@ fun mk_prove_test test_path = let
       Term[QUOTE(String.concat[
         test_name_escaped, "_transaction = <|",
         " from := n2w ", #sender transaction,
-        ";to := n2w ", #to transaction,
+        ";to := ", mk_tx_to (#to transaction),
         ";data := REVERSE $ hex_to_rev_bytes [] \"", trim2 $ #data transaction,
         "\";nonce := ", #nonce transaction,
         ";value := ", #value transaction,
