@@ -123,8 +123,7 @@ val account_rwts = [
 ];
 
 (*
-  set_goal([], thm_term);
-  Globals.max_print_depth := 32
+  set_goal([], thm_term)
 *)
 fun mk_tactic num_steps eval_th =
   rw[run_block_SOME_with_fuel]
@@ -248,7 +247,8 @@ fun mk_code_defs prefix acc (ls: account list) =
          | SOME def => def::l) acc ls
 
 (*
-  val test_index = 0
+  val test_index = 0;
+  Globals.max_print_depth := 32
 *)
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
@@ -989,13 +989,27 @@ opcECDiffPlaces.json
 opcEDDiffPlaces.json
 opcEEDiffPlaces.json
 opcEFDiffPlaces.json
-opcF6DiffPlaces.json
-opcF7DiffPlaces.json
-opcF8DiffPlaces.json
-opcF9DiffPlaces.json
-opcFBDiffPlaces.json
-opcFCDiffPlaces.json
 *)
+
+val test_path = mk_test_path "opcF6DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcF7DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcF8DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcF9DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcFBDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "opcFCDiffPlaces.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1194,47 +1208,35 @@ val test_path = mk_test_path "callcallcodecallcode_ABCB_RECURSIVE.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "callcodeDynamicCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "callcodeDynamicCode2SelfCall.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "callcodeEmptycontract.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "callcodeInInitcodeToEmptyContract.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path
   "callcodeInInitcodeToExisContractWithVTransferNEMoney.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "callcodeInInitcodeToExistingContract.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path
   "callcodeInInitcodeToExistingContractWithValueTransfer.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "callcode_checkPC.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1379,38 +1381,29 @@ val thms = List.tabulate (num_tests, prove_test);
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stCallCreateCallCodeTest/" ^ s;
 
-(* TODO: fix
 val test_path = mk_test_path "Call1024BalanceTooLow.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "Call1024OOG.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cache num_steps *)
-(* TODO: fix
 val test_path = mk_test_path "Call1024PreCalls.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "CallLoseGasOOG.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "CallRecursiveBombPreCall.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "Callcode1024BalanceTooLow.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "Callcode1024OOG.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1444,17 +1437,13 @@ val test_path = mk_test_path "callOutput3partialFail.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "callWithHighValue.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "callWithHighValueAndGasOOG.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (*
 callWithHighValueAndOOGatTxLevel.json
@@ -1489,11 +1478,9 @@ createNameRegistratorendowmentTooHigh.json
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stCallDelegateCodesCallCodeHomestead/" ^ s;
 
-(* TODO: fix
 val test_path = mk_test_path "callcallcallcode_001.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (*
 callcallcallcode_001_OOGE.json
@@ -1600,13 +1587,13 @@ createCodeSizeLimit.json
 (*
 
 cv_eval ``
-let acc = pc_d0g0v0_Cancun_pre in
-let blk = pc_d0g0v0_Cancun_block in
-let tx = pc_d0g0v0_Cancun_transaction in
+let acc = callcodeDynamicCode_d2g0v0_Cancun_pre in
+let blk = callcodeDynamicCode_d2g0v0_Cancun_block in
+let tx = callcodeDynamicCode_d2g0v0_Cancun_transaction in
 let s = (THE $ initial_state 1 [] blk acc
                empty_return_destination tx) with accounts updated_by
            transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 12 s in
+let (r, s) = run_n 24 s in
   (*
 let (e, t) =  step_inst SignExtend s
 in ISR e
@@ -1639,6 +1626,7 @@ let c = EL 0 s.contexts in
    c.memory,
    c.callParams.static,
    c.callParams.callee,
+   (lookup_account c.callParams.callee s.accounts).balance,
    (lookup_storage 0w (lookup_account c.callParams.callee s.accounts).storage),
    (lookup_storage 1w (lookup_account c.callParams.callee s.accounts).storage)
    (*
@@ -1649,12 +1637,6 @@ let c = EL 0 s.contexts in
    (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 256w)
    *)
    )
-``
-
-cv_eval ``run_transaction_with_fuel 16 1 []
-  envInfo_d7g0v0_Cancun_block
-  envInfo_d7g0v0_Cancun_pre
-  envInfo_d7g0v0_Cancun_transaction
 ``
 
 TypeBase.fields_of``:execution_state`` |> map (fn x => (fst x, #ty $ snd x))

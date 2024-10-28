@@ -906,7 +906,7 @@ Definition proceed_create_def:
       update_account senderAddress $ sender with nonce updated_by SUC;
     subContextTx <<- <|
         from     := senderAddress
-      ; to       := 0w
+      ; to       := address
       ; value    := value
       ; gasLimit := cappedGas
       ; data     := []
