@@ -690,10 +690,12 @@ Definition step_ext_code_hash_def:
     accessCost <- access_address address;
     consume_gas $ static_gas ExtCodeHash + accessCost;
     accounts <- get_accounts;
-    code <<- (lookup_account address accounts).code;
-    (* TODO: handle non-existent or destroyed accounts? (hash = 0) *)
-    hash <<- if fIN address precompile_addresses then 0w
-             else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ code;
+    account <<- lookup_account address accounts;
+    hash <<- if fIN address precompile_addresses ∨
+                account_empty account
+             then 0w
+             else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $
+                  account.code;
     push_stack hash
   od
 End
@@ -864,12 +866,12 @@ Definition step_self_destruct_def:
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     assert_not_static;
     set_accounts $ transfer_value senderAddress address balance accounts;
-    createdInThisTx <<- F; (* TODO *)
-    if createdInThisTx ∧ senderAddress = address then
+    original <- get_original;
+    originalContract <<- lookup_account senderAddress original;
+    if account_empty originalContract then
       update_accounts $
-        update_account senderAddress (sender with balance := 0)
+        update_account senderAddress originalContract
     else return ();
-    (* TODO: destroy contract if created in this transaction *)
     finish
   od
 End
