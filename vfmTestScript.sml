@@ -913,18 +913,51 @@ val test_path = mk_test_path "opc5FDiffPlaces.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+val test_path = mk_test_path "opcA5DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcA6DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcA7DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcA8DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcA9DiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcAADiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcABDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcACDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcADDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcAEDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "opcAFDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (* TODO: add
-opcA5DiffPlaces.json
-opcA6DiffPlaces.json
-opcA7DiffPlaces.json
-opcA8DiffPlaces.json
-opcA9DiffPlaces.json
-opcAADiffPlaces.json
-opcABDiffPlaces.json
-opcACDiffPlaces.json
-opcADDiffPlaces.json
-opcAEDiffPlaces.json
-opcAFDiffPlaces.json
 opcB0DiffPlaces.json
 opcB1DiffPlaces.json
 opcB2DiffPlaces.json
@@ -1540,7 +1573,88 @@ callcodecallcodecallcode_ABCB_RECURSIVE.json
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stCallDelegateCodesHomestead/" ^ s;
-(* TODO *)
+
+val test_path = mk_test_path "callcallcallcode_001.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_OOGE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_OOGMAfter.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_OOGMBefore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_SuicideEnd.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_001_SuicideMiddle.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcallcallcode_ABCB_RECURSIVE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO add:
+callcallcode_01.json
+callcallcode_01_OOGE.json
+callcallcode_01_SuicideEnd.json
+callcallcodecall_010.json
+callcallcodecall_010_OOGE.json
+callcallcodecall_010_OOGMAfter.json
+callcallcodecall_010_OOGMBefore.json
+callcallcodecall_010_SuicideEnd.json
+callcallcodecall_010_SuicideMiddle.json
+callcallcodecall_ABCB_RECURSIVE.json
+callcallcodecallcode_011.json
+callcallcodecallcode_011_OOGE.json
+callcallcodecallcode_011_OOGMAfter.json
+callcallcodecallcode_011_OOGMBefore.json
+callcallcodecallcode_011_SuicideEnd.json
+callcallcodecallcode_011_SuicideMiddle.json
+callcallcodecallcode_ABCB_RECURSIVE.json
+callcodecall_10.json
+callcodecall_10_OOGE.json
+callcodecall_10_SuicideEnd.json
+callcodecallcall_100.json
+callcodecallcall_100_OOGE.json
+callcodecallcall_100_OOGMAfter.json
+callcodecallcall_100_OOGMBefore.json
+callcodecallcall_100_SuicideEnd.json
+callcodecallcall_100_SuicideMiddle.json
+callcodecallcall_ABCB_RECURSIVE.json
+callcodecallcallcode_101.json
+callcodecallcallcode_101_OOGE.json
+callcodecallcallcode_101_OOGMAfter.json
+callcodecallcallcode_101_OOGMBefore.json
+callcodecallcallcode_101_SuicideEnd.json
+callcodecallcallcode_101_SuicideMiddle.json
+callcodecallcallcode_ABCB_RECURSIVE.json
+callcodecallcode_11.json
+callcodecallcode_11_OOGE.json
+callcodecallcode_11_SuicideEnd.json
+callcodecallcodecall_110.json
+callcodecallcodecall_110_OOGE.json
+callcodecallcodecall_110_OOGMAfter.json
+callcodecallcodecall_110_OOGMBefore.json
+callcodecallcodecall_110_SuicideEnd.json
+callcodecallcodecall_110_SuicideMiddle.json
+callcodecallcodecall_ABCB_RECURSIVE.json
+callcodecallcodecallcode_111.json
+callcodecallcodecallcode_111_OOGE.json
+callcodecallcodecallcode_111_OOGMAfter.json
+callcodecallcodecallcode_111_OOGMBefore.json
+callcodecallcodecallcode_111_SuicideEnd.json
+callcodecallcodecallcode_111_SuicideMiddle.json
+callcodecallcodecallcode_ABCB_RECURSIVE.json
+*)
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stChainId/" ^ s;
@@ -1575,10 +1689,259 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "codesizeOOGInvalidSize.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-codesizeValid.json
-create2CodeSizeLimit.json
-createCodeSizeLimit.json
+
+val test_path = mk_test_path "codesizeValid.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 *)
+
+(* TODO: fix
+val test_path = mk_test_path "create2CodeSizeLimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "createCodeSizeLimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stCreate2/" ^ s;
+
+val test_path = mk_test_path "CREATE2_Bounds.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE2_Bounds2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE2_Bounds3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fails json parse
+val test_path = mk_test_path "CREATE2_FirstByte_loop.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "CREATE2_HighNonce.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE2_HighNonceDelegatecall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE2_HighNonceMinus1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fails parse
+val test_path = mk_test_path "CREATE2_Suicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix from d15g0v0
+val test_path = mk_test_path "Create2OOGFromCallRefunds.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "Create2OOGafterInitCode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "Create2OOGafterInitCodeReturndata.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Create2OOGafterInitCodeReturndata2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Create2OOGafterInitCodeReturndata3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "Create2OOGafterInitCodeReturndataSize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "Create2OOGafterInitCodeRevert.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "Create2OOGafterInitCodeRevert2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "Create2OnDepth1023.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Create2OnDepth1024.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix json parse
+val test_path = mk_test_path "Create2Recursive.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "CreateMessageReverted.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix json parse
+val test_path = mk_test_path "CreateMessageRevertedOOGInInit2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "RevertDepthCreate2OOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "RevertDepthCreate2OOGBerlin.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "RevertDepthCreateAddressCollision.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "RevertDepthCreateAddressCollisionBerlin.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix json parse
+val test_path = mk_test_path "RevertInCreateInInitCreate2Paris.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "RevertOpcodeCreate.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "RevertOpcodeInCreateReturnsCreate2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "call_outsize_then_create2_successful_then_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "call_then_create2_successful_then_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix json parse
+val test_path = mk_test_path "create2InitCodes.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "create2SmartInitCode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "create2callPrecompiles.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "create2checkFieldsInInitcode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix parse
+val test_path = mk_test_path "create2collisionBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "create2collisionCode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "create2collisionCode2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "create2collisionNonce.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "create2collisionSelfdestructed.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: add
+create2collisionSelfdestructed2.json
+create2collisionSelfdestructedOOG.json
+create2collisionSelfdestructedRevert.json
+create2collisionStorageParis.json
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "create2noCash.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "returndatacopy_0_0_following_successful_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_afterFailing_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_revert_in_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_successful_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_following_successful_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 (*
 
