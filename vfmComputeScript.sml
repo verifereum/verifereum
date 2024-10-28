@@ -672,6 +672,12 @@ val () = “push_stack v s” |>
     push_stack_def, bind_def, ignore_bind_def, LET_RATOR
   ] |> cv_auto_trans;
 
+
+val () = “precompile_identity s” |>
+   SIMP_CONV std_ss [
+       precompile_identity_def, bind_def, ignore_bind_def, LET_RATOR
+     ] |> cv_auto_trans;
+
 Theorem pop_stack_INL_LENGTH:
   pop_stack n s = (INL x, y) ⇒
   LENGTH x = n ∧
@@ -829,6 +835,8 @@ val () = “abort_call_value x s” |>
   SIMP_CONV std_ss [
     abort_call_value_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
+
+val th = tf dispatch_precompiles_def;
 
 val () = “proceed_call a b c d e f g h i j s” |>
   SIMP_CONV std_ss [
