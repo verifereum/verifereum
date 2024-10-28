@@ -1,27 +1,7 @@
-open HolKernel boolLib bossLib Parse
-     monadsyntax byteTheory keccakTheory
-     recursiveLengthPrefixTheory
+open HolKernel boolLib bossLib Parse monadsyntax
      vfmTypesTheory vfmContextTheory;
 
 val _ = new_theory "vfmExecution";
-
-(* TODO: move? *)
-Definition Keccak_256_bytes_def:
-  Keccak_256_bytes (bs:word8 list) : word8 list =
-    MAP bools_to_word $ chunks 8 $
-    Keccak_256 $
-    MAP ((=) 1) $ FLAT $
-    MAP (PAD_RIGHT 0 8 o word_to_bin_list) bs
-End
-
-Definition lookup_account_def:
-  lookup_account address (accounts: evm_accounts) = accounts address
-End
-
-Definition update_account_def:
-  update_account address new_account (accounts: evm_accounts) =
-    (address =+ new_account) accounts
-End
 
 Definition lookup_storage_def:
   lookup_storage k (s: storage) = s k
@@ -89,16 +69,6 @@ Definition call_gas_def:
                 left - (left DIV 64)
               ) in
     (gas + otherCost, gas + stipend)
-End
-
-Definition address_for_create_def:
-  address_for_create (address: address) nonce : address =
-    let rlpSender = rlp_bytes $ word_to_bytes address T in
-    let rlpNonce = rlp_bytes $ if nonce = 0n then [] else
-                   MAP n2w $ REVERSE $ n2l 256 $ nonce in
-    let rlpBytes = rlp_list $ rlpSender ++ rlpNonce in
-    let hash = word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes in
-    w2w hash
 End
 
 Definition address_for_create2_def:
@@ -908,7 +878,7 @@ Definition proceed_create_def:
       update_account senderAddress $ sender with nonce updated_by SUC;
     subContextTx <<- <|
         from     := senderAddress
-      ; to       := address
+      ; to       := SOME address
       ; value    := value
       ; gasLimit := cappedGas
       ; data     := []
@@ -927,7 +897,7 @@ Definition proceed_create_def:
       ; outputTo  := Code address
       ; static    := F
     |>;
-    push_context $ initial_context subContextParams subContextTx
+    push_context $ initial_context address subContextParams subContextTx
   od
 End
 
@@ -993,10 +963,11 @@ Definition proceed_call_def:
     else return ();
     caller <- get_caller;
     callValue <- get_value;
+    callee <<- if op = CallCode ∨ op = DelegateCall
+               then sender else address;
     subContextTx <<- <|
         from     := if op = DelegateCall then caller else sender
-      ; to       := if op = CallCode ∨ op = DelegateCall
-                    then sender else address
+      ; to       := SOME callee
       ; value    := if op = DelegateCall then callValue else value
       ; gasLimit := stipend
       ; data     := data
@@ -1012,7 +983,7 @@ Definition proceed_call_def:
       ; outputTo := outputTo
       ; static   := (op = StaticCall ∨ static)
     |>;
-    push_context $ initial_context subContextParams subContextTx;
+    push_context $ initial_context callee subContextParams subContextTx;
   od
 End
 
@@ -1303,7 +1274,8 @@ Definition run_transaction_def:
     (initial_state chainId prevHashes blk accounts empty_return_destination tx)
     (λs.
         case run (s with accounts updated_by
-                  transfer_value tx.from tx.to tx.value) of
+                  transfer_value
+                    tx.from (HD s.contexts).callParams.callee tx.value) of
         | SOME (INR r, t) => SOME $
             post_transaction_accounting blk tx r s.accounts t
         | _ => NONE)

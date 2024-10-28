@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory pred_setTheory finite_setTheory
+     byteTheory recursiveLengthPrefixTheory keccakTheory
      vfmTypesTheory vfmStateTheory vfmTransactionTheory vfmOperationTheory;
 
 val _ = new_theory "vfmContext";
@@ -147,15 +148,48 @@ Termination
   \\ rw[LENGTH_DROP, LENGTH_NOT_NULL]
 End
 
+(* TODO: move? *)
+Definition Keccak_256_bytes_def:
+  Keccak_256_bytes (bs:word8 list) : word8 list =
+    MAP bools_to_word $ chunks 8 $
+    Keccak_256 $
+    MAP ((=) 1) $ FLAT $
+    MAP (PAD_RIGHT 0 8 o word_to_bin_list) bs
+End
+
+Definition address_for_create_def:
+  address_for_create (address: address) nonce : address =
+    let rlpSender = rlp_bytes $ word_to_bytes address T in
+    let rlpNonce = rlp_bytes $ if nonce = 0n then [] else
+                   MAP n2w $ REVERSE $ n2l 256 $ nonce in
+    let rlpBytes = rlp_list $ rlpSender ++ rlpNonce in
+    let hash = word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes in
+    w2w hash
+End
+
+Definition lookup_account_def:
+  lookup_account address (accounts: evm_accounts) = accounts address
+End
+
+Definition update_account_def:
+  update_account address new_account (accounts: evm_accounts) =
+    (address =+ new_account) accounts
+End
+
+Definition callee_from_tx_to_def:
+  callee_from_tx_to sender nonce NONE = address_for_create sender nonce ∧
+  callee_from_tx_to sender nonce (SOME address) = address
+End
+
 Definition initial_call_params_def:
-  initial_call_params ctxt t =
+  initial_call_params callee ctxt t =
   <| caller    := t.from
-   ; callee    := t.to
+   ; callee    := callee
    ; code      := ctxt.code
    ; parsed    := parse_code 0 FEMPTY ctxt.code
    ; value     := t.value
    ; static    := ctxt.static
-   ; data      := t.data
+   ; data      := if t.to = NONE then [] else t.data
    ; gasLimit  := t.gasLimit
    ; accounts  := ctxt.accounts
    ; accesses  := ctxt.accesses
@@ -179,7 +213,7 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context ctxt t =
+  initial_context callee ctxt t =
   <| stack      := []
    ; memory     := []
    ; pc         := 0
@@ -188,35 +222,35 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; gasRefund  := 0
    ; logs       := []
-   ; callParams := initial_call_params ctxt t
+   ; callParams := initial_call_params callee ctxt t
    |>
 End
 
 Theorem initial_call_params_simp[simp]:
-  (initial_call_params ctxt t).code = ctxt.code ∧
-  (initial_call_params ctxt t).gasLimit = t.gasLimit ∧
-  (initial_call_params ctxt t).outputTo = ctxt.outputTo
+  (initial_call_params callee ctxt t).code = ctxt.code ∧
+  (initial_call_params callee ctxt t).gasLimit = t.gasLimit ∧
+  (initial_call_params callee ctxt t).outputTo = ctxt.outputTo
   (* TODO: as needed *)
 Proof
   rw[initial_call_params_def]
 QED
 
 Theorem initial_context_simp[simp]:
-  (initial_context ctxt t).stack = [] ∧
-  (initial_context ctxt t).memory = [] ∧
-  (initial_context ctxt t).pc = 0 ∧
-  (initial_context ctxt t).jumpDest = NONE ∧
-  (initial_context ctxt t).returnData = [] ∧
-  (initial_context ctxt t).gasUsed = 0 ∧
-  (initial_context ctxt t).gasRefund = 0 ∧
-  (initial_context ctxt t).logs = [] ∧
-  (initial_context ctxt t).callParams = initial_call_params ctxt t
+  (initial_context callee ctxt t).stack = [] ∧
+  (initial_context callee ctxt t).memory = [] ∧
+  (initial_context callee ctxt t).pc = 0 ∧
+  (initial_context callee ctxt t).jumpDest = NONE ∧
+  (initial_context callee ctxt t).returnData = [] ∧
+  (initial_context callee ctxt t).gasUsed = 0 ∧
+  (initial_context callee ctxt t).gasRefund = 0 ∧
+  (initial_context callee ctxt t).logs = [] ∧
+  (initial_context callee ctxt t).callParams = initial_call_params callee ctxt t
 Proof
   rw[initial_context_def]
 QED
 
 Theorem wf_initial_context[simp]:
-  wf_context (initial_context ctxt t)
+  wf_context (initial_context callee ctxt t)
 Proof
   rw[wf_context_def]
 QED
@@ -235,10 +269,10 @@ Definition precompile_addresses_def:
 End
 
 Definition initial_access_sets_def:
-  initial_access_sets t =
+  initial_access_sets callee t =
   <| addresses   :=
        fUNION (
-         fINSERT t.from $ fINSERT t.to $
+         fINSERT t.from $ fINSERT callee $
          fIMAGE (λe. e.account) $ fset_ABS t.accessList
        ) precompile_addresses
    ; storageKeys := fBIGUNION
@@ -265,7 +299,7 @@ QED
 
 Definition initial_state_def:
   initial_state c h b a r t =
-  let sender = (a t.from) in
+  let sender = lookup_account t.from a in
   let fee = t.gasLimit * t.gasPrice in (* TODO: add blob gas fee *)
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
   if sender.balance < fee + t.value then NONE else
@@ -273,12 +307,16 @@ Definition initial_state_def:
     nonce := SUC sender.nonce;
     balance := sender.balance - fee
   |> in
-  let accounts = (t.from =+ updatedSender) a in
-  let acc = initial_access_sets t in
-  let ctxt = <| code := (a t.to).code; accounts := accounts; accesses := acc
+  let accounts = update_account t.from updatedSender a in
+  let callee = callee_from_tx_to t.from sender.nonce t.to in
+  let acc = initial_access_sets callee t in
+  let code = case t.to of
+                  SOME addr => (lookup_account addr a).code
+                | NONE => t.data in
+  let ctxt = <| code := code; accounts := accounts; accesses := acc
               ; outputTo := r; static := F |> in
   SOME $
-  <| contexts := [apply_intrinsic_cost $ initial_context ctxt t]
+  <| contexts := [apply_intrinsic_cost $ initial_context callee ctxt t]
    ; txParams := initial_tx_params c h b t
    ; accesses := acc
    ; accounts := accounts
@@ -290,7 +328,8 @@ Theorem wf_initial_state:
   ⇒
   wf_state s
 Proof
-  rw[wf_accounts_def, wf_state_def, initial_state_def] \\ rw[]
+  rw[wf_accounts_def, wf_state_def, initial_state_def,
+     update_account_def, lookup_account_def] \\ rw[]
   \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
   \\ rw[]
 QED
