@@ -862,6 +862,10 @@ val option_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
 
+val prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
 val return_destination_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
@@ -878,18 +882,32 @@ val () = “pop_and_incorporate_context b s” |>
     bind_def, ignore_bind_def, COND_RATOR
   ] |> cv_auto_trans;
 
+val () = “handle_create e s” |>
+  SIMP_CONV std_ss [
+    handle_create_def,
+    bind_def, ignore_bind_def, LET_RATOR,
+    update_accounts_def, COND_RATOR, LET_PROD_RATOR,
+    option_CASE_rator,
+    prod_CASE_rator, return_destination_CASE_rator
+  ] |> cv_auto_trans;
+
 val () = “handle_exception e s” |>
   SIMP_CONV std_ss [
     handle_exception_def,
     bind_def, ignore_bind_def, LET_RATOR,
-    update_accounts_def, COND_RATOR,
-    return_destination_CASE_rator
+    update_accounts_def, COND_RATOR, LET_PROD_RATOR,
+    prod_CASE_rator, return_destination_CASE_rator
   ] |> cv_auto_trans;
 
-val () =  step_def |>
-  SIMP_RULE std_ss [
-    bind_def, ignore_bind_def, LET_RATOR,
-    COND_RATOR, option_CASE_rator
+val () = “handle_step e s” |>
+  SIMP_CONV std_ss [
+    handle_step_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val () = “step s” |>
+  SIMP_CONV std_ss [
+    step_def, bind_def, ignore_bind_def, LET_RATOR,
+    COND_RATOR, option_CASE_rator, handle_def
   ] |> cv_auto_trans;
 
 val () = initial_access_sets_def

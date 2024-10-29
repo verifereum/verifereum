@@ -83,6 +83,7 @@ Datatype:
   | WriteInStaticContext
   | OutOfBoundsRead
   | AddressCollision
+  | InvalidContractPrefix
   | Reverted
   | Impossible
 End
@@ -1151,37 +1152,52 @@ Definition pop_and_incorporate_context_def:
   od
 End
 
-Definition handle_exception_def:
-  handle_exception e = do
+Definition handle_def:
+  handle f h s : α execution_result =
+  case f s
+    of (INR e, s) => h e s
+     | otherwise => otherwise
+End
+
+Definition handle_create_def:
+  handle_create e = do
     code <- get_return_data;
     outputTo <- get_output_to;
-    success <<- (e = NONE);
-    if success ∧ case outputTo of Code _ => T | _ => F then do
+    case (e, outputTo) of
+    | (NONE, Code address) => do
       codeLen <<- LENGTH code;
       codeGas <<- 200 * codeLen;
-      validCode <<- (case code of h::_ => h ≠ n2w 0xef | _ => T);
+      assert (case code of h::_ => h ≠ n2w 0xef | _ => T) InvalidContractPrefix;
       consume_gas codeGas;
-      assert (codeLen ≤ 0x6000) OutOfGas
-    od else return ();
+      assert (codeLen ≤ 0x6000) OutOfGas;
+      update_accounts $ (λaccounts.
+        update_account address
+          (lookup_account address accounts with code := code)
+          accounts);
+      reraise e
+    od | _ => reraise e
+  od
+End
+
+Definition handle_exception_def:
+  handle_exception e = do
+    success <<- (e = NONE);
     if ¬success ∧ e ≠ SOME Reverted then do
       gasLeft <- get_gas_left;
       consume_gas gasLeft;
       set_return_data [];
     od else return ();
-    output <- get_return_data;
     n <- get_num_contexts;
     if n ≤ 1 then reraise e else do
+    output <- get_return_data;
+    outputTo <- get_output_to;
     pop_and_incorporate_context success;
     inc_pc;
     case outputTo of
     | Code address =>
         if success then do
-          update_accounts $ (λaccounts.
-            update_account address
-              (lookup_account address accounts with code := code)
-              accounts) ;
           set_return_data [];
-          push_stack $ w2w address;
+          push_stack $ w2w address
         od else do
           set_return_data output;
           push_stack $ b2w F
@@ -1195,8 +1211,12 @@ Definition handle_exception_def:
   od
 End
 
+Definition handle_step_def:
+  handle_step e = handle (handle_create e) handle_exception
+End
+
 Definition step_def:
-  step s = case do
+  step = handle do
     context <- get_current_context;
     code <<- context.callParams.code;
     parsed <<- context.callParams.parsed;
@@ -1210,9 +1230,7 @@ Definition step_def:
           inc_pc_or_jump op
         od
     od
-  od s of
-  | (INR e, s) => handle_exception e s
-  | else_continue => else_continue
+  od handle_step
 End
 
 Definition run_def:
