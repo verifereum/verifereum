@@ -1694,7 +1694,6 @@ val thms = List.tabulate (num_tests, prove_test);
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stCodeSizeLimit/" ^ s;
 
-(* TODO: need to support create transactions
 val test_path = mk_test_path "codesizeInit.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1706,19 +1705,14 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "codesizeValid.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "create2CodeSizeLimit.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "createCodeSizeLimit.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stCreate2/" ^ s;
@@ -1758,7 +1752,7 @@ val test_path = mk_test_path "CREATE2_HighNonceMinus1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fails parse
+(* TODO: fix
 val test_path = mk_test_path "CREATE2_Suicide.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1822,7 +1816,7 @@ val test_path = mk_test_path "CreateMessageReverted.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix json parse
+(* TODO: fix
 val test_path = mk_test_path "CreateMessageRevertedOOGInInit2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1844,7 +1838,7 @@ val test_path = mk_test_path "RevertDepthCreateAddressCollisionBerlin.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix json parse
+(* TODO: fix
 val test_path = mk_test_path "RevertInCreateInInitCreate2Paris.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1867,7 +1861,7 @@ val test_path = mk_test_path "call_then_create2_successful_then_returndatasize.j
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix json parse
+(* TODO: fix
 val test_path = mk_test_path "create2InitCodes.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1889,7 +1883,7 @@ val test_path = mk_test_path "create2checkFieldsInInitcode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix parse
+(* TODO: fix
 val test_path = mk_test_path "create2collisionBalance.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1956,20 +1950,92 @@ val test_path = mk_test_path "returndatasize_following_successful_create.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stCreateTest/" ^ s;
+
+val test_path = mk_test_path "CREATE2_CallData.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "CREATE2_RefundEF.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "CREATE_AcreateB_BSuicide_BStore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "CREATE_ContractRETURNBigOffset.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix parse
+val test_path = mk_test_path "CREATE_ContractSSTOREDuringInit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: add
+CREATE_ContractSuicideDuringInit.json
+CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json
+CREATE_ContractSuicideDuringInit_WithValue.json
+CREATE_ContractSuicideDuringInit_WithValueToItself.json
+CREATE_EContractCreateEContractInInit_Tr.json
+CREATE_EContractCreateNEContractInInitOOG_Tr.json
+CREATE_EContractCreateNEContractInInit_Tr.json
+CREATE_EContract_ThenCALLToNonExistentAcc.json
+CREATE_EmptyContract.json
+CREATE_EmptyContractAndCallIt_0wei.json
+CREATE_EmptyContractAndCallIt_1wei.json
+CREATE_EmptyContractWithBalance.json
+CREATE_EmptyContractWithStorage.json
+CREATE_EmptyContractWithStorageAndCallIt_0wei.json
+CREATE_EmptyContractWithStorageAndCallIt_1wei.json
+CREATE_FirstByte_loop.json
+CREATE_HighNonce.json
+CREATE_HighNonceMinus1.json
+CREATE_empty000CreateinInitCode_Transaction.json
+CodeInConstructor.json
+CreateAddressWarmAfterFail.json
+CreateCollisionResults.json
+CreateCollisionToEmpty2.json
+CreateOOGFromCallRefunds.json
+CreateOOGFromEOARefunds.json
+CreateOOGafterInitCode.json
+CreateOOGafterInitCodeReturndata.json
+CreateOOGafterInitCodeReturndata2.json
+CreateOOGafterInitCodeReturndata3.json
+CreateOOGafterInitCodeReturndataSize.json
+CreateOOGafterInitCodeRevert.json
+CreateOOGafterInitCodeRevert2.json
+CreateOOGafterMaxCodesize.json
+CreateResults.json
+CreateTransactionCallData.json
+CreateTransactionHighNonce.json
+CreateTransactionRefundEF.json
+TransactionCollisionToEmpty2.json
+TransactionCollisionToEmptyButCode.json
+TransactionCollisionToEmptyButNonce.json
+createFailResult.json
+createLargeResult.json
+*)
+
 (*
 
 cv_eval ``
-let acc = callcodeDynamicCode_d2g0v0_Cancun_pre in
-let blk = callcodeDynamicCode_d2g0v0_Cancun_block in
-let tx = callcodeDynamicCode_d2g0v0_Cancun_transaction in
-let s = (THE $ initial_state 1 [] blk acc
-               empty_return_destination tx) with accounts updated_by
-           transfer_value tx.from tx.to tx.value in
-let (r, s) = run_n 24 s in
-  (*
-let (e, t) =  step_inst SignExtend s
-in ISR e
-*)
+let acc = codesizeInit_d0g0v0_Cancun_pre in
+let blk = codesizeInit_d0g0v0_Cancun_block in
+let tx = codesizeInit_d0g0v0_Cancun_transaction in
+let init = run_create 1 [] blk acc tx in
+let cont = OUTR $ THE init in
+let s = SND cont in
+let (r, s) = run_n 7 s in
 let c = EL 0 s.contexts in
   (ISL r, LENGTH s.contexts,
    c.stack,
