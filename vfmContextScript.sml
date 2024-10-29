@@ -130,9 +130,14 @@ Definition call_data_cost_def:
   if is_zero then 4n else 16
 End
 
+Definition word_size_def:
+  word_size byteSize = (byteSize + 31) DIV 32
+End
+
 Definition intrinsic_cost_def:
-  intrinsic_cost (data: byte list) =
+  intrinsic_cost isCreate (data: byte list) =
   base_cost + SUM (MAP (λb. call_data_cost (b = 0w)) data)
+  + (if isCreate then 32000 + 2 * (word_size $ LENGTH data) else 0)
 End
 
 Definition parse_code_def:
@@ -282,16 +287,16 @@ Definition initial_access_sets_def:
 End
 
 Definition apply_intrinsic_cost_def:
-  apply_intrinsic_cost c =
+  apply_intrinsic_cost isCreate c =
   c with callParams updated_by (λp.
     p with gasLimit updated_by (λl.
-      l - intrinsic_cost p.data
+      l - intrinsic_cost isCreate p.data
     )
   )
 End
 
 Theorem wf_context_apply_intrinsic_cost[simp]:
-  wf_context (apply_intrinsic_cost c) =
+  wf_context (apply_intrinsic_cost b c) =
   wf_context c
 Proof
   rw[apply_intrinsic_cost_def, wf_context_def]
@@ -317,11 +322,12 @@ Definition initial_state_def:
   let code = case t.to of
                   SOME addr => (lookup_account addr a).code
                 | NONE => t.data in
-  let rd = if IS_SOME t.to then empty_return_destination else Code callee in
+  let isCreate = IS_NONE t.to in
+  let rd = if isCreate then Code callee else empty_return_destination in
   let ctxt = <| code := code; accounts := accounts; accesses := acc
               ; outputTo := rd; static := F |> in
   SOME $
-  <| contexts := [apply_intrinsic_cost $ initial_context callee ctxt t]
+  <| contexts := [apply_intrinsic_cost isCreate $ initial_context callee ctxt t]
    ; txParams := initial_tx_params c h b t
    ; accesses := acc
    ; accounts := accounts

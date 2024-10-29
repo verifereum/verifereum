@@ -19,10 +19,6 @@ Definition with_zero_def:
   with_zero f x y = if y = 0w then 0w else f x y
 End
 
-Definition word_size_def:
-  word_size byteSize = (byteSize + 31) DIV 32
-End
-
 Definition sign_extend_def:
   sign_extend (n:bytes32) (w:bytes32) : bytes32 =
   if n > 31w then w else
