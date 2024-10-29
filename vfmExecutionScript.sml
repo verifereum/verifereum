@@ -125,6 +125,13 @@ Definition reraise_def:
   reraise e s = (INR e, s) : α execution_result
 End
 
+Definition handle_def:
+  handle f h s : α execution_result =
+  case f s
+    of (INR e, s) => h e s
+     | otherwise => otherwise
+End
+
 val _ = monadsyntax.declare_monad (
   "evm_execution",
   { bind = “bind”, unit = “return”,
@@ -1169,13 +1176,6 @@ Definition pop_and_incorporate_context_def:
       set_toDelete callee.callParams.toDelete
     od
   od
-End
-
-Definition handle_def:
-  handle f h s : α execution_result =
-  case f s
-    of (INR e, s) => h e s
-     | otherwise => otherwise
 End
 
 Definition handle_create_def:
