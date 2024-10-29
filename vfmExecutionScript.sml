@@ -36,7 +36,8 @@ End
 Definition memory_cost_def:
   memory_cost byteSize =
   let wordSize = word_size byteSize in
-  (wordSize * wordSize) DIV 512 + (3 * wordSize)
+  (wordSize * wordSize) DIV 512 +
+    (memory_cost_per_word * wordSize)
 End
 
 Definition memory_expansion_cost_def:
@@ -58,7 +59,7 @@ End
 
 Definition call_gas_def:
   call_gas value gas gasLeft memoryCost otherCost =
-  let stipend = if value = 0n then 0 else 2300 in
+  let stipend = if value = 0n then 0 else call_stipend in
   let gas = if gasLeft < memoryCost + otherCost then gas
             else MIN gas (
               let left = gasLeft - memoryCost - otherCost in
@@ -370,7 +371,7 @@ Definition access_address_def:
   access_address a s =
   let addresses = s.accesses.addresses in
     return
-      (if fIN a addresses then 100n else 2600)
+      (if fIN a addresses then warm_access_cost else cold_access_cost)
       (s with accesses := (s.accesses with addresses := fINSERT a addresses))
 End
 
@@ -378,12 +379,12 @@ Definition access_slot_def:
   access_slot x s =
   let storageKeys = s.accesses.storageKeys in
     return
-      (if fIN x storageKeys then 100n else 2100)
+      (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
       (s with accesses := (s.accesses with storageKeys := fINSERT x storageKeys))
 End
 
 Definition zero_warm_def:
-  zero_warm accessCost = if accessCost > 100 then accessCost else 0n
+  zero_warm accessCost = if accessCost > warm_access_cost then accessCost else 0n
 End
 
 Datatype:
@@ -431,7 +432,7 @@ Definition copy_to_memory_def:
   copy_to_memory gas offset sourceOffset size getSource = do
     minimumWordSize <<- word_size size;
     mx <- memory_expansion_info offset size;
-    dynamicGas <<- 3 * minimumWordSize + mx.cost;
+    dynamicGas <<- memory_copy_cost * minimumWordSize + mx.cost;
     consume_gas $ gas + dynamicGas;
     sourceBytes <- getSource;
     bytes <<- take_pad_0 size (DROP sourceOffset sourceBytes);
@@ -526,7 +527,7 @@ Definition step_exp_def:
     exponentByteSize <<-
       if exponent = 0w then 0
       else SUC (LOG2 (w2n exponent) DIV 8);
-    dynamicGas <<- 50 * exponentByteSize;
+    dynamicGas <<- exp_per_byte_cost * exponentByteSize;
     consume_gas $ static_gas Exp + dynamicGas;
     result <<- word_exp base exponent;
     push_stack $ result
@@ -539,7 +540,7 @@ Definition step_keccak256_def:
     offset <<- w2n (EL 0 args);
     size <<- w2n (EL 1 args);
     mx <- memory_expansion_info offset size;
-    dynamicGas <<- 6 * word_size size + mx.cost;
+    dynamicGas <<- keccak256_per_word_cost * word_size size + mx.cost;
     consume_gas $ static_gas Keccak256 + dynamicGas;
     expand_memory mx.expand_by;
     data <- read_memory offset size;
@@ -576,23 +577,25 @@ Definition step_sstore_def:
     accessCost <- access_slot (SK address key);
     baseDynamicGas <<-
       if originalValue = currentValue ∧ currentValue ≠ value
-      then if originalValue = 0w then 20000 else 5000 - 2100
-      else 100;
+      then if originalValue = 0w
+           then storage_set_cost
+           else storage_update_cost - cold_sload_cost
+      else warm_access_cost;
     dynamicGas <<- baseDynamicGas + zero_warm accessCost;
     refundUpdates <<-
       if currentValue ≠ value then
         let storageSetRefund =
           if originalValue = value then
             if originalValue = 0w then
-              20000 - 100
+              storage_set_cost - warm_access_cost
             else
-              5000 - 2100 - 100
+              storage_update_cost - cold_sload_cost - warm_access_cost
           else 0
         in
           if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w then
-            (storageSetRefund + 4800, 0)
+            (storageSetRefund + storage_clear_refund, 0)
           else if originalValue ≠ 0w ∧ currentValue = 0w then
-            (storageSetRefund, 4800)
+            (storageSetRefund, storage_clear_refund)
           else (storageSetRefund, 0)
       else (0, 0);
     update_gas_refund refundUpdates;
@@ -806,7 +809,7 @@ Definition step_log_def:
     size <<- w2n $ EL 1 args;
     topics <<- DROP 2 args;
     mx <- memory_expansion_info offset size;
-    dynamicGas <<- 375 * n + 8 * size + mx.cost;
+    dynamicGas <<- log_topic_cost * n + log_data_cost * size + mx.cost;
     consume_gas $ (static_gas $ Log n) + dynamicGas;
     expand_memory mx.expand_by;
     assert_not_static;
@@ -850,7 +853,8 @@ Definition step_self_destruct_def:
     sender <<- lookup_account senderAddress accounts;
     balance <<- sender.balance;
     beneficiaryEmpty <<- account_empty $ lookup_account address accounts;
-    transferCost <<- if 0 < balance ∧ beneficiaryEmpty then 25000 else 0;
+    transferCost <<- if 0 < balance ∧ beneficiaryEmpty
+                     then self_destruct_new_account_cost else 0;
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     assert_not_static;
     set_accounts $ transfer_value senderAddress address balance accounts;
@@ -932,8 +936,8 @@ Definition step_create_def:
     mx <- memory_expansion_info offset size;
     staticGas <<- static_gas (if two then Create2 else Create);
     callDataWords <<- word_size size;
-    initCodeCost <<- 2 * callDataWords;
-    readCodeCost <<- if two then 6 * callDataWords else 0;
+    initCodeCost <<- init_code_word_cost * callDataWords;
+    readCodeCost <<- if two then keccak256_per_word_cost * callDataWords else 0;
     consume_gas $ staticGas + initCodeCost + readCodeCost + mx.cost;
     expand_memory mx.expand_by;
     code <- read_memory offset size;
@@ -1025,11 +1029,11 @@ Definition step_call_def:
       (argsOffset, argsSize) (retOffset, retSize);
     mx <- memory_expansion_info offset size;
     accessCost <- access_address address;
-    positiveValueCost <<- if 0 < value then 9000 else 0;
+    positiveValueCost <<- if 0 < value then call_value_cost else 0;
     accounts <- get_accounts;
     toAccount <<- lookup_account address accounts;
     createCost <<- if op = Call ∧ 0 < value ∧ account_empty toAccount
-                   then 25000 else 0;
+                   then new_account_cost else 0;
     gasLeft <- get_gas_left;
     (dynamicGas, stipend) <<- call_gas value gas gasLeft mx.cost $
                                 accessCost + positiveValueCost + createCost;
@@ -1185,7 +1189,7 @@ Definition handle_create_def:
     case (e, outputTo) of
     | (NONE, Code address) => do
       codeLen <<- LENGTH code;
-      codeGas <<- 200 * codeLen;
+      codeGas <<- code_deposit_cost * codeLen;
       assert (case code of h::_ => h ≠ n2w 0xef | _ => T) InvalidContractPrefix;
       consume_gas codeGas;
       assert (codeLen ≤ 0x6000) OutOfGas;
