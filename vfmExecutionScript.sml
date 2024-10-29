@@ -619,8 +619,8 @@ Definition step_call_data_load_def:
     args <- pop_stack 1;
     index <<- w2n $ EL 0 args;
     consume_gas $ static_gas CallDataLoad;
-    context <- get_current_context;
-    bytes <<- take_pad_0 32 (DROP index context.callParams.data);
+    callData <- get_call_data;
+    bytes <<- take_pad_0 32 (DROP index callData);
     push_stack $ word_of_bytes F 0w (REVERSE bytes)
   od
 End
