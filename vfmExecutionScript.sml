@@ -189,6 +189,14 @@ Definition set_accesses_def:
   set_accesses a s = return () (s with accesses := a)
 End
 
+Definition get_toDelete_def:
+  get_toDelete s = return s.toDelete s
+End
+
+Definition set_toDelete_def:
+  set_toDelete x s = return () (s with toDelete := x)
+End
+
 Definition get_original_def:
   get_original s =
     if s.contexts = [] then
@@ -344,6 +352,11 @@ Definition push_stack_def:
     set_current_context $
     context with stack := v :: context.stack
   od
+End
+
+Definition add_to_delete_def:
+  add_to_delete a s =
+  return () (s with toDelete updated_by CONS a)
 End
 
 Definition access_address_def:
@@ -836,10 +849,11 @@ Definition step_self_destruct_def:
     set_accounts $ transfer_value senderAddress address balance accounts;
     original <- get_original;
     originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then
+    if account_empty originalContract then do
       update_accounts $
-        update_account senderAddress originalContract
-    else return ();
+        update_account senderAddress (sender with balance := 0);
+      add_to_delete senderAddress
+    od else return ();
     finish
   od
 End
@@ -888,10 +902,12 @@ Definition proceed_create_def:
       transfer_value senderAddress address value o
       update_account address (toCreate with nonce updated_by SUC);
     accesses <- get_accesses;
+    toDelete <- get_toDelete;
     subContextParams <<- <|
         code      := code
       ; accounts  := rollback
       ; accesses  := accesses
+      ; toDelete  := toDelete
       ; outputTo  := Code address
       ; static    := F
     |>;
@@ -974,10 +990,12 @@ Definition proceed_call_def:
     |>;
     static <- get_static;
     accesses <- get_accesses;
+    toDelete <- get_toDelete;
     subContextParams <<- <|
         code     := code
       ; accounts := accounts
       ; accesses := accesses
+      ; toDelete := toDelete
       ; outputTo := outputTo
       ; static   := (op = StaticCall ∨ static)
     |>;
@@ -1147,7 +1165,8 @@ Definition pop_and_incorporate_context_def:
       update_gas_refund (callee.gasRefund, 0)
     od else do
       set_accesses callee.callParams.accesses;
-      set_accounts callee.callParams.accounts
+      set_accounts callee.callParams.accounts;
+      set_toDelete callee.callParams.toDelete
     od
   od
 End
@@ -1246,6 +1265,12 @@ Datatype:
    |>
 End
 
+Definition process_deletions_def:
+  process_deletions [] acc = acc ∧
+  process_deletions (a::as) acc =
+  process_deletions as (update_account a empty_account_state acc)
+End
+
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
   let (gasLimit, gasUsed, refund, logs, returnData) =
@@ -1262,7 +1287,9 @@ Definition post_transaction_accounting_def:
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
   let totalGasUsed = txGasUsed - gasRefund in
   let transactionFee = totalGasUsed * priorityFeePerGas in
-  let accounts = if result = NONE then t.accounts else acc in
+  let accounts = if result = NONE
+                 then process_deletions t.toDelete t.accounts
+                 else acc in
   let sender = lookup_account tx.from accounts in
   let feeRecipient = lookup_account blk.coinBase accounts in
   let newAccounts =

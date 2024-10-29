@@ -365,6 +365,12 @@ Proof
   rw[from_word_fset_def, fIMAGE_fUNION, fUNION_num_cv_rep]
 QED
 
+Theorem fEMPTY_word_cv_rep[cv_rep]:
+  from_word_fset fEMPTY = Num 0
+Proof
+  rw[from_word_fset_def, fEMPTY_num_cv_rep]
+QED
+
 Theorem fINSERT_storage_key_cv_rep[cv_rep]:
   from_storage_key_fset (fINSERT e s) =
   cv_insert (from_storage_key e) (Num 0) (from_storage_key_fset s)
@@ -1106,6 +1112,8 @@ Proof
   \\ first_x_assum(qspec_then`SUC n`mp_tac)
   \\ simp[FUNPOW]
 QED
+
+val () = cv_auto_trans process_deletions_def;
 
 val post_transaction_accounting_pre_def = post_transaction_accounting_def
   |> cv_auto_trans_pre;

@@ -769,7 +769,7 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fails to parse transaction def?
+(* TODO: too slow
 val test_path = mk_test_path "CrashingTransaction.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1752,11 +1752,9 @@ val test_path = mk_test_path "CREATE2_HighNonceMinus1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "CREATE2_Suicide.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO: fix from d15g0v0
 val test_path = mk_test_path "Create2OOGFromCallRefunds.json";
@@ -1764,11 +1762,9 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix
 val test_path = mk_test_path "Create2OOGafterInitCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "Create2OOGafterInitCodeReturndata.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1782,21 +1778,17 @@ val test_path = mk_test_path "Create2OOGafterInitCodeReturndata3.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "Create2OOGafterInitCodeReturndataSize.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "Create2OOGafterInitCodeRevert.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "Create2OOGafterInitCodeRevert2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "Create2OnDepth1023.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1816,11 +1808,9 @@ val test_path = mk_test_path "CreateMessageReverted.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "CreateMessageRevertedOOGInInit2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "RevertDepthCreate2OOG.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1861,19 +1851,15 @@ val test_path = mk_test_path "call_then_create2_successful_then_returndatasize.j
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "create2InitCodes.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "create2SmartInitCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix parse
+(* TODO: fix
 val test_path = mk_test_path "create2callPrecompiles.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -1889,42 +1875,41 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix parse
 val test_path = mk_test_path "create2collisionCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix parse
 val test_path = mk_test_path "create2collisionCode2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix parse
 val test_path = mk_test_path "create2collisionNonce.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix parse
 val test_path = mk_test_path "create2collisionSelfdestructed.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: add
-create2collisionSelfdestructed2.json
-create2collisionSelfdestructedOOG.json
-create2collisionSelfdestructedRevert.json
-create2collisionStorageParis.json
-*)
+val test_path = mk_test_path "create2collisionSelfdestructed2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix parse
+val test_path = mk_test_path "create2collisionSelfdestructedOOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "create2collisionSelfdestructedRevert.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "create2collisionStorageParis.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 val test_path = mk_test_path "create2noCash.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "returndatacopy_0_0_following_successful_create.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1957,74 +1942,202 @@ val test_path = mk_test_path "CREATE2_CallData.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "CREATE2_RefundEF.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix
 val test_path = mk_test_path "CREATE_AcreateB_BSuicide_BStore.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix parse
 val test_path = mk_test_path "CREATE_ContractRETURNBigOffset.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
+
+val test_path = mk_test_path "CREATE_ContractSSTOREDuringInit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_ContractSuicideDuringInit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_ContractSuicideDuringInit_WithValue.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_ContractSuicideDuringInit_WithValueToItself.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EContractCreateEContractInInit_Tr.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EContractCreateNEContractInInitOOG_Tr.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EContractCreateNEContractInInit_Tr.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EContract_ThenCALLToNonExistentAcc.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EmptyContract.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EmptyContractAndCallIt_0wei.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EmptyContractAndCallIt_1wei.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EmptyContractWithBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EmptyContractWithStorage.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EmptyContractWithStorageAndCallIt_0wei.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_EmptyContractWithStorageAndCallIt_1wei.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 (* TODO: fix parse
-val test_path = mk_test_path "CREATE_ContractSSTOREDuringInit.json";
+val test_path = mk_test_path "CREATE_FirstByte_loop.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: add
-CREATE_ContractSuicideDuringInit.json
-CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json
-CREATE_ContractSuicideDuringInit_WithValue.json
-CREATE_ContractSuicideDuringInit_WithValueToItself.json
-CREATE_EContractCreateEContractInInit_Tr.json
-CREATE_EContractCreateNEContractInInitOOG_Tr.json
-CREATE_EContractCreateNEContractInInit_Tr.json
-CREATE_EContract_ThenCALLToNonExistentAcc.json
-CREATE_EmptyContract.json
-CREATE_EmptyContractAndCallIt_0wei.json
-CREATE_EmptyContractAndCallIt_1wei.json
-CREATE_EmptyContractWithBalance.json
-CREATE_EmptyContractWithStorage.json
-CREATE_EmptyContractWithStorageAndCallIt_0wei.json
-CREATE_EmptyContractWithStorageAndCallIt_1wei.json
-CREATE_FirstByte_loop.json
-CREATE_HighNonce.json
-CREATE_HighNonceMinus1.json
-CREATE_empty000CreateinInitCode_Transaction.json
-CodeInConstructor.json
-CreateAddressWarmAfterFail.json
-CreateCollisionResults.json
-CreateCollisionToEmpty2.json
-CreateOOGFromCallRefunds.json
-CreateOOGFromEOARefunds.json
-CreateOOGafterInitCode.json
-CreateOOGafterInitCodeReturndata.json
-CreateOOGafterInitCodeReturndata2.json
-CreateOOGafterInitCodeReturndata3.json
-CreateOOGafterInitCodeReturndataSize.json
-CreateOOGafterInitCodeRevert.json
-CreateOOGafterInitCodeRevert2.json
-CreateOOGafterMaxCodesize.json
-CreateResults.json
-CreateTransactionCallData.json
-CreateTransactionHighNonce.json
-CreateTransactionRefundEF.json
-TransactionCollisionToEmpty2.json
-TransactionCollisionToEmptyButCode.json
-TransactionCollisionToEmptyButNonce.json
-createFailResult.json
-createLargeResult.json
+val test_path = mk_test_path "CREATE_HighNonce.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_HighNonceMinus1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CREATE_empty000CreateinInitCode_Transaction.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CodeInConstructor.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateAddressWarmAfterFail.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateCollisionResults.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "CreateCollisionToEmpty2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 *)
+
+(* TODO: fix from d15g0v0
+val test_path = mk_test_path "CreateOOGFromCallRefunds.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix from d15g0v0
+val test_path = mk_test_path "CreateOOGFromEOARefunds.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "CreateOOGafterInitCode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateOOGafterInitCodeReturndata.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateOOGafterInitCodeReturndata2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateOOGafterInitCodeReturndata3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateOOGafterInitCodeReturndataSize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateOOGafterInitCodeRevert.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateOOGafterInitCodeRevert2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow *)
+val test_path = mk_test_path "CreateOOGafterMaxCodesize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateResults.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateTransactionCallData.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix parse
+val test_path = mk_test_path "CreateTransactionHighNonce.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "CreateTransactionRefundEF.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TransactionCollisionToEmpty2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TransactionCollisionToEmptyButCode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TransactionCollisionToEmptyButNonce.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createFailResult.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow *)
+val test_path = mk_test_path "createLargeResult.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 (*
 

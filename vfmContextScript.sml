@@ -58,6 +58,7 @@ Datatype:
    (* values at the start of the call, for rollback *)
    ; accounts  : evm_accounts
    ; accesses  : access_sets
+   ; toDelete  : address list
    |>
 End
 
@@ -94,6 +95,7 @@ Datatype:
    ; txParams : transaction_parameters
    ; accesses : access_sets
    ; accounts : evm_accounts
+   ; toDelete : address list
    |>
 End
 
@@ -116,6 +118,7 @@ Datatype:
   <| code      : byte list
    ; accounts  : evm_accounts
    ; accesses  : access_sets
+   ; toDelete  : address list
    ; outputTo  : return_destination
    ; static    : bool
    |>
@@ -198,7 +201,7 @@ Definition callee_from_tx_to_def:
 End
 
 Definition initial_call_params_def:
-  initial_call_params callee ctxt t =
+  initial_call_params callee (ctxt: call_context) t =
   <| caller    := t.from
    ; callee    := callee
    ; code      := ctxt.code
@@ -209,6 +212,7 @@ Definition initial_call_params_def:
    ; gasLimit  := t.gasLimit
    ; accounts  := ctxt.accounts
    ; accesses  := ctxt.accesses
+   ; toDelete  := ctxt.toDelete
    ; outputTo  := ctxt.outputTo
    |>
 End
@@ -330,18 +334,19 @@ Definition initial_state_def:
   |> in
   let accounts = update_account t.from updatedSender a in
   let callee = callee_from_tx_to t.from sender.nonce t.to in
-  let acc = initial_access_sets callee t in
+  let accesses = initial_access_sets callee t in
   let code = case t.to of
                   SOME addr => (lookup_account addr a).code
                 | NONE => t.data in
   let rd = if IS_SOME t.to then empty_return_destination else Code callee in
-  let ctxt = <| code := code; accounts := accounts; accesses := acc
-              ; outputTo := rd; static := F |> in
+  let ctxt = <| code := code; accounts := accounts; accesses := accesses
+              ; toDelete := []; outputTo := rd; static := F |> in
   SOME $
   <| contexts := [apply_intrinsic_cost $ initial_context callee ctxt t]
    ; txParams := initial_tx_params c h b t
-   ; accesses := acc
+   ; accesses := accesses
    ; accounts := accounts
+   ; toDelete := []
    |>
 End
 
