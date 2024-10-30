@@ -783,7 +783,7 @@ val test_path = mk_test_path "eip2315NotRemoved.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: needs precompiles
+(* TODO: fix from d41g0v0 (needs more precompiles?)
 val test_path = mk_test_path "invalidAddr.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -2278,23 +2278,6 @@ val test_path = mk_test_path "ExtCodeCopyTestsParis.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-
-(* Precompile tests *)
-fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/stPreCompiledContracts/" ^ s;
-
-(* val test_path = mk_test_path "idPrecomps.json"; *)
-(* val (num_tests, prove_test) = mk_prove_test test_path; *)
-(* val thms = List.tabulate (num_tests, prove_test); *)
-
-val test_path = mk_test_path "identity_to_smaller.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-val test_path = mk_test_path "identity_to_bigger.json";
-val (num_tests, prove_test) = mk_prove_test test_path;
-val thms = List.tabulate (num_tests, prove_test);
-
-
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stCodeSizeLimit/" ^ s;
 
@@ -3321,6 +3304,37 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "yulExample.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: add dirs until stPreCompiledContracts *)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stPreCompiledContracts/" ^ s;
+
+(* TODO: add
+blake2B.json
+delegatecall09Undefined.json
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "idPrecomps.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "identity_to_smaller.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "identity_to_bigger.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: add
+modexp.json
+modexpTests.json
+precompsEIP2929Cancun.json
+sec80.json
+*)
 
 (*
 

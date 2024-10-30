@@ -981,7 +981,6 @@ Definition abort_call_value_def:
   od
 End
 
-
 Definition precompile_identity_def:
   precompile_identity = do
     input <- get_call_data;
@@ -999,7 +998,6 @@ Definition dispatch_precompiles_def:
     else fail Impossible
   od
 End
-
 
 Definition proceed_call_def:
   proceed_call op sender address value
@@ -1272,16 +1270,12 @@ Definition step_def:
     code <<- context.callParams.code;
     parsed <<- context.callParams.parsed;
     if LENGTH code ≤ context.pc
-    then step_inst Stop
-    else do
-        case FLOOKUP parsed context.pc of
-        | NONE => step_inst Invalid
-        | SOME op => do
-                      step_inst op;
-                      inc_pc_or_jump op
-                    od
-      od
-    od handle_step
+    then step_inst Stop else
+    do case FLOOKUP parsed context.pc of
+      | NONE => step_inst Invalid
+      | SOME op => do step_inst op; inc_pc_or_jump op od
+    od
+  od handle_step
 End
 
 Definition run_def:
