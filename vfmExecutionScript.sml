@@ -29,8 +29,12 @@ Definition sign_extend_def:
     word_of_bytes T 0w $ REPLICATE m sw ++ bs
 End
 
+Definition account_has_code_or_nonce_def:
+  account_has_code_or_nonce a = ¬(a.nonce = 0 ∧ NULL a.code)
+End
+
 Definition account_empty_def:
-  account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
+  account_empty a ⇔ a.balance = 0 ∧ ¬account_has_code_or_nonce a
 End
 
 Definition memory_cost_def:
@@ -961,7 +965,7 @@ Definition step_create_def:
        SUC nonce ≥ 2 ** 64 ∨
        sucDepth > 1024
     then abort_unuse cappedGas
-    else if ¬(account_empty toCreate)
+    else if account_has_code_or_nonce toCreate
     then abort_create_exists senderAddress sender
     else proceed_create senderAddress sender
            address value code toCreate cappedGas
@@ -1322,7 +1326,7 @@ Definition run_create_def:
              transfer_value tx.from calleeAddress tx.value)
     else
       let callee = lookup_account calleeAddress s.accounts in
-      if ¬(callee.nonce = 0 ∧ NULL callee.code) then
+      if account_has_code_or_nonce callee then
         INL $ post_transaction_accounting blk tx (SOME AddressCollision) s.accounts
               (s with contexts := [ctxt with gasUsed := ctxt.callParams.gasLimit])
       else

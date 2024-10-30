@@ -261,7 +261,8 @@ fun mk_tx_to s =
 
 (*
   val test_index = 0;
-  Globals.max_print_depth := 32
+  Globals.max_print_depth := 32;
+  val json_path = test_path
 *)
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
@@ -1260,7 +1261,7 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: json parsing failure
+(* TODO: no explicit postStates
 val test_path = mk_test_path "undefinedOpcodeFirstByte.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -2320,7 +2321,7 @@ val test_path = mk_test_path
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fails json parse
+(* TODO: no postStates
 val test_path = mk_test_path "CREATE2_FirstByte_loop.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -2455,11 +2456,9 @@ val test_path = mk_test_path "create2checkFieldsInInitcode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "create2collisionBalance.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "create2collisionCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -2635,11 +2634,9 @@ val test_path = mk_test_path "CreateCollisionResults.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "CreateCollisionToEmpty2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO: fix from d15g0v0
 val test_path = mk_test_path "CreateOOGFromCallRefunds.json";
