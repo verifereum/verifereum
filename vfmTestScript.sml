@@ -2343,11 +2343,9 @@ val test_path = mk_test_path "CREATE2_Suicide.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix from d15g0v0
 val test_path = mk_test_path "Create2OOGFromCallRefunds.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "Create2OOGafterInitCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -2638,17 +2636,13 @@ val test_path = mk_test_path "CreateCollisionToEmpty2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix from d15g0v0
 val test_path = mk_test_path "CreateOOGFromCallRefunds.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: fix from d15g0v0
 val test_path = mk_test_path "CreateOOGFromEOARefunds.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "CreateOOGafterInitCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;

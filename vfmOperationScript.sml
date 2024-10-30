@@ -91,7 +91,7 @@ End
 
 Definition wf_opname_def[simp]:
     wf_opname (Push n w) = (n ≤ 32 ∧ LENGTH w = n)
-  ∧ wf_opname (Log n) = (n < 4)
+  ∧ wf_opname (Log n) = (n ≤ 4)
   ∧ wf_opname (Dup n) = (n < 16)
   ∧ wf_opname (Swap n) = (n < 16)
   ∧ wf_opname _ = T
@@ -440,6 +440,7 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0xa1 then SOME (Log 1) else
       if opc = n2w 0xa2 then SOME (Log 2) else
       if opc = n2w 0xa3 then SOME (Log 3) else
+      if opc = n2w 0xa4 then SOME (Log 4) else
       if opc = n2w 0xf0 then SOME Create else
       if opc = n2w 0xf1 then SOME Call else
       if opc = n2w 0xf2 then SOME CallCode else
@@ -497,7 +498,7 @@ Proof
       end)
     val dup_cases = mk_x_cases 16 “Dup”
     val swap_cases = mk_x_cases 16 “Swap”
-    val log_cases = mk_x_cases 4 “Log”
+    val log_cases = mk_x_cases 5 “Log”
   in
     TRY $ FIRST (def_cases @ push_cases @ dup_cases @ swap_cases @ log_cases)
   end
