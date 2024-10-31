@@ -15,6 +15,15 @@ structure readTestJsonLib = struct
           Json.List u => u
         | _ => raise ERR "getArray'" "expect an associated list"
 
+  fun getAccessListEntry j = let
+    val address = getObject' j "address" |> getString'
+    val storageKeys = getObject' j "storageKeys" |> getArray' |> List.map getString'
+  in
+    {address=address, storageKeys=storageKeys}
+  end
+
+  fun getAccessList' NONE = []
+    | getAccessList' (SOME j) = getArray' j |> List.map getAccessListEntry
 
   fun get_test json_path test_name = let
     val (json, rest) = Json.fromFile json_path
@@ -53,16 +62,13 @@ structure readTestJsonLib = struct
     val sender = getObject' tx0 "sender" |> getString'
     val to = getObject' tx0 "to" |> getString'
     val value = getObject' tx0 "value" |> getString'
+    val accessList = getObject tx0 "accessList" |> getAccessList'
 
     val postState = getObject' tobj "postState"
     val preState = getObject' tobj "pre"
 
     val postKeys = getKeys' postState
     val preKeys = getKeys' preState
-
-    val () = if
-            List.exists (String.isPrefix "access") (getKeys' tx0)
-        then raise Fail "accessList not yet supported" else ()
 
     fun get_account state addr = let
         val a = getObject' state addr
@@ -99,7 +105,8 @@ structure readTestJsonLib = struct
       nonce=nonce,
       sender=sender,
       to=to,
-      value=value
+      value=value,
+      accessList=accessList
     }
   in
     {block=block, transaction=transaction, pre=pre, post=post}

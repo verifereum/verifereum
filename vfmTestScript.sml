@@ -228,6 +228,16 @@ fun accounts_term (ls: account list) =
         "|> (", s, ")"
       ]) "empty_accounts" ls
 
+fun entry_term {address, storageKeys} = let
+  val keys = List.map (fn s => "n2w " ^ s ) storageKeys |> String.concatWith "; "
+in
+  String.concat["<| account := n2w ", address,
+                 "; keys := fset_ABS [", keys, "] |>"]
+end
+
+fun accesses_term ls =
+  String.concat["[", String.concatWith "; " (List.map entry_term ls), "]"]
+
 fun mk_code_name prefix address =
   prefix ^ address  ^ "_code";
 
@@ -285,7 +295,7 @@ fun mk_prove_test test_path = let
         ";value := ", #value transaction,
         ";gasPrice := ", #gasPrice transaction,
         ";gasLimit := ", #gasLimit transaction,
-        ";accessList := [] |>"
+        ";accessList := ", accesses_term $ #accessList transaction, " |>"
       ])]);
 
     val block = #block test;
