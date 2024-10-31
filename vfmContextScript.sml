@@ -365,10 +365,10 @@ Definition precompile_addresses_def:
 End
 
 Definition initial_access_sets_def:
-  initial_access_sets callee t =
+  initial_access_sets coinBase callee t =
   <| addresses   :=
        fUNION (
-         fINSERT t.from $ fINSERT callee $
+         fINSERT t.from $ fINSERT callee $ fINSERT coinBase $
          fIMAGE (λe. e.account) $ fset_ABS t.accessList
        ) precompile_addresses
    ; storageKeys := fBIGUNION
@@ -410,7 +410,7 @@ Definition initial_state_def:
   |> in
   let accounts = update_account t.from updatedSender a in
   let callee = callee_from_tx_to t.from sender.nonce t.to in
-  let accesses = initial_access_sets callee t in
+  let accesses = initial_access_sets b.coinBase callee t in
   let code = case t.to of
                   SOME addr => (lookup_account addr a).code
                 | NONE => t.data in
