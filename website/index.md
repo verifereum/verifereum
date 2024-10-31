@@ -12,6 +12,7 @@
 # Get involved
 - Join [the CakeML Discord](https://discord.gg/a8UUs6Ce6m) and say hello in the #verifereum channel!
 - Check out the [repository on GitHub](https://github.com/verifereum/verifereum)!
+- Look at the open [issues](https://github.com/verifereum/verifereum/issues)
 - Ask [Ramana (aka xrchz)](https://github.com/xrchz) about ideas of things to work on
 - See the roadmap below for ideas
 
