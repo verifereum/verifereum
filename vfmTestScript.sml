@@ -3177,17 +3177,13 @@ val thms = List.tabulate (num_tests, prove_test);
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stEIP2930/" ^ s;
 
-(* TODO: need accessList
 val test_path = mk_test_path "addressOpcodes.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: needs accessList
 val test_path = mk_test_path "coinbaseT01.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO: parse
 val test_path = mk_test_path "coinbaseT2.json";
@@ -3195,29 +3191,23 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: accessList
 val test_path = mk_test_path "manualCreate.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: accessList
 val test_path = mk_test_path "storageCosts.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: accessList
+(* TODO: fix from d10g0v0
 val test_path = mk_test_path "transactionCosts.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: accessList
 val test_path = mk_test_path "variedContext.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stEIP3607/" ^ s;
@@ -3257,11 +3247,9 @@ val thms = List.tabulate (num_tests, prove_test);
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stExample/" ^ s;
 
-(* TODO: accessList
 val test_path = mk_test_path "accessListExample.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "add11.json";
 val (num_tests, prove_test) = mk_prove_test test_path;

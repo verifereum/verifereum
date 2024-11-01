@@ -218,8 +218,16 @@ Definition is_code_dest_def:
   is_code_dest _ = F
 End
 
+Definition access_list_address_cost_def:
+  access_list_address_cost = 2400n
+End
+
+Definition access_list_storage_key_cost_def:
+  access_list_storage_key_cost = 1900n
+End
+
 Definition intrinsic_cost_def:
-  intrinsic_cost p =
+  intrinsic_cost accessList p =
   let isCreate = is_code_dest p.outputTo in
   let data = if isCreate then p.code else p.data in
   base_cost
@@ -227,7 +235,8 @@ Definition intrinsic_cost_def:
   + (if isCreate
      then create_cost + init_code_word_cost * (word_size $ LENGTH data)
      else 0)
-  (* TODO: add access list cost *)
+  + access_list_address_cost * LENGTH accessList
+  + access_list_storage_key_cost * SUM (MAP (λx. fCARD x.keys) accessList)
 End
 
 Definition parse_code_def:
@@ -378,16 +387,16 @@ Definition initial_access_sets_def:
 End
 
 Definition apply_intrinsic_cost_def:
-  apply_intrinsic_cost c =
+  apply_intrinsic_cost accessList c =
   c with callParams updated_by (λp.
     p with gasLimit updated_by (λl.
-      l - intrinsic_cost p
+      l - intrinsic_cost accessList p
     )
   )
 End
 
 Theorem wf_context_apply_intrinsic_cost[simp]:
-  wf_context (apply_intrinsic_cost c) =
+  wf_context (apply_intrinsic_cost a c) =
   wf_context c
 Proof
   rw[apply_intrinsic_cost_def, wf_context_def]
@@ -418,7 +427,8 @@ Definition initial_state_def:
   let ctxt = <| code := code; accounts := accounts; accesses := accesses
               ; toDelete := []; outputTo := rd; static := F |> in
   SOME $
-  <| contexts := [apply_intrinsic_cost $ initial_context callee ctxt t]
+  <| contexts := [apply_intrinsic_cost t.accessList $
+                  initial_context callee ctxt t]
    ; txParams := initial_tx_params c h b t
    ; accesses := accesses
    ; accounts := accounts

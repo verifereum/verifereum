@@ -7,6 +7,51 @@ open HolKernel boolLib bossLib Parse dep_rewrite blastLib
 
 val _ = new_theory "vfmCompute";
 
+(* TODO: move *)
+Theorem size_list_to_num_set:
+  size (list_to_num_set ls) = LENGTH (nub ls)
+Proof
+  Induct_on`ls`
+  \\ gs[list_to_num_set_def, nub_def, size_insert, domain_list_to_num_set]
+  \\ rw[]
+QED
+
+Theorem toSet_fEMPTY[simp]:
+  toSet fEMPTY = {}
+Proof
+  rw[toSet_def]
+QED
+
+Theorem toSet_fINSERT:
+  toSet (fINSERT x s) = x INSERT (toSet s)
+Proof
+  rw[toSet_def, pred_setTheory.EXTENSION]
+QED
+
+Theorem CARD_toSet:
+  CARD (toSet s) = fCARD s
+Proof
+  Induct_on`s` \\ gs[toSet_fINSERT, fIN_IN]
+QED
+
+Theorem toSet_fIMAGE:
+  toSet (fIMAGE f s) = IMAGE f (toSet s)
+Proof
+  rw[toSet_def, pred_setTheory.EXTENSION, EQ_IMP_THM]
+  \\ metis_tac[]
+QED
+
+Theorem fCARD_num_cv_rep[cv_rep]:
+  Num (fCARD (s: num fset)) =
+  cv_size' (from_num_fset s)
+Proof
+  rw[from_num_fset_def, GSYM cv_size'_thm, size_list_to_num_set]
+  \\ irule EQ_SYM
+  \\ irule(SIMP_RULE std_ss [quotientTheory.FUN_REL] fCARD_relates)
+  \\ simp[FSET_def]
+QED
+(* -- *)
+
 val from_to_bytes32 = from_to_thm_for “:bytes32”;
 
 val to_bytes32 = from_to_bytes32 |> concl |> rand;
@@ -411,6 +456,28 @@ Theorem fEMPTY_storage_key_cv_rep[cv_rep]:
   from_storage_key_fset fEMPTY = Num 0
 Proof
   rw[from_storage_key_fset_def, fEMPTY_num_cv_rep]
+QED
+
+Theorem fCARD_word_cv_rep[cv_rep]:
+  Num (fCARD s) = cv_size' (from_word_fset s)
+Proof
+  rw[from_word_fset_def, GSYM fCARD_num_cv_rep, GSYM CARD_toSet, toSet_fIMAGE]
+  \\ irule EQ_SYM
+  \\ irule pred_setTheory.CARD_INJ_IMAGE
+  \\ simp[]
+QED
+
+Theorem fCARD_storage_key_cv_rep[cv_rep]:
+  Num (fCARD s) = cv_size' (from_storage_key_fset s)
+Proof
+  rw[from_storage_key_fset_def, GSYM fCARD_num_cv_rep,
+     GSYM CARD_toSet, toSet_fIMAGE]
+  \\ irule EQ_SYM
+  \\ irule pred_setTheory.CARD_INJ_IMAGE
+  \\ simp[]
+  \\ Cases \\ Cases
+  \\ simp[EQ_IMP_THM]
+  \\ blastLib.BBLAST_TAC
 QED
 
 (* TODO: does this already exist? *)
