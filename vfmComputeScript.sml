@@ -50,6 +50,13 @@ Proof
   \\ irule(SIMP_RULE std_ss [quotientTheory.FUN_REL] fCARD_relates)
   \\ simp[FSET_def]
 QED
+
+Theorem from_sptree_eq_Num_iff:
+  from_sptree_sptree_spt f m = Num n <=> (m = LN ∧ n = 0)
+Proof
+  Cases_on`m` \\ rw[from_sptree_sptree_spt_def]
+QED
+
 (* -- *)
 
 val from_to_bytes32 = from_to_thm_for “:bytes32”;
@@ -86,6 +93,14 @@ Proof
   \\ rw[lookup_insert, LESS_OR_EQ]
   \\ gvs[NOT_LESS] \\ rw[] \\ gvs[]
   \\ strip_tac \\ gvs[]
+QED
+
+Theorem build_spt_empty_iff:
+  ∀n. build_spt z n s = LN ⇔ (∀m. m < n ==> s (n2w m) = z)
+Proof
+  Induct \\ gvs[build_spt_def]
+  \\ rw[EQ_IMP_THM]
+  \\ Cases_on`m = n` \\ gvs[]
 QED
 
 Theorem build_spt_empty_storage[simp]:
@@ -194,6 +209,18 @@ Proof
   \\ rw[] \\ gvs[]
   \\ TRY (qspec_then`k`strip_assume_tac w2n_lt \\ gs[] \\ NO_TAC)
   \\ qpat_x_assum`_ = 0w`mp_tac \\ rw[] \\ gs[]
+QED
+
+Theorem storage_empty_cv_rep[cv_rep]:
+  b2c (storage_empty s) =
+    cv_eq (from_storage s) (Num 0)
+Proof
+  Cases_on`storage_empty s`
+  \\ gs[from_storage_def, cv_eq_def,
+        storage_empty_def, from_sptree_sptree_spt_def]
+  \\ rw[from_sptree_eq_Num_iff, build_spt_empty_iff]
+  \\ gs[empty_storage_def, FUN_EQ_THM]
+  \\ Cases_on`x` \\ gs[]
 QED
 
 val from_to_account_state = from_to_thm_for “:account_state”;

@@ -2423,11 +2423,9 @@ val test_path = mk_test_path "RevertDepthCreateAddressCollisionBerlin.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "RevertInCreateInInitCreate2Paris.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "RevertOpcodeCreate.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -3517,11 +3515,9 @@ val test_path = mk_test_path "NashatyrevSuicideRevert.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "PythonRevertTestTue201814-1430.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "RevertDepth2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -3539,11 +3535,9 @@ val test_path = mk_test_path "RevertInCallCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "RevertInCreateInInit_Paris.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "RevertInDelegateCall.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -3597,7 +3591,7 @@ val test_path = mk_test_path "RevertOpcodeWithBigOutputInInit.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
+(* TODO: fix from d0g1v0
 val test_path = mk_test_path "RevertPrecompiledTouchExactOOG_Paris.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
