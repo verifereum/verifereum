@@ -691,9 +691,7 @@ Definition step_ext_code_hash_def:
     consume_gas $ static_gas ExtCodeHash + accessCost;
     accounts <- get_accounts;
     account <<- lookup_account address accounts;
-    hash <<- if fIN address precompile_addresses ∨
-                account_empty account
-             then 0w
+    hash <<- if account_empty account then 0w
              else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $
                   account.code;
     push_stack hash
