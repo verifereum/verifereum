@@ -7,7 +7,7 @@ val _ = new_theory "vfmTransaction";
 Datatype:
   access_list_entry =
   <| account : address
-   ; keys    : bytes32 fset
+   ; keys    : bytes32 list
    |>
 End
 

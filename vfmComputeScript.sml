@@ -416,6 +416,29 @@ Proof
   \\ BBLAST_TAC
 QED
 
+Theorem from_list_from_storage_key_MAP_w2n:
+  from_list from_storage_key l =
+  from_list Num (MAP (λs. w2n (case s of SK x y => word_join y x)) l)
+Proof
+  Induct_on`l`
+  \\ rw[cv_typeTheory.from_list_def, from_storage_key_def]
+QED
+
+Theorem fset_ABS_storage_key_cv_rep[cv_rep]:
+  from_storage_key_fset (fset_ABS l) =
+  cv_list_to_num_set (from_list from_storage_key l)
+Proof
+  rw[from_storage_key_fset_def, from_num_fset_def,
+     from_list_from_storage_key_MAP_w2n,
+     GSYM cv_list_to_num_set_thm]
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ simp[wf_list_to_num_set, lookup_list_to_num_set, MEM_fset_REP]
+  \\ simp[GSYM fromSet_set, IN_fromSet, MEM_MAP, CaseEq"storage_key"]
+  \\ rw[PULL_EXISTS] \\ gs[]
+  \\ Cases_on`s` \\ gs[]
+QED
+
 Theorem fINSERT_word_cv_rep[cv_rep]:
   from_word_fset (fINSERT e s) =
   cv_insert (from_word e) (Num 0) (from_word_fset s)

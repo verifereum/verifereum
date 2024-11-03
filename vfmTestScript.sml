@@ -232,7 +232,7 @@ fun entry_term {address, storageKeys} = let
   val keys = List.map (fn s => "n2w " ^ s ) storageKeys |> String.concatWith "; "
 in
   String.concat["<| account := n2w ", address,
-                 "; keys := fset_ABS [", keys, "] |>"]
+                 "; keys := [", keys, "] |>"]
 end
 
 fun accesses_term ls =
@@ -3197,11 +3197,9 @@ val test_path = mk_test_path "storageCosts.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix from d10g0v0
 val test_path = mk_test_path "transactionCosts.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "variedContext.json";
 val (num_tests, prove_test) = mk_prove_test test_path;

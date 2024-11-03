@@ -236,7 +236,7 @@ Definition intrinsic_cost_def:
      then create_cost + init_code_word_cost * (word_size $ LENGTH data)
      else 0)
   + access_list_address_cost * LENGTH accessList
-  + access_list_storage_key_cost * SUM (MAP (λx. fCARD x.keys) accessList)
+  + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
 End
 
 Definition parse_code_def:
@@ -378,11 +378,11 @@ Definition initial_access_sets_def:
   <| addresses   :=
        fUNION (
          fINSERT t.from $ fINSERT callee $ fINSERT coinBase $
-         fIMAGE (λe. e.account) $ fset_ABS t.accessList
+         fset_ABS $ MAP (λe. e.account) t.accessList
        ) precompile_addresses
-   ; storageKeys := fBIGUNION
-                      (fIMAGE (λe. fIMAGE (SK e.account) e.keys)
-                              (fset_ABS t.accessList))
+   ; storageKeys := fBIGUNION $ fset_ABS $
+                      (MAP (λe. fset_ABS $ MAP (SK e.account) e.keys)
+                           t.accessList)
    |>
 End
 
