@@ -4241,7 +4241,725 @@ precompsEIP2929Cancun.json
 sec80.json
 *)
 
-(* TODO: add until stRevertTest *)
+(* TODO: add until stPreCompiledContracts2 *)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stQuadraticComplexityTest/" ^ s;
+
+val test_path = mk_test_path "Call1MB1024Calldepth.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "Call20KbytesContract50_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: slow
+val test_path = mk_test_path "Call20KbytesContract50_2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: probably slow
+val test_path = mk_test_path "Call20KbytesContract50_3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Call50000.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Call50000_ecrec.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Call50000_identity.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Call50000_identity2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Call50000_rip160.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Call50000_sha256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Callcode50000.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Create1000.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Create1000Byzantium.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Create1000Shnghai.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "QuadraticComplexitySolidity_CallDataCopy.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Return50000.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Return50000_2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stRandom/" ^ s;
+
+val test_path = mk_test_path "randomStatetest0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "randomStatetest10.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "randomStatetest100.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest102.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest103.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest104.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest105.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest106.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest107.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "randomStatetest108.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "randomStatetest11.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest110.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "randomStatetest111.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: add
+randomStatetest112.json
+randomStatetest114.json
+randomStatetest115.json
+randomStatetest116.json
+randomStatetest117.json
+randomStatetest118.json
+randomStatetest119.json
+randomStatetest12.json
+randomStatetest120.json
+randomStatetest121.json
+randomStatetest122.json
+randomStatetest124.json
+randomStatetest125.json
+randomStatetest126.json
+randomStatetest129.json
+randomStatetest13.json
+randomStatetest130.json
+randomStatetest131.json
+randomStatetest133.json
+randomStatetest134.json
+randomStatetest135.json
+randomStatetest137.json
+randomStatetest138.json
+randomStatetest139.json
+randomStatetest14.json
+randomStatetest142.json
+randomStatetest143.json
+randomStatetest144.json
+randomStatetest145.json
+randomStatetest146.json
+randomStatetest147.json
+randomStatetest148.json
+randomStatetest149.json
+randomStatetest15.json
+randomStatetest150.json
+randomStatetest151.json
+randomStatetest153.json
+randomStatetest154.json
+randomStatetest155.json
+randomStatetest156.json
+randomStatetest157.json
+randomStatetest158.json
+randomStatetest159.json
+randomStatetest16.json
+randomStatetest161.json
+randomStatetest162.json
+randomStatetest163.json
+randomStatetest164.json
+randomStatetest166.json
+randomStatetest167.json
+randomStatetest169.json
+randomStatetest17.json
+randomStatetest171.json
+randomStatetest172.json
+randomStatetest173.json
+randomStatetest174.json
+randomStatetest175.json
+randomStatetest176.json
+randomStatetest177.json
+randomStatetest178.json
+randomStatetest179.json
+randomStatetest18.json
+randomStatetest180.json
+randomStatetest183.json
+randomStatetest184.json
+randomStatetest185.json
+randomStatetest187.json
+randomStatetest188.json
+randomStatetest189.json
+randomStatetest19.json
+randomStatetest190.json
+randomStatetest191.json
+randomStatetest192.json
+randomStatetest194.json
+randomStatetest195.json
+randomStatetest196.json
+randomStatetest197.json
+randomStatetest198.json
+randomStatetest199.json
+randomStatetest2.json
+randomStatetest20.json
+randomStatetest200.json
+randomStatetest201.json
+randomStatetest202.json
+randomStatetest204.json
+randomStatetest205.json
+randomStatetest206.json
+randomStatetest207.json
+randomStatetest208.json
+randomStatetest209.json
+randomStatetest210.json
+randomStatetest211.json
+randomStatetest212.json
+randomStatetest214.json
+randomStatetest215.json
+randomStatetest216.json
+randomStatetest217.json
+randomStatetest219.json
+randomStatetest22.json
+randomStatetest220.json
+randomStatetest221.json
+randomStatetest222.json
+randomStatetest225.json
+randomStatetest226.json
+randomStatetest227.json
+randomStatetest228.json
+randomStatetest23.json
+randomStatetest230.json
+randomStatetest231.json
+randomStatetest232.json
+randomStatetest233.json
+randomStatetest236.json
+randomStatetest237.json
+randomStatetest238.json
+randomStatetest24.json
+randomStatetest242.json
+randomStatetest243.json
+randomStatetest244.json
+randomStatetest245.json
+randomStatetest246.json
+randomStatetest247.json
+randomStatetest248.json
+randomStatetest249.json
+randomStatetest25.json
+randomStatetest250.json
+randomStatetest251.json
+randomStatetest252.json
+randomStatetest254.json
+randomStatetest257.json
+randomStatetest259.json
+randomStatetest26.json
+randomStatetest260.json
+randomStatetest261.json
+randomStatetest263.json
+randomStatetest264.json
+randomStatetest265.json
+randomStatetest266.json
+randomStatetest267.json
+randomStatetest268.json
+randomStatetest269.json
+randomStatetest27.json
+randomStatetest270.json
+randomStatetest271.json
+randomStatetest273.json
+randomStatetest274.json
+randomStatetest275.json
+randomStatetest276.json
+randomStatetest278.json
+randomStatetest279.json
+randomStatetest28.json
+randomStatetest280.json
+randomStatetest281.json
+randomStatetest282.json
+randomStatetest283.json
+randomStatetest285.json
+randomStatetest286.json
+randomStatetest287.json
+randomStatetest288.json
+randomStatetest29.json
+randomStatetest290.json
+randomStatetest291.json
+randomStatetest292.json
+randomStatetest293.json
+randomStatetest294.json
+randomStatetest295.json
+randomStatetest296.json
+randomStatetest297.json
+randomStatetest298.json
+randomStatetest299.json
+randomStatetest3.json
+randomStatetest30.json
+randomStatetest300.json
+randomStatetest301.json
+randomStatetest302.json
+randomStatetest303.json
+randomStatetest304.json
+randomStatetest305.json
+randomStatetest306.json
+randomStatetest307.json
+randomStatetest308.json
+randomStatetest309.json
+randomStatetest31.json
+randomStatetest310.json
+randomStatetest311.json
+randomStatetest312.json
+randomStatetest313.json
+randomStatetest315.json
+randomStatetest316.json
+randomStatetest318.json
+randomStatetest320.json
+randomStatetest321.json
+randomStatetest322.json
+randomStatetest323.json
+randomStatetest325.json
+randomStatetest326.json
+randomStatetest327.json
+randomStatetest329.json
+randomStatetest33.json
+randomStatetest332.json
+randomStatetest333.json
+randomStatetest334.json
+randomStatetest335.json
+randomStatetest336.json
+randomStatetest337.json
+randomStatetest338.json
+randomStatetest339.json
+randomStatetest340.json
+randomStatetest341.json
+randomStatetest342.json
+randomStatetest343.json
+randomStatetest345.json
+randomStatetest346.json
+randomStatetest347.json
+randomStatetest348.json
+randomStatetest349.json
+randomStatetest350.json
+randomStatetest351.json
+randomStatetest352.json
+randomStatetest353.json
+randomStatetest354.json
+randomStatetest355.json
+randomStatetest356.json
+randomStatetest357.json
+randomStatetest358.json
+randomStatetest359.json
+randomStatetest36.json
+randomStatetest360.json
+randomStatetest361.json
+randomStatetest362.json
+randomStatetest363.json
+randomStatetest364.json
+randomStatetest365.json
+randomStatetest366.json
+randomStatetest367.json
+randomStatetest368.json
+randomStatetest369.json
+randomStatetest37.json
+randomStatetest370.json
+randomStatetest371.json
+randomStatetest372.json
+randomStatetest376.json
+randomStatetest378.json
+randomStatetest379.json
+randomStatetest380.json
+randomStatetest381.json
+randomStatetest382.json
+randomStatetest383.json
+randomStatetest384.json
+randomStatetest39.json
+randomStatetest4.json
+randomStatetest41.json
+randomStatetest42.json
+randomStatetest43.json
+randomStatetest45.json
+randomStatetest47.json
+randomStatetest48.json
+randomStatetest49.json
+randomStatetest5.json
+randomStatetest51.json
+randomStatetest52.json
+randomStatetest53.json
+randomStatetest54.json
+randomStatetest55.json
+randomStatetest57.json
+randomStatetest58.json
+randomStatetest59.json
+randomStatetest6.json
+randomStatetest60.json
+randomStatetest62.json
+randomStatetest63.json
+randomStatetest64.json
+randomStatetest66.json
+randomStatetest67.json
+randomStatetest69.json
+randomStatetest72.json
+randomStatetest73.json
+randomStatetest74.json
+randomStatetest75.json
+randomStatetest77.json
+randomStatetest78.json
+randomStatetest80.json
+randomStatetest81.json
+randomStatetest82.json
+randomStatetest83.json
+randomStatetest84.json
+randomStatetest85.json
+randomStatetest87.json
+randomStatetest88.json
+randomStatetest89.json
+randomStatetest9.json
+randomStatetest90.json
+randomStatetest92.json
+randomStatetest95.json
+randomStatetest96.json
+randomStatetest97.json
+randomStatetest98.json
+*)
+
+(* TODO: add until stRandom2 *)
+
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stRecursiveCreate/" ^ s;
+
+val test_path = mk_test_path "recursiveCreate.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: parse
+val test_path = mk_test_path "recursiveCreateReturnValue.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stRefundTest/" ^ s;
+
+val test_path = mk_test_path "refund50_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund50_2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund50percentCap.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund600.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refundFF.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refundMax.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refundSSTORE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refundSuicide50procentCap.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_CallA.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_CallA_OOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_CallA_notEnoughGasInCall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_CallToSuicideNoStorage.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_CallToSuicideStorage.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_CallToSuicideTwice.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_NoOOG_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_OOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_TxToSuicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_TxToSuicideOOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_changeNonZeroStorage.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_getEtherBack.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_multimpleSuicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "refund_singleSuicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stReturnDataTest/" ^ s;
+
+(* TODO: fix - need precompile?
+val test_path = mk_test_path "call_ecrec_success_empty_then_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path
+  "call_outsize_then_create_successful_then_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "call_then_call_value_fail_then_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "call_then_create_successful_then_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "clearReturnBuffer.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "create_callprecompile_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix - need precompile?
+val test_path = mk_test_path "modexp_modsize0_returndatasize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "returndatacopy_0_0_following_successful_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_afterFailing_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_after_failing_callcode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_after_failing_delegatecall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_after_failing_staticcall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_after_revert_in_staticcall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_after_successful_callcode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_after_successful_delegatecall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_after_successful_staticcall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_call.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_failing_call.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_revert.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_revert_in_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_successful_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_following_too_big_transfer.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_initial.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_initial_256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_initial_big_sum.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatacopy_overrun.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_after_failing_callcode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_after_failing_delegatecall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_after_failing_staticcall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_after_oog_after_deeper.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_after_successful_callcode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_after_successful_delegatecall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_after_successful_staticcall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_bug.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_following_successful_create.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_initial.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "returndatasize_initial_zero_read.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "revertRetDataSize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "subcallReturnMoreThenExpected.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "tooLongReturnDataCopy.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stRevertTest/" ^ s;
