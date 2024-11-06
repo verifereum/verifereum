@@ -275,7 +275,7 @@ fun remove_special_chars #"-" = "_"
   | remove_special_chars c = String.str c
 
 (*
-  val test_index = 0;
+  val test_index = 8;
   Globals.max_print_depth := 40;
   val json_path = test_path
 *)
@@ -4483,7 +4483,6 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "identity_to_bigger.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-
 
 val test_path = mk_test_path "modexp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;

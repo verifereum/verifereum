@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse monadsyntax
-     vfmTypesTheory vfmContextTheory;
+     vfmTypesTheory vfmContextTheory numposrepTheory numTheory
+     arithmeticTheory dep_rewrite;
 
 val _ = new_theory "vfmExecution";
 
@@ -1049,6 +1050,81 @@ Definition precompile_identity_def:
   od
 End
 
+Definition bitlength_def:
+  bitlength 0n = 0 ∧
+  bitlength (SUC n) = LOG2 (SUC n) + 1
+End
+
+(* val inputs = “[0w:byte; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
+(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 1w; 0w; 0w; 0w; 0w; *)
+(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
+(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 32w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
+(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
+(*       0w; 0w; 0w; 0w; 0w; 0w; 32w; 3w; 255w; 255w; 255w; 255w; 255w; 255w; *)
+(*       255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
+(*       255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 254w; 255w; 255w; *)
+(*       252w; 46w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
+(*       255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
+(*       255w; 255w; 255w; 255w; 255w; 254w; 255w; 255w; 252w; 47w]” *)
+      
+(* val bSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 ^inputs” |> concl |> rhs *)
+(* val eSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 32 ^inputs)” |> concl |> rhs *)
+(* val mSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 64 ^inputs)” |> concl |> rhs *)
+
+(* val b = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^bSize (DROP 96 ^inputs)” |> concl |> rhs *)
+(* val e = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^eSize (DROP (96 + ^bSize) ^inputs)” |> concl |> rhs *)
+(* val m = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^mSize (DROP (96 + ^bSize + ^eSize) ^inputs)” |> concl |> rhs *)
+(* EVAL “REVERSE $ PAD_LEFT 0w 32 $ MAP n2w $ n2l 256 (1:num)” *)
+(*     (*                                                                                                           cv_eval “if ^eSize ≤ 32 ∧ ^e = 0 then 0n *) *)
+(*     (*                                                                                                                    else if ^eSize ≤ 32    then bitlength ^e *) *)
+(*     (*                    else (8 * (^eSize - 32)) + (bitlength (w2n (n2w ^e:bytes32)))” *) *)
+(*     (* cv_eval “modexp ^b ^e ^m 1” *) *)
+
+Definition modexp_def:
+  modexp (b:num) (e:num) (m: num) (a:num) =
+  if e = 0n then (a MOD m) else
+  if EVEN e then
+    modexp ((b * b) MOD m) (DIV2 e) m a
+  else
+    modexp b (PRE e) m ((b * a) MOD m)
+Termination
+  WF_REL_TAC`measure (FST o SND)`
+  \\ rw[DIV2_def]
+End
+
+Theorem even_exp_lemma:
+  ∀x n. EVEN n ⇒ (x:num) ** n = (x ** 2) ** (n DIV 2)
+Proof
+  rw[EVEN_EXISTS, GSYM EXP_EXP_MULT]
+  \\ rw[logrootTheory.EXP_MUL]
+QED
+
+Theorem modexp_exp:
+  !b e m a. 0 < m ⇒ modexp b e m a = (a * b ** e) MOD m
+Proof
+  recInduct modexp_ind
+  \\ rpt strip_tac
+  \\ simp[Once modexp_def]
+  \\ IF_CASES_TAC \\ gs[]
+  \\ rw[DIV2_def]
+  \\ DEP_REWRITE_TAC [GSYM even_exp_lemma] \\ rw[]
+  \\ ‘0 < e’ by simp[NOT_ZERO]
+  \\ ‘b ** e = b * b ** PRE e’ by gvs[GSYM EXP, SUC_PRE]
+  \\ rw[]
+QED
+(* EVAL “” *)
+(* cv_eval “word_of_bytes F (0w:bytes32) $ REVERSE $ REVERSE $ PAD_RIGHT (0w:byte) 32 $ MAP n2w $ n2l 256 452312848583266388373324160190187140051835877600158453279131187530910662656” *)
+(* cv_eval “modexp ” *)
+(* val input = cv_eval “modexp_d11g0v0_Cancun_transaction.data” |> concl |> rhs *)
+(* val bSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 ^input” |> concl |> rhs *)
+(* val eSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 32 ^input)” |> concl |> rhs *)
+(* val mSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 64 ^input)” |> concl |> rhs *)
+(* val b = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^bSize (DROP 96 ^input)” |> concl |> rhs *)
+(* val e = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^eSize (DROP (96 + ^bSize) ^input)” |> concl |> rhs *)
+(* val m = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^mSize (DROP (96 + ^bSize + ^eSize) ^input)” |> concl |> rhs *)
+
+(* val r = cv_eval “modexp ^b ^e ^m 1” *)
+(* EVAL “REVERSE $ PAD_RIGHT 0w ^mSize $ MAP n2w $ n2l 256 (1025:num)” *)
 Definition precompile_modexp_def:
   precompile_modexp = do
     inputs <- get_call_data;
@@ -1060,32 +1136,34 @@ Definition precompile_modexp_def:
     words <<- (maxLength + 7) DIV 8;
     multiplicationComplexity <<- words * words;
 
-    b <<- word_of_bytes T (0w:bytes32) $ TAKE bSize (DROP 96 inputs);
-    e <<- word_of_bytes T (0w:bytes32) $ TAKE eSize (DROP (96 + bSize) inputs);
-    m <<- word_of_bytes T (0w:bytes32) $ TAKE mSize (DROP (96 + bSize + eSize) inputs);
+    b: num <<- l2n 256 $ REVERSE $ MAP w2n $ TAKE bSize (DROP 96 inputs);
+    e: num <<- l2n 256 $ REVERSE $ MAP w2n $ TAKE eSize (DROP (96 + bSize) inputs);
+    m: num <<- l2n 256 $ REVERSE $ MAP w2n $ TAKE mSize (DROP (96 + bSize + eSize) inputs);
 
-    iterationCount <<- if eSize ≤ 32 ∧ e = 0w then 0n
-                       else if eSize ≤ 32     then 1n
-                       else 0n;
-
-    dynamicGas <<- MAX 200 (multiplicationComplexity * iterationCount DIV 3);
+    iterationCount <<- if eSize ≤ 32 ∧ e = 0 then 0n
+                       else if eSize ≤ 32    then bitlength e -1
+                       else (8 * (eSize - 32)) + (bitlength (w2n (n2w e:bytes32)) -1);
+    calculatedIterationCount <<- MAX iterationCount 1;
+    dynamicGas <<- MAX 200 (multiplicationComplexity * calculatedIterationCount DIV 3);
     consume_gas dynamicGas;
 
-    result <<- word_mod (word_exp b e) m;
-
-    set_return_data $ word_to_bytes result T;
+    (* result <<- (b ** e) MOD m; *)
+    result <<- if bSize = 0 ∧ mSize = 0
+               then []
+               else if m = 0
+               then REPLICATE mSize 0w
+               else REVERSE $ PAD_RIGHT 0w mSize $ MAP n2w $ n2l 256 $ modexp b e m 1;
+    set_return_data result;
 
     finish
   od
 End
 
 Definition dispatch_precompiles_def:
-  dispatch_precompiles = do
-    callee <- get_callee;
-    if callee = 0x4w then precompile_identity
-    else if callee = 0x5w then precompile_modexp
+  dispatch_precompiles (a: address) =
+    if a = 0x4w then precompile_identity
+    else if a = 0x5w then precompile_modexp
     else fail Impossible
-  od
 End
 
 Definition proceed_call_def:
@@ -1126,7 +1204,7 @@ Definition proceed_call_def:
     context <<- initial_context callee subContextParams subContextTx;
     push_context context;
     if fIN address precompile_addresses
-    then dispatch_precompiles
+    then dispatch_precompiles address
     else return ()
   od
 End
