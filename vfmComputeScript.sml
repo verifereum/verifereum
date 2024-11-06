@@ -886,6 +886,9 @@ val () = “precompile_identity s” |>
        precompile_identity_def, bind_def, ignore_bind_def, LET_RATOR
      ] |> cv_auto_trans;
 
+val () = cv_auto_trans bitlength_def;
+val () = cv_auto_trans modexp_def;
+
 val () = “precompile_modexp s” |>
    SIMP_CONV std_ss [
        precompile_modexp_def, bind_def, ignore_bind_def, LET_RATOR
@@ -1069,7 +1072,10 @@ val () = “abort_call_value x s” |>
     abort_call_value_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
-val th = tf dispatch_precompiles_def;
+val () = “dispatch_precompiles a s” |>
+  SIMP_CONV std_ss [
+    dispatch_precompiles_def, COND_RATOR
+  ] |> cv_auto_trans;
 
 val () = “proceed_call a b c d e f g h i j s” |>
   SIMP_CONV std_ss [
