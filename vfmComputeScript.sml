@@ -886,6 +886,11 @@ val () = “precompile_identity s” |>
        precompile_identity_def, bind_def, ignore_bind_def, LET_RATOR
      ] |> cv_auto_trans;
 
+val () = “precompile_modexp s” |>
+   SIMP_CONV std_ss [
+       precompile_modexp_def, bind_def, ignore_bind_def, LET_RATOR
+     ] |> cv_auto_trans;
+
 Theorem pop_stack_INL_LENGTH:
   pop_stack n s = (INL x, y) ⇒
   LENGTH x = n ∧
