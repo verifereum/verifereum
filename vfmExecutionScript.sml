@@ -1049,10 +1049,41 @@ Definition precompile_identity_def:
   od
 End
 
+Definition precompile_modexp_def:
+  precompile_modexp = do
+    inputs <- get_call_data;
+    bSize <<- w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 inputs;
+    eSize <<- w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 32 inputs);
+    mSize <<- w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 64 inputs);
+
+    maxLength <<- MAX bSize mSize;
+    words <<- (maxLength + 7) DIV 8;
+    multiplicationComplexity <<- words * words;
+
+    b <<- word_of_bytes T (0w:bytes32) $ TAKE bSize (DROP 96 inputs);
+    e <<- word_of_bytes T (0w:bytes32) $ TAKE eSize (DROP (96 + bSize) inputs);
+    m <<- word_of_bytes T (0w:bytes32) $ TAKE mSize (DROP (96 + bSize + eSize) inputs);
+
+    iterationCount <<- if eSize ≤ 32 ∧ e = 0w then 0n
+                       else if eSize ≤ 32     then 1n
+                       else 0n;
+
+    dynamicGas <<- MAX 200 (multiplicationComplexity * iterationCount DIV 3);
+    consume_gas dynamicGas;
+
+    result <<- word_mod (word_exp b e) m;
+
+    set_return_data $ word_to_bytes result T;
+
+    finish
+  od
+End
+
 Definition dispatch_precompiles_def:
   dispatch_precompiles = do
     callee <- get_callee;
     if callee = 0x4w then precompile_identity
+    else if callee = 0x5w then precompile_modexp
     else fail Impossible
   od
 End

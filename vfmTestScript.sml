@@ -276,7 +276,7 @@ fun remove_special_chars #"-" = "_"
 
 (*
   val test_index = 0;
-  Globals.max_print_depth := 32;
+  Globals.max_print_depth := 40;
   val json_path = test_path
 *)
 fun mk_prove_test test_path = let
@@ -4484,6 +4484,11 @@ val test_path = mk_test_path "identity_to_bigger.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+
+val test_path = mk_test_path "modexp.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (* TODO: add
 modexp.json
 modexpTests.json
@@ -6692,13 +6697,13 @@ stZeroKnowledge2
 (*
 
 cv_eval ``
-let acc = SstoreCallToSelfSubRefundBelowZero_d0g0v0_Cancun_pre in
-let blk = SstoreCallToSelfSubRefundBelowZero_d0g0v0_Cancun_block in
-let tx =  SstoreCallToSelfSubRefundBelowZero_d0g0v0_Cancun_transaction in
+let acc = modexp_d0g0v0_Cancun_pre in
+let blk = modexp_d0g0v0_Cancun_block in
+let tx = modexp_d0g0v0_Cancun_transaction in
 let init = run_create 1 [] blk acc tx in
 let cont = OUTR $ THE init in
 let s = SND cont in
-let (r, s) = run_n 25 s in
+let (r, s) = run_n 12 s in
 let c = EL 0 s.contexts in
   (ISL r, LENGTH s.contexts,
    c.stack,
