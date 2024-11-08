@@ -269,6 +269,10 @@ fun mk_tx_to s =
   if String.size s = 0 then "NONE"
   else "SOME (n2w " ^ s ^ ")"
 
+fun remove_special_chars #"-" = "_"
+  | remove_special_chars #"^" = "N"
+  | remove_special_chars c = String.str c
+
 (*
   val test_index = 0;
   Globals.max_print_depth := 32;
@@ -278,8 +282,7 @@ fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
   fun prove_test test_index = let
     val test_name = List.nth(test_names, test_index);
-    val test_name_escaped =
-      String.translate(fn c => if c = #"-" then "_" else String.str c) test_name
+    val test_name_escaped = String.translate remove_special_chars test_name
 
     val test = get_test test_path test_name;
 
@@ -580,6 +583,106 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "vmPerformance/performanceTester.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: add
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/Pyspecs/" ^ s;
+
+needs support for old block types
+val test_path = mk_test_path "berlin/eip2930_access_list/access_list.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/Cancun/" ^ s;
+
+(* TODO: parse - need to add transient storage
+val test_path = mk_test_path
+  "stEIP1153-transientStorage/10_revertUndoesStoreAfterReturn.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "stEIP1153-transientStorage/14_revertAfterNestedStaticcall.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "stEIP1153-transientStorage/15_tstoreCannotBeDosd.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "stEIP1153-transientStorage/17_tstoreGas.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+TODO: add the rest
+*)
+
+(* TODO: add stEIP4844-blobtransactions *)
+
+(* TODO: fix - need to add mcopy
+val test_path = mk_test_path "stEIP5656-MCOPY/MCOPY.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stEIP5656-MCOPY/MCOPY_copy_cost.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stEIP5656-MCOPY/MCOPY_memory_expansion_cost.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stEIP5656-MCOPY/MCOPY_memory_hash.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/Shanghai/" ^ s;
+
+val test_path = mk_test_path "stEIP3651-warmcoinbase/coinbaseWarmAccountCallGas.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "stEIP3651-warmcoinbase/coinbaseWarmAccountCallGasFail.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stEIP3855-push0/push0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stEIP3855-push0/push0Gas.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stEIP3855-push0/push0Gas2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path
+  "stEIP3860-limitmeterinitcode/create2InitCodeSizeLimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path
+  "stEIP3860-limitmeterinitcode/createInitCodeSizeLimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow / oom
+val test_path = mk_test_path
+  "stEIP3860-limitmeterinitcode/creationTxInitCodeSizeLimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stArgsZeroOneBalance/" ^ s;
@@ -5149,6 +5252,1029 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "stateRevert.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stSLoadTest/" ^ s;
+
+val test_path = mk_test_path "sloadGasCost.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stSStoreTest/" ^ s;
+
+val test_path = mk_test_path "InitCollisionNonZeroNonce.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "InitCollisionParis.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "SstoreCallToSelfSubRefundBelowZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "sstoreGas.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0to0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0to0to0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0to0toX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0toX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0toXto0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0toXto0toX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0toXtoX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_0toXtoY.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_Xto0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_Xto0to0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: add
+sstore_Xto0toX.json
+sstore_Xto0toXto0.json
+sstore_Xto0toY.json
+sstore_XtoX.json
+sstore_XtoXto0.json
+sstore_XtoXtoX.json
+sstore_XtoXtoY.json
+sstore_XtoY.json
+sstore_XtoYto0.json
+sstore_XtoYtoX.json
+sstore_XtoYtoY.json
+sstore_XtoYtoZ.json
+sstore_changeFromExternalCallInInitCode.json
+sstore_gasLeft.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stSelfBalance/" ^ s;
+
+val test_path = mk_test_path "diffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "selfBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "selfBalanceCallTypes.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "selfBalanceEqualsBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "selfBalanceGasCost.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "selfBalanceUpdate.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stShift/" ^ s;
+
+val test_path = mk_test_path "sar00.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar01.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar10.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar11.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_0_256-1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^254_254.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255-1_248.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255-1_254.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255-1_255.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255-1_256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255_255.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255_256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^255_257.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "sar_2^256-1_0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "sar_2^256-1_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^256-1_255.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sar_2^256-1_256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "shiftCombinations.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shiftSignedCombinations.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "shl01-0100.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl01-0101.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl01-ff.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl01.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl10.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl11.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl_-1_0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl_-1_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl_-1_255.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl_-1_256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shl_2^255-1_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr01.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr10.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr11.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_-1_0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_-1_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_-1_255.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_-1_256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_2^255_1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_2^255_255.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_2^255_256.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "shr_2^255_257.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stSolidityTest/" ^ s;
+
+val test_path = mk_test_path "AmbiguousMethod.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ByZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallInfiniteLoop.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallLowLevelCreatesSolidity.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveMethods.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ContractInheritance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateContractFromMethod.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "RecursiveCreateContracts.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "RecursiveCreateContractsCreate4Contracts.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "SelfDestruct.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TestBlockAndTransactionProperties.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TestContractInteraction.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TestContractSuicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "TestCryptographicFunctions.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "TestKeywords.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TestOverflow.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TestStoreGasPrices.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: fix
+val test_path = mk_test_path "TestStructuresAndVariabless.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stSpecialTest/" ^ s;
+
+val test_path = mk_test_path "FailedCreateRevertsDeletionParis.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "JUMPDEST_Attack.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "JUMPDEST_AttackwithJump.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "OverflowGasMakeMoney.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "StackDepthLimitSEC.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "block504980.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "deploymentError.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: parse
+val test_path = mk_test_path "eoaEmptyParis.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+val test_path = mk_test_path "failed_tx_xcf416c53_Paris.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "gasPrice0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "makeMoney.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "push32withoutByte.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "selfdestructEIP2929.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sha3_deja.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow
+val test_path = mk_test_path "tx_e1c174e2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stStackTests/" ^ s;
+
+val test_path = mk_test_path "shallowStack.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow / oom
+val test_path = mk_test_path "stackOverflow.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: add
+stackOverflowDUP.json
+stackOverflowM1.json
+stackOverflowM1DUP.json
+stackOverflowM1PUSH.json
+stackOverflowPUSH.json
+stackOverflowSWAP.json
+stacksanitySWAP.json
+underflowTest.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stStaticCall/" ^ s;
+
+(* TODO: add
+StaticcallToPrecompileFromCalledContract.json
+StaticcallToPrecompileFromContractInitialization.json
+StaticcallToPrecompileFromTransaction.json
+static_ABAcalls0.json
+static_ABAcalls1.json
+static_ABAcalls2.json
+static_ABAcalls3.json
+static_ABAcallsSuicide0.json
+static_ABAcallsSuicide1.json
+static_CALL_OneVCallSuicide.json
+static_CALL_ZeroVCallSuicide.json
+static_CREATE_ContractSuicideDuringInit.json
+static_CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json
+static_CREATE_ContractSuicideDuringInit_WithValue.json
+static_CREATE_EmptyContractAndCallIt_0wei.json
+static_CREATE_EmptyContractWithStorageAndCallIt_0wei.json
+static_Call10.json
+static_Call1024BalanceTooLow.json
+static_Call1024BalanceTooLow2.json
+static_Call1024OOG.json
+static_Call1024PreCalls.json
+static_Call1024PreCalls2.json
+static_Call1024PreCalls3.json
+static_Call1MB1024Calldepth.json
+static_Call50000.json
+static_Call50000_ecrec.json
+static_Call50000_identity.json
+static_Call50000_identity2.json
+static_Call50000_rip160.json
+static_Call50000bytesContract50_1.json
+static_Call50000bytesContract50_2.json
+static_Call50000bytesContract50_3.json
+static_CallAndCallcodeConsumeMoreGasThenTransactionHas.json
+static_CallAskMoreGasOnDepth2ThenTransactionHas.json
+static_CallContractToCreateContractAndCallItOOG.json
+static_CallContractToCreateContractOOG.json
+static_CallContractToCreateContractOOGBonusGas.json
+static_CallContractToCreateContractWhichWouldCreateContractIfCalled.json
+static_CallEcrecover0.json
+static_CallEcrecover0_0input.json
+static_CallEcrecover0_Gas2999.json
+static_CallEcrecover0_NoGas.json
+static_CallEcrecover0_completeReturnValue.json
+static_CallEcrecover0_gas3000.json
+static_CallEcrecover0_overlappingInputOutput.json
+static_CallEcrecover1.json
+static_CallEcrecover2.json
+static_CallEcrecover3.json
+static_CallEcrecover80.json
+static_CallEcrecoverCheckLength.json
+static_CallEcrecoverCheckLengthWrongV.json
+static_CallEcrecoverH_prefixed0.json
+static_CallEcrecoverR_prefixed0.json
+static_CallEcrecoverS_prefixed0.json
+static_CallEcrecoverV_prefixed0.json
+static_CallGoesOOGOnSecondLevel.json
+static_CallGoesOOGOnSecondLevel2.json
+static_CallIdentitiy_1.json
+static_CallIdentity_1_nonzeroValue.json
+static_CallIdentity_2.json
+static_CallIdentity_3.json
+static_CallIdentity_4.json
+static_CallIdentity_4_gas17.json
+static_CallIdentity_4_gas18.json
+static_CallIdentity_5.json
+static_CallLoseGasOOG.json
+static_CallRecursiveBomb0.json
+static_CallRecursiveBomb0_OOG_atMaxCallDepth.json
+static_CallRecursiveBomb1.json
+static_CallRecursiveBomb2.json
+static_CallRecursiveBomb3.json
+static_CallRecursiveBombLog.json
+static_CallRecursiveBombLog2.json
+static_CallRecursiveBombPreCall.json
+static_CallRecursiveBombPreCall2.json
+static_CallRipemd160_1.json
+static_CallRipemd160_2.json
+static_CallRipemd160_3.json
+static_CallRipemd160_3_postfixed0.json
+static_CallRipemd160_3_prefixed0.json
+static_CallRipemd160_4.json
+static_CallRipemd160_4_gas719.json
+static_CallRipemd160_5.json
+static_CallSha256_1.json
+static_CallSha256_1_nonzeroValue.json
+static_CallSha256_2.json
+static_CallSha256_3.json
+static_CallSha256_3_postfix0.json
+static_CallSha256_3_prefix0.json
+static_CallSha256_4.json
+static_CallSha256_4_gas99.json
+static_CallSha256_5.json
+static_CallToNameRegistrator0.json
+static_CallToReturn1.json
+static_CalltoReturn2.json
+static_CheckCallCostOOG.json
+static_CheckOpcodes.json
+static_CheckOpcodes2.json
+static_CheckOpcodes3.json
+static_CheckOpcodes4.json
+static_CheckOpcodes5.json
+static_ExecuteCallThatAskForeGasThenTrabsactionHas.json
+static_InternalCallHittingGasLimit.json
+static_InternalCallHittingGasLimit2.json
+static_InternalCallStoreClearsOOG.json
+static_LoopCallsDepthThenRevert.json
+static_LoopCallsDepthThenRevert2.json
+static_LoopCallsDepthThenRevert3.json
+static_LoopCallsThenRevert.json
+static_PostToReturn1.json
+static_RETURN_Bounds.json
+static_RETURN_BoundsOOG.json
+static_RawCallGasAsk.json
+static_Return50000_2.json
+static_ReturnTest.json
+static_ReturnTest2.json
+static_RevertDepth2.json
+static_RevertOpcodeCalls.json
+static_ZeroValue_CALL_OOGRevert.json
+static_ZeroValue_SUICIDE_OOGRevert.json
+static_callBasic.json
+static_callChangeRevert.json
+static_callCreate.json
+static_callCreate2.json
+static_callCreate3.json
+static_callOutput1.json
+static_callOutput2.json
+static_callOutput3.json
+static_callOutput3Fail.json
+static_callOutput3partial.json
+static_callOutput3partialFail.json
+static_callToCallCodeOpCodeCheck.json
+static_callToCallOpCodeCheck.json
+static_callToDelCallOpCodeCheck.json
+static_callToStaticOpCodeCheck.json
+static_callWithHighValue.json
+static_callWithHighValueAndGasOOG.json
+static_callWithHighValueAndOOGatTxLevel.json
+static_callWithHighValueOOGinCall.json
+static_call_OOG_additionalGasCosts1.json
+static_call_OOG_additionalGasCosts2_Paris.json
+static_call_value_inherit.json
+static_call_value_inherit_from_call.json
+static_callcall_00.json
+static_callcall_00_OOGE.json
+static_callcall_00_OOGE_1.json
+static_callcall_00_OOGE_2.json
+static_callcall_00_SuicideEnd.json
+static_callcallcall_000.json
+static_callcallcall_000_OOGE.json
+static_callcallcall_000_OOGMAfter.json
+static_callcallcall_000_OOGMAfter2.json
+static_callcallcall_000_OOGMBefore.json
+static_callcallcall_000_SuicideEnd.json
+static_callcallcall_000_SuicideMiddle.json
+static_callcallcall_ABCB_RECURSIVE.json
+static_callcallcallcode_001.json
+static_callcallcallcode_001_2.json
+static_callcallcallcode_001_OOGE.json
+static_callcallcallcode_001_OOGE_2.json
+static_callcallcallcode_001_OOGMAfter.json
+static_callcallcallcode_001_OOGMAfter2.json
+static_callcallcallcode_001_OOGMAfter_2.json
+static_callcallcallcode_001_OOGMAfter_3.json
+static_callcallcallcode_001_OOGMBefore.json
+static_callcallcallcode_001_OOGMBefore2.json
+static_callcallcallcode_001_SuicideEnd.json
+static_callcallcallcode_001_SuicideEnd2.json
+static_callcallcallcode_001_SuicideMiddle.json
+static_callcallcallcode_001_SuicideMiddle2.json
+static_callcallcallcode_ABCB_RECURSIVE.json
+static_callcallcallcode_ABCB_RECURSIVE2.json
+static_callcallcode_01_2.json
+static_callcallcode_01_OOGE_2.json
+static_callcallcode_01_SuicideEnd.json
+static_callcallcode_01_SuicideEnd2.json
+static_callcallcodecall_010.json
+static_callcallcodecall_010_2.json
+static_callcallcodecall_010_OOGE.json
+static_callcallcodecall_010_OOGE_2.json
+static_callcallcodecall_010_OOGMAfter.json
+static_callcallcodecall_010_OOGMAfter2.json
+static_callcallcodecall_010_OOGMAfter_2.json
+static_callcallcodecall_010_OOGMAfter_3.json
+static_callcallcodecall_010_OOGMBefore.json
+static_callcallcodecall_010_OOGMBefore2.json
+static_callcallcodecall_010_SuicideEnd.json
+static_callcallcodecall_010_SuicideEnd2.json
+static_callcallcodecall_010_SuicideMiddle.json
+static_callcallcodecall_010_SuicideMiddle2.json
+static_callcallcodecall_ABCB_RECURSIVE.json
+static_callcallcodecall_ABCB_RECURSIVE2.json
+static_callcallcodecallcode_011.json
+static_callcallcodecallcode_011_2.json
+static_callcallcodecallcode_011_OOGE.json
+static_callcallcodecallcode_011_OOGE_2.json
+static_callcallcodecallcode_011_OOGMAfter.json
+static_callcallcodecallcode_011_OOGMAfter2.json
+static_callcallcodecallcode_011_OOGMAfter_1.json
+static_callcallcodecallcode_011_OOGMAfter_2.json
+static_callcallcodecallcode_011_OOGMBefore.json
+static_callcallcodecallcode_011_OOGMBefore2.json
+static_callcallcodecallcode_011_SuicideEnd.json
+static_callcallcodecallcode_011_SuicideEnd2.json
+static_callcallcodecallcode_011_SuicideMiddle.json
+static_callcallcodecallcode_011_SuicideMiddle2.json
+static_callcallcodecallcode_ABCB_RECURSIVE.json
+static_callcallcodecallcode_ABCB_RECURSIVE2.json
+static_callcode_checkPC.json
+static_callcodecall_10.json
+static_callcodecall_10_2.json
+static_callcodecall_10_OOGE.json
+static_callcodecall_10_OOGE_2.json
+static_callcodecall_10_SuicideEnd.json
+static_callcodecall_10_SuicideEnd2.json
+static_callcodecallcall_100.json
+static_callcodecallcall_100_2.json
+static_callcodecallcall_100_OOGE.json
+static_callcodecallcall_100_OOGE2.json
+static_callcodecallcall_100_OOGMAfter.json
+static_callcodecallcall_100_OOGMAfter2.json
+static_callcodecallcall_100_OOGMAfter_2.json
+static_callcodecallcall_100_OOGMAfter_3.json
+static_callcodecallcall_100_OOGMBefore.json
+static_callcodecallcall_100_OOGMBefore2.json
+static_callcodecallcall_100_SuicideEnd.json
+static_callcodecallcall_100_SuicideEnd2.json
+static_callcodecallcall_100_SuicideMiddle.json
+static_callcodecallcall_100_SuicideMiddle2.json
+static_callcodecallcall_ABCB_RECURSIVE.json
+static_callcodecallcall_ABCB_RECURSIVE2.json
+static_callcodecallcallcode_101.json
+static_callcodecallcallcode_101_2.json
+static_callcodecallcallcode_101_OOGE.json
+static_callcodecallcallcode_101_OOGE_2.json
+static_callcodecallcallcode_101_OOGMAfter.json
+static_callcodecallcallcode_101_OOGMAfter2.json
+static_callcodecallcallcode_101_OOGMAfter_1.json
+static_callcodecallcallcode_101_OOGMAfter_3.json
+static_callcodecallcallcode_101_OOGMBefore.json
+static_callcodecallcallcode_101_OOGMBefore2.json
+static_callcodecallcallcode_101_SuicideEnd.json
+static_callcodecallcallcode_101_SuicideEnd2.json
+static_callcodecallcallcode_101_SuicideMiddle.json
+static_callcodecallcallcode_101_SuicideMiddle2.json
+static_callcodecallcallcode_ABCB_RECURSIVE.json
+static_callcodecallcallcode_ABCB_RECURSIVE2.json
+static_callcodecallcodecall_110.json
+static_callcodecallcodecall_1102.json
+static_callcodecallcodecall_110_2.json
+static_callcodecallcodecall_110_OOGE.json
+static_callcodecallcodecall_110_OOGE2.json
+static_callcodecallcodecall_110_OOGMAfter.json
+static_callcodecallcodecall_110_OOGMAfter2.json
+static_callcodecallcodecall_110_OOGMAfter_2.json
+static_callcodecallcodecall_110_OOGMAfter_3.json
+static_callcodecallcodecall_110_OOGMBefore.json
+static_callcodecallcodecall_110_OOGMBefore2.json
+static_callcodecallcodecall_110_SuicideEnd.json
+static_callcodecallcodecall_110_SuicideEnd2.json
+static_callcodecallcodecall_110_SuicideMiddle.json
+static_callcodecallcodecall_110_SuicideMiddle2.json
+static_callcodecallcodecall_ABCB_RECURSIVE.json
+static_callcodecallcodecall_ABCB_RECURSIVE2.json
+static_callcodecallcodecallcode_111_SuicideEnd.json
+static_calldelcode_01.json
+static_calldelcode_01_OOGE.json
+static_contractCreationMakeCallThatAskMoreGasThenTransactionProvided.json
+static_contractCreationOOGdontLeaveEmptyContractViaTransaction.json
+static_log0_emptyMem.json
+static_log0_logMemStartTooHigh.json
+static_log0_logMemsizeTooHigh.json
+static_log0_logMemsizeZero.json
+static_log0_nonEmptyMem.json
+static_log0_nonEmptyMem_logMemSize1.json
+static_log0_nonEmptyMem_logMemSize1_logMemStart31.json
+static_log1_MaxTopic.json
+static_log1_emptyMem.json
+static_log1_logMemStartTooHigh.json
+static_log1_logMemsizeTooHigh.json
+static_log1_logMemsizeZero.json
+static_log_Caller.json
+static_makeMoney.json
+static_refund_CallA.json
+static_refund_CallToSuicideNoStorage.json
+static_refund_CallToSuicideTwice.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stStaticFlagEnabled/" ^ s;
+
+(* TODO: add
+CallWithNOTZeroValueToPrecompileFromCalledContract.json
+CallWithNOTZeroValueToPrecompileFromContractInitialization.json
+CallWithNOTZeroValueToPrecompileFromTransaction.json
+CallWithZeroValueToPrecompileFromCalledContract.json
+CallWithZeroValueToPrecompileFromContractInitialization.json
+CallWithZeroValueToPrecompileFromTransaction.json
+CallcodeToPrecompileFromCalledContract.json
+CallcodeToPrecompileFromContractInitialization.json
+CallcodeToPrecompileFromTransaction.json
+DelegatecallToPrecompileFromCalledContract.json
+DelegatecallToPrecompileFromContractInitialization.json
+DelegatecallToPrecompileFromTransaction.json
+StaticcallForPrecompilesIssue683.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stSystemOperationsTest/" ^ s;
+
+(* TODO: add
+ABAcalls0.json
+ABAcalls1.json
+ABAcalls2.json
+ABAcalls3.json
+ABAcallsSuicide0.json
+ABAcallsSuicide1.json
+Call10.json
+CallRecursiveBomb0.json
+CallRecursiveBomb0_OOG_atMaxCallDepth.json
+CallRecursiveBomb1.json
+CallRecursiveBomb2.json
+CallRecursiveBomb3.json
+CallRecursiveBombLog.json
+CallRecursiveBombLog2.json
+CallToNameRegistrator0.json
+CallToNameRegistratorAddressTooBigLeft.json
+CallToNameRegistratorAddressTooBigRight.json
+CallToNameRegistratorMemOOGAndInsufficientBalance.json
+CallToNameRegistratorNotMuchMemory0.json
+CallToNameRegistratorNotMuchMemory1.json
+CallToNameRegistratorOutOfGas.json
+CallToNameRegistratorTooMuchMemory0.json
+CallToNameRegistratorTooMuchMemory1.json
+CallToNameRegistratorTooMuchMemory2.json
+CallToNameRegistratorZeorSizeMemExpansion.json
+CallToReturn1.json
+CallToReturn1ForDynamicJump0.json
+CallToReturn1ForDynamicJump1.json
+CalltoReturn2.json
+CreateHashCollision.json
+PostToReturn1.json
+TestNameRegistrator.json
+balanceInputAddressTooBig.json
+callValue.json
+callcodeTo0.json
+callcodeToNameRegistrator0.json
+callcodeToNameRegistratorAddresTooBigLeft.json
+callcodeToNameRegistratorAddresTooBigRight.json
+callcodeToNameRegistratorZeroMemExpanion.json
+callcodeToReturn1.json
+callerAccountBalance.json
+createNameRegistrator.json
+createNameRegistratorOOG_MemExpansionOOV.json
+createNameRegistratorOutOfMemoryBonds0.json
+createNameRegistratorOutOfMemoryBonds1.json
+createNameRegistratorValueTooHigh.json
+createNameRegistratorZeroMem.json
+createNameRegistratorZeroMem2.json
+createNameRegistratorZeroMemExpansion.json
+createWithInvalidOpcode.json
+currentAccountBalance.json
+doubleSelfdestructTest.json
+doubleSelfdestructTouch_Paris.json
+extcodecopy.json
+multiSelfdestruct.json
+return0.json
+return1.json
+return2.json
+suicideAddress.json
+suicideCaller.json
+suicideCallerAddresTooBigLeft.json
+suicideCallerAddresTooBigRight.json
+suicideNotExistingAccount.json
+suicideOrigin.json
+suicideSendEtherPostDeath.json
+suicideSendEtherToMe.json
+testRandomTest.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stTimeConsuming/" ^ s;
+
+(* TODO: add
+CALLBlake2f_MaxRounds.json
+sstore_combinations_initial00_2_Paris.json
+sstore_combinations_initial00_Paris.json
+sstore_combinations_initial01_2_Paris.json
+sstore_combinations_initial01_Paris.json
+sstore_combinations_initial10_2_Paris.json
+sstore_combinations_initial10_Paris.json
+sstore_combinations_initial11_2_Paris.json
+sstore_combinations_initial11_Paris.json
+sstore_combinations_initial20_2_Paris.json
+sstore_combinations_initial20_Paris.json
+sstore_combinations_initial21_2_Paris.json
+sstore_combinations_initial21_Paris.json
+static_Call50000_sha256.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stTransactionTest/" ^ s;
+
+(* TODO: add
+ContractStoreClearsOOG.json
+ContractStoreClearsSuccess.json
+CreateMessageReverted.json
+CreateMessageSuccess.json
+CreateTransactionSuccess.json
+EmptyTransaction3.json
+HighGasLimit.json
+HighGasPriceParis.json
+InternalCallHittingGasLimit.json
+InternalCallHittingGasLimit2.json
+InternalCallHittingGasLimitSuccess.json
+InternalCallStoreClearsOOG.json
+InternalCallStoreClearsSuccess.json
+NoSrcAccount.json
+NoSrcAccount1559.json
+NoSrcAccountCreate.json
+NoSrcAccountCreate1559.json
+Opcodes_TransactionInit.json
+OverflowGasRequire2.json
+PointAtInfinityECRecover.json
+StoreClearsAndInternalCallStoreClearsOOG.json
+StoreClearsAndInternalCallStoreClearsSuccess.json
+StoreGasOnCreate.json
+SuicidesAndInternalCallSuicidesBonusGasAtCall.json
+SuicidesAndInternalCallSuicidesBonusGasAtCallFailed.json
+SuicidesAndInternalCallSuicidesOOG.json
+SuicidesAndInternalCallSuicidesSuccess.json
+SuicidesAndSendMoneyToItselfEtherDestroyed.json
+SuicidesStopAfterSuicide.json
+TransactionDataCosts652.json
+TransactionSendingToEmpty.json
+TransactionSendingToZero.json
+TransactionToAddressh160minusOne.json
+TransactionToItself.json
+ValueOverflowParis.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stTransitionTest/" ^ s;
+
+(* TODO: add
+createNameRegistratorPerTxsAfter.json
+createNameRegistratorPerTxsAt.json
+createNameRegistratorPerTxsBefore.json
+delegatecallAfterTransition.json
+delegatecallAtTransition.json
+delegatecallBeforeTransition.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stWalletTest/" ^ s;
+
+(* TODO: add
+dayLimitConstruction.json
+dayLimitConstructionOOG.json
+dayLimitConstructionPartial.json
+dayLimitResetSpentToday.json
+dayLimitSetDailyLimit.json
+dayLimitSetDailyLimitNoData.json
+multiOwnedAddOwner.json
+multiOwnedAddOwnerAddMyself.json
+multiOwnedChangeOwner.json
+multiOwnedChangeOwnerNoArgument.json
+multiOwnedChangeOwner_fromNotOwner.json
+multiOwnedChangeOwner_toIsOwner.json
+multiOwnedChangeRequirementTo0.json
+multiOwnedChangeRequirementTo1.json
+multiOwnedChangeRequirementTo2.json
+multiOwnedConstructionCorrect.json
+multiOwnedConstructionNotEnoughGas.json
+multiOwnedConstructionNotEnoughGasPartial.json
+multiOwnedIsOwnerFalse.json
+multiOwnedIsOwnerTrue.json
+multiOwnedRemoveOwner.json
+multiOwnedRemoveOwnerByNonOwner.json
+multiOwnedRemoveOwner_mySelf.json
+multiOwnedRemoveOwner_ownerIsNotOwner.json
+multiOwnedRevokeNothing.json
+walletAddOwnerRemovePendingTransaction.json
+walletChangeOwnerRemovePendingTransaction.json
+walletChangeRequirementRemovePendingTransaction.json
+walletConfirm.json
+walletConstruction.json
+walletConstructionOOG.json
+walletConstructionPartial.json
+walletDefault.json
+walletDefaultWithOutValue.json
+walletExecuteOverDailyLimitMultiOwner.json
+walletExecuteOverDailyLimitOnlyOneOwner.json
+walletExecuteOverDailyLimitOnlyOneOwnerNew.json
+walletExecuteUnderDailyLimit.json
+walletKill.json
+walletKillNotByOwner.json
+walletKillToWallet.json
+walletRemoveOwnerRemovePendingTransaction.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stZeroCallsRevert/" ^ s;
+
+(* TODO: add
+ZeroValue_CALLCODE_OOGRevert.json
+ZeroValue_CALLCODE_ToEmpty_OOGRevert_Paris.json
+ZeroValue_CALLCODE_ToNonZeroBalance_OOGRevert.json
+ZeroValue_CALLCODE_ToOneStorageKey_OOGRevert_Paris.json
+ZeroValue_CALL_OOGRevert.json
+ZeroValue_CALL_ToEmpty_OOGRevert_Paris.json
+ZeroValue_CALL_ToNonZeroBalance_OOGRevert.json
+ZeroValue_CALL_ToOneStorageKey_OOGRevert_Paris.json
+ZeroValue_DELEGATECALL_OOGRevert.json
+ZeroValue_DELEGATECALL_ToEmpty_OOGRevert_Paris.json
+ZeroValue_DELEGATECALL_ToNonZeroBalance_OOGRevert.json
+ZeroValue_DELEGATECALL_ToOneStorageKey_OOGRevert_Paris.json
+ZeroValue_SUICIDE_OOGRevert.json
+ZeroValue_SUICIDE_ToEmpty_OOGRevert_Paris.json
+ZeroValue_SUICIDE_ToNonZeroBalance_OOGRevert.json
+ZeroValue_SUICIDE_ToOneStorageKey_OOGRevert_Paris.json
+*)
+
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stZeroCallsTest/" ^ s;
+
+(* TODO: add
+ZeroValue_CALL.json
+ZeroValue_CALLCODE.json
+ZeroValue_CALLCODE_ToEmpty_Paris.json
+ZeroValue_CALLCODE_ToNonZeroBalance.json
+ZeroValue_CALLCODE_ToOneStorageKey_Paris.json
+ZeroValue_CALL_ToEmpty_Paris.json
+ZeroValue_CALL_ToNonZeroBalance.json
+ZeroValue_CALL_ToOneStorageKey_Paris.json
+ZeroValue_DELEGATECALL.json
+ZeroValue_DELEGATECALL_ToEmpty_Paris.json
+ZeroValue_DELEGATECALL_ToNonZeroBalance.json
+ZeroValue_DELEGATECALL_ToOneStorageKey_Paris.json
+ZeroValue_SUICIDE.json
+ZeroValue_SUICIDE_ToEmpty_Paris.json
+ZeroValue_SUICIDE_ToNonZeroBalance.json
+ZeroValue_SUICIDE_ToOneStorageKey_Paris.json
+ZeroValue_TransactionCALL.json
+ZeroValue_TransactionCALL_ToEmpty_Paris.json
+ZeroValue_TransactionCALL_ToNonZeroBalance.json
+ZeroValue_TransactionCALL_ToOneStorageKey_Paris.json
+ZeroValue_TransactionCALLwithData.json
+ZeroValue_TransactionCALLwithData_ToEmpty_Paris.json
+ZeroValue_TransactionCALLwithData_ToNonZeroBalance.json
+ZeroValue_TransactionCALLwithData_ToOneStorageKey_Paris.json
+*)
+
+(* TODO: add
+stZeroKnowledge
+stZeroKnowledge2
+*)
 
 (*
 
