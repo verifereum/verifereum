@@ -70,7 +70,8 @@ Datatype:
    ; jumpDest   : num option
    ; returnData : byte list
    ; gasUsed    : num
-   ; gasRefund  : num
+   ; addRefund  : num
+   ; subRefund  : num
    ; logs       : event list
    ; callParams : call_parameters
    |>
@@ -325,7 +326,8 @@ Definition initial_context_def:
    ; jumpDest   := NONE
    ; returnData := []
    ; gasUsed    := 0
-   ; gasRefund  := 0
+   ; addRefund  := 0
+   ; subRefund  := 0
    ; logs       := []
    ; callParams := initial_call_params callee ctxt t
    |>
@@ -347,7 +349,8 @@ Theorem initial_context_simp[simp]:
   (initial_context callee ctxt t).jumpDest = NONE ∧
   (initial_context callee ctxt t).returnData = [] ∧
   (initial_context callee ctxt t).gasUsed = 0 ∧
-  (initial_context callee ctxt t).gasRefund = 0 ∧
+  (initial_context callee ctxt t).addRefund = 0 ∧
+  (initial_context callee ctxt t).subRefund = 0 ∧
   (initial_context callee ctxt t).logs = [] ∧
   (initial_context callee ctxt t).callParams = initial_call_params callee ctxt t
 Proof

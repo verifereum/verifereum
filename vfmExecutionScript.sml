@@ -327,7 +327,10 @@ Definition update_gas_refund_def:
   update_gas_refund (add, sub) = do
     context <- get_current_context;
     set_current_context $
-      context with gasRefund updated_by (λx. x + add - sub)
+      context with <|
+        addRefund updated_by ($+ add);
+        subRefund updated_by ($+ sub)
+      |>
   od
 End
 
@@ -1202,7 +1205,7 @@ Definition pop_and_incorporate_context_def:
     unuse_gas calleeGasLeft;
     if success then do
       push_logs callee.logs;
-      update_gas_refund (callee.gasRefund, 0)
+      update_gas_refund (callee.addRefund, callee.subRefund)
     od else do
       set_accesses callee.callParams.accesses;
       set_accounts callee.callParams.accounts;
@@ -1302,16 +1305,16 @@ End
 
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
-  let (gasLimit, gasUsed, refund, logs, returnData) =
+  let (gasLimit, gasUsed, addRefund, subRefund, logs, returnData) =
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
-    then (0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
+    then (0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = HD t.contexts in
       (ctxt.callParams.gasLimit, ctxt.gasUsed,
-       ctxt.gasRefund, ctxt.logs, ctxt.returnData) in
+       ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
   let txGasUsed = tx.gasLimit - gasLeft in
   let gasRefund = if result ≠ NONE then 0
-                  else MIN (txGasUsed DIV 5) refund in
+                  else MIN (txGasUsed DIV 5) (addRefund - subRefund) in
   let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
   let totalGasUsed = txGasUsed - gasRefund in

@@ -5271,11 +5271,9 @@ val test_path = mk_test_path "InitCollisionParis.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: fix
 val test_path = mk_test_path "SstoreCallToSelfSubRefundBelowZero.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "sstoreGas.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -5321,22 +5319,61 @@ val test_path = mk_test_path "sstore_Xto0to0.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: add
-sstore_Xto0toX.json
-sstore_Xto0toXto0.json
-sstore_Xto0toY.json
-sstore_XtoX.json
-sstore_XtoXto0.json
-sstore_XtoXtoX.json
-sstore_XtoXtoY.json
-sstore_XtoY.json
-sstore_XtoYto0.json
-sstore_XtoYtoX.json
-sstore_XtoYtoY.json
-sstore_XtoYtoZ.json
-sstore_changeFromExternalCallInInitCode.json
-sstore_gasLeft.json
-*)
+val test_path = mk_test_path "sstore_Xto0toX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_Xto0toXto0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_Xto0toY.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoXto0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoXtoX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoXtoY.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoY.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoYto0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoYtoX.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoYtoY.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_XtoYtoZ.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_changeFromExternalCallInInitCode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "sstore_gasLeft.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stSelfBalance/" ^ s;
@@ -6279,51 +6316,28 @@ stZeroKnowledge2
 (*
 
 cv_eval ``
-let acc = RevertInCreateInInitCreate2Paris_d0g0v0_Cancun_pre in
-let blk = RevertInCreateInInitCreate2Paris_d0g0v0_Cancun_block in
-let tx = RevertInCreateInInitCreate2Paris_d0g0v0_Cancun_transaction in
+let acc = SstoreCallToSelfSubRefundBelowZero_d0g0v0_Cancun_pre in
+let blk = SstoreCallToSelfSubRefundBelowZero_d0g0v0_Cancun_block in
+let tx =  SstoreCallToSelfSubRefundBelowZero_d0g0v0_Cancun_transaction in
 let init = run_create 1 [] blk acc tx in
 let cont = OUTR $ THE init in
 let s = SND cont in
-let (r, s) = run_n 2 s in
+let (r, s) = run_n 25 s in
 let c = EL 0 s.contexts in
   (ISL r, LENGTH s.contexts,
    c.stack,
-   c.callParams.data,
-   c.returnData,
    c.gasUsed,
    c.callParams.gasLimit,
-   c.gasRefund,
-   (*
-   (EL 1 s.contexts).gasUsed,
-   *)
+   (c.addRefund, c.subRefund),
    c.jumpDest,
-   (*
-   word_of_bytes F (0w:bytes32) $ REVERSE (lookup_account s.accounts 0xc0dew).code,
-   *)
-   (*
-   [fIN 4096w c.callParams.accesses.addresses;
-    fIN 4097w c.callParams.accesses.addresses;
-    fIN 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCw
-    c.callParams.accesses.addresses;
-   ],
-   *)
-   (*c.callParams.parsed,*)
    FLOOKUP c.callParams.parsed c.pc,
-   (*DROP c.pc c.callParams.code,*) LENGTH c.memory,
+   LENGTH c.memory,
    c.memory,
    c.callParams.static,
    c.callParams.callee,
    (lookup_account c.callParams.callee s.accounts).nonce,
    (lookup_storage 0w (lookup_account c.callParams.callee s.accounts).storage),
    (lookup_storage 1w (lookup_account c.callParams.callee s.accounts).storage)
-   (*
-   (lookup_account 0x1007w s.accounts).balance
-   (lookup_storage (lookup_account s.accounts 0x100fw).storage 0w),
-   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 1w),
-   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 2w),
-   (lookup_storage (lookup_account s.accounts c.callParams.callee).storage 256w)
-   *)
    )
 ``
 
