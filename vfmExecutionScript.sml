@@ -580,7 +580,7 @@ Definition step_sstore_def:
     key <<- EL 0 args;
     value <<- EL 1 args;
     gasLeft <- get_gas_left;
-    assert (2300 ≤ gasLeft) OutOfGas;
+    assert (call_stipend < gasLeft) OutOfGas;
     address <- get_callee;
     accounts <- get_accounts;
     currentValue <<- lookup_storage key (lookup_account address accounts).storage;
