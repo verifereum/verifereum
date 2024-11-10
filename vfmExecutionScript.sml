@@ -556,7 +556,7 @@ Definition step_keccak256_def:
     consume_gas $ static_gas Keccak256 + dynamicGas;
     expand_memory mx.expand_by;
     data <- read_memory offset size;
-    hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ REVERSE $ data;
+    hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ data;
     push_stack hash
   od
 End
