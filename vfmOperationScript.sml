@@ -73,6 +73,8 @@ Datatype:
   | MSize
   | Gas
   | JumpDest
+  | TLoad
+  | TStore
   | MCopy
   | Push num (word8 list)
   | Dup num
@@ -163,6 +165,8 @@ Definition opcode_def:
   ∧ opcode MSize          = [n2w 0x59]
   ∧ opcode Gas            = [n2w 0x5a]
   ∧ opcode JumpDest       = [n2w 0x5b]
+  ∧ opcode TLoad          = [n2w 0x5c]
+  ∧ opcode TStore         = [n2w 0x5d]
   ∧ opcode MCopy          = [n2w 0x5e]
   ∧ opcode (Push n w)     = [n2w 0x5f + n2w n] ++ w
   ∧ opcode (Dup n)        = [n2w 0x80 + n2w n]
@@ -251,6 +255,8 @@ Definition static_gas_def[simp]:
   ∧ static_gas MSize          = 2
   ∧ static_gas Gas            = 2
   ∧ static_gas JumpDest       = 1
+  ∧ static_gas TLoad          = 0
+  ∧ static_gas TStore         = 0
   ∧ static_gas MCopy          = 3
   ∧ static_gas (Push n w)     = (if n = 0 then 2 else 3)
   ∧ static_gas (Dup n)        = 3
@@ -374,6 +380,8 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0x59 then SOME MSize else
       if opc = n2w 0x5a then SOME Gas else
       if opc = n2w 0x5b then SOME JumpDest else
+      if opc = n2w 0x5c then SOME TLoad else
+      if opc = n2w 0x5d then SOME TStore else
       if opc = n2w 0x5e then SOME MCopy else
       if opc = n2w 0x5f then SOME (Push 0  (take_pad_0 0  rest)) else
       if opc = n2w 0x60 then SOME (Push 1  (take_pad_0 1  rest)) else

@@ -324,6 +324,98 @@ Proof
   rw[from_evm_accounts_def, from_sptree_sptree_spt_def]
 QED
 
+Definition to_transient_storage_def:
+  to_transient_storage cv : transient_storage =
+  let t = to_sptree_spt to_storage cv in
+    FOLDR (λ(k,v) f. (n2w k =+ v) f) (λk. empty_storage) (toSortedAList t)
+End
+
+Definition from_transient_storage_def:
+  from_transient_storage (t: transient_storage) =
+  from_sptree_sptree_spt from_storage
+    (build_spt empty_storage (dimword (:160)) t)
+End
+
+val from_to_transient_storage_spt = from_to_thm_for “:storage num_map”;
+
+Theorem from_to_transient_storage[cv_from_to]:
+  from_to from_transient_storage to_transient_storage
+Proof
+  rw[from_to_def, from_transient_storage_def, to_transient_storage_def]
+  \\ rw[from_to_transient_storage_spt |> REWRITE_RULE[from_to_def]]
+  \\ qmatch_goalsub_abbrev_tac`toSortedAList t`
+  \\ DEP_REWRITE_TAC[Q.ISPEC`w2n`FOLDR_UPDATE_lookup]
+  \\ simp[ALL_DISTINCT_MAP_FST_toSortedAList, ALOOKUP_toSortedAList]
+  \\ simp[Abbr`t`, lookup_build_spt, domain_lookup, FUN_EQ_THM]
+  \\ rw[]
+  \\ qspec_then`k`mp_tac w2n_lt
+  \\ gs[]
+QED
+
+Theorem build_spt_empty_transient_storage[simp]:
+  ∀n. build_spt empty_storage n empty_transient_storage = LN
+Proof
+  Induct \\ rw[build_spt_def]
+  \\ gs[empty_transient_storage_def]
+QED
+
+Theorem empty_transient_storage_cv_rep[cv_rep]:
+  from_transient_storage empty_transient_storage = Num 0
+Proof
+  rw[from_transient_storage_def, from_sptree_sptree_spt_def]
+QED
+
+Definition cv_lookup_transient_storage_def:
+  cv_lookup_transient_storage (a:cv) (t:cv) =
+  let v = cv_lookup a t in
+    cv_if (cv_ispair v) (cv_snd v) (Num 0)
+End
+
+Theorem lookup_transient_storage_cv_rep[cv_rep]:
+  from_storage (lookup_transient_storage k t) =
+  cv_lookup_transient_storage (from_word k) (from_transient_storage t)
+Proof
+  gs[lookup_transient_storage_def, cv_lookup_transient_storage_def,
+     from_transient_storage_def,
+     GSYM cv_lookup_thm, from_word_def, from_storage_def, lookup_build_spt]
+  \\ qspec_then`k`strip_assume_tac w2n_lt
+  \\ gs[]
+  \\ Cases_on`t k = empty_storage`
+  \\ gs[from_option_def, from_storage_def, from_sptree_eq_Num_iff]
+QED
+
+Definition cv_update_transient_storage_def:
+  cv_update_transient_storage (k:cv) (v:cv) (a:cv) =
+  cv_if (cv_eq v (Num 0))
+    (cv_delete k a)
+    (cv_insert k v a)
+End
+
+Theorem update_transient_storage_cv_rep[cv_rep]:
+  from_transient_storage (update_transient_storage k v a) =
+  cv_update_transient_storage (from_word k) (from_storage v)
+    (from_transient_storage a)
+Proof
+  gs[from_transient_storage_def, cv_update_transient_storage_def,
+     update_transient_storage_def, from_word_def, cv_eq_def]
+  \\ qmatch_goalsub_abbrev_tac`Num (COND ve _ _)`
+  \\ `ve ⇔ v = empty_storage` by (
+    simp[from_storage_def, Abbr`ve`, from_sptree_eq_Num_iff,
+         build_spt_empty_iff, FUN_EQ_THM, empty_storage_def]
+    \\ simp[EQ_IMP_THM] \\ strip_tac
+    \\ Cases \\ gs[] )
+  \\ simp[Abbr`ve`]
+  \\ gs[GSYM cv_insert_thm, GSYM cv_delete_thm]
+  \\ IF_CASES_TAC
+  \\ AP_TERM_TAC
+  \\ DEP_REWRITE_TAC[spt_eq_thm]
+  \\ simp[wf_delete, wf_insert, lookup_delete, lookup_insert,
+          lookup_build_spt, APPLY_UPDATE_THM]
+  \\ rw[] \\ gvs[]
+  \\ TRY (qspec_then`k`strip_assume_tac w2n_lt \\ gs[] \\ NO_TAC)
+  \\ qpat_x_assum`_ = empty_storage`mp_tac \\ rw[] \\ gs[]
+QED
+
 Definition from_word_fset_def:
   from_word_fset (fs: 'a word fset) = from_num_fset (fIMAGE w2n fs)
 End
@@ -789,7 +881,6 @@ val () = “push_stack v s” |>
     push_stack_def, bind_def, ignore_bind_def, LET_RATOR
   ] |> cv_auto_trans;
 
-
 val () = “precompile_identity s” |>
    SIMP_CONV std_ss [
        precompile_identity_def, bind_def, ignore_bind_def, LET_RATOR
@@ -834,6 +925,10 @@ val () = “write_memory x y s” |>
 
 val () = “write_storage x y z s” |>
   SIMP_CONV std_ss [ write_storage_def, update_accounts_def ]
+  |> cv_auto_trans;
+
+val () = “write_transient_storage x y z s” |>
+  SIMP_CONV std_ss [ write_transient_storage_def, bind_def, LET_RATOR ]
   |> cv_auto_trans;
 
 val () = “assert_not_static s” |>
@@ -922,6 +1017,7 @@ val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec;
 val th = tt step_exp_def;
 val th = tt step_keccak256_def;
 val th = tt step_sload_def;
+val th = tf step_sstore_gas_consumption_def;
 val th = tt step_sstore_def;
 val th = tt step_balance_def;
 val th = tt step_call_data_load_def;

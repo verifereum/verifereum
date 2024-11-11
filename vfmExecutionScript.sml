@@ -15,6 +15,14 @@ Definition storage_empty_def:
   storage_empty (s: storage) = (s = empty_storage)
 End
 
+Definition lookup_transient_storage_def:
+  lookup_transient_storage a (t: transient_storage) = t a
+End
+
+Definition update_transient_storage_def:
+  update_transient_storage a s (t: transient_storage) = (a =+ s) t
+End
+
 Definition b2w_def[simp]:
   b2w T = 1w ∧ b2w F = 0w
 End
@@ -212,6 +220,14 @@ End
 
 Definition set_toDelete_def:
   set_toDelete x s = return () (s with toDelete := x)
+End
+
+Definition get_tStorage_def:
+  get_tStorage s = return s.tStorage s
+End
+
+Definition set_tStorage_def:
+  set_tStorage x s = return () (s with tStorage := x)
 End
 
 Definition get_original_def:
@@ -470,6 +486,15 @@ Definition write_storage_def:
     in update_account address newAccount accounts)
 End
 
+Definition write_transient_storage_def:
+  write_transient_storage address key value = do
+    tStorage <- get_tStorage;
+    storage <<- lookup_transient_storage address tStorage;
+    set_tStorage $ update_transient_storage
+      address (update_storage key value storage) tStorage
+  od
+End
+
 Definition assert_not_static_def:
   assert_not_static = do
     static <- get_static;
@@ -571,26 +596,29 @@ Definition step_keccak256_def:
 End
 
 Definition step_sload_def:
-  step_sload = do
+  step_sload transient = do
     args <- pop_stack 1;
     key <<- EL 0 args;
     address <- get_callee;
-    accessCost <- access_slot (SK address key);
-    consume_gas $ static_gas SLoad + accessCost;
-    accounts <- get_accounts;
-    word <<- lookup_storage key (lookup_account address accounts).storage;
+    accessCost <- if transient then return warm_access_cost
+                  else access_slot (SK address key);
+    consume_gas $ accessCost;
+    storage <- if transient then do
+      tStorage <- get_tStorage;
+      return $ lookup_transient_storage address tStorage
+    od else do
+      accounts <- get_accounts;
+      return $ (lookup_account address accounts).storage
+    od;
+    word <<- lookup_storage key storage;
     push_stack word
   od
 End
 
-Definition step_sstore_def:
-  step_sstore = do
-    args <- pop_stack 2;
-    key <<- EL 0 args;
-    value <<- EL 1 args;
+Definition step_sstore_gas_consumption_def:
+  step_sstore_gas_consumption address key value = do
     gasLeft <- get_gas_left;
     assert (call_stipend < gasLeft) OutOfGas;
-    address <- get_callee;
     accounts <- get_accounts;
     currentValue <<- lookup_storage key (lookup_account address accounts).storage;
     original <- get_original;
@@ -621,8 +649,21 @@ Definition step_sstore_def:
       else (0, 0);
     update_gas_refund refundUpdates;
     consume_gas dynamicGas;
+  od
+End
+
+Definition step_sstore_def:
+  step_sstore transient = do
+    args <- pop_stack 2;
+    key <<- EL 0 args;
+    value <<- EL 1 args;
+    address <- get_callee;
+    if transient then consume_gas warm_access_cost
+    else step_sstore_gas_consumption address key value;
     assert_not_static;
-    write_storage address key value
+    (if transient then write_transient_storage
+                  else write_storage)
+      address key value
   od
 End
 
@@ -933,11 +974,13 @@ Definition proceed_create_def:
       update_account address (toCreate with nonce updated_by SUC);
     accesses <- get_accesses;
     toDelete <- get_toDelete;
+    tStorage <- get_tStorage;
     subContextParams <<- <|
         code      := code
       ; accounts  := rollback
       ; accesses  := accesses
       ; toDelete  := toDelete
+      ; tStorage  := tStorage
       ; outputTo  := Code address
       ; static    := F
     |>;
@@ -1038,11 +1081,13 @@ Definition proceed_call_def:
     static <- get_static;
     accesses <- get_accesses;
     toDelete <- get_toDelete;
+    tStorage <- get_tStorage;
     subContextParams <<- <|
         code     := code
       ; accounts := accounts
       ; accesses := accesses
       ; toDelete := toDelete
+      ; tStorage := tStorage
       ; outputTo := outputTo
       ; static   := (op = StaticCall ∨ static)
     |>;
@@ -1155,14 +1200,16 @@ Definition step_inst_def:
   ∧ step_inst MLoad = step_mload
   ∧ step_inst MStore = step_mstore MStore
   ∧ step_inst MStore8 = step_mstore MStore8
-  ∧ step_inst SLoad = step_sload
-  ∧ step_inst SStore = step_sstore
+  ∧ step_inst SLoad = step_sload F
+  ∧ step_inst SStore = step_sstore F
   ∧ step_inst Jump = step_jump
   ∧ step_inst JumpI = step_jumpi
   ∧ step_inst PC = step_context PC (λc. n2w c.pc)
   ∧ step_inst MSize = step_context MSize (λc. n2w $ LENGTH c.memory)
   ∧ step_inst Gas = step_context Gas
                       (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
+  ∧ step_inst TLoad = step_sload T
+  ∧ step_inst TStore = step_sstore T
   ∧ step_inst MCopy = step_copy_to_memory MCopy NONE
   ∧ step_inst JumpDest = consume_gas $ static_gas JumpDest
   ∧ step_inst (Push n ws) = step_push n ws
@@ -1220,7 +1267,8 @@ Definition pop_and_incorporate_context_def:
     od else do
       set_accesses callee.callParams.accesses;
       set_accounts callee.callParams.accounts;
-      set_toDelete callee.callParams.toDelete
+      set_toDelete callee.callParams.toDelete;
+      set_tStorage callee.callParams.tStorage
     od
   od
 End

@@ -44,6 +44,12 @@ Datatype:
   | Code address
 End
 
+Type transient_storage = “:address -> storage”
+
+Definition empty_transient_storage_def:
+  empty_transient_storage (a: address) = empty_storage
+End
+
 Datatype:
   call_parameters =
   <| caller    : address
@@ -57,6 +63,7 @@ Datatype:
    ; outputTo  : return_destination
    (* values at the start of the call, for rollback *)
    ; accounts  : evm_accounts
+   ; tStorage  : transient_storage
    ; accesses  : access_sets
    ; toDelete  : address list
    |>
@@ -96,6 +103,7 @@ Datatype:
    ; txParams : transaction_parameters
    ; accesses : access_sets
    ; accounts : evm_accounts
+   ; tStorage : transient_storage
    ; toDelete : address list
    |>
 End
@@ -118,6 +126,7 @@ Datatype:
   call_context =
   <| code      : byte list
    ; accounts  : evm_accounts
+   ; tStorage  : transient_storage
    ; accesses  : access_sets
    ; toDelete  : address list
    ; outputTo  : return_destination
@@ -297,6 +306,7 @@ Definition initial_call_params_def:
    ; data      := if t.to = NONE then [] else t.data
    ; gasLimit  := t.gasLimit
    ; accounts  := ctxt.accounts
+   ; tStorage  := ctxt.tStorage
    ; accesses  := ctxt.accesses
    ; toDelete  := ctxt.toDelete
    ; outputTo  := ctxt.outputTo
@@ -428,6 +438,7 @@ Definition initial_state_def:
                 | NONE => t.data in
   let rd = if IS_SOME t.to then empty_return_destination else Code callee in
   let ctxt = <| code := code; accounts := accounts; accesses := accesses
+              ; tStorage := empty_transient_storage
               ; toDelete := []; outputTo := rd; static := F |> in
   SOME $
   <| contexts := [apply_intrinsic_cost t.accessList $
@@ -435,6 +446,7 @@ Definition initial_state_def:
    ; txParams := initial_tx_params c h b t
    ; accesses := accesses
    ; accounts := accounts
+   ; tStorage := empty_transient_storage
    ; toDelete := []
    |>
 End
