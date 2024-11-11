@@ -3,7 +3,7 @@ open HolKernel boolLib bossLib Parse dep_rewrite blastLib
      pairTheory combinTheory optionTheory sumTheory listTheory byteTheory
      wordsTheory alistTheory arithmeticTheory finite_setTheory sptreeTheory
      whileTheory recursiveLengthPrefixTheory vfmContextTheory vfmStateTheory
-     vfmExecutionTheory;
+     vfmTransactionTheory vfmExecutionTheory;
 
 val _ = new_theory "vfmCompute";
 
@@ -900,6 +900,8 @@ QED
 val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
 
 val from_to_transaction = from_to_thm_for “:transaction”;
+
+val () = cv_auto_trans effective_gas_price_def;
 
 val from_to_memory_expansion_info = from_to_thm_for “:memory_expansion_info”;
 

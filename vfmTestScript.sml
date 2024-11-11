@@ -286,6 +286,8 @@ fun mk_prove_test test_path = let
 
     val test = get_test test_path test_name;
 
+    val block = #block test;
+
     val transaction = #transaction test;
     val transaction_def = new_definition(
       test_name_escaped ^ "_transaction_def",
@@ -296,12 +298,18 @@ fun mk_prove_test test_path = let
         ";data := REVERSE $ hex_to_rev_bytes [] \"", trim2 $ #data transaction,
         "\";nonce := ", #nonce transaction,
         ";value := ", #value transaction,
-        ";gasPrice := ", #gasPrice transaction,
+        ";gasPrice := ", case #gasPrice transaction of SOME n => n
+                         | _ => String.concat [
+                                  "effective_gas_price ",
+                                  #baseFeePerGas block, " ",
+                                  Option.valOf $ #maxFeePerGas transaction, " ",
+                                  Option.valOf $
+                                    #maxPriorityFeePerGas transaction
+                                ],
         ";gasLimit := ", #gasLimit transaction,
         ";accessList := ", accesses_term $ #accessList transaction, " |>"
       ])]);
 
-    val block = #block test;
     val block_def = new_definition(
       test_name_escaped ^ "_block_def",
       Term[QUOTE(String.concat[

@@ -24,4 +24,10 @@ Datatype:
    |>
 End
 
+Definition effective_gas_price_def:
+  effective_gas_price baseFee maxFee maxPrioFee =
+  let prioFee = MIN maxPrioFee (maxFee - baseFee) in
+    baseFee + prioFee
+End
+
 val _ = export_theory();
