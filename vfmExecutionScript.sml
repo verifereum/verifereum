@@ -443,12 +443,21 @@ End
 Definition copy_to_memory_def:
   copy_to_memory gas offset sourceOffset size getSource = do
     minimumWordSize <<- word_size size;
-    mx <- memory_expansion_info offset size;
+    (xOffset, xSize) <<-
+      if getSource = NONE
+      then max_expansion_range (offset, size) (sourceOffset, size)
+      else (offset, size);
+    mx <- memory_expansion_info xOffset xSize;
     dynamicGas <<- memory_copy_cost * minimumWordSize + mx.cost;
     consume_gas $ gas + dynamicGas;
-    sourceBytes <- getSource;
-    bytes <<- take_pad_0 size (DROP sourceOffset sourceBytes);
-    expand_memory mx.expand_by;
+    bytes <- case getSource of SOME f => do
+      sourceBytes <- f;
+      expand_memory mx.expand_by;
+      return $ take_pad_0 size (DROP sourceOffset sourceBytes)
+    od | _ => do
+      expand_memory mx.expand_by;
+      read_memory sourceOffset size
+    od;
     write_memory offset bytes;
   od
 End
@@ -657,7 +666,7 @@ Definition step_return_data_copy_def:
     sourceOffset <<- w2n $ EL 1 args;
     size <<- w2n $ EL 2 args;
     copy_to_memory (static_gas ReturnDataCopy)
-    offset sourceOffset size (get_return_data_check sourceOffset size)
+    offset sourceOffset size (SOME $ get_return_data_check sourceOffset size)
   od
 End
 
@@ -682,7 +691,7 @@ Definition step_ext_code_copy_def:
     size <<- w2n $ EL 3 args;
     accessCost <- access_address address;
     copy_to_memory (static_gas ExtCodeCopy + accessCost)
-      offset sourceOffset size (get_code address)
+      offset sourceOffset size (SOME $ get_code address)
   od
 End
 
@@ -1122,9 +1131,10 @@ Definition step_inst_def:
   ∧ step_inst CallValue = step_callParams CallValue (λc. n2w c.value)
   ∧ step_inst CallDataLoad = step_call_data_load
   ∧ step_inst CallDataSize = step_callParams CallDataSize (λc. n2w (LENGTH c.data))
-  ∧ step_inst CallDataCopy = step_copy_to_memory CallDataCopy get_call_data
+  ∧ step_inst CallDataCopy =
+      step_copy_to_memory CallDataCopy (SOME get_call_data)
   ∧ step_inst CodeSize = step_callParams CodeSize (λc. n2w (LENGTH c.code))
-  ∧ step_inst CodeCopy = step_copy_to_memory CodeCopy get_current_code
+  ∧ step_inst CodeCopy = step_copy_to_memory CodeCopy (SOME get_current_code)
   ∧ step_inst GasPrice = step_txParams GasPrice (λt. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize = step_ext_code_size
   ∧ step_inst ExtCodeCopy = step_ext_code_copy
@@ -1153,6 +1163,7 @@ Definition step_inst_def:
   ∧ step_inst MSize = step_context MSize (λc. n2w $ LENGTH c.memory)
   ∧ step_inst Gas = step_context Gas
                       (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
+  ∧ step_inst MCopy = step_copy_to_memory MCopy NONE
   ∧ step_inst JumpDest = consume_gas $ static_gas JumpDest
   ∧ step_inst (Push n ws) = step_push n ws
   ∧ step_inst (Dup n) = step_dup n

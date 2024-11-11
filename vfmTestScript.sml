@@ -623,7 +623,6 @@ TODO: add the rest
 
 (* TODO: add stEIP4844-blobtransactions *)
 
-(* TODO: fix - need to add mcopy
 val test_path = mk_test_path "stEIP5656-MCOPY/MCOPY.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -639,7 +638,6 @@ val thms = List.tabulate (num_tests, prove_test);
 val test_path = mk_test_path "stEIP5656-MCOPY/MCOPY_memory_hash.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/Shanghai/" ^ s;

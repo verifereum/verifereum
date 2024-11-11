@@ -871,6 +871,18 @@ Proof
   rw[UNCURRY]
 QED
 
+val option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+val prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
+val return_destination_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
+
 fun mconv def =
   SIMP_CONV std_ss [
     def, copy_to_memory_def,
@@ -879,6 +891,7 @@ fun mconv def =
     COND_RATOR,
     LET_RATOR,
     LET_PROD_RATOR,
+    option_CASE_rator,
     LET_UNCURRY
 ];
 
@@ -974,7 +987,8 @@ val step_inst_pre_def = step_inst_def |>
     step_txParams_def,
     step_copy_to_memory_def,
     copy_to_memory_def,
-    bind_def, ignore_bind_def, LET_RATOR
+    bind_def, ignore_bind_def, LET_RATOR,
+    LET_PROD_RATOR, option_CASE_rator, LET_UNCURRY
   ] |> cv_auto_trans_pre;
 
 Theorem step_inst_pre[cv_pre]:
@@ -988,18 +1002,6 @@ Proof
   \\ rpt strip_tac \\ gvs[]
   \\ drule pop_stack_INL_LENGTH \\ gvs[]
 QED
-
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val return_destination_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
 
 val () = “inc_pc_or_jump n s” |>
   SIMP_CONV std_ss [
