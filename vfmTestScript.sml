@@ -282,7 +282,12 @@ fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
   fun prove_test test_index = let
     val test_name = List.nth(test_names, test_index);
-    val test_name_escaped = String.translate remove_special_chars test_name
+    val test_name_escaped =
+      let
+        val e = String.translate remove_special_chars test_name
+      in
+        if Char.isDigit $ String.sub (e, 0) then "t" ^ e else e
+      end
 
     val test = get_test test_path test_name;
 
@@ -605,7 +610,6 @@ val thms = List.tabulate (num_tests, prove_test);
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/Cancun/" ^ s;
 
-(* TODO: parse - need to add transient storage
 val test_path = mk_test_path
   "stEIP1153-transientStorage/10_revertUndoesStoreAfterReturn.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -616,17 +620,20 @@ val test_path = mk_test_path
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: slow - cache num steps
 val test_path = mk_test_path
   "stEIP1153-transientStorage/15_tstoreCannotBeDosd.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
+*)
 
 val test_path = mk_test_path
   "stEIP1153-transientStorage/17_tstoreGas.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-TODO: add the rest
+(*
+TODO: add the rest of the tstore tests
 *)
 
 (* TODO: add stEIP4844-blobtransactions *)
