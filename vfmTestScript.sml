@@ -632,9 +632,25 @@ val test_path = mk_test_path
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(*
-TODO: add the rest of the tstore tests
+val test_path = mk_test_path
+  "stEIP1153-transientStorage/19_oogUndoesTransientStore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow - cache num steps
+val test_path = mk_test_path
+  "stEIP1153-transientStorage/21_tstoreCannotBeDosdOOO.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 *)
+
+val test_path = mk_test_path "stEIP1153-transientStorage/transStorageOK.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stEIP1153-transientStorage/transStorageReset.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 (* TODO: add stEIP4844-blobtransactions *)
 
