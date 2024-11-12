@@ -271,6 +271,7 @@ fun mk_tx_to s =
 
 fun remove_special_chars #"-" = "_"
   | remove_special_chars #"^" = "N"
+  | remove_special_chars #"+" = "P"
   | remove_special_chars c = String.str c
 
 (*
@@ -3203,11 +3204,10 @@ val test_path = mk_test_path "gasPriceDiffPlaces.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse error
+(* TODO: parse error from d0g28v0 *)
 val test_path = mk_test_path "intrinsic.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO: parse error
 val test_path = mk_test_path "lowFeeCap.json";
@@ -3239,11 +3239,9 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: parse error
 val test_path = mk_test_path "senderBalance.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO: parse error
 val test_path = mk_test_path "tipTooHigh.json";
@@ -3257,13 +3255,11 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: parse error
 val test_path = mk_test_path "typeTwoBerlin.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse error
+(* TODO: parse error from d0g0v1 - need expectException
 val test_path = mk_test_path "valCausesOOF.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -3315,11 +3311,9 @@ val test_path = mk_test_path "coinbaseT01.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse
 val test_path = mk_test_path "coinbaseT2.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "manualCreate.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -3387,17 +3381,13 @@ val test_path = mk_test_path "add11_yml.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse
 val test_path = mk_test_path "basefeeExample.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "eip1559.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "indexesOmitExample.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -3413,11 +3403,9 @@ val test_path = mk_test_path "labelsExample.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse
 val test_path = mk_test_path "mergeTest.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "rangesExample.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -3989,29 +3977,21 @@ val test_path = mk_test_path "mem32b_singleByte.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb+1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb+31.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb+32.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb+33.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "mem32kb-1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -4033,29 +4013,21 @@ val test_path = mk_test_path "mem32kb.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb_singleByte+1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb_singleByte+31.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb_singleByte+32.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem32kb_singleByte+33.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "mem32kb_singleByte-1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -4081,29 +4053,21 @@ val test_path = mk_test_path "mem33b_singleByte.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb+1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb+31.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb+32.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb+33.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "mem64kb-1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -4125,29 +4089,21 @@ val test_path = mk_test_path "mem64kb.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb_singleByte+1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb_singleByte+31.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb_singleByte+32.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: parse
 val test_path = mk_test_path "mem64kb_singleByte+33.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "mem64kb_singleByte-1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -5761,21 +5717,44 @@ val test_path = mk_test_path "shallowStack.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: slow / oom
+(* TODO: oom near last test *)
 val test_path = mk_test_path "stackOverflow.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
-(* TODO: add
-stackOverflowDUP.json
-stackOverflowM1.json
-stackOverflowM1DUP.json
-stackOverflowM1PUSH.json
-stackOverflowPUSH.json
-stackOverflowSWAP.json
-stacksanitySWAP.json
-underflowTest.json
+(* TODO: oom near last test *)
+val test_path = mk_test_path "stackOverflowDUP.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stackOverflowM1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stackOverflowM1DUP.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stackOverflowM1PUSH.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stackOverflowPUSH.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stackOverflowSWAP.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "stacksanitySWAP.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: parse
+val test_path = mk_test_path "underflowTest.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 *)
 
 fun mk_test_path s =
@@ -6073,10 +6052,20 @@ static_refund_CallToSuicideTwice.json
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stStaticFlagEnabled/" ^ s;
 
+val test_path = mk_test_path "CallWithNOTZeroValueToPrecompileFromCalledContract.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "CallWithNOTZeroValueToPrecompileFromContractInitialization.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallWithNOTZeroValueToPrecompileFromTransaction.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (* TODO: add
-CallWithNOTZeroValueToPrecompileFromCalledContract.json
-CallWithNOTZeroValueToPrecompileFromContractInitialization.json
-CallWithNOTZeroValueToPrecompileFromTransaction.json
 CallWithZeroValueToPrecompileFromCalledContract.json
 CallWithZeroValueToPrecompileFromContractInitialization.json
 CallWithZeroValueToPrecompileFromTransaction.json
@@ -6092,75 +6081,273 @@ StaticcallForPrecompilesIssue683.json
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stSystemOperationsTest/" ^ s;
 
-(* TODO: add
-ABAcalls0.json
-ABAcalls1.json
-ABAcalls2.json
-ABAcalls3.json
-ABAcallsSuicide0.json
-ABAcallsSuicide1.json
-Call10.json
-CallRecursiveBomb0.json
-CallRecursiveBomb0_OOG_atMaxCallDepth.json
-CallRecursiveBomb1.json
-CallRecursiveBomb2.json
-CallRecursiveBomb3.json
-CallRecursiveBombLog.json
-CallRecursiveBombLog2.json
-CallToNameRegistrator0.json
-CallToNameRegistratorAddressTooBigLeft.json
-CallToNameRegistratorAddressTooBigRight.json
-CallToNameRegistratorMemOOGAndInsufficientBalance.json
-CallToNameRegistratorNotMuchMemory0.json
-CallToNameRegistratorNotMuchMemory1.json
-CallToNameRegistratorOutOfGas.json
-CallToNameRegistratorTooMuchMemory0.json
-CallToNameRegistratorTooMuchMemory1.json
-CallToNameRegistratorTooMuchMemory2.json
-CallToNameRegistratorZeorSizeMemExpansion.json
-CallToReturn1.json
-CallToReturn1ForDynamicJump0.json
-CallToReturn1ForDynamicJump1.json
-CalltoReturn2.json
-CreateHashCollision.json
-PostToReturn1.json
-TestNameRegistrator.json
-balanceInputAddressTooBig.json
-callValue.json
-callcodeTo0.json
-callcodeToNameRegistrator0.json
-callcodeToNameRegistratorAddresTooBigLeft.json
-callcodeToNameRegistratorAddresTooBigRight.json
-callcodeToNameRegistratorZeroMemExpanion.json
-callcodeToReturn1.json
-callerAccountBalance.json
-createNameRegistrator.json
-createNameRegistratorOOG_MemExpansionOOV.json
-createNameRegistratorOutOfMemoryBonds0.json
-createNameRegistratorOutOfMemoryBonds1.json
-createNameRegistratorValueTooHigh.json
-createNameRegistratorZeroMem.json
-createNameRegistratorZeroMem2.json
-createNameRegistratorZeroMemExpansion.json
-createWithInvalidOpcode.json
-currentAccountBalance.json
-doubleSelfdestructTest.json
-doubleSelfdestructTouch_Paris.json
-extcodecopy.json
-multiSelfdestruct.json
-return0.json
-return1.json
-return2.json
-suicideAddress.json
-suicideCaller.json
-suicideCallerAddresTooBigLeft.json
-suicideCallerAddresTooBigRight.json
-suicideNotExistingAccount.json
-suicideOrigin.json
-suicideSendEtherPostDeath.json
-suicideSendEtherToMe.json
-testRandomTest.json
-*)
+val test_path = mk_test_path "ABAcalls0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ABAcalls1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ABAcalls2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ABAcalls3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ABAcallsSuicide0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ABAcallsSuicide1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "Call10.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveBomb0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveBomb0_OOG_atMaxCallDepth.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveBomb1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveBomb2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveBomb3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveBombLog.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallRecursiveBombLog2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistrator0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorAddressTooBigLeft.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorAddressTooBigRight.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorMemOOGAndInsufficientBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorNotMuchMemory0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorNotMuchMemory1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorOutOfGas.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorTooMuchMemory0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorTooMuchMemory1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorTooMuchMemory2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToNameRegistratorZeorSizeMemExpansion.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToReturn1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToReturn1ForDynamicJump0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CallToReturn1ForDynamicJump1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CalltoReturn2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateHashCollision.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "PostToReturn1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "TestNameRegistrator.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "balanceInputAddressTooBig.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callValue.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcodeTo0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcodeToNameRegistrator0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcodeToNameRegistratorAddresTooBigLeft.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcodeToNameRegistratorAddresTooBigRight.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcodeToNameRegistratorZeroMemExpanion.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callcodeToReturn1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "callerAccountBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistrator.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistratorOOG_MemExpansionOOV.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistratorOutOfMemoryBonds0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistratorOutOfMemoryBonds1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistratorValueTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistratorZeroMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistratorZeroMem2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createNameRegistratorZeroMemExpansion.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "createWithInvalidOpcode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "currentAccountBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "doubleSelfdestructTest.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "doubleSelfdestructTouch_Paris.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "extcodecopy.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "multiSelfdestruct.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "return0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "return1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "return2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideAddress.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideCaller.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideCallerAddresTooBigLeft.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideCallerAddresTooBigRight.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideNotExistingAccount.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideOrigin.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideSendEtherPostDeath.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "suicideSendEtherToMe.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "testRandomTest.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stTimeConsuming/" ^ s;
