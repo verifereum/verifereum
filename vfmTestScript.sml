@@ -582,7 +582,25 @@ val test_path = mk_test_path "vmIOandFlowOperations/sstore_sload.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: add log tests - may need to check logs in theorem statement *)
+val test_path = mk_test_path "vmLogTest/log0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmLogTest/log1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmLogTest/log2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmLogTest/log3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "vmLogTest/log4.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 (* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmPerformance/loopExp.json";
@@ -813,12 +831,21 @@ val test_path = mk_test_path "jumpiNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO support logs
-log0NonConst.json
-log1NonConst.json
-log2NonConst.json
-log3NonConst.json
-*)
+val test_path = mk_test_path "log0NonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1NonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2NonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3NonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 val test_path = mk_test_path "ltNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -3664,54 +3691,189 @@ val thms = List.tabulate (num_tests, prove_test);
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stLogTests/" ^ s;
 
-(* TODO: add logs
-log0_emptyMem.json
-log0_logMemStartTooHigh.json
-log0_logMemsizeTooHigh.json
-log0_logMemsizeZero.json
-log0_nonEmptyMem.json
-log0_nonEmptyMem_logMemSize1.json
-log0_nonEmptyMem_logMemSize1_logMemStart31.json
-log1_Caller.json
-log1_MaxTopic.json
-log1_emptyMem.json
-log1_logMemStartTooHigh.json
-log1_logMemsizeTooHigh.json
-log1_logMemsizeZero.json
-log1_nonEmptyMem.json
-log1_nonEmptyMem_logMemSize1.json
-log1_nonEmptyMem_logMemSize1_logMemStart31.json
-log2_Caller.json
-log2_MaxTopic.json
-log2_emptyMem.json
-log2_logMemStartTooHigh.json
-log2_logMemsizeTooHigh.json
-log2_logMemsizeZero.json
-log2_nonEmptyMem.json
-log2_nonEmptyMem_logMemSize1.json
-log2_nonEmptyMem_logMemSize1_logMemStart31.json
-log3_Caller.json
-log3_MaxTopic.json
-log3_PC.json
-log3_emptyMem.json
-log3_logMemStartTooHigh.json
-log3_logMemsizeTooHigh.json
-log3_logMemsizeZero.json
-log3_nonEmptyMem.json
-log3_nonEmptyMem_logMemSize1.json
-log3_nonEmptyMem_logMemSize1_logMemStart31.json
-log4_Caller.json
-log4_MaxTopic.json
-log4_PC.json
-log4_emptyMem.json
-log4_logMemStartTooHigh.json
-log4_logMemsizeTooHigh.json
-log4_logMemsizeZero.json
-log4_nonEmptyMem.json
-log4_nonEmptyMem_logMemSize1.json
-log4_nonEmptyMem_logMemSize1_logMemStart31.json
-logInOOG_Call.json
-*)
+val test_path = mk_test_path "log0_emptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log0_logMemStartTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log0_logMemsizeTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log0_logMemsizeZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log0_nonEmptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log0_nonEmptyMem_logMemSize1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log0_nonEmptyMem_logMemSize1_logMemStart31.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_Caller.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_MaxTopic.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_emptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_logMemStartTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_logMemsizeTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_logMemsizeZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_nonEmptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_nonEmptyMem_logMemSize1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log1_nonEmptyMem_logMemSize1_logMemStart31.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_Caller.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_MaxTopic.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_emptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_logMemStartTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_logMemsizeTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_logMemsizeZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_nonEmptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_nonEmptyMem_logMemSize1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log2_nonEmptyMem_logMemSize1_logMemStart31.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_Caller.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_MaxTopic.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_PC.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_emptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_logMemStartTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_logMemsizeTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_logMemsizeZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_nonEmptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_nonEmptyMem_logMemSize1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log3_nonEmptyMem_logMemSize1_logMemStart31.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_Caller.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_MaxTopic.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_PC.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_emptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_logMemStartTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_logMemsizeTooHigh.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_logMemsizeZero.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_nonEmptyMem.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_nonEmptyMem_logMemSize1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "log4_nonEmptyMem_logMemSize1_logMemStart31.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "logInOOG_Call.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stMemExpandingEIP150Calls/" ^ s;
