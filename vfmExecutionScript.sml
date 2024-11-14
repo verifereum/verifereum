@@ -1066,7 +1066,7 @@ End
 (*       252w; 46w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
 (*       255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
 (*       255w; 255w; 255w; 255w; 255w; 254w; 255w; 255w; 252w; 47w]” *)
-      
+
 (* val bSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 ^inputs” |> concl |> rhs *)
 (* val eSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 32 ^inputs)” |> concl |> rhs *)
 (* val mSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 64 ^inputs)” |> concl |> rhs *)
@@ -1099,6 +1099,25 @@ Proof
   \\ rw[logrootTheory.EXP_MUL]
 QED
 
+Theorem PAD_RIGHT_CONS:
+  PAD_RIGHT x y (h::t) = h::PAD_RIGHT x (PRE y) t
+Proof
+  rw[listTheory.PAD_RIGHT]
+  \\ Cases_on`y` \\ gs[]
+QED
+
+Theorem take_pad_0_pad_take:
+  take_pad_0 z l = TAKE z (PAD_RIGHT 0w z l)
+Proof
+  rw[vfmOperationTheory.take_pad_0_def]
+  \\ qid_spec_tac`z`
+  \\ Induct_on`l`
+  \\ gs[bitstringTheory.length_pad_right]
+  \\ rw[Once listTheory.TAKE_def]
+  >- EVAL_TAC
+  \\ gs[PAD_RIGHT_CONS, PRE_SUB1]
+QED
+
 Theorem modexp_exp:
   !b e m a. 0 < m ⇒ modexp b e m a = (a * b ** e) MOD m
 Proof
@@ -1128,17 +1147,19 @@ QED
 Definition precompile_modexp_def:
   precompile_modexp = do
     inputs <- get_call_data;
-    bSize <<- w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 inputs;
-    eSize <<- w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 32 inputs);
-    mSize <<- w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 64 inputs);
+    bSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 inputs;
+    eSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 (DROP 32 inputs);
+    mSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 (DROP 64 inputs);
 
     maxLength <<- MAX bSize mSize;
     words <<- (maxLength + 7) DIV 8;
     multiplicationComplexity <<- words * words;
 
-    b: num <<- l2n 256 $ REVERSE $ MAP w2n $ TAKE bSize (DROP 96 inputs);
-    e: num <<- l2n 256 $ REVERSE $ MAP w2n $ TAKE eSize (DROP (96 + bSize) inputs);
-    m: num <<- l2n 256 $ REVERSE $ MAP w2n $ TAKE mSize (DROP (96 + bSize + eSize) inputs);
+    nums <<- MAP w2n $ take_pad_0 (bSize + eSize + mSize) $ DROP 96 inputs;
+
+    b <<- l2n 256 $ REVERSE $ TAKE bSize nums;
+    e <<- l2n 256 $ REVERSE $ TAKE eSize $ DROP (bSize) nums;
+    m <<- l2n 256 $ REVERSE $ TAKE mSize $ DROP (bSize + eSize) nums;
 
     iterationCount <<- if eSize ≤ 32 ∧ e = 0 then 0n
                        else if eSize ≤ 32    then bitlength e -1
