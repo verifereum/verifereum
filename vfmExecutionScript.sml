@@ -1055,31 +1055,6 @@ Definition bitlength_def:
   bitlength (SUC n) = LOG2 (SUC n) + 1
 End
 
-(* val inputs = “[0w:byte; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
-(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 1w; 0w; 0w; 0w; 0w; *)
-(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
-(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 32w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
-(*       0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; 0w; *)
-(*       0w; 0w; 0w; 0w; 0w; 0w; 32w; 3w; 255w; 255w; 255w; 255w; 255w; 255w; *)
-(*       255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
-(*       255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 254w; 255w; 255w; *)
-(*       252w; 46w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
-(*       255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; *)
-(*       255w; 255w; 255w; 255w; 255w; 254w; 255w; 255w; 252w; 47w]” *)
-
-(* val bSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 ^inputs” |> concl |> rhs *)
-(* val eSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 32 ^inputs)” |> concl |> rhs *)
-(* val mSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 64 ^inputs)” |> concl |> rhs *)
-
-(* val b = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^bSize (DROP 96 ^inputs)” |> concl |> rhs *)
-(* val e = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^eSize (DROP (96 + ^bSize) ^inputs)” |> concl |> rhs *)
-(* val m = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^mSize (DROP (96 + ^bSize + ^eSize) ^inputs)” |> concl |> rhs *)
-(* EVAL “REVERSE $ PAD_LEFT 0w 32 $ MAP n2w $ n2l 256 (1:num)” *)
-(*     (*                                                                                                           cv_eval “if ^eSize ≤ 32 ∧ ^e = 0 then 0n *) *)
-(*     (*                                                                                                                    else if ^eSize ≤ 32    then bitlength ^e *) *)
-(*     (*                    else (8 * (^eSize - 32)) + (bitlength (w2n (n2w ^e:bytes32)))” *) *)
-(*     (* cv_eval “modexp ^b ^e ^m 1” *) *)
-
 Definition modexp_def:
   modexp (b:num) (e:num) (m: num) (a:num) =
   if e = 0n then (a MOD m) else
@@ -1131,19 +1106,7 @@ Proof
   \\ ‘b ** e = b * b ** PRE e’ by gvs[GSYM EXP, SUC_PRE]
   \\ rw[]
 QED
-(* EVAL “” *)
-(* cv_eval “word_of_bytes F (0w:bytes32) $ REVERSE $ REVERSE $ PAD_RIGHT (0w:byte) 32 $ MAP n2w $ n2l 256 452312848583266388373324160190187140051835877600158453279131187530910662656” *)
-(* cv_eval “modexp ” *)
-(* val input = cv_eval “modexp_d11g0v0_Cancun_transaction.data” |> concl |> rhs *)
-(* val bSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 ^input” |> concl |> rhs *)
-(* val eSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 32 ^input)” |> concl |> rhs *)
-(* val mSize = cv_eval “w2n $ word_of_bytes T (0w:bytes32) $ TAKE 32 (DROP 64 ^input)” |> concl |> rhs *)
-(* val b = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^bSize (DROP 96 ^input)” |> concl |> rhs *)
-(* val e = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^eSize (DROP (96 + ^bSize) ^input)” |> concl |> rhs *)
-(* val m = cv_eval “l2n 256 $ REVERSE $ MAP w2n $ TAKE ^mSize (DROP (96 + ^bSize + ^eSize) ^input)” |> concl |> rhs *)
 
-(* val r = cv_eval “modexp ^b ^e ^m 1” *)
-(* EVAL “REVERSE $ PAD_RIGHT 0w ^mSize $ MAP n2w $ n2l 256 (1025:num)” *)
 Definition precompile_modexp_def:
   precompile_modexp = do
     inputs <- get_call_data;
@@ -1155,25 +1118,27 @@ Definition precompile_modexp_def:
     words <<- (maxLength + 7) DIV 8;
     multiplicationComplexity <<- words * words;
 
-    nums <<- MAP w2n $ take_pad_0 (bSize + eSize + mSize) $ DROP 96 inputs;
-
-    b <<- l2n 256 $ REVERSE $ TAKE bSize nums;
-    e <<- l2n 256 $ REVERSE $ TAKE eSize $ DROP (bSize) nums;
-    m <<- l2n 256 $ REVERSE $ TAKE mSize $ DROP (bSize + eSize) nums;
-
-    iterationCount <<- if eSize ≤ 32 ∧ e = 0 then 0n
-                       else if eSize ≤ 32    then bitlength e -1
-                       else (8 * (eSize - 32)) + (bitlength (w2n (n2w e:bytes32)) -1);
+    eHead <<- l2n 256 $ REVERSE $ MAP w2n $ take_pad_0 (MIN 32 eSize) $ DROP (96 + bSize) inputs;
+    iterationCount <<- if eSize ≤ 32 ∧ eHead = 0 then 0n
+                       else if eSize ≤ 32    then bitlength eHead -1
+                       else (8 * (eSize - 32)) + (bitlength (w2n (n2w eHead:bytes32)) -1);
     calculatedIterationCount <<- MAX iterationCount 1;
     dynamicGas <<- MAX 200 (multiplicationComplexity * calculatedIterationCount DIV 3);
     consume_gas dynamicGas;
 
-    (* result <<- (b ** e) MOD m; *)
+    m <<- l2n 256 $ REVERSE $ MAP w2n $ take_pad_0 mSize $ DROP (96 + bSize + eSize) inputs;
     result <<- if bSize = 0 ∧ mSize = 0
                then []
                else if m = 0
                then REPLICATE mSize 0w
-               else REVERSE $ PAD_RIGHT 0w mSize $ MAP n2w $ n2l 256 $ modexp b e m 1;
+               else let
+                      nums = MAP w2n $ take_pad_0 (bSize + eSize + mSize) $ DROP 96 inputs;
+                      b = l2n 256 $ REVERSE $ TAKE bSize nums;
+                      e = l2n 256 $ REVERSE $ TAKE eSize $ DROP (bSize) nums
+                    in
+                      REVERSE $ PAD_RIGHT 0w mSize $ MAP n2w $ n2l 256 $ modexp b e m 1;
+
+    (* result <<- (b ** e) MOD m; *)
     set_return_data result;
 
     finish
