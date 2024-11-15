@@ -275,10 +275,25 @@ fun remove_special_chars #"-" = "_"
   | remove_special_chars c = String.str c
 
 (*
-  val test_index = 8;
+  val test_index = 80;
   Globals.max_print_depth := 40;
   val json_path = test_path
+
+
+  fun findIndexByName (name:string) (l: string list) = let
+  fun aux [] _ = NONE
+     | aux (x::xs) (n:int) =
+       if name = x
+       then SOME n
+       else aux xs (n+1)
+  in
+    aux l 0
+  end
+
+  findIndexByName "modexp_d28g0v0_Cancun" test_names
 *)
+
+
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
   fun prove_test test_index = let
@@ -6694,11 +6709,12 @@ stZeroKnowledge2
 *)
 
 (*
+val _ = (cv_memLib.verbosity_level := cv_memLib.Verbose);
 
-cv_eval ``
-let acc = modexp_d0g0v0_Cancun_pre in
-let blk = modexp_d0g0v0_Cancun_block in
-let tx = modexp_d0g0v0_Cancun_transaction in
+cv_eval_raw ``
+let acc = modexp_d28g0v0_Cancun_pre in
+let blk = modexp_d28g0v0_Cancun_block in
+let tx = modexp_d28g0v0_Cancun_transaction in
 let init = run_create 1 [] blk acc tx in
 let cont = OUTR $ THE init in
 let s = SND cont in
