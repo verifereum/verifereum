@@ -798,6 +798,8 @@ Proof
   rw[rlp_bytes_pre_def, LENGTH_EQ_NUM_compute]
 QED
 
+val () = cv_auto_trans modexp_def;
+
 val () = cv_auto_trans Keccak_256_bytes_def;
 
 val () = cv_auto_trans address_for_create_def;
@@ -885,9 +887,6 @@ val () = “precompile_identity s” |>
    SIMP_CONV std_ss [
        precompile_identity_def, bind_def, ignore_bind_def, LET_RATOR
      ] |> cv_auto_trans;
-
-val () = cv_auto_trans bitlength_def;
-val () = cv_auto_trans modexp_def;
 
 val () = “precompile_modexp s” |>
    SIMP_CONV std_ss [

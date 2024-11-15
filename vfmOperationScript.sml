@@ -301,6 +301,25 @@ Proof
   \\ qexists_tac`n - LENGTH t` \\ rw[]
 QED
 
+Theorem PAD_RIGHT_CONS:
+  PAD_RIGHT x y (h::t) = h::PAD_RIGHT x (PRE y) t
+Proof
+  rw[PAD_RIGHT] \\ Cases_on`y` \\ gs[]
+QED
+
+(* alternative characterisation *)
+Theorem take_pad_0_pad_take:
+  take_pad_0 z l = TAKE z (PAD_RIGHT 0w z l)
+Proof
+  rw[take_pad_0_def]
+  \\ qid_spec_tac`z`
+  \\ Induct_on`l`
+  \\ gs[bitstringTheory.length_pad_right]
+  \\ rw[Once TAKE_def]
+  >- EVAL_TAC
+  \\ gs[PAD_RIGHT_CONS, PRE_SUB1]
+QED
+
 (* TODO: move *)
 
 Theorem REPLICATE_EQ_CONS:

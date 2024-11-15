@@ -4,6 +4,32 @@ open HolKernel boolLib bossLib Parse monadsyntax
 
 val _ = new_theory "vfmExecution";
 
+(* TODO: move *)
+Definition modexp_def:
+  modexp (b:num) (e:num) (m: num) (a:num) =
+  if e = 0n then (a MOD m) else
+  if EVEN e then
+    modexp ((b * b) MOD m) (DIV2 e) m a
+  else
+    modexp b (PRE e) m ((b * a) MOD m)
+Termination
+  WF_REL_TAC`measure (FST o SND)`
+  \\ rw[DIV2_def]
+End
+
+Theorem modexp_exp:
+  !b e m a. 0 < m ⇒ modexp b e m a = (a * b ** e) MOD m
+Proof
+  recInduct modexp_ind
+  \\ rpt strip_tac
+  \\ simp[Once modexp_def]
+  \\ IF_CASES_TAC
+  \\ gs[EVEN_EXISTS, DIV2_def]
+  \\ rw[] >- gs[GSYM EXP_EXP_MULT]
+  \\ Cases_on`e` \\ gs[EXP]
+QED
+(* -- *)
+
 Definition lookup_storage_def:
   lookup_storage k (s: storage) = s k
 End
@@ -1050,62 +1076,10 @@ Definition precompile_identity_def:
   od
 End
 
-Definition bitlength_def:
-  bitlength 0n = 0 ∧
-  bitlength (SUC n) = LOG2 (SUC n) + 1
-End
+Overload num_from_input_words = “λz ls.
+  l2n 256 $ REVERSE $ MAP w2n $ take_pad_0 z ls”
 
-Definition modexp_def:
-  modexp (b:num) (e:num) (m: num) (a:num) =
-  if e = 0n then (a MOD m) else
-  if EVEN e then
-    modexp ((b * b) MOD m) (DIV2 e) m a
-  else
-    modexp b (PRE e) m ((b * a) MOD m)
-Termination
-  WF_REL_TAC`measure (FST o SND)`
-  \\ rw[DIV2_def]
-End
-
-Theorem even_exp_lemma:
-  ∀x n. EVEN n ⇒ (x:num) ** n = (x ** 2) ** (n DIV 2)
-Proof
-  rw[EVEN_EXISTS, GSYM EXP_EXP_MULT]
-  \\ rw[logrootTheory.EXP_MUL]
-QED
-
-Theorem PAD_RIGHT_CONS:
-  PAD_RIGHT x y (h::t) = h::PAD_RIGHT x (PRE y) t
-Proof
-  rw[listTheory.PAD_RIGHT]
-  \\ Cases_on`y` \\ gs[]
-QED
-
-Theorem take_pad_0_pad_take:
-  take_pad_0 z l = TAKE z (PAD_RIGHT 0w z l)
-Proof
-  rw[vfmOperationTheory.take_pad_0_def]
-  \\ qid_spec_tac`z`
-  \\ Induct_on`l`
-  \\ gs[bitstringTheory.length_pad_right]
-  \\ rw[Once listTheory.TAKE_def]
-  >- EVAL_TAC
-  \\ gs[PAD_RIGHT_CONS, PRE_SUB1]
-QED
-
-Theorem modexp_exp:
-  !b e m a. 0 < m ⇒ modexp b e m a = (a * b ** e) MOD m
-Proof
-  recInduct modexp_ind
-  \\ rpt strip_tac
-  \\ simp[Once modexp_def]
-  \\ IF_CASES_TAC \\ gs[]
-  \\ rw[DIV2_def]
-  \\ DEP_REWRITE_TAC [GSYM even_exp_lemma] \\ rw[]
-  \\ ‘0 < e’ by simp[NOT_ZERO]
-  \\ ‘b ** e = b * b ** PRE e’ by gvs[GSYM EXP, SUC_PRE]
-  \\ rw[]
-QED
+Overload bitlength = “λn. SUC (LOG2 (MAX 1 n))”
 
 Definition precompile_modexp_def:
   precompile_modexp = do
@@ -1113,34 +1087,27 @@ Definition precompile_modexp_def:
     bSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 inputs;
     eSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 (DROP 32 inputs);
     mSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 (DROP 64 inputs);
-
     maxLength <<- MAX bSize mSize;
     words <<- (maxLength + 7) DIV 8;
     multiplicationComplexity <<- words * words;
-
-    eHead <<- l2n 256 $ REVERSE $ MAP w2n $ take_pad_0 (MIN 32 eSize) $ DROP (96 + bSize) inputs;
-    iterationCount <<- if eSize ≤ 32 ∧ eHead = 0 then 0n
-                       else if eSize ≤ 32    then bitlength eHead -1
-                       else (8 * (eSize - 32)) + (bitlength (w2n (n2w eHead:bytes32)) -1);
+    restInputs <<- DROP 96 inputs;
+    eHead <<- num_from_input_words (MIN 32 eSize) $ DROP bSize restInputs;
+    iterationCount <<-
+      if eSize ≤ 32 then
+        if eHead = 0 then 0n else bitlength eHead - 1
+      else 8 * (eSize - 32) + bitlength (w2n (n2w eHead: bytes32)) - 1;
     calculatedIterationCount <<- MAX iterationCount 1;
     dynamicGas <<- MAX 200 (multiplicationComplexity * calculatedIterationCount DIV 3);
     consume_gas dynamicGas;
-
-    m <<- l2n 256 $ REVERSE $ MAP w2n $ take_pad_0 mSize $ DROP (96 + bSize + eSize) inputs;
-    result <<- if bSize = 0 ∧ mSize = 0
-               then []
-               else if m = 0
-               then REPLICATE mSize 0w
-               else let
-                      nums = MAP w2n $ take_pad_0 (bSize + eSize + mSize) $ DROP 96 inputs;
-                      b = l2n 256 $ REVERSE $ TAKE bSize nums;
-                      e = l2n 256 $ REVERSE $ TAKE eSize $ DROP (bSize) nums
-                    in
-                      REVERSE $ PAD_RIGHT 0w mSize $ MAP n2w $ n2l 256 $ modexp b e m 1;
-
-    (* result <<- (b ** e) MOD m; *)
-    set_return_data result;
-
+    m <<- num_from_input_words mSize $ DROP (bSize + eSize) restInputs;
+    set_return_data $
+      if bSize = 0 ∧ mSize = 0 then []
+      else if m = 0 then REPLICATE mSize 0w
+      else let
+        nums = MAP w2n $ take_pad_0 (bSize + eSize + mSize) $ restInputs;
+        b = l2n 256 $ REVERSE $ TAKE bSize nums;
+        e = l2n 256 $ REVERSE $ TAKE eSize $ DROP bSize nums
+      in REVERSE $ PAD_RIGHT 0w mSize $ MAP n2w $ n2l 256 $ modexp b e m 1;
     finish
   od
 End
