@@ -4503,9 +4503,11 @@ val test_path = mk_test_path "modexp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+val test_path = mk_test_path "modexpTests.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (* TODO: add
-modexp.json
-modexpTests.json
 precompsEIP2929Cancun.json
 sec80.json
 *)
