@@ -1,7 +1,7 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory combinTheory
      arithmeticTheory sptreeTheory
-     recursiveLengthPrefixTheory keccakTheory
+     recursiveLengthPrefixTheory
      vfmTypesTheory
 
 val _ = new_theory "merkle";
@@ -178,5 +178,48 @@ Proof
   \\ asm_rewrite_tac[]
   \\ simp_tac (std_ss ++ ETA_ss) [list_case_def]
 QED
+
+Datatype:
+  encoded_trie_node =
+    MTL (byte list) (byte list)
+  | MTE (byte list) (byte list)
+  | MTB (byte list list) (byte list)
+End
+
+Definition nibble_list_to_bytes_def:
+  nibble_list_to_bytes ([]: byte list) = [] : byte list ∧
+  nibble_list_to_bytes [n] = [n] ∧
+  nibble_list_to_bytes (n1::n2::ns) =
+  16w * n1 + n2 :: nibble_list_to_bytes ns
+End
+
+Definition nibble_list_to_compact_def:
+  nibble_list_to_compact bytes isLeaf =
+  if EVEN (LENGTH bytes) then
+    (16w * (if isLeaf then 2w else 0w)) ::
+    nibble_list_to_bytes bytes
+  else
+    16w * (if isLeaf then 3w else 1w) + HD bytes ::
+    nibble_list_to_bytes (TL bytes)
+End
+
+Definition encode_internal_node_unencoded_def:
+  encode_internal_node_unencoded NONE = [] ∧
+  encode_internal_node_unencoded (SOME (MTL key value)) =
+    [nibble_list_to_compact key T; value] ∧
+  encode_internal_node_unencoded (SOME (MTE key subnode)) =
+    [nibble_list_to_compact key F; subnode] ∧
+  encode_internal_node_unencoded (SOME (MTB subnodes value)) =
+    SNOC value subnodes
+End
+
+Definition encode_internal_node_def:
+  encode_internal_node node = let
+    unencoded = encode_internal_node_unencoded node;
+    encoded = rlp_list (FLAT (MAP rlp_bytes unencoded))
+  in
+    if LENGTH encoded < 32 then encoded
+    else Keccak_256_bytes encoded
+End
 
 val _ = export_theory();

@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory pred_setTheory finite_setTheory
-     byteTheory recursiveLengthPrefixTheory keccakTheory
+     byteTheory recursiveLengthPrefixTheory
      vfmTypesTheory vfmStateTheory vfmTransactionTheory vfmOperationTheory;
 
 val _ = new_theory "vfmContext";
@@ -260,15 +260,6 @@ Definition parse_code_def:
 Termination
   WF_REL_TAC`measure (LENGTH o SND o SND)`
   \\ rw[LENGTH_DROP, LENGTH_NOT_NULL]
-End
-
-(* TODO: move? *)
-Definition Keccak_256_bytes_def:
-  Keccak_256_bytes (bs:word8 list) : word8 list =
-    MAP bools_to_word $ chunks 8 $
-    Keccak_256 $
-    MAP ((=) 1) $ FLAT $
-    MAP (PAD_RIGHT 0 8 o word_to_bin_list) bs
 End
 
 Definition address_for_create_def:
