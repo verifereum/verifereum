@@ -1,10 +1,23 @@
 open HolKernel boolLib bossLib Parse
-     listTheory rich_listTheory combinTheory
-     arithmeticTheory sptreeTheory
+     listTheory rich_listTheory combinTheory sortingTheory
+     arithmeticTheory finite_mapTheory sptreeTheory pairTheory
      recursiveLengthPrefixTheory
      vfmTypesTheory
 
 val _ = new_theory "merkle";
+
+Theorem NULL_MAP[simp]:
+  NULL (MAP f ls) = NULL ls
+Proof
+  rw[NULL_EQ]
+QED
+
+Theorem PERM_NULL:
+  !l1 l2. PERM l1 l2 ==> NULL l1 = NULL l2
+Proof
+  ho_match_mp_tac PERM_IND
+  \\ rw[NULL_EQ]
+QED
 
 Theorem LENGTH_TL_LESS_EQ:
   !ls. LENGTH (TL ls) <= LENGTH ls
@@ -47,6 +60,39 @@ Proof
   \\ gs[IS_PREFIX_APPEND, APPEND_EQ_CONS]
 QED
 
+Theorem longest_common_prefix_nil[simp]:
+  longest_common_prefix x [] = [] ∧
+  longest_common_prefix [] y = []
+Proof
+  rw[longest_common_prefix_def]
+  \\ Cases_on`x` \\ rw[longest_common_prefix_def]
+QED
+
+Theorem longest_common_prefix_comm:
+  ∀x y.
+    longest_common_prefix x y =
+    longest_common_prefix y x
+Proof
+  recInduct longest_common_prefix_ind
+  \\ rw[]
+  \\ rw[Once longest_common_prefix_def]
+  \\ rw[Once longest_common_prefix_def, SimpRHS]
+  >- first_assum MATCH_ACCEPT_TAC
+  \\ rw[Once longest_common_prefix_def]
+QED
+
+Theorem longest_common_prefix_assoc:
+  ∀x y z.
+  longest_common_prefix (longest_common_prefix x y) z =
+  longest_common_prefix x (longest_common_prefix y z)
+Proof
+  recInduct longest_common_prefix_ind
+  \\ rw[longest_common_prefix_def]
+  \\ Cases_on`z`
+  \\ rw[longest_common_prefix_def]
+  \\ rw[]
+QED
+
 Definition longest_common_prefix_of_list_def:
   longest_common_prefix_of_list [] = [] ∧
   longest_common_prefix_of_list [x] = x ∧
@@ -73,6 +119,30 @@ Proof
     \\ gs[longest_common_prefix_thm] \\ NO_TAC)
   \\ last_x_assum irule
   \\ simp[longest_common_prefix_thm]
+QED
+
+Theorem longest_common_prefix_of_list_CONS:
+  longest_common_prefix_of_list (x::xs) =
+  if NULL xs then x else
+    longest_common_prefix x $
+    longest_common_prefix_of_list xs
+Proof
+  qid_spec_tac`x`
+  \\ Induct_on`xs`
+  \\ rw[longest_common_prefix_of_list_def]
+  \\ rw[longest_common_prefix_assoc]
+QED
+
+Theorem longest_common_prefix_of_list_PERM:
+  ∀l1 l2.
+    PERM l1 l2 ⇒
+    longest_common_prefix_of_list l1 =
+    longest_common_prefix_of_list l2
+Proof
+  ho_match_mp_tac PERM_STRONG_IND
+  \\ rw[longest_common_prefix_of_list_CONS]
+  \\ gs[NULL_EQ, longest_common_prefix_of_list_def]
+  \\ rw[AC longest_common_prefix_assoc longest_common_prefix_comm]
 QED
 
 Definition make_branch_def:
@@ -179,6 +249,77 @@ Proof
   \\ simp_tac (std_ss ++ ETA_ss) [list_case_def]
 QED
 
+Theorem make_branch_PERM:
+  PERM kvs1 kvs2 ==>
+  PERM (make_branch kvs1 i) (make_branch kvs2 i)
+Proof
+  cheat
+QED
+
+Theorem patricialise_PERM:
+  ∀kvs1 kvs2.
+    PERM kvs1 kvs2 ⇒
+    patricialise kvs1 = patricialise kvs2
+Proof
+  recInduct patricialise_ind
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ rpt gen_tac
+  \\ rpt strip_tac
+  \\ Cases_on`kvs2` >- gs[]
+  \\ qmatch_assum_rename_tac`PERM _ (_::ls)`
+  \\ Cases_on`ls` >- gs[]
+  \\ rewrite_tac[patricialise_def]
+  \\ qmatch_assum_abbrev_tac`PERM kvs1 kvs2`
+  \\ `PERM (MAP FST kvs1) (MAP FST kvs2)`
+  by metis_tac[PERM_MAP]
+  \\ drule longest_common_prefix_of_list_PERM
+  \\ strip_tac
+  \\ `ALL_DISTINCT (MAP FST kvs1) =
+      ALL_DISTINCT (MAP FST kvs2)` by simp[ALL_DISTINCT_PERM]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ simp[]
+  \\ IF_CASES_TAC \\ simp[]
+  \\ reverse IF_CASES_TAC \\ simp[]
+  >- (
+    first_x_assum irule
+    \\ simp[]
+    \\ irule PERM_MAP
+    \\ simp[] )
+  \\ reverse conj_tac
+  >- (
+    simp[Abbr`value`, Abbr`value'`]
+    \\ simp[Abbr`values`, Abbr`values'`]
+    \\ qmatch_goalsub_abbrev_tac`FILTER P`
+    \\ `PERM (FILTER P kvs1) (FILTER P kvs2)` by simp[PERM_FILTER]
+    \\ drule PERM_NULL
+    \\ simp[] \\ strip_tac
+    \\ IF_CASES_TAC \\ simp[]
+    \\ `∃k v. FILTER P kvs1  = [(k, v)]`
+    by (
+      Cases_on`FILTER P kvs1` \\ gs[]
+      \\ fs[FILTER_EQ_CONS, FILTER_EQ_NIL]
+      \\ qmatch_assum_rename_tac`P kv`
+      \\ Cases_on`kv` \\ gs[]
+      \\ qmatch_rename_tac`ls = []`
+      \\ Cases_on`ls` \\ gs[]
+      \\ gvs[FILTER_EQ_CONS]
+      \\ gvs[Abbr`P`, NULL_EQ]
+      \\ gvs[ALL_DISTINCT_APPEND] )
+    \\ gs[] )
+  \\ simp[LIST_EQ_REWRITE]
+  \\ conj_asm1_tac >- rw[Abbr`branches`, Abbr`branches'`]
+  \\ simp[EL_MAP]
+  \\ rpt strip_tac
+  \\ last_x_assum irule
+  \\ simp[]
+  \\ conj_tac >- metis_tac[MEM_EL]
+  \\ qmatch_asmsub_abbrev_tac`GENLIST _ st`
+  \\ gs[Abbr`branches`, Abbr`branches'`, EL_GENLIST]
+  \\ irule make_branch_PERM
+  \\ rw[]
+QED
+
 Datatype:
   encoded_trie_node =
     MTL (byte list) (byte list)
@@ -221,5 +362,31 @@ Definition encode_internal_node_def:
     if LENGTH encoded < 32 then encoded
     else Keccak_256_bytes encoded
 End
+
+Definition encode_trie_node_def:
+  encode_trie_node (Leaf key value) =
+    MTL key value ∧
+  encode_trie_node (Extension key node) =
+    MTE key $
+    encode_internal_node (OPTION_MAP encode_trie_node node) ∧
+  encode_trie_node (Branch nodes value) =
+    MTB
+      (MAP (encode_internal_node o OPTION_MAP encode_trie_node) nodes)
+       value
+Termination
+  WF_REL_TAC `measure trie_node_size`
+End
+
+Definition build_fmap_def:
+  build_fmap z 0 m = FEMPTY ∧
+  build_fmap z (SUC n) m =
+  if m (n2w n) = z then build_fmap z n m
+  else FUPDATE (build_fmap z n m) (n, (m (n2w n)))
+End
+
+(*
+Definition storage_trie_def:
+  storage_trie
+*)
 
 val _ = export_theory();
