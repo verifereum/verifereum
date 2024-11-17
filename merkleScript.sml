@@ -1,9 +1,16 @@
 open HolKernel boolLib bossLib Parse
-     listTheory rich_listTheory
+     listTheory rich_listTheory combinTheory
+     arithmeticTheory sptreeTheory
      recursiveLengthPrefixTheory keccakTheory
      vfmTypesTheory
 
 val _ = new_theory "merkle";
+
+Theorem LENGTH_TL_LESS_EQ:
+  !ls. LENGTH (TL ls) <= LENGTH ls
+Proof
+  Cases \\ rw[]
+QED
 
 Datatype:
   trie_node =
@@ -68,22 +75,108 @@ Proof
   \\ simp[longest_common_prefix_thm]
 QED
 
-(*
+Definition make_branch_def:
+  make_branch (kvs: (byte list # byte list) list) (nb: byte) =
+  MAP (TL ## I) $ FILTER (λkv. [nb] ≼ FST kv) kvs
+End
+
 Definition patricialise_def:
-  patricialise [] level = NONE ∧
-  patricialise [(k, v)] level =
-    SOME $ Leaf (DROP level k) v ∧
-  patricialise kvs level = let
-    lcp = longest_common_prefix_of_list (MAP (DROP level o FST) kvs)
+  patricialise [] = NONE ∧
+  patricialise [(k, v)] = SOME $ Leaf k v ∧
+  patricialise kvs = let
+    lcp = longest_common_prefix_of_list (MAP FST kvs)
   in
+    if ALL_DISTINCT (MAP FST kvs) then
     if NULL lcp then
-      ARB
+      let
+        branches = GENLIST (make_branch kvs o n2w) 16;
+        values = MAP SND $ FILTER (NULL o FST) kvs;
+        value = if NULL values then [] else HD values
+      in
+        SOME $ Branch (MAP patricialise branches) value
     else
       SOME $
-      Extension lcp (patricialise kvs (level + LENGTH lcp))
+      Extension lcp (patricialise (MAP (DROP (LENGTH lcp) ## I) kvs))
+    else NONE
 Termination
-  either length of kvs or total length of drop level over kvs
+  WF_REL_TAC`measure (SUM o (MAP $ LENGTH o FST))`
+  \\ gs[]
+  \\ conj_tac
+  >- (
+    rpt gen_tac
+    \\ qmatch_goalsub_abbrev_tac`make_branch kvs`
+    \\ qmatch_goalsub_abbrev_tac`_ ∧ (_ ∧ M) ⇒ _`
+    \\ strip_tac
+    \\ `∃nb. a = make_branch kvs nb`
+    by ( fs[Abbr`M`] \\ metis_tac[] )
+    \\ simp[make_branch_def, MAP_MAP_o, o_DEF]
+    \\ qmatch_goalsub_abbrev_tac `_ < lkvs`
+    \\ `lkvs = SUM (MAP (λx. LENGTH (FST x)) kvs)`
+    by ( simp[Abbr`lkvs`, Abbr`kvs`] )
+    \\ simp[]
+    \\ qmatch_goalsub_abbrev_tac`SUM (MAP f fkvs) < SUM (MAP g kvs)`
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ qexists_tac`SUM (MAP f kvs)`
+    \\ conj_tac
+    >- (
+      irule SUM_MAP_same_LESS
+      \\ simp[Abbr`f`, Abbr`g`, LENGTH_TL_LESS_EQ, EXISTS_MEM]
+      \\ qmatch_assum_rename_tac`k1 ≠ k2`
+      \\ qmatch_asmsub_rename_tac`(k1,v1)::(k2,v2)::_`
+      \\ qexists_tac`if NULL k1 then (k2,v2) else (k1,v1)`
+      \\ conj_tac >- rw[Abbr`kvs`]
+      \\ rw[NULL_EQ]
+      \\ qmatch_goalsub_rename_tac`TL tt`
+      \\ Cases_on`tt` \\ gs[] )
+    \\ irule SUM_SUBLIST
+    \\ irule MAP_SUBLIST
+    \\ qunabbrev_tac`fkvs`
+    \\ irule FILTER_sublist )
+  \\ rpt gen_tac
+  \\ strip_tac
+  \\ qmatch_goalsub_abbrev_tac`longest_common_prefix_of_list fkvs`
+  \\ qmatch_goalsub_abbrev_tac `_ < lkvs`
+  \\ `lkvs = SUM (MAP LENGTH fkvs)`
+    by ( simp[Abbr`lkvs`, Abbr`fkvs`, MAP_MAP_o, o_DEF] )
+  \\ qmatch_goalsub_abbrev_tac`DROP (LENGTH lcp)`
+  \\ simp[MAP_MAP_o, o_DEF]
+  \\ qmatch_goalsub_abbrev_tac`lhs < _`
+  \\ `lhs = SUM (MAP (flip $- (LENGTH lcp) o LENGTH) fkvs)`
+  by simp[Abbr`fkvs`, Abbr`lhs`, o_DEF, MAP_MAP_o]
+  \\ simp[]
+  \\ irule SUM_MAP_same_LESS
+  \\ simp[]
+  \\ `0 < LENGTH lcp` by (Cases_on`lcp` \\ gs[])
+  \\ simp[Abbr`fkvs`]
+  \\ qmatch_assum_rename_tac`k1 ≠ k2`
+  \\ Cases_on`k1` \\ Cases_on`k2` \\ gs[]
 End
-*)
+
+Theorem patricialise_ALL_DISTINCT_def:
+  ∀kvs. ALL_DISTINCT (MAP FST kvs) ⇒
+  patricialise kvs =
+  case kvs of [] => NONE
+     | [(k, v)] => SOME $ Leaf k v
+     | _ => let
+       lcp = longest_common_prefix_of_list (MAP FST kvs) in
+         if NULL lcp then
+           let
+             branches = GENLIST (make_branch kvs o n2w) 16;
+             values = MAP SND $ FILTER (NULL o FST) kvs;
+             value = if NULL values then [] else HD values
+           in
+             SOME $ Branch (MAP patricialise branches) value
+         else
+           SOME $
+           Extension lcp (patricialise (MAP (DROP (LENGTH lcp) ## I) kvs))
+Proof
+  recInduct patricialise_ind
+  \\ rpt strip_tac
+  >- EVAL_TAC
+  >- EVAL_TAC
+  \\ rewrite_tac[patricialise_def]
+  \\ asm_rewrite_tac[]
+  \\ simp_tac (std_ss ++ ETA_ss) [list_case_def]
+QED
 
 val _ = export_theory();
