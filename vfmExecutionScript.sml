@@ -30,18 +30,6 @@ Proof
 QED
 (* -- *)
 
-Definition lookup_storage_def:
-  lookup_storage k (s: storage) = s k
-End
-
-Definition update_storage_def:
-  update_storage k v (s: storage) = (k =+ v) s
-End
-
-Definition storage_empty_def:
-  storage_empty (s: storage) = (s = empty_storage)
-End
-
 Definition lookup_transient_storage_def:
   lookup_transient_storage a (t: transient_storage) = t a
 End

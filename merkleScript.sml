@@ -1,8 +1,8 @@
 open HolKernel boolLib bossLib Parse
-     listTheory rich_listTheory combinTheory sortingTheory
+     listTheory rich_listTheory combinTheory sortingTheory wordsTheory
      arithmeticTheory finite_mapTheory sptreeTheory pairTheory
      recursiveLengthPrefixTheory
-     vfmTypesTheory
+     vfmTypesTheory vfmStateTheory
 
 val _ = new_theory "merkle";
 
@@ -384,13 +384,89 @@ Definition build_fmap_def:
   build_fmap z 0 m = FEMPTY ∧
   build_fmap z (SUC n) m =
   if m (n2w n) = z then build_fmap z n m
-  else FUPDATE (build_fmap z n m) (n, (m (n2w n)))
+  else FUPDATE (build_fmap z n m) (n2w n, (m (n2w n)))
 End
 
-(*
-Definition storage_trie_def:
-  storage_trie
+Theorem build_fmap_empty:
+  (∀x. x < n ⇒ m (n2w x) = z) ⇒
+  build_fmap z n m = FEMPTY
+Proof
+  Induct_on`n` \\ rw[build_fmap_def]
+QED
+
+Theorem lookup_build_fmap:
+  ∀n k. n ≤ dimword(:'a) ⇒
+  FLOOKUP (build_fmap z n m) (k:α word) =
+  if n ≤ w2n k then NONE
+  else if m k = z then NONE
+  else SOME (m k)
+Proof
+  Induct \\ gvs[build_fmap_def]
+  \\ rw[FLOOKUP_UPDATE, LESS_OR_EQ]
+  \\ gvs[NOT_LESS] \\ rw[] \\ gvs[]
+  \\ strip_tac \\ gvs[]
+  \\ Cases_on`n < dimword(:'a)` \\ gs[]
+  \\ `0 < dimword(:'a)` by gs[]
+  \\ `SUC n < dimword(:'a)` by gs[]
+  \\ gs[]
+QED
+
+Definition storage_fmap_def:
+  storage_fmap (s: storage) : bytes32 |-> bytes32 =
+    build_fmap 0w (dimword (:256)) s
 End
-*)
+
+Theorem storage_fmap_empty_storage:
+  storage_fmap empty_storage = FEMPTY
+Proof
+  rw[storage_fmap_def]
+  \\ irule build_fmap_empty
+  \\ rw[empty_storage_def]
+QED
+
+Theorem storage_fmap_update_storage:
+  storage_fmap (update_storage k v s) =
+  if v ≠ 0w then
+    FUPDATE (storage_fmap s) (k, v)
+  else
+    (storage_fmap s) \\ k
+Proof
+  simp[storage_fmap_def, fmap_eq_flookup]
+  \\ qx_gen_tac`x`
+  \\ qspec_then`x`assume_tac w2n_lt
+  \\ Cases_on`v = 0w`
+  \\ simp[DOMSUB_FLOOKUP_THM, FLOOKUP_UPDATE]
+  \\ gs[lookup_build_fmap, update_storage_def, APPLY_UPDATE_THM]
+  \\ rw[] \\ gs[]
+QED
+
+(*
+Definition byte_to_nibbles_def:
+  byte_to_nibbles (b: byte) : byte list =
+  MAP w2w ([(8 >< 4) b; (4 >< 0) b]: word4 list)
+End
+
+Definition bytes_to_nibbles_def:
+  bytes_to_nibbles bs = FLAT $ MAP byte_to_nibbles bs
+End
+
+Definition key_nibbles_def:
+  key_nibbles (k: bytes32) =
+  bytes_to_nibbles (word_to_bytes k T)
+  type_of``word_to_byte``
+  f"word_to_byt"
+  *)
+
+Definition expanded_storage_trie_def:
+  expanded_storage_trie s = let
+    m = storage_fmap s;
+    l = fmap_to_alist m;
+    kvs = MAP (λ(k,v). (MAP n2w $ word_to_hex_list k, MAP n2w $ w2l 256 v)) l
+  in patricialise kvs
+End
+
+Definition storage_trie_def:
+  storage_trie s = OPTION_MAP encode_trie_node $ expanded_storage_trie s
+End
 
 val _ = export_theory();

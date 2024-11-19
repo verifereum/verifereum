@@ -6,6 +6,22 @@ val _ = new_theory "vfmState";
 
 Type storage = “:bytes32 -> bytes32”;
 
+Definition lookup_storage_def:
+  lookup_storage k (s: storage) = s k
+End
+
+Definition update_storage_def:
+  update_storage k v (s: storage) = (k =+ v) s
+End
+
+Definition empty_storage_def:
+  empty_storage: bytes32 -> bytes32 = K 0w
+End
+
+Definition storage_empty_def:
+  storage_empty (s: storage) = (s = empty_storage)
+End
+
 Datatype:
   account_state =
   <| nonce   : num
@@ -13,10 +29,6 @@ Datatype:
    ; storage : storage
    ; code    : byte list
    |>
-End
-
-Definition empty_storage_def:
-  empty_storage: bytes32 -> bytes32 = K 0w
 End
 
 (* TODO: this probably needs to depend on block number (for hardforks) *)
