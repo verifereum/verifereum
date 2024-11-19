@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse
-     wordsLib wordsTheory;
+     wordsLib wordsTheory listTheory
+     cv_transLib cv_stdTheory
 
 val _ = new_theory "recursiveLengthPrefix";
 
@@ -21,5 +22,20 @@ Definition rlp_list_def:
   in
     [n2w (248 + LENGTH lengthBytes)] ++ lengthBytes ++ payload
 End
+
+val () = cv_auto_trans numposrepTheory.n2l_n2lA;
+
+val rlp_bytes_alt =
+  rlp_bytes_def |> ONCE_REWRITE_RULE[
+    METIS_PROVE[]“A ∧ B ⇔ (if A then B else F)”
+  ];
+
+val rlp_bytes_pre_def = cv_auto_trans_pre rlp_bytes_alt;
+
+Theorem rlp_bytes_pre[cv_pre]:
+  ∀b. rlp_bytes_pre b
+Proof
+  rw[rlp_bytes_pre_def, LENGTH_EQ_NUM_compute]
+QED
 
 val _ = export_theory();

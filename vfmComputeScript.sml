@@ -783,21 +783,6 @@ Proof
   rw[sign_extend_pre_def, NULL_EQ]
 QED
 
-val () = cv_auto_trans numposrepTheory.n2l_n2lA;
-
-val rlp_bytes_alt =
-  rlp_bytes_def |> ONCE_REWRITE_RULE[
-    METIS_PROVE[]“A ∧ B ⇔ (if A then B else F)”
-  ];
-
-val rlp_bytes_pre_def = cv_auto_trans_pre rlp_bytes_alt;
-
-Theorem rlp_bytes_pre[cv_pre]:
-  ∀b. rlp_bytes_pre b
-Proof
-  rw[rlp_bytes_pre_def, LENGTH_EQ_NUM_compute]
-QED
-
 val () = cv_auto_trans modexp_def;
 
 val () = cv_auto_trans Keccak_256_bytes_def;
