@@ -253,7 +253,10 @@ Theorem make_branch_PERM:
   PERM kvs1 kvs2 ==>
   PERM (make_branch kvs1 i) (make_branch kvs2 i)
 Proof
-  cheat
+  rw[make_branch_def]
+  \\ irule PERM_MAP
+  \\ irule PERM_FILTER
+  \\ rw[]
 QED
 
 Theorem patricialise_PERM:
@@ -387,6 +390,7 @@ End
 (*
 Definition storage_trie_def:
   storage_trie
+End
 *)
 
 val _ = export_theory();
