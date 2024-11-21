@@ -1,10 +1,21 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory combinTheory sortingTheory wordsTheory
-     arithmeticTheory finite_mapTheory sptreeTheory pairTheory
+     optionTheory arithmeticTheory finite_mapTheory sptreeTheory pairTheory
      recursiveLengthPrefixTheory
      vfmTypesTheory vfmStateTheory
+     cv_transLib
 
 val _ = new_theory "merkle";
+
+(* TODO: move *)
+
+Theorem OPT_MMAP_IS_SOME:
+  IS_SOME (OPT_MMAP f ls) ⇔ EVERY IS_SOME (MAP f ls)
+Proof
+  Induct_on`ls` \\ rw[]
+  \\ Cases_on`f h` \\ rw[]
+  \\ Cases_on`OPT_MMAP f ls` \\ gs[]
+QED
 
 Theorem NULL_MAP[simp]:
   NULL (MAP f ls) = NULL ls
@@ -222,6 +233,33 @@ Termination
   \\ Cases_on`k1` \\ Cases_on`k2` \\ gs[]
 End
 
+Definition drop_from_keys_def:
+  drop_from_keys n [] = [] ∧
+  drop_from_keys n ((k, v)::kvs) =
+  (DROP n k,v) :: drop_from_keys n kvs
+End
+
+Definition patricialise_list_def:
+  patricialise_list [] acc = REVERSE acc ∧
+  patricialise_list (b::bs) acc =
+  patricialise_list bs (patricialise b :: acc)
+End
+
+Theorem patricialise_list_map:
+  patricialise_list bs acc = REVERSE acc ++ MAP patricialise bs
+Proof
+  qid_spec_tac`acc`
+  \\ Induct_on`bs`
+  \\ rw[patricialise_list_def]
+QED
+
+Theorem drop_from_keys_map:
+  drop_from_keys n ls = MAP (DROP n ## I) ls
+Proof
+  Induct_on`ls` \\ simp[drop_from_keys_def]
+  \\ Cases \\ simp[drop_from_keys_def]
+QED
+
 Theorem patricialise_ALL_DISTINCT_def:
   ∀kvs. ALL_DISTINCT (MAP FST kvs) ⇒
   patricialise kvs =
@@ -235,17 +273,17 @@ Theorem patricialise_ALL_DISTINCT_def:
              values = MAP SND $ FILTER (NULL o FST) kvs;
              value = if NULL values then [] else HD values
            in
-             SOME $ Branch (MAP patricialise branches) value
+             SOME $ Branch (patricialise_list branches []) value
          else
            SOME $
-           Extension lcp (patricialise (MAP (DROP (LENGTH lcp) ## I) kvs))
+           Extension lcp (patricialise (drop_from_keys (LENGTH lcp) kvs))
 Proof
   recInduct patricialise_ind
   \\ rpt strip_tac
   >- EVAL_TAC
   >- EVAL_TAC
-  \\ rewrite_tac[patricialise_def]
-  \\ asm_rewrite_tac[]
+  \\ rewrite_tac[patricialise_def, patricialise_list_map, drop_from_keys_map]
+  \\ asm_rewrite_tac[REVERSE_DEF, APPEND]
   \\ simp_tac (std_ss ++ ETA_ss) [list_case_def]
 QED
 
@@ -347,6 +385,19 @@ Definition nibble_list_to_compact_def:
     nibble_list_to_bytes (TL bytes)
 End
 
+(* TODO: move out of vfmCompute *)
+val () = cv_auto_trans Keccak_256_bytes_def;
+
+val () = cv_auto_trans nibble_list_to_bytes_def;
+val nibble_list_to_compact_pre_def = cv_trans_pre nibble_list_to_compact_def;
+
+Theorem nibble_list_to_compact_pre[cv_pre]:
+  nibble_list_to_compact_pre x y
+Proof
+  rw[nibble_list_to_compact_pre_def]
+  \\ strip_tac \\ gs[]
+QED
+
 Definition encode_internal_node_unencoded_def:
   encode_internal_node_unencoded NONE = [] ∧
   encode_internal_node_unencoded (SOME (MTL key value)) =
@@ -366,6 +417,8 @@ Definition encode_internal_node_def:
     else Keccak_256_bytes encoded
 End
 
+val () = cv_auto_trans encode_internal_node_def;
+
 Definition encode_trie_node_def:
   encode_trie_node (Leaf key value) =
     MTL key value ∧
@@ -380,12 +433,40 @@ Termination
   WF_REL_TAC `measure trie_node_size`
 End
 
+Definition encode_trie_node_fo_def:
+  encode_trie_node_fo (Leaf k v) = MTL k v ∧
+  encode_trie_node_fo (Extension k n) =
+  (let t = case n of NONE => NONE | SOME n => SOME $ encode_trie_node_fo n in
+    MTE k (encode_internal_node t)) ∧
+  encode_trie_node_fo (Branch ns v) =
+  (let ts = encode_trie_node_fo_list ns in
+    MTB (MAP encode_internal_node ts) v) ∧
+  encode_trie_node_fo_list [] = [] ∧
+  encode_trie_node_fo_list (x::xs) =
+  (let n = case x of NONE => NONE | SOME n => SOME $ encode_trie_node_fo n in
+    n :: encode_trie_node_fo_list xs)
+Termination
+  WF_REL_TAC`measure (λx. case x of INR ls => trie_node1_size ls |
+                                    INL t => trie_node_size t)`
+End
+
+Theorem encode_trie_node_fo_thm:
+  (∀t. encode_trie_node_fo t = encode_trie_node t) ∧
+  (∀ls. encode_trie_node_fo_list ls = MAP (OPTION_MAP encode_trie_node) ls)
+Proof
+  ho_match_mp_tac encode_trie_node_fo_ind
+  \\ rw[encode_trie_node_def, encode_trie_node_fo_def]
+  \\ srw_tac[ETA_ss][MAP_MAP_o]
+  \\ CASE_TAC \\ gs[]
+QED
 Definition build_fmap_def:
   build_fmap z 0 m = FEMPTY ∧
   build_fmap z (SUC n) m =
   if m (n2w n) = z then build_fmap z n m
   else FUPDATE (build_fmap z n m) (n2w n, (m (n2w n)))
 End
+
+val () = cv_auto_trans encode_trie_node_fo_def;
 
 Theorem build_fmap_empty:
   (∀x. x < n ⇒ m (n2w x) = z) ⇒
@@ -440,23 +521,6 @@ Proof
   \\ rw[] \\ gs[]
 QED
 
-(*
-Definition byte_to_nibbles_def:
-  byte_to_nibbles (b: byte) : byte list =
-  MAP w2w ([(8 >< 4) b; (4 >< 0) b]: word4 list)
-End
-
-Definition bytes_to_nibbles_def:
-  bytes_to_nibbles bs = FLAT $ MAP byte_to_nibbles bs
-End
-
-Definition key_nibbles_def:
-  key_nibbles (k: bytes32) =
-  bytes_to_nibbles (word_to_bytes k T)
-  type_of``word_to_byte``
-  f"word_to_byt"
-  *)
-
 Definition expanded_storage_trie_def:
   expanded_storage_trie s = let
     m = storage_fmap s;
@@ -468,5 +532,238 @@ End
 Definition storage_trie_def:
   storage_trie s = OPTION_MAP encode_trie_node $ expanded_storage_trie s
 End
+
+Definition storage_root_def:
+  storage_root s = encode_internal_node $ storage_trie s
+End
+
+Theorem make_branch_eta[local]:
+  make_branch kvs nb =
+  MAP (λp. (TL (FST p), SND p)) $ FILTER (λkv. [nb] ≼ FST kv) kvs
+Proof
+  rw[make_branch_def]
+  \\ AP_THM_TAC
+  \\ AP_TERM_TAC
+  \\ rw[FUN_EQ_THM, PAIR_MAP]
+QED
+
+val () = make_branch_eta |> cv_auto_trans;
+val () = longest_common_prefix_of_list_def |> cv_auto_trans;
+
+Definition patricialise_fused_clocked_def:
+  patricialise_fused_clocked n kvs =
+  (if n = 0n then NONE else
+  (case kvs of
+     | [] => SOME $ encode_internal_node NONE
+     | [(k,v)] => SOME $ encode_internal_node $ SOME $ MTL k v
+     | _ => let lcp = longest_common_prefix_of_list (MAP FST kvs) in
+       if NULL lcp then let
+         branches = GENLIST (make_branch kvs o n2w) 16;
+         values = MAP SND (FILTER (NULL o FST) kvs);
+         value = if NULL values then [] else HD values
+         in case
+         OPT_MMAP (patricialise_fused_clocked (n - 1)) branches
+         of NONE => NONE |
+            SOME subnodes =>
+            SOME $ encode_internal_node $ SOME $ MTB subnodes value
+       else
+         case patricialise_fused_clocked (n - 1)
+                     (drop_from_keys (LENGTH lcp) kvs)
+         of SOME subnode =>
+            SOME $ encode_internal_node $ SOME $ MTE lcp subnode
+          | NONE => NONE))
+End
+
+Theorem patricialise_fused_clocked_add:
+  ∀n kvs m.
+    patricialise_fused_clocked n kvs ≠ NONE ⇒
+    patricialise_fused_clocked (n + m) kvs =
+    patricialise_fused_clocked n kvs
+Proof
+  recInduct patricialise_fused_clocked_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ gen_tac
+  \\ rewrite_tac[Once patricialise_fused_clocked_def]
+  \\ IF_CASES_TAC >- rw[]
+  \\ BasicProvers.TOP_CASE_TAC
+  >- rw[patricialise_fused_clocked_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  >- rw[patricialise_fused_clocked_def]
+  \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
+  \\ strip_tac
+  \\ rewrite_tac[Once patricialise_fused_clocked_def]
+  \\ IF_CASES_TAC >- gs[]
+  \\ qmatch_goalsub_abbrev_tac`lhs = _`
+  \\ rewrite_tac[Once patricialise_fused_clocked_def]
+  \\ IF_CASES_TAC >- gs[]
+  \\ qunabbrev_tac`lhs`
+  \\ simp_tac std_ss [list_case_def]
+  \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
+  \\ asm_simp_tac std_ss []
+  \\ simp[]
+  \\ qmatch_goalsub_abbrev_tac`NULL lcp`
+  \\ IF_CASES_TAC
+  >- (
+    simp[]
+    \\ AP_THM_TAC
+    \\ AP_THM_TAC
+    \\ AP_TERM_TAC
+    \\ irule OPT_MMAP_cong
+    \\ simp[]
+    \\ gen_tac \\ strip_tac
+    \\ `m + n - 1 = n - 1 + m` by ( Cases_on`n` \\ gs[] )
+    \\ pop_assum SUBST_ALL_TAC
+    \\ last_x_assum irule
+    \\ gs[]
+    \\ simp[Abbr`kvs`]
+    \\ fs[CaseEq"option"]
+    \\ qmatch_assum_abbrev_tac`OPT_MMAP f ls ≠ NONE`
+    \\ `IS_SOME (OPT_MMAP f ls)` by (Cases_on`OPT_MMAP f ls` \\ gs[])
+    \\ fs[OPT_MMAP_IS_SOME, EVERY_MAP, EVERY_MEM]
+    \\ res_tac
+    \\ strip_tac
+    \\ fs[] )
+  \\ simp[]
+  \\ AP_THM_TAC
+  \\ AP_THM_TAC
+  \\ AP_TERM_TAC
+  \\ `m + n - 1 = n - 1 + m` by ( Cases_on`n` \\ gs[] )
+  \\ pop_assum SUBST_ALL_TAC
+  \\ first_x_assum irule
+  \\ gs[]
+  \\ reverse conj_tac >- rw[Abbr`kvs`]
+  \\ strip_tac \\ fs[]
+QED
+
+Theorem patricialise_fused_clocked_thm:
+  ∀kvs. ALL_DISTINCT (MAP FST kvs) ⇒
+    ∃n. patricialise_fused_clocked n kvs
+        = SOME $ encode_internal_node $ OPTION_MAP encode_trie_node $ patricialise kvs
+Proof
+  recInduct patricialise_ind
+  \\ conj_tac
+  >- rw[patricialise_def, patricialise_fused_clocked_def]
+  \\ conj_tac
+  >- rw[patricialise_def, patricialise_fused_clocked_def, encode_trie_node_def]
+  \\ rpt gen_tac \\ strip_tac
+  \\ once_rewrite_tac[patricialise_def]
+  \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
+  \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
+  \\ simp[]
+  \\ qmatch_goalsub_abbrev_tac`NULL lcp`
+  \\ strip_tac
+  \\ asm_simp_tac std_ss [Once patricialise_fused_clocked_def]
+  \\ simp[Once EXISTS_NUM]
+  \\ qunabbrev_tac`kvs`
+  \\ simp_tac std_ss [list_case_def]
+  \\ qmatch_goalsub_abbrev_tac`FILTER _ kvs`
+  \\ Cases_on`NULL lcp` \\ simp[]
+  >- (
+    simp[encode_trie_node_def, MAP_MAP_o, CaseEq"option"]
+    \\ cheat (* use max of all the inductive clocks *) )
+  \\ gs[GSYM drop_from_keys_map, CaseEq"option"]
+  \\ simp[encode_trie_node_def]
+  \\ qmatch_goalsub_abbrev_tac`MTE lcp subnode`
+  \\ CONV_TAC SWAP_EXISTS_CONV
+  \\ qexists_tac`subnode` \\ simp[]
+  \\ qunabbrev_tac`subnode`
+  \\ simp[ETA_AX]
+  \\ first_x_assum irule
+  \\ simp[drop_from_keys_map]
+  \\ cheat (* removing longest_common_prefix_of_list preserves distinct *)
+QED
+
+(* TODO: need to pull out the OPT_MMAP as first-order
+val () = cv_auto_trans patricialise_fused_clocked_def;
+*)
+
+(*
+
+Datatype:
+  patricialsed_continuation =
+    KExt (word8 list)
+  | KBra (word8 list)
+  | KRes (trie_node option)
+  | KLst ((word8 list # word8 list) list list) ((trie_node option) list)
+End
+
+Definition patricialise_tr_def:
+  patricialise_tr kvs ks =
+  case kvs of
+  | [] => KRes NONE :: ks
+  | [(k,v)] => KRes (SOME $ Leaf k v) :: ks
+  | _ =>
+    let lcp = longest_common_prefix_of_list (MAP FST kvs) in
+    if NULL lcp then let
+      branches = GENLIST (make_branch kvs o n2w) 16;
+      values = MAP SND (FILTER (NULL o FST) kvs);
+      value = if NULL values then [] else HD values;
+      bks = KBra value :: ks
+    in
+      KLst branches [] :: bks
+    else
+      patricialise_tr (drop_from_keys (LENGTH lcp) kvs)
+        (KExt lcp :: ks)
+Termination
+  WF_REL_TAC`measure (SUM o (MAP $ LENGTH o FST) o FST)`
+  \\ rpt gen_tac \\ strip_tac
+  \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
+  \\ rewrite_tac[drop_from_keys_map]
+  \\ qmatch_goalsub_abbrev_tac`DROP n`
+  \\ simp[MAP_MAP_o, o_DEF]
+  \\ irule SUM_MAP_same_LESS
+  \\ simp[]
+  \\ Cases_on`n = 0` >- (unabbrev_all_tac \\ gs[])
+  \\ gs[longest_common_prefix_of_list_CONS, NULL_EQ, Abbr`kvs`]
+  \\ qmatch_goalsub_rename_tac`0 < LENGTH ls`
+  \\ Cases_on`ls` \\ gs[]
+End
+
+Definition patricialise_k_def:
+  patricialise_k ((KRes t)::(KExt lcp)::ks) =
+    (KRes $ SOME $ Extension lcp t)::ks ∧
+  patricialise_k ((KRes t)::(KLst bs acc)::ks) =
+    KLst bs (t::acc) :: ks ∧
+  patricialise_k ((KLst [] acc)::(KBra v)::ks) =
+    (KRes $ SOME $ Branch (REVERSE acc) v)::ks ∧
+  patricialise_k ((KLst (b::bs) acc)::ks) =
+    patricialise_tr b (KLst bs acc :: ks) ∧
+  patricialise_k _ = []
+End
+
+Definition isnt_KRes_sing_def:
+  isnt_KRes_sing [(KRes _)] = F ∧
+  isnt_KRes_sing _ = T
+End
+
+Definition dest_KRes_sing_def:
+  dest_KRes_sing [(KRes t)] = t ∧
+  dest_KRes_sing _ = NONE
+End
+
+Definition patricialise_loop_def:
+  patricialise_loop 0 ks = NONE ∧
+  patricialise_loop (SUC n) ks =
+  if isnt_KRes_sing ks then
+    patricialise_loop n (patricialise_k ks)
+  else
+    dest_KRes_sing ks
+End
+
+Definition patricialise_run_def:
+  patricialise_run n kvs =
+  patricialise_loop n (patricialise_tr kvs [])
+End
+
+(* why bother with this - just add a clock to patricialise_fused and use that *)
+
+val () = cv_auto_trans patricialise_tr_def;
+val () = cv_auto_trans patricialise_k_def;
+val () = cv_auto_trans isnt_KRes_sing_def;
+val () = cv_auto_trans dest_KRes_sing_def;
+val () = cv_auto_trans patricialise_loop_def;
+val () = cv_auto_trans patricialise_run_def;
+
+*)
 
 val _ = export_theory();
