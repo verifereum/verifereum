@@ -1,3 +1,14 @@
+# New! ☃️ Higher Order Log Cabin ☃️ Event!
+- The first in-person Verifereum unconference!
+- We will *hack* on + *talk* about *Verifereum*, *HOL*, *Vyper*, and *CakeML*
+- We will be staying in a *beautiful venue in the Swedish countryside* for the long weekend of **February 7–10 2025** <br>
+    !["Living room with fireplace (representative venue)"](venue1.png "fireplace"){ width=250px } !["Living room with couches (representative venue)"](venue2.png "couches"){ width=250px }
+    !["Solarium and swimming pool (representative venue)"](venue3.png "solarium"){ width=250px } !["Cabin in the snow (representative venue)"](venue4.png "snow"){ width=250px }
+- As it's the first event, accommodation and food will be covered by us (!), and you arrange your own travel ✈️
+- There will be food and socialising 🔥
+- All people are welcome, including folks who are just interested in the space and want to learn more 📚
+- Places are limited! Please fill out **[this form](https://forms.gle/KzT7VJe2n8S1dKmN8)** to confirm attendance
+
 # What
 
 - Mathematical verification of Ethereum applications
