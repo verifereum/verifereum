@@ -3,7 +3,7 @@ open HolKernel boolLib bossLib Parse
      optionTheory arithmeticTheory finite_mapTheory sptreeTheory pairTheory
      recursiveLengthPrefixTheory
      vfmTypesTheory vfmStateTheory
-     cv_transLib
+     cv_transLib cv_stdTheory
 
 val _ = new_theory "merkle";
 
@@ -562,7 +562,7 @@ Definition patricialise_fused_clocked_def:
          values = MAP SND (FILTER (NULL o FST) kvs);
          value = if NULL values then [] else HD values
          in case
-         OPT_MMAP (patricialise_fused_clocked (n - 1)) branches
+           patricialise_fused_clocked_mmap (n - 1) branches []
          of NONE => NONE |
             SOME subnodes =>
             SOME $ encode_internal_node $ SOME $ MTB subnodes value
@@ -571,68 +571,110 @@ Definition patricialise_fused_clocked_def:
                      (drop_from_keys (LENGTH lcp) kvs)
          of SOME subnode =>
             SOME $ encode_internal_node $ SOME $ MTE lcp subnode
-          | NONE => NONE))
+          | NONE => NONE)) ∧
+  patricialise_fused_clocked_mmap 0 _ _ = NONE ∧
+  patricialise_fused_clocked_mmap n [] acc = SOME (REVERSE acc) ∧
+  patricialise_fused_clocked_mmap n (b::bs) acc =
+    case patricialise_fused_clocked (n - 1) b of NONE => NONE
+       | SOME a => patricialise_fused_clocked_mmap (n - 1) bs (a::acc)
+Termination
+  WF_REL_TAC`measure (λx. case x of INL p => FST p | INR p => FST p)`
 End
 
 Theorem patricialise_fused_clocked_add:
-  ∀n kvs m.
-    patricialise_fused_clocked n kvs ≠ NONE ⇒
-    patricialise_fused_clocked (n + m) kvs =
-    patricialise_fused_clocked n kvs
+  (∀n kvs m.
+     patricialise_fused_clocked n kvs ≠ NONE ⇒
+     patricialise_fused_clocked (n + m) kvs =
+     patricialise_fused_clocked n kvs) ∧
+  (∀n bs acc m.
+     patricialise_fused_clocked_mmap n bs acc ≠ NONE ⇒
+     patricialise_fused_clocked_mmap (n + m) bs acc =
+     patricialise_fused_clocked_mmap n bs acc)
 Proof
-  recInduct patricialise_fused_clocked_ind
-  \\ rpt gen_tac \\ strip_tac
-  \\ gen_tac
-  \\ rewrite_tac[Once patricialise_fused_clocked_def]
-  \\ IF_CASES_TAC >- rw[]
-  \\ BasicProvers.TOP_CASE_TAC
-  >- rw[patricialise_fused_clocked_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  >- rw[patricialise_fused_clocked_def]
-  \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
-  \\ strip_tac
-  \\ rewrite_tac[Once patricialise_fused_clocked_def]
-  \\ IF_CASES_TAC >- gs[]
-  \\ qmatch_goalsub_abbrev_tac`lhs = _`
-  \\ rewrite_tac[Once patricialise_fused_clocked_def]
-  \\ IF_CASES_TAC >- gs[]
-  \\ qunabbrev_tac`lhs`
-  \\ simp_tac std_ss [list_case_def]
-  \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
-  \\ asm_simp_tac std_ss []
-  \\ simp[]
-  \\ qmatch_goalsub_abbrev_tac`NULL lcp`
-  \\ IF_CASES_TAC
+  ho_match_mp_tac patricialise_fused_clocked_ind
+  \\ conj_tac
   >- (
-    simp[]
+    rpt gen_tac \\ strip_tac
+    \\ gen_tac
+    \\ rewrite_tac[Once patricialise_fused_clocked_def]
+    \\ IF_CASES_TAC >- rw[]
+    \\ BasicProvers.TOP_CASE_TAC
+    >- rw[patricialise_fused_clocked_def]
+    \\ BasicProvers.TOP_CASE_TAC
+    >- rw[patricialise_fused_clocked_def]
+    \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
+    \\ strip_tac
+    \\ rewrite_tac[Once patricialise_fused_clocked_def]
+    \\ IF_CASES_TAC >- gs[]
+    \\ qmatch_goalsub_abbrev_tac`lhs = _`
+    \\ rewrite_tac[Once patricialise_fused_clocked_def]
+    \\ IF_CASES_TAC >- gs[]
+    \\ qunabbrev_tac`lhs`
+    \\ simp_tac std_ss [list_case_def]
+    \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
+    \\ asm_simp_tac std_ss []
+    \\ simp[]
+    \\ qmatch_goalsub_abbrev_tac`NULL lcp`
+    \\ IF_CASES_TAC
+    >- (
+      simp[]
+      \\ AP_THM_TAC
+      \\ AP_THM_TAC
+      \\ AP_TERM_TAC
+      \\ `m + n - 1 = n - 1 + m` by ( Cases_on`n` \\ gs[] )
+      \\ pop_assum SUBST_ALL_TAC
+      \\ last_x_assum irule
+      \\ gs[]
+      \\ simp[Abbr`kvs`]
+      \\ fs[CaseEq"option"] )
+    \\ simp[]
     \\ AP_THM_TAC
     \\ AP_THM_TAC
     \\ AP_TERM_TAC
-    \\ irule OPT_MMAP_cong
-    \\ simp[]
-    \\ gen_tac \\ strip_tac
     \\ `m + n - 1 = n - 1 + m` by ( Cases_on`n` \\ gs[] )
     \\ pop_assum SUBST_ALL_TAC
-    \\ last_x_assum irule
+    \\ first_x_assum irule
     \\ gs[]
-    \\ simp[Abbr`kvs`]
-    \\ fs[CaseEq"option"]
-    \\ qmatch_assum_abbrev_tac`OPT_MMAP f ls ≠ NONE`
-    \\ `IS_SOME (OPT_MMAP f ls)` by (Cases_on`OPT_MMAP f ls` \\ gs[])
-    \\ fs[OPT_MMAP_IS_SOME, EVERY_MAP, EVERY_MEM]
-    \\ res_tac
-    \\ strip_tac
-    \\ fs[] )
-  \\ simp[]
-  \\ AP_THM_TAC
-  \\ AP_THM_TAC
-  \\ AP_TERM_TAC
-  \\ `m + n - 1 = n - 1 + m` by ( Cases_on`n` \\ gs[] )
+    \\ reverse conj_tac >- rw[Abbr`kvs`]
+    \\ strip_tac \\ fs[])
+  \\ conj_tac >- rw[Once patricialise_fused_clocked_def]
+  \\ conj_tac >- (
+    rw[patricialise_fused_clocked_def]
+    \\ qmatch_goalsub_rename_tac`m + SUC n`
+    \\ `m + SUC n = SUC (m + n)` by simp[]
+    \\ rw[patricialise_fused_clocked_def] )
+  \\ rw[]
+  \\ qmatch_goalsub_rename_tac`m + SUC n`
+  \\ `m + SUC n = SUC (m + n)` by simp[]
+  \\ pop_assum SUBST_ALL_TAC
+  \\ pop_assum mp_tac
+  \\ rw[Once patricialise_fused_clocked_def]
+  \\ rw[Once patricialise_fused_clocked_def]
+  \\ rw[Once patricialise_fused_clocked_def, SimpRHS]
+  \\ irule EQ_SYM
+  \\ BasicProvers.TOP_CASE_TAC \\ gs[]
+QED
+
+Theorem patricialise_fused_clocked_mmap_thm:
+  ∀bs n acc as.
+    LENGTH bs < n ∧
+    GENLIST (λi. patricialise_fused_clocked (n - i - 1) (EL i bs)) (LENGTH bs) =
+      MAP SOME as ⇒
+    patricialise_fused_clocked_mmap n bs acc = SOME (REVERSE acc ++ as)
+Proof
+  Induct \\ rw[]
+  >- ( Cases_on`n` \\ gs[Once patricialise_fused_clocked_def] )
+  \\ Cases_on`n` \\ gs[]
+  \\ simp[Once patricialise_fused_clocked_def]
+  \\ gs[GENLIST_CONS]
+  \\ Cases_on`as` \\ gs[]
+  \\ qmatch_goalsub_rename_tac`REVERSE acc ++ a :: as`
+  \\ `REVERSE acc ++ a :: as = REVERSE (a::acc) ++ as` by rw[]
   \\ pop_assum SUBST_ALL_TAC
   \\ first_x_assum irule
-  \\ gs[]
-  \\ reverse conj_tac >- rw[Abbr`kvs`]
-  \\ strip_tac \\ fs[]
+  \\ simp[]
+  \\ pop_assum(SUBST1_TAC o SYM)
+  \\ simp[LIST_EQ_REWRITE, ADD1]
 QED
 
 Theorem patricialise_fused_clocked_thm:
@@ -660,7 +702,14 @@ Proof
   \\ Cases_on`NULL lcp` \\ simp[]
   >- (
     simp[encode_trie_node_def, MAP_MAP_o, CaseEq"option"]
-    \\ cheat (* use max of all the inductive clocks *) )
+    \\ qmatch_goalsub_abbrev_tac`MTB subnodes _`
+    \\ qmatch_goalsub_abbrev_tac`patricialise_fused_clocked_mmap _ bs`
+    \\ CONV_TAC SWAP_EXISTS_CONV
+    \\ qexists_tac`subnodes` \\ simp[]
+    \\ last_x_assum(qspec_then`lcp`mp_tac)
+    \\ simp[]
+    \\ cheat (* use patricialise_fused_clocked_thm and
+                    patricialise_fused_clocked_add *) )
   \\ gs[GSYM drop_from_keys_map, CaseEq"option"]
   \\ simp[encode_trie_node_def]
   \\ qmatch_goalsub_abbrev_tac`MTE lcp subnode`
@@ -673,8 +722,50 @@ Proof
   \\ cheat (* removing longest_common_prefix_of_list preserves distinct *)
 QED
 
-(* TODO: need to pull out the OPT_MMAP as first-order
-val () = cv_auto_trans patricialise_fused_clocked_def;
+val patricialise_fused_clocked_pre_def =
+  cv_auto_trans_pre patricialise_fused_clocked_def;
+
+Theorem patricialise_fused_clocked_pre[cv_pre]:
+  (∀n kvs. patricialise_fused_clocked_pre n kvs) ∧
+  (∀v0 v v1. patricialise_fused_clocked_mmap_pre v0 v v1)
+Proof
+  ho_match_mp_tac patricialise_fused_clocked_ind
+  \\ conj_tac
+  >- (
+    rpt strip_tac
+    \\ rewrite_tac[Once patricialise_fused_clocked_pre_def]
+    \\ strip_tac \\ rpt gen_tac \\ strip_tac
+    \\ rpt gen_tac \\ strip_tac
+    \\ rpt gen_tac \\ strip_tac
+    \\ conj_tac
+    >- (
+      strip_tac \\ gen_tac
+      \\ strip_tac \\ gen_tac
+      \\ strip_tac
+      \\ conj_tac >- rw[NULL_EQ]
+      \\ gen_tac \\ strip_tac
+      \\ first_x_assum irule
+      \\ rpt BasicProvers.VAR_EQ_TAC
+      \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
+      \\ simp[genlist_eq_GENLIST] )
+    \\ strip_tac
+    \\ first_x_assum irule
+    \\ rpt BasicProvers.VAR_EQ_TAC
+    \\ simp[] )
+  \\ conj_tac
+  >- rw[Once patricialise_fused_clocked_pre_def]
+  \\ conj_tac
+  >- rw[Once patricialise_fused_clocked_pre_def]
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once patricialise_fused_clocked_pre_def]
+  \\ gs[ADD1]
+QED
+
+(* TODO: define cv rep of this that goes straight to list of num spt
+expanded_storage_trie_def
+storage_fmap_def
+storage_root_def
+storage_trie_def
 *)
 
 (*
