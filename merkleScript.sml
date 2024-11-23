@@ -1,7 +1,7 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory combinTheory sortingTheory wordsTheory
      optionTheory arithmeticTheory finite_mapTheory sptreeTheory
-     pairTheory alistTheory numposrepTheory wordsLib
+     pairTheory alistTheory numposrepTheory wordsLib blastLib
      recursiveLengthPrefixTheory
      vfmTypesTheory vfmStateTheory
      cv_transLib cv_typeLib cv_typeTheory cv_stdTheory
@@ -384,8 +384,48 @@ Definition nibble_list_to_bytes_def:
   nibble_list_to_bytes ([]: byte list) = [] : byte list ∧
   nibble_list_to_bytes [n] = [n] ∧
   nibble_list_to_bytes (n1::n2::ns) =
-  16w * n1 + n2 :: nibble_list_to_bytes ns
+  ((n1 << 4) || n2) :: nibble_list_to_bytes ns
 End
+
+Definition bytes_to_nibble_list_def:
+  bytes_to_nibble_list [] = [] : word8 list ∧
+  bytes_to_nibble_list (b::bs) =
+  ((b && 0xf0w) >>> 4) :: (b && 0x0fw) :: bytes_to_nibble_list bs
+End
+
+Theorem bytes_to_nibble_list_to_bytes:
+  nibble_list_to_bytes (bytes_to_nibble_list bs) = bs
+Proof
+  Induct_on`bs`
+  \\ rw[nibble_list_to_bytes_def, bytes_to_nibble_list_def]
+  \\ BBLAST_TAC
+QED
+
+Theorem bytes_to_nibble_list_nibbles:
+  EVERY (λn. n && 0xf0w = 0w) (bytes_to_nibble_list bs)
+Proof
+  Induct_on`bs` \\ gs[bytes_to_nibble_list_def]
+QED
+
+Theorem nibble_list_to_bytes_to_nibble_list:
+  EVEN (LENGTH ns) ∧ EVERY (λn. n && 0xf0w = 0w) ns ⇒
+  bytes_to_nibble_list (nibble_list_to_bytes ns) = ns
+Proof
+  completeInduct_on`LENGTH ns`
+  \\ rw[]
+  \\ Cases_on`ns`
+  \\ rw[bytes_to_nibble_list_def, nibble_list_to_bytes_def]
+  \\ Cases_on`t` \\ gs[]
+  \\ qmatch_goalsub_rename_tac`n1::n2::ns`
+  \\ simp[bytes_to_nibble_list_def, nibble_list_to_bytes_def]
+  \\ rpt (
+    conj_tac >- (
+      rpt (qpat_x_assum`_ = 0w`mp_tac)
+      \\ BBLAST_TAC ))
+  \\ first_x_assum irule
+  \\ rw[]
+  \\ gs[ADD1, EVEN_ADD]
+QED
 
 Definition nibble_list_to_compact_def:
   nibble_list_to_compact bytes isLeaf =
