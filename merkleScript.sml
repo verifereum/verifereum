@@ -450,20 +450,27 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
+Definition rlp_encode_list_def:
+  rlp_encode_list acc [] = rlp_list $ FLAT $ REVERSE acc ∧
+  rlp_encode_list acc (x::xs) =
+  rlp_encode_list (rlp_bytes x :: acc) xs
+End
+
+val () = cv_auto_trans rlp_encode_list_def;
+
 Definition encode_internal_node_unencoded_def:
-  encode_internal_node_unencoded NONE = [] ∧
+  encode_internal_node_unencoded NONE = rlp_bytes [] ∧
   encode_internal_node_unencoded (SOME (MTL key value)) =
-    [nibble_list_to_compact key T; value] ∧
+    rlp_encode_list [] [nibble_list_to_compact key T; value] ∧
   encode_internal_node_unencoded (SOME (MTE key subnode)) =
-    [nibble_list_to_compact key F; subnode] ∧
+    rlp_encode_list [] [nibble_list_to_compact key F; subnode] ∧
   encode_internal_node_unencoded (SOME (MTB subnodes value)) =
-    SNOC value subnodes
+    rlp_encode_list [] $ SNOC value subnodes
 End
 
 Definition encode_internal_node_def:
   encode_internal_node node = let
-    unencoded = encode_internal_node_unencoded node;
-    encoded = rlp_list (FLAT (MAP rlp_bytes unencoded))
+    encoded = encode_internal_node_unencoded node
   in
     if LENGTH encoded < 32 then encoded
     else Keccak_256_bytes encoded
@@ -587,7 +594,10 @@ Definition storage_trie_def:
 End
 
 Definition storage_root_def:
-  storage_root s = encode_internal_node $ storage_trie s
+  storage_root s =
+  let encodedRoot = encode_internal_node $ storage_trie s in
+    if LENGTH encodedRoot < 32 then Keccak_256_bytes encodedRoot
+    else encodedRoot
 End
 
 Theorem make_branch_eta[local]:
@@ -814,6 +824,16 @@ Proof
   \\ gs[ADD1]
 QED
 
+Definition trie_root_clocked_def:
+  trie_root_clocked n kvs =
+  case patricialise_fused_clocked n kvs of
+    NONE => NONE
+  | SOME r => SOME $
+    if LENGTH r < 32 then Keccak_256_bytes r else r
+End
+
+val () = cv_auto_trans trie_root_clocked_def;
+
 val from_to_storage_spt = from_to_thm_for “:bytes32 num_map”;
 
 Theorem PERM_alist_build_fmap_build_spt:
@@ -883,15 +903,16 @@ Definition storage_root_clocked_def:
   storage_root_clocked n (s:storage) = let
     t = build_spt 0w (dimword (:256)) s;
     l = toAList t
-    in patricialise_fused_clocked n $ storage_kvs l []
+  in trie_root_clocked n $ storage_kvs l []
 End
 
 Theorem storage_root_clocked_thm:
   ∃n. storage_root_clocked n s = SOME $ storage_root s
 Proof
-  rw[storage_root_clocked_def, Excl"SIZES_CONV",
-     storage_trie_def, storage_root_def, storage_kvs_thm]
-  \\ rw[expanded_storage_trie_def, storage_fmap_def, Excl"SIZES_CONV"]
+  simp[storage_root_clocked_def, Excl"SIZES_CONV",
+       storage_trie_def, storage_root_def, storage_kvs_thm,
+       trie_root_clocked_def]
+  \\ qmatch_goalsub_abbrev_tac`Keccak_256_bytes r`
   \\ qmatch_goalsub_abbrev_tac`patricialise_fused_clocked _ kvs`
   \\ `ALL_DISTINCT (MAP FST kvs)`
   by (
@@ -918,10 +939,16 @@ Proof
   \\ qexists_tac`n`
   \\ pop_assum SUBST_ALL_TAC
   \\ simp[Excl"SIZES_CONV"]
+  \\ qmatch_goalsub_abbrev_tac`LENGTH r2`
+  \\ `r2 = r` suffices_by rw[]
+  \\ qunabbrev_tac`r`
+  \\ qunabbrev_tac`r2`
   \\ AP_TERM_TAC
   \\ AP_TERM_TAC
+  \\ simp[expanded_storage_trie_def]
   \\ irule patricialise_PERM
   \\ qunabbrev_tac`kvs`
+  \\ simp[storage_fmap_def, Excl"SIZES_CONV"]
   \\ qmatch_goalsub_abbrev_tac`PERM (MAP g sl) (MAP f fl)`
   \\ `MAP g sl = MAP (f o (n2w ## I)) sl`
   by simp[MAP_EQ_f, Abbr`g`, Abbr`f`, FORALL_PROD, word_to_hex_list_def,
@@ -937,26 +964,79 @@ QED
 
 Definition cv_storage_root_clocked_def:
   cv_storage_root_clocked (n:cv) (s:cv) =
-  cv_patricialise_fused_clocked n
-    (cv_storage_kvs (cv_toAList s) (Num 0))
+  cv_trie_root_clocked n $
+    cv_storage_kvs (cv_toAList s) (Num 0)
 End
 
 val cv_storage_kvs_thm = theorem "cv_storage_kvs_thm";
 val cv_patricialise_fused_clocked_thm =
   theorem "cv_patricialise_fused_clocked_thm";
+val cv_trie_root_clocked_thm = theorem "cv_trie_root_clocked_thm";
 
 Theorem cv_storage_root_clocked_rep[cv_rep]:
   from_option (from_list from_word) $ storage_root_clocked n s =
   cv_storage_root_clocked (Num n) (from_storage s)
 Proof
-  rw[cv_storage_root_clocked_def, storage_root_clocked_def,
-     from_storage_def, Excl"SIZES_CONV"]
+  simp[cv_storage_root_clocked_def, storage_root_clocked_def,
+       from_storage_def, Excl"SIZES_CONV", cv_trie_root_clocked_thm]
   \\ qmatch_goalsub_abbrev_tac`from_sptree_sptree_spt _ t`
-  \\ rw[GSYM cv_toAList_thm]
-  \\ rw[cv_storage_kvs_thm |> GSYM |> Q.GEN`acc` |> Q.SPEC`[]` |>
-        SIMP_RULE std_ss [from_list_def]]
-  \\ irule $ cj 1 cv_patricialise_fused_clocked_thm
-  \\ rw[patricialise_fused_clocked_pre]
+  \\ simp[GSYM cv_toAList_thm]
+  \\ simp[cv_storage_kvs_thm |> GSYM |> Q.GEN`acc` |> Q.SPEC`[]` |>
+          SIMP_RULE std_ss [from_list_def]]
 QED
+
+(*
+
+Definition hex_to_rev_bytes_def:
+    hex_to_rev_bytes acc [] = acc : byte list
+  ∧ hex_to_rev_bytes acc [c] = CONS (n2w (UNHEX c)) acc
+  ∧ hex_to_rev_bytes acc (c1::c2::rest) =
+    hex_to_rev_bytes (CONS (n2w (16 * UNHEX c1 + UNHEX c2)) acc) rest
+End
+
+val _ = cv_auto_trans hex_to_rev_bytes_def;
+
+val root = cv_eval ``trie_root_clocked 60 []`` |> concl |> rhs
+
+(* empty trie root:
+cv_eval ``
+REVERSE $ hex_to_rev_bytes []
+  "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"``
+*)
+
+(*
+emptyValues test
+      ["do", "verb"],
+      ["ether", "wookiedoo"],
+      ["horse", "stallion"],
+      ["shaman", "horse"],
+      ["doge", "coin"],
+      ["ether", null],
+      ["dog", "puppy"],
+      ["shaman", null]
+    "root": "0x5991bb8c6514148a29db676a14ac506cd2cd5775ace63c30a4fe457715e9ac84"
+*)
+
+val correct_root = cv_eval
+``REVERSE $ hex_to_rev_bytes []
+  "5991bb8c6514148a29db676a14ac506cd2cd5775ace63c30a4fe457715e9ac84"``
+  |> concl |> rhs
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("do", "verb");
+    ("ether", "wookiedoo");
+    ("horse", "stallion");
+    ("shaman", "horse");
+    ("doge", "coin");
+    (*("ether", "");*)
+    ("dog", "puppy")(*;
+    ("shaman", "")*)
+  ] : (word8 list # word8 list) list
+  `` |> concl |> rhs;
+
+val root = cv_eval ``trie_root_clocked 60 ^kvs`` |> concl |> rhs
+
+*)
 
 val _ = export_theory();
