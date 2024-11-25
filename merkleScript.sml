@@ -1021,16 +1021,9 @@ val _ = cv_auto_trans hex_to_rev_bytes_def;
 
 val root = cv_eval ``trie_root_clocked 60 []`` |> concl |> rhs
 
-cv_eval ``
+val correct_root = cv_eval ``
 REVERSE $ hex_to_rev_bytes []
   "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"``
-
-(* empty key, empty value *)
-
-val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
-  "f9be828fd675253c2e3ecdff4379debab459f376b7554fac193747c676f10f0a"``
-val kvs = ``[[], []] : (word8 list # word8 list) list``
-val root = cv_eval ``trie_root_clocked 20 ^kvs``
 
 (* empty key, non-empty value *)
 
@@ -1052,10 +1045,6 @@ val kvs = ``[([0w; 1w], [1w]); ([1w; 0w], [2w])] : (word8 list # word8 list) lis
 val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
   "fae9ea07da94adc433a0b5590a7f45aa36bf80938d29a629c62929804be96cef"``;
 val root = cv_eval ``trie_root_clocked 20 ^kvs``;
-val preroot = cv_eval ``patricialise_fused_clocked 20 ^kvs`` |> concl |> rhs |> rand;
-val encoded = cv_eval ``rlp_encode ^preroot`` |> concl |> rhs;
-val correct_encoded = cv_eval``REVERSE $ hex_to_rev_bytes []
-  "d5c23101c23002808080808080808080808080808080"``;
 
 (* two keys with prefix *)
 
@@ -1063,6 +1052,73 @@ val kvs = ``[([0w; 1w], [1w]); ([], [2w])] : (word8 list # word8 list) list``
 val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
   "b56ea9ac6de00cb85727dafab1ae09d5272d82564ba5b29972f6cf67dd503768"``;
 val root = cv_eval ``trie_root_clocked 20 ^kvs``;
+
+(* kvs from strings *)
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("a", "b")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "09ca68268104f67d9da9c8514ebdd8c98c6667aba87016f8602a1fbefb575216"``;
+val root = cv_eval``trie_root_clocked 40 ^kvs``;
+
+(* building up example *)
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("do", "verb")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "014f07ed95e2e028804d915e0dbd4ed451e394e1acfd29e463c11a060b2ddef7"``;
+val root = cv_eval``trie_root_clocked 40 ^kvs``;
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("do", "verb");
+    ("dog", "puppy")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "779db3986dd4f38416bfde49750ef7b13c6ecb3e2221620bcad9267e94604d36"``;
+val root = cv_eval``trie_root_clocked 40 ^kvs``;
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("do", "verb");
+    ("dog", "puppy");
+    ("doge", "coins")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "1845cb4d335234906848274dcfce956c57f0c4d8f9e4aa81437c61604696d353"``;
+val root = cv_eval``trie_root_clocked 40 ^kvs``;
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("do", "verb");
+    ("horse", "stallion")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "8bcc171eb7e7303059b303ef4b2c440588b534701512413785fb061ffb6e415b"``;
+val root = cv_eval``trie_root_clocked 40 ^kvs``;
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("dog", "puppy");
+    ("horse", "stallion")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "ebf5de461c566173ef3f27e26d180c23125f69a517865c312c0dcd9bb0c7cbed"``;
+val root = cv_eval``trie_root_clocked 40 ^kvs``;
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("do", "verb");
+    ("dog", "puppy");
+    ("horse", "stallion")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "40b4a841a5ed78d2beb33a3dbba6dd38f5b1566db97ae643e073ded3aa77dceb"``;
+val root = cv_eval``trie_root_clocked 40 ^kvs``;
 
 (* example *)
 
@@ -1073,58 +1129,9 @@ val kvs = EVAL``
     ("doge", "coins");
     ("horse", "stallion")
   ] : (word8 list # word8 list) list`` |> concl |> rhs;
-
-val lcp = cv_eval
-  ``longest_common_prefix_of_list (MAP FST ^kvs)`` |> concl |> rhs;
-
-val kvs2 = cv_eval ``drop_from_keys (LENGTH ^lcp) ^kvs`` |> concl |> rhs;
-
-val lcp2 = cv_eval
-  ``longest_common_prefix_of_list (MAP FST ^kvs2)`` |> concl |> rhs;
-
-val branches = cv_eval``GENLIST (make_branch ^kvs2 o n2w) 16``
-     |> concl |> rhs;
-val values = cv_eval``MAP SND (FILTER (NULL o FST) ^kvs2)``
-
-val kvs3 = cv_eval``EL 4 ^branches`` |> UNDISCH |> concl |> rhs;
-
-val lcp3 = cv_eval
-  ``longest_common_prefix_of_list (MAP FST ^kvs3)`` |> concl |> rhs;
-
-cv_eval``nibble_list_to_compact ^lcp3 F``
-
-val kvs4 = cv_eval``drop_from_keys (LENGTH ^lcp3) ^kvs3`` |> concl |> rhs;
-
-val lcp4 = cv_eval
-  ``longest_common_prefix_of_list (MAP FST ^kvs4)`` |> concl |> rhs;
-
-val branches4 = cv_eval
-  ``GENLIST (make_branch ^kvs4 o n2w) 16`` |> concl |> rhs;
-val values4 = cv_eval
-  ``MAP SND (FILTER (NULL o FST) ^kvs4)`` |> concl |> rhs;
-val value4 = cv_eval``HD ^values4`` |> UNDISCH |> concl |> rhs;
-val verb = EVAL``MAP (CHR o w2n) ^value4``
-
-val kvs5 = cv_eval ``EL 6 ^branches4`` |> UNDISCH |> concl |> rhs;
-val lcp5 = cv_eval
-  ``longest_common_prefix_of_list (MAP FST ^kvs5)`` |> concl |> rhs;
-val key5 = cv_eval``nibble_list_to_compact ^lcp5 F``
-
-val kvs6 = cv_eval ``drop_from_keys (LENGTH ^lcp5) ^kvs5`` |> concl |> rhs;
-val lcp6 = cv_eval
-  ``longest_common_prefix_of_list (MAP FST ^kvs6)`` |> concl |> rhs;
-val branches6 = cv_eval
-  ``GENLIST (make_branch ^kvs6 o n2w) 16`` |> concl |> rhs;
-val values6 = cv_eval
-  ``MAP SND (FILTER (NULL o FST) ^kvs6)`` |> concl |> rhs;
-val value6 = cv_eval``HD ^values6`` |> UNDISCH |> concl |> rhs;
-val puppy = EVAL``MAP (CHR o w2n) ^value6``
-
-val kvs7 = cv_eval ``EL 6 ^branches6`` |> UNDISCH |> concl |> rhs;
-val key7 = cv_eval ``FST (HD ^kvs7)`` |> UNDISCH |> concl |> rhs;
-val val7 = cv_eval ``SND (HD ^kvs7)`` |> UNDISCH |> concl |> rhs;
-cv_eval``nibble_list_to_compact ^key7 T``
-val coins = EVAL``MAP (CHR o w2n) ^val7``
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "4034a3e31976c08463970a25a9b52209bfe55ae5b503005ad77a748a2b1b4f51"``
+val root = cv_eval ``trie_root_clocked 40 ^kvs`` |> concl |> rhs |> rand;
 
 (*
   "insert-middle-leaf": {
@@ -1140,11 +1147,6 @@ val coins = EVAL``MAP (CHR o w2n) ^val7``
   },
 *)
 
-val correct_root = cv_eval
-``REVERSE $ hex_to_rev_bytes []
-  "cb65032e2f76c48b82b5c24b3db8f670ce73982869d38cd39a624f23d62a9e89"``
-  |> concl |> rhs
-
 val kvs = EVAL``
   MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
     ("key1aa", "0123456789012345678901234567890123456789xxx");
@@ -1156,7 +1158,10 @@ val kvs = EVAL``
   ] : (word8 list # word8 list) list
   `` |> concl |> rhs;
 
-val preroot = cv_eval ``patricialise_fused_clocked 60 ^kvs``
+val correct_root = cv_eval
+``REVERSE $ hex_to_rev_bytes []
+  "cb65032e2f76c48b82b5c24b3db8f670ce73982869d38cd39a624f23d62a9e89"``
+  |> concl |> rhs
 
 val root = cv_eval ``trie_root_clocked 60 ^kvs``
 
@@ -1173,23 +1178,23 @@ emptyValues test
     "root": "0x5991bb8c6514148a29db676a14ac506cd2cd5775ace63c30a4fe457715e9ac84"
 *)
 
-val correct_root = cv_eval
-``REVERSE $ hex_to_rev_bytes []
-  "5991bb8c6514148a29db676a14ac506cd2cd5775ace63c30a4fe457715e9ac84"``
-  |> concl |> rhs
-
 val kvs = EVAL``
   MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
     ("do", "verb");
-    ("ether", "wookiedoo");
+    (*("ether", "wookiedoo");*)
     ("horse", "stallion");
-    ("shaman", "horse");
+    (*("shaman", "horse");*)
     ("doge", "coin");
     (*("ether", "");*)
     ("dog", "puppy")(*;
     ("shaman", "")*)
   ] : (word8 list # word8 list) list
   `` |> concl |> rhs;
+
+val correct_root = cv_eval
+``REVERSE $ hex_to_rev_bytes []
+  "5991bb8c6514148a29db676a14ac506cd2cd5775ace63c30a4fe457715e9ac84"``
+  |> concl |> rhs
 
 val root = cv_eval ``trie_root_clocked 60 ^kvs`` |> concl |> rhs
 

@@ -16,11 +16,11 @@ End
 
 Definition rlp_list_def:
   rlp_list (payload : word8 list) =
-  if LENGTH payload < 56 then n2w (192 + LENGTH payload) :: payload
+  if LENGTH payload < 0x38 then n2w (0xc0 + LENGTH payload) :: payload
   else
     let lengthBytes = MAP n2w $ REVERSE $ n2l 256 $ LENGTH payload
   in
-    [n2w (248 + LENGTH lengthBytes)] ++ lengthBytes ++ payload
+    [n2w (0xf7 + LENGTH lengthBytes)] ++ lengthBytes ++ payload
 End
 
 val () = cv_auto_trans numposrepTheory.n2l_n2lA;
