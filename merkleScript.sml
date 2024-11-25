@@ -374,10 +374,19 @@ Proof
 QED
 
 Datatype:
+  rlp = RLPB (word8 list) | RLPL (rlp list)
+End
+
+Definition dest_RLPB_def:
+  dest_RLPB (RLPB bs) = bs ∧
+  dest_RLPB _ = []
+End
+
+Datatype:
   encoded_trie_node =
     MTL (byte list) (byte list)
-  | MTE (byte list) (byte list)
-  | MTB (byte list list) (byte list)
+  | MTE (byte list) rlp
+  | MTB (rlp list) (byte list)
 End
 
 Definition nibble_list_to_bytes_def:
@@ -450,30 +459,33 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-Definition rlp_encode_list_def:
+Definition rlp_encode_def:
+  rlp_encode (RLPB bs) = rlp_bytes bs ∧
+  rlp_encode (RLPL rs) = rlp_encode_list [] rs ∧
   rlp_encode_list acc [] = rlp_list $ FLAT $ REVERSE acc ∧
   rlp_encode_list acc (x::xs) =
-  rlp_encode_list (rlp_bytes x :: acc) xs
+  rlp_encode_list (rlp_encode x :: acc) xs
 End
 
-val () = cv_auto_trans rlp_encode_list_def;
+val () = cv_auto_trans rlp_encode_def;
 
 Definition encode_internal_node_unencoded_def:
-  encode_internal_node_unencoded NONE = rlp_bytes [] ∧
+  encode_internal_node_unencoded NONE = RLPB [] ∧
   encode_internal_node_unencoded (SOME (MTL key value)) =
-    rlp_encode_list [] [nibble_list_to_compact key T; value] ∧
+    RLPL [RLPB $ nibble_list_to_compact key T; RLPB value] ∧
   encode_internal_node_unencoded (SOME (MTE key subnode)) =
-    rlp_encode_list [] [nibble_list_to_compact key F; subnode] ∧
+    RLPL [RLPB $ nibble_list_to_compact key F; subnode] ∧
   encode_internal_node_unencoded (SOME (MTB subnodes value)) =
-    rlp_encode_list [] $ SNOC value subnodes
+    RLPL $ SNOC (RLPB value) subnodes
 End
 
 Definition encode_internal_node_def:
   encode_internal_node node = let
-    encoded = encode_internal_node_unencoded node
+    unencoded = encode_internal_node_unencoded node;
+    encoded = rlp_encode unencoded
   in
-    if LENGTH encoded < 32 then encoded
-    else Keccak_256_bytes encoded
+    if LENGTH encoded < 32 then unencoded
+    else RLPB $ Keccak_256_bytes encoded
 End
 
 val () = cv_auto_trans encode_internal_node_def;
@@ -593,11 +605,19 @@ Definition storage_trie_def:
   storage_trie s = OPTION_MAP encode_trie_node $ expanded_storage_trie s
 End
 
+Definition trie_root_def:
+  trie_root t = let
+    root_node = encode_internal_node t;
+    encoded = rlp_encode root_node
+  in
+    if LENGTH encoded < 32 then
+      Keccak_256_bytes encoded
+    else
+      dest_RLPB root_node
+End
+
 Definition storage_root_def:
-  storage_root s =
-  let encodedRoot = encode_internal_node $ storage_trie s in
-    if LENGTH encodedRoot < 32 then Keccak_256_bytes encodedRoot
-    else encodedRoot
+  storage_root s = trie_root $ storage_trie s
 End
 
 Theorem make_branch_eta[local]:
@@ -829,7 +849,8 @@ Definition trie_root_clocked_def:
   case patricialise_fused_clocked n kvs of
     NONE => NONE
   | SOME r => SOME $
-    if LENGTH r < 32 then Keccak_256_bytes r else r
+    let e = rlp_encode r in
+    if LENGTH e < 32 then Keccak_256_bytes e else dest_RLPB r
 End
 
 val () = cv_auto_trans trie_root_clocked_def;
@@ -911,8 +932,8 @@ Theorem storage_root_clocked_thm:
 Proof
   simp[storage_root_clocked_def, Excl"SIZES_CONV",
        storage_trie_def, storage_root_def, storage_kvs_thm,
-       trie_root_clocked_def]
-  \\ qmatch_goalsub_abbrev_tac`Keccak_256_bytes r`
+       trie_root_clocked_def, trie_root_def]
+  \\ qmatch_goalsub_abbrev_tac`rlp_encode r`
   \\ qmatch_goalsub_abbrev_tac`patricialise_fused_clocked _ kvs`
   \\ `ALL_DISTINCT (MAP FST kvs)`
   by (
@@ -939,7 +960,7 @@ Proof
   \\ qexists_tac`n`
   \\ pop_assum SUBST_ALL_TAC
   \\ simp[Excl"SIZES_CONV"]
-  \\ qmatch_goalsub_abbrev_tac`LENGTH r2`
+  \\ qmatch_goalsub_abbrev_tac`rlp_encode r2`
   \\ `r2 = r` suffices_by rw[]
   \\ qunabbrev_tac`r`
   \\ qunabbrev_tac`r2`
@@ -996,13 +1017,148 @@ End
 
 val _ = cv_auto_trans hex_to_rev_bytes_def;
 
+(* empty trie root *)
+
 val root = cv_eval ``trie_root_clocked 60 []`` |> concl |> rhs
 
-(* empty trie root:
 cv_eval ``
 REVERSE $ hex_to_rev_bytes []
   "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"``
+
+(* empty key, empty value *)
+
+val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
+  "f9be828fd675253c2e3ecdff4379debab459f376b7554fac193747c676f10f0a"``
+val kvs = ``[[], []] : (word8 list # word8 list) list``
+val root = cv_eval ``trie_root_clocked 20 ^kvs``
+
+(* empty key, non-empty value *)
+
+val kvs = ``[[], [1w]] : (word8 list # word8 list) list``
+val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
+  "ce8c4b060e961e285a1c2d6af956fae96986f946102f23b71506524eea9e2450"``;
+val root = cv_eval ``trie_root_clocked 20 ^kvs``;
+
+(* non-empty key, non-empty value *)
+
+val kvs = ``[[0w; 1w], [1w]] : (word8 list # word8 list) list``
+val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
+  "bb0a9dc519f763a6ffa8b82bc000baab4c8015d20ff830c548ea9cd857ea42cf"``;
+val root = cv_eval ``trie_root_clocked 20 ^kvs``;
+
+(* two keys no common prefix *)
+
+val kvs = ``[([0w; 1w], [1w]); ([1w; 0w], [2w])] : (word8 list # word8 list) list``
+val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
+  "fae9ea07da94adc433a0b5590a7f45aa36bf80938d29a629c62929804be96cef"``;
+val root = cv_eval ``trie_root_clocked 20 ^kvs``;
+val preroot = cv_eval ``patricialise_fused_clocked 20 ^kvs`` |> concl |> rhs |> rand;
+val encoded = cv_eval ``rlp_encode ^preroot`` |> concl |> rhs;
+val correct_encoded = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "d5c23101c23002808080808080808080808080808080"``;
+
+(* two keys with prefix *)
+
+val kvs = ``[([0w; 1w], [1w]); ([], [2w])] : (word8 list # word8 list) list``
+val correct_root = cv_eval ``REVERSE $ hex_to_rev_bytes []
+  "b56ea9ac6de00cb85727dafab1ae09d5272d82564ba5b29972f6cf67dd503768"``;
+val root = cv_eval ``trie_root_clocked 20 ^kvs``;
+
+(* example *)
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("do", "verb");
+    ("dog", "puppy");
+    ("doge", "coins");
+    ("horse", "stallion")
+  ] : (word8 list # word8 list) list`` |> concl |> rhs;
+
+val lcp = cv_eval
+  ``longest_common_prefix_of_list (MAP FST ^kvs)`` |> concl |> rhs;
+
+val kvs2 = cv_eval ``drop_from_keys (LENGTH ^lcp) ^kvs`` |> concl |> rhs;
+
+val lcp2 = cv_eval
+  ``longest_common_prefix_of_list (MAP FST ^kvs2)`` |> concl |> rhs;
+
+val branches = cv_eval``GENLIST (make_branch ^kvs2 o n2w) 16``
+     |> concl |> rhs;
+val values = cv_eval``MAP SND (FILTER (NULL o FST) ^kvs2)``
+
+val kvs3 = cv_eval``EL 4 ^branches`` |> UNDISCH |> concl |> rhs;
+
+val lcp3 = cv_eval
+  ``longest_common_prefix_of_list (MAP FST ^kvs3)`` |> concl |> rhs;
+
+cv_eval``nibble_list_to_compact ^lcp3 F``
+
+val kvs4 = cv_eval``drop_from_keys (LENGTH ^lcp3) ^kvs3`` |> concl |> rhs;
+
+val lcp4 = cv_eval
+  ``longest_common_prefix_of_list (MAP FST ^kvs4)`` |> concl |> rhs;
+
+val branches4 = cv_eval
+  ``GENLIST (make_branch ^kvs4 o n2w) 16`` |> concl |> rhs;
+val values4 = cv_eval
+  ``MAP SND (FILTER (NULL o FST) ^kvs4)`` |> concl |> rhs;
+val value4 = cv_eval``HD ^values4`` |> UNDISCH |> concl |> rhs;
+val verb = EVAL``MAP (CHR o w2n) ^value4``
+
+val kvs5 = cv_eval ``EL 6 ^branches4`` |> UNDISCH |> concl |> rhs;
+val lcp5 = cv_eval
+  ``longest_common_prefix_of_list (MAP FST ^kvs5)`` |> concl |> rhs;
+val key5 = cv_eval``nibble_list_to_compact ^lcp5 F``
+
+val kvs6 = cv_eval ``drop_from_keys (LENGTH ^lcp5) ^kvs5`` |> concl |> rhs;
+val lcp6 = cv_eval
+  ``longest_common_prefix_of_list (MAP FST ^kvs6)`` |> concl |> rhs;
+val branches6 = cv_eval
+  ``GENLIST (make_branch ^kvs6 o n2w) 16`` |> concl |> rhs;
+val values6 = cv_eval
+  ``MAP SND (FILTER (NULL o FST) ^kvs6)`` |> concl |> rhs;
+val value6 = cv_eval``HD ^values6`` |> UNDISCH |> concl |> rhs;
+val puppy = EVAL``MAP (CHR o w2n) ^value6``
+
+val kvs7 = cv_eval ``EL 6 ^branches6`` |> UNDISCH |> concl |> rhs;
+val key7 = cv_eval ``FST (HD ^kvs7)`` |> UNDISCH |> concl |> rhs;
+val val7 = cv_eval ``SND (HD ^kvs7)`` |> UNDISCH |> concl |> rhs;
+cv_eval``nibble_list_to_compact ^key7 T``
+val coins = EVAL``MAP (CHR o w2n) ^val7``
+
+(*
+  "insert-middle-leaf": {
+    "in": [
+      [ "key1aa", "0123456789012345678901234567890123456789xxx"],
+      [ "key1", "0123456789012345678901234567890123456789Very_Long"],
+      [ "key2bb", "aval3"],
+      [ "key2", "short"],
+      [ "key3cc", "aval3"],
+      [ "key3","1234567890123456789012345678901"]
+    ],
+    "root": "0xcb65032e2f76c48b82b5c24b3db8f670ce73982869d38cd39a624f23d62a9e89"
+  },
 *)
+
+val correct_root = cv_eval
+``REVERSE $ hex_to_rev_bytes []
+  "cb65032e2f76c48b82b5c24b3db8f670ce73982869d38cd39a624f23d62a9e89"``
+  |> concl |> rhs
+
+val kvs = EVAL``
+  MAP (bytes_to_nibble_list o MAP (n2w o ORD) ## MAP (n2w o ORD)) [
+    ("key1aa", "0123456789012345678901234567890123456789xxx");
+    ("key1", "0123456789012345678901234567890123456789Very_Long");
+    ("key2bb", "aval3");
+    ("key2", "short");
+    ("key3cc", "aval3");
+    ("key3", "1234567890123456789012345678901")
+  ] : (word8 list # word8 list) list
+  `` |> concl |> rhs;
+
+val preroot = cv_eval ``patricialise_fused_clocked 60 ^kvs``
+
+val root = cv_eval ``trie_root_clocked 60 ^kvs``
 
 (*
 emptyValues test
