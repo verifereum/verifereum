@@ -29,6 +29,17 @@ Proof
   \\ Cases_on`OPT_MMAP f ls` \\ gs[]
 QED
 
+Theorem ALL_DISTINCT_MAP_DROP_LESS:
+  !ls.
+    n <= m /\
+    ALL_DISTINCT (MAP (DROP m) ls) ==>
+    ALL_DISTINCT (MAP (DROP n) ls)
+Proof
+  Induct \\ rw[] \\ gs[MEM_MAP, PULL_EXISTS]
+  \\ rw[] \\ first_x_assum irule
+  \\ gs[LIST_EQ_REWRITE, EL_DROP, LESS_EQ_EXISTS]
+QED
+
 Theorem NULL_MAP[simp]:
   NULL (MAP f ls) = NULL ls
 Proof
@@ -760,6 +771,27 @@ Proof
   \\ simp[LIST_EQ_REWRITE, ADD1]
 QED
 
+Theorem ALL_DISTINCT_DROP_LENGTH_lcp:
+  ∀ls. ALL_DISTINCT ls ⇒
+       ALL_DISTINCT (MAP (DROP (LENGTH $ longest_common_prefix_of_list ls)) ls)
+Proof
+  Induct \\ reverse(rw[])
+  \\ gs[longest_common_prefix_of_list_CONS]
+  \\ rw[NULL_EQ] \\ gvs[MEM_MAP]
+  \\ qmatch_goalsub_abbrev_tac`longest_common_prefix x y`
+  \\ qspecl_then[`x`,`y`]mp_tac longest_common_prefix_thm
+  \\ strip_tac
+  >- (
+    irule ALL_DISTINCT_MAP_DROP_LESS
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ simp[IS_PREFIX_LENGTH] )
+  \\ qx_gen_tac`z` \\ strip_tac
+  \\ strip_tac
+  \\ drule $ cj 1 longest_common_prefix_of_list_thm
+  \\ simp[] \\ strip_tac
+  \\ cheat
+QED
+
 Theorem patricialise_fused_clocked_thm:
   ∀kvs. ALL_DISTINCT (MAP FST kvs) ⇒
     ∃n. patricialise_fused_clocked n kvs
@@ -791,8 +823,49 @@ Proof
     \\ qexists_tac`subnodes` \\ simp[]
     \\ last_x_assum(qspec_then`lcp`mp_tac)
     \\ simp[]
-    \\ cheat (* use patricialise_fused_clocked_thm and
-                    patricialise_fused_clocked_add *) )
+    \\ `EVERY (λa. ALL_DISTINCT (MAP FST a)) bs`
+    by (
+      rw[Abbr`bs`, EVERY_GENLIST, make_branch_def, o_DEF, MAP_MAP_o]
+      \\ qpat_x_assum`ALL_DISTINCT _`mp_tac
+      \\ rpt (pop_assum kall_tac)
+      \\ Induct_on`kvs` \\ rw[]
+      \\ gs[MEM_MAP, MEM_FILTER]
+      \\ Cases_on`h` \\ Cases \\ gs[]
+      \\ qmatch_goalsub_rename_tac`TL a = TL b`
+      \\ Cases_on`a` \\ Cases_on`b` \\ gs[] )
+    \\ fs[EVERY_MEM]
+    \\ simp[GSYM RIGHT_EXISTS_IMP_THM, SKOLEM_THM]
+    \\ simp[RIGHT_EXISTS_IMP_THM]
+    \\ disch_then(qx_choose_then`f`strip_assume_tac)
+    \\ `subnodes = REVERSE [] ++ subnodes` by simp[]
+    \\ pop_assum SUBST1_TAC
+    \\ qexists_tac`SUM (MAP f bs) + LENGTH bs + 1`
+    \\ irule patricialise_fused_clocked_mmap_thm
+    \\ conj_tac >- simp[]
+    \\ simp[GSYM GENLIST_EL_MAP]
+    \\ simp[Abbr`subnodes`]
+    \\ simp[GENLIST_FUN_EQ, EL_MAP]
+    \\ gs[MEM_EL, PULL_EXISTS, ETA_AX]
+    \\ qx_gen_tac`n` \\ strip_tac
+    \\ first_x_assum drule
+    \\ strip_tac
+    \\ qmatch_assum_abbrev_tac`x = SOME _`
+    \\ `x ≠ NONE` by (Cases_on`x` \\ fs[])
+    \\ qunabbrev_tac`x`
+    \\ drule (cj 1 patricialise_fused_clocked_add)
+    \\ qmatch_goalsub_abbrev_tac`_ m _ = _`
+    \\ `f (EL n bs) ≤ m` by (
+      qunabbrev_tac`m`
+      \\ qmatch_goalsub_abbrev_tac`x + y - n`
+      \\ irule LESS_EQ_TRANS
+      \\ qexists_tac`y` \\ simp[]
+      \\ qunabbrev_tac`y`
+      \\ qunabbrev_tac`x`
+      \\ simp[GENLIST_EL_MAP]
+      \\ irule SUM_MAP_MEM_bound
+      \\ metis_tac[MEM_EL] )
+    \\ drule (LESS_EQ_EXISTS |> SPEC_ALL |> iffLR)
+    \\ metis_tac[])
   \\ gs[GSYM drop_from_keys_map, CaseEq"option"]
   \\ simp[encode_trie_node_def]
   \\ qmatch_goalsub_abbrev_tac`MTE lcp subnode`
@@ -802,7 +875,14 @@ Proof
   \\ simp[ETA_AX]
   \\ first_x_assum irule
   \\ simp[drop_from_keys_map]
-  \\ cheat (* removing longest_common_prefix_of_list preserves distinct *)
+  \\ simp[MAP_MAP_o, o_DEF]
+  \\ qmatch_goalsub_abbrev_tac`_ ls`
+  \\ `ls = MAP (DROP $ LENGTH lcp) (MAP FST kvs)`
+  by simp[Abbr`ls`, MAP_MAP_o, o_DEF]
+  \\ pop_assum SUBST1_TAC
+  \\ qunabbrev_tac`lcp`
+  \\ irule ALL_DISTINCT_DROP_LENGTH_lcp
+  \\ simp[]
 QED
 
 val patricialise_fused_clocked_pre_def =
