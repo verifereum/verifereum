@@ -1,7 +1,7 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory combinTheory sortingTheory wordsTheory
      optionTheory arithmeticTheory finite_mapTheory sptreeTheory
-     pairTheory alistTheory numposrepTheory wordsLib blastLib
+     byteTheory pairTheory alistTheory numposrepTheory wordsLib blastLib
      recursiveLengthPrefixTheory
      vfmTypesTheory vfmStateTheory
      cv_transLib cv_typeLib cv_typeTheory cv_stdTheory
@@ -419,6 +419,10 @@ Definition dest_RLPB_def:
   dest_RLPB _ = []
 End
 
+Definition rlp_number_def:
+  rlp_number n = RLPB $ REVERSE $ MAP n2w $ n2l 256 n
+End
+
 Datatype:
   encoded_trie_node =
     MTL (byte list) (byte list)
@@ -571,39 +575,54 @@ QED
 val () = cv_auto_trans encode_trie_node_fo_def;
 
 Definition build_fmap_def:
-  build_fmap z 0 m = FEMPTY ∧
-  build_fmap z (SUC n) m =
-  if m (n2w n) = z then build_fmap z n m
-  else FUPDATE (build_fmap z n m) (n2w n, (m (n2w n)))
+  build_fmap f z 0 m = FEMPTY ∧
+  build_fmap f z (SUC n) m =
+  if m (n2w n) = z then build_fmap f z n m
+  else FUPDATE (build_fmap f z n m) (f n, (m (n2w n)))
 End
 
 Theorem build_fmap_empty:
   (∀x. x < n ⇒ m (n2w x) = z) ⇒
-  build_fmap z n m = FEMPTY
+  build_fmap n2w z n m = FEMPTY
 Proof
   Induct_on`n` \\ rw[build_fmap_def]
 QED
 
 Theorem lookup_build_fmap:
+  (∀x y. x < dimword(:'a) ∧ y < dimword(:'a) ∧ f x = f y ⇒ x = y) ⇒
+  ∀n k. n ≤ dimword(:'a) ∧ k < dimword(:'a) ⇒
+  FLOOKUP (build_fmap f z n m) (f k) =
+  if n ≤ k then NONE
+  else if m (n2w k : α word) = z then NONE
+  else SOME (m (n2w k))
+Proof
+  strip_tac
+  \\ Induct \\ gvs[build_fmap_def]
+  \\ rw[FLOOKUP_UPDATE, LESS_OR_EQ]
+  \\ gvs[NOT_LESS] \\ rw[] \\ gvs[]
+  \\ TRY strip_tac \\ gvs[]
+  \\ last_x_assum(first_assum o mp_then Any mp_tac)
+  \\ simp[]
+  \\ strip_tac \\ gs[]
+QED
+
+Theorem lookup_build_fmap_n2w:
   ∀n k. n ≤ dimword(:'a) ⇒
-  FLOOKUP (build_fmap z n m) (k:α word) =
+  FLOOKUP (build_fmap n2w z n m) (k: α word) =
   if n ≤ w2n k then NONE
   else if m k = z then NONE
   else SOME (m k)
 Proof
-  Induct \\ gvs[build_fmap_def]
-  \\ rw[FLOOKUP_UPDATE, LESS_OR_EQ]
-  \\ gvs[NOT_LESS] \\ rw[] \\ gvs[]
-  \\ strip_tac \\ gvs[]
-  \\ Cases_on`n < dimword(:'a)` \\ gs[]
-  \\ `0 < dimword(:'a)` by gs[]
-  \\ `SUC n < dimword(:'a)` by gs[]
-  \\ gs[]
+  gen_tac \\ Cases
+  \\ strip_tac
+  \\ simp[w2n_n2w]
+  \\ irule lookup_build_fmap
+  \\ rw[] \\ gvs[]
 QED
 
 Definition storage_fmap_def:
   storage_fmap (s: storage) : bytes32 |-> bytes32 =
-    build_fmap 0w (dimword (:256)) s
+    build_fmap n2w 0w (dimword (:256)) s
 End
 
 Theorem storage_fmap_empty_storage:
@@ -626,7 +645,7 @@ Proof
   \\ qspec_then`x`assume_tac w2n_lt
   \\ Cases_on`v = 0w`
   \\ simp[DOMSUB_FLOOKUP_THM, FLOOKUP_UPDATE]
-  \\ gs[lookup_build_fmap, update_storage_def, APPLY_UPDATE_THM]
+  \\ gs[lookup_build_fmap_n2w, update_storage_def, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
 QED
 
@@ -942,11 +961,11 @@ val () = cv_auto_trans trie_root_clocked_def;
 
 val from_to_storage_spt = from_to_thm_for “:bytes32 num_map”;
 
-Theorem PERM_alist_build_fmap_build_spt:
+Theorem PERM_alist_build_fmap_build_spt_n2w:
   n ≤ dimword(:α) ⇒
   PERM
     (MAP (n2w ## I) (toAList (build_spt z n (s: α word -> β))))
-    ((fmap_to_alist (build_fmap z n (s: α word -> β))) : (α word # β) list)
+    ((fmap_to_alist (build_fmap n2w z n (s: α word -> β))) : (α word # β) list)
 Proof
   strip_tac
   \\ irule PERM_ALL_DISTINCT
@@ -955,7 +974,7 @@ Proof
     simp[MEM_fmap_to_alist_FLOOKUP, MEM_toAList, MEM_MAP,
          PULL_EXISTS, EXISTS_PROD, FORALL_PROD]
     \\ Cases
-    \\ simp[lookup_build_fmap, lookup_build_spt]
+    \\ simp[lookup_build_fmap_n2w, lookup_build_spt]
     \\ rw[EQ_IMP_THM] \\ gs[]
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ simp[] )
@@ -1064,7 +1083,7 @@ Proof
   \\ irule PERM_MAP
   \\ qunabbrev_tac`fl`
   \\ qunabbrev_tac`sl`
-  \\ irule PERM_alist_build_fmap_build_spt
+  \\ irule PERM_alist_build_fmap_build_spt_n2w
   \\ simp[]
 QED
 
@@ -1090,6 +1109,36 @@ Proof
   \\ simp[cv_storage_kvs_thm |> GSYM |> Q.GEN`acc` |> Q.SPEC`[]` |>
           SIMP_RULE std_ss [from_list_def]]
 QED
+
+Definition encode_account_def:
+  encode_account a = rlp_encode $ RLPL [
+    rlp_number a.nonce;
+    rlp_number a.balance;
+    RLPB $ storage_root a.storage;
+    RLPB $ Keccak_256_bytes a.code
+  ]
+End
+
+Definition accounts_fmap_def:
+  accounts_fmap (a: evm_accounts) =
+  build_fmap
+    (bytes_to_nibble_list o Keccak_256_bytes o
+     flip word_to_bytes F o (n2w : num -> address))
+    (encode_account empty_account_state)
+    (dimword (:160)) (encode_account o a)
+End
+
+Definition state_trie_def:
+  state_trie a = let
+    m = accounts_fmap a;
+    l = fmap_to_alist m;
+    t = patricialise l;
+  in OPTION_MAP encode_trie_node t
+End
+
+Definition state_root_def:
+  state_root a = trie_root $ state_trie a
+End
 
 (*
 
