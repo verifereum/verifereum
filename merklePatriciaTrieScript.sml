@@ -179,6 +179,32 @@ Proof
   \\ rw[AC longest_common_prefix_assoc longest_common_prefix_comm]
 QED
 
+Theorem ALL_DISTINCT_DROP_LENGTH_lcp:
+  ∀ls. ALL_DISTINCT ls ⇒
+       ALL_DISTINCT (MAP (DROP (LENGTH $ longest_common_prefix_of_list ls)) ls)
+Proof
+  Induct \\ reverse(rw[])
+  \\ gs[longest_common_prefix_of_list_CONS]
+  \\ rw[NULL_EQ] \\ gvs[MEM_MAP]
+  \\ qmatch_goalsub_abbrev_tac`longest_common_prefix x y`
+  \\ qspecl_then[`x`,`y`]mp_tac longest_common_prefix_thm
+  \\ strip_tac
+  >- (
+    irule ALL_DISTINCT_MAP_DROP_LESS
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ simp[IS_PREFIX_LENGTH] )
+  \\ qx_gen_tac`z` \\ strip_tac
+  \\ strip_tac
+  \\ drule $ cj 1 longest_common_prefix_of_list_thm
+  \\ simp[] \\ strip_tac
+  \\ `x = z` suffices_by (strip_tac \\ gs[])
+  \\ qmatch_asmsub_abbrev_tac`LENGTH lcp`
+  \\ gvs[IS_PREFIX_APPEND, PULL_EXISTS, DROP_APPEND]
+  \\ qmatch_goalsub_abbrev_tac`DROP n`
+  \\ `n = 0` suffices_by simp[]
+  \\ simp[Abbr`n`]
+QED
+
 Definition make_branch_def:
   make_branch (kvs: (byte list # byte list) list) (nb: byte) =
   MAP (TL ## I) $ FILTER (λkv. [nb] ≼ FST kv) kvs
@@ -769,27 +795,6 @@ Proof
   \\ simp[]
   \\ pop_assum(SUBST1_TAC o SYM)
   \\ simp[LIST_EQ_REWRITE, ADD1]
-QED
-
-Theorem ALL_DISTINCT_DROP_LENGTH_lcp:
-  ∀ls. ALL_DISTINCT ls ⇒
-       ALL_DISTINCT (MAP (DROP (LENGTH $ longest_common_prefix_of_list ls)) ls)
-Proof
-  Induct \\ reverse(rw[])
-  \\ gs[longest_common_prefix_of_list_CONS]
-  \\ rw[NULL_EQ] \\ gvs[MEM_MAP]
-  \\ qmatch_goalsub_abbrev_tac`longest_common_prefix x y`
-  \\ qspecl_then[`x`,`y`]mp_tac longest_common_prefix_thm
-  \\ strip_tac
-  >- (
-    irule ALL_DISTINCT_MAP_DROP_LESS
-    \\ goal_assum(first_assum o mp_then Any mp_tac)
-    \\ simp[IS_PREFIX_LENGTH] )
-  \\ qx_gen_tac`z` \\ strip_tac
-  \\ strip_tac
-  \\ drule $ cj 1 longest_common_prefix_of_list_thm
-  \\ simp[] \\ strip_tac
-  \\ cheat
 QED
 
 Theorem patricialise_fused_clocked_thm:
