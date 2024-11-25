@@ -6,7 +6,7 @@ open HolKernel boolLib bossLib Parse
      vfmTypesTheory vfmStateTheory
      cv_transLib cv_typeLib cv_typeTheory cv_stdTheory
 
-val _ = new_theory "merkle";
+val _ = new_theory "merklePatriciaTrie";
 
 (* TODO: move *)
 
