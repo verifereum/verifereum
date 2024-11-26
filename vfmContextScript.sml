@@ -272,15 +272,6 @@ Definition address_for_create_def:
     w2w hash
 End
 
-Definition lookup_account_def:
-  lookup_account address (accounts: evm_accounts) = accounts address
-End
-
-Definition update_account_def:
-  update_account address new_account (accounts: evm_accounts) =
-    (address =+ new_account) accounts
-End
-
 Definition callee_from_tx_to_def:
   callee_from_tx_to sender nonce NONE = address_for_create sender nonce ∧
   callee_from_tx_to sender nonce (SOME address) = address
