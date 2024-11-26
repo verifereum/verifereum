@@ -442,24 +442,6 @@ Proof
 QED
 
 Datatype:
-  rlp = RLPB (word8 list) | RLPL (rlp list)
-End
-
-Definition dest_RLPB_def:
-  dest_RLPB (RLPB bs) = bs ∧
-  dest_RLPB _ = []
-End
-
-Definition num_to_be_bytes_def:
-  num_to_be_bytes n : byte list =
-  if n = 0 then [] else REVERSE $ MAP n2w $ n2l 256 n
-End
-
-Definition rlp_number_def:
-  rlp_number n = RLPB $ num_to_be_bytes n
-End
-
-Datatype:
   encoded_trie_node =
     MTL (byte list) (byte list)
   | MTE (byte list) rlp
@@ -535,16 +517,6 @@ Proof
   rw[nibble_list_to_compact_pre_def]
   \\ strip_tac \\ gs[]
 QED
-
-Definition rlp_encode_def:
-  rlp_encode (RLPB bs) = rlp_bytes bs ∧
-  rlp_encode (RLPL rs) = rlp_encode_list [] rs ∧
-  rlp_encode_list acc [] = rlp_list $ FLAT $ REVERSE acc ∧
-  rlp_encode_list acc (x::xs) =
-  rlp_encode_list (rlp_encode x :: acc) xs
-End
-
-val () = cv_auto_trans rlp_encode_def;
 
 Definition encode_internal_node_unencoded_def:
   encode_internal_node_unencoded NONE = RLPB [] ∧
