@@ -10,6 +10,37 @@ val _ = new_theory "merklePatriciaTrie";
 
 (* TODO: move *)
 
+(*
+Definition map_keys_def:
+  map_keys d f LN = LN /\
+  map_keys d f (LS x) = insert (f d) x LN /\
+  map_keys d f (BN t1 t2) = (let d2 = SUC (2 * d) in
+    union (map_keys d2 f t1) (map_keys (SUC d2) f t2)) /\
+  map_keys d f (BS t1 x t2) = insert (f d) x $
+    let d2 = SUC (2 * d) in
+      union (map_keys d2 f t1) (map_keys (SUC d2) f t2)
+End
+
+Theorem wf_map_keys[simp]:
+  !d f t. wf (map_keys d f t)
+Proof
+  Induct_on`t`
+  \\ rw[map_keys_def, wf_insert, wf_union]
+QED
+
+Theorem lookup_map_keys:
+  !k f d t.
+  INJ f (domain t) UNIV /\ d <= k ==>
+  lookup (f k) (map_keys d f t) =
+  if k - d IN domain t then
+    lookup (k - d) t
+  else NONE
+Proof
+  Induct_on`t`
+  \\ rw[map_keys_def, lookup_insert]
+  FLOOKUP_MAP_KEYS
+*)
+
 Theorem PERM_toAList_toSortedAList:
   PERM (toAList t) (toSortedAList t)
 Proof
@@ -575,54 +606,39 @@ QED
 val () = cv_auto_trans encode_trie_node_fo_def;
 
 Definition build_fmap_def:
-  build_fmap f z 0 m = FEMPTY ∧
-  build_fmap f z (SUC n) m =
-  if m (n2w n) = z then build_fmap f z n m
-  else FUPDATE (build_fmap f z n m) (f n, (m (n2w n)))
+  build_fmap z 0 m = FEMPTY ∧
+  build_fmap z (SUC n) m =
+  if m (n2w n) = z then build_fmap z n m
+  else FUPDATE (build_fmap z n m) (n2w n, (m (n2w n)))
 End
 
 Theorem build_fmap_empty:
   (∀x. x < n ⇒ m (n2w x) = z) ⇒
-  build_fmap n2w z n m = FEMPTY
+  build_fmap z n m = FEMPTY
 Proof
   Induct_on`n` \\ rw[build_fmap_def]
 QED
 
 Theorem lookup_build_fmap:
-  (∀x y. x < dimword(:'a) ∧ y < dimword(:'a) ∧ f x = f y ⇒ x = y) ⇒
-  ∀n k. n ≤ dimword(:'a) ∧ k < dimword(:'a) ⇒
-  FLOOKUP (build_fmap f z n m) (f k) =
-  if n ≤ k then NONE
-  else if m (n2w k : α word) = z then NONE
-  else SOME (m (n2w k))
-Proof
-  strip_tac
-  \\ Induct \\ gvs[build_fmap_def]
-  \\ rw[FLOOKUP_UPDATE, LESS_OR_EQ]
-  \\ gvs[NOT_LESS] \\ rw[] \\ gvs[]
-  \\ TRY strip_tac \\ gvs[]
-  \\ last_x_assum(first_assum o mp_then Any mp_tac)
-  \\ simp[]
-  \\ strip_tac \\ gs[]
-QED
-
-Theorem lookup_build_fmap_n2w:
   ∀n k. n ≤ dimword(:'a) ⇒
-  FLOOKUP (build_fmap n2w z n m) (k: α word) =
+  FLOOKUP (build_fmap z n m) (k:α word) =
   if n ≤ w2n k then NONE
   else if m k = z then NONE
   else SOME (m k)
 Proof
-  gen_tac \\ Cases
-  \\ strip_tac
-  \\ simp[w2n_n2w]
-  \\ irule lookup_build_fmap
-  \\ rw[] \\ gvs[]
+  Induct \\ gvs[build_fmap_def]
+  \\ rw[FLOOKUP_UPDATE, LESS_OR_EQ]
+  \\ gvs[NOT_LESS] \\ rw[] \\ gvs[]
+  \\ strip_tac \\ gvs[]
+  \\ Cases_on`n < dimword(:'a)` \\ gs[]
+  \\ `0 < dimword(:'a)` by gs[]
+  \\ `SUC n < dimword(:'a)` by gs[]
+  \\ gs[]
 QED
 
 Definition storage_fmap_def:
   storage_fmap (s: storage) : bytes32 |-> bytes32 =
-    build_fmap n2w 0w (dimword (:256)) s
+    build_fmap 0w (dimword (:256)) s
 End
 
 Theorem storage_fmap_empty_storage:
@@ -645,7 +661,7 @@ Proof
   \\ qspec_then`x`assume_tac w2n_lt
   \\ Cases_on`v = 0w`
   \\ simp[DOMSUB_FLOOKUP_THM, FLOOKUP_UPDATE]
-  \\ gs[lookup_build_fmap_n2w, update_storage_def, APPLY_UPDATE_THM]
+  \\ gs[lookup_build_fmap, update_storage_def, APPLY_UPDATE_THM]
   \\ rw[] \\ gs[]
 QED
 
@@ -688,6 +704,10 @@ QED
 
 val () = make_branch_eta |> cv_auto_trans;
 val () = longest_common_prefix_of_list_def |> cv_auto_trans;
+
+(* TODO: maybe in the future we could actually prove termination and avoid the
+* clock throughout this file. note the termination proof will also need to be
+* done on the cv version *)
 
 Definition patricialise_fused_clocked_def:
   patricialise_fused_clocked n kvs =
@@ -961,11 +981,11 @@ val () = cv_auto_trans trie_root_clocked_def;
 
 val from_to_storage_spt = from_to_thm_for “:bytes32 num_map”;
 
-Theorem PERM_alist_build_fmap_build_spt_n2w:
+Theorem PERM_alist_build_fmap_build_spt:
   n ≤ dimword(:α) ⇒
   PERM
     (MAP (n2w ## I) (toAList (build_spt z n (s: α word -> β))))
-    ((fmap_to_alist (build_fmap n2w z n (s: α word -> β))) : (α word # β) list)
+    ((fmap_to_alist (build_fmap z n (s: α word -> β))) : (α word # β) list)
 Proof
   strip_tac
   \\ irule PERM_ALL_DISTINCT
@@ -974,7 +994,7 @@ Proof
     simp[MEM_fmap_to_alist_FLOOKUP, MEM_toAList, MEM_MAP,
          PULL_EXISTS, EXISTS_PROD, FORALL_PROD]
     \\ Cases
-    \\ simp[lookup_build_fmap_n2w, lookup_build_spt]
+    \\ simp[lookup_build_fmap, lookup_build_spt]
     \\ rw[EQ_IMP_THM] \\ gs[]
     \\ goal_assum(first_assum o mp_then Any mp_tac)
     \\ simp[] )
@@ -1083,7 +1103,7 @@ Proof
   \\ irule PERM_MAP
   \\ qunabbrev_tac`fl`
   \\ qunabbrev_tac`sl`
-  \\ irule PERM_alist_build_fmap_build_spt_n2w
+  \\ irule PERM_alist_build_fmap_build_spt
   \\ simp[]
 QED
 
@@ -1120,25 +1140,102 @@ Definition encode_account_def:
 End
 
 Definition accounts_fmap_def:
-  accounts_fmap (a: evm_accounts) =
-  build_fmap
-    (bytes_to_nibble_list o Keccak_256_bytes o
-     flip word_to_bytes F o (n2w : num -> address))
-    (encode_account empty_account_state)
-    (dimword (:160)) (encode_account o a)
+  accounts_fmap (a: evm_accounts) : address |-> account_state =
+  build_fmap empty_account_state (dimword (:160)) a
+End
+
+Definition account_key_def:
+  account_key (addr: address) =
+  bytes_to_nibble_list $ Keccak_256_bytes $ word_to_bytes addr F
 End
 
 Definition state_trie_def:
   state_trie a = let
     m = accounts_fmap a;
     l = fmap_to_alist m;
-    t = patricialise l;
+    kvs = MAP (account_key ## encode_account) l;
+    t = patricialise kvs
   in OPTION_MAP encode_trie_node t
 End
 
 Definition state_root_def:
   state_root a = trie_root $ state_trie a
 End
+
+(* TODO: can't prove this equivalent to below because we don't
+*        know the hash function is injective. could try to remove
+*        the ALL_DISTINCT requirement though. or just avoid the clock
+*        altogether by proving termination of the fused version. *)
+
+Definition encode_account_clocked_def:
+  encode_account_clocked n a =
+  case storage_root_clocked n a.storage of SOME r => (
+    rlp_encode $ RLPL [
+      rlp_number a.nonce;
+      rlp_number a.balance;
+      RLPB $ r;
+      RLPB $ Keccak_256_bytes a.code
+    ] )
+  | NONE => []
+End
+
+Theorem encode_account_clocked_thm:
+  ∃n. encode_account_clocked n a = encode_account a
+Proof
+  rw[encode_account_def, encode_account_clocked_def]
+  \\ qspec_then`a.storage`strip_assume_tac(Q.GEN`s`storage_root_clocked_thm)
+  \\ qexists_tac`n` \\ simp[]
+QED
+
+val () = cv_auto_trans encode_account_clocked_def;
+
+Definition state_root_clocked_def:
+  state_root_clocked n a = let
+    t = build_spt empty_account_state (dimword (:160)) a;
+    l = toAList t;
+    kvs = MAP (λp. account_key (n2w $ FST p), encode_account_clocked n (SND p)) l;
+  in trie_root_clocked n kvs
+End
+
+Definition state_kvs_def:
+  state_kvs n [] acc = REVERSE acc ∧
+  state_kvs n ((k,v)::ls) acc =
+  state_kvs n ls ((account_key $ n2w k, encode_account_clocked n v)::acc)
+End
+
+val () = cv_auto_trans state_kvs_def;
+
+Theorem state_kvs_map:
+  state_kvs n ls acc = REVERSE acc ++ MAP (λp. account_key (n2w $ FST p),
+  encode_account_clocked n (SND p)) ls
+Proof
+  qid_spec_tac`acc`
+  \\ Induct_on`ls`
+  \\ rw[state_kvs_def]
+  \\ Cases_on`h` \\ rw[state_kvs_def]
+QED
+
+Definition cv_state_root_clocked_def:
+  cv_state_root_clocked (n:cv) (a:cv) =
+  cv_trie_root_clocked n $
+    cv_state_kvs n (cv_toAList a) (Num 0)
+End
+
+val cv_state_kvs_thm = theorem "cv_state_kvs_thm";
+
+Theorem cv_state_root_clocked_rep[cv_rep]:
+  from_option (from_list from_word) $ state_root_clocked n a =
+  cv_state_root_clocked (Num n) (from_evm_accounts a)
+Proof
+  simp[cv_state_root_clocked_def, state_root_clocked_def,
+       from_evm_accounts_def, Excl"SIZES_CONV", cv_trie_root_clocked_thm]
+  \\ qmatch_goalsub_abbrev_tac`from_sptree_sptree_spt _ t`
+  \\ simp[GSYM cv_toAList_thm,
+          state_kvs_map |> Q.GEN`acc` |> Q.SPEC`[]` |>
+          SIMP_RULE (srw_ss()) [] |> GSYM]
+  \\ simp[cv_state_kvs_thm |> GSYM |> Q.GEN`acc` |> Q.SPEC`[]` |>
+          SIMP_RULE std_ss [from_list_def]]
+QED
 
 (*
 
