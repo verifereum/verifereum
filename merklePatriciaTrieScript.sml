@@ -450,8 +450,13 @@ Definition dest_RLPB_def:
   dest_RLPB _ = []
 End
 
+Definition num_to_be_bytes_def:
+  num_to_be_bytes n : byte list =
+  if n = 0 then [] else REVERSE $ MAP n2w $ n2l 256 n
+End
+
 Definition rlp_number_def:
-  rlp_number n = RLPB $ REVERSE $ MAP n2w $ n2l 256 n
+  rlp_number n = RLPB $ num_to_be_bytes n
 End
 
 Datatype:
@@ -665,11 +670,26 @@ Proof
   \\ rw[] \\ gs[]
 QED
 
+Definition storage_key_def:
+  storage_key k : word8 list =
+  bytes_to_nibble_list $ Keccak_256_bytes $
+  PAD_LEFT 0w 32 $ num_to_be_bytes k
+End
+
+val () = cv_auto_trans storage_key_def;
+
+Definition storage_value_def:
+  storage_value v : word8 list =
+  rlp_encode $ rlp_number v
+End
+
+val () = cv_auto_trans storage_value_def;
+
 Definition expanded_storage_trie_def:
   expanded_storage_trie s = let
     m = storage_fmap s;
     l = fmap_to_alist m;
-    kvs = MAP (λ(k,v). (MAP n2w $ word_to_hex_list k, MAP n2w $ w2l 256 v)) l
+    kvs = MAP (λ(k,v). (storage_key (w2n k), storage_value (w2n v))) l
   in patricialise kvs
 End
 
@@ -1008,26 +1028,11 @@ Proof
   \\ metis_tac[ALL_DISTINCT_MAP, ALL_DISTINCT_fmap_to_alist_keys]
 QED
 
-Definition storage_key_bytes_def:
-  storage_key_bytes k : word8 list =
-  MAP n2w (n2l 16 k)
-End
-
-val () = cv_auto_trans storage_key_bytes_def;
-
-Definition storage_value_bytes_def:
-  storage_value_bytes (v: bytes32) : word8 list =
-  MAP n2w (w2l 256 v)
-End
-
-val () = cv_auto_trans storage_value_bytes_def;
-
 Definition storage_kvs_def:
   storage_kvs [] (acc: (word8 list # word8 list) list) = REVERSE acc ∧
   storage_kvs ((k:num, v:bytes32)::ls) acc =
   storage_kvs ls $
-    (storage_key_bytes k,
-     storage_value_bytes v) :: acc
+    (storage_key k, storage_value (w2n v)) :: acc
 End
 
 val () = cv_trans storage_kvs_def;
@@ -1035,13 +1040,11 @@ val () = cv_trans storage_kvs_def;
 Theorem storage_kvs_thm:
   storage_kvs l acc =
   REVERSE acc ++
-  MAP (λ(k,v). (MAP n2w (n2l 16 k),
-                MAP n2w (w2l 256 v))) l
+  MAP (λ(k,v). (storage_key k, storage_value (w2n v))) l
 Proof
   qid_spec_tac`acc`
   \\ Induct_on`l`
-  \\ simp[storage_kvs_def, FORALL_PROD,
-          storage_key_bytes_def, storage_value_bytes_def]
+  \\ simp[storage_kvs_def, FORALL_PROD]
 QED
 
 Definition storage_root_clocked_def:
@@ -1051,6 +1054,8 @@ Definition storage_root_clocked_def:
   in trie_root_clocked n $ storage_kvs l []
 End
 
+(* cannot prove this because Keccak_256_bytes is not injective
+*  see other comments about removing ALL_DISTINCT or the clock
 Theorem storage_root_clocked_thm:
   ∃n. storage_root_clocked n s = SOME $ storage_root s
 Proof
@@ -1106,6 +1111,7 @@ Proof
   \\ irule PERM_alist_build_fmap_build_spt
   \\ simp[]
 QED
+*)
 
 Definition cv_storage_root_clocked_def:
   cv_storage_root_clocked (n:cv) (s:cv) =
@@ -1146,7 +1152,7 @@ End
 
 Definition account_key_def:
   account_key (addr: address) =
-  bytes_to_nibble_list $ Keccak_256_bytes $ word_to_bytes addr F
+  bytes_to_nibble_list $ Keccak_256_bytes $ word_to_bytes addr T
 End
 
 Definition state_trie_def:
@@ -1179,6 +1185,7 @@ Definition encode_account_clocked_def:
   | NONE => []
 End
 
+(*
 Theorem encode_account_clocked_thm:
   ∃n. encode_account_clocked n a = encode_account a
 Proof
@@ -1186,6 +1193,7 @@ Proof
   \\ qspec_then`a.storage`strip_assume_tac(Q.GEN`s`storage_root_clocked_thm)
   \\ qexists_tac`n` \\ simp[]
 QED
+*)
 
 val () = cv_auto_trans encode_account_clocked_def;
 
@@ -1247,6 +1255,113 @@ Definition hex_to_rev_bytes_def:
 End
 
 val _ = cv_auto_trans hex_to_rev_bytes_def;
+
+(* empty state test *)
+
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"``;
+
+val root = cv_eval``state_root_clocked 100 empty_accounts``
+
+(* account encoding test *)
+
+val account = ``
+  <| balance := 0x0ba1a9ce0ba1a9ce;
+       code := [];
+       nonce := 0;
+       storage := empty_storage |>
+``
+
+val encoded = cv_eval``encode_account_clocked 100 ^account``
+
+val correct_encoding = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "f84c80880ba1a9ce0ba1a9cea056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"``;
+
+val true = aconv (rand(concl encoded)) (rand(concl correct_encoding))
+
+(* single account state test *)
+
+val addr = ``0xa94f5374fce5edbc8e2a8697c15331677e6ebf0bw : address``
+
+val state = ``
+  update_account ^addr ^account empty_accounts
+``;
+
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "c7a2369be883c297b5252d0006157561eae7f2a0f9b34b6b94e618a37731b043"``;
+
+val root = cv_eval``state_root_clocked 100 ^state``
+
+val true = aconv (rand(rand(concl root))) (rand(concl correct_root))
+
+(*
+val kvs = cv_eval``state_kvs 100
+  (toAList (insert (w2n ^addr) ^account LN)) []``
+
+val pres = cv_eval``patricialise_fused_clocked 100 ^(rhs(concl kvs))``
+
+cv_eval``SND $ HD $ ^(rhs(concl kvs))``
+
+val correct_key_nibbles = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "00030600010406020009030b050904050d010607060d0f0009030404060709000f0d03010b02000e070b01020a020e080e050e00090d0006080100090601060b"``
+
+val key_nibbles = cv_eval``account_key ^addr``
+
+val compact_key = cv_eval``nibble_list_to_compact ^(rhs(concl key_nibbles)) T``
+val correct_compact_key = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "2003601462093b5945d1676df093446790fd31b20e7b12a2e8e5e09d068109616b"``
+
+val preencoded_leaf = cv_eval``
+  encode_internal_node_unencoded (SOME (MTL ^(rhs(concl key_nibbles))
+    ^(rhs(concl encoded))))``;
+val encoded_leaf = cv_eval`` rlp_encode $ ^(rhs(concl preencoded_leaf))``
+
+cv_eval``rlp_bytes $ dest_RLPB $ EL 1 $ ^(rand(rhs(concl preencoded_leaf)))``
+
+val correct_encoded_leaf = cv_eval``REVERSE $ hex_to_rev_bytes []
+    "f872a12003601462093b5945d1676df093446790fd31b20e7b12a2e8e5e09d068109616bb84ef84c80880ba1a9ce0ba1a9cea056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"``;
+
+cv_eval``word_to_bytes (0xa94f5374fce5edbc8e2a8697c15331677e6ebf0bw:address) T``
+cv_eval``REVERSE $ hex_to_rev_bytes [] "a94f5374fce5edbc8e2a8697c15331677e6ebf0bw"``
+*)
+
+(* non-empty storage *)
+val storage = ``update_storage 0w 3w empty_storage``
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "db913528a1ccbc4403ae18eb823863b107a1c01c008f0ebccbd896e03c5f9792"``;
+val root = cv_eval``storage_root_clocked 20 ^storage``
+
+(*
+val key = cv_eval``storage_key 0``
+val correct_key = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "0209000d0e0c0d090504080b06020a080d06000304050a0908080308060f0c08040b0a060b0c09050408040000080f060306020f09030106000e0f030e050603"``;
+*)
+
+(* more accounts *)
+
+val state = ``
+  update_account ^addr ^account $
+  update_account 0xccccccccccccccccccccccccccccccccccccccccw
+  <| balance := 0x0ba1a9ce0ba1a9ce;
+     nonce := 0;
+     code := REVERSE $ hex_to_rev_bytes []
+       "600060006000600060006004356110000162fffffff100";
+     storage := empty_storage |> $
+  update_account 0x0000000000000000000000000000000000001001w
+  <| balance := 0x0ba1a9;
+     code := REVERSE $ hex_to_rev_bytes []
+       "60047fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0160005500";
+     nonce := 1;
+     storage := update_storage 0x00w 0x03w empty_storage |>
+  empty_accounts
+``;
+
+val root = cv_eval``state_root_clocked 100 ^state``;
+
+val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
+  "aa00aae8b6c3ef96d899938796cad78006ab07bf8a7dc9cf8e1ef52598c58cb4"``;
+
+val true = aconv (rand(rand(concl root))) (rand(concl correct_root))
 
 (* empty trie root *)
 
