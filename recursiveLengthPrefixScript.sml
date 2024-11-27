@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse
      wordsLib wordsTheory listTheory
-     cv_transLib cv_stdTheory
+     vfmTypesTheory cv_transLib cv_stdTheory
 
 val _ = new_theory "recursiveLengthPrefix";
 
@@ -40,8 +40,6 @@ Definition rlp_list_def:
   in
     [n2w (0xf7 + LENGTH lengthBytes)] ++ lengthBytes ++ payload
 End
-
-val () = cv_auto_trans numposrepTheory.n2l_n2lA;
 
 val rlp_bytes_alt =
   rlp_bytes_def |> ONCE_REWRITE_RULE[

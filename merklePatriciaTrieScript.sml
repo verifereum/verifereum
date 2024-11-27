@@ -505,9 +505,6 @@ Definition nibble_list_to_compact_def:
     nibble_list_to_bytes (TL bytes)
 End
 
-(* TODO: move out of vfmCompute *)
-val () = cv_auto_trans Keccak_256_bytes_def;
-
 val () = cv_auto_trans nibble_list_to_bytes_def;
 val nibble_list_to_compact_pre_def = cv_trans_pre nibble_list_to_compact_def;
 
@@ -1128,7 +1125,7 @@ Definition account_key_def:
 End
 
 Definition state_trie_def:
-  state_trie a = let
+  state_trie (a: evm_accounts) = let
     m = accounts_fmap a;
     l = fmap_to_alist m;
     kvs = MAP (account_key ## encode_account) l;
@@ -1170,7 +1167,7 @@ QED
 val () = cv_auto_trans encode_account_clocked_def;
 
 Definition state_root_clocked_def:
-  state_root_clocked n a = let
+  state_root_clocked n (a: evm_accounts) = let
     t = build_spt empty_account_state (dimword (:160)) a;
     l = toAList t;
     kvs = MAP (λp. account_key (n2w $ FST p), encode_account_clocked n (SND p)) l;
