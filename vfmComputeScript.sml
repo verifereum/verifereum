@@ -1,9 +1,9 @@
-open HolKernel boolLib bossLib Parse dep_rewrite blastLib
-     cv_typeTheory cv_transLib cv_typeLib cvTheory cv_stdTheory
-     pairTheory combinTheory optionTheory sumTheory listTheory byteTheory
-     wordsTheory alistTheory arithmeticTheory finite_setTheory sptreeTheory
-     whileTheory recursiveLengthPrefixTheory vfmContextTheory vfmStateTheory
-     vfmTransactionTheory vfmExecutionTheory vfmTypesTheory;
+open HolKernel boolLib bossLib Parse dep_rewrite blastLib cv_typeTheory
+cv_transLib cv_typeLib cvTheory cv_stdTheory pairTheory combinTheory
+optionTheory sumTheory listTheory byteTheory wordsTheory alistTheory
+arithmeticTheory finite_setTheory sptreeTheory whileTheory
+recursiveLengthPrefixTheory merklePatriciaTrieTheory vfmContextTheory
+vfmStateTheory vfmTransactionTheory vfmExecutionTheory vfmTypesTheory;
 
 val _ = new_theory "vfmCompute";
 
@@ -1144,5 +1144,14 @@ Proof
   \\ rw[] \\ gvs[]
   \\ metis_tac[]
 QED
+
+Definition run_block_to_hash_def:
+  run_block_to_hash n1 n2 chainId prevHashes accounts blk =
+  case run_block_with_fuel n1 chainId prevHashes accounts blk
+    of NONE => NONE
+     | SOME (rs, s, m) => SOME (m, state_root_clocked n2 s)
+End
+
+val () = cv_auto_trans run_block_to_hash_def;
 
 val _ = export_theory();

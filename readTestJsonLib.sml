@@ -25,6 +25,19 @@ structure readTestJsonLib = struct
   fun getAccessList' NONE = []
     | getAccessList' (SOME j) = getArray' j |> List.map getAccessListEntry
 
+  fun getTransactions' block =
+    case getObject block "transactions" of
+      SOME txns => getArray' txns
+    | NONE => getObject' block "rlp_decoded"
+              |> C getObject' "transactions"
+              |> getArray'
+
+  fun getBlockHeader' block =
+    case getObject block "blockHeader" of
+      SOME h => h
+    | NONE => getObject' block "rlp_decoded"
+              |> C getObject' "blockHeader"
+
   fun get_test json_path test_name = let
     val (json, rest) = Json.fromFile json_path
     val tobj = Json.getObject' (hd json) test_name
@@ -32,12 +45,13 @@ structure readTestJsonLib = struct
 
     val nblocks = blocks |> length
     val block0 = hd blocks
-    val ntxns = getObject' block0 "transactions" |> getArray' |> length
+    val txns = getTransactions' block0
+    val ntxns = length txns
     val () = if nblocks <> 1 orelse ntxns <> 1
              then raise Fail "only 1 transaction in 1 block currently supported"
              else ()
 
-    val bh0 = getObject' block0 "blockHeader"
+    val bh0 = getBlockHeader' block0
     val bhkeys = bh0 |> getKeys'
     val () = if List.exists (String.isSuffix "andao") bhkeys
              then raise Fail "Unexpected key (looks like randao) in blockheader"
@@ -52,8 +66,7 @@ structure readTestJsonLib = struct
     val timeStamp = getObject' bh0 "timestamp" |> getString'
     val coinBase = getObject' bh0 "coinbase" |> getString'
 
-    val tx = getObject' block0 "transactions" |> getArray'
-    val tx0 = hd tx
+    val tx0 = hd txns
 
     val data = getObject' tx0 "data" |> getString'
     val gasLimit = getObject' tx0 "gasLimit" |> getString'
@@ -66,10 +79,11 @@ structure readTestJsonLib = struct
     val value = getObject' tx0 "value" |> getString'
     val accessList = getObject tx0 "accessList" |> getAccessList'
 
-    val postState = getObject' tobj "postState"
+    val postState = getObject tobj "postState"
+    val postStateHash = getObject tobj "postStateHash" |> Option.map getString'
     val preState = getObject' tobj "pre"
 
-    val postKeys = getKeys' postState
+    val postKeys = Option.map getKeys' postState
     val preKeys = getKeys' preState
 
     fun get_account state addr = let
@@ -88,7 +102,9 @@ structure readTestJsonLib = struct
       {address=addr, balance=balance, code=code, nonce=nonce, storage=storage}
     end
 
-    val post = List.map (get_account postState) postKeys
+    val post = Option.map (fn keys =>
+                 List.map (get_account (Option.valOf postState)) keys
+               ) postKeys
     val pre = List.map (get_account preState) preKeys
     val block = {
       number=number,
@@ -113,7 +129,8 @@ structure readTestJsonLib = struct
       accessList=accessList
     }
   in
-    {block=block, transaction=transaction, pre=pre, post=post}
+    {block=block, transaction=transaction, pre=pre, post=post,
+     postHash=postStateHash}
   end
 
   (*

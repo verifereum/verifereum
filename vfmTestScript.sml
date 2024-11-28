@@ -113,13 +113,21 @@ val cv_eval_run_block_with_fuel_rwts = [
 
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
-fun mk_statement test_name =
-  Term[QUOTE(String.concat[
-         "∃rs. run_block 1 [] ", (* TODO: add prev hashes if needed *)
-         test_name, "_pre ",
-         test_name, "_block ",
-         "= SOME (rs, ",
-         test_name, "_post)"])]
+fun mk_statement isHash test_name =
+  if isHash then
+    Term[QUOTE(String.concat[
+           "∃n1 n2 m. run_block_to_hash n1 n2 1 [] ", (* TODO: add prev hashes if needed *)
+           test_name, "_pre ",
+           test_name, "_block ",
+           "= SOME (m, SOME ",
+           test_name, "_post)"])]
+  else
+    Term[QUOTE(String.concat[
+           "∃rs. run_block 1 [] ", (* TODO: add prev hashes if needed *)
+           test_name, "_pre ",
+           test_name, "_block ",
+           "= SOME (rs, ",
+           test_name, "_post)"])]
 
 val account_rwts = [
   account_state_component_equality,
@@ -131,17 +139,22 @@ val account_rwts = [
   K_THM, FUN_EQ_THM, APPLY_UPDATE_THM
 ];
 
+val run_block_to_hash = run_block_to_hash_def |> SPEC_ALL
+  |> concl |> lhs |> strip_comb |> fst;
+val trie_steps = 65536
+val trie_n = numSyntax.term_of_int trie_steps
+
 (*
   set_goal([], thm_term)
 *)
 fun mk_tactic num_steps eval_th =
-  rw[run_block_SOME_with_fuel]
-  \\ CONV_TAC SWAP_EXISTS_CONV
+  rw[run_block_SOME_with_fuel, PULL_EXISTS]
+  \\ CONV_TAC (RESORT_EXISTS_CONV(sort_vars["n"]))
   \\ exists_tac num_steps
   \\ rewrite_tac[eval_th]
   \\ rewrite_tac cv_eval_run_block_with_fuel_rwts
   \\ rewrite_tac[LET_THM]
-  \\ CONV_TAC(PATH_CONV"blrrrlr"(BETA_CONV THENC EVAL))
+  \\ CONV_TAC(ONCE_DEPTH_CONV (BETA_CONV THENC EVAL))
   \\ rewrite_tac[SOME_11, PAIR_EQ]
   \\ Ho_Rewrite.REWRITE_TAC[UNWIND_THM1]
   \\ rewrite_tac[FUN_EQ_THM] \\ gen_tac
@@ -163,9 +176,20 @@ fun mk_tactic num_steps eval_th =
     ))
   \\ rewrite_tac account_rwts
 
-fun find_num_steps thm_term =
+fun mk_tactic_hash eval_th = let
+  val args = eval_th |> concl |> lhs |> strip_comb |> #2
+in
+  exists_tac (el 1 args)
+  \\ exists_tac (el 2 args)
+  \\ rewrite_tac[eval_th]
+  \\ rewrite_tac[to_option_def, SOME_11, to_pair_def, PAIR_EQ]
+  \\ Ho_Rewrite.REWRITE_TAC[UNWIND_THM1]
+  \\ EVAL_TAC
+end
+
+fun find_num_steps isHash thm_term =
 let
-  val (_, args) = dest_exists thm_term |> snd |> lhs |> strip_comb
+  val (_, args) = strip_exists thm_term |> snd |> lhs |> strip_comb
   val name = last args |> dest_const |> fst
   fun msg pre n = pre ^ " num steps " ^ Int.toString n ^ " for " ^ name ^ "\n"
   val n = 65536
@@ -173,7 +197,9 @@ let
   let
     val () = TextIO.print $ msg "Trying" n
     val n_tm = numSyntax.term_of_int n
-    val run_tm = list_mk_comb(run_block_with_fuel, n_tm::args)
+    val run_tm = if isHash
+      then list_mk_comb(run_block_to_hash, n_tm::trie_n::(List.drop(args, 2)))
+      else list_mk_comb(run_block_with_fuel, n_tm::args)
     val raw_th = cv_eval_raw run_tm
     val r_tm = raw_th |>
       REWRITE_RULE[to_option_def, to_pair_def, c2n_def] |>
@@ -184,13 +210,18 @@ let
     else (raw_th, n)
   end
   val (raw_th, n) = loop n
-  val zero_th = MATCH_MP run_block_with_fuel_cv_sub raw_th
-                |> CONV_RULE (PATH_CONV "lrllllr" numLib.REDUCE_CONV)
-  val num_steps = zero_th |> concl |> lhs |> strip_comb |>
-                  #2 |> el 1
-  val () = TextIO.print $ msg "Found" $ numSyntax.int_of_term num_steps
 in
-  (num_steps, zero_th)
+  if isHash then
+    (numSyntax.zero_tm, raw_th)
+  else let
+    val zero_th = MATCH_MP run_block_with_fuel_cv_sub raw_th
+                  |> CONV_RULE (PATH_CONV "lrllllr" numLib.REDUCE_CONV)
+    val num_steps = zero_th |> concl |> lhs |> strip_comb |>
+                    #2 |> el 1
+    val () = TextIO.print $ msg "Found" $ numSyntax.int_of_term num_steps
+  in
+    (num_steps, zero_th)
+  end
 end
 
 type account = {
@@ -354,12 +385,22 @@ fun mk_prove_test test_path = let
     val pre_def = new_definition(pre_name ^ "_def",
       Term[QUOTE(pre_name ^ " = " ^ accounts_term pre)]);
 
-    val post = #post test;
     val post_name = test_name_escaped ^ "_post";
     val post_prefix = post_name ^ "_";
-    val code_defs = mk_code_defs post_prefix code_defs post;
-    val post_def = new_definition(post_name ^ "_def",
-      Term[QUOTE(post_name ^ " = " ^ accounts_term post)]);
+    val isHash = not $ Option.isSome $ #post test;
+    val (post_def, code_defs) =
+      case #post test of SOME post => let
+        val code_defs = mk_code_defs post_prefix code_defs post;
+        val post_def = new_definition(post_name ^ "_def",
+          Term[QUOTE(post_name ^ " = " ^ accounts_term post)]);
+      in (post_def, code_defs) end
+      | _ => let
+        val post = Option.valOf $ #postHash test;
+        val bytes = String.concat["REVERSE $ hex_to_rev_bytes [] \"",
+                                  trim2 post, "\""]
+        val post_def = new_definition(post_name ^ "_def",
+          Term[QUOTE(post_name ^ " = " ^ bytes)])
+      in (post_def, code_defs) end
 
     val () = List.app (cv_trans_deep_embedding EVAL) code_defs;
     val () = cv_auto_trans pre_def;
@@ -370,11 +411,12 @@ fun mk_prove_test test_path = let
     val () = computeLib.add_funs code_defs;
 
     val thm_name = test_name_escaped ^ "_correctness";
-    val thm_term = mk_statement test_name_escaped;
+    val thm_term = mk_statement isHash test_name_escaped;
 
-    val (num_steps, eval_th) = find_num_steps thm_term
+    val (num_steps, eval_th) = find_num_steps isHash thm_term
   in
-    store_thm(thm_name, thm_term, mk_tactic num_steps eval_th)
+    store_thm(thm_name, thm_term,
+              (if isHash then mk_tactic_hash else mk_tactic num_steps) eval_th)
   end
 in (List.length test_names, prove_test) end
 
