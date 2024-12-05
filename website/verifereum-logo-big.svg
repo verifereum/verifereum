@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="209.786mm"
+   height="43.956375mm"
+   viewBox="0 0 209.78599 43.956375"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   sodipodi:docname="verifereum-logo-big-cropped.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#999999"
+     borderopacity="1"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.8234388"
+     inkscape:cx="345.5023"
+     inkscape:cy="185.80616"
+     inkscape:window-width="2558"
+     inkscape:window-height="1410"
+     inkscape:window-x="0"
+     inkscape:window-y="28"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-10.296195,-6.6136796)">
+    <path
+       id="path19-3-8-1-8-8-5-7-16-2-3-95-1"
+       style="fill:#a70404;fill-opacity:1;stroke-width:2.61275;paint-order:markers fill stroke"
+       d="m 14.827204,6.6136857 -4.531009,3.106e-4 16.958012,43.9560597 h 6.016246 L 50.228427,6.6139963 45.816905,6.6136857 37.779043,26.995949 30.400645,30.246677 22.745581,27.051716 Z M 30.372139,33.799787 37.242716,31.12551 30.29493,47.704032 23.326111,31.037854 Z"
+       sodipodi:nodetypes="ccccccccccccccc" />
+    <path
+       style="fill:#fb9da3;fill-opacity:1;stroke:none;stroke-width:0.382614;stroke-opacity:1;paint-order:markers fill stroke"
+       d="m 30.275246,47.90984 -6.949169,-16.871999 7.046026,2.761935 6.870572,-2.674285 z"
+       id="path1-46-2-7-89-3-6-3-8"
+       sodipodi:nodetypes="ccccc" />
+    <path
+       style="fill:#fb9da3;fill-opacity:1;stroke:none;stroke-width:0.368047;stroke-opacity:1;paint-order:markers fill stroke"
+       d="m 30.30363,6.6136796 -7.558062,20.4380324 7.655031,3.194951 7.378403,-3.250718 z"
+       id="path1-4-0-9-6-89-4-0-38-3"
+       sodipodi:nodetypes="ccccc" />
+    <text
+       xml:space="preserve"
+       style="font-size:24.8181px;font-family:Sans;-inkscape-font-specification:'Sans, Normal';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#a70404;fill-rule:evenodd;stroke-width:0.615357;paint-order:markers fill stroke"
+       x="41.083633"
+       y="50.062225"
+       id="text1"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:33.5496px;font-family:Sans;-inkscape-font-specification:'Sans, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.615357"
+         x="41.083633"
+         y="50.062225">erifereum</tspan></text>
+  </g>
+</svg>
