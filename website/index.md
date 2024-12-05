@@ -1,4 +1,8 @@
-% Verifereum
+---
+title: Verifereum
+header-includes:
+    <link rel="icon" type="image/svg" href="./verifereum-logo-small.svg">
+---
 
 # !["Verifereum logo"](verifereum-logo-big.svg "Verifereum")
 

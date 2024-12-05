@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="75.981506mm"
+   height="83.638496mm"
+   viewBox="0 0 75.981506 83.638496"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   sodipodi:docname="verifereum-logo-small.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#999999"
+     borderopacity="1"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.6075452"
+     inkscape:cx="310.26498"
+     inkscape:cy="464.163"
+     inkscape:window-width="2558"
+     inkscape:window-height="1410"
+     inkscape:window-x="0"
+     inkscape:window-y="28"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-9.986737,-8.7427728)">
+    <path
+       id="path19-3-8-1-8-8-5-7-16-2-3-95-1"
+       style="fill:#a70404;fill-opacity:1;stroke-width:4.97144;paint-order:markers fill stroke"
+       d="m 18.608167,8.7427841 -8.62143,5.92e-4 32.26705,83.6378919 h 11.44748 l 32.266977,-83.6378919 -8.394067,-5.92e-4 -15.29414,38.7825839 -14.03933,6.18536 -14.56576,-6.07925 z m 29.5783,51.7286639 13.07307,-5.08851 -13.21998,31.54497 -13.26,-31.71176 z"
+       sodipodi:nodetypes="ccccccccccccccc" />
+    <path
+       style="fill:#fb9da3;fill-opacity:1;stroke:none;stroke-width:0.728022;stroke-opacity:1;paint-order:markers fill stroke"
+       d="M 48.002103,87.319512 34.779494,55.216123 48.1864,60.471426 61.259457,55.3829 Z"
+       id="path1-46-2-7-89-3-6-3-8"
+       sodipodi:nodetypes="ccccc" />
+    <path
+       style="fill:#fb9da3;fill-opacity:1;stroke:none;stroke-width:0.700306;stroke-opacity:1;paint-order:markers fill stroke"
+       d="M 48.056112,8.7427728 33.674922,47.631473 48.240621,53.710702 62.27996,47.525361 Z"
+       id="path1-4-0-9-6-89-4-0-38-3"
+       sodipodi:nodetypes="ccccc" />
+  </g>
+</svg>
