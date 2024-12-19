@@ -1216,15 +1216,6 @@ QED
 
 (*
 
-Definition hex_to_rev_bytes_def:
-    hex_to_rev_bytes acc [] = acc : byte list
-  ∧ hex_to_rev_bytes acc [c] = CONS (n2w (UNHEX c)) acc
-  ∧ hex_to_rev_bytes acc (c1::c2::rest) =
-    hex_to_rev_bytes (CONS (n2w (16 * UNHEX c1 + UNHEX c2)) acc) rest
-End
-
-val _ = cv_auto_trans hex_to_rev_bytes_def;
-
 (* empty state test *)
 
 val correct_root = cv_eval``REVERSE $ hex_to_rev_bytes []
