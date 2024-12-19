@@ -110,18 +110,6 @@ val () = cv_auto_trans (INST_TYPE [alpha |-> “:256”] word_of_bytes_def);
 
 val () = cv_auto_trans numposrepTheory.n2l_n2lA;
 
-(* TODO: move? *)
-
-Definition Keccak_256_bytes_def:
-  Keccak_256_bytes (bs:word8 list) : word8 list =
-    MAP bools_to_word $ chunks 8 $
-    Keccak_256 $
-    MAP ((=) 1) $ FLAT $
-    MAP (PAD_RIGHT 0 8 o word_to_bin_list) bs
-End
-
-val () = cv_auto_trans Keccak_256_bytes_def;
-
 Type address = “:160 word”
 Type bytes32 = “:256 word”
 Type byte = “:word8”
