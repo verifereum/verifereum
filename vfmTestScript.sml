@@ -306,8 +306,8 @@ fun remove_special_chars #"-" = "_"
   | remove_special_chars c = String.str c
 
 (*
-  val test_index = 80;
-  Globals.max_print_depth := 40;
+  val test_index = 0;
+  val () = Globals.max_print_depth := 30;
   val json_path = test_path
 
 
@@ -321,9 +321,8 @@ fun remove_special_chars #"-" = "_"
     aux l 0
   end
 
-  findIndexByName "modexp_d28g0v0_Cancun" test_names
+  val SOME test_index = findIndexByName "sha3_d3g0v0_Cancun" test_names
 *)
-
 
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
@@ -454,7 +453,7 @@ val test_path = mk_test_path "vmTests/random.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval oom in d3g0v0 *)
+(* TODO: cv_eval struggles with REPLICATE 1049600 in d3g0v0 *)
 val test_path = mk_test_path "vmTests/sha3.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -588,12 +587,9 @@ val test_path = mk_test_path "vmIOandFlowOperations/jump.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(*
-TODO: does not have explicit postStates so can't handle for now...
 val test_path = mk_test_path "vmIOandFlowOperations/jumpToPush.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "vmIOandFlowOperations/jumpi.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -1488,7 +1484,7 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: no explicit postStates
+(* TODO: slow
 val test_path = mk_test_path "undefinedOpcodeFirstByte.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -2548,7 +2544,7 @@ val test_path = mk_test_path
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: no postStates
+(* TODO: slow
 val test_path = mk_test_path "CREATE2_FirstByte_loop.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -2610,7 +2606,7 @@ val test_path = mk_test_path "Create2OnDepth1024.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: no postStates
+(* TODO: slow
 val test_path = mk_test_path "Create2Recursive.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -5989,27 +5985,97 @@ fun mk_test_path s =
 StaticcallToPrecompileFromCalledContract.json
 StaticcallToPrecompileFromContractInitialization.json
 StaticcallToPrecompileFromTransaction.json
-static_ABAcalls0.json
-static_ABAcalls1.json
-static_ABAcalls2.json
-static_ABAcalls3.json
-static_ABAcallsSuicide0.json
-static_ABAcallsSuicide1.json
-static_CALL_OneVCallSuicide.json
-static_CALL_ZeroVCallSuicide.json
-static_CREATE_ContractSuicideDuringInit.json
-static_CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json
-static_CREATE_ContractSuicideDuringInit_WithValue.json
-static_CREATE_EmptyContractAndCallIt_0wei.json
-static_CREATE_EmptyContractWithStorageAndCallIt_0wei.json
-static_Call10.json
-static_Call1024BalanceTooLow.json
-static_Call1024BalanceTooLow2.json
-static_Call1024OOG.json
-static_Call1024PreCalls.json
-static_Call1024PreCalls2.json
-static_Call1024PreCalls3.json
-static_Call1MB1024Calldepth.json
+*)
+
+val test_path = mk_test_path "static_ABAcalls0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_ABAcalls1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_ABAcalls2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_ABAcalls3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_ABAcallsSuicide0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_ABAcallsSuicide1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_CALL_OneVCallSuicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_CALL_ZeroVCallSuicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_CREATE_ContractSuicideDuringInit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "static_CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "static_CREATE_ContractSuicideDuringInit_WithValue.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_CREATE_EmptyContractAndCallIt_0wei.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path
+  "static_CREATE_EmptyContractWithStorageAndCallIt_0wei.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_Call10.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_Call1024BalanceTooLow.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_Call1024BalanceTooLow2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_Call1024OOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_Call1024PreCalls.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_Call1024PreCalls2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "static_Call1024PreCalls3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO: slow *)
+val test_path = mk_test_path "static_Call1MB1024Calldepth.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+(* TODO add
 static_Call50000.json
 static_Call50000_ecrec.json
 static_Call50000_identity.json
@@ -6290,13 +6356,44 @@ val test_path = mk_test_path "CallWithNOTZeroValueToPrecompileFromTransaction.js
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+(* TODO: fix
+val test_path = mk_test_path "CallWithZeroValueToPrecompileFromCalledContract.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path
+  "CallWithZeroValueToPrecompileFromContractInitialization.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "CallWithZeroValueToPrecompileFromTransaction.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "CallcodeToPrecompileFromCalledContract.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix
+val test_path = mk_test_path "CallcodeToPrecompileFromContractInitialization.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
+(* TODO: fix - needs precompiles
+val test_path = mk_test_path "CallcodeToPrecompileFromTransaction.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+*)
+
 (* TODO: add
-CallWithZeroValueToPrecompileFromCalledContract.json
-CallWithZeroValueToPrecompileFromContractInitialization.json
-CallWithZeroValueToPrecompileFromTransaction.json
-CallcodeToPrecompileFromCalledContract.json
-CallcodeToPrecompileFromContractInitialization.json
-CallcodeToPrecompileFromTransaction.json
 DelegatecallToPrecompileFromCalledContract.json
 DelegatecallToPrecompileFromContractInitialization.json
 DelegatecallToPrecompileFromTransaction.json
@@ -6597,20 +6694,59 @@ static_Call50000_sha256.json
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stTransactionTest/" ^ s;
 
+val test_path = mk_test_path "ContractStoreClearsOOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "ContractStoreClearsSuccess.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateMessageReverted.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateMessageSuccess.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "CreateTransactionSuccess.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "EmptyTransaction3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "HighGasLimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "HighGasPriceParis.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "InternalCallHittingGasLimit.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "InternalCallHittingGasLimit2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "InternalCallHittingGasLimitSuccess.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "InternalCallStoreClearsOOG.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+val test_path = mk_test_path "InternalCallStoreClearsSuccess.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (* TODO: add
-ContractStoreClearsOOG.json
-ContractStoreClearsSuccess.json
-CreateMessageReverted.json
-CreateMessageSuccess.json
-CreateTransactionSuccess.json
-EmptyTransaction3.json
-HighGasLimit.json
-HighGasPriceParis.json
-InternalCallHittingGasLimit.json
-InternalCallHittingGasLimit2.json
-InternalCallHittingGasLimitSuccess.json
-InternalCallStoreClearsOOG.json
-InternalCallStoreClearsSuccess.json
 NoSrcAccount.json
 NoSrcAccount1559.json
 NoSrcAccountCreate.json
