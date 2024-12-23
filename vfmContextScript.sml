@@ -268,7 +268,7 @@ Definition address_for_create_def:
     let rlpNonce = rlp_bytes $ if nonce = 0n then [] else
                    MAP n2w $ REVERSE $ n2l 256 $ nonce in
     let rlpBytes = rlp_list $ rlpSender ++ rlpNonce in
-    let hash = word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ rlpBytes in
+    let hash = word_of_bytes T (0w:bytes32) $ Keccak_256_w64 $ rlpBytes in
     w2w hash
 End
 

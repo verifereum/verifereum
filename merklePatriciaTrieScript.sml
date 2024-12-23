@@ -531,7 +531,7 @@ Definition encode_internal_node_def:
     encoded = rlp_encode unencoded
   in
     if LENGTH encoded < 32 then unencoded
-    else RLPB $ Keccak_256_bytes encoded
+    else RLPB $ Keccak_256_w64 encoded
 End
 
 val () = cv_auto_trans encode_internal_node_def;
@@ -641,7 +641,7 @@ QED
 
 Definition storage_key_def:
   storage_key k : word8 list =
-  bytes_to_nibble_list $ Keccak_256_bytes $
+  bytes_to_nibble_list $ Keccak_256_w64 $
   PAD_LEFT 0w 32 $ num_to_be_bytes k
 End
 
@@ -672,7 +672,7 @@ Definition trie_root_def:
     encoded = rlp_encode root_node
   in
     if LENGTH encoded < 32 then
-      Keccak_256_bytes encoded
+      Keccak_256_w64 encoded
     else
       dest_RLPB root_node
 End
@@ -963,7 +963,7 @@ Definition trie_root_clocked_def:
     NONE => NONE
   | SOME r => SOME $
     let e = rlp_encode r in
-    if LENGTH e < 32 then Keccak_256_bytes e else dest_RLPB r
+    if LENGTH e < 32 then Keccak_256_w64 e else dest_RLPB r
 End
 
 val () = cv_auto_trans trie_root_clocked_def;
@@ -1023,7 +1023,7 @@ Definition storage_root_clocked_def:
   in trie_root_clocked n $ storage_kvs l []
 End
 
-(* cannot prove this because Keccak_256_bytes is not injective
+(* cannot prove this because Keccak_256_w64 is not injective
 *  see other comments about removing ALL_DISTINCT or the clock
 Theorem storage_root_clocked_thm:
   ∃n. storage_root_clocked n s = SOME $ storage_root s
@@ -1110,7 +1110,7 @@ Definition encode_account_def:
     rlp_number a.nonce;
     rlp_number a.balance;
     RLPB $ storage_root a.storage;
-    RLPB $ Keccak_256_bytes a.code
+    RLPB $ Keccak_256_w64 a.code
   ]
 End
 
@@ -1121,7 +1121,7 @@ End
 
 Definition account_key_def:
   account_key (addr: address) =
-  bytes_to_nibble_list $ Keccak_256_bytes $ word_to_bytes addr T
+  bytes_to_nibble_list $ Keccak_256_w64 $ word_to_bytes addr T
 End
 
 Definition state_trie_def:
@@ -1149,7 +1149,7 @@ Definition encode_account_clocked_def:
       rlp_number a.nonce;
       rlp_number a.balance;
       RLPB $ r;
-      RLPB $ Keccak_256_bytes a.code
+      RLPB $ Keccak_256_w64 a.code
     ] )
   | NONE => []
 End

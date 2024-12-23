@@ -102,9 +102,9 @@ End
 
 Definition address_for_create2_def:
   address_for_create2 (address: address) (salt: bytes32) (code: byte list) : address =
-  w2w $ word_of_bytes T (0w: bytes32) $ Keccak_256_bytes $
+  w2w $ word_of_bytes T (0w: bytes32) $ Keccak_256_w64 $
     [0xffw] ++ word_to_bytes address T ++
-    word_to_bytes salt T ++ Keccak_256_bytes code
+    word_to_bytes salt T ++ Keccak_256_w64 code
 End
 
 Datatype:
@@ -605,7 +605,7 @@ Definition step_keccak256_def:
     consume_gas $ static_gas Keccak256 + dynamicGas;
     expand_memory mx.expand_by;
     data <- read_memory offset size;
-    hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $ data;
+    hash <<- word_of_bytes T (0w:bytes32) $ Keccak_256_w64 $ data;
     push_stack hash
   od
 End
@@ -760,7 +760,7 @@ Definition step_ext_code_hash_def:
     accounts <- get_accounts;
     account <<- lookup_account address accounts;
     hash <<- if account_empty account then 0w
-             else word_of_bytes T (0w:bytes32) $ Keccak_256_bytes $
+             else word_of_bytes T (0w:bytes32) $ Keccak_256_w64 $
                   account.code;
     push_stack hash
   od
