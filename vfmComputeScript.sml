@@ -8,6 +8,21 @@ vfmStateTheory vfmTransactionTheory vfmExecutionTheory vfmTypesTheory;
 val _ = new_theory "vfmCompute";
 
 (* TODO: move *)
+
+Theorem word_lsl_modexp:
+  word_lsl (w:'a word) n =
+  if n < dimindex(:'a) then
+    n2w (modexp 2 n (dimword(:'a)) (w2n w))
+  else 0w
+Proof
+  Cases_on`w`
+  \\ simp[word_lsl_n2w]
+  \\ DEP_REWRITE_TAC[modexp_exp]
+  \\ rw[]
+  \\ fs[dimword_def]
+  \\ gvs[]
+QED
+
 Theorem size_list_to_num_set:
   size (list_to_num_set ls) = LENGTH (nub ls)
 Proof
@@ -699,6 +714,7 @@ val step_inst_pre_def = step_inst_def |>
     step_monop_def,
     step_binop_def,
     step_modop_def,
+    word_lsl_modexp,
     with_zero_def,
     step_context_def,
     step_callParams_def,
