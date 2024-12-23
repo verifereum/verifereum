@@ -10,13 +10,15 @@ Work in progress.
 
 ## Getting Started
 
+1. Install Docker Desktop for your platform from [here](https://docs.docker.com/desktop/).
+
 1. Run the following command to initialize the environment and enter the shell. On its first run it'll build the image which could take a while:
 
 ```sh
 docker compose run verifereum
 ```
 
-2. Within the shell, run this to build the project and run the tests:
+1. Within the shell, run this to build the project and run the tests:
 
 ```sh
 Holmake
