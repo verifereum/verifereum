@@ -453,7 +453,6 @@ val test_path = mk_test_path "vmTests/random.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval struggles with REPLICATE 1049600 in d3g0v0 *)
 val test_path = mk_test_path "vmTests/sha3.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
