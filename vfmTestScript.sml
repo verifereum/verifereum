@@ -1,6 +1,7 @@
-open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
+open HolKernel boolLib bossLib Parse wordsLib dep_rewrite permLib
      listTheory pairTheory optionTheory sumTheory
      arithmeticTheory combinTheory whileTheory
+     sortingTheory wordsTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory
      vfmOperationTheory vfmComputeTheory
@@ -144,6 +145,54 @@ val run_block_to_hash = run_block_to_hash_def |> SPEC_ALL
 val trie_steps = 65536
 val trie_n = numSyntax.term_of_int trie_steps
 
+Definition switch_def:
+  switch x d [] = d ∧
+  switch x d ((y,z)::ls) =
+  if x = y then z else switch x d ls
+End
+
+Theorem COND_right_switch1:
+  COND (x = b) y z = switch b z [(x,y)]
+Proof
+  rw[switch_def]
+QED
+
+Theorem switch1_switch:
+  switch x (switch x d ls) [p] =
+  switch x d (p::ls)
+Proof
+  Cases_on`p` \\ rw[switch_def]
+QED
+
+Theorem PERM_switch:
+  !l1 l2. PERM l1 l2 ⇒ ALL_DISTINCT (MAP FST l1) ⇒
+  switch b d l1 = switch b d l2
+Proof
+  ho_match_mp_tac PERM_STRONG_IND
+  \\ rw[] \\ gs[]
+  >- ( Cases_on`x` \\ rw[switch_def] )
+  >- (
+    Cases_on`x` \\ Cases_on`y`
+    \\ rw[switch_def] \\ gs[] )
+  \\ first_x_assum irule
+  \\ metis_tac[PERM_MAP, ALL_DISTINCT_PERM]
+QED
+
+Theorem irreflexive_transitive_word_lo:
+  irreflexive (word_lo:bytes32 -> bytes32 -> bool) ∧
+  transitive  (word_lo:bytes32 -> bytes32 -> bool)
+Proof
+  rw[relationTheory.irreflexive_def, relationTheory.transitive_def]
+  \\ irule WORD_LOWER_TRANS
+  \\ goal_assum (first_x_assum o mp_then Any mp_tac)
+  \\ first_x_assum ACCEPT_TAC
+QED
+
+fun word_w2n_lt t1 t2 = let
+  val n1 = t1 |> rand |> numSyntax.dest_numeral
+  val n2 = t2 |> rand |> numSyntax.dest_numeral
+in Arbnum.< (n1, n2) end
+
 (*
   set_goal([], thm_term)
 *)
@@ -163,17 +212,22 @@ fun mk_tactic num_steps eval_th =
   \\ rpt (
      IF_CASES_TAC >- (
        BasicProvers.VAR_EQ_TAC
-       \\ simp_tac (std_ss ++ WORD_ss) []
+       \\ CONV_TAC(ONCE_DEPTH_CONV word_EQ_CONV)
        \\ rewrite_tac account_rwts
        \\ rpt gen_tac
-       \\ rpt (
-          IF_CASES_TAC >- (
-            BasicProvers.VAR_EQ_TAC
-            \\ CONV_TAC(DEPTH_CONV word_EQ_CONV)
-            \\ rewrite_tac[]
-          ))
-       \\ rewrite_tac[]
-    ))
+       \\ rewrite_tac[COND_right_switch1, switch1_switch]
+       \\ irule PERM_switch
+       \\ (conj_tac >- (
+         rewrite_tac[MAP, FST]
+         \\ CONV_TAC (
+              ALL_DISTINCT_CONV
+                irreflexive_transitive_word_lo
+                word_w2n_lt
+                (EQT_INTRO o wordsLib.WORD_DECIDE)
+            )))
+       \\ CONV_TAC(PERM_NORMALISE_CONV)
+       \\ rewrite_tac[])
+     \\ rewrite_tac [])
   \\ rewrite_tac account_rwts
 
 fun mk_tactic_hash eval_th = let
@@ -334,8 +388,8 @@ fun mk_prove_test test_path = let
       in
         if Char.isDigit $ String.sub (e, 0) then "t" ^ e else e
       end
-
     val test = get_test test_path test_name;
+    val isHash = not $ Option.isSome $ #post test;
 
     val block = #block test;
 
@@ -386,7 +440,6 @@ fun mk_prove_test test_path = let
 
     val post_name = test_name_escaped ^ "_post";
     val post_prefix = post_name ^ "_";
-    val isHash = not $ Option.isSome $ #post test;
     val (post_def, code_defs) =
       case #post test of SOME post => let
         val code_defs = mk_code_defs post_prefix code_defs post;
@@ -537,7 +590,6 @@ val test_path = mk_test_path "vmArithmeticTest/sub.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmArithmeticTest/twoOps.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
