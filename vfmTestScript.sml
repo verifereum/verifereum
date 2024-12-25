@@ -89,7 +89,6 @@ val cv_eval_run_block_with_fuel_rwts = [
   EVAL``2n = 0``,
   EVAL``2n = 1``,
   EVAL``1n = 0``,
-  to_evm_accounts_def,
   cv_typeTheory.to_list_def,
   cvTheory.cv_fst_def,
   cvTheory.cv_snd_def,
@@ -260,7 +259,7 @@ let
       concl |> rhs
   in
     if optionSyntax.is_none r_tm
-    then loop $ 2 * n
+    then loop $ 512 * n
     else (raw_th, n)
   end
   val (raw_th, n) = loop n
@@ -706,7 +705,6 @@ val test_path = mk_test_path "vmLogTest/log4.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: cv_eval oom problem? *)
 val test_path = mk_test_path "vmPerformance/loopExp.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
@@ -3654,11 +3652,9 @@ val test_path = mk_test_path "extCodeHashInInitCode.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: slow
 val test_path = mk_test_path "extCodeHashMaxCodeSize.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "extCodeHashNewAccount.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -4601,7 +4597,7 @@ precompsEIP2929Cancun.json
 sec80.json
 *)
 
-(* TODO: add until stPreCompiledContracts2 *)
+(* TODO: add stPreCompiledContracts2 *)
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stQuadraticComplexityTest/" ^ s;
@@ -4691,11 +4687,9 @@ val test_path = mk_test_path "randomStatetest1.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: slow
 val test_path = mk_test_path "randomStatetest10.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "randomStatetest100.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -4725,11 +4719,10 @@ val test_path = mk_test_path "randomStatetest107.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
-(* TODO: slow
+(* TODO: fix slow rewrite_tac cv_eval_run_block_with_fuel_rwts *)
 val test_path = mk_test_path "randomStatetest108.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 val test_path = mk_test_path "randomStatetest11.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -4743,8 +4736,11 @@ val test_path = mk_test_path "randomStatetest111.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 
+val test_path = mk_test_path "randomStatetest112.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 (* TODO: add
-randomStatetest112.json
 randomStatetest114.json
 randomStatetest115.json
 randomStatetest116.json
