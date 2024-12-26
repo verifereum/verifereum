@@ -10,19 +10,68 @@ Work in progress.
 
 ## Getting Started
 
-1. Install Docker Desktop for your platform from [here](https://docs.docker.com/desktop/).
+1.  Install and polyml from source
 
-1. Run the following command to initialize the environment and enter the shell. On its first run it'll build the image which could take a while:
+    i. Download the source code from the polyml github repository
 
-```sh
-docker compose run verifereum
-```
+    ```bash
+    wget wget https://github.com/polyml/polyml/archive/refs/heads/master.zip -O poly-master.zip;
+    unzip polyml-master.zip;
+    ```
 
-1. Within the shell, run this to build the project and run the tests:
+    ii.
 
-```sh
-Holmake
-```
+    ```bash
+    cd polyml-master;
+    ./configure --enable-intinf-as-int;
+    make -C polyml-master -j4
+    make -C polyml-master install
+    rm -r polyml-master polyml-master.zip
+    ```
+
+    iii. For M1 Macs you may need to edit the `/usr/local/bin/polyc` script on line line 44 and 46 to remove the quotes otherwise it'll error with `g++ -std=gnu++11: command not found`.
+
+    >        ${LINK} ...
+
+    instead of
+
+    >        "${LINK}" ...
+
+1.  Install and build HOL
+
+    i. Download the source code from the HOL github repository
+
+    ```bash
+    cd - # cd into project root
+    git clone https://github.com/HOL-Theorem-Prover/HOL
+    cd HOL
+    poly --script tools/smart-configure.sml
+    bin/build
+    ```
+
+    ii. Add the following to your `.bashrc` file
+
+    ```bash
+    cd -
+    export HOLDIR=<path-to-HOL>/HOL
+    export PATH=$HOLDIR/bin:$PATH
+    ```
+
+    iii. Run this to build the project and run the tests. They will take a while to run so you can cancel them.
+
+    ```bash
+    Holmake
+    # Scanned 16 directories
+    # Finished $(HOLDIR)/examples/json                               (0.000s)
+    # vfmTypesTheory                    Documents/Code/verifereum (26s)     OK
+    # vfmTransactionTheory              Documents/Code/verifereum  (2s)     OK
+    # recursiveLengthPrefixTheory       Documents/Code/verifereum  (6s)     OK
+    # ...
+    ```
+
+    For other tips checkout [this FAQ](https://hol-theorem-prover.org/faq.html).
+
+In case you would rather not build the project from source, you can use Docker as described [here](docs/run-with-docker.md).
 
 ## Links
 
