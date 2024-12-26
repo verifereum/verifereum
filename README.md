@@ -10,9 +10,9 @@ Work in progress.
 
 ## Getting Started
 
-1.  Install and polyml from source
+1.  Install and build Poly/ML from source (or use a packaged version if applicable)
 
-    i. Download the source code from the polyml github repository
+    i. Download the source code from the Poly/ML GitHub repository
 
     ```bash
     wget https://github.com/polyml/polyml/archive/refs/heads/master.zip -O poly-master.zip;
@@ -39,7 +39,7 @@ Work in progress.
 
 1.  Install and build HOL
 
-    i. Download the source code from the HOL github repository
+    i. Download the source code from the HOL GitHub repository
 
     ```bash
     cd - # cd into project root
