@@ -15,18 +15,18 @@ Work in progress.
     i. Download the source code from the Poly/ML GitHub repository
 
     ```bash
-    wget https://github.com/polyml/polyml/archive/refs/heads/master.zip -O poly-master.zip;
-    unzip polyml-master.zip;
+    curl -L https://github.com/polyml/polyml/archive/refs/heads/master.zip | bsdtar -xf -
     ```
 
     ii.
 
     ```bash
-    cd polyml-master;
-    ./configure --enable-intinf-as-int;
-    make -C polyml-master -j4
-    make -C polyml-master install
-    rm -r polyml-master polyml-master.zip
+    cd polyml-master
+    ./configure --enable-intinf-as-int
+    make -j4
+    make install
+    cd ..
+    rm -r polyml-master
     ```
 
     iii. For M1 Macs you may need to edit the `/usr/local/bin/polyc` script on line line 44 and 46 to remove the quotes otherwise it'll error with `g++ -std=gnu++11: command not found`.
@@ -42,7 +42,6 @@ Work in progress.
     i. Download the source code from the HOL GitHub repository
 
     ```bash
-    cd - # cd into project root
     git clone https://github.com/HOL-Theorem-Prover/HOL
     cd HOL
     poly --script tools/smart-configure.sml
