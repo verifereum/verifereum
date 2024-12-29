@@ -10,7 +10,16 @@ Work in progress.
 
 ## Getting Started
 
-1.  Install and build Poly/ML from source (or use a packaged version if applicable)
+Verifereum is developed in the [HOL](https://hol-theorem-prover.org) Theorem
+Prover (a.k.a. HOL4), which itself is written in Standard ML.
+
+These instructions guide you in installing [Poly/ML](https://polyml.org), which
+is a Standard ML implementation, and then building HOL4 with it.
+
+In case you would rather not build the project from source, you can use Docker
+as described [here](docs/run-with-docker.md).
+
+1.  Install and build Poly/ML from source (you may prefer to use a packaged version if available)
 
     i. Download the source code from the Poly/ML GitHub repository
 
@@ -37,7 +46,7 @@ Work in progress.
 
     >        "${LINK}" ...
 
-1.  Install and build HOL
+2.  Install and build HOL4
 
     i. Download the source code from the HOL GitHub repository
 
@@ -48,7 +57,7 @@ Work in progress.
     bin/build
     ```
 
-    ii. Add the following to your `.bashrc` file
+    ii. Export paths: add the following to your `.bashrc` file
 
     ```bash
     cd -
@@ -56,7 +65,9 @@ Work in progress.
     export PATH=$HOLDIR/bin:$PATH
     ```
 
-    iii. Run this to build the project and run the tests. They will take a while to run so you can cancel them.
+    For other tips checkout [this FAQ](https://hol-theorem-prover.org/faq.html).
+
+3. Run Holmake to build Verifereum and run the tests. They will take a while to run so you can cancel them.
 
     ```bash
     Holmake
@@ -67,10 +78,6 @@ Work in progress.
     # recursiveLengthPrefixTheory       Documents/Code/verifereum  (6s)     OK
     # ...
     ```
-
-    For other tips checkout [this FAQ](https://hol-theorem-prover.org/faq.html).
-
-In case you would rather not build the project from source, you can use Docker as described [here](docs/run-with-docker.md).
 
 ## Links
 
