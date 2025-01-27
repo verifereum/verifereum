@@ -8,21 +8,21 @@ header-includes:
 
 ## Mathematically Verified Ethereum Smart Contracts
 
-Verifereum is an open-source project that brings mathematical rigour to Ethereum smart contract verification.
-Using the HOL4 theorem prover, we're building tools to prove the correctness of smart contracts and eliminate entire classes of vulnerabilities.
+Verifereum is an open-source project that brings mathematical rigour to [Ethereum](https://ethereum.org) smart contract verification.
+Using the [HOL4 theorem prover](https://hol-theorem-prover.org), we're building tools to prove the correctness of smart contracts and eliminate entire classes of vulnerabilities.
 
 ### Why Verifereum Matters
 
 - **Beyond Traditional Auditing**: While audits can find bugs, mathematical verification proves the absence of entire classes of vulnerabilities
 - **High Stakes, Higher Standards**: With billions of dollars secured by smart contracts, formal verification offers the strongest security guarantees possible
-- **Perfect Fit**: Ethereum's deterministic execution model makes it an ideal candidate for formal verification
+- **Perfect Fit**: Ethereum's deterministic execution model, where additionally code is expensive so applications are small, makes it an ideal candidate for formal verification
 
 ## Project Status & Recent Achievements
 
 - Active development with regular commits to our [main repository](https://github.com/verifereum/verifereum)
 - Completed formal specification of most EVM operations in HOL4
 - Hosting our first community event (Higher Order Log Cabin) in February 2025, bringing together researchers and developers
-- Making progress on Vyper semantics formalization
+- Making progress on [Vyper](https://vyperlang.org) [semantics formalization](https://github.com/xrchz/vyper-hol)
 
 ## Get Involved
 
@@ -71,7 +71,7 @@ We're currently working on three main tracks:
 
 ### Collaboration Philosophy
 
-Verifereum is committed to open collaboration and free software principles.
+Verifereum is committed to open collaboration and [free software](https://fsf.org) principles.
 All our work remains accessible to everyone, and we welcome contributions at any level of experience or commitment.
 
 ## Looking to Contribute?
@@ -85,7 +85,7 @@ We have opportunities for both technical and non-technical contributions:
 - Technical documentation
 - Example contract verification
 
-### Supporting Roles
+### Social Roles
 - Documentation improvement
 - Community building
 - Project management
