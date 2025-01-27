@@ -6,85 +6,89 @@ header-includes:
 
 # !["Verifereum logo"](verifereum-logo-big.svg "Verifereum")
 
-## New! ☃️ Higher Order Log Cabin ☃️ Event!
-- The first in-person Verifereum unconference!
-- We will *hack* on + *talk* about *Verifereum*, *HOL*, *Vyper*, and *CakeML*
-- We will be staying in a *beautiful venue in the Swedish countryside* for the long weekend of **February 7–10 2025** <br>
-    !["Living room with fireplace (representative venue)"](venue1.png "fireplace"){ width=250px } !["Living room with couches (representative venue)"](venue2.png "couches"){ width=250px }
-    !["Solarium and swimming pool (representative venue)"](venue3.png "solarium"){ width=250px } !["Cabin in the snow (representative venue)"](venue4.png "snow"){ width=250px }
-- As it's the first event, accommodation and food will be covered by us (!), and you arrange your own travel ✈️
-- There will be food and socialising 🔥
-- All people are welcome, including folks who are just interested in the space and want to learn more 📚
-- Places are limited! Please fill out **[this form](https://forms.gle/KzT7VJe2n8S1dKmN8)** to confirm attendance
+## Mathematically Verified Ethereum Smart Contracts
 
-## What
+Verifereum is an open-source project that brings mathematical rigour to Ethereum smart contract verification.
+Using the HOL4 theorem prover, we're building tools to prove the correctness of smart contracts and eliminate entire classes of vulnerabilities.
 
-- Mathematical verification of Ethereum applications
-- Proven functional correctness of smart contracts
+### Why Verifereum Matters
 
-## Why
+- **Beyond Traditional Auditing**: While audits can find bugs, mathematical verification proves the absence of entire classes of vulnerabilities
+- **High Stakes, Higher Standards**: With billions of dollars secured by smart contracts, formal verification offers the strongest security guarantees possible
+- **Perfect Fit**: Ethereum's deterministic execution model makes it an ideal candidate for formal verification
 
-- Auditing is not exhaustive; theorems rule out _all_ exploits (of a certain class)
-- There is a lot of value custodied by Ethereum applications: the stakes are high for implementation bugs
-- The Ethereum specification is simple, unambiguous, and easy to reason about: it is a perfect fit for formal verification
+## Project Status & Recent Achievements
 
-## Get involved
-- Join [the CakeML Discord](https://discord.gg/a8UUs6Ce6m) and say hello in the #verifereum channel!
-- Check out the [repository on GitHub](https://github.com/verifereum/verifereum)!
-- Look at the open [issues](https://github.com/verifereum/verifereum/issues)
-- Ask [Ramana (aka xrchz)](https://github.com/xrchz) about ideas of things to work on
-- See the roadmap below for ideas
+- Active development with regular commits to our [main repository](https://github.com/verifereum/verifereum)
+- Completed formal specification of most EVM operations in HOL4
+- Hosting our first community event (Higher Order Log Cabin) in February 2025, bringing together researchers and developers
+- Making progress on Vyper semantics formalization
 
-### Collaboration
+## Get Involved
 
-Verifereum is a free software project with no legal or formal barriers to collaboration at any level of experience or commitment, as long as all results remain accessible to everyone
+We welcome contributors of all experience levels! Here's how to start:
 
-## Technical approach
+### For Technical Contributors
 
-- Formal model of the [Ethereum Virtual Machine (EVM)](https://ethereum.org/en/developers/docs/evm/) in the [HOL4 theorem prover (higher-order logic)](https://hol-theorem-prover.org)
-- Operational semantics of the EVM, as a definitional interpreter
-- Executable in logic
-- Faithful and up to date: pass the EVM test suite, written in readable style for cross-checking against the [official specification](https://github.com/ethereum/execution-specs/)
-- Program logic for verifying smart contract applications
-- [Decompilation into logic](https://www.cl.cam.ac.uk/~mom22/decompilation/) and/or [compiler verification](https://cakeml.org) (e.g. for [Vyper](https://vyperlang.org)) for verifying implementations at the bytecode level
+1. **Join the Community**:
+   - Connect on [Discord](https://discord.gg/a8UUs6Ce6m) (join the #verifereum channel)
+   - Watch our [GitHub repository](https://github.com/verifereum/verifereum)
 
-## Roadmap and status
+2. **Start Contributing**:
+   - Check out open [issues](https://github.com/verifereum/verifereum/issues)
+   - Contact [Ramana (xrchz)](https://github.com/xrchz) for project ideas
+   - Review our technical documentation below
 
-Status: [Under heavy development](https://github.com/verifereum/verifereum/commits/main/) and seeking collaborators!
+### Technical Focus Areas
 
-We are most of the way through the EVM base sequence
+We're currently working on three main tracks:
 
-### EVM base
-1. Mostly Done: Formal specification of the EVM in HOL4
-   1. TODO: specify the precompiles (ecRecover, etc.)
-2. Mostly Done: Make the EVM model executable (fast) in logic
-3. WIP: Pass the [EVM test suite](https://github.com/ethereum/tests/)
-4. TODO: Make the definitions more tidy and readable
+1. **EVM Base Layer**
+   - Refining our formal EVM specification
+   - Implementing precompiles (ecRecover, etc.)
+   - Optimizing execution in logic
+   - Ensuring test suite compliance
 
-### Decompilation track
-1. TODO: Build a program logic (Hoare or Separation logic) for EVM bytecode programs
-2. TODO: Verify some simple example contracts
-3. TODO: Build decompilation-into-logic automation
+2. **Decompilation Pipeline**
+   - Building Hoare/Separation logic for EVM bytecode
+   - Creating verification examples
+   - Developing decompilation automation
 
-### Verification track
-1. [Started](https://github.com/xrchz/vyper-hol): Formal specification of Vyper semantics in HOL4
-2. TODO: Define a copy of the compiler frontend in logic
-3. TODO: ... (steps to be filled in) ...
+3. **Vyper Verification**
+   - Formalizing Vyper semantics
+   - Implementing compiler frontend in logic
+   - Building verification infrastructure
 
-Other tracks (bug bounties, consulting, etc.) can also be defined
+## Technical Details
 
-## Roles needed
-- Technical contributors (i.e. interested to commit code to git repositories)
-    - work on formal specifications/definitions
-    - theorem proving - writing and maintaining proofs in HOL4
-    - proof automation / building infrastructure for theorem proving
-    - technical documentation and tutorials
-    - issue curation, triaging, etc.
-    - creating examples of verified applications
-- Non-technical contributors (i.e. not working directly/primarily with code)
-    - grant-writing and fundraising
-    - recruiting/networking
-    - community-building and maintenance
-    - editing and styling documentation and other comms
-    - project management - roadmap, milestones, priorities, checkins, etc.
-    - legal + accounting + bizdev + investor relations, for any for-profit work built on top
+### Our Approach
+
+- **Foundation**: Formal model of the EVM in HOL4 (Higher-Order Logic)
+- **Methodology**: Operational semantics via definitional interpreter
+- **Validation**: Complete EVM test suite compliance
+- **Verification**: Program logic for smart contract correctness proofs
+- **Implementation**: Focus on decompilation and compiler verification
+
+### Collaboration Philosophy
+
+Verifereum is committed to open collaboration and free software principles.
+All our work remains accessible to everyone, and we welcome contributions at any level of experience or commitment.
+
+## Looking to Contribute?
+
+We have opportunities for both technical and non-technical contributions:
+
+### Technical Roles
+- Formal specification development
+- HOL4 theorem proving
+- Proof automation infrastructure
+- Technical documentation
+- Example contract verification
+
+### Supporting Roles
+- Documentation improvement
+- Community building
+- Project management
+- Grant writing and fundraising
+
+Ready to start? Join our [Discord](https://discord.gg/a8UUs6Ce6m) or check out our [GitHub repository](https://github.com/verifereum/verifereum)!
