@@ -17,6 +17,8 @@ Using the [HOL4 theorem prover](https://hol-theorem-prover.org), we're building 
 - **High Stakes, Higher Standards**: With billions of dollars secured by smart contracts, formal verification offers the strongest security guarantees possible
 - **Perfect Fit**: Ethereum's deterministic execution model, where additionally code is expensive so applications are small, makes it an ideal candidate for formal verification
 
+**[→ Learn how to contribute](/contribute)**
+
 ## Project Status & Recent Achievements
 
 - Active development with regular commits to our [main repository](https://github.com/verifereum/verifereum)
@@ -26,7 +28,9 @@ Using the [HOL4 theorem prover](https://hol-theorem-prover.org), we're building 
 
 ## Get Involved
 
-We welcome contributors of all experience levels! Here's how to start:
+We welcome contributors of all experience levels!
+
+Start by reading our [Contributor Guide](/contribute) to learn how to set up your development environment and find your first project.
 
 ### For Technical Contributors
 
@@ -76,6 +80,8 @@ All our work remains accessible to everyone, and we welcome contributions at any
 
 ## Looking to Contribute?
 
+See our [detailed contributor guide](/contribute) to get started.
+
 We have opportunities for both technical and non-technical contributions:
 
 ### Technical Roles
@@ -91,4 +97,4 @@ We have opportunities for both technical and non-technical contributions:
 - Project management
 - Grant writing and fundraising
 
-Ready to start? Join our [Discord](https://discord.gg/a8UUs6Ce6m) or check out our [GitHub repository](https://github.com/verifereum/verifereum)!
+Ready to start? Join our [Discord](https://discord.gg/a8UUs6Ce6m) and check out our [contributor guide](/contribute)!
