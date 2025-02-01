@@ -2,8 +2,9 @@ open HolKernel boolLib bossLib Parse dep_rewrite blastLib cv_typeTheory
 cv_transLib cv_typeLib cvTheory cv_stdTheory pairTheory combinTheory
 optionTheory sumTheory listTheory byteTheory wordsTheory alistTheory
 arithmeticTheory finite_setTheory sptreeTheory whileTheory
-recursiveLengthPrefixTheory merklePatriciaTrieTheory vfmContextTheory
-vfmStateTheory vfmTransactionTheory vfmExecutionTheory vfmTypesTheory;
+recursiveLengthPrefixTheory merklePatriciaTrieTheory vfmRootTheory
+vfmContextTheory vfmStateTheory vfmTransactionTheory vfmExecutionTheory
+vfmTypesTheory;
 
 val _ = new_theory "vfmCompute";
 

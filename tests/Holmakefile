@@ -1,1 +1,1 @@
-INCLUDES=.. $(HOLDIR)/examples/json
+INCLUDES=../util ../spec $(HOLDIR)/examples/json
