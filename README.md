@@ -67,7 +67,8 @@ as described [here](docs/run-with-docker.md).
 
     For other tips checkout [this FAQ](https://hol-theorem-prover.org/faq.html).
 
-3. Run Holmake to build Verifereum and run the tests. They will take a while to run so you can cancel them.
+3. Run Holmake in the `tests` directory to build Verifereum and run the tests.
+   They will take a while to run so you can cancel them.
 
     ```bash
     Holmake
