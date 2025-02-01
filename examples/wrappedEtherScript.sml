@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse wordsLib
-     combinTheory vfmStateTheory vfmComputeTheory
+     combinTheory
+     vfmExecutionTheory vfmStateTheory vfmComputeTheory
      cv_transLib;
 
 val () = new_theory "wrappedEther";
@@ -98,5 +99,72 @@ Proof
   \\ CONV_TAC (RAND_CONV cv_eval)
   \\ CONV_TAC (listLib.list_EQ_CONV EVAL)
 QED
+
+(*
+[{"constant":true,"inputs":[],"name":"name","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},
+{"constant":false,"inputs":[{"name":"guy","type":"address"},{"name":"wad","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
+{"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
+{"constant":false,"inputs":[{"name":"src","type":"address"},{"name":"dst","type":"address"},{"name":"wad","type":"uint256"}],"name":"transferFrom","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
+{"constant":false,"inputs":[{"name":"wad","type":"uint256"}],"name":"withdraw","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},
+{"constant":true,"inputs":[],"name":"decimals","outputs":[{"name":"","type":"uint8"}],"payable":false,"stateMutability":"view","type":"function"},
+{"constant":true,"inputs":[{"name":"","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
+{"constant":true,"inputs":[],"name":"symbol","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},
+{"constant":false,"inputs":[{"name":"dst","type":"address"},{"name":"wad","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
+{"constant":false,"inputs":[],"name":"deposit","outputs":[],"payable":true,"stateMutability":"payable","type":"function"},
+{"constant":true,"inputs":[{"name":"","type":"address"},{"name":"","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
+{"payable":true,"stateMutability":"payable","type":"fallback"},
+{"anonymous":false,"inputs":[{"indexed":true,"name":"src","type":"address"},{"indexed":true,"name":"guy","type":"address"},{"indexed":false,"name":"wad","type":"uint256"}],"name":"Approval","type":"event"},
+{"anonymous":false,"inputs":[{"indexed":true,"name":"src","type":"address"},{"indexed":true,"name":"dst","type":"address"},{"indexed":false,"name":"wad","type":"uint256"}],"name":"Transfer","type":"event"},
+{"anonymous":false,"inputs":[{"indexed":true,"name":"dst","type":"address"},{"indexed":false,"name":"wad","type":"uint256"}],"name":"Deposit","type":"event"},
+{"anonymous":false,"inputs":[{"indexed":true,"name":"src","type":"address"},{"indexed":false,"name":"wad","type":"uint256"}],"name":"Withdrawal","type":"event"}]
+*)
+
+Definition abi_signatures_def:
+  abi_signatures = [
+    "name()";
+    "approve(address,uint256)";
+    "totalSupply()";
+    "transferFrom(address,address,uint256)";
+    "withdraw(uint256)";
+    "decimals()";
+    "balanceOf(address)";
+    "symbol()";
+    "transfer(address,uint256)";
+    "deposit()";
+    "allowance(address,address)"
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL abi_signatures_def;
+
+Definition Keccak_256_string_def:
+  Keccak_256_string s =
+  Keccak_256_w64 $ MAP (n2w o ORD) s
+End
+
+val () = cv_auto_trans Keccak_256_string_def;
+
+Definition abi_4bytes_def:
+  abi_4bytes = MAP (TAKE 4 o Keccak_256_string) abi_signatures
+End
+
+val () = cv_auto_trans abi_4bytes_def;
+
+Theorem abi_4bytes_eq = abi_4bytes_def |> CONV_RULE (RAND_CONV cv_eval);
+
+(*
+Theorem call_follows_abi_4bytes:
+  tx.to = SOME addr ∧
+  (lookup_account addr ms).code = contract_code ∧
+  run_transaction 1 ph bk ms tx = SOME (res, ms2) ∧
+  res.result ≠ SOME Reverted ∧ res.result ≠ SOME OutOfGas
+  ⇒
+  ∃sel.
+    sel ∈ set abi_4bytes ∧
+    sel ≼ tx.data
+Proof
+  rw[run_transaction_def, run_create_def]
+  \\ gvs[CaseEq"option", CaseEq"prod", CaseEq"sum"]
+*)
 
 val () = export_theory();
