@@ -1,5 +1,5 @@
 [submodule "tests"]
-	path = tests
+	path = tests/tests
 	url = https://github.com/ethereum/tests.git
 	branch = develop
 	shallow = true
