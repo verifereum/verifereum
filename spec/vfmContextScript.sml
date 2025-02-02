@@ -65,22 +65,16 @@ Datatype:
 End
 
 Datatype:
-  call_info =
-  <| code      : byte list
-   ; static    : bool
-   ; outputTo  : return_destination
-   ; rollback  : rollback_state
-   |>
-End
-
-Datatype:
   message_parameters =
   <| caller    : address
    ; callee    : address
+   ; code      : byte list
    ; parsed    : num |-> opname
    ; value     : num
    ; gasLimit  : num
    ; data      : byte list
+   ; static    : bool
+   ; outputTo  : return_destination
    |>
 End
 
@@ -95,7 +89,7 @@ Datatype:
    ; addRefund  : num
    ; subRefund  : num
    ; logs       : event list
-   ; callInfo   : call_info
+   ; rollback   : rollback_state
    ; msgParams  : message_parameters
    |>
 End
@@ -161,13 +155,16 @@ Definition callee_from_tx_to_def:
 End
 
 Definition initial_msg_params_def:
-  initial_msg_params callee code t =
+  initial_msg_params callee code static rd t =
   <| caller    := t.from
    ; callee    := callee
+   ; code      := code
    ; parsed    := parse_code 0 FEMPTY code
    ; value     := t.value
    ; data      := if t.to = NONE then [] else t.data
    ; gasLimit  := t.gasLimit
+   ; static    := static
+   ; outputTo  := rd
    |>
 End
 
@@ -187,7 +184,7 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context callee call t =
+  initial_context rb callee code static rd t =
   <| stack      := []
    ; memory     := []
    ; pc         := 0
@@ -197,28 +194,29 @@ Definition initial_context_def:
    ; addRefund  := 0
    ; subRefund  := 0
    ; logs       := []
-   ; callInfo   := call
-   ; msgParams  := initial_msg_params callee call.code t
+   ; rollback   := rb
+   ; msgParams  := initial_msg_params callee code static rd t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context callee c t).stack = [] ∧
-  (initial_context callee c t).memory = [] ∧
-  (initial_context callee c t).pc = 0 ∧
-  (initial_context callee c t).jumpDest = NONE ∧
-  (initial_context callee c t).returnData = [] ∧
-  (initial_context callee c t).gasUsed = 0 ∧
-  (initial_context callee c t).addRefund = 0 ∧
-  (initial_context callee c t).subRefund = 0 ∧
-  (initial_context callee c t).logs = [] ∧
-  (initial_context callee c t).msgParams  = initial_msg_params callee c.code t
+  (initial_context rb fr c s rd t).stack = [] ∧
+  (initial_context rb fr c s rd t).memory = [] ∧
+  (initial_context rb fr c s rd t).pc = 0 ∧
+  (initial_context rb fr c s rd t).jumpDest = NONE ∧
+  (initial_context rb fr c s rd t).returnData = [] ∧
+  (initial_context rb fr c s rd t).gasUsed = 0 ∧
+  (initial_context rb fr c s rd t).addRefund = 0 ∧
+  (initial_context rb fr c s rd t).subRefund = 0 ∧
+  (initial_context rb fr c s rd t).logs = [] ∧
+  (initial_context rb fr c s rd t).rollback = rb ∧
+  (initial_context rb fr c s rd t).msgParams  = initial_msg_params fr c s rd t
 Proof
   rw[initial_context_def]
 QED
 
 Theorem wf_initial_context[simp]:
-  wf_context (initial_context callee c t)
+  wf_context (initial_context rb callee c s rd t)
 Proof
   rw[wf_context_def]
 QED
@@ -251,8 +249,8 @@ End
 
 Definition intrinsic_cost_def:
   intrinsic_cost accessList p =
-  let isCreate = is_code_dest p.callInfo.outputTo in
-  let data = if isCreate then p.callInfo.code else p.msgParams.data in
+  let isCreate = is_code_dest p.outputTo in
+  let data = if isCreate then p.code else p.data in
   base_cost
   + SUM (MAP (λb. call_data_cost (b = 0w)) data)
   + (if isCreate
@@ -266,7 +264,7 @@ Definition apply_intrinsic_cost_def:
   apply_intrinsic_cost accessList c =
   c with msgParams updated_by (λp.
     p with gasLimit updated_by (λl.
-      l - intrinsic_cost accessList c
+      l - intrinsic_cost accessList p
     )
   )
 End
@@ -298,10 +296,9 @@ Definition initial_state_def:
   let rd = if IS_SOME t.to then empty_return_destination else Code callee in
   let rb = <| accounts := accounts; accesses := accesses;
               tStorage := empty_transient_storage; toDelete := [] |> in
-  let call = <| code := code; static := F; outputTo := rd; rollback := rb |> in
   SOME $
   <| contexts := [apply_intrinsic_cost t.accessList $
-                  initial_context callee call t]
+                  initial_context rb callee code F rd t]
    ; txParams := initial_tx_params c h b t
    ; rollback := rb
    |>

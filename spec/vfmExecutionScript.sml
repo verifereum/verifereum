@@ -244,7 +244,7 @@ Definition get_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return (LAST s.contexts).callInfo.rollback.accounts s
+      return (LAST s.contexts).rollback.accounts s
 End
 
 Definition get_gas_left_def:
@@ -278,7 +278,7 @@ End
 Definition get_output_to_def:
   get_output_to = do
     context <- get_current_context;
-    return context.callInfo.outputTo
+    return context.msgParams.outputTo
   od
 End
 
@@ -308,7 +308,7 @@ End
 Definition get_static_def:
   get_static = do
     context <- get_current_context;
-    return context.callInfo.static
+    return context.msgParams.static
   od
 End
 
@@ -322,7 +322,7 @@ End
 Definition get_current_code_def:
   get_current_code = do
     context <- get_current_context;
-    return $ context.callInfo.code
+    return $ context.msgParams.code
   od
 End
 
@@ -987,13 +987,7 @@ Definition proceed_create_def:
     update_accounts $
       transfer_value senderAddress address value o
       update_account address (toCreate with nonce updated_by SUC);
-    subCall <<- <|
-        code      := code
-      ; static    := F
-      ; outputTo  := Code address
-      ; rollback  := rollback
-    |>;
-    push_context $ initial_context address subCall subContextTx
+    push_context $ initial_context rollback address code F (Code address) subContextTx
   od
 End
 
@@ -1124,13 +1118,8 @@ Definition proceed_call_def:
       ; nonce := 0; gasPrice := 0; accessList := []
     |>;
     static <- get_static;
-    subCall <<- <|
-        code     := code
-      ; static   := (op = StaticCall ∨ static)
-      ; outputTo := outputTo
-      ; rollback := rollback
-    |>;
-    context <<- initial_context callee subCall subContextTx;
+    subStatic <<- (op = StaticCall ∨ static);
+    context <<- initial_context rollback callee code subStatic outputTo subContextTx;
     push_context context;
     if fIN address precompile_addresses
     then dispatch_precompiles address
@@ -1216,7 +1205,7 @@ Definition step_inst_def:
   ∧ step_inst CallDataSize = step_msgParams CallDataSize (λc. n2w (LENGTH c.data))
   ∧ step_inst CallDataCopy =
       step_copy_to_memory CallDataCopy (SOME get_call_data)
-  ∧ step_inst CodeSize = step_context CodeSize (λc. n2w (LENGTH c.callInfo.code))
+  ∧ step_inst CodeSize = step_msgParams CodeSize (λc. n2w (LENGTH c.code))
   ∧ step_inst CodeCopy = step_copy_to_memory CodeCopy (SOME get_current_code)
   ∧ step_inst GasPrice = step_txParams GasPrice (λt. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize = step_ext_code_size
@@ -1284,7 +1273,7 @@ Definition inc_pc_or_jump_def:
     case context.jumpDest of
     | NONE => set_current_context $ context with pc := context.pc + n
     | SOME pc => do
-        code <<- context.callInfo.code;
+        code <<- context.msgParams.code;
         parsed <<- context.msgParams.parsed;
         assert (pc < LENGTH code ∧
                 FLOOKUP parsed pc = SOME JumpDest) InvalidJumpDest;
@@ -1303,7 +1292,7 @@ Definition pop_and_incorporate_context_def:
       push_logs callee.logs;
       update_gas_refund (callee.addRefund, callee.subRefund)
     od else
-      set_rollback callee.callInfo.rollback
+      set_rollback callee.rollback
   od
 End
 
@@ -1366,7 +1355,7 @@ End
 Definition step_def:
   step = handle do
     context <- get_current_context;
-    code <<- context.callInfo.code;
+    code <<- context.msgParams.code;
     parsed <<- context.msgParams.parsed;
     if LENGTH code ≤ context.pc
     then step_inst Stop else
