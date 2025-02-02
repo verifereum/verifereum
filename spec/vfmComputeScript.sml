@@ -786,6 +786,12 @@ val () = initial_access_sets_def
 
 val () = cv_auto_trans initial_tx_params_def;
 
+val () = cv_auto_trans initial_rollback_def;
+
+val () = cv_auto_trans pre_transaction_updates_def;
+
+val () = cv_auto_trans code_from_tx_def;
+
 val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
@@ -983,7 +989,9 @@ val run_create_pre_def = run_create_def
 Theorem run_create_pre[cv_pre]:
   run_create_pre c p b a t
 Proof
-  rw[run_create_pre_def, initial_state_def]
+  rw[run_create_pre_def, initial_state_def,
+     pre_transaction_updates_def,
+     initial_rollback_def, code_from_tx_def]
 QED
 
 Definition run_transaction_with_fuel_def:

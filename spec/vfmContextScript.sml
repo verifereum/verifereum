@@ -276,8 +276,14 @@ Proof
   rw[apply_intrinsic_cost_def, wf_context_def]
 QED
 
-Definition initial_state_def:
-  initial_state c h b a t =
+Definition initial_rollback_def:
+  initial_rollback accounts accesses =
+  <| accounts := accounts; accesses := accesses;
+     tStorage := empty_transient_storage; toDelete := [] |>
+End
+
+Definition pre_transaction_updates_def:
+  pre_transaction_updates a t =
   let sender = lookup_account t.from a in
   let fee = t.gasLimit * t.gasPrice in (* TODO: add blob gas fee *)
   (* TODO: ensure sender has no code *)
@@ -287,21 +293,31 @@ Definition initial_state_def:
     nonce := SUC sender.nonce;
     balance := sender.balance - fee
   |> in
-  let accounts = update_account t.from updatedSender a in
-  let callee = callee_from_tx_to t.from sender.nonce t.to in
-  let accesses = initial_access_sets b.coinBase callee t in
-  let code = case t.to of
-                  SOME addr => (lookup_account addr a).code
-                | NONE => t.data in
-  let rd = if IS_SOME t.to then empty_return_destination else Code callee in
-  let rb = <| accounts := accounts; accesses := accesses;
-              tStorage := empty_transient_storage; toDelete := [] |> in
-  SOME $
-  <| contexts := [apply_intrinsic_cost t.accessList $
-                  initial_context rb callee code F rd t]
-   ; txParams := initial_tx_params c h b t
-   ; rollback := rb
-   |>
+  SOME $ update_account t.from updatedSender a
+End
+
+Definition code_from_tx_def:
+  code_from_tx a t =
+  case t.to of
+    SOME addr => (lookup_account addr a).code
+  | NONE => t.data
+End
+
+Definition initial_state_def:
+  initial_state c h b a t =
+  case pre_transaction_updates a t of NONE => NONE |
+  SOME accounts =>
+    let callee = callee_from_tx_to t.from t.nonce t.to in
+    let accesses = initial_access_sets b.coinBase callee t in
+    let code = code_from_tx a t in
+    let rd = if IS_SOME t.to then empty_return_destination else Code callee in
+    let rb = initial_rollback accounts accesses in
+    let ctxt = initial_context rb callee code F rd t in
+    SOME $
+    <| contexts := [apply_intrinsic_cost t.accessList $ ctxt]
+     ; txParams := initial_tx_params c h b t
+     ; rollback := rb
+     |>
 End
 
 Theorem wf_initial_state:
@@ -310,7 +326,8 @@ Theorem wf_initial_state:
   wf_state s
 Proof
   rw[wf_accounts_def, wf_state_def, initial_state_def,
-     update_account_def, lookup_account_def] \\ rw[]
+     pre_transaction_updates_def, update_account_def,
+     initial_rollback_def, code_from_tx_def, lookup_account_def] \\ rw[]
   \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
   \\ rw[]
 QED
