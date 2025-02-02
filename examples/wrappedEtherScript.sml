@@ -1,9 +1,24 @@
 open HolKernel boolLib bossLib Parse wordsLib
-     combinTheory
-     vfmExecutionTheory vfmStateTheory vfmComputeTheory
+     combinTheory whileTheory
+     vfmContextTheory vfmExecutionTheory vfmStateTheory vfmComputeTheory
      cv_transLib;
 
 val () = new_theory "wrappedEther";
+
+Definition Keccak_256_string_def:
+  Keccak_256_string s =
+  Keccak_256_w64 $ MAP (n2w o ORD) s
+End
+
+val () = cv_auto_trans Keccak_256_string_def;
+
+(*
+Theorem initial_state_contexts:
+  initial_state c ph bk ms tx = SOME s ⇒
+  s.contexts = [
+    apply_intrinsic_cost tx.accessList
+      (initial_context (callee_from_tx_to tx.from tx.nonce tx.to)
+*)
 
 Definition deploy_data_def:
   deploy_data = REVERSE $ hex_to_rev_bytes [] $
@@ -137,20 +152,32 @@ End
 
 val () = cv_trans_deep_embedding EVAL abi_signatures_def;
 
-Definition Keccak_256_string_def:
-  Keccak_256_string s =
-  Keccak_256_w64 $ MAP (n2w o ORD) s
+Definition MAP_TAKE_4_Keccak_256_string_def:
+  MAP_TAKE_4_Keccak_256_string ls = MAP (TAKE 4 o Keccak_256_string) ls
 End
 
-val () = cv_auto_trans Keccak_256_string_def;
+val () = cv_auto_trans MAP_TAKE_4_Keccak_256_string_def;
 
 Definition abi_4bytes_def:
-  abi_4bytes = MAP (TAKE 4 o Keccak_256_string) abi_signatures
+  abi_4bytes = MAP_TAKE_4_Keccak_256_string abi_signatures
 End
 
-val () = cv_auto_trans abi_4bytes_def;
+val () = cv_auto_trans (abi_4bytes_def |> CONV_RULE (RAND_CONV cv_eval))
 
-Theorem abi_4bytes_eq = abi_4bytes_def |> CONV_RULE (RAND_CONV cv_eval);
+Theorem contract_code_eq = cv_eval “contract_code”;
+
+Definition parsed_contract_code_def:
+  parsed_contract_code = parse_code 0 FEMPTY contract_code
+End
+
+Theorem parsed_contract_code_eq =
+  parsed_contract_code_def
+  |> CONV_RULE(RAND_CONV cv_eval);
+
+val () = cv_auto_trans parsed_contract_code_eq;
+
+Theorem FLOOKUP_parsed_contract_code_0 =
+  cv_eval “FLOOKUP parsed_contract_code 0”;
 
 (*
 Theorem call_follows_abi_4bytes:
@@ -165,6 +192,29 @@ Theorem call_follows_abi_4bytes:
 Proof
   rw[run_transaction_def, run_create_def]
   \\ gvs[CaseEq"option", CaseEq"prod", CaseEq"sum"]
+  \\ qhdtm_x_assum `run` mp_tac
+  \\ simp[run_def]
+  \\ simp[Once OWHILE_THM]
+  \\ qmatch_goalsub_abbrev_tac`OWHILE _ f`
+  \\ simp[Once step_def]
+  \\ simp[handle_def]
+  \\ `s.contexts <> []` by gvs[initial_state_def, CaseEq"option"]
+  \\ simp[Once bind_def, get_current_context_def, return_def]
+  \\ qhdtm_x_assum`initial_state`mp_tac
+  \\ simp[initial_state_def, CaseEq"option"]
+  \\ strip_tac
+  \\ qmatch_asmsub_abbrev_tac`[ctxt]`
+  \\ gvs[]
+  \\ `ctxt.msgParams.code = contract_code ∧ ctxt.pc = 0`
+  by gvs[Abbr`ctxt`, apply_intrinsic_cost_def,
+         initial_msg_params_def, code_from_tx_def]
+  \\ gvs[]
+  \\ IF_CASES_TAC
+  >- ( pop_assum mp_tac \\ rewrite_tac[contract_code_eq] \\ rw[] )
+  \\ `ctxt.msgParams.parsed = parsed_contract_code`
+  by gvs[Abbr`ctxt`, apply_intrinsic_cost_def, initial_msg_params_def,
+         parsed_contract_code_def]
+  \\ simp[FLOOKUP_parsed_contract_code_0]
 *)
 
 val () = export_theory();
