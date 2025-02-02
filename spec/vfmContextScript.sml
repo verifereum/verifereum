@@ -1,9 +1,10 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory pred_setTheory finite_setTheory
      byteTheory recursiveLengthPrefixTheory
-     vfmTypesTheory vfmStateTheory vfmTransactionTheory vfmOperationTheory;
+     vfmConstantsTheory vfmTypesTheory vfmStateTheory
+     vfmTransactionTheory vfmOperationTheory;
 
-val _ = new_theory "vfmContext";
+val () = new_theory "vfmContext";
 
 Datatype:
   transaction_parameters =
@@ -44,6 +45,10 @@ Datatype:
   | Code address
 End
 
+Definition empty_return_destination_def:
+  empty_return_destination = Memory <| offset := 0; size := 0 |>
+End
+
 Type transient_storage = “:address -> storage”
 
 Definition empty_transient_storage_def:
@@ -51,21 +56,32 @@ Definition empty_transient_storage_def:
 End
 
 Datatype:
-  call_parameters =
-  <| caller    : address
-   ; callee    : address
-   ; code      : byte list
-   ; parsed    : num |-> opname
-   ; value     : num
-   ; static    : bool
-   ; gasLimit  : num
-   ; data      : byte list
-   ; outputTo  : return_destination
-   (* values at the start of the call, for rollback *)
-   ; accounts  : evm_accounts
+  rollback_state =
+  <| accounts  : evm_accounts
    ; tStorage  : transient_storage
    ; accesses  : access_sets
    ; toDelete  : address list
+   |>
+End
+
+Datatype:
+  call_info =
+  <| code      : byte list
+   ; static    : bool
+   ; outputTo  : return_destination
+   ; rollback  : rollback_state
+   |>
+End
+
+Datatype:
+  message_parameters =
+  <| caller    : address
+   ; callee    : address
+   ; parsed    : num |-> opname
+   ; value     : num
+   ; gasLimit  : num
+   ; data      : byte list
+   ; call      : call_info
    |>
 End
 
@@ -80,16 +96,8 @@ Datatype:
    ; addRefund  : num
    ; subRefund  : num
    ; logs       : event list
-   ; callParams : call_parameters
+   ; msgParams  : message_parameters
    |>
-End
-
-Definition stack_limit_def[simp]:
-  stack_limit = 1024n
-End
-
-Definition context_limit_def[simp]:
-  context_limit = 1024n
 End
 
 Definition wf_context_def:
@@ -101,10 +109,7 @@ Datatype:
   execution_state =
   <| contexts : context list
    ; txParams : transaction_parameters
-   ; accesses : access_sets
-   ; accounts : evm_accounts
-   ; tStorage : transient_storage
-   ; toDelete : address list
+   ; rollback : rollback_state
    |>
 End
 
@@ -122,131 +127,9 @@ Datatype:
    |>
 End
 
-Datatype:
-  call_context =
-  <| code      : byte list
-   ; accounts  : evm_accounts
-   ; tStorage  : transient_storage
-   ; accesses  : access_sets
-   ; toDelete  : address list
-   ; outputTo  : return_destination
-   ; static    : bool
-   |>
-End
-
-Definition base_cost_def:
-  base_cost = 21000n
-End
-
-Definition create_cost_def:
-  create_cost = 32000n
-End
-
-Definition call_data_cost_def:
-  call_data_cost is_zero =
-  if is_zero then 4n else 16
-End
-
-Definition init_code_word_cost_def:
-  init_code_word_cost = 2n
-End
-
-Definition code_deposit_cost_def:
-  code_deposit_cost = 200n
-End
-
-Definition warm_access_cost_def:
-  warm_access_cost = 100n
-End
-
-Definition cold_sload_cost_def:
-  cold_sload_cost = 2100n
-End
-
-Definition cold_access_cost_def:
-  cold_access_cost = 2600n
-End
-
-Definition memory_cost_per_word_def:
-  memory_cost_per_word = 3n
-End
-
-Definition memory_copy_cost_def:
-  memory_copy_cost = 3n
-End
-
-Definition exp_per_byte_cost_def:
-  exp_per_byte_cost = 50n
-End
-
-Definition keccak256_per_word_cost_def:
-  keccak256_per_word_cost = 6n
-End
-
-Definition storage_set_cost_def:
-  storage_set_cost = 20000n
-End
-
-Definition storage_update_cost_def:
-  storage_update_cost = 5000n
-End
-
-Definition storage_clear_refund_def:
-  storage_clear_refund = 4800n
-End
-
-Definition log_topic_cost_def:
-  log_topic_cost = 375n
-End
-
-Definition log_data_cost_def:
-  log_data_cost = 8n
-End
-
-Definition new_account_cost_def:
-  new_account_cost = 25000n
-End
-
-Definition call_value_cost_def:
-  call_value_cost = 9000n
-End
-
-Definition self_destruct_new_account_cost_def:
-  self_destruct_new_account_cost = 25000n
-End
-
-Definition word_size_def:
-  word_size byteSize = (byteSize + 31) DIV 32
-End
-
-Definition call_stipend_def:
-  call_stipend = 2300n
-End
-
 Definition is_code_dest_def:
   is_code_dest (Code _ ) = T ∧
   is_code_dest _ = F
-End
-
-Definition access_list_address_cost_def:
-  access_list_address_cost = 2400n
-End
-
-Definition access_list_storage_key_cost_def:
-  access_list_storage_key_cost = 1900n
-End
-
-Definition intrinsic_cost_def:
-  intrinsic_cost accessList p =
-  let isCreate = is_code_dest p.outputTo in
-  let data = if isCreate then p.code else p.data in
-  base_cost
-  + SUM (MAP (λb. call_data_cost (b = 0w)) data)
-  + (if isCreate
-     then create_cost + init_code_word_cost * (word_size $ LENGTH data)
-     else 0)
-  + access_list_address_cost * LENGTH accessList
-  + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
 End
 
 Definition parse_code_def:
@@ -277,21 +160,15 @@ Definition callee_from_tx_to_def:
   callee_from_tx_to sender nonce (SOME address) = address
 End
 
-Definition initial_call_params_def:
-  initial_call_params callee (ctxt: call_context) t =
+Definition initial_msg_params_def:
+  initial_msg_params callee (call: call_info) t =
   <| caller    := t.from
    ; callee    := callee
-   ; code      := ctxt.code
-   ; parsed    := parse_code 0 FEMPTY ctxt.code
+   ; parsed    := parse_code 0 FEMPTY call.code
    ; value     := t.value
-   ; static    := ctxt.static
    ; data      := if t.to = NONE then [] else t.data
    ; gasLimit  := t.gasLimit
-   ; accounts  := ctxt.accounts
-   ; tStorage  := ctxt.tStorage
-   ; accesses  := ctxt.accesses
-   ; toDelete  := ctxt.toDelete
-   ; outputTo  := ctxt.outputTo
+   ; call      := call
    |>
 End
 
@@ -311,7 +188,7 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context callee ctxt t =
+  initial_context callee call t =
   <| stack      := []
    ; memory     := []
    ; pc         := 0
@@ -321,36 +198,34 @@ Definition initial_context_def:
    ; addRefund  := 0
    ; subRefund  := 0
    ; logs       := []
-   ; callParams := initial_call_params callee ctxt t
+   ; msgParams  := initial_msg_params callee call t
    |>
 End
 
-Theorem initial_call_params_simp[simp]:
-  (initial_call_params callee ctxt t).code = ctxt.code ∧
-  (initial_call_params callee ctxt t).gasLimit = t.gasLimit ∧
-  (initial_call_params callee ctxt t).outputTo = ctxt.outputTo
+Theorem initial_msg_params_simp[simp]:
+  (initial_msg_params callee c t).gasLimit = t.gasLimit
   (* TODO: as needed *)
 Proof
-  rw[initial_call_params_def]
+  rw[initial_msg_params_def]
 QED
 
 Theorem initial_context_simp[simp]:
-  (initial_context callee ctxt t).stack = [] ∧
-  (initial_context callee ctxt t).memory = [] ∧
-  (initial_context callee ctxt t).pc = 0 ∧
-  (initial_context callee ctxt t).jumpDest = NONE ∧
-  (initial_context callee ctxt t).returnData = [] ∧
-  (initial_context callee ctxt t).gasUsed = 0 ∧
-  (initial_context callee ctxt t).addRefund = 0 ∧
-  (initial_context callee ctxt t).subRefund = 0 ∧
-  (initial_context callee ctxt t).logs = [] ∧
-  (initial_context callee ctxt t).callParams = initial_call_params callee ctxt t
+  (initial_context callee c t).stack = [] ∧
+  (initial_context callee c t).memory = [] ∧
+  (initial_context callee c t).pc = 0 ∧
+  (initial_context callee c t).jumpDest = NONE ∧
+  (initial_context callee c t).returnData = [] ∧
+  (initial_context callee c t).gasUsed = 0 ∧
+  (initial_context callee c t).addRefund = 0 ∧
+  (initial_context callee c t).subRefund = 0 ∧
+  (initial_context callee c t).logs = [] ∧
+  (initial_context callee c t).msgParams  = initial_msg_params callee c t
 Proof
   rw[initial_context_def]
 QED
 
 Theorem wf_initial_context[simp]:
-  wf_context (initial_context callee ctxt t)
+  wf_context (initial_context callee c t)
 Proof
   rw[wf_context_def]
 QED
@@ -360,7 +235,7 @@ Definition wf_state_def:
     s.contexts ≠ [] ∧
     LENGTH s.contexts ≤ context_limit ∧
     EVERY wf_context s.contexts ∧
-    wf_accounts s.accounts
+    wf_accounts s.rollback.accounts
 End
 
 Definition precompile_addresses_def:
@@ -381,9 +256,22 @@ Definition initial_access_sets_def:
    |>
 End
 
+Definition intrinsic_cost_def:
+  intrinsic_cost accessList p =
+  let isCreate = is_code_dest p.call.outputTo in
+  let data = if isCreate then p.call.code else p.data in
+  base_cost
+  + SUM (MAP (λb. call_data_cost (b = 0w)) data)
+  + (if isCreate
+     then create_cost + init_code_word_cost * (word_size $ LENGTH data)
+     else 0)
+  + access_list_address_cost * LENGTH accessList
+  + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
+End
+
 Definition apply_intrinsic_cost_def:
   apply_intrinsic_cost accessList c =
-  c with callParams updated_by (λp.
+  c with msgParams  updated_by (λp.
     p with gasLimit updated_by (λl.
       l - intrinsic_cost accessList p
     )
@@ -396,10 +284,6 @@ Theorem wf_context_apply_intrinsic_cost[simp]:
 Proof
   rw[apply_intrinsic_cost_def, wf_context_def]
 QED
-
-Definition empty_return_destination_def:
-  empty_return_destination = Memory <| offset := 0; size := 0 |>
-End
 
 Definition initial_state_def:
   initial_state c h b a t =
@@ -419,17 +303,14 @@ Definition initial_state_def:
                   SOME addr => (lookup_account addr a).code
                 | NONE => t.data in
   let rd = if IS_SOME t.to then empty_return_destination else Code callee in
-  let ctxt = <| code := code; accounts := accounts; accesses := accesses
-              ; tStorage := empty_transient_storage
-              ; toDelete := []; outputTo := rd; static := F |> in
+  let rb = <| accounts := accounts; accesses := accesses;
+              tStorage := empty_transient_storage; toDelete := [] |> in
+  let call = <| code := code; static := F; outputTo := rd; rollback := rb |> in
   SOME $
   <| contexts := [apply_intrinsic_cost t.accessList $
-                  initial_context callee ctxt t]
+                  initial_context callee call t]
    ; txParams := initial_tx_params c h b t
-   ; accesses := accesses
-   ; accounts := accounts
-   ; tStorage := empty_transient_storage
-   ; toDelete := []
+   ; rollback := rb
    |>
 End
 
@@ -444,4 +325,4 @@ Proof
   \\ rw[]
 QED
 
-val _ = export_theory();
+val () = export_theory();

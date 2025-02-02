@@ -210,39 +210,33 @@ Definition get_tx_params_def:
 End
 
 Definition get_accounts_def:
-  get_accounts s = return s.accounts s
+  get_accounts s = return s.rollback.accounts s
 End
 
 Definition update_accounts_def:
-  update_accounts f s = return () (s with accounts updated_by f)
+  update_accounts f s = return () $
+    s with rollback updated_by (λr. r with accounts updated_by f)
 End
 
 Definition set_accounts_def:
   set_accounts a = update_accounts (K a)
 End
 
-Definition get_accesses_def:
-  get_accesses s = return s.accesses s
-End
-
-Definition set_accesses_def:
-  set_accesses a s = return () (s with accesses := a)
-End
-
-Definition get_toDelete_def:
-  get_toDelete s = return s.toDelete s
-End
-
-Definition set_toDelete_def:
-  set_toDelete x s = return () (s with toDelete := x)
-End
-
 Definition get_tStorage_def:
-  get_tStorage s = return s.tStorage s
+  get_tStorage s = return s.rollback.tStorage s
 End
 
 Definition set_tStorage_def:
-  set_tStorage x s = return () (s with tStorage := x)
+  set_tStorage x s = return () $
+    s with rollback updated_by (λr. r with tStorage := x)
+End
+
+Definition get_rollback_def:
+  get_rollback s = return s.rollback s
+End
+
+Definition set_rollback_def:
+  set_rollback r s = return () $ s with rollback := r
 End
 
 Definition get_original_def:
@@ -250,41 +244,41 @@ Definition get_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return (LAST s.contexts).callParams.accounts s
+      return (LAST s.contexts).msgParams.call.rollback.accounts s
 End
 
 Definition get_gas_left_def:
   get_gas_left = do
     context <- get_current_context;
-    return $ context.callParams.gasLimit - context.gasUsed
+    return $ context.msgParams.gasLimit - context.gasUsed
   od
 End
 
 Definition get_callee_def:
   get_callee = do
     context <- get_current_context;
-    return context.callParams.callee
+    return context.msgParams.callee
   od
 End
 
 Definition get_caller_def:
   get_caller = do
     context <- get_current_context;
-    return context.callParams.caller
+    return context.msgParams.caller
   od
 End
 
 Definition get_value_def:
   get_value = do
     context <- get_current_context;
-    return context.callParams.value
+    return context.msgParams.value
   od
 End
 
 Definition get_output_to_def:
   get_output_to = do
     context <- get_current_context;
-    return context.callParams.outputTo
+    return context.msgParams.call.outputTo
   od
 End
 
@@ -314,7 +308,7 @@ End
 Definition get_static_def:
   get_static = do
     context <- get_current_context;
-    return context.callParams.static
+    return context.msgParams.call.static
   od
 End
 
@@ -328,14 +322,14 @@ End
 Definition get_current_code_def:
   get_current_code = do
     context <- get_current_context;
-    return $ context.callParams.code
+    return $ context.msgParams.call.code
   od
 End
 
 Definition get_call_data_def:
   get_call_data = do
     context <- get_current_context;
-    return $ context.callParams.data
+    return $ context.msgParams.data
   od
 End
 
@@ -370,7 +364,7 @@ Definition consume_gas_def:
   do
     context <- get_current_context;
     newContext <<- context with gasUsed := context.gasUsed + n;
-    assert (newContext.gasUsed ≤ context.callParams.gasLimit) OutOfGas;
+    assert (newContext.gasUsed ≤ context.msgParams.gasLimit) OutOfGas;
     set_current_context newContext
   od
 End
@@ -407,23 +401,29 @@ End
 
 Definition add_to_delete_def:
   add_to_delete a s =
-  return () (s with toDelete updated_by CONS a)
+  return () $
+    s with rollback updated_by
+      (λr. r with toDelete updated_by CONS a)
 End
 
 Definition access_address_def:
   access_address a s =
-  let addresses = s.accesses.addresses in
+  let addresses = s.rollback.accesses.addresses in
+  let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
+  let newRollback = s.rollback with accesses := newAccesses in
     return
       (if fIN a addresses then warm_access_cost else cold_access_cost)
-      (s with accesses := (s.accesses with addresses := fINSERT a addresses))
+      (s with rollback := newRollback)
 End
 
 Definition access_slot_def:
   access_slot x s =
-  let storageKeys = s.accesses.storageKeys in
+  let storageKeys = s.rollback.accesses.storageKeys in
+  let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
+  let newRollback = s.rollback with accesses := newAccesses in
     return
       (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
-      (s with accesses := (s.accesses with storageKeys := fINSERT x storageKeys))
+      (s with rollback := newRollback)
 End
 
 Definition zero_warm_def:
@@ -568,8 +568,8 @@ Definition step_context_def:
   od
 End
 
-Definition step_callParams_def:
-  step_callParams op f = step_context op (λc. f c.callParams)
+Definition step_msgParams_def:
+  step_msgParams op f = step_context op (λc. f c.msgParams)
 End
 
 Definition step_txParams_def:
@@ -983,23 +983,17 @@ Definition proceed_create_def:
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
     |>;
-    rollback <- get_accounts;
+    rollback <- get_rollback;
     update_accounts $
       transfer_value senderAddress address value o
       update_account address (toCreate with nonce updated_by SUC);
-    accesses <- get_accesses;
-    toDelete <- get_toDelete;
-    tStorage <- get_tStorage;
-    subContextParams <<- <|
+    subCall <<- <|
         code      := code
-      ; accounts  := rollback
-      ; accesses  := accesses
-      ; toDelete  := toDelete
-      ; tStorage  := tStorage
-      ; outputTo  := Code address
       ; static    := F
+      ; outputTo  := Code address
+      ; rollback  := rollback
     |>;
-    push_context $ initial_context address subContextParams subContextTx
+    push_context $ initial_context address subCall subContextTx
   od
 End
 
@@ -1110,7 +1104,8 @@ End
 Definition proceed_call_def:
   proceed_call op sender address value
     argsOffset argsSize code stipend
-    accounts outputTo = do
+    outputTo = do
+    rollback <- get_rollback;
     data <- read_memory argsOffset argsSize;
     if op ≠ CallCode (* otherwise to := sender *) ∧ 0 < value then
       update_accounts $ transfer_value sender address value
@@ -1129,20 +1124,13 @@ Definition proceed_call_def:
       ; nonce := 0; gasPrice := 0; accessList := []
     |>;
     static <- get_static;
-    accesses <- get_accesses;
-    toDelete <- get_toDelete;
-    tStorage <- get_tStorage;
-    subContextParams <<- <|
+    subCall <<- <|
         code     := code
-      ; accounts := accounts
-      ; accesses := accesses
-      ; toDelete := toDelete
-      ; tStorage := tStorage
-      ; outputTo := outputTo
       ; static   := (op = StaticCall ∨ static)
+      ; outputTo := outputTo
+      ; rollback := rollback
     |>;
-
-    context <<- initial_context callee subContextParams subContextTx;
+    context <<- initial_context callee subCall subContextTx;
     push_context context;
     if fIN address precompile_addresses
     then dispatch_precompiles address
@@ -1186,7 +1174,7 @@ Definition step_call_def:
       then abort_unuse stipend
       else proceed_call op sender address value
              argsOffset argsSize toAccount.code stipend
-             accounts (Memory <| offset := retOffset; size := retSize |>)
+             (Memory <| offset := retOffset; size := retSize |>)
     od
   od
 End
@@ -1219,16 +1207,16 @@ Definition step_inst_def:
   ∧ step_inst ShR = step_binop ShR (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = step_binop SAR (λn w. word_asr w (w2n n))
   ∧ step_inst Keccak256 = step_keccak256
-  ∧ step_inst Address = step_callParams Address (λc. w2w c.callee)
+  ∧ step_inst Address = step_msgParams Address (λc. w2w c.callee)
   ∧ step_inst Balance = step_balance
   ∧ step_inst Origin = step_txParams Origin (λt. w2w t.origin)
-  ∧ step_inst Caller = step_callParams Caller (λc. w2w c.caller)
-  ∧ step_inst CallValue = step_callParams CallValue (λc. n2w c.value)
+  ∧ step_inst Caller = step_msgParams Caller (λc. w2w c.caller)
+  ∧ step_inst CallValue = step_msgParams CallValue (λc. n2w c.value)
   ∧ step_inst CallDataLoad = step_call_data_load
-  ∧ step_inst CallDataSize = step_callParams CallDataSize (λc. n2w (LENGTH c.data))
+  ∧ step_inst CallDataSize = step_msgParams CallDataSize (λc. n2w (LENGTH c.data))
   ∧ step_inst CallDataCopy =
       step_copy_to_memory CallDataCopy (SOME get_call_data)
-  ∧ step_inst CodeSize = step_callParams CodeSize (λc. n2w (LENGTH c.code))
+  ∧ step_inst CodeSize = step_msgParams CodeSize (λc. n2w (LENGTH c.call.code))
   ∧ step_inst CodeCopy = step_copy_to_memory CodeCopy (SOME get_current_code)
   ∧ step_inst GasPrice = step_txParams GasPrice (λt. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize = step_ext_code_size
@@ -1257,7 +1245,7 @@ Definition step_inst_def:
   ∧ step_inst PC = step_context PC (λc. n2w c.pc)
   ∧ step_inst MSize = step_context MSize (λc. n2w $ LENGTH c.memory)
   ∧ step_inst Gas = step_context Gas
-                      (λc. n2w $ c.callParams.gasLimit - c.gasUsed)
+                      (λc. n2w $ c.msgParams.gasLimit - c.gasUsed)
   ∧ step_inst TLoad = step_sload T
   ∧ step_inst TStore = step_sstore T
   ∧ step_inst MCopy = step_copy_to_memory MCopy NONE
@@ -1296,8 +1284,8 @@ Definition inc_pc_or_jump_def:
     case context.jumpDest of
     | NONE => set_current_context $ context with pc := context.pc + n
     | SOME pc => do
-        code <<- context.callParams.code;
-        parsed <<- context.callParams.parsed;
+        code <<- context.msgParams.call.code;
+        parsed <<- context.msgParams.parsed;
         assert (pc < LENGTH code ∧
                 FLOOKUP parsed pc = SOME JumpDest) InvalidJumpDest;
         set_current_context $
@@ -1314,12 +1302,8 @@ Definition pop_and_incorporate_context_def:
     if success then do
       push_logs callee.logs;
       update_gas_refund (callee.addRefund, callee.subRefund)
-    od else do
-      set_accesses callee.callParams.accesses;
-      set_accounts callee.callParams.accounts;
-      set_toDelete callee.callParams.toDelete;
-      set_tStorage callee.callParams.tStorage
-    od
+    od else
+      set_rollback callee.msgParams.call.rollback
   od
 End
 
@@ -1382,8 +1366,8 @@ End
 Definition step_def:
   step = handle do
     context <- get_current_context;
-    code <<- context.callParams.code;
-    parsed <<- context.callParams.parsed;
+    code <<- context.msgParams.call.code;
+    parsed <<- context.msgParams.parsed;
     if LENGTH code ≤ context.pc
     then step_inst Stop else
     do case FLOOKUP parsed context.pc of
@@ -1418,7 +1402,7 @@ Definition post_transaction_accounting_def:
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
     then (0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = HD t.contexts in
-      (ctxt.callParams.gasLimit, ctxt.gasUsed,
+      (ctxt.msgParams.gasLimit, ctxt.gasUsed,
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
   let txGasUsed = tx.gasLimit - gasLeft in
@@ -1429,7 +1413,7 @@ Definition post_transaction_accounting_def:
   let totalGasUsed = txGasUsed - gasRefund in
   let transactionFee = totalGasUsed * priorityFeePerGas in
   let accounts = if result = NONE
-                 then process_deletions t.toDelete t.accounts
+                 then process_deletions t.rollback.toDelete t.rollback.accounts
                  else acc in
   let sender = lookup_account tx.from accounts in
   let feeRecipient = lookup_account blk.coinBase accounts in
@@ -1453,20 +1437,22 @@ Definition run_create_def:
     NONE => NONE
   | SOME s => SOME $
     let ctxt = HD s.contexts in
-    let calleeAddress = ctxt.callParams.callee in
+    let calleeAddress = ctxt.msgParams.callee in
     if IS_SOME tx.to then
-      INR $ (s.accounts, s with accounts updated_by
-             transfer_value tx.from calleeAddress tx.value)
+      INR $ (s.rollback.accounts, s with rollback updated_by
+                                   (λr. r with accounts updated_by
+             transfer_value tx.from calleeAddress tx.value))
     else
-      let callee = lookup_account calleeAddress s.accounts in
+      let accounts = s.rollback.accounts in
+      let callee = lookup_account calleeAddress accounts in
       if account_already_created callee then
-        INL $ post_transaction_accounting blk tx (SOME AddressCollision) s.accounts
-              (s with contexts := [ctxt with gasUsed := ctxt.callParams.gasLimit])
+        INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
+              (s with contexts := [ctxt with gasUsed := ctxt.msgParams.gasLimit])
       else
-        INR $ (s.accounts, s with accounts updated_by (
+        INR $ (accounts, s with rollback updated_by (λr. r with accounts updated_by (
           transfer_value tx.from calleeAddress tx.value o
           update_account calleeAddress (callee with nonce updated_by SUC)
-        ))
+        )))
 End
 
 Definition run_transaction_def:

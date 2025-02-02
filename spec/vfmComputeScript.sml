@@ -702,7 +702,7 @@ val () = “dispatch_precompiles a s” |>
     dispatch_precompiles_def, COND_RATOR
   ] |> cv_auto_trans;
 
-val () = “proceed_call a b c d e f g h i j s” |>
+val () = “proceed_call a b c d e f g h i s” |>
   SIMP_CONV std_ss [
     proceed_call_def, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR
   ] |> cv_auto_trans;
@@ -718,7 +718,7 @@ val step_inst_pre_def = step_inst_def |>
     word_lsl_modexp,
     with_zero_def,
     step_context_def,
-    step_callParams_def,
+    step_msgParams_def,
     step_txParams_def,
     step_copy_to_memory_def,
     copy_to_memory_def,
