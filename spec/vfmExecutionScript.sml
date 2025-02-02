@@ -244,7 +244,7 @@ Definition get_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return (LAST s.contexts).msgParams.call.rollback.accounts s
+      return (LAST s.contexts).callInfo.rollback.accounts s
 End
 
 Definition get_gas_left_def:
@@ -278,7 +278,7 @@ End
 Definition get_output_to_def:
   get_output_to = do
     context <- get_current_context;
-    return context.msgParams.call.outputTo
+    return context.callInfo.outputTo
   od
 End
 
@@ -308,7 +308,7 @@ End
 Definition get_static_def:
   get_static = do
     context <- get_current_context;
-    return context.msgParams.call.static
+    return context.callInfo.static
   od
 End
 
@@ -322,7 +322,7 @@ End
 Definition get_current_code_def:
   get_current_code = do
     context <- get_current_context;
-    return $ context.msgParams.call.code
+    return $ context.callInfo.code
   od
 End
 
@@ -1216,7 +1216,7 @@ Definition step_inst_def:
   ∧ step_inst CallDataSize = step_msgParams CallDataSize (λc. n2w (LENGTH c.data))
   ∧ step_inst CallDataCopy =
       step_copy_to_memory CallDataCopy (SOME get_call_data)
-  ∧ step_inst CodeSize = step_msgParams CodeSize (λc. n2w (LENGTH c.call.code))
+  ∧ step_inst CodeSize = step_context CodeSize (λc. n2w (LENGTH c.callInfo.code))
   ∧ step_inst CodeCopy = step_copy_to_memory CodeCopy (SOME get_current_code)
   ∧ step_inst GasPrice = step_txParams GasPrice (λt. n2w t.gasPrice)
   ∧ step_inst ExtCodeSize = step_ext_code_size
@@ -1284,7 +1284,7 @@ Definition inc_pc_or_jump_def:
     case context.jumpDest of
     | NONE => set_current_context $ context with pc := context.pc + n
     | SOME pc => do
-        code <<- context.msgParams.call.code;
+        code <<- context.callInfo.code;
         parsed <<- context.msgParams.parsed;
         assert (pc < LENGTH code ∧
                 FLOOKUP parsed pc = SOME JumpDest) InvalidJumpDest;
@@ -1303,7 +1303,7 @@ Definition pop_and_incorporate_context_def:
       push_logs callee.logs;
       update_gas_refund (callee.addRefund, callee.subRefund)
     od else
-      set_rollback callee.msgParams.call.rollback
+      set_rollback callee.callInfo.rollback
   od
 End
 
@@ -1366,7 +1366,7 @@ End
 Definition step_def:
   step = handle do
     context <- get_current_context;
-    code <<- context.msgParams.call.code;
+    code <<- context.callInfo.code;
     parsed <<- context.msgParams.parsed;
     if LENGTH code ≤ context.pc
     then step_inst Stop else

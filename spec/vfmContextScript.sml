@@ -81,7 +81,6 @@ Datatype:
    ; value     : num
    ; gasLimit  : num
    ; data      : byte list
-   ; call      : call_info
    |>
 End
 
@@ -96,6 +95,7 @@ Datatype:
    ; addRefund  : num
    ; subRefund  : num
    ; logs       : event list
+   ; callInfo   : call_info
    ; msgParams  : message_parameters
    |>
 End
@@ -161,14 +161,13 @@ Definition callee_from_tx_to_def:
 End
 
 Definition initial_msg_params_def:
-  initial_msg_params callee (call: call_info) t =
+  initial_msg_params callee code t =
   <| caller    := t.from
    ; callee    := callee
-   ; parsed    := parse_code 0 FEMPTY call.code
+   ; parsed    := parse_code 0 FEMPTY code
    ; value     := t.value
    ; data      := if t.to = NONE then [] else t.data
    ; gasLimit  := t.gasLimit
-   ; call      := call
    |>
 End
 
@@ -198,16 +197,10 @@ Definition initial_context_def:
    ; addRefund  := 0
    ; subRefund  := 0
    ; logs       := []
-   ; msgParams  := initial_msg_params callee call t
+   ; callInfo   := call
+   ; msgParams  := initial_msg_params callee call.code t
    |>
 End
-
-Theorem initial_msg_params_simp[simp]:
-  (initial_msg_params callee c t).gasLimit = t.gasLimit
-  (* TODO: as needed *)
-Proof
-  rw[initial_msg_params_def]
-QED
 
 Theorem initial_context_simp[simp]:
   (initial_context callee c t).stack = [] ∧
@@ -219,7 +212,7 @@ Theorem initial_context_simp[simp]:
   (initial_context callee c t).addRefund = 0 ∧
   (initial_context callee c t).subRefund = 0 ∧
   (initial_context callee c t).logs = [] ∧
-  (initial_context callee c t).msgParams  = initial_msg_params callee c t
+  (initial_context callee c t).msgParams  = initial_msg_params callee c.code t
 Proof
   rw[initial_context_def]
 QED
@@ -258,8 +251,8 @@ End
 
 Definition intrinsic_cost_def:
   intrinsic_cost accessList p =
-  let isCreate = is_code_dest p.call.outputTo in
-  let data = if isCreate then p.call.code else p.data in
+  let isCreate = is_code_dest p.callInfo.outputTo in
+  let data = if isCreate then p.callInfo.code else p.msgParams.data in
   base_cost
   + SUM (MAP (λb. call_data_cost (b = 0w)) data)
   + (if isCreate
@@ -271,9 +264,9 @@ End
 
 Definition apply_intrinsic_cost_def:
   apply_intrinsic_cost accessList c =
-  c with msgParams  updated_by (λp.
+  c with msgParams updated_by (λp.
     p with gasLimit updated_by (λl.
-      l - intrinsic_cost accessList p
+      l - intrinsic_cost accessList c
     )
   )
 End
