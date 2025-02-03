@@ -1,1 +1,1 @@
-INCLUDES=../spec
+INCLUDES=../spec ../prog
