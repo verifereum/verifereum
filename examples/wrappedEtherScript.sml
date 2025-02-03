@@ -5,6 +5,170 @@ open HolKernel boolLib bossLib Parse wordsLib
 
 val () = new_theory "wrappedEther";
 
+Definition valid_def:
+  valid P f Q =
+  ∀s: execution_state.
+    P s ⇒ case f s : α execution_result
+          of (r, t) => Q r t
+End
+
+Definition valid_result_def:
+  valid_result P f Q =
+  valid P f (λr s. ISL r ∧ Q (OUTL r) s)
+End
+
+Definition valid_result_fn_def:
+  valid_result_fn P f Q g =
+  valid_result P f (λr s. Q s ∧ r = g s)
+End
+
+Definition valid_result_eq_def:
+  valid_result_eq P f Q x =
+  valid_result_fn P f Q (K x)
+End
+
+Theorem valid_bind_success:
+  valid_result P g Q1 ∧
+  (∀x. valid (Q1 x) (f x) Q)
+  ⇒
+  valid P (monad_bind g f) Q
+Proof
+  rw[valid_result_def, valid_def, bind_def]
+  \\ CASE_TAC \\ gvs[]
+  \\ last_x_assum drule \\ rw[]
+  \\ CASE_TAC \\ gvs[]
+QED
+
+Theorem valid_ignore_bind_success:
+  valid_result P r Q1 ∧
+  (∀x. valid (Q1 x) f Q)
+  ⇒
+  valid P (ignore_bind r f) Q
+Proof
+  rw[valid_def, valid_result_def, ignore_bind_def, bind_def]
+  \\ first_x_assum drule
+  \\ CASE_TAC \\ gvs[] \\ strip_tac
+  \\ CASE_TAC \\ gvs[]
+  \\ CASE_TAC \\ gvs[]
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem valid_result_get_current_context:
+  (∀s. P s ⇒ ¬NULL s.contexts) ∧
+  (∀s. P s ⇒ Q (HD s.contexts) s)
+  ⇒
+  valid_result P get_current_context Q
+Proof
+  rw[valid_result_def, valid_def, get_current_context_def]
+  \\ rw[fail_def, return_def]
+  \\ rpt(first_x_assum drule)
+  \\ rw[]
+QED
+
+Theorem valid_result_eq_assert:
+  (∀s. P s ⇒ b ∧ Q s)
+  ⇒
+  valid_result_eq P (assert b e) Q ()
+Proof
+  rw[valid_result_eq_def, valid_result_fn_def, valid_result_def, valid_def, assert_def]
+QED
+
+Theorem valid_result_eq_set_current_context:
+  (∀s. P s ⇒ ¬NULL s.contexts) ∧
+  (∀s. P s ⇒ Q (s with contexts updated_by λls. c :: TL ls))
+  ⇒
+  valid_result_eq P (set_current_context c) Q ()
+Proof
+  rw[valid_result_eq_def, valid_result_def, valid_def,
+     valid_result_fn_def, set_current_context_def]
+  \\ last_x_assum drule \\ rw[return_def]
+  \\ last_x_assum drule \\ rw[]
+  \\ qmatch_goalsub_abbrev_tac`Q s1`
+  \\ qmatch_asmsub_abbrev_tac`Q s2`
+  \\ `s1 = s2` by rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality]
+  \\ rw[]
+QED
+
+Theorem valid_strengthen:
+  valid P f Q1 ∧
+  (∀r s. Q1 r s ⇒ Q r s)
+  ⇒
+  valid P f Q
+Proof
+  rw[valid_def]
+  \\ last_x_assum drule \\ gvs[]
+  \\ CASE_TAC \\ rw[]
+QED
+
+Theorem valid_result_valid:
+  valid_result P f Q1 ∧
+  (∀r s. ISL r ∧ Q1 (OUTL r) s ⇒ Q r s)
+  ⇒
+  valid P f Q
+Proof
+  rw[valid_result_def]
+  \\ irule valid_strengthen
+  \\ goal_assum (first_x_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
+Theorem valid_result_eq_valid_result:
+  valid_result_eq P f Q1 x ∧
+  (∀s. Q1 s ⇒ Q x s)
+  ⇒
+  valid_result P f Q
+Proof
+  rw[valid_result_fn_def, valid_result_eq_def, valid_result_def]
+  \\ irule valid_strengthen
+  \\ goal_assum (first_x_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
+Theorem valid_result_eq_consume_gas:
+  (∀s. P s ⇒ ∃c t. s.contexts = c::t ∧ c.gasUsed + n ≤ c.msgParams.gasLimit) ∧
+  (∀s. P s ⇒ Q (s with contexts updated_by
+                λls. (HD ls with gasUsed updated_by $+ n) :: TL ls))
+  ⇒
+  valid_result_eq P (consume_gas n) Q ()
+Proof
+  rw[consume_gas_def]
+  \\ rw[valid_result_eq_def, valid_result_fn_def, valid_result_def]
+  \\ irule valid_bind_success
+  \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
+  \\ reverse(rw[])
+  >- (
+    irule valid_result_get_current_context
+    \\ rw[] \\ res_tac \\ rw[])
+  \\ irule valid_ignore_bind_success
+  \\ qexists_tac`λr s. P s ∧ x = HD s.contexts`
+  \\ reverse(rw[])
+  >- (
+    irule valid_result_eq_valid_result \\ rw[]
+    \\ qexists_tac`λs. P s ∧ x = HD s.contexts` \\ rw[]
+    \\ irule valid_result_eq_assert
+    \\ rw[]
+    \\ last_x_assum drule \\ rw[]
+    \\ rw[] )
+  \\ irule valid_result_valid
+  \\ rw[]
+  \\ qexists_tac`λr s. Q s`
+  \\ rw[]
+  \\ irule valid_result_eq_valid_result
+  \\ rw[]
+  \\ qexists_tac`Q`
+  \\ rw[]
+  \\ irule valid_result_eq_set_current_context
+  \\ rw[]
+  \\ last_x_assum drule \\ rw[]
+  \\ last_x_assum drule \\ rw[]
+  \\ qmatch_goalsub_abbrev_tac`Q s1`
+  \\ qmatch_asmsub_abbrev_tac`Q s2`
+  \\ `s1 = s2` by (
+    rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality,
+       context_component_equality] )
+  \\ rw[]
+QED
+
 Definition Keccak_256_string_def:
   Keccak_256_string s =
   Keccak_256_w64 $ MAP (n2w o ORD) s
@@ -215,6 +379,11 @@ Proof
   by gvs[Abbr`ctxt`, apply_intrinsic_cost_def, initial_msg_params_def,
          parsed_contract_code_def]
   \\ simp[FLOOKUP_parsed_contract_code_0]
+  \\ simp[step_inst_def]
+  \\ qmatch_goalsub_abbrev_tac`pair_CASE (_ s)`
+  \\ simp[bind_def, ignore_bind_def]
+  \\ simp[step_push_def]
+  step_push_def
 *)
 
 val () = export_theory();
