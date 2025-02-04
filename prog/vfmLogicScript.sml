@@ -36,6 +36,39 @@ Proof
   \\ CASE_TAC \\ rw[]
 QED
 
+Theorem valid_weaken:
+  valid P1 f1 Q ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  valid P f Q
+Proof
+  rw[valid_def]
+  \\ first_x_assum drule \\ rw[]
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem valid_result_weaken:
+  valid_result P1 f1 Q ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  valid_result P f Q
+Proof
+  rw[valid_result_def]
+  \\ metis_tac[valid_weaken]
+QED
+
+Theorem valid_result_fn_weaken:
+  valid_result_fn P1 f1 Q g ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  valid_result_fn P f Q g
+Proof
+  rw[valid_result_fn_def]
+  \\ metis_tac[valid_result_weaken]
+QED
+
+Theorem valid_result_eq_weaken:
+  valid_result_eq P1 f1 Q g ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  valid_result_eq P f Q g
+Proof
+  rw[valid_result_eq_def]
+  \\ metis_tac[valid_result_fn_weaken]
+QED
+
 Theorem valid_result_valid:
   valid_result P f Q1 ∧
   (∀r s. ISL r ∧ Q1 (OUTL r) s ⇒ Q r s)
@@ -168,6 +201,22 @@ Proof
   \\ rw[]
 QED
 
+Theorem valid_result_eq_eq_ignore_bind:
+  valid_result_eq P g Q1 z ∧
+  valid_result_eq Q1 f Q y
+  ⇒
+  valid_result_eq P (ignore_bind g f) Q y
+Proof
+  rw[valid_result_eq_def]
+  \\ irule valid_result_fn_ignore_bind
+  \\ gs[valid_result_fn_def]
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+  \\ irule valid_result_weaken
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
 Theorem valid_result_get_current_context:
   (∀s. P s ⇒ ¬NULL s.contexts) ∧
   (∀s. P s ⇒ Q (HD s.contexts) s)
@@ -202,6 +251,34 @@ Proof
   \\ qmatch_asmsub_abbrev_tac`Q s2`
   \\ `s1 = s2` by rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality]
   \\ rw[]
+QED
+
+Theorem valid_result_handle:
+  valid_result P f Q
+  ⇒
+  valid_result P (handle f g) Q
+Proof
+  rw[valid_result_def, valid_def, handle_def]
+  \\ first_x_assum drule
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ gvs[]
+QED
+
+Theorem valid_result_fn_handle:
+  valid_result_fn P f Q k
+  ⇒
+  valid_result_fn P (handle f g) Q k
+Proof
+  rw[valid_result_fn_def, valid_result_handle]
+QED
+
+Theorem valid_result_eq_handle:
+  valid_result_eq P f Q ()
+  ⇒
+  valid_result_eq P (handle f g) Q ()
+Proof
+  rw[valid_result_eq_def, valid_result_fn_handle]
 QED
 
 Definition has_cc_def:
@@ -355,6 +432,43 @@ Proof
         context_component_equality, update_cc_def]
 QED
 
+Theorem valid_result_eq_step:
+  (∀s. P s ⇒ has_cc (λc.
+    c.pc < LENGTH c.msgParams.code ∧
+    FLOOKUP c.msgParams.parsed c.pc = SOME op) s) ∧
+  valid_result_eq P (do step_inst op; inc_pc_or_jump op od) Q ()
+  ⇒
+  valid_result_eq P step Q ()
+Proof
+  rw[step_def]
+  \\ irule valid_result_eq_handle
+  \\ irule valid_result_eq_bind \\ rw[]
+  \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
+  \\ rw[]
+  >- (
+    rw[valid_result_eq_def, valid_result_fn_def, valid_result_def, valid_def]
+    \\ first_x_assum drule
+    \\ rw[has_cc_def]
+    \\ gvs[] )
+  \\ TRY (
+    irule valid_result_get_current_context
+    \\ rw[]
+    \\ first_x_assum drule
+    \\ rw[has_cc_def]
+    \\ rw[] )
+  \\ CASE_TAC
+  >- (
+    rw[valid_result_eq_def, valid_result_fn_def, valid_result_def, valid_def]
+    \\ first_x_assum drule \\ rw[has_cc_def]
+    \\ gvs[] )
+  \\ irule valid_result_eq_weaken
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
+  \\ rw[]
+  \\ first_x_assum drule
+  \\ rw[has_cc_def]
+  \\ gvs[]
+QED
+
 Theorem valid_imp:
   valid P f Q ∧ P s
   ⇒
@@ -363,6 +477,27 @@ Proof
   rw[valid_def]
   \\ last_x_assum drule
   \\ CASE_TAC \\ rw[]
+QED
+
+Theorem valid_result_imp:
+  valid_result P f Q ∧ P s ⇒
+  ∃r t. f s = (INL r, t) ∧ Q r t
+Proof
+  rw[valid_result_def]
+  \\ drule valid_imp
+  \\ disch_then drule
+  \\ rw[] \\ gvs[]
+  \\ Cases_on`r` \\ gvs[]
+QED
+
+Theorem valid_result_eq_imp:
+  valid_result_eq P f Q x ∧ P s ⇒
+  ∃t. f s = (INL x, t) ∧ Q t
+Proof
+  rw[valid_result_eq_def, valid_result_fn_def]
+  \\ drule valid_result_imp
+  \\ disch_then drule
+  \\ rw[]
 QED
 
 val () = export_theory();
