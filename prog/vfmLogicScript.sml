@@ -116,6 +116,58 @@ Proof
   \\ qexists_tac`Q` \\ rw[]
 QED
 
+Theorem valid_result_fn_bind:
+  valid_result P g Q1 ∧
+  (∀x. valid_result_fn (Q1 x) (f x) Q h)
+  ⇒
+  valid_result_fn P (monad_bind g f) Q h
+Proof
+  rw[]
+  \\ rw[valid_result_fn_def]
+  \\ irule valid_result_bind
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+  \\ fs[valid_result_fn_def]
+QED
+
+Theorem valid_result_eq_bind:
+  valid_result P g Q1 ∧
+  (∀x. valid_result_eq (Q1 x) (f x) Q y)
+  ⇒
+  valid_result_eq P (monad_bind g f) Q y
+Proof
+  rw[valid_result_eq_def]
+  \\ irule valid_result_fn_bind
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
+Theorem valid_result_fn_ignore_bind:
+  valid_result P g Q1 ∧
+  (∀x. valid_result_fn (Q1 x) f Q h)
+  ⇒
+  valid_result_fn P (ignore_bind g f) Q h
+Proof
+  rw[]
+  \\ rw[valid_result_fn_def]
+  \\ irule valid_result_ignore_bind
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+  \\ fs[valid_result_fn_def]
+QED
+
+Theorem valid_result_eq_ignore_bind:
+  valid_result P g Q1 ∧
+  (∀x. valid_result_eq (Q1 x) f Q y)
+  ⇒
+  valid_result_eq P (ignore_bind g f) Q y
+Proof
+  rw[valid_result_eq_def]
+  \\ irule valid_result_fn_ignore_bind
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
 Theorem valid_result_get_current_context:
   (∀s. P s ⇒ ¬NULL s.contexts) ∧
   (∀s. P s ⇒ Q (HD s.contexts) s)
@@ -162,6 +214,12 @@ Definition update_cc_def:
   s with contexts updated_by (λls. (f (HD ls))::(TL ls))
 End
 
+Theorem mp_rand:
+  Q s1 ∧ s1 = s2 ⇒ Q s2
+Proof
+  rw[] \\ rw[]
+QED
+
 Theorem valid_result_eq_consume_gas:
   (∀s. P s ⇒ has_cc (λc. c.gasUsed + n ≤ c.msgParams.gasLimit) s) ∧
   (∀s. P s ⇒ Q (update_cc (λc. c with gasUsed updated_by $+ n) s))
@@ -169,14 +227,13 @@ Theorem valid_result_eq_consume_gas:
   valid_result_eq P (consume_gas n) Q ()
 Proof
   rw[consume_gas_def]
-  \\ rw[valid_result_eq_def, valid_result_fn_def]
-  \\ irule valid_result_bind
+  \\ irule valid_result_eq_bind
   \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
   \\ reverse(rw[])
   >- (
     irule valid_result_get_current_context
     \\ rw[] \\ res_tac \\ fs[has_cc_def])
-  \\ irule valid_result_ignore_bind
+  \\ irule valid_result_eq_ignore_bind
   \\ qexists_tac`λr s. P s ∧ x = HD s.contexts`
   \\ reverse(rw[])
   >- (
@@ -186,20 +243,13 @@ Proof
     \\ rw[]
     \\ last_x_assum drule \\ rw[has_cc_def]
     \\ rw[] )
-  \\ irule valid_result_eq_valid_result
-  \\ rw[]
-  \\ qexists_tac`Q`
-  \\ rw[]
   \\ irule valid_result_eq_set_current_context
   \\ rw[]
   \\ last_x_assum drule \\ rw[has_cc_def]
   \\ last_x_assum drule \\ rw[]
-  \\ qmatch_goalsub_abbrev_tac`Q s1`
-  \\ qmatch_asmsub_abbrev_tac`Q s2`
-  \\ `s1 = s2` by (
-    rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality,
-       context_component_equality, update_cc_def] )
-  \\ rw[]
+  \\ irule mp_rand \\ goal_assum drule
+  \\ rw[execution_state_component_equality,
+        context_component_equality, update_cc_def]
 QED
 
 Theorem valid_result_eq_push_stack:
@@ -209,8 +259,8 @@ Theorem valid_result_eq_push_stack:
   valid_result_eq P (push_stack w) Q ()
 Proof
   (* TODO: mostly repeated from previous proof - abstract or automate? *)
-  rw[push_stack_def, valid_result_eq_def, valid_result_fn_def, valid_result_def]
-  \\ irule valid_bind \\ rw[]
+  rw[push_stack_def]
+  \\ irule valid_result_eq_bind \\ rw[]
   \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
   \\ reverse(rw[])
   >- (
@@ -218,7 +268,7 @@ Proof
     \\ rw[]
     \\ last_x_assum drule \\ rw[has_cc_def]
     \\ rw[] )
-  \\ irule valid_ignore_bind \\ rw[]
+  \\ irule valid_result_eq_ignore_bind \\ rw[]
   \\ qexists_tac`λr s. P s ∧ x = HD s.contexts`
   \\ reverse(rw[])
   >- (
@@ -228,24 +278,13 @@ Proof
     \\ rw[]
     \\ last_x_assum drule \\ rw[has_cc_def]
     \\ rw[] )
-  \\ irule valid_result_valid
-  \\ rw[]
-  \\ qexists_tac`λr s. Q s`
-  \\ rw[]
-  \\ irule valid_result_eq_valid_result
-  \\ rw[]
-  \\ qexists_tac`Q`
-  \\ rw[]
   \\ irule valid_result_eq_set_current_context
   \\ rw[]
   \\ last_x_assum drule \\ rw[has_cc_def]
   \\ last_x_assum drule \\ rw[]
-  \\ qmatch_goalsub_abbrev_tac`Q s1`
-  \\ qmatch_asmsub_abbrev_tac`Q s2`
-  \\ `s1 = s2` by (
-    rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality,
-       context_component_equality, update_cc_def] )
-  \\ rw[]
+  \\ irule mp_rand \\ goal_assum drule
+  \\ rw[execution_state_component_equality,
+        context_component_equality, update_cc_def]
 QED
 
 Theorem valid_result_eq_step_push:
@@ -260,11 +299,10 @@ Theorem valid_result_eq_step_push:
   ⇒
   valid_result_eq P (step_push n ws) Q ()
 Proof
-  rw[step_push_def, valid_result_eq_def, valid_result_fn_def,
-     valid_result_def, Excl"static_gas_def"]
+  rw[step_push_def, Excl"static_gas_def"]
   \\ qmatch_goalsub_abbrev_tac`consume_gas g`
   \\ qmatch_goalsub_abbrev_tac`push_stack w`
-  \\ irule valid_ignore_bind \\ rw[]
+  \\ irule valid_result_eq_ignore_bind \\ rw[]
   \\ qexists_tac`λr s. has_cc (λc. LENGTH c.stack < stack_limit) s ∧
                        Q (update_cc (λc. c with stack updated_by CONS w) s)`
   \\ reverse (rw[])
@@ -278,16 +316,9 @@ Proof
     \\ last_x_assum drule \\ rw[has_cc_def]
     \\ rw[update_cc_def]
     \\ last_x_assum drule \\ rw[update_cc_def]
-    \\ qmatch_goalsub_abbrev_tac`Q s1`
-    \\ qmatch_asmsub_abbrev_tac`Q s2`
-    \\ `s1 = s2` by (
-      rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality,
-         context_component_equality, update_cc_def] )
-    \\ rw[])
-  \\ irule valid_result_valid \\ rw[]
-  \\ qexists_tac`λr s. Q s` \\ rw[]
-  \\ irule valid_result_eq_valid_result
-  \\ qexists_tac`Q` \\ rw[]
+    \\ irule mp_rand \\ goal_assum drule
+    \\ rw[execution_state_component_equality,
+         context_component_equality, update_cc_def])
   \\ irule valid_result_eq_push_stack
   \\ rw[]
 QED
@@ -299,9 +330,8 @@ Theorem valid_result_eq_inc_pc_or_jump_inc:
   ⇒
   valid_result_eq P (inc_pc_or_jump i) Q ()
 Proof
-  rw[valid_result_eq_def, inc_pc_or_jump_def,
-     valid_result_fn_def, valid_result_def]
-  \\ irule valid_bind
+  rw[inc_pc_or_jump_def]
+  \\ irule valid_result_eq_bind
   \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
   \\ reverse conj_tac
   >- (
@@ -312,27 +342,17 @@ Proof
   \\ rw[]
   \\ reverse(Cases_on`x.jumpDest`)
   >- (
-    rw[valid_def]
+    rw[valid_result_eq_def, valid_result_fn_def, valid_result_def, valid_def]
     \\ last_x_assum drule \\ rw[has_cc_def]
     \\ gs[] )
-  \\ rw[]
-  \\ irule valid_result_valid \\ rw[]
-  \\ qexists_tac`λr s. Q s`
-  \\ rw[]
-  \\ irule valid_result_eq_valid_result
-  \\ rw[]
-  \\ qexists_tac`Q`
   \\ rw[]
   \\ irule valid_result_eq_set_current_context
   \\ rw[]
   \\ last_x_assum drule \\ rw[has_cc_def]
   \\ last_x_assum drule \\ rw[]
-  \\ qmatch_goalsub_abbrev_tac`Q s1`
-  \\ qmatch_asmsub_abbrev_tac`Q s2`
-  \\ `s1 = s2` by (
-    rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality,
-       context_component_equality, update_cc_def] )
-  \\ rw[]
+  \\ irule mp_rand \\ goal_assum drule
+  \\ rw[execution_state_component_equality,
+        context_component_equality, update_cc_def]
 QED
 
 Theorem valid_imp:
