@@ -25,6 +25,18 @@ Definition spec_total_eq_def:
   spec_total_fn P f Q (K x)
 End
 
+(* TODO: need a version that specifies which exceptions are allowed? *)
+
+Definition spec_partial_def:
+  spec_partial P f Q =
+  spec P f (λr s. ISL r ⇒ Q (OUTL r) s)
+End
+
+Definition spec_partial_unit_def:
+  spec_partial_unit P f Q =
+  spec_partial P f (λ(r:unit) s. Q s)
+End
+
 Theorem spec_strengthen:
   spec P f Q1 ∧
   (∀r s. Q1 r s ⇒ Q r s)
@@ -69,6 +81,22 @@ Proof
   \\ metis_tac[spec_total_fn_weaken]
 QED
 
+Theorem spec_partial_weaken:
+  spec_partial P1 f1 Q ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  spec_partial P f Q
+Proof
+  rw[spec_partial_def]
+  \\ metis_tac[spec_weaken]
+QED
+
+Theorem spec_partial_unit_weaken:
+  spec_partial_unit P1 f1 Q ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  spec_partial_unit P f Q
+Proof
+  rw[spec_partial_unit_def]
+  \\ metis_tac[spec_partial_weaken]
+QED
+
 Theorem spec_total_spec:
   spec_total P f Q1 ∧
   (∀r s. ISL r ∧ Q1 (OUTL r) s ⇒ Q r s)
@@ -93,7 +121,7 @@ Proof
   \\ rw[]
 QED
 
-Theorem spec_bind:
+Theorem spec_bind_total:
   spec_total P g Q1 ∧
   (∀x. spec (Q1 x) (f x) Q)
   ⇒
@@ -105,7 +133,7 @@ Proof
   \\ CASE_TAC \\ gvs[]
 QED
 
-Theorem spec_ignore_bind:
+Theorem spec_ignore_bind_total:
   spec_total P r Q1 ∧
   (∀x. spec (Q1 x) f Q)
   ⇒
@@ -119,6 +147,66 @@ Proof
   \\ first_x_assum drule \\ rw[]
 QED
 
+Theorem spec_partial_bind:
+  spec_partial P g Q1 ∧
+  (∀x. spec_partial (Q1 x) (f x) Q)
+  ⇒
+  spec_partial P (monad_bind g f) Q
+Proof
+  rw[spec_partial_def, spec_def, bind_def]
+  \\ last_x_assum drule \\ rw[]
+  \\ CASE_TAC \\ gvs[]
+  \\ CASE_TAC \\ gvs[]
+QED
+
+Theorem spec_partial_ignore_bind:
+  spec_partial P g Q1 ∧
+  (∀x. spec_partial (Q1 x) f Q)
+  ⇒
+  spec_partial P (ignore_bind g f) Q
+Proof
+  rw[spec_partial_def, spec_def, ignore_bind_def, bind_def]
+  \\ last_x_assum drule
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ gvs[]
+  \\ CASE_TAC \\ gvs[]
+  \\ last_x_assum drule \\ rw[]
+QED
+
+Theorem spec_partial_unit_bind:
+  spec_partial P g Q1 ∧
+  (∀x. spec_partial_unit (Q1 x) (f x) Q)
+  ⇒
+  spec_partial_unit P (monad_bind g f) Q
+Proof
+  rw[spec_partial_unit_def]
+  \\ irule spec_partial_bind
+  \\ goal_assum drule \\ rw[]
+QED
+
+Theorem spec_partial_unit_ignore_bind:
+  spec_partial P g Q1 ∧
+  (∀x. spec_partial_unit (Q1 x) f Q)
+  ⇒
+  spec_partial_unit P (ignore_bind g f) Q
+Proof
+  rw[spec_partial_unit_def]
+  \\ irule spec_partial_ignore_bind
+  \\ goal_assum drule \\ rw[]
+QED
+
+Theorem spec_partial_unit_unit_ignore_bind:
+  spec_partial_unit P g Q1 ∧
+  spec_partial_unit Q1 f Q
+  ⇒
+  spec_partial_unit P (ignore_bind g f) Q
+Proof
+  rw[spec_partial_unit_def]
+  \\ irule spec_partial_ignore_bind
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
+  \\ gvs[ETA_AX]
+QED
+
 Theorem spec_total_bind:
   spec_total P g Q1 ∧
   (∀x. spec_total (Q1 x) (f x) Q)
@@ -127,7 +215,7 @@ Theorem spec_total_bind:
 Proof
   rw[]
   \\ rw[spec_total_def]
-  \\ irule spec_bind
+  \\ irule spec_bind_total
   \\ goal_assum(first_assum o mp_then Any mp_tac)
   \\ rw[]
   \\ irule spec_total_spec
@@ -142,7 +230,7 @@ Theorem spec_total_ignore_bind:
 Proof
   rw[]
   \\ rw[spec_total_def]
-  \\ irule spec_ignore_bind
+  \\ irule spec_ignore_bind_total
   \\ goal_assum(first_assum o mp_then Any mp_tac)
   \\ rw[]
   \\ irule spec_total_spec
@@ -217,6 +305,20 @@ Proof
   \\ rw[]
 QED
 
+(* TODO: clean up naming esp. of total specs *)
+(* TODO: move specs of vfmExecution to another theory *)
+(* TODO: move pure monad specs to another theory? *)
+(* TODO: split theories for total and partial specs? *)
+
+Theorem spec_partial_get_current_context:
+  (∀s. P s ∧ s.contexts ≠ [] ⇒ Q (HD s.contexts) s)
+  ⇒
+  spec_partial P get_current_context Q
+Proof
+  rw[spec_partial_def, spec_def, get_current_context_def]
+  \\ rw[fail_def, return_def]
+QED
+
 Theorem spec_total_get_current_context:
   (∀s. P s ⇒ ¬NULL s.contexts) ∧
   (∀s. P s ⇒ Q (HD s.contexts) s)
@@ -235,6 +337,14 @@ Theorem spec_total_eq_assert:
   spec_total_eq P (assert b e) Q ()
 Proof
   rw[spec_total_eq_def, spec_total_fn_def, spec_total_def, spec_def, assert_def]
+QED
+
+Theorem spec_partial_unit_assert:
+  (∀s. P s ⇒ Q s)
+  ⇒
+  spec_partial_unit P (assert b e) Q
+Proof
+  rw[spec_partial_unit_def, spec_partial_def, spec_def, assert_def]
 QED
 
 Theorem spec_total_eq_set_current_context:
