@@ -238,156 +238,166 @@ Proof
   \\ gvs[]
 QED
 
-(*
+Theorem spec_excl_unit_handle:
+  spec_exc P f (λr. Q) R1 ∧
+  (∀e. spec_excl_unit (R1 e) (g e) Q G)
+  ⇒
+  spec_excl_unit P (handle f g) Q G
+Proof
+  rw[spec_excl_unit_def, spec_excl_def]
+  \\ irule spec_exc_handle
+  \\ goal_assum drule
+  \\ gvs[]
+QED
+
+Definition has_gas_def:
+  has_gas n c = (c.gasUsed + n ≤ c.msgParams.gasLimit)
+End
 
 Theorem spec_excl_unit_consume_gas:
   (∀s. P s ∧ SOME Impossible ∉ G ⇒ s.contexts ≠ []) ∧
-  (∀s. P s ∧ SOME OutOfGas ∉ G ∧ s.contexts ≠ [] ⇒
-       let c = HD s.contexts in
-       c.gasUsed + n ≤ c.msgParams.gasLimit) ∧
-  (∀s. P s ∧ has_cc (λc. c.gasUsed + n ≤ c.msgParams.gasLimit) s
+  (∀s. P s ∧ SOME OutOfGas ∉ G ∧ s.contexts ≠ []
+       ⇒ has_gas n (HD s.contexts)) ∧
+  (∀s. P s ∧ has_cc (has_gas n) s
        ⇒ Q (update_cc (λc. c with gasUsed updated_by $+ n) s))
   ⇒
   spec_excl_unit P (consume_gas n) Q G
 Proof
   rw[consume_gas_def]
   \\ irule spec_excl_unit_bind
-  \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
+  \\ qexists_tac`λr s. P s ∧ s.contexts ≠ [] ∧ r = HD s.contexts`
   \\ reverse(rw[])
   >- ( irule spec_excl_get_current_context \\ rw[] )
   \\ irule spec_excl_unit_unit
-  \\ qexists_tac`λs. P s ∧ x = HD s.contexts`
-  \\ reverse(rw[])
-  >- (
-    irule spec_excl_unit_set_current_context \\ rw[]
-
-    \\ qexists_tac`λs. P s ∧ x = HD s.contexts` \\ rw[]
-    \\ irule spec_total_eq_assert
-    \\ rw[]
-    \\ last_x_assum drule \\ rw[has_cc_def]
-    \\ rw[] )
-  \\ irule spec_total_eq_set_current_context
+  \\ qmatch_goalsub_abbrev_tac`assert b`
+  \\ qexists_tac`λs. P s ∧ s.contexts ≠ [] ∧ x = HD s.contexts ∧ b`
   \\ rw[]
-  \\ last_x_assum drule \\ rw[has_cc_def]
-  \\ last_x_assum drule \\ rw[]
+  >- ( irule spec_excl_unit_assert \\ rw[Abbr`b`] \\ gs[has_gas_def] )
+  \\ irule spec_excl_unit_set_current_context
+  \\ rw[]
+  \\ Cases_on`s.contexts` \\ gvs[]
+  \\ first_x_assum drule
+  \\ rw[has_cc_def, has_gas_def]
   \\ irule mp_rand \\ goal_assum drule
   \\ rw[execution_state_component_equality,
         context_component_equality, update_cc_def]
 QED
 
-Theorem spec_total_eq_push_stack:
-  (∀s. P s ⇒ has_cc (λc. LENGTH c.stack < stack_limit) s) ∧
-  (∀s. P s ⇒ Q (update_cc (λc. c with stack updated_by CONS w) s))
+Theorem spec_excl_unit_push_stack:
+  (∀s. P s ∧ SOME Impossible ∉ G ⇒ s.contexts ≠ []) ∧
+  (∀s. P s ∧ SOME StackOverflow ∉ G ∧ s.contexts ≠ []
+       ⇒ LENGTH (HD s.contexts).stack < stack_limit) ∧
+  (∀s. P s ∧ has_cc (λc. LENGTH c.stack < stack_limit) s
+       ⇒ Q (update_cc (λc. c with stack updated_by CONS w) s))
   ⇒
-  spec_total_eq P (push_stack w) Q ()
+  spec_excl_unit P (push_stack w) Q G
 Proof
   (* TODO: mostly repeated from previous proof - abstract or automate? *)
   rw[push_stack_def]
-  \\ irule spec_total_eq_bind \\ rw[]
-  \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
+  \\ irule spec_excl_unit_bind \\ rw[]
+  \\ qexists_tac`λr s. P s ∧ s.contexts ≠ [] ∧ r = HD s.contexts`
   \\ reverse(rw[])
-  >- (
-    irule spec_total_get_current_context
-    \\ rw[]
-    \\ last_x_assum drule \\ rw[has_cc_def]
-    \\ rw[] )
-  \\ irule spec_total_eq_ignore_bind \\ rw[]
-  \\ qexists_tac`λr s. P s ∧ x = HD s.contexts`
-  \\ reverse(rw[])
-  >- (
-    irule spec_total_eq_spec_total \\ rw[]
-    \\ qexists_tac`λs. P s ∧ x = HD s.contexts` \\ rw[]
-    \\ irule spec_total_eq_assert
-    \\ rw[]
-    \\ last_x_assum drule \\ rw[has_cc_def]
-    \\ rw[] )
-  \\ irule spec_total_eq_set_current_context
+  >- ( irule spec_excl_get_current_context \\ rw[] )
+  \\ irule spec_excl_unit_unit \\ rw[]
+  \\ qmatch_goalsub_abbrev_tac`assert b`
+  \\ qexists_tac`λs. P s ∧ s.contexts ≠ [] ∧ x = HD s.contexts ∧ b`
   \\ rw[]
-  \\ last_x_assum drule \\ rw[has_cc_def]
-  \\ last_x_assum drule \\ rw[]
+  >- ( irule spec_excl_unit_assert \\ rw[Abbr`b`] \\ gs[has_gas_def] )
+  \\ irule spec_excl_unit_set_current_context
+  \\ rw[]
+  \\ Cases_on`s.contexts` \\ gvs[]
+  \\ first_x_assum drule
+  \\ rw[has_cc_def]
   \\ irule mp_rand \\ goal_assum drule
   \\ rw[execution_state_component_equality,
         context_component_equality, update_cc_def]
 QED
 
-Theorem spec_total_eq_step_push:
+Theorem spec_excl_unit_step_push:
   g = static_gas (Push n ws) ∧
   w = word_of_bytes F 0w (REVERSE ws) ∧
-  (∀s. P s ⇒ has_cc (λc.
-         c.gasUsed + g ≤ c.msgParams.gasLimit ∧
-         LENGTH c.stack < stack_limit) s) ∧
-  (∀s. P s ⇒ Q (update_cc (λc. c with <|
+  (∀s. P s ∧ SOME Impossible ∉ G ⇒ s.contexts ≠ []) ∧
+  (∀s. P s ∧ SOME StackOverflow ∉ G ∧ s.contexts ≠ []
+       ⇒ LENGTH (HD s.contexts).stack < stack_limit) ∧
+  (∀s. P s ∧ SOME OutOfGas ∉ G ∧ s.contexts ≠ []
+       ⇒ has_gas g (HD s.contexts)) ∧
+  (∀s. P s ∧ has_cc (λc. has_gas g c ∧ LENGTH c.stack < stack_limit) s
+       ⇒ Q (update_cc (λc. c with <|
                   stack updated_by CONS w
                 ; gasUsed updated_by $+ g |>) s))
   ⇒
-  spec_total_eq P (step_push n ws) Q ()
+  spec_excl_unit P (step_push n ws) Q G
 Proof
   rw[step_push_def, Excl"static_gas_def"]
   \\ qmatch_goalsub_abbrev_tac`consume_gas g`
   \\ qmatch_goalsub_abbrev_tac`push_stack w`
-  \\ irule spec_total_eq_ignore_bind \\ rw[]
-  \\ qexists_tac`λr s. has_cc (λc. LENGTH c.stack < stack_limit) s ∧
-                       Q (update_cc (λc. c with stack updated_by CONS w) s)`
+  \\ irule spec_excl_unit_ignore_bind \\ rw[]
+  (* TODO: need to derive/match this automatically *)
+  \\ qexists_tac`λr s.
+       (SOME Impossible ∉ G ⇒ s.contexts ≠ []) ∧
+       (SOME StackOverflow ∉ G ∧ s.contexts ≠ [] ⇒
+        LENGTH (HD s.contexts).stack < stack_limit) ∧
+       (has_cc (λc. LENGTH c.stack < stack_limit) s ⇒
+        Q (update_cc (λc. c with stack updated_by CONS w) s))`
   \\ reverse (rw[])
   >- (
-    irule spec_total_eq_spec_total
-    \\ qmatch_goalsub_abbrev_tac`_ ⇒ Q1 _ _`
-    \\ qexists_tac`λs. Q1 () s`
-    \\ rw[Abbr`Q1`]
-    \\ irule spec_total_eq_consume_gas
+    irule (iffLR spec_excl_unit_def)
+    \\ irule spec_excl_unit_consume_gas
     \\ rw[]
-    \\ last_x_assum drule \\ rw[has_cc_def]
-    \\ rw[update_cc_def]
-    \\ last_x_assum drule \\ rw[update_cc_def]
+    \\ rpt(first_x_assum drule)
+    \\ gvs[has_cc_def, update_cc_def]
+    \\ strip_tac
     \\ irule mp_rand \\ goal_assum drule
     \\ rw[execution_state_component_equality,
-         context_component_equality, update_cc_def])
-  \\ irule spec_total_eq_push_stack
+         context_component_equality])
+  \\ irule spec_excl_unit_push_stack
   \\ rw[]
 QED
 
-Theorem spec_total_eq_inc_pc_or_jump_inc:
+Theorem spec_excl_unit_inc_pc_or_jump_inc:
   n = LENGTH (opcode i) ∧ ¬is_call i ∧
-  (∀s. P s ⇒ has_cc (λc. c.jumpDest = NONE) s) ∧
-  (∀s. P s ⇒ Q (update_cc (λc. c with pc updated_by $+ n) s))
+  (∀s. P s ∧ SOME Impossible ∉ G ⇒ s.contexts ≠ []) ∧
+  (∀s. P s ∧ s.contexts ≠ [] ⇒ (HD s.contexts).jumpDest = NONE) ∧
+  (∀s. P s ∧ has_cc (λc. c.jumpDest = NONE) s
+       ⇒ Q (update_cc (λc. c with pc updated_by $+ n) s))
   ⇒
-  spec_total_eq P (inc_pc_or_jump i) Q ()
+  spec_excl_unit P (inc_pc_or_jump i) Q G
 Proof
   rw[inc_pc_or_jump_def]
-  \\ irule spec_total_eq_bind
-  \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
+  \\ irule spec_excl_unit_bind \\ rw[]
+  \\ qexists_tac`λr s. P s ∧ s.contexts ≠ [] ∧ r = HD s.contexts`
   \\ reverse conj_tac
-  >- (
-    irule spec_total_get_current_context
-    \\ rw[]
-    \\ last_x_assum drule \\ rw[has_cc_def]
-    \\ rw[] )
+  >- ( irule spec_excl_get_current_context \\ rw[])
   \\ rw[]
   \\ reverse(Cases_on`x.jumpDest`)
   >- (
-    rw[spec_total_eq_def, spec_total_fn_def, spec_total_def, spec_def]
-    \\ last_x_assum drule \\ rw[has_cc_def]
-    \\ gs[] )
+    rw[spec_excl_unit_def, spec_excl_def, spec_exc_def, spec_def]
+    \\ rpt(last_x_assum drule)
+    \\ rw[has_cc_def])
   \\ rw[]
-  \\ irule spec_total_eq_set_current_context
+  \\ irule spec_excl_unit_set_current_context
   \\ rw[]
-  \\ last_x_assum drule \\ rw[has_cc_def]
   \\ last_x_assum drule \\ rw[]
+  \\ last_x_assum drule \\ rw[]
+  \\ last_x_assum drule \\ rw[has_cc_def]
+  \\ Cases_on`s.contexts` \\ gvs[]
   \\ irule mp_rand \\ goal_assum drule
   \\ rw[execution_state_component_equality,
         context_component_equality, update_cc_def]
 QED
 
-Theorem spec_total_eq_step:
+(*
+Theorem spec_excl_unit_step:
   (∀s. P s ⇒ has_cc (λc.
     c.pc < LENGTH c.msgParams.code ∧
     FLOOKUP c.msgParams.parsed c.pc = SOME op) s) ∧
-  spec_total_eq P (do step_inst op; inc_pc_or_jump op od) Q ()
+  spec_excl_unit P (do step_inst op; inc_pc_or_jump op od) Q G
   ⇒
-  spec_total_eq P step Q ()
+  spec_excl_unit P step Q G
 Proof
   rw[step_def]
-  \\ irule spec_total_eq_handle
+  \\ irule spec_excl_unit_handle
+
   \\ irule spec_total_eq_bind \\ rw[]
   \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
   \\ rw[]
@@ -414,6 +424,7 @@ Proof
   \\ rw[has_cc_def]
   \\ gvs[]
 QED
+*)
 
 Theorem spec_imp:
   spec P f Q ∧ P s
@@ -425,27 +436,14 @@ Proof
   \\ CASE_TAC \\ rw[]
 QED
 
-Theorem spec_total_imp:
-  spec_total P f Q ∧ P s ⇒
-  ∃r t. f s = (INL r, t) ∧ Q r t
+Theorem spec_excl_imp:
+  spec_excl P f Q G ∧ P s ⇒
+  case f s of (INR e, t) => e ∈ G | (INL r, t) => Q r t
 Proof
-  rw[spec_total_def]
+  rw[spec_excl_def, spec_exc_def]
   \\ drule spec_imp
   \\ disch_then drule
   \\ rw[] \\ gvs[]
-  \\ Cases_on`r` \\ gvs[]
 QED
-
-Theorem spec_total_eq_imp:
-  spec_total_eq P f Q x ∧ P s ⇒
-  ∃t. f s = (INL x, t) ∧ Q t
-Proof
-  rw[spec_total_eq_def, spec_total_fn_def]
-  \\ drule spec_total_imp
-  \\ disch_then drule
-  \\ rw[]
-QED
-
-*)
 
 val () = export_theory();
