@@ -1,4 +1,5 @@
 open HolKernel boolLib bossLib Parse
+     pred_setTheory
      vfmContextTheory vfmExecutionTheory;
 
 val () = new_theory "vfmLogic";
@@ -10,31 +11,19 @@ Definition spec_def:
           of (r, t) => Q r t
 End
 
-Definition spec_total_def:
-  spec_total P f Q =
-  spec P f (λr s. ISL r ∧ Q (OUTL r) s)
+Definition spec_exc_def:
+  spec_exc P f Q R =
+  spec P f (λr s. case r of INL x => Q x s | INR e => R e s)
 End
 
-Definition spec_total_fn_def:
-  spec_total_fn P f Q g =
-  spec_total P f (λr s. Q s ∧ r = g s)
+Definition spec_excl_def:
+  spec_excl P f Q G =
+  spec_exc P f Q (λe s. e ∈ G)
 End
 
-Definition spec_total_eq_def:
-  spec_total_eq P f Q x =
-  spec_total_fn P f Q (K x)
-End
-
-(* TODO: need a version that specifies which exceptions are allowed? *)
-
-Definition spec_partial_def:
-  spec_partial P f Q =
-  spec P f (λr s. ISL r ⇒ Q (OUTL r) s)
-End
-
-Definition spec_partial_unit_def:
-  spec_partial_unit P f Q =
-  spec_partial P f (λ(r:unit) s. Q s)
+Definition spec_excl_unit_def:
+  spec_excl_unit P f Q G =
+  spec_excl P f (λ(r:unit). Q) G
 End
 
 Theorem spec_strengthen:
@@ -57,89 +46,101 @@ Proof
   \\ first_x_assum drule \\ rw[]
 QED
 
-Theorem spec_total_weaken:
-  spec_total P1 f1 Q ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
-  spec_total P f Q
-Proof
-  rw[spec_total_def]
-  \\ metis_tac[spec_weaken]
-QED
-
-Theorem spec_total_fn_weaken:
-  spec_total_fn P1 f1 Q g ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
-  spec_total_fn P f Q g
-Proof
-  rw[spec_total_fn_def]
-  \\ metis_tac[spec_total_weaken]
-QED
-
-Theorem spec_total_eq_weaken:
-  spec_total_eq P1 f1 Q g ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
-  spec_total_eq P f Q g
-Proof
-  rw[spec_total_eq_def]
-  \\ metis_tac[spec_total_fn_weaken]
-QED
-
-Theorem spec_partial_weaken:
-  spec_partial P1 f1 Q ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
-  spec_partial P f Q
-Proof
-  rw[spec_partial_def]
-  \\ metis_tac[spec_weaken]
-QED
-
-Theorem spec_partial_unit_weaken:
-  spec_partial_unit P1 f1 Q ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
-  spec_partial_unit P f Q
-Proof
-  rw[spec_partial_unit_def]
-  \\ metis_tac[spec_partial_weaken]
-QED
-
-Theorem spec_total_spec:
-  spec_total P f Q1 ∧
-  (∀r s. ISL r ∧ Q1 (OUTL r) s ⇒ Q r s)
+Theorem spec_exc_strengthen:
+  spec_exc P f Q1 R1 ∧
+  (∀r s. Q1 r s ⇒ Q r s) ∧
+  (∀e s. R1 e s ⇒ R e s)
   ⇒
-  spec P f Q
+  spec_exc P f Q R
 Proof
-  rw[spec_total_def]
+  rw[spec_exc_def]
   \\ irule spec_strengthen
-  \\ goal_assum (first_x_assum o mp_then Any mp_tac)
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
+  \\ rw[] \\ CASE_TAC \\ gvs[]
+QED
+
+Theorem spec_excl_strengthen:
+  spec_excl P f Q1 G1 ∧
+  (∀r s. Q1 r s ⇒ Q r s) ∧
+  G1 ⊆ G
+  ⇒
+  spec_excl P f Q G
+Proof
+  rw[spec_excl_def]
+  \\ irule spec_exc_strengthen
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
+  \\ rw[] \\ gvs[SUBSET_DEF]
+QED
+
+Theorem spec_excl_unit_strengthen:
+  spec_excl_unit P f Q1 G1 ∧
+  (∀s. Q1 s ⇒ Q s) ∧
+  G1 ⊆ G
+  ⇒
+  spec_excl_unit P f Q G
+Proof
+  rw[spec_excl_unit_def]
+  \\ irule spec_excl_strengthen
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
   \\ rw[]
 QED
 
-Theorem spec_total_eq_spec_total:
-  spec_total_eq P f Q1 x ∧
-  (∀s. Q1 s ⇒ Q x s)
-  ⇒
-  spec_total P f Q
+Theorem spec_exc_weaken:
+  spec_exc P1 f1 Q R ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  spec_exc P f Q R
 Proof
-  rw[spec_total_fn_def, spec_total_eq_def, spec_total_def]
-  \\ irule spec_strengthen
-  \\ goal_assum (first_x_assum o mp_then Any mp_tac)
-  \\ rw[]
+  rw[spec_exc_def]
+  \\ metis_tac[spec_weaken]
 QED
 
-Theorem spec_bind_total:
-  spec_total P g Q1 ∧
-  (∀x. spec (Q1 x) (f x) Q)
-  ⇒
-  spec P (monad_bind g f) Q
+Theorem spec_excl_weaken:
+  spec_excl P1 f1 Q G ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  spec_excl P f Q G
 Proof
-  rw[spec_total_def, spec_def, bind_def]
+  rw[spec_excl_def]
+  \\ metis_tac[spec_exc_weaken]
+QED
+
+Theorem spec_excl_unit_weaken:
+  spec_excl_unit P1 f1 Q G ∧ (∀s. P s ⇒ P1 s ∧ f1 = f) ⇒
+  spec_excl_unit P f Q G
+Proof
+  rw[spec_excl_unit_def]
+  \\ metis_tac[spec_excl_weaken]
+QED
+
+Theorem spec_excl_bind:
+  spec_excl P g Q1 G ∧
+  (∀x. spec_excl (Q1 x) (f x) Q G)
+  ⇒
+  spec_excl P (monad_bind g f) Q G
+Proof
+  rw[spec_excl_def, spec_exc_def, spec_def, bind_def]
   \\ CASE_TAC \\ gvs[]
   \\ last_x_assum drule \\ rw[]
   \\ CASE_TAC \\ gvs[]
 QED
 
-Theorem spec_ignore_bind_total:
-  spec_total P r Q1 ∧
-  (∀x. spec (Q1 x) f Q)
+Theorem spec_excl_unit_bind:
+  spec_excl P g Q1 G ∧
+  (∀x. spec_excl_unit (Q1 x) (f x) Q G)
   ⇒
-  spec P (ignore_bind r f) Q
+  spec_excl_unit P (monad_bind g f) Q G
 Proof
-  rw[spec_def, spec_total_def, ignore_bind_def, bind_def]
+  rw[spec_excl_unit_def]
+  \\ irule spec_excl_bind
+  \\ metis_tac[]
+QED
+
+Theorem spec_excl_ignore_bind:
+  spec_excl P r Q1 G ∧
+  (∀x. spec_excl (Q1 x) f Q G)
+  ⇒
+  spec_excl P (ignore_bind r f) Q G
+Proof
+  rw[spec_def, spec_exc_def, spec_excl_def, ignore_bind_def, bind_def]
   \\ first_x_assum drule
   \\ CASE_TAC \\ gvs[] \\ strip_tac
   \\ CASE_TAC \\ gvs[]
@@ -147,249 +148,37 @@ Proof
   \\ first_x_assum drule \\ rw[]
 QED
 
-Theorem spec_partial_bind:
-  spec_partial P g Q1 ∧
-  (∀x. spec_partial (Q1 x) (f x) Q)
+Theorem spec_excl_unit_ignore_bind:
+  spec_excl P g Q1 G ∧
+  (∀x. spec_excl_unit (Q1 x) f Q G)
   ⇒
-  spec_partial P (monad_bind g f) Q
+  spec_excl_unit P (ignore_bind g f) Q G
 Proof
-  rw[spec_partial_def, spec_def, bind_def]
-  \\ last_x_assum drule \\ rw[]
-  \\ CASE_TAC \\ gvs[]
-  \\ CASE_TAC \\ gvs[]
-QED
-
-Theorem spec_partial_ignore_bind:
-  spec_partial P g Q1 ∧
-  (∀x. spec_partial (Q1 x) f Q)
-  ⇒
-  spec_partial P (ignore_bind g f) Q
-Proof
-  rw[spec_partial_def, spec_def, ignore_bind_def, bind_def]
-  \\ last_x_assum drule
-  \\ CASE_TAC \\ rw[]
-  \\ CASE_TAC \\ gvs[]
-  \\ CASE_TAC \\ gvs[]
-  \\ last_x_assum drule \\ rw[]
-QED
-
-Theorem spec_partial_unit_bind:
-  spec_partial P g Q1 ∧
-  (∀x. spec_partial_unit (Q1 x) (f x) Q)
-  ⇒
-  spec_partial_unit P (monad_bind g f) Q
-Proof
-  rw[spec_partial_unit_def]
-  \\ irule spec_partial_bind
+  rw[spec_excl_unit_def]
+  \\ irule spec_excl_ignore_bind
   \\ goal_assum drule \\ rw[]
 QED
 
-Theorem spec_partial_unit_ignore_bind:
-  spec_partial P g Q1 ∧
-  (∀x. spec_partial_unit (Q1 x) f Q)
+Theorem spec_excl_unit_unit:
+  spec_excl_unit P g Q1 G ∧
+  spec_excl_unit Q1 f Q G
   ⇒
-  spec_partial_unit P (ignore_bind g f) Q
+  spec_excl_unit P (ignore_bind g f) Q G
 Proof
-  rw[spec_partial_unit_def]
-  \\ irule spec_partial_ignore_bind
-  \\ goal_assum drule \\ rw[]
-QED
-
-Theorem spec_partial_unit_unit_ignore_bind:
-  spec_partial_unit P g Q1 ∧
-  spec_partial_unit Q1 f Q
-  ⇒
-  spec_partial_unit P (ignore_bind g f) Q
-Proof
-  rw[spec_partial_unit_def]
-  \\ irule spec_partial_ignore_bind
+  rw[spec_excl_unit_def]
+  \\ irule spec_excl_ignore_bind
   \\ goal_assum (first_assum o mp_then Any mp_tac)
-  \\ gvs[ETA_AX]
-QED
-
-Theorem spec_total_bind:
-  spec_total P g Q1 ∧
-  (∀x. spec_total (Q1 x) (f x) Q)
-  ⇒
-  spec_total P (monad_bind g f) Q
-Proof
-  rw[]
-  \\ rw[spec_total_def]
-  \\ irule spec_bind_total
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-  \\ irule spec_total_spec
-  \\ qexists_tac`Q` \\ rw[]
-QED
-
-Theorem spec_total_ignore_bind:
-  spec_total P r Q1 ∧
-  (∀x. spec_total (Q1 x) f Q)
-  ⇒
-  spec_total P (ignore_bind r f) Q
-Proof
-  rw[]
-  \\ rw[spec_total_def]
-  \\ irule spec_ignore_bind_total
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-  \\ irule spec_total_spec
-  \\ qexists_tac`Q` \\ rw[]
-QED
-
-Theorem spec_total_fn_bind:
-  spec_total P g Q1 ∧
-  (∀x. spec_total_fn (Q1 x) (f x) Q h)
-  ⇒
-  spec_total_fn P (monad_bind g f) Q h
-Proof
-  rw[]
-  \\ rw[spec_total_fn_def]
-  \\ irule spec_total_bind
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-  \\ fs[spec_total_fn_def]
-QED
-
-Theorem spec_total_eq_bind:
-  spec_total P g Q1 ∧
-  (∀x. spec_total_eq (Q1 x) (f x) Q y)
-  ⇒
-  spec_total_eq P (monad_bind g f) Q y
-Proof
-  rw[spec_total_eq_def]
-  \\ irule spec_total_fn_bind
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-QED
-
-Theorem spec_total_fn_ignore_bind:
-  spec_total P g Q1 ∧
-  (∀x. spec_total_fn (Q1 x) f Q h)
-  ⇒
-  spec_total_fn P (ignore_bind g f) Q h
-Proof
-  rw[]
-  \\ rw[spec_total_fn_def]
-  \\ irule spec_total_ignore_bind
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-  \\ fs[spec_total_fn_def]
-QED
-
-Theorem spec_total_eq_ignore_bind:
-  spec_total P g Q1 ∧
-  (∀x. spec_total_eq (Q1 x) f Q y)
-  ⇒
-  spec_total_eq P (ignore_bind g f) Q y
-Proof
-  rw[spec_total_eq_def]
-  \\ irule spec_total_fn_ignore_bind
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-QED
-
-Theorem spec_total_eq_eq_ignore_bind:
-  spec_total_eq P g Q1 z ∧
-  spec_total_eq Q1 f Q y
-  ⇒
-  spec_total_eq P (ignore_bind g f) Q y
-Proof
-  rw[spec_total_eq_def]
-  \\ irule spec_total_fn_ignore_bind
-  \\ gs[spec_total_fn_def]
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-  \\ irule spec_total_weaken
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ rw[]
-QED
-
-(* TODO: clean up naming esp. of total specs *)
-(* TODO: move specs of vfmExecution to another theory *)
-(* TODO: move pure monad specs to another theory? *)
-(* TODO: split theories for total and partial specs? *)
-
-Theorem spec_partial_get_current_context:
-  (∀s. P s ∧ s.contexts ≠ [] ⇒ Q (HD s.contexts) s)
-  ⇒
-  spec_partial P get_current_context Q
-Proof
-  rw[spec_partial_def, spec_def, get_current_context_def]
-  \\ rw[fail_def, return_def]
-QED
-
-Theorem spec_total_get_current_context:
-  (∀s. P s ⇒ ¬NULL s.contexts) ∧
-  (∀s. P s ⇒ Q (HD s.contexts) s)
-  ⇒
-  spec_total P get_current_context Q
-Proof
-  rw[spec_total_def, spec_def, get_current_context_def]
-  \\ rw[fail_def, return_def]
-  \\ rpt(first_x_assum drule)
-  \\ rw[]
-QED
-
-Theorem spec_total_eq_assert:
-  (∀s. P s ⇒ b ∧ Q s)
-  ⇒
-  spec_total_eq P (assert b e) Q ()
-Proof
-  rw[spec_total_eq_def, spec_total_fn_def, spec_total_def, spec_def, assert_def]
-QED
-
-Theorem spec_partial_unit_assert:
-  (∀s. P s ⇒ Q s)
-  ⇒
-  spec_partial_unit P (assert b e) Q
-Proof
-  rw[spec_partial_unit_def, spec_partial_def, spec_def, assert_def]
-QED
-
-Theorem spec_total_eq_set_current_context:
-  (∀s. P s ⇒ ¬NULL s.contexts) ∧
-  (∀s. P s ⇒ Q (s with contexts updated_by λls. c :: TL ls))
-  ⇒
-  spec_total_eq P (set_current_context c) Q ()
-Proof
-  rw[spec_total_eq_def, spec_total_def, spec_def,
-     spec_total_fn_def, set_current_context_def]
-  \\ last_x_assum drule \\ rw[return_def]
-  \\ last_x_assum drule \\ rw[]
-  \\ qmatch_goalsub_abbrev_tac`Q s1`
-  \\ qmatch_asmsub_abbrev_tac`Q s2`
-  \\ `s1 = s2` by rw[Abbr`s1`, Abbr`s2`, execution_state_component_equality]
-  \\ rw[]
-QED
-
-Theorem spec_total_handle:
-  spec_total P f Q
-  ⇒
-  spec_total P (handle f g) Q
-Proof
-  rw[spec_total_def, spec_def, handle_def]
-  \\ first_x_assum drule
-  \\ CASE_TAC \\ rw[]
-  \\ CASE_TAC \\ rw[]
   \\ gvs[]
 QED
 
-Theorem spec_total_fn_handle:
-  spec_total_fn P f Q k
-  ⇒
-  spec_total_fn P (handle f g) Q k
+Theorem mp_rand:
+  Q s1 ∧ s1 = s2 ⇒ Q s2
 Proof
-  rw[spec_total_fn_def, spec_total_handle]
+  rw[] \\ rw[]
 QED
 
-Theorem spec_total_eq_handle:
-  spec_total_eq P f Q ()
-  ⇒
-  spec_total_eq P (handle f g) Q ()
-Proof
-  rw[spec_total_eq_def, spec_total_fn_handle]
-QED
+(* TODO: move specs of vfmExecution to another theory *)
+(* TODO: move pure monad specs to another theory? *)
 
 Definition has_cc_def:
   has_cc P s =
@@ -401,30 +190,77 @@ Definition update_cc_def:
   s with contexts updated_by (λls. (f (HD ls))::(TL ls))
 End
 
-Theorem mp_rand:
-  Q s1 ∧ s1 = s2 ⇒ Q s2
+Theorem spec_excl_get_current_context:
+  (∀s. P s ∧ s.contexts ≠ [] ⇒ Q (HD s.contexts) s) ∧
+  (∀s. P s ∧ SOME Impossible ∉ G ⇒ s.contexts ≠ [])
+  ⇒
+  spec_excl P get_current_context Q G
 Proof
-  rw[] \\ rw[]
+  rw[spec_excl_def, spec_exc_def, spec_def, get_current_context_def]
+  \\ rw[fail_def, return_def]
+  \\ metis_tac[]
 QED
 
-Theorem spec_total_eq_consume_gas:
-  (∀s. P s ⇒ has_cc (λc. c.gasUsed + n ≤ c.msgParams.gasLimit) s) ∧
-  (∀s. P s ⇒ Q (update_cc (λc. c with gasUsed updated_by $+ n) s))
+Theorem spec_excl_unit_assert:
+  (∀s. P s ∧ b ⇒ Q s) ∧
+  (SOME e ∉ G ⇒ ∀s. P s ⇒ b)
   ⇒
-  spec_total_eq P (consume_gas n) Q ()
+  spec_excl_unit P (assert b e) Q G
+Proof
+  rw[spec_excl_unit_def, spec_excl_def, spec_exc_def, spec_def, assert_def]
+  \\ metis_tac[]
+QED
+
+Theorem spec_excl_unit_set_current_context:
+  (∀s. P s ∧ s.contexts ≠ [] ⇒ Q (update_cc (K c) s)) ∧
+  (SOME Impossible ∉ G ⇒ ∀s. P s ⇒ s.contexts ≠ [])
+  ⇒
+  spec_excl_unit P (set_current_context c) Q G
+Proof
+  rw[spec_excl_unit_def, spec_excl_def,
+     spec_exc_def, spec_def, set_current_context_def]
+  \\ rw[fail_def] >- metis_tac[]
+  \\ last_x_assum drule \\ rw[return_def, update_cc_def]
+  \\ irule mp_rand \\ goal_assum drule
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem spec_exc_handle:
+  spec_exc P f Q R1 ∧
+  (∀e. spec_exc (R1 e) (g e) Q R)
+  ⇒
+  spec_exc P (handle f g) Q R
+Proof
+  rw[spec_exc_def, spec_def, handle_def]
+  \\ first_x_assum drule
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ gvs[]
+QED
+
+(*
+
+Theorem spec_excl_unit_consume_gas:
+  (∀s. P s ∧ SOME Impossible ∉ G ⇒ s.contexts ≠ []) ∧
+  (∀s. P s ∧ SOME OutOfGas ∉ G ∧ s.contexts ≠ [] ⇒
+       let c = HD s.contexts in
+       c.gasUsed + n ≤ c.msgParams.gasLimit) ∧
+  (∀s. P s ∧ has_cc (λc. c.gasUsed + n ≤ c.msgParams.gasLimit) s
+       ⇒ Q (update_cc (λc. c with gasUsed updated_by $+ n) s))
+  ⇒
+  spec_excl_unit P (consume_gas n) Q G
 Proof
   rw[consume_gas_def]
-  \\ irule spec_total_eq_bind
+  \\ irule spec_excl_unit_bind
   \\ qexists_tac`λr s. P s ∧ r = HD s.contexts`
   \\ reverse(rw[])
-  >- (
-    irule spec_total_get_current_context
-    \\ rw[] \\ res_tac \\ fs[has_cc_def])
-  \\ irule spec_total_eq_ignore_bind
-  \\ qexists_tac`λr s. P s ∧ x = HD s.contexts`
+  >- ( irule spec_excl_get_current_context \\ rw[] )
+  \\ irule spec_excl_unit_unit
+  \\ qexists_tac`λs. P s ∧ x = HD s.contexts`
   \\ reverse(rw[])
   >- (
-    irule spec_total_eq_spec_total \\ rw[]
+    irule spec_excl_unit_set_current_context \\ rw[]
+
     \\ qexists_tac`λs. P s ∧ x = HD s.contexts` \\ rw[]
     \\ irule spec_total_eq_assert
     \\ rw[]
@@ -609,5 +445,7 @@ Proof
   \\ disch_then drule
   \\ rw[]
 QED
+
+*)
 
 val () = export_theory();
