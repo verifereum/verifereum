@@ -14,9 +14,9 @@ val _ = new_theory "vfmTest";
 
 Theorem run_transactions_with_fuel_sub:
   !ts n a rs qs m j.
-  run_transactions_with_fuel n c h b a rs ts = SOME (qs,d,m) /\ j <= m ==>
+  run_transactions_with_fuel n st c h b a rs ts = SOME (qs,d,m) /\ j <= m ==>
   m ≤ n ∧
-  run_transactions_with_fuel (n - j) c h b a rs ts = SOME (qs,d,m - j)
+  run_transactions_with_fuel (n - j) st c h b a rs ts = SOME (qs,d,m - j)
 Proof
   Induct
   \\ simp[run_transactions_with_fuel_def]
@@ -7371,7 +7371,7 @@ cv_eval_raw ``
 let acc = modexp_d28g0v0_Cancun_pre in
 let blk = modexp_d28g0v0_Cancun_block in
 let tx = modexp_d28g0v0_Cancun_transaction in
-let init = run_create 1 [] blk acc tx in
+let init = run_create F 1 [] blk acc tx in
 let cont = OUTR $ THE init in
 let s = SND cont in
 let (r, s) = run_n 12 s in

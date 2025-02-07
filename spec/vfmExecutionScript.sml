@@ -1421,8 +1421,8 @@ Definition post_transaction_accounting_def:
 End
 
 Definition run_create_def:
-  run_create chainId prevHashes blk accounts tx =
-  case initial_state chainId prevHashes blk accounts tx of
+  run_create static chainId prevHashes blk accounts tx =
+  case initial_state static chainId prevHashes blk accounts tx of
     NONE => NONE
   | SOME s => SOME $
     let ctxt = HD s.contexts in
@@ -1445,8 +1445,8 @@ Definition run_create_def:
 End
 
 Definition run_transaction_def:
-  run_transaction chainId prevHashes blk accounts tx =
-  case run_create chainId prevHashes blk accounts tx of
+  run_transaction static chainId prevHashes blk accounts tx =
+  case run_create static chainId prevHashes blk accounts tx of
      | SOME (INL result) => SOME result
      | SOME (INR (acc, s1)) => (case run s1 of
        | SOME (INR r, s2) => SOME $
@@ -1474,7 +1474,7 @@ Definition run_block_def:
     (λx tx.
        OPTION_BIND x (λ(ls, a).
          OPTION_MAP (λ(r, a). (SNOC r ls, a)) $
-         run_transaction chainId prevHashes b a tx))
+         run_transaction F chainId prevHashes b a tx))
     (SOME ([], update_beacon_block b accounts))
     b.transactions
 End
