@@ -304,7 +304,7 @@ Definition code_from_tx_def:
 End
 
 Definition initial_state_def:
-  initial_state c h b a t =
+  initial_state static c h b a t =
   case pre_transaction_updates a t of NONE => NONE |
   SOME accounts =>
     let callee = callee_from_tx_to t.from t.nonce t.to in
@@ -312,7 +312,7 @@ Definition initial_state_def:
     let code = code_from_tx a t in
     let rd = if IS_SOME t.to then empty_return_destination else Code callee in
     let rb = initial_rollback accounts accesses in
-    let ctxt = initial_context rb callee code F rd t in
+    let ctxt = initial_context rb callee code static rd t in
     SOME $
     <| contexts := [apply_intrinsic_cost t.accessList $ ctxt]
      ; txParams := initial_tx_params c h b t
@@ -321,7 +321,7 @@ Definition initial_state_def:
 End
 
 Theorem wf_initial_state:
-  wf_accounts a ∧ initial_state c h b a t = SOME s
+  wf_accounts a ∧ initial_state static c h b a t = SOME s
   ⇒
   wf_state s
 Proof

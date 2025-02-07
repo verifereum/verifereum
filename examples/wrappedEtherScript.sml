@@ -74,7 +74,7 @@ val () = cv_auto_trans deploy_accounts_def;
 
 Definition deploy_tx_result_def:
   deploy_tx_result =
-    run_transaction_with_fuel 267 1 [] deploy_block deploy_accounts deploy_tx
+    run_transaction_with_fuel 267 F 1 [] deploy_block deploy_accounts deploy_tx
 End
 
 val () = cv_auto_trans deploy_tx_result_def;
@@ -184,7 +184,7 @@ Theorem FLOOKUP_parsed_contract_code_0 =
 Theorem call_follows_abi_4bytes:
   tx.to = SOME addr ∧
   (lookup_account addr ms).code = contract_code ∧
-  run_transaction 1 ph bk ms tx = SOME (res, ms2) ∧
+  run_transaction F 1 ph bk ms tx = SOME (res, ms2) ∧
   res.result ≠ SOME Reverted ∧ res.result ≠ SOME OutOfGas
   ⇒
   ∃sel.
