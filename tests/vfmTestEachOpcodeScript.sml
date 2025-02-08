@@ -149,11 +149,20 @@ val test_path = mk_path "stSelfBalance/selfBalanceEqualsBalance.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 0;
 
-(* TODO Origin *)
+(* Origin *)
+val test_path = mk_path "stSystemOperationsTest/suicideOrigin.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
 
-(* TODO Caller *)
+(* Caller *)
+val test_path = mk_path "stSystemOperationsTest/callerAccountBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
 
-(* TODO CallValue *)
+(* CallValue *)
+val test_path = mk_path "stSystemOperationsTest/callValue.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
 
 (* CallDataLoad *)
 val test_path = mk_path "VMTests/vmTests/calldataload.json";
@@ -180,7 +189,10 @@ val test_path = mk_path "stMemoryTest/codecopy_dejavu.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 0;
 
-(* TODO GasPrice *)
+(* GasPrice *)
+val test_path = mk_path "stEIP1559/gasPriceDiffPlaces.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 11;
 
 (* ExtCodeSize *)
 val test_path = mk_path "stArgsZeroOneBalance/extcodesizeNonConst.json";
@@ -209,9 +221,7 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 0;
 
 (* TODO BlockHash *)
-
 (* TODO CoinBase *)
-
 (* TODO TimeStamp *)
 (* TODO Number *)
 (* TODO PrevRandao *)
@@ -227,7 +237,10 @@ val test_path = mk_path "stSelfBalance/selfBalanceUpdate.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 0;
 
-(* TODO BaseFee *)
+(* BaseFee *)
+val test_path = mk_path "stExample/basefeeExample.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
 
 (* Pop *)
 val test_path = mk_path "VMTests/vmIOandFlowOperations/pop.json";
@@ -279,9 +292,15 @@ val test_path = mk_path "VMTests/vmIOandFlowOperations/msize.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 4;
 
-(* TODO Gas *)
+(* Gas *)
+val test_path = mk_path "stNonZeroCallsTest/NonZeroValue_CALLCODE_ToEmpty_Paris.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
 
-(* TODO JumpDest *)
+(* JumpDest *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/jumpToPush.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 64;
 
 (* TLoad *)
 val test_path = mk_path
@@ -356,10 +375,19 @@ val test_path = mk_path "stStaticCall/static_ABAcalls3.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 1;
 
-(* TODO Revert *)
+(* Revert *)
+val test_path = mk_path "stRevertTest/RevertDepth2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
 
-(* TODO Invalid *)
+(* Invalid *)
+val test_path = mk_path "stSystemOperationsTest/createWithInvalidOpcode.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
 
-(* TODO SelfDestruct *)
+(* SelfDestruct *)
+val test_path = mk_path "VMTests/vmTests/suicide.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 2;
 
 val () = export_theory();
