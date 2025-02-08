@@ -1,6 +1,7 @@
-open HolKernel boolLib bossLib Parse wordsLib dep_rewrite vfmTestLib
+open HolKernel boolLib bossLib Parse wordsLib vfmTestLib
+     vfmTestEachOpcodeTheory (* so it comes earlier when building *)
 
-val _ = new_theory "vfmTest";
+val () = new_theory "vfmTest";
 
 fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/VMTests/" ^ s;
 
@@ -6974,4 +6975,4 @@ in
 
 *)
 
-val _ = export_theory();
+val () = export_theory();
