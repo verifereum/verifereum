@@ -4136,6 +4136,18 @@ val thms = List.tabulate (num_tests, prove_test);
 *)
 
 (* TODO: add stPreCompiledContracts2 *)
+fun mk_test_path s =
+  "tests/BlockchainTests/GeneralStateTests/stPreCompiledContracts2/" ^ s;
+
+val test_path = mk_test_path "CallCODESha256_5.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
+
+val test_path = mk_test_path "CallSha256_0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thms = List.tabulate (num_tests, prove_test);
+
 
 fun mk_test_path s =
   "tests/BlockchainTests/GeneralStateTests/stQuadraticComplexityTest/" ^ s;
@@ -6044,11 +6056,10 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
 *)
 
-(* TODO: fix - needs precompiles
+
 val test_path = mk_test_path "CallcodeToPrecompileFromTransaction.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thms = List.tabulate (num_tests, prove_test);
-*)
 
 (* TODO: add
 DelegatecallToPrecompileFromCalledContract.json
