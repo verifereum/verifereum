@@ -170,7 +170,10 @@ val test_path = mk_path "VMTests/vmTests/calldatacopy.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 2;
 
-(* TODO CodeSize *)
+(* CodeSize *)
+val test_path = mk_path "stCodeSizeLimit/codesizeValid.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
 
 (* CodeCopy *)
 val test_path = mk_path "stMemoryTest/codecopy_dejavu.json";
@@ -179,6 +182,7 @@ val thm = prove_test 0;
 
 (* TODO GasPrice *)
 
+(* ExtCodeSize *)
 val test_path = mk_path "stArgsZeroOneBalance/extcodesizeNonConst.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 1;
@@ -223,37 +227,139 @@ val test_path = mk_path "stSelfBalance/selfBalanceUpdate.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 0;
 
-(* TODO
-BaseFee
-Pop
-MLoad
-MStore
-MStore8
-SLoad
-SStore
-Jump
-JumpI
-PC
-MSize
-Gas
-JumpDest
-TLoad
-TStore
-MCopy
-Push num (word8 list)
-Dup num
-Swap num
-Log num
-Create
-Call
-CallCode
-Return
-DelegateCall
-Create2
-StaticCall
-Revert
-Invalid
-SelfDestruct
-*)
+(* TODO BaseFee *)
+
+(* Pop *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/pop.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
+
+(* MLoad *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/mload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* MStore *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/mstore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 2;
+
+(* MStore8 *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/mstore8.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
+
+(* SLoad *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/sstore_sload.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 2;
+
+(* SStore *)
+val test_path = mk_path "stSStoreTest/sstore_Xto0toXto0.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 16;
+
+(* Jump *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/jump.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 14;
+
+(* JumpI *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/jumpi.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 22;
+
+(* PC *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/pc.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
+
+(* MSize *)
+val test_path = mk_path "VMTests/vmIOandFlowOperations/msize.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 4;
+
+(* TODO Gas *)
+
+(* TODO JumpDest *)
+
+(* TLoad *)
+val test_path = mk_path
+  "Cancun/stEIP1153-transientStorage/transStorageOK.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 12;
+
+(* TStore *)
+val test_path = mk_path
+  "Cancun/stEIP1153-transientStorage/19_oogUndoesTransientStore.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* MCopy *)
+val test_path = mk_path "stMemoryTest/memCopySelf.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* Push *)
+val test_path = mk_path "VMTests/vmTests/push.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 12;
+
+(* Dup *)
+val test_path = mk_path "VMTests/vmTests/dup.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 7;
+
+(* Swap *)
+val test_path = mk_path "VMTests/vmTests/swap.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 14;
+
+(* Log *)
+val test_path = mk_path "VMTests/vmLogTest/log3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 9;
+
+(* Create *)
+val test_path = mk_path "stArgsZeroOneBalance/createNonConst.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
+
+(* Call *)
+val test_path = mk_path "stCallCodes/callcallcall_ABCB_RECURSIVE.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* CallCode *)
+val test_path = mk_path "stCallCodes/callcallcodecall_010_OOGMAfter.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* Return *)
+val test_path = mk_path "stInitCodeTest/ReturnTest2.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* DelegateCall *)
+val test_path = mk_path
+  "stNonZeroCallsTest/NonZeroValue_DELEGATECALL_ToNonNonZeroBalance.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* Create2 *)
+val test_path = mk_path "stCreate2/CREATE2_HighNonceMinus1.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* StaticCall *)
+val test_path = mk_path "stStaticCall/static_ABAcalls3.json";
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
+
+(* TODO Revert *)
+
+(* TODO Invalid *)
+
+(* TODO SelfDestruct *)
 
 val () = export_theory();
