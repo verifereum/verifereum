@@ -1,6 +1,6 @@
-open HolKernel boolLib bossLib Parse monadsyntax
+ open HolKernel boolLib bossLib Parse monadsyntax
      vfmTypesTheory vfmContextTheory numposrepTheory numTheory
-     arithmeticTheory dep_rewrite;
+     arithmeticTheory dep_rewrite sha2Theory;
 
 val _ = new_theory "vfmExecution";
 
@@ -1088,10 +1088,23 @@ Definition precompile_modexp_def:
   od
 End
 
+
+Definition precompile_sha2_256_def:
+  precompile_sha2_256 = do
+    input <- get_call_data;
+    hsh <<- SHA_256_bytes input;
+    dynamic_gas <<- 12 * word_size (LENGTH input);
+    consume_gas (60 + dynamic_gas);
+    set_return_data $ word_to_bytes hsh T;
+    finish
+    od
+End
+
 Definition dispatch_precompiles_def:
   dispatch_precompiles (a: address) =
     if a = 0x4w then precompile_identity
     else if a = 0x5w then precompile_modexp
+    else if a = 0x2w then precompile_sha2_256
     else fail Impossible
 End
 
