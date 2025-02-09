@@ -221,11 +221,31 @@ val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 0;
 
 (* TODO BlockHash *)
-(* TODO CoinBase *)
-(* TODO TimeStamp *)
-(* TODO Number *)
-(* TODO PrevRandao *)
-(* TODO GasLimit *)
+
+(* CoinBase *)
+val test_path = mk_path "VMTests/vmTests/blockInfo.json"
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 0;
+
+(* TimeStamp *)
+val test_path = mk_path "VMTests/vmTests/blockInfo.json"
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 4;
+
+(* Number *)
+val test_path = mk_path "VMTests/vmTests/blockInfo.json"
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 3;
+
+(* Difficulty/prevrandao *)
+val test_path = mk_path "VMTests/vmTests/blockInfo.json"
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 1;
+
+(* GasLimit *)
+val test_path = mk_path "VMTests/vmTests/blockInfo.json"
+val (num_tests, prove_test) = mk_prove_test test_path;
+val thm = prove_test 2;
 
 (* ChainId *)
 val test_path = mk_path "stChainId/chainId.json";
