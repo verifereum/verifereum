@@ -67,7 +67,11 @@ as described [here](docs/run-with-docker.md).
 
     For other tips checkout [this FAQ](https://hol-theorem-prover.org/faq.html).
 
-3. Run Holmake in the `tests` directory to build Verifereum and run the tests.
+3. Clone the Verifereum repo itself ahead of the build e.g., `git clone https://github.com/verifereum/verifereum` or alternative method
+
+   NB don't forget to run `git submodule update --init` too, otherwise the build will fail during the step below
+  
+4. Run Holmake in the `tests` directory to build Verifereum and run the tests.
    They will take a while to run so you can cancel them.
 
     ```bash
