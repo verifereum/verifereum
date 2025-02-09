@@ -32,26 +32,44 @@ structure readTestJsonLib = struct
               |> C getObject' "transactions"
               |> getArray'
 
+  fun getTransaction tx = let
+    val data = getObject' tx "data" |> getString'
+    val gasLimit = getObject' tx "gasLimit" |> getString'
+    val gasPrice = getObject tx "gasPrice" |> Option.map getString'
+    val maxFeePerGas = getObject tx "maxFeePerGas" |> Option.map getString'
+    val maxPriorityFeePerGas = getObject tx "maxPriorityFeePerGas" |> Option.map getString'
+    val nonce = getObject' tx "nonce" |> getString'
+    val sender = getObject' tx "sender" |> getString'
+    val to = getObject' tx "to" |> getString'
+    val value = getObject' tx "value" |> getString'
+    val accessList = getObject tx "accessList" |> getAccessList'
+
+  in {
+      data=data,
+      gasLimit=gasLimit,
+      gasPrice=gasPrice,
+      maxFeePerGas=maxFeePerGas,
+      maxPriorityFeePerGas=maxPriorityFeePerGas,
+      nonce=nonce,
+      sender=sender,
+      to=to,
+      value=value,
+      accessList=accessList
+    }
+  end
+
+
+  fun getTransactions'' block = getTransactions' block |> List.map
+    getTransaction
+
   fun getBlockHeader' block =
     case getObject block "blockHeader" of
       SOME h => h
     | NONE => getObject' block "rlp_decoded"
               |> C getObject' "blockHeader"
 
-  fun get_test json_path test_name = let
-    val (json, rest) = Json.fromFile json_path
-    val tobj = Json.getObject' (hd json) test_name
-    val blocks = Json.getObject' tobj "blocks" |> getArray'
-
-    val nblocks = blocks |> length
-    val block0 = hd blocks
-    val txns = getTransactions' block0
-    val ntxns = length txns
-    val () = if nblocks <> 1 orelse ntxns <> 1
-             then raise Fail "only 1 transaction in 1 block currently supported"
-             else ()
-
-    val bh0 = getBlockHeader' block0
+  fun getBlock' block = let
+    val bh0 = getBlockHeader' block
     val bhkeys = bh0 |> getKeys'
     val () = if List.exists (String.isSuffix "andao") bhkeys
              then raise Fail "Unexpected key (looks like randao) in blockheader"
@@ -65,19 +83,24 @@ structure readTestJsonLib = struct
     val parentBeaconBlockRoot = getObject' bh0 "parentBeaconBlockRoot" |> getString'
     val timeStamp = getObject' bh0 "timestamp" |> getString'
     val coinBase = getObject' bh0 "coinbase" |> getString'
+    val transactions = getTransactions'' block
+  in {
+      number=number,
+      hash=hash,
+      gasLimit=blockGasLimit,
+      baseFeePerGas=baseFeePerGas,
+      prevRandao=prevRandao,
+      parentBeaconBlockRoot=parentBeaconBlockRoot,
+      timeStamp=timeStamp,
+      coinBase=coinBase,
+      transactions=transactions
+    }
+  end
 
-    val tx0 = hd txns
-
-    val data = getObject' tx0 "data" |> getString'
-    val gasLimit = getObject' tx0 "gasLimit" |> getString'
-    val gasPrice = getObject tx0 "gasPrice" |> Option.map getString'
-    val maxFeePerGas = getObject tx0 "maxFeePerGas" |> Option.map getString'
-    val maxPriorityFeePerGas = getObject tx0 "maxPriorityFeePerGas" |> Option.map getString'
-    val nonce = getObject' tx0 "nonce" |> getString'
-    val sender = getObject' tx0 "sender" |> getString'
-    val to = getObject' tx0 "to" |> getString'
-    val value = getObject' tx0 "value" |> getString'
-    val accessList = getObject tx0 "accessList" |> getAccessList'
+  fun get_test json_path test_name = let
+    val (json, rest) = Json.fromFile json_path
+    val tobj = Json.getObject' (hd json) test_name
+    val blocks = Json.getObject' tobj "blocks" |> getArray' |> map getBlock'
 
     val postState = getObject tobj "postState"
     val postStateHash = getObject tobj "postStateHash" |> Option.map getString'
@@ -106,31 +129,8 @@ structure readTestJsonLib = struct
                  List.map (get_account (Option.valOf postState)) keys
                ) postKeys
     val pre = List.map (get_account preState) preKeys
-    val block = {
-      number=number,
-      hash=hash,
-      gasLimit=blockGasLimit,
-      baseFeePerGas=baseFeePerGas,
-      prevRandao=prevRandao,
-      parentBeaconBlockRoot=parentBeaconBlockRoot,
-      timeStamp=timeStamp,
-      coinBase=coinBase
-    }
-    val transaction = {
-      data=data,
-      gasLimit=gasLimit,
-      gasPrice=gasPrice,
-      maxFeePerGas=maxFeePerGas,
-      maxPriorityFeePerGas=maxPriorityFeePerGas,
-      nonce=nonce,
-      sender=sender,
-      to=to,
-      value=value,
-      accessList=accessList
-    }
   in
-    {block=block, transaction=transaction, pre=pre, post=post,
-     postHash=postStateHash}
+    {blocks=blocks, pre=pre, post=post, postHash=postStateHash}
   end
 
   (*
