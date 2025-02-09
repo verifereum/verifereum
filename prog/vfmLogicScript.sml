@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse
-     pred_setTheory
+     arithmeticTheory listTheory sumTheory relationTheory pairTheory pred_setTheory
      vfmContextTheory vfmExecutionTheory;
 
 val () = new_theory "vfmLogic";
@@ -450,7 +450,9 @@ Definition decreases_gas_def:
   decreases_gas strict (m: execution_state -> α execution_result) =
     ∀s c cs. s.contexts = c::cs ∧ c.gasUsed ≤ c.msgParams.gasLimit ⇒
     ∃c'.
-      (SND (m s)).contexts = c'::cs ∧ c'.gasUsed ≤ c'.msgParams.gasLimit ∧
+      (SND (m s)).contexts = c'::cs ∧
+      c'.gasUsed ≤ c'.msgParams.gasLimit ∧
+      c'.msgParams.gasLimit = c.msgParams.gasLimit ∧
       if strict ∧ ISL (FST (m s))
       then c.gasUsed < c'.gasUsed
       else c.gasUsed ≤ c'.gasUsed
@@ -537,7 +539,7 @@ QED
 Theorem decreases_gas_assert[simp]:
   decreases_gas F (assert b e)
 Proof
-  simp [decreases_gas_def, assert_def, no_exn_def]
+  simp [decreases_gas_def, assert_def]
   \\ Cases_on `b` \\ rw []
 QED
 
@@ -760,14 +762,62 @@ Definition unused_gas_def:
   unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
 End
 
+Definition ok_state_def:
+  ok_state s ⇔
+      (∀c. c ∈ set s.contexts ⇒ c.gasUsed ≤ c.msgParams.gasLimit) ∧
+      s.contexts ≠ []
+End
+
+Definition contexts_weight_def:
+  contexts_weight c = (LENGTH c, unused_gas c)
+End
+
 Definition decreases_gas'_def:
   decreases_gas' b (m: execution_state -> α execution_result) =
-    ∀s. (∀c. c ∈ set s.contexts ⇒ c.gasUsed ≤ c.msgParams.gasLimit) ⇒
-    (∀c. c ∈ set (SND (m s)).contexts ⇒ c.gasUsed ≤ c.msgParams.gasLimit) ∧
+    ∀s. ok_state s
+      ⇒ ok_state (SND (m s)) ∧
+      let (p,q) = (contexts_weight (SND (m s)).contexts,
+                   contexts_weight s.contexts) in
       if b ∧ ISL (FST (m s))
-      then unused_gas s.contexts < unused_gas (SND (m s)).contexts
-      else unused_gas s.contexts ≤ unused_gas (SND (m s)).contexts
+      then ($< LEX $<) p q
+      else ¬(($< LEX $<) q p)
 End
+
+Theorem transitive_LEX_LESS =
+  CONJ transitive_LESS transitive_LESS
+  |> MATCH_MP transitive_LEX
+  |> REWRITE_RULE[transitive_def]
+
+Theorem transitive_LE_LEX_LT:
+   ¬($< LEX $<) y x ∧ ($< LEX $<) y z ⇒ ($< LEX $<) (x:num # num) z
+Proof
+  Cases_on`x` \\ Cases_on`y` \\ Cases_on`z`
+  \\ rw[LEX_DEF]
+QED
+
+Theorem transitive_LT_LEX_LE:
+   ($< LEX $<) x y ∧ ¬($< LEX $<) z y ⇒ ($< LEX $<) (x:num # num) z
+Proof
+  Cases_on`x` \\ Cases_on`y` \\ Cases_on`z`
+  \\ rw[LEX_DEF]
+QED
+
+Theorem transitive_LE_LEX_LE:
+   ¬($< LEX $<) y x ∧ ¬($< LEX $<) z y ⇒ ¬($< LEX $<) (z:num # num) x
+Proof
+  Cases_on`x` \\ Cases_on`y` \\ Cases_on`z`
+  \\ rw[LEX_DEF]
+QED
+
+Theorem LEX_LT_IMP_LE:
+  ($< LEX $<) x y ⇒ ¬($< LEX $<) y (x:num # num)
+Proof
+  Cases_on`x` \\ Cases_on`y` \\ rw[LEX_DEF]
+QED
+
+val lexs = [transitive_LEX_LESS, transitive_LE_LEX_LT,
+            transitive_LT_LEX_LE, transitive_LE_LEX_LE,
+            LEX_LT_IMP_LE]
 
 Theorem decreases_gas'_handle[simp]:
   decreases_gas' T f ∧ (∀e. decreases_gas' T (h e)) ⇒
@@ -776,13 +826,14 @@ Proof
   simp [decreases_gas'_def, handle_def] \\ ntac 3 strip_tac
   \\ CASE_TAC \\ CASE_TAC >- (last_x_assum drule \\ rw [])
   \\ last_x_assum drule \\ simp [] \\ strip_tac
-  \\ last_x_assum (drule_then (qspec_then `y` mp_tac)) \\ rw []
+  \\ last_x_assum (drule_then (qspec_then`y`mp_tac)) \\ rw[]
+  \\ metis_tac lexs
 QED
 
 Theorem decreases_gas'_true_false:
   decreases_gas' T m ⇒ decreases_gas' F m
 Proof
-  simp [decreases_gas'_def] \\ metis_tac [arithmeticTheory.LT_IMP_LE]
+  simp [decreases_gas'_def] \\ metis_tac lexs
 QED
 
 Theorem decreases_gas'_true:
@@ -801,14 +852,17 @@ Theorem decreases_gas'_bind:
   decreases_gas' bg g ∧ (∀x. decreases_gas' bf (f x)) ⇒
   decreases_gas' (bf ∨ bg) (bind g f)
 Proof
-  simp [decreases_gas'_def, bind_def] \\ ntac 3 strip_tac
-  \\ CASE_TAC \\ CASE_TAC
-
-  \\ last_x_assum drule \\ rw []
-  \\ Cases_on `bf` \\ simp []
-  \\ last_x_assum (drule_then (qspec_then `x` mp_tac))
-  \\ rw [] \\ rw [] \\ gvs []
-  \\ qhdtm_x_assum `COND` mp_tac \\ rw [] *)
+  simp [decreases_gas'_def, bind_def]
+  \\ ntac 3 strip_tac
+  \\ CASE_TAC
+  \\ last_x_assum drule \\ simp[]
+  \\ strip_tac
+  \\ CASE_TAC \\ simp[]
+  >- (
+    last_x_assum (drule_then(qspec_then`x`mp_tac))
+    \\ qhdtm_x_assum `COND` mp_tac \\ rw []
+    \\ metis_tac (NOT_ISR_ISL::lexs) )
+  \\ qhdtm_x_assum `COND` mp_tac \\ rw []
 QED
 
 Theorem decreases_gas'_bind_mono:
@@ -859,19 +913,171 @@ QED
 Theorem decreases_gas_imp[simp]:
   decreases_gas b m ⇒ decreases_gas' b m
 Proof
-  cheat
+  simp[decreases_gas_def, decreases_gas'_def]
+  \\ strip_tac
+  \\ gen_tac
+  \\ strip_tac
+  \\ Cases_on`s.contexts` >- gs[ok_state_def]
+  \\ first_x_assum drule
+  \\ impl_tac >- (fs[ok_state_def] \\ metis_tac[])
+  \\ strip_tac
+  \\ conj_asm1_tac >- ( gvs[ok_state_def] \\ metis_tac[] )
+  \\ qmatch_goalsub_abbrev_tac`COND bb`
+  \\ qhdtm_x_assum`COND`mp_tac
+  \\ gvs[ok_state_def]
+  \\ simp[contexts_weight_def, LEX_DEF]
+  \\ rw[unused_gas_def]
 QED
 
-Theorem decreases_gas_step_inst:
+Theorem decreases_gas'_step_inst[simp]:
   decreases_gas' T (step_inst inst)
 Proof
   cheat
 QED
 
-Theorem decreases_gas_step_inst:
-  decreases_gas' T (step_inst inst)
+Theorem bind_assoc[simp]:
+  bind (bind x f) g =
+  bind x (λa. bind (f a) g)
 Proof
-  cheat
+  rw[bind_def, FUN_EQ_THM]
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+QED
+
+Definition pop_helper_def:
+  pop_helper = do
+    n <- get_num_contexts;
+    assert (1 < n) Impossible;
+    calleeGasLeft <- get_gas_left;
+    callee <- pop_context;
+    unuse_gas calleeGasLeft;
+    return callee
+  od
+End
+
+Theorem return_bind[simp]:
+  bind (return x) f = f x
+Proof
+  rw[bind_def, return_def, FUN_EQ_THM]
+QED
+
+Definition after_pop_def:
+  after_pop output outputTo success = do
+        inc_pc;
+        case outputTo of
+          Memory r =>
+            do
+              set_return_data output;
+              push_stack (b2w success);
+              write_memory r.offset (TAKE r.size output)
+            od
+        | Code address =>
+          if success then
+            do set_return_data []; push_stack (w2w address) od
+          else do set_return_data output; push_stack 0w od
+  od
+End
+
+Definition handle_ex_helper_def:
+  handle_ex_helper e = do
+    n <- get_num_contexts;
+    if n ≤ 1 then reraise e
+    else
+      do
+        output <- get_return_data;
+        outputTo <- get_output_to;
+        pop_and_incorporate_context (e = NONE);
+        after_pop output outputTo (e = NONE)
+      od
+    od
+End
+
+Theorem handle_ex_helper_thm:
+  handle_ex_helper e = do
+    n <- get_num_contexts;
+    if n ≤ 1 then reraise e
+    else
+      do
+        output <- get_return_data;
+        outputTo <- get_output_to;
+        callee <- pop_helper;
+        if (e = NONE) then
+          do
+            push_logs callee.logs;
+            update_gas_refund (callee.addRefund,callee.subRefund)
+          od
+        else set_rollback callee.rollback;
+        after_pop output outputTo (e = NONE)
+      od
+    od
+Proof
+  rw[handle_ex_helper_def, FUN_EQ_THM, ignore_bind_def,
+     pop_and_incorporate_context_def, pop_helper_def]
+  \\ rw[get_num_contexts_def, get_return_data_def, get_output_to_def,
+        assert_def, bind_def, return_def, get_current_context_def]
+  \\ IF_CASES_TAC \\ gvs[]
+QED
+
+Theorem decreases_gas_update_gas_refund[simp]:
+  decreases_gas F (update_gas_refund p)
+Proof
+  Cases_on`p` \\ rw[update_gas_refund_def]
+  \\ rw [decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def]
+QED
+
+Theorem decreases_gas_inc_pc[simp]:
+  decreases_gas F inc_pc
+Proof
+  rw[inc_pc_def]
+  \\ rw [decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def]
+QED
+
+Theorem decreases_gas_write_memory[simp]:
+  decreases_gas F (write_memory a b)
+Proof
+  rw[write_memory_def]
+  \\ rw [decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def]
+QED
+
+Theorem decreases_gas_set_rollback[simp]:
+  decreases_gas F (set_rollback b)
+Proof
+  rw[set_rollback_def, decreases_gas_def]
+  \\ rw [decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def]
+QED
+
+Theorem decreases_gas_after_pop[simp]:
+  decreases_gas F (after_pop a b c)
+Proof
+  rw[after_pop_def]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_inc_pc
+  \\ CASE_TAC
+  \\ (
+    reverse CASE_TAC
+    \\ irule_at Any decreases_gas_ignore_bind_false
+    \\ irule_at Any decreases_gas_set_return_data
+    >- (irule_at Any decreases_gas_push_stack)
+    \\ irule_at Any decreases_gas_ignore_bind_false
+    \\ irule_at Any decreases_gas_push_stack
+    \\ irule_at Any decreases_gas_write_memory)
+QED
+
+Theorem decreases_gas_update_accounts[simp]:
+  decreases_gas F (update_accounts f)
+Proof
+  rw[decreases_gas_def, update_accounts_def]
+  \\ rw [decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def]
 QED
 
 Theorem decreases_gas_step[simp]:
@@ -894,23 +1100,83 @@ Proof
         \\ irule decreases_gas_ignore_bind_mono
         \\ irule_at Any decreases_gas_consume_gas \\ rw []
         \\ irule_at Any decreases_gas_set_return_data)
+      \\ simp[GSYM after_pop_def, GSYM handle_ex_helper_def]
+      \\ simp[handle_ex_helper_thm]
       \\ irule decreases_gas'_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_num_contexts \\ rw []
       \\ irule decreases_gas'_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_return_data \\ rw []
       \\ irule decreases_gas'_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_output_to \\ rw []
-      \\ irule_at Any decreases_gas'_ignore_bind_mono
-      \\ rw [decreases_gas_def]
+      \\ irule_at Any decreases_gas'_bind_mono
+      \\ qexistsl_tac[`F`,`T`]
+      \\ simp[]
+      \\ conj_tac >- (
+        rw[] >- (
+          irule decreases_gas_imp
+          \\ irule decreases_gas_ignore_bind_false
+          \\ conj_tac
+          >- (
+            qexists_tac`F`
+            \\ irule decreases_gas_ignore_bind_false
+            \\ conj_tac
+            >- ( qexists_tac`F` \\ irule decreases_gas_push_logs)
+            \\ qexists_tac`F` \\ irule decreases_gas_update_gas_refund
+          )
+          \\ irule_at Any decreases_gas_after_pop
+        )
+        \\ irule decreases_gas_imp
+        \\ irule_at Any decreases_gas_ignore_bind_false
+        \\ irule_at Any decreases_gas_set_rollback
+        \\ irule_at Any decreases_gas_after_pop
+      )
+      \\ rw[pop_helper_def]
+      \\ simp[bind_def, decreases_gas'_def, get_gas_left_def,
+              get_current_context_def, return_def, pop_context_def,
+              unuse_gas_def, ignore_bind_def, fail_def, assert_def,
+              set_current_context_def, ok_state_def, get_num_contexts_def,
+              assert_def]
+      \\ rpt gen_tac \\ strip_tac
+      \\ reverse IF_CASES_TAC \\ simp[]
+      >- metis_tac lexs
+      \\ Cases_on`s.contexts` \\ gvs[]
+      \\ Cases_on`t` \\ gvs[]
+      \\ rw[] \\ rw[] \\ fsrw_tac[DNF_ss][]
+      >- decide_tac
+      \\ gvs[contexts_weight_def, LEX_DEF]
     )
     \\ simp [handle_create_def]
+    \\ irule decreases_gas_imp
+    \\ irule_at Any decreases_gas_bind_right
+    \\ irule_at Any decreases_gas_get_return_data \\ rw[]
+    \\ irule_at Any decreases_gas_bind_right
+    \\ irule_at Any decreases_gas_get_output_to \\ rw[]
+    \\ BasicProvers.TOP_CASE_TAC \\ rw[]
+    \\ BasicProvers.TOP_CASE_TAC \\ rw[]
+    \\ irule_at Any decreases_gas_ignore_bind_mono
+    \\ qexistsl_tac[`T`,`F`] \\ simp[]
+    \\ irule_at Any decreases_gas_ignore_bind_mono
+    \\ irule_at Any decreases_gas_consume_gas
+    \\ qexists_tac`T` \\ simp[]
+    \\ irule_at Any decreases_gas_ignore_bind_mono
+    \\ irule_at Any decreases_gas_ignore_bind
+    \\ irule_at Any decreases_gas_reraise
+    \\ irule_at Any decreases_gas_assert
+    \\ irule_at Any decreases_gas_update_accounts
+    \\ rw[]
   )
-  \\ irule decreases_gas_bind_right
-  \\ irule_at Any decreases_gas_get_current_context \\ rw []
-  \\ CASE_TAC >- rw []
-  \\ irule_at Any decreases_gas_ignore_bind_mono
-  \\ irule_at Any decreases_gas_step_inst
-  \\ irule_at Any decreases_gas_inc_pc_or_jump \\ rw []
+  \\ irule decreases_gas'_bind_right
+  \\ reverse conj_tac
+  >- (
+    irule_at Any decreases_gas_imp
+    \\ irule_at Any decreases_gas_get_current_context  )
+  \\ rw[]
+  \\ CASE_TAC >- rw[]
+  \\ irule_at Any decreases_gas'_ignore_bind_mono
+  \\ irule_at Any decreases_gas'_step_inst
+  \\ rw[]
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_inc_pc_or_jump
 QED
 
 val () = export_theory();
