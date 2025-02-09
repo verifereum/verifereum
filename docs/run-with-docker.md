@@ -6,7 +6,7 @@ In case you have a lot of trouble installing polyml and HOL, you can use Docker 
 
 1. Create a `Dockerfile` in the root of the project with the following content:
 
-```Dockerfile
+  ```Dockerfile
 # Keep in sync with https://github.com/CakeML/pure/blob/master/.github/Dockerfile
 # we copied it over because there's certain deps we don't need
 FROM ubuntu:20.04
@@ -36,30 +36,14 @@ ENV HOLDIR=/home/HOL
 ENV PATH=$HOLDIR/bin:$PATH
 ```
 
-1. Create a `docker-compose.yml` file in the root of the project:
-
-```yaml
-services:
-  verifereum:
-    image: verifereum
-    build:
-      context: .
-      dockerfile: Dockerfile
-      tags:
-        - verifereum
-    volumes:
-      - .:/src
-    working_dir: /src
-```
-
-1. Run this command to initialize the environment and enter the shell. On its first run it'll build the image which could take a while:
+1. Run this command to build the docker image:
 
 ```sh
-docker compose run verifereum
+docker build . -t hol  # -t <name of docker image, can be anything you like>
 ```
+This should take 10-20 minutes.
 
-1. Within the shell, run this to build the project and run the tests:
-
+1. Run Holmake, pointing the cwd of the docker image (`-w`) to the directory that you want to run Holmake in. For example, this runs `Holmake` in the `spec/` directory:
 ```sh
-Holmake
+docker run -v $PWD:/app -w /app/spec hol Holmake
 ```
