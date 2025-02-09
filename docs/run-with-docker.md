@@ -6,7 +6,7 @@ In case you have a lot of trouble installing polyml and HOL, you can use Docker 
 
 1. Create a `Dockerfile` in the root of the project with the following content:
 
-  ```Dockerfile
+```Dockerfile
 # Keep in sync with https://github.com/CakeML/pure/blob/master/.github/Dockerfile
 # we copied it over because there's certain deps we don't need
 FROM ubuntu:20.04
