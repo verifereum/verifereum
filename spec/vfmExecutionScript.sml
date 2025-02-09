@@ -1492,4 +1492,15 @@ Definition run_block_def:
     b.transactions
 End
 
+Definition run_blocks_def:
+  run_blocks chainId prevHashes accounts bs =
+  FOLDL
+    (λx b.
+      OPTION_BIND x (λ(ls, h, a).
+        OPTION_MAP (λ(rs, a). (SNOC rs ls, b.hash::h, a)) $
+          run_block chainId h a b))
+    (SOME ([], prevHashes, accounts))
+    bs
+End
+
 val _ = export_theory();
