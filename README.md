@@ -60,7 +60,6 @@ as described [here](docs/run-with-docker.md).
     ii. Export paths: add the following to your `.bashrc` file
 
     ```bash
-    cd -
     export HOLDIR=<path-to-HOL>/HOL
     export PATH=$HOLDIR/bin:$PATH
     ```
