@@ -48,16 +48,16 @@ fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 fun mk_statement isHash test_name =
   if isHash then
     Term[QUOTE(String.concat[
-           "∃n1. run_block_to_hash n1 1 [] ", (* TODO: add prev hashes if needed *)
+           "∃n1. run_block_to_hash n1 1 ",
            test_name, "_pre ",
-           test_name, "_block ",
+           test_name, "_blocks ",
            "= SOME ", test_name, "_post"])]
   else
     Term[QUOTE(String.concat[
-           "∃rs. run_block 1 [] ", (* TODO: add prev hashes if needed *)
+           "∃rs. run_block 1 ",
            test_name, "_pre ",
-           test_name, "_block ",
-           "= SOME (rs, ",
+           test_name, "_blocks ",
+           "= SOME (rs, prevhashes, ",
            test_name, "_post)"])]
 
 val account_rwts = [
@@ -234,14 +234,11 @@ fun mk_prove_test test_path = let
     val test = get_test test_path test_name;
     val isHash = not $ Option.isSome $ #post test;
 
-    val block = #block test;
+    val blocks = #blocks test;
 
-    val transaction = #transaction test;
-    val transaction_def = new_definition(
-      test_name_escaped ^ "_transaction_def",
-      Term[QUOTE(String.concat[
-        test_name_escaped, "_transaction = <|",
-        " from := n2w ", #sender transaction,
+    fun tx_term block transaction =
+      String.concat[
+        "<| from := n2w ", #sender transaction,
         ";to := ", mk_tx_to (#to transaction),
         ";data := REVERSE $ hex_to_rev_bytes [] \"", trim2 $ #data transaction,
         "\";nonce := ", #nonce transaction,
@@ -256,13 +253,11 @@ fun mk_prove_test test_path = let
                                 ],
         ";gasLimit := ", #gasLimit transaction,
         ";accessList := ", accesses_term $ #accessList transaction, " |>"
-      ])]);
+      ];
 
-    val block_def = new_definition(
-      test_name_escaped ^ "_block_def",
-      Term[QUOTE(String.concat[
-        test_name_escaped, "_block = <|",
-        " number := ", #number block,
+    fun blk_term block =
+      String.concat[
+        "<| number := ", #number block,
         ";baseFeePerGas := ", #baseFeePerGas block,
         ";timeStamp := ", #timeStamp block,
         ";coinBase := n2w ", #coinBase block,
@@ -270,9 +265,20 @@ fun mk_prove_test test_path = let
         ";gasLimit := ", #gasLimit block,
         ";prevRandao := n2w ", #prevRandao block,
         ";parentBeaconBlockRoot := n2w ", #parentBeaconBlockRoot block,
-        ";transactions := [", test_name_escaped, "_transaction]",
+        ";transactions := [",
+        String.concatWith ";" (map (tx_term block) (#transactions block)),
+        "]",
         "|>"
-      ])]);
+      ];
+
+
+    val blocks_def = new_definition(
+      test_name_escaped ^ "_blocks_def",
+      Term[QUOTE(String.concat[
+      test_name_escaped, "_blocks = [",
+      String.concatWith ";" (map blk_term blocks),
+      "]"
+    ])]);
 
     val pre = #pre test;
     val pre_name = test_name_escaped ^ "_pre";
@@ -297,16 +303,17 @@ fun mk_prove_test test_path = let
           Term[QUOTE(post_name ^ " = " ^ bytes)])
       in (post_def, code_defs) end
 
+
     val () = List.app (cv_trans_deep_embedding EVAL) code_defs;
     val () = cv_auto_trans pre_def;
     val () = cv_auto_trans post_def;
-    val () = cv_auto_trans transaction_def;
-    val () = cv_auto_trans block_def;
-    val () = computeLib.add_funs [pre_def, post_def, transaction_def, block_def]
+    val () = cv_auto_trans blocks_def;
+    val () = computeLib.add_funs [pre_def, post_def, blocks_def]
     val () = computeLib.add_funs code_defs;
 
     val thm_name = test_name_escaped ^ "_correctness";
     val thm_term = mk_statement isHash test_name_escaped;
+
   in
     store_thm(thm_name, thm_term,
               (if isHash then mk_tactic_hash else mk_tactic))
