@@ -953,6 +953,12 @@ Proof
   rw[bind_def, return_def, FUN_EQ_THM]
 QED
 
+Theorem return_ignore_bind[simp]:
+  ignore_bind (return x) f = f
+Proof
+  rw[ignore_bind_def, return_def]
+QED
+
 Theorem bind_assoc[simp]:
   bind (bind x f) g =
   bind x (λa. bind (f a) g)
@@ -974,10 +980,118 @@ Proof
   rw [decreases_gas_def, revert_def]
 QED
 
+Theorem decreases_gas_access_address[simp]:
+  decreases_gas F (access_address a)
+Proof
+  rw [access_address_def, decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def,
+    cold_access_cost_def, warm_access_cost_def]
+QED
+
+Theorem decreases_gas_access_address_bind:
+  (∀x. 0 < x ⇒ decreases_gas sf (f x)) ⇒
+  decreases_gas sf (monad_bind (access_address a) f)
+Proof
+  strip_tac \\ irule decreases_gas_mono
+  \\ irule_at Any decreases_gas_bind_pred
+  \\ qexistsl_tac [`F`,`sf`,`λx. 0 < x`] \\ simp []
+  \\ rw [access_address_def, decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def,
+    cold_access_cost_def, warm_access_cost_def]
+QED
+
+Theorem decreases_gas_get_accounts[simp]:
+  decreases_gas F get_accounts
+Proof
+  rw [get_accounts_def, decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def]
+QED
+
+Theorem decreases_gas'_bind_pred:
+  decreases_gas' sg g ∧
+  (∀s a. FST (g s) = INL a ⇒ p a) ∧
+  (∀x. p x ⇒ decreases_gas' sf (f x)) ⇒
+  decreases_gas' (sf ∨ sg) (monad_bind g f)
+Proof
+  rw [decreases_gas'_def, bind_def]
+  \\ last_x_assum drule \\ rw []
+  \\ CASE_TAC \\ CASE_TAC \\ gvs []
+  \\ last_x_assum (qspecl_then [`s`,`x`] mp_tac) \\ rw []
+  \\ first_x_assum (drule_then assume_tac)
+  \\ first_x_assum (drule_then mp_tac) \\ rw []
+  \\ metis_tac lexs
+QED
+
+Theorem decreases_gas'_access_address_bind:
+  (∀x. 0 < x ⇒ decreases_gas' sf (f x)) ⇒
+  decreases_gas' sf (monad_bind (access_address a) f)
+Proof
+  strip_tac \\ irule decreases_gas'_mono
+  \\ irule_at Any decreases_gas'_bind_pred
+  \\ qexistsl_tac [`F`,`sf`,`λx. 0 < x`] \\ simp []
+  \\ rw [access_address_def, decreases_gas_def, get_current_context_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def,
+    cold_access_cost_def, warm_access_cost_def]
+QED
+
+Theorem decreases_gas'_consume_gas_bind[simp]:
+  0 < n ∧ decreases_gas' sf f ⇒
+  decreases_gas' T (do consume_gas n; f od)
+Proof
+  rw [] \\ irule decreases_gas'_ignore_bind_mono
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ metis_tac []
+QED
+
 Theorem decreases_gas'_step_call[simp]:
   decreases_gas' T (step_call op)
 Proof
-  rw [step_call_def]
+  simp [step_call_def]
+  \\ qmatch_goalsub_abbrev_tac`pop_stack (n + _)`
+  \\ irule_at Any decreases_gas'_bind_right
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_pop_stack
+  \\ simp[] \\ gen_tac
+  \\ qmatch_goalsub_abbrev_tac`max_expansion_range p1 p2`
+  \\ Cases_on`max_expansion_range p1 p2` \\ simp[]
+  \\ irule_at Any decreases_gas'_bind_right
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_memory_expansion_info
+  \\ simp[] \\ gen_tac
+  \\ irule_at Any decreases_gas'_access_address_bind
+  \\ simp[] \\ gen_tac \\ strip_tac
+  \\ irule_at Any decreases_gas'_bind_right
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_get_accounts
+  \\ simp[] \\ gen_tac
+  \\ irule_at Any decreases_gas'_bind_right
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_get_gas_left
+  \\ simp[] \\ gen_tac
+  \\ qmatch_goalsub_abbrev_tac`call_gas v g l m e`
+  \\ Cases_on`call_gas v g l m e` \\ simp[]
+  \\ irule_at Any decreases_gas'_consume_gas_bind
+  \\ conj_tac >- ( gvs[call_gas_def] \\ rw[Abbr`e`] )
+  \\ qexists_tac`F`
+  \\ irule_at Any decreases_gas'_ignore_bind_false
+  \\ conj_tac
+  >- (
+    irule_at Any decreases_gas_imp
+    \\ rw[]
+    >- irule_at Any decreases_gas_assert_not_static
+    \\ irule_at Any decreases_gas_return )
+  \\ irule_at Any decreases_gas'_ignore_bind_false
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_expand_memory
+  \\ irule_at Any decreases_gas'_bind_false
+  \\ irule_at Any decreases_gas_imp
+  \\ irule_at Any decreases_gas_get_callee
+  \\ simp[] \\ gen_tac
   \\ cheat
 QED
 
@@ -1026,27 +1140,6 @@ Proof
   \\ first_x_assum drule \\ rw []
   \\ first_assum (irule_at Any)
   \\ qhdtm_x_assum `COND` mp_tac \\ rw []
-QED
-
-Theorem decreases_gas_access_address_bind:
-  (∀x. 0 < x ⇒ decreases_gas sf (f x)) ⇒
-  decreases_gas sf (monad_bind (access_address a) f)
-Proof
-  strip_tac \\ irule decreases_gas_mono
-  \\ irule_at Any decreases_gas_bind_pred
-  \\ qexistsl_tac [`F`,`sf`,`λx. 0 < x`] \\ simp []
-  \\ rw [access_address_def, decreases_gas_def, get_current_context_def,
-    bind_def, return_def, assert_def, ignore_bind_def,
-    set_current_context_def,
-    cold_access_cost_def, warm_access_cost_def]
-QED
-
-Theorem decreases_gas_get_accounts[simp]:
-  decreases_gas F get_accounts
-Proof
-  rw [get_accounts_def, decreases_gas_def, get_current_context_def,
-    bind_def, return_def, assert_def, ignore_bind_def,
-    set_current_context_def]
 QED
 
 Theorem decreases_gas_step_balance[simp]:
