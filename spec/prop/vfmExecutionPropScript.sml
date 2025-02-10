@@ -777,6 +777,78 @@ Proof
   \\ irule_at Any decreases_gas_finish
 QED
 
+Theorem decreases_gas_precompile_ecrecover[simp]:
+  decreases_gas F precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_ecadd[simp]:
+  decreases_gas F precompile_ecadd
+Proof
+  rw[precompile_ecadd_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_ecmul[simp]:
+  decreases_gas F precompile_ecmul
+Proof
+  rw[precompile_ecmul_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_ecpairing[simp]:
+  decreases_gas F precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_ripemd_160[simp]:
+  decreases_gas F precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_blake2f[simp]:
+  decreases_gas F precompile_blake2f
+Proof
+  rw[precompile_blake2f_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
 Theorem decreases_gas_dispatch_precompiles[simp]:
   decreases_gas F (dispatch_precompiles address)
 Proof
