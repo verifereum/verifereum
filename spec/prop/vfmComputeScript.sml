@@ -877,13 +877,8 @@ QED
 
 val () = cv_auto_trans run_block_eq;
 
-Definition run_block_to_hash_def:
-  run_block_to_hash n2 chainId prevHashes accounts blk =
-  case run_block chainId prevHashes accounts blk
-    of NONE => NONE
-     | SOME (rs, s) => SOME (state_root_clocked n2 s)
-End
-
 val () = cv_auto_trans run_block_to_hash_def;
+
+val () = cv_auto_trans run_blocks_to_hash_def;
 
 val _ = export_theory();
