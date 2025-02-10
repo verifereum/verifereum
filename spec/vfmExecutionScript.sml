@@ -1044,7 +1044,7 @@ End
 
 Definition precompile_ecrecover_def:
   precompile_ecrecover = do
-    (* TODO *) 
+    (* TODO *)
     finish
   od
 End
@@ -1107,36 +1107,36 @@ Definition precompile_sha2_256_def:
 End
 
 Definition precompile_ripemd_160_def:
-  precompile_ripemd_160_def = do
-    (* TODO *) 
+  precompile_ripemd_160 = do
+    (* TODO *)
     finish
   od
 End
 
 Definition precompile_ecadd_def:
-  precompile_ecadd_def = do
-    (* TODO *) 
+  precompile_ecadd = do
+    (* TODO *)
     finish
   od
 End
 
 Definition precompile_ecmul_def:
-  precompile_ecmul_def = do
-    (* TODO *) 
+  precompile_ecmul = do
+    (* TODO *)
     finish
   od
 End
 
 Definition precompile_ecpairing_def:
-  precompile_ecpairing_def = do
-    (* TODO *) 
+  precompile_ecpairing = do
+    (* TODO *)
     finish
   od
 End
 
 Definition precompile_blake2f_def:
   precompile_blake2f = do
-    (* TODO *) 
+    (* TODO *)
     finish
   od
 End
