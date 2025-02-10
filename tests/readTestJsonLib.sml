@@ -77,6 +77,7 @@ structure readTestJsonLib = struct
 
     val number = getObject' bh0 "number" |> getString'
     val hash = getObject' bh0 "hash" |> getString'
+    val parentHash = getObject' bh0 "parentHash" |> getString'
     val blockGasLimit = getObject' bh0 "gasLimit" |> getString'
     val baseFeePerGas = getObject' bh0 "baseFeePerGas" |> getString'
     val prevRandao = getObject' bh0 "mixHash" |> getString'
@@ -87,6 +88,7 @@ structure readTestJsonLib = struct
   in {
       number=number,
       hash=hash,
+      parentHash=parentHash,
       gasLimit=blockGasLimit,
       baseFeePerGas=baseFeePerGas,
       prevRandao=prevRandao,

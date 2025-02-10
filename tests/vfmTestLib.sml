@@ -45,16 +45,20 @@ val cv_eval_run_block_rwts = [
 
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
-fun mk_statement isHash test_name =
+fun mk_statement isHash test_name prev_hashes =
   if isHash then
     Term[QUOTE(String.concat[
-           "∃n1. run_blocks_to_hash n1 1 [] ",
+           "∃n1. run_blocks_to_hash n1 1 [",
+           String.concatWith "; " (map (fn hash => "n2w " ^ hash) prev_hashes),
+           "] ",
            test_name, "_pre ",
            test_name, "_blocks ",
            "= SOME ", test_name, "_post"])]
   else
     Term[QUOTE(String.concat[
-           "∃rs prevhashes. run_blocks 1 [] ",
+           "∃rs prevhashes. run_blocks 1 [",
+           String.concatWith "; " (map (fn hash => "n2w " ^ hash) prev_hashes),
+           "] ",
            test_name, "_pre ",
            test_name, "_blocks ",
            "= SOME (rs, prevhashes, ",
@@ -236,6 +240,9 @@ fun prep_test test_path test_index = let
 
   val blocks = #blocks test;
 
+  (* initialize prev_hashes with "parentHash" of 0th block *)
+  val prev_hashes = [#parentHash (List.nth (blocks, 0))]
+
   fun tx_term block transaction =
     String.concat[
       "<| from := n2w ", #sender transaction,
@@ -312,7 +319,7 @@ fun prep_test test_path test_index = let
   val () = computeLib.add_funs code_defs;
 
   val thm_name = test_name_escaped ^ "_correctness";
-  val thm_term = mk_statement isHash test_name_escaped;
+  val thm_term = mk_statement isHash test_name_escaped prev_hashes;
 
   in (thm_name, thm_term, (if isHash then mk_tactic_hash else mk_tactic))
 end
