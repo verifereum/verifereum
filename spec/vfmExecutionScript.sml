@@ -1042,7 +1042,7 @@ Definition abort_call_value_def:
   od
 End
 
-Definition precompile_ecrecover:
+Definition precompile_ecrecover_def:
   precompile_ecrecover = do
     (* TODO *) 
     finish
@@ -1095,7 +1095,6 @@ Definition precompile_modexp_def:
   od
 End
 
-
 Definition precompile_sha2_256_def:
   precompile_sha2_256 = do
     input <- get_call_data;
@@ -1105,6 +1104,41 @@ Definition precompile_sha2_256_def:
     set_return_data $ word_to_bytes hsh T;
     finish
     od
+End
+
+Definition precompile_ripemd_160_def:
+  precompile_ripemd_160_def = do
+    (* TODO *) 
+    finish
+  od
+End
+
+Definition precompile_ecadd_def:
+  precompile_ecadd_def = do
+    (* TODO *) 
+    finish
+  od
+End
+
+Definition precompile_ecmul_def:
+  precompile_ecmul_def = do
+    (* TODO *) 
+    finish
+  od
+End
+
+Definition precompile_ecpairing_def:
+  precompile_ecpairing_def = do
+    (* TODO *) 
+    finish
+  od
+End
+
+Definition precompile_blake2f_def:
+  precompile_blake2f = do
+    (* TODO *) 
+    finish
+  od
 End
 
 Definition dispatch_precompiles_def:
