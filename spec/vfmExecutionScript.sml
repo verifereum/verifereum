@@ -1,6 +1,6 @@
- open HolKernel boolLib bossLib Parse monadsyntax
-     vfmTypesTheory vfmContextTheory numposrepTheory numTheory
-     arithmeticTheory dep_rewrite sha2Theory;
+ open HolKernel boolLib bossLib Parse monadsyntax dep_rewrite
+     numposrepTheory numTheory arithmeticTheory sha2Theory
+     vfmTypesTheory vfmRootTheory vfmContextTheory;
 
 val _ = new_theory "vfmExecution";
 
@@ -1548,6 +1548,20 @@ Definition run_blocks_def:
           run_block chainId h a b))
     (SOME ([], prevHashes, accounts))
     bs
+End
+
+Definition run_block_to_hash_def:
+  run_block_to_hash n2 chainId prevHashes accounts blk =
+  case run_block chainId prevHashes accounts blk
+    of NONE => NONE
+     | SOME (rs, s) => state_root_clocked n2 s
+End
+
+Definition run_blocks_to_hash_def:
+  run_blocks_to_hash n2 chainId prevHashes accounts bs =
+  case run_blocks chainId prevHashes accounts bs
+    of NONE => NONE
+     | SOME (rs, hs, s) => state_root_clocked n2 s
 End
 
 val _ = export_theory();

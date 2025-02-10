@@ -51,8 +51,7 @@ fun mk_statement isHash test_name =
            "∃n1. run_block_to_hash n1 1 [] ", (* TODO: add prev hashes if needed *)
            test_name, "_pre ",
            test_name, "_block ",
-           "= SOME (SOME ",
-           test_name, "_post)"])]
+           "= SOME ", test_name, "_post"])]
   else
     Term[QUOTE(String.concat[
            "∃rs. run_block 1 [] ", (* TODO: add prev hashes if needed *)
