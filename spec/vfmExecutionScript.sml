@@ -1042,6 +1042,13 @@ Definition abort_call_value_def:
   od
 End
 
+Definition precompile_ecrecover:
+  precompile_ecrecover = do
+    (* TODO *) 
+    finish
+  od
+End
+
 Definition precompile_identity_def:
   precompile_identity = do
     input <- get_call_data;
@@ -1102,9 +1109,15 @@ End
 
 Definition dispatch_precompiles_def:
   dispatch_precompiles (a: address) =
-    if a = 0x4w then precompile_identity
-    else if a = 0x5w then precompile_modexp
+    if a = 0x1w then precompile_ecrecover
     else if a = 0x2w then precompile_sha2_256
+    else if a = 0x3w then precompile_ripemd_160
+    else if a = 0x4w then precompile_identity
+    else if a = 0x5w then precompile_modexp
+    else if a = 0x6w then precompile_ecadd
+    else if a = 0x7w then precompile_ecmul
+    else if a = 0x8w then precompile_ecpairing
+    else if a = 0x9w then precompile_blake2f
     else fail Impossible
 End
 
