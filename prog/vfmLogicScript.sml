@@ -1006,12 +1006,6 @@ Proof
   \\ CASE_TAC \\ rw[]
 QED
 
-Theorem decreases_gas_finish[simp]:
-  decreases_gas T finish
-Proof
-  rw [decreases_gas_def, finish_def]
-QED
-
 Theorem decreases_gas_revert[simp]:
   decreases_gas T revert
 Proof
@@ -1158,10 +1152,61 @@ Proof
     set_current_context_def]
 QED
 
+Theorem decreases_gas_fail[simp]:
+  decreases_gas F (fail e)
+Proof
+  rw[decreases_gas_def, fail_def]
+QED
+
+Theorem decreases_gas_finish[simp]:
+  decreases_gas b finish
+Proof
+  rw[decreases_gas_def, finish_def]
+QED
+
+Theorem decreases_gas_get_call_data[simp]:
+  decreases_gas F get_call_data
+Proof
+  rw [get_call_data_def]
+  \\ irule_at Any decreases_gas_bind_false
+  \\ irule_at Any decreases_gas_get_current_context \\ rw []
+QED
+
+Theorem decreases_gas_precompile_identity[simp]:
+  decreases_gas F precompile_identity
+Proof
+  rw[precompile_identity_def]
+  \\ irule decreases_gas_bind_false \\ rw[]
+  \\ rw[ignore_bind_def]
+  \\ irule decreases_gas_bind_false \\ simp[]
+  \\ conj_tac
+  >- ( irule decreases_gas_bind_false \\ rw[] )
+  \\ irule decreases_gas_mono
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ rw[]
+QED
+
+Theorem decreases_gas_precompile_modexp[simp]:
+  decreases_gas F precompile_modexp
+Proof
+  rw[precompile_modexp_def]
+  \\ irule decreases_gas_bind_false \\ simp[]
+  \\ gen_tac
+  \\ qpat_abbrev_tac `v1 = COND a b c`
+  \\ qpat_abbrev_tac `v2 = COND a b c`
+  \\ rw[ignore_bind_def]
+  \\ irule decreases_gas_bind_false \\ simp[]
+  \\ conj_tac
+  >- ( irule decreases_gas_bind_false \\ rw[] )
+  \\ irule decreases_gas_mono
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ rw[]
+QED
+
 Theorem decreases_gas_dispatch_precompiles[simp]:
   decreases_gas F (dispatch_precompiles address)
 Proof
-  cheat
+  rw[dispatch_precompiles_def]
 QED
 
 Theorem decreases_gas'_push_context[simp]:
@@ -1405,14 +1450,6 @@ Proof
   \\ irule_at Any decreases_gas_pop_stack \\ rw []
   \\ irule decreases_gas_consume_gas_bind \\ rw []
   \\ irule_at Any decreases_gas_push_stack
-QED
-
-Theorem decreases_gas_get_call_data[simp]:
-  decreases_gas F get_call_data
-Proof
-  rw [get_call_data_def]
-  \\ irule_at Any decreases_gas_bind_false
-  \\ irule_at Any decreases_gas_get_current_context \\ rw []
 QED
 
 Theorem decreases_gas_step_call_data_load[simp]:
