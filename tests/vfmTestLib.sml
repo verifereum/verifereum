@@ -84,8 +84,6 @@ in Arbnum.< (n1, n2) end
   set_goal([], thm_term)
 *)
 
-val unwind_lemma = Q.prove (`∀P a b. (∃x y. a = x /\ b = y ∧ P x y) ⇔ P a b`, rw []): thm;
-
 val mk_tactic =
   CONV_TAC(STRIP_QUANT_CONV(LAND_CONV cv_eval_raw))
   \\ rewrite_tac cv_eval_run_block_rwts
@@ -224,7 +222,8 @@ fun remove_special_chars #"-" = "_"
   val SOME test_index = findIndexByName "randomStatetest108" test_names
 *)
 
-fun prep_test test_path test_names test_index = let
+fun prep_test test_path test_index = let
+  val test_names = get_test_names test_path;
   val test_name = List.nth(test_names, test_index);
   val test_name_escaped =
     let
@@ -318,13 +317,11 @@ fun prep_test test_path test_names test_index = let
   in (thm_name, thm_term, (if isHash then mk_tactic_hash else mk_tactic))
 end
 
-fun prove_test test_path test_names test_index = let
-  val (a, b, c) = prep_test test_path test_names test_index
-  in store_thm(a, b, c)
-end
-
 fun mk_prove_test test_path = let
   val test_names = get_test_names test_path;
-in (List.length test_names, prove_test test_path test_names) end
+  fun prove_test test_path test_index = let
+    val x = prep_test test_path test_index
+  in store_thm x end
+in (List.length test_names, prove_test test_path) end
 
 end
