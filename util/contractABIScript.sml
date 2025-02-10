@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse wordsLib
-     listTheory vfmTypesTheory
+     listTheory arithmeticTheory numposrepTheory wordsTheory
+     vfmTypesTheory
      cv_transLib
 
 val () = new_theory "contractABI";
@@ -139,10 +140,24 @@ Definition enc_number_def:
     word_to_bytes (n2w v : bytes32) T ∧
   enc_number Bool (NumV v) =
     word_to_bytes (n2w v : bytes32) T ∧
+  enc_number (Fixed m n) (IntV i) =
+    word_to_bytes
+      (if 0 ≤ i then n2w (Num i) else -n2w (Num i) : bytes32) T ∧
+  enc_number (Ufixed m n) (NumV v) =
+    word_to_bytes (n2w v : bytes32) T ∧
   enc_number _ _ = []
 End
 
-(* TODO
+val () = cv_auto_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_aux_def
+val () = cv_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_def
+val () = cv_auto_trans enc_number_def;
+
+Theorem abi_value1_size_map:
+  abi_value1_size vs = LENGTH vs + SUM (MAP abi_value_size vs)
+Proof
+  Induct_on`vs` \\ rw[abi_value_size_def]
+QED
+
 Definition enc_def:
   enc (Tuple ts) (ListV vs) = (
     let hl = head_lengths ts vs 0 in
@@ -157,22 +172,136 @@ Definition enc_def:
     let k = LENGTH vs in
     let ts = REPLICATE (LENGTH vs) t in
     let hl = head_lengths ts vs 0 in
-    let pre = enc (Uint 256) (NumV k) in
+    let pre = enc_number (Uint 256) (NumV k) in
       enc_tuple hl 0 ts vs [pre] []
   ) ∧
-  enc _ _ = [] (* TODO *) ∧
+  enc (Bytes NONE) (BytesV bs) = (
+    let k = LENGTH bs in
+    let n = ceil32 k in
+      enc_number (Uint 256) (NumV k) ++
+      bs ++ REPLICATE (n - k) 0w
+  ) ∧
+  enc String (BytesV bs) = (
+    let k = LENGTH bs in
+    let n = ceil32 k in
+      enc_number (Uint 256) (NumV k) ++
+      bs ++ REPLICATE (n - k) 0w
+  ) ∧
+  enc (Bytes (SOME m)) (BytesV bs) = (
+      bs ++ REPLICATE (32 - m) 0w
+  ) ∧
+  enc t v = enc_number t v ∧
   enc_tuple hl tl (t::ts) (v::vs) rhds rtls = (
     let dyn = is_dynamic t in
     let tail = if dyn then enc t v else [] in
-    let head = if dyn then enc (Uint 256) (NumV (hl + tl)) else enc t v in
+    let head = if dyn then enc_number (Uint 256) (NumV (hl + tl)) else enc t v in
     enc_tuple hl (tl + LENGTH tail) ts vs (head::rhds) (tail::rtls)
   ) ∧
   enc_tuple _ _ _ _ rhds rtls = FLAT $ REV rhds (REV rtls [])
 Termination
   WF_REL_TAC ‘measure (λx.
-    case x of INL (_, v) => abi_value_size v
+    case x of INL (_, v) =>  abi_value_size v
        | INR (_,_,_,vs,_,_) => abi_value1_size vs)’
 End
+
+val () = cv_trans enc_def;
+
+Definition type_to_string_def:
+  type_to_string (Uint n) = "uint" ++ (num_to_dec_string n) ∧
+  type_to_string (Int n) = "int" ++ (num_to_dec_string n) ∧
+  type_to_string (Address) = "address" ∧
+  type_to_string (Bool) = "bool" ∧
+  type_to_string (Fixed m n) =
+    "fixed" ++ (num_to_dec_string m) ++ "x" ++ (num_to_dec_string n) ∧
+  type_to_string (Ufixed m n) =
+    "ufixed" ++ (num_to_dec_string m) ++ "x" ++ (num_to_dec_string n) ∧
+  type_to_string (Bytes NONE) = "bytes" ∧
+  type_to_string (Bytes (SOME m)) = "bytes" ++ (num_to_dec_string m) ∧
+  type_to_string (String) = "string" ∧
+  type_to_string (Array NONE t) = type_to_string t ++ "[]" ∧
+  type_to_string (Array (SOME k) t) =
+    type_to_string t ++ "[" ++ (num_to_dec_string k) ++ "]" ∧
+  type_to_string (Tuple ts) = types_to_string ts ["("] ∧
+  types_to_string [] acc = FLAT (REV acc [")"]) ∧
+  types_to_string [t] acc = FLAT (REV (type_to_string t::acc) [")"]) ∧
+  types_to_string (t::ts) acc =
+    types_to_string ts (","::type_to_string t::acc)
+Termination
+  WF_REL_TAC ‘measure (λx. case x of INL t => abi_type_size t | INR (ts,_) =>
+                           abi_type1_size ts)’
+End
+
+Definition dec_def:
+  dec n = CHR (48 + (MIN 9 n))
+End
+
+val dec_pre_def = cv_trans_pre dec_def;
+
+Theorem dec_pre[cv_pre]:
+  dec_pre n
+Proof
+  rw[dec_pre_def] \\ rw[MIN_DEF]
+QED
+
+Theorem MAP_HEX_n2l_10:
+  MAP HEX (n2l 10 n) = MAP dec (n2l 10 n)
+Proof
+  rw[MAP_EQ_f]
+  \\ qspec_then`10`mp_tac n2l_BOUND
+  \\ rw[EVERY_MEM]
+  \\ first_x_assum drule
+  \\ rw[dec_def, MIN_DEF]
+  \\ Cases_on`e = 10` \\ rw[]
+  \\ `e < 10` by fs[]
+  \\ fs[NUMERAL_LESS_THM]
+QED
+
+val () = cv_auto_trans (
+  ASCIInumbersTheory.num_to_dec_string_def
+  |> SIMP_RULE std_ss [ASCIInumbersTheory.n2s_def, FUN_EQ_THM, MAP_HEX_n2l_10]
+  )
+
+val () = cv_trans type_to_string_def;
+
+(*
+cv_eval``type_to_string (Array (SOME 2) (Bytes (SOME 3)))``
+cv_eval``type_to_string (Tuple [(Array NONE (Bytes (SOME 3))); Uint 256])``
+cv_eval``type_to_string (Tuple [])``
+*)
+
+Definition function_signature_def:
+  function_signature name args = name ++ type_to_string (Tuple args)
+End
+
+val () = cv_trans function_signature_def;
+
+Definition function_selector_def:
+  function_selector name args =
+  TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) (function_signature name args)))
+End
+
+val () = cv_auto_trans function_selector_def;
+
+(*
+cv_eval ``function_signature "foo" [Uint 32; Bool]``
+cv_eval ``function_selector "bar" [Array (SOME 2) (Bytes (SOME 3))]``
+0xfc
+0xe3
+0x53
+0xf6
+*)
+
+(*
+val abc = rhs (concl (EVAL ``MAP (n2w o ORD) "abc" : byte list``))
+val def = rhs (concl (EVAL ``MAP (n2w o ORD) "def" : byte list``))
+cv_eval``
+  (REVERSE $ hex_to_rev_bytes []
+   "6162630000000000000000000000000000000000000000000000000000000000") ++
+  (REVERSE $ hex_to_rev_bytes []
+   "6465660000000000000000000000000000000000000000000000000000000000")
+  =
+  enc (Array (SOME 2) (Bytes (SOME 3)))
+      (ListV [BytesV ^abc; BytesV ^def])``
 *)
 
 val () = export_theory();
