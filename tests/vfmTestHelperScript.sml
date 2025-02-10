@@ -7,6 +7,12 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite permLib
 
 val () = new_theory "vfmTestHelper";
 
+Theorem unwind_lemma:
+  ∀P a b. (∃x y. a = x ∧ b = y ∧ P x y) ⇔ P a b
+Proof
+  rw[]
+QED
+
 Definition switch_def:
   switch x d [] = d ∧
   switch x d ((y,z)::ls) =
