@@ -1720,22 +1720,20 @@ Definition run_tr_def:
     case r of INR x => (x, s)
        | _ => run_tr (step s)
 Termination
-  cheat
-  (*
-  WF_REL_TAC`inv_image ($< LEX $<) (λp.
-    let w = contexts_weight 0 (SND p).contexts in
-    if ISR (FST p) then (0,0) else w)`
-  \\ rpt gen_tac \\ strip_tac
-  \\ mp_tac decreases_gas_step
-  \\ rewrite_tac[decreases_gas_cred_def]
-  \\ disch_then drule
-  \\ reverse(rw[LEX_DEF, UNCURRY])
-  >- metis_tac[sum_CASES, ISL, ISR]
-  \\ qmatch_goalsub_abbrev_tac`a ∨ b`
-  \\ Cases_on `a` \\ gs[Abbr`b`]
-  \\ gvs[contexts_weight_def, ok_state_def]
-  \\ Cases_on`s.contexts` \\ gs[]
-  *)
+  WF_REL_TAC `inv_image ($< LEX ($< LEX $<)) (λ(r, s).
+    if ISR r then ((0:num), (0, 0))
+    else (1, contexts_weight 0 s.contexts))`
+  \\ rpt gen_tac
+  \\ mp_tac (Q.SPEC `s` (REWRITE_RULE [decreases_gas_cred_def] decreases_gas_step))
+  \\ IF_CASES_TAC >- (
+    rw [contexts_weight_def, unused_gas_def]
+    \\ CCONTR_TAC \\ pop_assum kall_tac \\ pop_assum irule
+    \\ simp [step_def, handle_def, bind_def, get_current_context_def, fail_def,
+      handle_step_def, handle_create_def, get_return_data_def,
+      handle_exception_def, ignore_bind_def, get_gas_left_def])
+  \\ rw []
+  \\ fs[LEX_DEF, UNCURRY]
+  \\ metis_tac[sum_CASES, ISL, ISR]
 End
 
 Theorem run_eq_tr:
