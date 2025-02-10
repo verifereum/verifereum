@@ -4,6 +4,7 @@ val () = new_theory "vfmTestEachOpcode";
 
 fun mk_path s = "tests/BlockchainTests/GeneralStateTests/" ^ s
 
+(* BlockHash *)
 val test_path =
   "tests/BlockchainTests/ValidBlocks/bcStateTests/blockhashTests.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
@@ -224,8 +225,6 @@ val test_path = mk_path
   "stExtCodeHash/extCodeHashCreatedAndDeletedAccountRecheckInOuterCall.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 0;
-
-(* TODO BlockHash *)
 
 (* CoinBase *)
 val test_path = mk_path "VMTests/vmTests/blockInfo.json"
