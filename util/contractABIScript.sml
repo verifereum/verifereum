@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse
+open HolKernel boolLib bossLib Parse wordsLib
      listTheory vfmTypesTheory
      cv_transLib
 
@@ -119,5 +119,60 @@ Termination
 End
 
 val () = cv_auto_trans enc_length_def;
+
+Definition head_lengths_def:
+  head_lengths (t::ts) (v::vs) a =
+  head_lengths ts vs
+    (a + if is_dynamic t then 32 else enc_length t v) ∧
+  head_lengths _ _ a = a
+End
+
+val () = cv_auto_trans head_lengths_def;
+
+Definition enc_number_def:
+  enc_number (Uint n) (NumV v) =
+    word_to_bytes (n2w v : bytes32) T ∧
+  enc_number (Int n) (IntV i) =
+    word_to_bytes
+      (if 0 ≤ i then n2w (Num i) else -n2w (Num i) : bytes32) T ∧
+  enc_number Address (NumV v) =
+    word_to_bytes (n2w v : bytes32) T ∧
+  enc_number Bool (NumV v) =
+    word_to_bytes (n2w v : bytes32) T ∧
+  enc_number _ _ = []
+End
+
+(* TODO
+Definition enc_def:
+  enc (Tuple ts) (ListV vs) = (
+    let hl = head_lengths ts vs 0 in
+      enc_tuple hl 0 ts vs [] []
+  ) ∧
+  enc (Array (SOME _) t) (ListV vs) = (
+    let ts = REPLICATE (LENGTH vs) t in
+    let hl = head_lengths ts vs 0 in
+      enc_tuple hl 0 ts vs [] []
+  ) ∧
+  enc (Array NONE t) (ListV vs) = (
+    let k = LENGTH vs in
+    let ts = REPLICATE (LENGTH vs) t in
+    let hl = head_lengths ts vs 0 in
+    let pre = enc (Uint 256) (NumV k) in
+      enc_tuple hl 0 ts vs [pre] []
+  ) ∧
+  enc _ _ = [] (* TODO *) ∧
+  enc_tuple hl tl (t::ts) (v::vs) rhds rtls = (
+    let dyn = is_dynamic t in
+    let tail = if dyn then enc t v else [] in
+    let head = if dyn then enc (Uint 256) (NumV (hl + tl)) else enc t v in
+    enc_tuple hl (tl + LENGTH tail) ts vs (head::rhds) (tail::rtls)
+  ) ∧
+  enc_tuple _ _ _ _ rhds rtls = FLAT $ REV rhds (REV rtls [])
+Termination
+  WF_REL_TAC ‘measure (λx.
+    case x of INL (_, v) => abi_value_size v
+       | INR (_,_,_,vs,_,_) => abi_value1_size vs)’
+End
+*)
 
 val () = export_theory();
