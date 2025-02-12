@@ -8,6 +8,12 @@ val () = new_theory "contractABI";
 
 (* TODO: move *)
 
+Theorem c2n_cv_add[simp]:
+  cv$c2n (cv_add v1 v2) = cv$c2n v1 + cv$c2n v2
+Proof
+  Cases_on`v1` \\ Cases_on`v2` \\ rw[]
+QED
+
 Theorem LENGTH_word_to_bytes_aux[simp]:
   LENGTH (word_to_bytes_aux n w b) = n
 Proof
@@ -133,7 +139,7 @@ Definition enc_length_def[simp]:
   enc_length_tuple _ [] a = a ∧
   enc_length_tuple (t::ts) (v::vs) a =
   enc_length_tuple ts vs $
-    32 + if is_dynamic t then a + enc_length t v else a
+    enc_length t v + if is_dynamic t then 32 + a else a
 Termination
   WF_REL_TAC ‘measure (λx. case x of INL (t,v) => abi_value_size v
                                  | INR (ts, vs, _) => abi_value1_size vs)’
@@ -181,6 +187,13 @@ Theorem abi_value1_size_map:
 Proof
   Induct_on`vs` \\ rw[abi_value_size_def]
 QED
+
+Theorem abi_type1_size_map:
+  abi_type1_size vs = LENGTH vs + SUM (MAP abi_type_size vs)
+Proof
+  Induct_on`vs` \\ rw[abi_type_size_def]
+QED
+
 
 Definition enc_def[simp]:
   enc (Tuple ts) (ListV vs) = (
@@ -313,23 +326,19 @@ Proof
   \\ rw[DIV_EQ_0]
 QED
 
-Theorem enc_has_length:
+Theorem enc_has_length[simp]:
   (∀t v. has_type t v ⇒ LENGTH (enc t v) = enc_length t v) ∧
   (∀hl tl ts vs hds tls. has_types ts vs ⇒
       LENGTH (enc_tuple hl tl ts vs hds tls) =
       enc_length_tuple ts vs (SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls)))
 Proof
   ho_match_mp_tac enc_ind
+  \\ rpt conj_tac
   \\ reverse(rw[SUB_LEFT_ADD])
   \\ rw[LENGTH_FLAT, REV_REVERSE_LEM, SUM_APPEND, MAP_REVERSE, SUM_REVERSE]
   \\ rw[Once enc_length_tuple_add] \\ gs[]
   \\ rw[Once enc_length_tuple_add, SimpRHS]
   \\ gs[LENGTH_TAKE_EQ] \\ rw[ceil32_when_le] \\ rw[]
-  >- (
-    drule (cj 1 is_static_LENGTH_enc_lemma)
-    \\ rw[]
-    \\ cheat (* TODO definitions need to be fixed *)
-  )
   \\ metis_tac[le_ceil32, LESS_EQUAL_ANTISYM]
 QED
 
@@ -450,13 +459,43 @@ End
 
 val () = cv_trans dest_NumV_def;
 
-(*
+Definition dec_type_size_def:
+  dec_type_size (Array NONE t) = ((2 ** 256) * (1 + dec_type_size t)) ∧
+  dec_type_size (Array (SOME n) t) = 1 + (n * (1 + dec_type_size t)) ∧
+  dec_type_size (Tuple ts) = 1 + dec_type_sizes ts ∧
+  dec_type_size _ = 1 ∧
+  dec_type_sizes [] = 0 ∧
+  dec_type_sizes (t::ts) = 1 + dec_type_size t + dec_type_sizes ts
+Termination
+  WF_REL_TAC ‘measure (λx. case x of INR ts => abi_type1_size ts
+                                 | INL t => abi_type_size t)’
+End
+
+val () = cv_trans dec_type_size_def;
+
+val cv_dec_type_size_def = theorem "cv_dec_type_size_def";
+
+Theorem dec_type_sizes_sum:
+  dec_type_sizes ls = LENGTH ls + SUM (MAP dec_type_size ls)
+Proof
+  Induct_on`ls` \\ rw[dec_type_size_def]
+QED
+
+Theorem dec_type_size_not_zero:
+  (∀t. 0 < dec_type_size t) ∧
+  (∀ts. LENGTH ts ≤ dec_type_sizes ts)
+Proof
+  ho_match_mp_tac dec_type_size_ind
+  \\ rw[dec_type_size_def]
+QED
+
 Definition dec_def:
-  dec (Tuple ts) bs = dec_tuple ts bs [] ∧
-  dec (Array (SOME n) t) bs = dec_tuple (REPLICATE n t) bs [] ∧
+  dec (Tuple ts) bs = dec_tuple ts bs bs [] ∧
+  dec (Array (SOME n) t) bs = dec_tuple (REPLICATE n t) bs bs [] ∧
   dec (Array NONE t) bs = (
     let n = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
-      dec_tuple (REPLICATE n t) (DROP 32 bs) []
+    let bs = DROP 32 bs in
+      dec_tuple (REPLICATE n t) bs bs []
   ) ∧
   dec (Bytes NONE) bs = (
     let k = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
@@ -466,15 +505,46 @@ Definition dec_def:
     let k = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
       BytesV (TAKE k (DROP 32 bs))
   ) ∧
-  dec (Bytes (SOME m)) bs = TAKE m bs ∧
+  dec (Bytes (SOME m)) bs = BytesV $ TAKE m bs ∧
   dec t bs = dec_number t (TAKE 32 bs) ∧
-  dec_tuple [] _ acc = ListV (REVERSE acc) ∧
-  dec_tuple (t::ts) bs acc =
+  dec_tuple [] _ _ acc = ListV (REVERSE acc) ∧
+  dec_tuple (t::ts) bs0 hds acc =
     if is_dynamic t then
-      dec_tuple ts bs (::acc)
-      enc_length_def
+      let j = dest_NumV (dec_number (Uint 256) (TAKE 32 hds)) in
+      let v = dec t (DROP j bs0) in
+      dec_tuple ts bs0 (DROP 32 hds) (v::acc)
     else
-      dec_tuple ts
+      let v = dec t (TAKE 32 hds) in
+      dec_tuple ts bs0 (DROP 32 hds) (v::acc)
+Termination
+  WF_REL_TAC ‘measure (λx. case x of (INR (ts,_,_,_)) => dec_type_sizes ts
+                                 | (INL (t,_)) => dec_type_size t)’
+  \\ rw[dec_type_size_def]
+  \\ rw[dec_type_sizes_sum, dec_number_def, dest_NumV_def]
+  \\ qmatch_goalsub_abbrev_tac`w2n w`
+  \\ qspec_then`w`mp_tac w2n_lt
+  \\ rw[LEFT_ADD_DISTRIB]
+  \\ qmatch_goalsub_abbrev_tac`k * _ + k`
+  \\ qmatch_goalsub_abbrev_tac`n + b * n`
+  \\ `b * n + n < b * k + k` suffices_by rw[]
+  \\ `b * n < b * k` suffices_by decide_tac
+  \\ rw[Abbr`b`, dec_type_size_not_zero]
+End
+
+(*
+val () = cv_trans_rec dec_def (
+  WF_REL_TAC ‘measure (λx. case x of INR (ts,_,_,_) =>
+                                     cv$c2n $ cv_dec_type_sizes ts
+                                 | INL (t,_) => cv$c2n $ cv_dec_type_size t)’
+  \\ rpt conj_tac
+  \\ Cases_on`cv_v` \\ rw[]
+  \\ rw[Once cv_dec_type_size_def,SimpR“prim_rec$<”]
+
+  ff"c2n""add"
+  m``cv$c2n (cv_add _ _)``
+
+  \\ rw[Once cv_dec_type_size_def]
+);
 *)
 
 val () = export_theory();
