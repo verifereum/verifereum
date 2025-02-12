@@ -263,7 +263,10 @@ fun prep_test test_path test_index = let
                                   #maxPriorityFeePerGas transaction
                               ],
       ";gasLimit := ", #gasLimit transaction,
-      ";accessList := ", accesses_term $ #accessList transaction, " |>"
+      ";accessList := ", accesses_term $ #accessList transaction,
+      ";blobVersionedHashes := [] ", (* TODO: include blobs if in test *)
+      ";blobGasPrice := 0 ", (* TODO: calculate if excess_blob_gas is in test *)
+      " |>"
     ];
 
   fun blk_term block =

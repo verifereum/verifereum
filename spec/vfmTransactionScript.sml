@@ -21,6 +21,8 @@ Datatype:
    ; gasLimit   : num
    ; gasPrice   : num
    ; accessList : access_list_entry list
+   ; blobVersionedHashes : bytes32 list
+   ; blobGasPrice : num
    |>
 End
 

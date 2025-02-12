@@ -1434,6 +1434,7 @@ Theorem step_create_lemma:
         ; data     := []
         (* unused: for concreteness *)
         ; nonce := 0; gasPrice := 0; accessList := []
+        ; blobGasPrice := 0; blobVersionedHashes := []
       |>;
       rollback <- get_rollback;
       _ <- update_accounts $

@@ -107,4 +107,8 @@ Definition access_list_storage_key_cost_def:
   access_list_storage_key_cost = 1900n
 End
 
+Definition gas_per_blob_def:
+  gas_per_blob = 2n ** 17
+End
+
 val () = export_theory();
