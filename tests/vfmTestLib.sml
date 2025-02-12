@@ -7,6 +7,10 @@ open HolKernel boolLib bossLib Parse
      vfmStateTheory vfmContextTheory vfmExecutionTheory
      vfmComputeTheory vfmTestHelperTheory
 
+val export_theory_no_docs = fn () =>
+  Feedback.set_trace "TheoryPP.include_docs" 0
+  before export_theory ();
+
 val run_block_pat = run_block_def |> SPEC_ALL |> concl |> lhs;
 
 val run_block = run_block_pat |> strip_comb |> fst;

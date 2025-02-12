@@ -414,4 +414,4 @@ val test_path = mk_path "VMTests/vmTests/suicide.json";
 val (num_tests, prove_test) = mk_prove_test test_path;
 val thm = prove_test 2;
 
-val () = export_theory();
+val () = export_theory_no_docs();

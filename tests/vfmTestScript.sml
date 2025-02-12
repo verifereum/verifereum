@@ -6986,4 +6986,4 @@ in
 
 *)
 
-val () = export_theory();
+val () = export_theory_no_docs();
