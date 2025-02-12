@@ -1,9 +1,26 @@
-open HolKernel boolLib bossLib Parse wordsLib
-     listTheory arithmeticTheory numposrepTheory wordsTheory
+open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
+     listTheory rich_listTheory arithmeticTheory bitTheory
+     numposrepTheory byteTheory wordsTheory dividesTheory
      vfmTypesTheory
      cv_transLib
 
 val () = new_theory "contractABI";
+
+(* TODO: move *)
+
+Theorem LENGTH_word_to_bytes_aux[simp]:
+  LENGTH (word_to_bytes_aux n w b) = n
+Proof
+  Induct_on`n` \\ rw[word_to_bytes_aux_def]
+QED
+
+Theorem LENGTH_word_to_bytes[simp]:
+  LENGTH (word_to_bytes (w:'a word) be) = dimindex(:'a) DIV 8
+Proof
+  rw[word_to_bytes_def]
+QED
+
+(* -- *)
 
 Datatype:
   abi_type
@@ -45,14 +62,14 @@ End
 
 val () = cv_auto_trans valid_fixed_bounds_def;
 
-Definition valid_length_def:
+Definition valid_length_def[simp]:
   valid_length NONE _ = T ∧
   valid_length (SOME n) ls = (LENGTH ls = n)
 End
 
 val () = cv_auto_trans valid_length_def;
 
-Definition has_type_def:
+Definition has_type_def[simp]:
   has_type (Uint n)     (NumV v)    = (v < 2 ** n ∧ valid_int_bound n) ∧
   has_type (Int n)      (IntV i)    = (Num i < 2 ** n ∧ valid_int_bound n) ∧
   has_type (Address)    (NumV v)    = (v < 2 ** 160) ∧
@@ -79,10 +96,10 @@ End
 
 val () = cv_auto_trans has_type_def;
 
-Definition is_dynamic_def:
+Definition is_dynamic_def[simp]:
   is_dynamic (Bytes NONE) = T ∧
   is_dynamic (String) = T ∧
-  is_dynamic (Array _ t) = is_dynamic t ∧
+  is_dynamic (Array x t) = (IS_NONE x ∨ is_dynamic t) ∧
   is_dynamic (Tuple ts) = any_dynamic ts ∧
   is_dynamic _ = F ∧
   any_dynamic [] = F ∧
@@ -103,10 +120,13 @@ End
 
 val () = cv_auto_trans ceil32_def;
 
-Definition enc_length_def:
-  enc_length _ (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
-  enc_length (Array _ t) (ListV vs) =
+Definition enc_length_def[simp]:
+  enc_length (Bytes NONE) (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
+  enc_length String (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
+  enc_length (Array NONE t) (ListV vs) =
     32 + enc_length_tuple (REPLICATE (LENGTH vs) t) vs 0 ∧
+  enc_length (Array _ t) (ListV vs) =
+    enc_length_tuple (REPLICATE (LENGTH vs) t) vs 0 ∧
   enc_length (Tuple ts) (ListV vs) = enc_length_tuple ts vs 0 ∧
   enc_length _ _ = 32 ∧
   enc_length_tuple [] _ a = a ∧
@@ -130,23 +150,27 @@ End
 
 val () = cv_auto_trans head_lengths_def;
 
-Definition enc_number_def:
+Definition enc_number_def[simp]:
   enc_number (Uint n) (NumV v) =
     word_to_bytes (n2w v : bytes32) T ∧
   enc_number (Int n) (IntV i) =
-    word_to_bytes
-      (if 0 ≤ i then n2w (Num i) else -n2w (Num i) : bytes32) T ∧
+    word_to_bytes (i2w i : bytes32) T ∧
   enc_number Address (NumV v) =
     word_to_bytes (n2w v : bytes32) T ∧
   enc_number Bool (NumV v) =
     word_to_bytes (n2w v : bytes32) T ∧
   enc_number (Fixed m n) (IntV i) =
-    word_to_bytes
-      (if 0 ≤ i then n2w (Num i) else -n2w (Num i) : bytes32) T ∧
+    word_to_bytes (i2w i : bytes32) T ∧
   enc_number (Ufixed m n) (NumV v) =
     word_to_bytes (n2w v : bytes32) T ∧
-  enc_number _ _ = []
+  enc_number _ _ = REPLICATE 32 0w
 End
+
+Theorem LENGTH_enc_number[simp]:
+  LENGTH (enc_number t v) = 32
+Proof
+  Cases_on`t` \\ Cases_on`v` \\ rw[]
+QED
 
 val () = cv_auto_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_aux_def
 val () = cv_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_def
@@ -158,7 +182,7 @@ Proof
   Induct_on`vs` \\ rw[abi_value_size_def]
 QED
 
-Definition enc_def:
+Definition enc_def[simp]:
   enc (Tuple ts) (ListV vs) = (
     let hl = head_lengths ts vs 0 in
       enc_tuple hl 0 ts vs [] []
@@ -188,7 +212,7 @@ Definition enc_def:
       bs ++ REPLICATE (n - k) 0w
   ) ∧
   enc (Bytes (SOME m)) (BytesV bs) = (
-      bs ++ REPLICATE (32 - m) 0w
+      TAKE 32 bs ++ REPLICATE (32 - m) 0w
   ) ∧
   enc t v = enc_number t v ∧
   enc_tuple hl tl (t::ts) (v::vs) rhds rtls = (
@@ -205,6 +229,109 @@ Termination
 End
 
 val () = cv_trans enc_def;
+
+Theorem ceil32_CEILING_DIV:
+  ceil32 n = 32 * (n \\ 32)
+Proof
+  rw[ceil32_def, CEILING_DIV_def]
+QED
+
+Theorem le_ceil32[simp]:
+  n ≤ ceil32 n
+Proof
+  rw[ceil32_CEILING_DIV]
+  \\ irule LE_MULT_CEILING_DIV
+  \\ rw[]
+QED
+
+Theorem enc_length_tuple_add:
+  enc_length_tuple ts vs n =
+  enc_length_tuple ts vs 0 + n
+Proof
+  qid_spec_tac`vs`
+  \\ qid_spec_tac`n`
+  \\ Induct_on`ts`
+  \\ rw[]
+  \\ Cases_on`vs`
+  >- rw[]
+  \\ rewrite_tac[enc_length_def]
+  \\ qmatch_goalsub_abbrev_tac`enc_length_tuple _ vv nn`
+  \\ first_assum(qspecl_then[`nn`,`vv`]SUBST1_TAC)
+  \\ qmatch_goalsub_abbrev_tac`_ + enc_length_tuple _ vv nm`
+  \\ first_x_assum(qspecl_then[`nm`,`vv`]SUBST1_TAC)
+  \\ rw[Abbr`nn`, Abbr`nm`]
+QED
+
+Theorem enc_length_tuple_nil[simp]:
+  enc_length_tuple x [] n = n ∧
+  enc_length_tuple [] y n = n
+Proof
+  rw[]
+  \\ Cases_on`x` \\ rw[]
+QED
+
+Theorem have_type_has_types_REPLICATE[simp]:
+  (=)
+  (have_type t vs)
+  (has_types (REPLICATE (LENGTH vs) t) vs)
+Proof
+  Induct_on`vs` \\ rw[]
+QED
+
+Theorem any_dynamic_EXISTS:
+  any_dynamic ts = EXISTS is_dynamic ts
+Proof
+  Induct_on`ts` \\ rw[]
+QED
+
+Definition static_length_def[simp]:
+  static_length (ListV []) = 0n ∧
+  static_length (ListV (v::vs)) = static_length v + static_length (ListV vs) ∧
+  static_length _ = 32
+End
+
+Theorem is_static_LENGTH_enc_lemma:
+  (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length v) ∧
+  (∀hl tl ts vs hds tls. has_types ts vs ∧ ¬any_dynamic ts ⇒
+    LENGTH (enc_tuple hl tl ts vs hds tls) =
+    SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls) +
+    static_length (ListV vs))
+Proof
+  ho_match_mp_tac enc_ind \\ rw[any_dynamic_EXISTS]
+  \\ gs[LENGTH_FLAT, REV_REVERSE_LEM, MAP_REVERSE,
+        SUM_REVERSE, SUM_APPEND, LENGTH_TAKE_EQ]
+QED
+
+Theorem ceil32_when_le:
+  n ≤ 32 ⇒ ceil32 n = if 0 < n then 32 else 0
+Proof
+  rw[ceil32_def]
+  >- (
+    Cases_on`n` \\ gs[ADD1]
+    \\ once_rewrite_tac[ADD_SYM]
+    \\ irule DIV_MULT_1 \\ gs[] )
+  \\ rw[DIV_EQ_0]
+QED
+
+Theorem enc_has_length:
+  (∀t v. has_type t v ⇒ LENGTH (enc t v) = enc_length t v) ∧
+  (∀hl tl ts vs hds tls. has_types ts vs ⇒
+      LENGTH (enc_tuple hl tl ts vs hds tls) =
+      enc_length_tuple ts vs (SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls)))
+Proof
+  ho_match_mp_tac enc_ind
+  \\ reverse(rw[SUB_LEFT_ADD])
+  \\ rw[LENGTH_FLAT, REV_REVERSE_LEM, SUM_APPEND, MAP_REVERSE, SUM_REVERSE]
+  \\ rw[Once enc_length_tuple_add] \\ gs[]
+  \\ rw[Once enc_length_tuple_add, SimpRHS]
+  \\ gs[LENGTH_TAKE_EQ] \\ rw[ceil32_when_le] \\ rw[]
+  >- (
+    drule (cj 1 is_static_LENGTH_enc_lemma)
+    \\ rw[]
+    \\ cheat (* TODO definitions need to be fixed *)
+  )
+  \\ metis_tac[le_ceil32, LESS_EQUAL_ANTISYM]
+QED
 
 Definition type_to_string_def:
   type_to_string (Uint n) = "uint" ++ (num_to_dec_string n) ∧
@@ -231,26 +358,26 @@ Termination
                            abi_type1_size ts)’
 End
 
-Definition dec_def:
-  dec n = CHR (48 + (MIN 9 n))
+Definition digit_def:
+  digit n = CHR (48 + (MIN 9 n))
 End
 
-val dec_pre_def = cv_trans_pre dec_def;
+val digit_pre_def = cv_trans_pre digit_def;
 
-Theorem dec_pre[cv_pre]:
-  dec_pre n
+Theorem digit_pre[cv_pre]:
+  digit_pre n
 Proof
-  rw[dec_pre_def] \\ rw[MIN_DEF]
+  rw[digit_pre_def] \\ rw[MIN_DEF]
 QED
 
 Theorem MAP_HEX_n2l_10:
-  MAP HEX (n2l 10 n) = MAP dec (n2l 10 n)
+  MAP HEX (n2l 10 n) = MAP digit (n2l 10 n)
 Proof
   rw[MAP_EQ_f]
   \\ qspec_then`10`mp_tac n2l_BOUND
   \\ rw[EVERY_MEM]
   \\ first_x_assum drule
-  \\ rw[dec_def, MIN_DEF]
+  \\ rw[digit_def, MIN_DEF]
   \\ Cases_on`e = 10` \\ rw[]
   \\ `e < 10` by fs[]
   \\ fs[NUMERAL_LESS_THM]
@@ -302,6 +429,52 @@ cv_eval``
   =
   enc (Array (SOME 2) (Bytes (SOME 3)))
       (ListV [BytesV ^abc; BytesV ^def])``
+*)
+
+Definition dec_number_def:
+  dec_number (Uint _) bs = NumV $ w2n (word_of_bytes T (0w: bytes32) bs) ∧
+  dec_number (Int _) bs = IntV $ w2i (word_of_bytes T (0w: bytes32) bs) ∧
+  dec_number Address bs = NumV $ w2n (word_of_bytes T (0w: bytes32) bs) ∧
+  dec_number Bool bs = NumV $ w2n (word_of_bytes T (0w: bytes32) bs) ∧
+  dec_number (Fixed _ _) bs = IntV $ w2i (word_of_bytes T (0w: bytes32) bs) ∧
+  dec_number (Ufixed _ _) bs = NumV $ w2n (word_of_bytes T (0w: bytes32) bs) ∧
+  dec_number _ _ = BytesV []
+End
+
+val () = cv_trans dec_number_def;
+
+Definition dest_NumV_def:
+  dest_NumV (NumV n) = n ∧
+  dest_NumV _ = 0
+End
+
+val () = cv_trans dest_NumV_def;
+
+(*
+Definition dec_def:
+  dec (Tuple ts) bs = dec_tuple ts bs [] ∧
+  dec (Array (SOME n) t) bs = dec_tuple (REPLICATE n t) bs [] ∧
+  dec (Array NONE t) bs = (
+    let n = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
+      dec_tuple (REPLICATE n t) (DROP 32 bs) []
+  ) ∧
+  dec (Bytes NONE) bs = (
+    let k = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
+      BytesV (TAKE k (DROP 32 bs))
+  ) ∧
+  dec String bs = (
+    let k = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
+      BytesV (TAKE k (DROP 32 bs))
+  ) ∧
+  dec (Bytes (SOME m)) bs = TAKE m bs ∧
+  dec t bs = dec_number t (TAKE 32 bs) ∧
+  dec_tuple [] _ acc = ListV (REVERSE acc) ∧
+  dec_tuple (t::ts) bs acc =
+    if is_dynamic t then
+      dec_tuple ts bs (::acc)
+      enc_length_def
+    else
+      dec_tuple ts
 *)
 
 val () = export_theory();
