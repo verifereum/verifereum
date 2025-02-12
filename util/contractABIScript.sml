@@ -2,16 +2,37 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
      listTheory rich_listTheory arithmeticTheory bitTheory
      numposrepTheory byteTheory wordsTheory dividesTheory
      vfmTypesTheory
-     cv_transLib
+     cvTheory cv_stdTheory cv_transLib
 
 val () = new_theory "contractABI";
 
 (* TODO: move *)
 
+(*
+Theorem word_to_bytes_of_bytes_256[simp]:
+  word_of_bytes be 0w (word_to_bytes w be) = (w: bytes32)
+Proof
+  cheat
+QED
+*)
+
 Theorem c2n_cv_add[simp]:
   cv$c2n (cv_add v1 v2) = cv$c2n v1 + cv$c2n v2
 Proof
   Cases_on`v1` \\ Cases_on`v2` \\ rw[]
+QED
+
+Theorem c2n_cv_mul[simp]:
+  cv$c2n (cv_mul v1 v2) = cv$c2n v1 * cv$c2n v2
+Proof
+  Cases_on`v1` \\ Cases_on`v2` \\ rw[]
+QED
+
+Theorem cv_lt_Num_0:
+  (cv$c2b $ cv_lt (Num 0) x) = ∃n. x = Num (SUC n)
+Proof
+  Cases_on`x` \\ rw[cv_lt_def]
+  \\ Cases_on`m` \\ simp[]
 QED
 
 Theorem LENGTH_word_to_bytes_aux[simp]:
@@ -297,22 +318,59 @@ Proof
   Induct_on`ts` \\ rw[]
 QED
 
+Definition static_length_from_value_def[simp]:
+  static_length_from_value (ListV []) = 0n ∧
+  static_length_from_value (ListV (v::vs)) = static_length_from_value v +
+  static_length_from_value (ListV vs) ∧
+  static_length_from_value _ = 32
+End
+
 Definition static_length_def[simp]:
-  static_length (ListV []) = 0n ∧
-  static_length (ListV (v::vs)) = static_length v + static_length (ListV vs) ∧
+  static_length (Tuple []) = 0n ∧
+  static_length (Tuple (t::ts)) = static_length t + static_length (Tuple ts) ∧
+  static_length (Array (SOME n) t) = n * static_length t ∧
   static_length _ = 32
 End
 
-Theorem is_static_LENGTH_enc_lemma:
-  (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length v) ∧
+val () = cv_trans static_length_def;
+
+Theorem is_static_LENGTH_enc_from_value:
+  (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length_from_value v) ∧
   (∀hl tl ts vs hds tls. has_types ts vs ∧ ¬any_dynamic ts ⇒
     LENGTH (enc_tuple hl tl ts vs hds tls) =
     SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls) +
-    static_length (ListV vs))
+    static_length_from_value (ListV vs))
 Proof
   ho_match_mp_tac enc_ind \\ rw[any_dynamic_EXISTS]
   \\ gs[LENGTH_FLAT, REV_REVERSE_LEM, MAP_REVERSE,
         SUM_REVERSE, SUM_APPEND, LENGTH_TAKE_EQ]
+QED
+
+Theorem has_types_LIST_REL:
+  has_types ts vs ⇔ LIST_REL has_type ts vs
+Proof
+  qid_spec_tac`vs` \\ Induct_on`ts` \\ rw[]
+  \\ Cases_on`vs` \\ gs[]
+QED
+
+Theorem static_length_Tuple_SUM:
+  static_length (Tuple ts) = SUM (MAP static_length ts)
+Proof
+  Induct_on`ts` \\ rw[]
+QED
+
+Theorem is_static_LENGTH_enc:
+  (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length t) ∧
+  (∀hl tl ts vs hds tls. has_types ts vs ∧ ¬any_dynamic ts ⇒
+    LENGTH (enc_tuple hl tl ts vs hds tls) =
+    SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls) +
+    static_length (Tuple ts))
+Proof
+  ho_match_mp_tac enc_ind
+  \\ rw[any_dynamic_EXISTS, has_types_LIST_REL]
+  \\ gs[static_length_Tuple_SUM, LENGTH_TAKE_EQ, LENGTH_FLAT, REV_REVERSE_LEM,
+        SUM_APPEND, MAP_REVERSE, SUM_REVERSE]
+  \\ Cases_on`t` \\ gs[]
 QED
 
 Theorem ceil32_when_le:
@@ -440,7 +498,7 @@ cv_eval``
       (ListV [BytesV ^abc; BytesV ^def])``
 *)
 
-Definition dec_number_def:
+Definition dec_number_def[simp]:
   dec_number (Uint _) bs = NumV $ w2n (word_of_bytes T (0w: bytes32) bs) ∧
   dec_number (Int _) bs = IntV $ w2i (word_of_bytes T (0w: bytes32) bs) ∧
   dec_number Address bs = NumV $ w2n (word_of_bytes T (0w: bytes32) bs) ∧
@@ -452,6 +510,24 @@ End
 
 val () = cv_trans dec_number_def;
 
+Definition is_num_value_def[simp]:
+  is_num_value (NumV _) = T ∧
+  is_num_value (IntV _) = T ∧
+  is_num_value _ = F
+End
+
+(*
+Theorem dec_enc_number:
+  has_type t v ∧
+  is_num_value v
+  ⇒ dec_number t (enc_number t v) = v
+Proof
+  Cases_on`t` \\ Cases_on`v` \\ rw[]
+  \\ gs[valid_int_bound_def, valid_fixed_bounds_def]
+  \\ cheat
+QED
+*)
+
 Definition dest_NumV_def:
   dest_NumV (NumV n) = n ∧
   dest_NumV _ = 0
@@ -459,43 +535,12 @@ End
 
 val () = cv_trans dest_NumV_def;
 
-Definition dec_type_size_def:
-  dec_type_size (Array NONE t) = ((2 ** 256) * (1 + dec_type_size t)) ∧
-  dec_type_size (Array (SOME n) t) = 1 + (n * (1 + dec_type_size t)) ∧
-  dec_type_size (Tuple ts) = 1 + dec_type_sizes ts ∧
-  dec_type_size _ = 1 ∧
-  dec_type_sizes [] = 0 ∧
-  dec_type_sizes (t::ts) = 1 + dec_type_size t + dec_type_sizes ts
-Termination
-  WF_REL_TAC ‘measure (λx. case x of INR ts => abi_type1_size ts
-                                 | INL t => abi_type_size t)’
-End
-
-val () = cv_trans dec_type_size_def;
-
-val cv_dec_type_size_def = theorem "cv_dec_type_size_def";
-
-Theorem dec_type_sizes_sum:
-  dec_type_sizes ls = LENGTH ls + SUM (MAP dec_type_size ls)
-Proof
-  Induct_on`ls` \\ rw[dec_type_size_def]
-QED
-
-Theorem dec_type_size_not_zero:
-  (∀t. 0 < dec_type_size t) ∧
-  (∀ts. LENGTH ts ≤ dec_type_sizes ts)
-Proof
-  ho_match_mp_tac dec_type_size_ind
-  \\ rw[dec_type_size_def]
-QED
-
 Definition dec_def:
   dec (Tuple ts) bs = dec_tuple ts bs bs [] ∧
-  dec (Array (SOME n) t) bs = dec_tuple (REPLICATE n t) bs bs [] ∧
+  dec (Array (SOME n) t) bs = dec_array n (is_dynamic t) t bs bs [] ∧
   dec (Array NONE t) bs = (
     let n = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
-    let bs = DROP 32 bs in
-      dec_tuple (REPLICATE n t) bs bs []
+      dec_array n (is_dynamic t) t bs (DROP 32 bs) []
   ) ∧
   dec (Bytes NONE) bs = (
     let k = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
@@ -507,6 +552,16 @@ Definition dec_def:
   ) ∧
   dec (Bytes (SOME m)) bs = BytesV $ TAKE m bs ∧
   dec t bs = dec_number t (TAKE 32 bs) ∧
+  dec_array 0 _ _ _ _ acc = ListV (REVERSE acc) ∧
+  dec_array (SUC n) T t bs0 hds acc = (
+    let j = dest_NumV (dec_number (Uint 256) (TAKE 32 hds)) in
+    let v = dec t (DROP j bs0) in
+    dec_array n T t bs0 (DROP 32 hds) (v::acc)
+  ) ∧
+  dec_array (SUC n) F t bs0 hds acc = (
+    let v = dec t (TAKE 32 hds) in
+    dec_array n F t bs0 (DROP 32 hds) (v::acc)
+  ) ∧
   dec_tuple [] _ _ acc = ListV (REVERSE acc) ∧
   dec_tuple (t::ts) bs0 hds acc =
     if is_dynamic t then
@@ -514,37 +569,116 @@ Definition dec_def:
       let v = dec t (DROP j bs0) in
       dec_tuple ts bs0 (DROP 32 hds) (v::acc)
     else
-      let v = dec t (TAKE 32 hds) in
-      dec_tuple ts bs0 (DROP 32 hds) (v::acc)
+      let n = static_length t in
+      let v = dec t (TAKE n hds) in
+      dec_tuple ts bs0 (DROP n hds) (v::acc)
 Termination
-  WF_REL_TAC ‘measure (λx. case x of (INR (ts,_,_,_)) => dec_type_sizes ts
-                                 | (INL (t,_)) => dec_type_size t)’
-  \\ rw[dec_type_size_def]
-  \\ rw[dec_type_sizes_sum, dec_number_def, dest_NumV_def]
-  \\ qmatch_goalsub_abbrev_tac`w2n w`
-  \\ qspec_then`w`mp_tac w2n_lt
-  \\ rw[LEFT_ADD_DISTRIB]
-  \\ qmatch_goalsub_abbrev_tac`k * _ + k`
-  \\ qmatch_goalsub_abbrev_tac`n + b * n`
-  \\ `b * n + n < b * k + k` suffices_by rw[]
-  \\ `b * n < b * k` suffices_by decide_tac
-  \\ rw[Abbr`b`, dec_type_size_not_zero]
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+    (INR (INR (ts,_,_,_))) => (abi_type1_size ts, 0)
+  | (INR (INL (n,_,t,_,_,_))) => (abi_type_size t, n)
+  | (INL (t,_)) => (abi_type_size t, 0))’
 End
 
-(*
 val () = cv_trans_rec dec_def (
-  WF_REL_TAC ‘measure (λx. case x of INR (ts,_,_,_) =>
-                                     cv$c2n $ cv_dec_type_sizes ts
-                                 | INL (t,_) => cv$c2n $ cv_dec_type_size t)’
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+  (λx. case x of
+         (INR (INR (ts,_,_,_))) => (cv_size ts, 0)
+       | (INR (INL (n,_,t,_,_,_))) => (cv_size t, cv$c2n n)
+       | (INL (t,_)) => (cv_size t, 0))’
   \\ rpt conj_tac
-  \\ Cases_on`cv_v` \\ rw[]
-  \\ rw[Once cv_dec_type_size_def,SimpR“prim_rec$<”]
-
-  ff"c2n""add"
-  m``cv$c2n (cv_add _ _)``
-
-  \\ rw[Once cv_dec_type_size_def]
+  \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
+  \\ qmatch_goalsub_rename_tac`cv_snd p`
+  \\ Cases_on`p` \\ gs[]
 );
+
+(*
+  val ty = “String”;
+  val va = “BytesV [3w]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple []”;
+  val va = “ListV []”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Array NONE String”;
+  val va = “ListV []”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Array NONE Bool”;
+  val va = “ListV [NumV 1]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple [Array NONE Bool; Array NONE String]”;
+  val va = “ListV [ListV [NumV 1]; ListV []]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple [Array NONE Bool; Array (SOME 1) String]”;
+  val va = “ListV [ListV [NumV 1]; ListV [BytesV []]]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple [Array (SOME 1) String; Array NONE Bool]”;
+  val va = “ListV [ListV [BytesV [1w]]; ListV [NumV 0]]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple [Array (SOME 2) String; Array NONE Bool]”;
+  val va = “ListV [ListV [BytesV [1w]; BytesV [2w; 3w]]; ListV [NumV 0]]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple [Array (SOME 3) Address; Array NONE Bool]”;
+  val va = “ListV [ListV [NumV 1; NumV 2; NumV 3]; ListV [NumV 0]]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Address”;
+  val va = “NumV 1”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Array (SOME 1) Address”;
+  val va = “ListV [NumV 1]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Array (SOME 2) Address”;
+  val va = “ListV [NumV 1; NumV 2]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple [Array (SOME 2) Address]”;
+  val va = “ListV [ListV [NumV 1; NumV 2]]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
+
+  val ty = “Tuple [Array (SOME 4) Address; Array NONE Bool; String]”;
+  val va = “ListV [
+        ListV [NumV 1; NumV 2; NumV 3; NumV 9];
+        ListV [NumV 0];
+        BytesV [3w; 5w]
+      ]”;
+  val th = EQT_ELIM $ cv_eval “has_type ^ty ^va”
+  val ed = rhs(concl(cv_eval“enc ^ty ^va”))
+  val de = rhs(concl(cv_eval“dec ^ty ^ed”))
 *)
 
 val () = export_theory();
