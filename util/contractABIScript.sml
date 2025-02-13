@@ -1,7 +1,7 @@
 open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
      listTheory rich_listTheory arithmeticTheory bitTheory
      numposrepTheory byteTheory wordsTheory dividesTheory
-     vfmTypesTheory
+     integerTheory integer_wordTheory vfmTypesTheory
      cvTheory cv_stdTheory cv_transLib
 
 val () = new_theory "contractABI";
@@ -46,6 +46,9 @@ Theorem LENGTH_word_to_bytes[simp]:
 Proof
   rw[word_to_bytes_def]
 QED
+
+val () = cv_auto_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_aux_def
+val () = cv_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_def
 
 (* -- *)
 
@@ -123,6 +126,21 @@ End
 
 val () = cv_auto_trans has_type_def;
 
+Theorem have_type_has_types_REPLICATE[simp]:
+  (=)
+  (have_type t vs)
+  (has_types (REPLICATE (LENGTH vs) t) vs)
+Proof
+  Induct_on`vs` \\ rw[]
+QED
+
+Theorem has_types_LIST_REL:
+  has_types ts vs ⇔ LIST_REL has_type ts vs
+Proof
+  qid_spec_tac`vs` \\ Induct_on`ts` \\ rw[]
+  \\ Cases_on`vs` \\ gs[]
+QED
+
 Definition is_dynamic_def[simp]:
   is_dynamic (Bytes NONE) = T ∧
   is_dynamic (String) = T ∧
@@ -139,6 +157,12 @@ End
 
 val () = cv_auto_trans is_dynamic_def;
 
+Theorem any_dynamic_EXISTS:
+  any_dynamic ts = EXISTS is_dynamic ts
+Proof
+  Induct_on`ts` \\ rw[]
+QED
+
 Overload is_static = “λt. ¬is_dynamic t”
 
 Definition ceil32_def:
@@ -147,32 +171,51 @@ End
 
 val () = cv_auto_trans ceil32_def;
 
-Definition enc_length_def[simp]:
-  enc_length (Bytes NONE) (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
-  enc_length String (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
-  enc_length (Array NONE t) (ListV vs) =
-    32 + enc_length_tuple (REPLICATE (LENGTH vs) t) vs 0 ∧
-  enc_length (Array _ t) (ListV vs) =
-    enc_length_tuple (REPLICATE (LENGTH vs) t) vs 0 ∧
-  enc_length (Tuple ts) (ListV vs) = enc_length_tuple ts vs 0 ∧
-  enc_length _ _ = 32 ∧
-  enc_length_tuple [] _ a = a ∧
-  enc_length_tuple _ [] a = a ∧
-  enc_length_tuple (t::ts) (v::vs) a =
-  enc_length_tuple ts vs $
-    enc_length t v + if is_dynamic t then 32 + a else a
-Termination
-  WF_REL_TAC ‘measure (λx. case x of INL (t,v) => abi_value_size v
-                                 | INR (ts, vs, _) => abi_value1_size vs)’
+Theorem ceil32_CEILING_DIV:
+  ceil32 n = 32 * (n \\ 32)
+Proof
+  rw[ceil32_def, CEILING_DIV_def]
+QED
+
+Theorem le_ceil32[simp]:
+  n ≤ ceil32 n
+Proof
+  rw[ceil32_CEILING_DIV]
+  \\ irule LE_MULT_CEILING_DIV
+  \\ rw[]
+QED
+
+Theorem ceil32_when_le:
+  n ≤ 32 ⇒ ceil32 n = if 0 < n then 32 else 0
+Proof
+  rw[ceil32_def]
+  >- (
+    Cases_on`n` \\ gs[ADD1]
+    \\ once_rewrite_tac[ADD_SYM]
+    \\ irule DIV_MULT_1 \\ gs[] )
+  \\ rw[DIV_EQ_0]
+QED
+
+Definition static_length_def[simp]:
+  static_length (Tuple []) = 0n ∧
+  static_length (Tuple (t::ts)) = static_length t + static_length (Tuple ts) ∧
+  static_length (Array (SOME n) t) = n * static_length t ∧
+  static_length _ = 32
 End
 
-val () = cv_auto_trans enc_length_def;
+val () = cv_trans static_length_def;
+
+Theorem static_length_Tuple_SUM:
+  static_length (Tuple ts) = SUM (MAP static_length ts)
+Proof
+  Induct_on`ts` \\ rw[]
+QED
 
 Definition head_lengths_def:
-  head_lengths (t::ts) (v::vs) a =
-  head_lengths ts vs
-    (a + if is_dynamic t then 32 else enc_length t v) ∧
-  head_lengths _ _ a = a
+  head_lengths (t::ts) a =
+  head_lengths ts
+    (a + if is_dynamic t then 32 else static_length t) ∧
+  head_lengths _ a = a
 End
 
 val () = cv_auto_trans head_lengths_def;
@@ -199,8 +242,6 @@ Proof
   Cases_on`t` \\ Cases_on`v` \\ rw[]
 QED
 
-val () = cv_auto_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_aux_def
-val () = cv_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_def
 val () = cv_auto_trans enc_number_def;
 
 Theorem abi_value1_size_map:
@@ -215,21 +256,20 @@ Proof
   Induct_on`vs` \\ rw[abi_type_size_def]
 QED
 
-
 Definition enc_def[simp]:
   enc (Tuple ts) (ListV vs) = (
-    let hl = head_lengths ts vs 0 in
+    let hl = head_lengths ts 0 in
       enc_tuple hl 0 ts vs [] []
   ) ∧
   enc (Array (SOME _) t) (ListV vs) = (
     let ts = REPLICATE (LENGTH vs) t in
-    let hl = head_lengths ts vs 0 in
+    let hl = head_lengths ts 0 in
       enc_tuple hl 0 ts vs [] []
   ) ∧
   enc (Array NONE t) (ListV vs) = (
     let k = LENGTH vs in
     let ts = REPLICATE (LENGTH vs) t in
-    let hl = head_lengths ts vs 0 in
+    let hl = head_lengths ts 0 in
     let pre = enc_number (Uint 256) (NumV k) in
       enc_tuple hl 0 ts vs [pre] []
   ) ∧
@@ -264,102 +304,7 @@ End
 
 val () = cv_trans enc_def;
 
-Theorem ceil32_CEILING_DIV:
-  ceil32 n = 32 * (n \\ 32)
-Proof
-  rw[ceil32_def, CEILING_DIV_def]
-QED
-
-Theorem le_ceil32[simp]:
-  n ≤ ceil32 n
-Proof
-  rw[ceil32_CEILING_DIV]
-  \\ irule LE_MULT_CEILING_DIV
-  \\ rw[]
-QED
-
-Theorem enc_length_tuple_add:
-  enc_length_tuple ts vs n =
-  enc_length_tuple ts vs 0 + n
-Proof
-  qid_spec_tac`vs`
-  \\ qid_spec_tac`n`
-  \\ Induct_on`ts`
-  \\ rw[]
-  \\ Cases_on`vs`
-  >- rw[]
-  \\ rewrite_tac[enc_length_def]
-  \\ qmatch_goalsub_abbrev_tac`enc_length_tuple _ vv nn`
-  \\ first_assum(qspecl_then[`nn`,`vv`]SUBST1_TAC)
-  \\ qmatch_goalsub_abbrev_tac`_ + enc_length_tuple _ vv nm`
-  \\ first_x_assum(qspecl_then[`nm`,`vv`]SUBST1_TAC)
-  \\ rw[Abbr`nn`, Abbr`nm`]
-QED
-
-Theorem enc_length_tuple_nil[simp]:
-  enc_length_tuple x [] n = n ∧
-  enc_length_tuple [] y n = n
-Proof
-  rw[]
-  \\ Cases_on`x` \\ rw[]
-QED
-
-Theorem have_type_has_types_REPLICATE[simp]:
-  (=)
-  (have_type t vs)
-  (has_types (REPLICATE (LENGTH vs) t) vs)
-Proof
-  Induct_on`vs` \\ rw[]
-QED
-
-Theorem any_dynamic_EXISTS:
-  any_dynamic ts = EXISTS is_dynamic ts
-Proof
-  Induct_on`ts` \\ rw[]
-QED
-
-Definition static_length_from_value_def[simp]:
-  static_length_from_value (ListV []) = 0n ∧
-  static_length_from_value (ListV (v::vs)) = static_length_from_value v +
-  static_length_from_value (ListV vs) ∧
-  static_length_from_value _ = 32
-End
-
-Definition static_length_def[simp]:
-  static_length (Tuple []) = 0n ∧
-  static_length (Tuple (t::ts)) = static_length t + static_length (Tuple ts) ∧
-  static_length (Array (SOME n) t) = n * static_length t ∧
-  static_length _ = 32
-End
-
-val () = cv_trans static_length_def;
-
-Theorem is_static_LENGTH_enc_from_value:
-  (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length_from_value v) ∧
-  (∀hl tl ts vs hds tls. has_types ts vs ∧ ¬any_dynamic ts ⇒
-    LENGTH (enc_tuple hl tl ts vs hds tls) =
-    SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls) +
-    static_length_from_value (ListV vs))
-Proof
-  ho_match_mp_tac enc_ind \\ rw[any_dynamic_EXISTS]
-  \\ gs[LENGTH_FLAT, REV_REVERSE_LEM, MAP_REVERSE,
-        SUM_REVERSE, SUM_APPEND, LENGTH_TAKE_EQ]
-QED
-
-Theorem has_types_LIST_REL:
-  has_types ts vs ⇔ LIST_REL has_type ts vs
-Proof
-  qid_spec_tac`vs` \\ Induct_on`ts` \\ rw[]
-  \\ Cases_on`vs` \\ gs[]
-QED
-
-Theorem static_length_Tuple_SUM:
-  static_length (Tuple ts) = SUM (MAP static_length ts)
-Proof
-  Induct_on`ts` \\ rw[]
-QED
-
-Theorem is_static_LENGTH_enc:
+Theorem enc_has_static_length:
   (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length t) ∧
   (∀hl tl ts vs hds tls. has_types ts vs ∧ ¬any_dynamic ts ⇒
     LENGTH (enc_tuple hl tl ts vs hds tls) =
@@ -371,33 +316,6 @@ Proof
   \\ gs[static_length_Tuple_SUM, LENGTH_TAKE_EQ, LENGTH_FLAT, REV_REVERSE_LEM,
         SUM_APPEND, MAP_REVERSE, SUM_REVERSE]
   \\ Cases_on`t` \\ gs[]
-QED
-
-Theorem ceil32_when_le:
-  n ≤ 32 ⇒ ceil32 n = if 0 < n then 32 else 0
-Proof
-  rw[ceil32_def]
-  >- (
-    Cases_on`n` \\ gs[ADD1]
-    \\ once_rewrite_tac[ADD_SYM]
-    \\ irule DIV_MULT_1 \\ gs[] )
-  \\ rw[DIV_EQ_0]
-QED
-
-Theorem enc_has_length[simp]:
-  (∀t v. has_type t v ⇒ LENGTH (enc t v) = enc_length t v) ∧
-  (∀hl tl ts vs hds tls. has_types ts vs ⇒
-      LENGTH (enc_tuple hl tl ts vs hds tls) =
-      enc_length_tuple ts vs (SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls)))
-Proof
-  ho_match_mp_tac enc_ind
-  \\ rpt conj_tac
-  \\ reverse(rw[SUB_LEFT_ADD])
-  \\ rw[LENGTH_FLAT, REV_REVERSE_LEM, SUM_APPEND, MAP_REVERSE, SUM_REVERSE]
-  \\ rw[Once enc_length_tuple_add] \\ gs[]
-  \\ rw[Once enc_length_tuple_add, SimpRHS]
-  \\ gs[LENGTH_TAKE_EQ] \\ rw[ceil32_when_le] \\ rw[]
-  \\ metis_tac[le_ceil32, LESS_EQUAL_ANTISYM]
 QED
 
 Definition type_to_string_def:
@@ -524,7 +442,29 @@ Theorem dec_enc_number:
 Proof
   Cases_on`t` \\ Cases_on`v` \\ rw[]
   \\ gs[valid_int_bound_def, valid_fixed_bounds_def]
-  \\ cheat
+  \\ TRY $ irule w2i_i2w \\ rw[]
+  \\ TRY (
+    irule LESS_LESS_EQ_TRANS
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ irule LESS_EQ_TRANS
+    \\ qexists_tac`2 ** 256`
+    \\ reverse conj_tac >- EVAL_TAC
+    \\ simp[] )
+  \\ TRY $ irule (INT_ABS_LE |> cj 1 |> iffLR |> cj 2)
+  \\ TRY (
+    irule INT_LE_TRANS
+    \\ qexists_tac`ABS i`
+    \\ conj_tac >- rw[INT_ABS_LE] )
+  \\ rewrite_tac[GSYM Num_EQ_ABS]
+  \\ irule (iffRL INT_LE)
+  \\ irule LESS_EQ_TRANS
+  \\ srw_tac[DNF_ss][Once LESS_OR_EQ]
+  \\ disj1_tac
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ irule LESS_EQ_TRANS
+  \\ qexists_tac`2 ** 256`
+  \\ reverse conj_tac >- (CONV_TAC(LAND_CONV EVAL))
+  \\ simp[] )
 QED
 *)
 
@@ -680,5 +620,86 @@ val () = cv_trans_rec dec_def (
   val ed = rhs(concl(cv_eval“enc ^ty ^va”))
   val de = rhs(concl(cv_eval“dec ^ty ^ed”))
 *)
+
+Definition enc_length_def[simp]:
+  enc_length (Bytes NONE) (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
+  enc_length String (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
+  enc_length (Array NONE t) (ListV vs) =
+    32 + enc_length_tuple (REPLICATE (LENGTH vs) t) vs 0 ∧
+  enc_length (Array _ t) (ListV vs) =
+    enc_length_tuple (REPLICATE (LENGTH vs) t) vs 0 ∧
+  enc_length (Tuple ts) (ListV vs) = enc_length_tuple ts vs 0 ∧
+  enc_length _ _ = 32 ∧
+  enc_length_tuple [] _ a = a ∧
+  enc_length_tuple _ [] a = a ∧
+  enc_length_tuple (t::ts) (v::vs) a =
+  enc_length_tuple ts vs $
+    enc_length t v + if is_dynamic t then 32 + a else a
+Termination
+  WF_REL_TAC ‘measure (λx. case x of INL (t,v) => abi_value_size v
+                                 | INR (ts, vs, _) => abi_value1_size vs)’
+End
+
+val () = cv_auto_trans enc_length_def;
+
+Theorem enc_length_tuple_add:
+  enc_length_tuple ts vs n =
+  enc_length_tuple ts vs 0 + n
+Proof
+  qid_spec_tac`vs`
+  \\ qid_spec_tac`n`
+  \\ Induct_on`ts`
+  \\ rw[]
+  \\ Cases_on`vs`
+  >- rw[]
+  \\ rewrite_tac[enc_length_def]
+  \\ qmatch_goalsub_abbrev_tac`enc_length_tuple _ vv nn`
+  \\ first_assum(qspecl_then[`nn`,`vv`]SUBST1_TAC)
+  \\ qmatch_goalsub_abbrev_tac`_ + enc_length_tuple _ vv nm`
+  \\ first_x_assum(qspecl_then[`nm`,`vv`]SUBST1_TAC)
+  \\ rw[Abbr`nn`, Abbr`nm`]
+QED
+
+Theorem enc_length_tuple_nil[simp]:
+  enc_length_tuple x [] n = n ∧
+  enc_length_tuple [] y n = n
+Proof
+  rw[]
+  \\ Cases_on`x` \\ rw[]
+QED
+
+Definition static_length_from_value_def[simp]:
+  static_length_from_value (ListV []) = 0n ∧
+  static_length_from_value (ListV (v::vs)) = static_length_from_value v +
+  static_length_from_value (ListV vs) ∧
+  static_length_from_value _ = 32
+End
+Theorem is_static_LENGTH_enc_from_value:
+  (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length_from_value v) ∧
+  (∀hl tl ts vs hds tls. has_types ts vs ∧ ¬any_dynamic ts ⇒
+    LENGTH (enc_tuple hl tl ts vs hds tls) =
+    SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls) +
+    static_length_from_value (ListV vs))
+Proof
+  ho_match_mp_tac enc_ind \\ rw[any_dynamic_EXISTS]
+  \\ gs[LENGTH_FLAT, REV_REVERSE_LEM, MAP_REVERSE,
+        SUM_REVERSE, SUM_APPEND, LENGTH_TAKE_EQ]
+QED
+
+Theorem enc_has_length[simp]:
+  (∀t v. has_type t v ⇒ LENGTH (enc t v) = enc_length t v) ∧
+  (∀hl tl ts vs hds tls. has_types ts vs ⇒
+      LENGTH (enc_tuple hl tl ts vs hds tls) =
+      enc_length_tuple ts vs (SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls)))
+Proof
+  ho_match_mp_tac enc_ind
+  \\ rpt conj_tac
+  \\ reverse(rw[SUB_LEFT_ADD])
+  \\ rw[LENGTH_FLAT, REV_REVERSE_LEM, SUM_APPEND, MAP_REVERSE, SUM_REVERSE]
+  \\ rw[Once enc_length_tuple_add] \\ gs[]
+  \\ rw[Once enc_length_tuple_add, SimpRHS]
+  \\ gs[LENGTH_TAKE_EQ] \\ rw[ceil32_when_le] \\ rw[]
+  \\ metis_tac[le_ceil32, LESS_EQUAL_ANTISYM]
+QED
 
 val () = export_theory();
