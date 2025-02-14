@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
+open HolKernel boolLib bossLib Parse wordsLib dep_rewrite blastLib
      listTheory rich_listTheory arithmeticTheory bitTheory
      numposrepTheory byteTheory wordsTheory dividesTheory
      integerTheory integer_wordTheory vfmTypesTheory
@@ -6,15 +6,26 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite
 
 val () = new_theory "contractABI";
 
+val () = numLib.prefer_num();
+
 (* TODO: move *)
 
-(*
-Theorem word_to_bytes_of_bytes_256[simp]:
-  word_of_bytes be 0w (word_to_bytes w be) = (w: bytes32)
+val vars = List.tabulate(32, fn n => mk_var("w" ^ Int.toString n, “:bytes32”))
+
+Theorem word_to_bytes_word_of_bytes_256[simp]:
+  word_of_bytes be (0w:bytes32) (word_to_bytes w be) = w
 Proof
-  cheat
+  rw[word_to_bytes_def, word_to_bytes_aux_compute]
+  \\ rw[word_of_bytes_def]
+  \\ map_every (fn wn =>
+    qmatch_goalsub_abbrev_tac`set_byte _ _ ^wn`
+    \\ simp[set_byte_get_byte_copy, byte_index_def]
+    \\ pop_assum mp_tac) vars
+  \\ rpt strip_tac
+  \\ Cases_on`be` \\ gvs[]
+  \\ map_every (fn v => BBLAST_TAC \\ qunabbrev_tac[ANTIQUOTE v]) vars
+  \\ rw[]
 QED
-*)
 
 Theorem c2n_cv_add[simp]:
   cv$c2n (cv_add v1 v2) = cv$c2n v1 + cv$c2n v2
@@ -99,14 +110,28 @@ End
 
 val () = cv_auto_trans valid_length_def;
 
+Definition valid_bytes_bound_def[simp]:
+  valid_bytes_bound NONE = T ∧
+  valid_bytes_bound (SOME m) = (0 < m ∧ m ≤ 32)
+End
+
+val () = cv_auto_trans valid_bytes_bound_def;
+
+Definition int_bits_bound_def:
+  int_bits_bound i n ⇔
+  Num (if i < 0 then i + 1 else i) < 2 ** PRE n
+End
+
+val () = cv_auto_trans int_bits_bound_def;
+
 Definition has_type_def[simp]:
   has_type (Uint n)     (NumV v)    = (v < 2 ** n ∧ valid_int_bound n) ∧
-  has_type (Int n)      (IntV i)    = (Num i < 2 ** n ∧ valid_int_bound n) ∧
+  has_type (Int n)      (IntV i)    = (int_bits_bound i n ∧ valid_int_bound n) ∧
   has_type (Address)    (NumV v)    = (v < 2 ** 160) ∧
   has_type (Bool)       (NumV v)    = (v < 2) ∧
-  has_type (Fixed n m)  (IntV i)    = (Num i < 2 ** m ∧ valid_fixed_bounds n m) ∧
+  has_type (Fixed n m)  (IntV i)    = (int_bits_bound i m ∧ valid_fixed_bounds n m) ∧
   has_type (Ufixed n m) (NumV v)    = (v < 2 ** m ∧ valid_fixed_bounds n m) ∧
-  has_type (Bytes b)    (BytesV bs) = (valid_length b bs) ∧
+  has_type (Bytes b)    (BytesV bs) = (valid_bytes_bound b ∧ valid_length b bs) ∧
   has_type (String)     (BytesV bs) = (T) ∧
   has_type (Array b t)  (ListV vs)  = (have_type t vs ∧ valid_length b vs) ∧
   has_type (Tuple ts)   (ListV vs)  = (has_types ts vs) ∧
@@ -434,10 +459,8 @@ Definition is_num_value_def[simp]:
   is_num_value _ = F
 End
 
-(*
 Theorem dec_enc_number:
-  has_type t v ∧
-  is_num_value v
+  has_type t v ∧ is_num_value v
   ⇒ dec_number t (enc_number t v) = v
 Proof
   Cases_on`t` \\ Cases_on`v` \\ rw[]
@@ -449,33 +472,22 @@ Proof
     \\ irule LESS_EQ_TRANS
     \\ qexists_tac`2 ** 256`
     \\ reverse conj_tac >- EVAL_TAC
-    \\ simp[] )
-  \\ TRY $ irule (INT_ABS_LE |> cj 1 |> iffLR |> cj 2)
-  \\ TRY (
-    irule INT_LE_TRANS
-    \\ qexists_tac`ABS i`
-    \\ conj_tac >- rw[INT_ABS_LE] )
-  \\ rewrite_tac[GSYM Num_EQ_ABS]
-  \\ irule (iffRL INT_LE)
-  \\ irule LESS_EQ_TRANS
-  \\ srw_tac[DNF_ss][Once LESS_OR_EQ]
-  \\ disj1_tac
-  \\ goal_assum(first_assum o mp_then Any mp_tac)
-  \\ irule LESS_EQ_TRANS
-  \\ qexists_tac`2 ** 256`
-  \\ reverse conj_tac >- (CONV_TAC(LAND_CONV EVAL))
-  \\ simp[] )
+    \\ simp[] \\ NO_TAC)
+  \\ gs[int_bits_bound_def]
+  \\ last_assum(mp_then Any (qspec_then`2 ** 255`mp_tac) LESS_LESS_EQ_TRANS)
+  \\ (impl_tac >- rw[PRE_SUB1])
+  \\ Cases_on`i` \\ gs[]
+  \\ rw[INT_ADD_CALCULATE]
 QED
-*)
 
-Definition dest_NumV_def:
+Definition dest_NumV_def[simp]:
   dest_NumV (NumV n) = n ∧
   dest_NumV _ = 0
 End
 
 val () = cv_trans dest_NumV_def;
 
-Definition dec_def:
+Definition dec_def[simp]:
   dec (Tuple ts) bs = dec_tuple ts bs bs [] ∧
   dec (Array (SOME n) t) bs = dec_array n (is_dynamic t) t bs bs [] ∧
   dec (Array NONE t) bs = (
@@ -530,6 +542,24 @@ val () = cv_trans_rec dec_def (
   \\ qmatch_goalsub_rename_tac`cv_snd p`
   \\ Cases_on`p` \\ gs[]
 );
+
+(*
+Theorem dec_enc:
+  (∀t v. has_type t v ⇒ dec t (enc t v) = v) ∧
+  (∀hl tl ts vs hds tls bs0 bs acc.
+     has_types ts vs ∧
+     enc_tuple hl tl ts vs hds tls = bs0 ∧
+     bs = DROP (SUM (MAP LENGTH hds)) bs0
+     ⇒
+     dec_tuple ts bs0 bs acc = ListV (REVERSE acc ++ vs) ∧
+     ∀n t. ts = REPLICATE n t ⇒
+       dec_array n (is_dynamic t) t bs0 bs acc =
+         ListV (REVERSE acc ++ vs))
+Proof
+  ho_match_mp_tac enc_ind
+  \\ rw[] \\ gs[]
+  \\ first_x_assum(qspec_then`[]`mp_tac) \\ rw[]
+*)
 
 (*
   val ty = “String”;
@@ -621,6 +651,8 @@ val () = cv_trans_rec dec_def (
   val de = rhs(concl(cv_eval“dec ^ty ^ed”))
 *)
 
+(* TODO: probably unused, can be deleted: *)
+
 Definition enc_length_def[simp]:
   enc_length (Bytes NONE) (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
   enc_length String (BytesV bs) = 32 + (ceil32 (LENGTH bs)) ∧
@@ -639,8 +671,6 @@ Termination
   WF_REL_TAC ‘measure (λx. case x of INL (t,v) => abi_value_size v
                                  | INR (ts, vs, _) => abi_value1_size vs)’
 End
-
-val () = cv_auto_trans enc_length_def;
 
 Theorem enc_length_tuple_add:
   enc_length_tuple ts vs n =
