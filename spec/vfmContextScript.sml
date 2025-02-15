@@ -94,11 +94,6 @@ Datatype:
    |>
 End
 
-Definition wf_context_def:
-  wf_context c ⇔
-    LENGTH c.stack ≤ stack_limit
-End
-
 Datatype:
   execution_state =
   <| contexts : context list
@@ -216,20 +211,6 @@ Proof
   rw[initial_context_def]
 QED
 
-Theorem wf_initial_context[simp]:
-  wf_context (initial_context rb callee c s rd t)
-Proof
-  rw[wf_context_def]
-QED
-
-Definition wf_state_def:
-  wf_state s ⇔
-    s.contexts ≠ [] ∧
-    LENGTH s.contexts ≤ context_limit ∧
-    EVERY wf_context s.contexts ∧
-    wf_accounts s.rollback.accounts
-End
-
 Definition precompile_addresses_def:
   precompile_addresses : address fset =
   fset_ABS (GENLIST (n2w o SUC) 10)
@@ -269,13 +250,6 @@ Definition apply_intrinsic_cost_def:
     )
   )
 End
-
-Theorem wf_context_apply_intrinsic_cost[simp]:
-  wf_context (apply_intrinsic_cost a c) =
-  wf_context c
-Proof
-  rw[apply_intrinsic_cost_def, wf_context_def]
-QED
 
 Definition initial_rollback_def:
   initial_rollback accounts accesses =
@@ -321,17 +295,5 @@ Definition initial_state_def:
      ; msdomain := dom
      |>
 End
-
-Theorem wf_initial_state:
-  wf_accounts a ∧ initial_state d st c h b a t = SOME s
-  ⇒
-  wf_state s
-Proof
-  rw[wf_accounts_def, wf_state_def, initial_state_def,
-     pre_transaction_updates_def, update_account_def,
-     initial_rollback_def, code_from_tx_def, lookup_account_def] \\ rw[]
-  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
-  \\ rw[]
-QED
 
 val () = export_theory();
