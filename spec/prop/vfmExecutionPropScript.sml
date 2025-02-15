@@ -4,6 +4,29 @@ open HolKernel boolLib bossLib Parse
 
 val () = new_theory "vfmExecutionProp";
 
+(* TODO: move? *)
+Theorem return_bind[simp]:
+  bind (return x) f = f x
+Proof
+  rw[bind_def, return_def, FUN_EQ_THM]
+QED
+
+Theorem return_ignore_bind[simp]:
+  ignore_bind (return x) f = f
+Proof
+  rw[ignore_bind_def, return_def]
+QED
+
+Theorem bind_assoc[simp]:
+  bind (bind x f) g =
+  bind x (λa. bind (f a) g)
+Proof
+  rw[bind_def, FUN_EQ_THM]
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+QED
+(* -- *)
+
 Definition decreases_gas_def:
   decreases_gas strict (m: execution_state -> α execution_result) =
     ∀s. case s.contexts of
@@ -353,11 +376,6 @@ Definition unused_gas_def:
   unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
 End
 
-Definition ok_state_def:
-  ok_state s ⇔
-    (∀c. c ∈ set s.contexts ⇒ c.gasUsed ≤ c.msgParams.gasLimit)
-End
-
 Definition contexts_weight_def:
   contexts_weight n c = (unused_gas c + n, LENGTH c)
 End
@@ -367,7 +385,6 @@ Definition decreases_gas_cred_def:
     ∀s. if s.contexts = []
       then (SND (m s)).contexts = []
       else (SND (m s)).contexts ≠ [] ∧
-        (ok_state s ⇒ ok_state (SND (m s))) ∧
         let (p,q) = (contexts_weight n1 (SND (m s)).contexts,
                      contexts_weight n0 s.contexts) in
         if b ∧ ISL (FST (m s))
@@ -547,30 +564,9 @@ Proof
   simp [decreases_gas_def, decreases_gas_cred_def] \\ ntac 2 strip_tac
   \\ pop_assum (qspec_then `s` mp_tac)
   \\ Cases_on `s.contexts` \\ gs [] \\ strip_tac
-  \\ simp [ok_state_def, DISJ_IMP_THM, FORALL_AND_THM]
+  \\ simp [DISJ_IMP_THM, FORALL_AND_THM]
   \\ qhdtm_x_assum `COND` mp_tac
   \\ rw [contexts_weight_def, LEX_DEF, unused_gas_def]
-QED
-
-Theorem return_bind[simp]:
-  bind (return x) f = f x
-Proof
-  rw[bind_def, return_def, FUN_EQ_THM]
-QED
-
-Theorem return_ignore_bind[simp]:
-  ignore_bind (return x) f = f
-Proof
-  rw[ignore_bind_def, return_def]
-QED
-
-Theorem bind_assoc[simp]:
-  bind (bind x f) g =
-  bind x (λa. bind (f a) g)
-Proof
-  rw[bind_def, FUN_EQ_THM]
-  \\ CASE_TAC \\ rw[]
-  \\ CASE_TAC \\ rw[]
 QED
 
 Theorem decreases_gas_revert[simp]:
@@ -631,7 +627,7 @@ Theorem decreases_gas_cred_consume_gas_debit_more:
   decreases_gas_cred b n1 0 (do consume_gas n; f od)
 Proof
   simp [decreases_gas_cred_def, consume_gas_def, bind_def, get_current_context_def,
-    decreases_gas_cred_def, ok_state_def, ignore_bind_def,
+    decreases_gas_cred_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ ntac 2 strip_tac
   \\ qmatch_goalsub_abbrev_tac `f s'`
@@ -866,7 +862,7 @@ Proof
     get_current_context_def]
   \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
   \\ first_x_assum (qspec_then `h.msgParams.static` mp_tac)
-  \\ gvs [ok_state_def] \\ metis_tac [LT_IMP_LE]
+  \\ gvs [] \\ metis_tac [LT_IMP_LE]
 QED
 
 Theorem decreases_gas_cred_get_static_push_context_bind: ∀ctx.
@@ -925,11 +921,10 @@ Proof
   \\ qexistsl_tac [`λ_. T`, `0`, `F`, `F`] \\ rw []
   \\ rw [unuse_gas_def]
   \\ simp [decreases_gas_cred_def, consume_gas_def, bind_def, get_current_context_def,
-    decreases_gas_cred_def, ok_state_def, ignore_bind_def,
+    decreases_gas_cred_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ Cases_on `s.contexts` >- gs [] \\ rw [] \\ rw [] \\ gs []
-  >- (fsrw_tac [DNF_ss] [] \\ simp [])
   \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF]
 QED
 
@@ -938,7 +933,7 @@ Theorem decreases_gas_inc_pc[simp]:
 Proof
   rw [inc_pc_def]
   \\ simp [inc_pc_def, bind_def, get_current_context_def,
-    decreases_gas_def, ok_state_def, ignore_bind_def,
+    decreases_gas_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac \\ Cases_on `s.contexts` \\ rw []
 QED
@@ -1746,7 +1741,7 @@ Proof
       \\ simp[bind_def, decreases_gas_cred_def, get_gas_left_def,
               get_current_context_def, return_def, pop_context_def,
               unuse_gas_def, ignore_bind_def, fail_def, assert_def,
-              set_current_context_def, ok_state_def, get_num_contexts_def,
+              set_current_context_def, get_num_contexts_def,
               assert_def]
       \\ gen_tac
       \\ Cases_on`s.contexts` \\ gvs []
