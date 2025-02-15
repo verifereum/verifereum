@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse
-     sumTheory pairTheory relationTheory arithmeticTheory
-     vfmConstantsTheory vfmContextTheory vfmExecutionTheory;
+     combinTheory sumTheory pairTheory relationTheory arithmeticTheory listTheory
+     vfmStateTheory vfmConstantsTheory vfmContextTheory vfmExecutionTheory;
 
 val () = new_theory "vfmExecutionProp";
 
@@ -25,6 +25,87 @@ Proof
   \\ CASE_TAC \\ rw[]
   \\ CASE_TAC \\ rw[]
 QED
+
+(* TODO: this probably needs to depend on block number (for hardforks) *)
+Definition wf_account_state_def:
+  wf_account_state a
+  ⇔ a.nonce < 2 ** 64                  (* https://eips.ethereum.org/EIPS/eip-2681 *)
+  ∧ LENGTH a.code <= 2 ** 14 + 2 ** 13 (* https://eips.ethereum.org/EIPS/eip-170 *)
+End
+
+Theorem wf_empty_account_state[simp]:
+  wf_account_state empty_account_state
+Proof
+  rw[empty_account_state_def, wf_account_state_def]
+QED
+
+Definition wf_accounts_def:
+  wf_accounts a ⇔ ∀x. wf_account_state (a x)
+End
+
+Theorem wf_accounts_transfer_value[simp]:
+  wf_accounts a ⇒
+  wf_accounts (transfer_value x y z a)
+Proof
+  rw[wf_accounts_def, wf_account_state_def, transfer_value_def,
+     update_account_def, APPLY_UPDATE_THM]
+  \\ rw[lookup_account_def]
+QED
+
+Theorem wf_accounts_update_account:
+  wf_accounts a ∧ wf_account_state x ⇒
+  wf_accounts (update_account addr x a)
+Proof
+  rw[wf_accounts_def, update_account_def, APPLY_UPDATE_THM]
+  \\ rw[]
+QED
+
+Definition wf_context_def:
+  wf_context c ⇔
+    LENGTH c.stack ≤ stack_limit ∧
+    c.gasUsed ≤ c.msgParams.gasLimit
+End
+
+Definition wf_state_def:
+  wf_state s ⇔
+    s.contexts ≠ [] ∧
+    LENGTH s.contexts ≤ context_limit ∧
+    EVERY wf_context s.contexts ∧
+    wf_accounts s.rollback.accounts
+End
+
+Definition ok_state_def:
+  ok_state s ⇔
+    EVERY wf_context s.contexts
+End
+
+Theorem wf_initial_context[simp]:
+  wf_context (initial_context rb callee c s rd t)
+Proof
+  rw[wf_context_def]
+QED
+
+Theorem wf_context_apply_intrinsic_cost:
+  wf_context (apply_intrinsic_cost a c) =
+  (wf_context c ∧
+   c.gasUsed ≤ c.msgParams.gasLimit - intrinsic_cost a c.msgParams)
+Proof
+  rw[apply_intrinsic_cost_def, wf_context_def]
+QED
+
+Theorem wf_initial_state:
+  wf_accounts a ∧ initial_state d st c h b a t = SOME s
+  ⇒
+  wf_state s
+Proof
+  rw[wf_accounts_def, wf_state_def, initial_state_def,
+     pre_transaction_updates_def, update_account_def,
+     initial_rollback_def, code_from_tx_def, lookup_account_def,
+     wf_context_apply_intrinsic_cost] \\ rw[]
+  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
+  \\ rw[wf_context_apply_intrinsic_cost]
+QED
+
 (* -- *)
 
 Definition decreases_gas_def:
@@ -37,6 +118,10 @@ Definition decreases_gas_def:
         c'.msgParams.gasLimit = c.msgParams.gasLimit ∧
         (c.gasUsed < c'.gasUsed ⇒
           c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
+        (wf_context c ⇒ wf_context c') ∧
+        (*
+        (wf_accounts s.rollback.accounts ⇒ wf_accounts (SND (m s)).rollback.accounts) ∧
+        *)
         if strict ∧ ISL (FST (m s))
         then c.gasUsed < c'.gasUsed
         else c.gasUsed ≤ c'.gasUsed
@@ -155,6 +240,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_consume_gas_bind[simp]:
@@ -173,6 +259,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_pop[simp]:
@@ -192,6 +279,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_push[simp]:
@@ -227,6 +315,8 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def, LENGTH_TAKE_EQ] \\ rw[]
+  \\ Cases_on`h.stack` \\ gs[]
 QED
 
 Theorem decreases_gas_memory_expansion_info[simp]:
@@ -247,6 +337,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_get_static[simp]:
@@ -289,6 +380,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_log[simp]:
@@ -322,6 +414,7 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def]
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_reraise[simp]:
@@ -347,6 +440,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_get_num_contexts[simp]:
@@ -374,11 +468,6 @@ QED
 
 Definition unused_gas_def:
   unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
-End
-
-Definition ok_state_def:
-  ok_state s ⇔
-    (∀c. c ∈ set s.contexts ⇒ c.gasUsed ≤ c.msgParams.gasLimit)
 End
 
 Definition contexts_weight_def:
@@ -648,13 +737,20 @@ Proof
     contexts_weight_def, unused_gas_def]
   \\ qhdtm_x_assum `COND` mp_tac
   \\ qpat_abbrev_tac `v1 = COND a b' c` \\ strip_tac
-  \\ rw [] \\ qmatch_goalsub_abbrev_tac `f s'`
+  \\ rw [] \\ gs[EVERY_MEM]
+  \\ gs[wf_context_def]
+  \\ qmatch_goalsub_abbrev_tac `f s'`
   \\ qpat_abbrev_tac `n' = SUM (MAP _ t)`
   >- (gs []
     \\ qmatch_goalsub_abbrev_tac`_ rr bb`
     \\ qmatch_asmsub_abbrev_tac`¬(_ aa rr)`
     \\ `($< LEX $<) aa bb` suffices_by metis_tac lexs
     \\ rw [Abbr`aa`,Abbr`bb`,LEX_DEF])
+  >- (gs[]
+    \\ qmatch_goalsub_abbrev_tac`_ rr bb`
+    \\ qmatch_asmsub_abbrev_tac`¬(_ aa bb)`
+    \\ `¬($< LEX $<) rr aa` suffices_by metis_tac lexs
+    \\ rw[Abbr`rr`,Abbr`aa`, LEX_DEF] )
   >- (qmatch_goalsub_abbrev_tac`_ bb rr`
     \\ qmatch_asmsub_abbrev_tac`_ aa rr`
     \\ `¬($< LEX $<) bb aa` suffices_by metis_tac lexs
@@ -678,6 +774,9 @@ Proof
 QED
 
 Theorem decreases_gas_update_accounts[simp]:
+  (*
+  (∀a. wf_accounts a ⇒ wf_accounts (f a)) ⇒
+  *)
   decreases_gas F (update_accounts f)
 Proof
   rw[decreases_gas_def, update_accounts_def]
@@ -857,10 +956,20 @@ Proof
   rw[dispatch_precompiles_def]
 QED
 
+Theorem decreases_gas_cred_bind_g_0:
+  decreases_gas F g ∧ (∀x. decreases_gas_cred F n0 0 (f x)) ⇒
+  decreases_gas_cred F n0 0 (bind g f)
+Proof
+  strip_tac \\ irule decreases_gas_cred_mono
+  \\ irule_at Any decreases_gas_cred_bind_g
+  \\ qexistsl_tac [`λ_. T`, `n0`, `F`, `F`] \\ rw []
+QED
+
 Theorem decreases_gas_cred_get_static_push_context:
   (∀st.
     (ctx st).msgParams.gasLimit < n0 ∧
-    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit) ⇒
+    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit ∧
+    LENGTH (ctx st).stack ≤ stack_limit) ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; push_context (ctx st) od)
 Proof
   simp [decreases_gas_cred_def, get_static_def, push_context_def, return_def,
@@ -868,13 +977,17 @@ Proof
     get_current_context_def]
   \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
   \\ first_x_assum (qspec_then `h.msgParams.static` mp_tac)
-  \\ gvs [ok_state_def] \\ metis_tac [LT_IMP_LE]
+  \\ gvs [ok_state_def]
+  \\ rw[]
+  \\ gvs[wf_context_def]
 QED
 
-Theorem decreases_gas_cred_get_static_push_context_bind: ∀ctx.
+Theorem decreases_gas_cred_get_static_push_context_bind:
+  ∀ctx.
   (∀st.
     (ctx st).msgParams.gasLimit < n0 ∧
-    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit) ∧
+    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit ∧
+    LENGTH (ctx st).stack ≤ stack_limit) ∧
   decreases_gas_cred F 0 0 f ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; _ <- push_context (ctx st); f od)
 Proof
@@ -886,15 +999,6 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g
   \\ qexistsl_tac [`λ_. T`, `0`, `F`, `F`] \\ rw []
   \\ metis_tac [decreases_gas_cred_get_static_push_context]
-QED
-
-Theorem decreases_gas_cred_bind_g_0:
-  decreases_gas F g ∧ (∀x. decreases_gas_cred F n0 0 (f x)) ⇒
-  decreases_gas_cred F n0 0 (bind g f)
-Proof
-  strip_tac \\ irule decreases_gas_cred_mono
-  \\ irule_at Any decreases_gas_cred_bind_g
-  \\ qexistsl_tac [`λ_. T`, `n0`, `F`, `F`] \\ rw []
 QED
 
 Theorem decreases_gas_cred_proceed_call[simp]:
@@ -909,7 +1013,10 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ reverse (rw [])
-  >- rw [Abbr`v1`]
+  >- (
+    rw [Abbr`v1`]
+    \\ irule decreases_gas_update_accounts
+    \\ gs[] )
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ gen_tac
   \\ qpat_abbrev_tac `v4 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ gen_tac
@@ -931,7 +1038,7 @@ Proof
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ Cases_on `s.contexts` >- gs [] \\ rw [] \\ rw [] \\ gs []
-  >- (fsrw_tac [DNF_ss] [] \\ simp [])
+  >- gs[wf_context_def]
   \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF]
 QED
 
@@ -943,6 +1050,7 @@ Proof
     decreases_gas_def, ok_state_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_cred_abort_call_value[simp]:
@@ -1118,6 +1226,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_copy_to_memory[simp]:
@@ -1335,6 +1444,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_sstore_gas_consumption[simp]:
@@ -1364,6 +1474,10 @@ Theorem decreases_gas_write_storage[simp]:
 Proof
   rw [write_storage_def]
   \\ irule_at Any decreases_gas_update_accounts
+  \\ rw[]
+  \\ irule wf_accounts_update_account
+  \\ gs[wf_accounts_def, lookup_account_def]
+  \\ gs[wf_account_state_def]
 QED
 
 Theorem decreases_gas_step_sstore[simp]:
@@ -1394,6 +1508,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_jump[simp]:
@@ -1499,7 +1614,11 @@ Proof
   >- (
     rw[abort_create_exists_def, ignore_bind_def]
     \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-    \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] )
+    \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
+    \\ irule decreases_gas_update_accounts \\ rw[]
+    \\ irule wf_accounts_update_account \\ rw[]
+    \\ gs[wf_account_state_def, wf_accounts_def, lookup_account_def]
+    )
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
@@ -1755,6 +1874,7 @@ Proof
       \\ Cases_on`t` \\ gvs[] >- metis_tac lexs
       \\ reverse IF_CASES_TAC \\ fs [DISJ_IMP_THM, FORALL_AND_THM,
         contexts_weight_def, LEX_DEF, unused_gas_def]
+      \\ gvs[wf_context_def]
     )
     \\ simp [handle_create_def]
     \\ irule decreases_gas_imp \\ rw []
