@@ -587,7 +587,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def,
     cold_access_cost_def, warm_access_cost_def]
-  \\ Cases_on `s.contexts` \\ rw []
+  \\ Cases_on `s.contexts` \\ rw [fail_def]
 QED
 
 Theorem decreases_gas_access_address_bind:
@@ -600,7 +600,7 @@ Proof
   \\ rw [access_address_def, decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def,
-    cold_access_cost_def, warm_access_cost_def]
+    cold_access_cost_def, warm_access_cost_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
 QED
 
@@ -622,7 +622,7 @@ Proof
   \\ qexistsl_tac [`F`,`sf`,`λx. 1 < x`] \\ simp []
   \\ rw [access_address_def, decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
-    set_current_context_def,
+    set_current_context_def, fail_def,
     cold_access_cost_def, warm_access_cost_def]
 QED
 
@@ -1291,7 +1291,7 @@ Proof
   \\ qexistsl_tac [`F`,`T`,`λx. 0 < x`]
   \\ rw [return_def, warm_access_cost_def]
   >- (pop_assum mp_tac \\
-    rw [access_slot_def, return_def,
+    rw [access_slot_def, return_def, fail_def,
       cold_sload_cost_def, warm_access_cost_def])
   \\ irule decreases_gas_consume_gas_bind \\ rw []
   \\ irule_at Any decreases_gas_bind_false \\ rw []
