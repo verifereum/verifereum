@@ -119,7 +119,7 @@ Datatype:
   | InvalidContractPrefix
   | Reverted
   (* semantic invariants/assumptions (not EVM exceptions) *)
-  | OutsideDomain address (bytes32 option)
+  | OutsideDomain (address + storage_key)
   | Unimplemented
   | Impossible
 End
@@ -418,7 +418,7 @@ Definition access_address_def:
       return
         (if fIN a addresses then warm_access_cost else cold_access_cost)
         (s with rollback := newRollback)
-  else fail (OutsideDomain a NONE) s
+  else fail (OutsideDomain (INL a)) s
 End
 
 Definition access_slot_def:
@@ -430,7 +430,7 @@ Definition access_slot_def:
       return
         (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
         (s with rollback := newRollback)
-  else fail (case x of SK a k => OutsideDomain a (SOME k)) s
+  else fail (OutsideDomain (INR x)) s
 End
 
 Definition zero_warm_def:
