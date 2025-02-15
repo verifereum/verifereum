@@ -49,10 +49,13 @@ val cv_eval_run_block_rwts = [
 
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
+(* TODO: build the actual domain from the test *)
+val empty_accs_str = "<| addresses := fEMPTY; storageKeys := fEMPTY |>"
+
 fun mk_statement isHash test_name prev_hashes =
   if isHash then
     Term[QUOTE(String.concat[
-           "∃n1. run_blocks_to_hash n1 1 [",
+           "∃n1. run_blocks_to_hash n1 ", empty_accs_str, " 1 [",
            String.concatWith "; " (map (fn hash => "n2w " ^ hash) prev_hashes),
            "] ",
            test_name, "_pre ",
@@ -60,7 +63,7 @@ fun mk_statement isHash test_name prev_hashes =
            "= SOME ", test_name, "_post"])]
   else
     Term[QUOTE(String.concat[
-           "∃rs prevhashes. run_blocks 1 [",
+           "∃rs prevhashes. run_blocks ", empty_accs_str, " 1 [",
            String.concatWith "; " (map (fn hash => "n2w " ^ hash) prev_hashes),
            "] ",
            test_name, "_pre ",

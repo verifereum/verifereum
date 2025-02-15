@@ -104,6 +104,7 @@ Datatype:
   <| contexts : context list
    ; txParams : transaction_parameters
    ; rollback : rollback_state
+   ; msdomain : access_sets
    |>
 End
 
@@ -304,24 +305,25 @@ Definition code_from_tx_def:
 End
 
 Definition initial_state_def:
-  initial_state static c h b a t =
-  case pre_transaction_updates a t of NONE => NONE |
+  initial_state dom static chainId prevHashes blk accs tx =
+  case pre_transaction_updates accs tx of NONE => NONE |
   SOME accounts =>
-    let callee = callee_from_tx_to t.from t.nonce t.to in
-    let accesses = initial_access_sets b.coinBase callee t in
-    let code = code_from_tx a t in
-    let rd = if IS_SOME t.to then empty_return_destination else Code callee in
+    let callee = callee_from_tx_to tx.from tx.nonce tx.to in
+    let accesses = initial_access_sets blk.coinBase callee tx in
+    let code = code_from_tx accs tx in
+    let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback accounts accesses in
-    let ctxt = initial_context rb callee code static rd t in
+    let ctxt = initial_context rb callee code static rd tx in
     SOME $
-    <| contexts := [apply_intrinsic_cost t.accessList $ ctxt]
-     ; txParams := initial_tx_params c h b t
+    <| contexts := [apply_intrinsic_cost tx.accessList $ ctxt]
+     ; txParams := initial_tx_params chainId prevHashes blk tx
      ; rollback := rb
+     ; msdomain := dom
      |>
 End
 
 Theorem wf_initial_state:
-  wf_accounts a ∧ initial_state static c h b a t = SOME s
+  wf_accounts a ∧ initial_state d st c h b a t = SOME s
   ⇒
   wf_state s
 Proof
