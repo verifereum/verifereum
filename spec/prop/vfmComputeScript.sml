@@ -838,7 +838,7 @@ val run_create_pre_def = run_create_def
   |> cv_auto_trans_pre;
 
 Theorem run_create_pre[cv_pre]:
-  run_create_pre st c p b a t
+  run_create_pre d st c p b a t
 Proof
   rw[run_create_pre_def, initial_state_def,
      pre_transaction_updates_def,
@@ -848,18 +848,18 @@ QED
 val () = run_transaction_def |> cv_auto_trans;
 
 Definition run_transactions_def:
-  run_transactions st c h b a rs [] = SOME (REVERSE rs, a) ∧
-  run_transactions st c h b a rs (tx::txs) =
-  case run_transaction st c h b a tx of
+  run_transactions d st c h b a rs [] = SOME (REVERSE rs, a) ∧
+  run_transactions d st c h b a rs (tx::txs) =
+  case run_transaction d st c h b a tx of
   | NONE => NONE
-  | SOME (r, a) => run_transactions st c h b a (r::rs) txs
+  | SOME (r, a) => run_transactions d st c h b a (r::rs) txs
 End
 
 val () = cv_trans run_transactions_def;
 
 Theorem run_block_eq:
-  run_block chainId h a b =
-  run_transactions F chainId h b (update_beacon_block b a) [] b.transactions
+  run_block d chainId h a b =
+  run_transactions d F chainId h b (update_beacon_block b a) [] b.transactions
 Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
