@@ -3,64 +3,7 @@ open HolKernel boolLib bossLib Parse
 
 val () = new_theory "vfmExecutionInvariants";
 
-(* TODO: this probably needs to depend on block number (for hardforks) *)
-Definition wf_account_state_def:
-  wf_account_state a
-  ⇔ a.nonce < 2 ** 64                  (* https://eips.ethereum.org/EIPS/eip-2681 *)
-  ∧ LENGTH a.code <= 2 ** 14 + 2 ** 13 (* https://eips.ethereum.org/EIPS/eip-170 *)
-End
-
-Theorem wf_empty_account_state[simp]:
-  wf_account_state empty_account_state
-Proof
-  rw[empty_account_state_def, wf_account_state_def]
-QED
-
-Definition wf_accounts_def:
-  wf_accounts a ⇔ ∀x. wf_account_state (a x)
-End
-
-Definition wf_context_def:
-  wf_context c ⇔
-    LENGTH c.stack ≤ stack_limit ∧
-    c.gasUsed ≤ c.msgParams.gasLimit
-End
-
-Definition wf_state_def:
-  wf_state s ⇔
-    s.contexts ≠ [] ∧
-    LENGTH s.contexts ≤ context_limit ∧
-    EVERY wf_context s.contexts ∧
-    wf_accounts s.rollback.accounts
-End
-
-Theorem wf_initial_context[simp]:
-  wf_context (initial_context rb callee c s rd t)
-Proof
-  rw[wf_context_def]
-QED
-
-Theorem wf_context_apply_intrinsic_cost:
-  wf_context (apply_intrinsic_cost a c) =
-  (wf_context c ∧
-   c.gasUsed ≤ c.msgParams.gasLimit - intrinsic_cost a c.msgParams)
-Proof
-  rw[apply_intrinsic_cost_def, wf_context_def]
-QED
-
-Theorem wf_initial_state:
-  wf_accounts a ∧ initial_state d st c h b a t = SOME s
-  ⇒
-  wf_state s
-Proof
-  rw[wf_accounts_def, wf_state_def, initial_state_def,
-     pre_transaction_updates_def, update_account_def,
-     initial_rollback_def, code_from_tx_def, lookup_account_def,
-     wf_context_apply_intrinsic_cost] \\ rw[]
-  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
-  \\ rw[wf_context_apply_intrinsic_cost]
-QED
-
+(*
 Definition preserves_wf_state_def:
   preserves_wf_state (m: execution_state -> α execution_result) =
   ∀s. wf_state s ⇒ wf_state (SND (m s))
@@ -163,7 +106,6 @@ Proof
   \\ Cases_on`s.contexts` \\ gs[]
 QED
 
-(*
 Theorem preserves_wf_state_consume_gas[simp]:
   preserves_wf_state (consume_gas n)
 Proof
