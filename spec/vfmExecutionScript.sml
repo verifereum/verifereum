@@ -119,7 +119,7 @@ Datatype:
   | InvalidContractPrefix
   | Reverted
   (* semantic invariants/assumptions (not EVM exceptions) *)
-  | OutsideDomain
+  | OutsideDomain address (bytes32 option)
   | Unimplemented
   | Impossible
 End
@@ -411,22 +411,26 @@ End
 
 Definition access_address_def:
   access_address a s =
-  let addresses = s.rollback.accesses.addresses in
-  let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
-  let newRollback = s.rollback with accesses := newAccesses in
-    return
-      (if fIN a addresses then warm_access_cost else cold_access_cost)
-      (s with rollback := newRollback)
+  if fIN a s.msdomain.addresses then
+    let addresses = s.rollback.accesses.addresses in
+    let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
+    let newRollback = s.rollback with accesses := newAccesses in
+      return
+        (if fIN a addresses then warm_access_cost else cold_access_cost)
+        (s with rollback := newRollback)
+  else fail (OutsideDomain a NONE) s
 End
 
 Definition access_slot_def:
   access_slot x s =
-  let storageKeys = s.rollback.accesses.storageKeys in
-  let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
-  let newRollback = s.rollback with accesses := newAccesses in
-    return
-      (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
-      (s with rollback := newRollback)
+  if fIN x s.msdomain.storageKeys then
+    let storageKeys = s.rollback.accesses.storageKeys in
+    let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
+    let newRollback = s.rollback with accesses := newAccesses in
+      return
+        (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
+        (s with rollback := newRollback)
+  else fail (case x of SK a k => OutsideDomain a (SOME k)) s
 End
 
 Definition zero_warm_def:
