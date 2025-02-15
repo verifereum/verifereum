@@ -118,6 +118,9 @@ Datatype:
   | AddressCollision
   | InvalidContractPrefix
   | Reverted
+  (* semantic invariants/assumptions (not EVM exceptions) *)
+  | OutsideDomain
+  | Unimplemented
   | Impossible
 End
 
@@ -1046,7 +1049,7 @@ End
 Definition precompile_ecrecover_def:
   precompile_ecrecover = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
@@ -1110,35 +1113,35 @@ End
 Definition precompile_ripemd_160_def:
   precompile_ripemd_160 = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_ecadd_def:
   precompile_ecadd = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_ecmul_def:
   precompile_ecmul = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_ecpairing_def:
   precompile_ecpairing = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_blake2f_def:
   precompile_blake2f = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
