@@ -4104,18 +4104,295 @@ Proof
   \\ gs[]
 QED
 
+Theorem access_slot_ignore_extra_domain[simp]:
+  ignores_extra_domain (access_slot x)
+Proof
+  rw[access_slot_def, ignores_extra_domain_def, return_def, fail_def]
+  \\ gvs[CaseEq"bool"]
+  \\ gs[sub_access_sets_def, SUBSET_DEF, fIN_IN]
+  \\ `cold_sload_cost ≠ warm_access_cost` by EVAL_TAC
+  \\ gs[]
+QED
+
 Theorem step_balance_ignore_extra_domain[simp]:
   ignores_extra_domain step_balance
 Proof
   rw[step_balance_def] \\ tac
 QED
 
+Theorem step_exp_ignore_extra_domain[simp]:
+  ignores_extra_domain step_exp
+Proof
+  rw[step_exp_def] \\ tac
+QED
+
+Theorem expand_memory_ignores_extra_domain[simp]:
+  ignores_extra_domain (expand_memory z)
+Proof
+  rw[expand_memory_def] \\ tac
+QED
+
+Theorem read_memory_ignores_extra_domain[simp]:
+  ignores_extra_domain (read_memory y z)
+Proof
+  rw[read_memory_def] \\ tac
+QED
+
+Theorem memory_expansion_info_ignores_extra_domain[simp]:
+  ignores_extra_domain (memory_expansion_info y z)
+Proof
+  rw[memory_expansion_info_def] \\ tac
+QED
+
+Theorem step_keccak256_ignore_extra_domain[simp]:
+  ignores_extra_domain step_keccak256
+Proof
+  rw[step_keccak256_def] \\ tac
+QED
+
+Theorem copy_to_memory_ignore_extra_domain[simp]:
+  (∀f. z = SOME f ⇒ ignores_extra_domain f) ⇒
+  ignores_extra_domain (copy_to_memory a b x y z)
+Proof
+  rw[copy_to_memory_def, max_expansion_range_def] \\ tac
+  \\ BasicProvers.TOP_CASE_TAC \\ gvs[] \\ tac
+QED
+
+Theorem step_copy_to_memory_ignore_extra_domain[simp]:
+  (∀f. y = SOME f ⇒ ignores_extra_domain f) ⇒
+  ignores_extra_domain (step_copy_to_memory x y)
+Proof
+  rw[step_copy_to_memory_def] \\ tac
+QED
+
+Theorem get_call_data_ignores_extra_domain[simp]:
+  ignores_extra_domain (get_call_data )
+Proof
+  rw[get_call_data_def] \\ tac
+QED
+
+Theorem step_call_data_load_ignore_extra_domain[simp]:
+  ignores_extra_domain step_call_data_load
+Proof
+  rw[step_call_data_load_def] \\ tac
+QED
+
+Theorem step_ext_code_size_ignore_extra_domain[simp]:
+  ignores_extra_domain step_ext_code_size
+Proof
+  rw[step_ext_code_size_def] \\ tac
+QED
+
+Theorem step_ext_code_hash_ignore_extra_domain[simp]:
+  ignores_extra_domain step_ext_code_hash
+Proof
+  rw[step_ext_code_hash_def] \\ tac
+QED
+
+Theorem get_code_ignores_extra_domain[simp]:
+  ignores_extra_domain (get_code x)
+Proof
+  rw[get_code_def] \\ tac
+QED
+
+Theorem step_ext_code_copy_ignore_extra_domain[simp]:
+  ignores_extra_domain step_ext_code_copy
+Proof
+  rw[step_ext_code_copy_def] \\ tac
+QED
+
+Theorem get_tx_params_ignores_extra_domain[simp]:
+  ignores_extra_domain get_tx_params
+Proof
+  rw[get_tx_params_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem step_txParams_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_txParams x y)
+Proof
+  rw[step_txParams_def] \\ tac
+QED
+
+Theorem get_return_data_check_ignores_extra_domain[simp]:
+  ignores_extra_domain (get_return_data_check x y)
+Proof
+  rw[get_return_data_check_def] \\ tac
+QED
+
+Theorem step_return_data_copy_ignore_extra_domain[simp]:
+  ignores_extra_domain step_return_data_copy
+Proof
+  rw[step_return_data_copy_def] \\ tac
+QED
+
+Theorem step_block_hash_ignore_extra_domain[simp]:
+  ignores_extra_domain step_block_hash
+Proof
+  rw[step_block_hash_def] \\ tac
+QED
+
+Theorem get_callee_ignores_extra_domain[simp]:
+  ignores_extra_domain get_callee
+Proof
+  rw[get_callee_def] \\ tac
+QED
+
+Theorem step_self_balance_ignore_extra_domain[simp]:
+  ignores_extra_domain step_self_balance
+Proof
+  rw[step_self_balance_def] \\ tac
+QED
+
+Theorem step_pop_ignores_extra_domain[simp]:
+  ignores_extra_domain step_pop
+Proof
+  rw[step_pop_def] \\ tac
+QED
+
+Theorem step_mload_ignores_extra_domain[simp]:
+  ignores_extra_domain step_mload
+Proof
+  rw[step_mload_def] \\ tac
+QED
+
+Theorem step_mstore_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_mstore x)
+Proof
+  rw[step_mstore_def] \\ tac
+QED
+
+Theorem get_tStorage_ignores_extra_domain[simp]:
+  ignores_extra_domain get_tStorage
+Proof
+  rw[get_tStorage_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem step_sload_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_sload x)
+Proof
+  rw[step_sload_def] \\ tac
+QED
+
+Theorem set_jump_dest_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_jump_dest i)
+Proof
+  rw[set_jump_dest_def] \\ tac
+QED
+
+Theorem step_jump_ignores_extra_domain[simp]:
+  ignores_extra_domain step_jump
+Proof
+  rw[step_jump_def] \\ tac
+QED
+
+Theorem step_jumpi_ignores_extra_domain[simp]:
+  ignores_extra_domain step_jumpi
+Proof
+  rw[step_jumpi_def] \\ tac
+QED
+
+Theorem step_push_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_push x y)
+Proof
+  rw[step_push_def] \\ tac
+QED
+
+Theorem step_dup_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_dup x)
+Proof
+  rw[step_dup_def] \\ tac
+QED
+
+Theorem get_static_ignores_extra_domain[simp]:
+  ignores_extra_domain get_static
+Proof
+  rw[get_static_def] \\ tac
+QED
+
+Theorem assert_not_static_ignores_extra_domain[simp]:
+  ignores_extra_domain assert_not_static
+Proof
+  rw[assert_not_static_def] \\ tac
+QED
+
+Theorem step_log_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_log x)
+Proof
+  rw[step_log_def] \\ tac
+QED
+
+Theorem step_swap_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_swap n)
+Proof
+  rw[step_swap_def] \\ tac
+QED
+
+Theorem revert_ignores_extra_domain[simp]:
+  ignores_extra_domain revert
+Proof
+  rw[ignores_extra_domain_def, revert_def]
+QED
+
+Theorem step_return_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_return n)
+Proof
+  rw[step_return_def] \\ tac
+QED
+
+Theorem step_invalid_ignores_extra_domain[simp]:
+  ignores_extra_domain step_invalid
+Proof
+  rw[step_invalid_def] \\ tac
+QED
+
+Theorem get_current_code_ignores_extra_domain[simp]:
+  ignores_extra_domain get_current_code
+Proof
+  rw[get_current_code_def] \\ tac
+QED
+
+Theorem set_tStorage_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_tStorage z)
+Proof
+  rw[set_tStorage_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem write_transient_storage_ignores_extra_domain[simp]:
+  ignores_extra_domain (write_transient_storage x y z)
+Proof
+  rw[write_transient_storage_def] \\ tac
+QED
+
+Theorem get_original_ignores_extra_domain[simp]:
+  ignores_extra_domain get_original
+Proof
+  rw[get_original_def, ignores_extra_domain_def, return_def, fail_def]
+  \\ gvs[CaseEq"bool"]
+QED
+
+Theorem step_sstore_gas_consumption_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_sstore_gas_consumption z y x)
+Proof
+  rw[step_sstore_gas_consumption_def] \\ tac
+QED
+
+Theorem write_storage_ignores_extra_domain[simp]:
+  ignores_extra_domain (write_storage x y z)
+Proof
+  rw[write_storage_def] \\ tac
+QED
+
+Theorem step_sstore_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_sstore x)
+Proof
+  rw[step_sstore_def] \\ tac
+QED
+
 (*
 Theorem step_inst_ignores_extra_domain[simp]:
   ignores_extra_domain (step_inst op)
 Proof
-  Cases_on`op` \\ rw[step_inst_def]
-  \\ tac
+  Cases_on`op` \\ rw[step_inst_def] \\ tac
 
 Theorem step_ignores_extra_domain:
   ignores_extra_domain step
