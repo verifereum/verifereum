@@ -124,6 +124,13 @@ Datatype:
   | Impossible
 End
 
+Definition vfm_abort_def[simp]:
+  vfm_abort (SOME (OutsideDomain _)) = T ∧
+  vfm_abort (SOME Unimplemented) = T ∧
+  vfm_abort (SOME Impossible) = T ∧
+  vfm_abort _ = F
+End
+
 Type execution_result = “:(α + exception option) # execution_state”;
 
 Definition bind_def:
@@ -1386,7 +1393,8 @@ Definition handle_create_def:
 End
 
 Definition handle_exception_def:
-  handle_exception e = do
+  handle_exception e =
+  if vfm_abort e then reraise e else do
     success <<- (e = NONE);
     if ¬success ∧ e ≠ SOME Reverted then do
       gasLeft <- get_gas_left;

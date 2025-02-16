@@ -1,5 +1,6 @@
 open HolKernel boolLib bossLib Parse
-     combinTheory sumTheory pairTheory relationTheory arithmeticTheory listTheory
+     combinTheory sumTheory pairTheory relationTheory arithmeticTheory
+     listTheory pred_setTheory finite_setTheory
      vfmStateTheory vfmConstantsTheory vfmContextTheory vfmExecutionTheory;
 
 val () = new_theory "vfmExecutionProp";
@@ -1842,7 +1843,7 @@ Proof
     \\ irule_at Any decreases_gas_write_memory)
 QED
 
-Theorem decreases_gas_step[simp]:
+Theorem decreases_gas_cred_step[simp]:
   decreases_gas_cred T 0 0 step
 Proof
   rw [step_def]
@@ -1852,6 +1853,7 @@ Proof
     \\ irule decreases_gas_cred_handle
     \\ CONJ_TAC >- (
       simp [handle_exception_def] \\ strip_tac
+      \\ IF_CASES_TAC >- rw[]
       \\ irule decreases_gas_cred_ignore_bind_mono
       \\ CONV_TAC SWAP_EXISTS_CONV \\ qexists_tac `F`
       \\ simp []
@@ -1948,12 +1950,13 @@ Termination
     if ISR r then ((0:num), (0, 0))
     else (1, contexts_weight 0 s.contexts))`
   \\ rpt gen_tac
-  \\ mp_tac (Q.SPEC `s` (REWRITE_RULE [decreases_gas_cred_def] decreases_gas_step))
+  \\ mp_tac (Q.SPEC `s` (REWRITE_RULE [decreases_gas_cred_def]
+             decreases_gas_cred_step))
   \\ IF_CASES_TAC >- (
     rw [contexts_weight_def, unused_gas_def]
     \\ CCONTR_TAC \\ pop_assum kall_tac \\ pop_assum irule
     \\ simp [step_def, handle_def, bind_def, get_current_context_def, fail_def,
-      handle_step_def, handle_create_def, get_return_data_def,
+      handle_step_def, handle_create_def, get_return_data_def, reraise_def,
       handle_exception_def, ignore_bind_def, get_gas_left_def])
   \\ rw []
   \\ fs[LEX_DEF, UNCURRY]
@@ -2891,6 +2894,7 @@ Proof
   \\ conj_tac
   >- (
     simp[handle_exception_def] \\ gen_tac
+    \\ IF_CASES_TAC >- gs[]
     \\ irule preserves_wf_accounts_ignore_bind
     \\ reverse conj_tac
     >- (
@@ -3772,6 +3776,7 @@ Proof
   \\ conj_tac
   >- (
     simp[handle_exception_def] \\ gen_tac
+    \\ IF_CASES_TAC >- gs[]
     \\ irule limits_num_contexts_ignore_bind_same
     \\ reverse conj_tac
     >- ( rw[] \\ tac )
@@ -3794,7 +3799,7 @@ QED
 Theorem step_preserves_wf_state:
   wf_state s ⇒ wf_state (SND (step s))
 Proof
-  mp_tac decreases_gas_step
+  mp_tac decreases_gas_cred_step
   \\ mp_tac preserves_wf_accounts_step
   \\ mp_tac (GEN_ALL limits_num_contexts_step)
   \\ rewrite_tac[decreases_gas_cred_def, preserves_wf_accounts_def,
@@ -3813,26 +3818,27 @@ End
 
 Definition ignores_extra_domain_def:
   ignores_extra_domain (m: α execution) =
-  ∀s r t d2.
-    sub_access_sets s.msdomain d2 ∧
-    m s = (r, t)
-    ⇒
+  ∀s r t. m s = (r, t) ⇒
     t.msdomain = s.msdomain ∧
-    m (s with msdomain := d2) = (r, t with msdomain := d2)
+    ((∀x. r ≠ INR $ SOME $ OutsideDomain x) ⇒
+      ∀d2. sub_access_sets s.msdomain d2 ⇒
+        m (s with msdomain := d2) = (r, t with msdomain := d2))
 End
 
 Theorem handle_ignores_extra_domain:
   ignores_extra_domain f ∧
-  (∀e. ignores_extra_domain (g e))
+  (∀e. if (∃x. e = SOME (OutsideDomain x))
+       then (∀s. ∃t. (g e) s = (INR e, t) ∧ t.msdomain = s.msdomain)
+       else ignores_extra_domain (g e))
   ⇒
   ignores_extra_domain (handle f g)
 Proof
   rw[handle_def, ignores_extra_domain_def]
   \\ gvs[CaseEq"prod",CaseEq"sum"]
-  \\ first_x_assum (drule_then drule) \\ gs[]
-  \\ strip_tac
-  \\ first_x_assum (drule_at Any) \\ gs[]
-  \\ disch_then drule \\ rw[]
+  \\ first_x_assum drule \\ gs[]
+  \\ first_x_assum(qspec_then`e`mp_tac) \\ rw[]
+  \\ gs[]
+  \\ metis_tac[PAIR_EQ]
 QED
 
 Theorem bind_ignores_extra_domain:
@@ -3845,10 +3851,10 @@ Proof
   \\ ntac 2 strip_tac
   \\ rpt gen_tac \\ strip_tac
   \\ gs[CaseEq"prod"]
-  \\ first_x_assum(drule_then drule)
+  \\ first_x_assum drule
   \\ strip_tac \\ gs[CaseEq"sum"]
-  \\ first_x_assum (drule_at Any) \\ simp[]
-  \\ disch_then drule \\ rw[]
+  \\ TRY (first_x_assum (drule_at Any) \\ simp[])
+  \\ rpt strip_tac \\ gvs[]
 QED
 
 Theorem ignore_bind_ignores_extra_domain:
@@ -3995,6 +4001,7 @@ Theorem handle_exception_ignores_extra_domain[simp]:
   ignores_extra_domain (handle_exception e)
 Proof
   simp[handle_exception_def]
+  \\ IF_CASES_TAC >- gs[]
   \\ irule ignore_bind_ignores_extra_domain
   \\ conj_tac
   >- ( rw[] \\ tac )
@@ -4027,6 +4034,7 @@ Proof
   rw[handle_step_def]
   \\ irule handle_ignores_extra_domain
   \\ rw[]
+  \\ rw[handle_exception_def, reraise_def]
 QED
 
 Theorem inc_pc_or_jump_ignores_extra_domain[simp]:
@@ -4038,7 +4046,77 @@ Proof
   \\ tac \\ rw[]
 QED
 
+Theorem finish_ignore_extra_domain[simp]:
+  ignores_extra_domain finish
+Proof
+  rw[finish_def, ignores_extra_domain_def]
+QED
+
+Theorem pop_stack_ignores_extra_domain[simp]:
+  ignores_extra_domain (pop_stack n)
+Proof
+  rw[pop_stack_def] \\ tac
+QED
+
+Theorem step_binop_ignore_extra_domain[simp]:
+  ignores_extra_domain (step_binop x y)
+Proof
+  rw[step_binop_def] \\ tac
+QED
+
+Theorem step_modop_ignore_extra_domain[simp]:
+  ignores_extra_domain (step_modop x y)
+Proof
+  rw[step_modop_def] \\ tac
+QED
+
+Theorem step_monop_ignore_extra_domain[simp]:
+  ignores_extra_domain (step_monop x y)
+Proof
+  rw[step_monop_def] \\ tac
+QED
+
+Theorem step_context_ignore_extra_domain[simp]:
+  ignores_extra_domain (step_context x y)
+Proof
+  rw[step_context_def] \\ tac
+QED
+
+Theorem step_msgParams_ignore_extra_domain[simp]:
+  ignores_extra_domain (step_msgParams x y)
+Proof
+  rw[step_msgParams_def] \\ tac
+QED
+
+Theorem get_accounts_ignore_extra_domain[simp]:
+  ignores_extra_domain get_accounts
+Proof
+  rw[get_accounts_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem access_address_ignore_extra_domain[simp]:
+  ignores_extra_domain (access_address x)
+Proof
+  rw[access_address_def, ignores_extra_domain_def, return_def, fail_def]
+  \\ gvs[CaseEq"bool"]
+  \\ gs[sub_access_sets_def, SUBSET_DEF, fIN_IN]
+  \\ `cold_access_cost ≠ warm_access_cost` by EVAL_TAC
+  \\ gs[]
+QED
+
+Theorem step_balance_ignore_extra_domain[simp]:
+  ignores_extra_domain step_balance
+Proof
+  rw[step_balance_def] \\ tac
+QED
+
 (*
+Theorem step_inst_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_inst op)
+Proof
+  Cases_on`op` \\ rw[step_inst_def]
+  \\ tac
+
 Theorem step_ignores_extra_domain:
   ignores_extra_domain step
 Proof
