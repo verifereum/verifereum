@@ -5,6 +5,9 @@ open HolKernel boolLib bossLib Parse
 val () = new_theory "vfmExecutionProp";
 
 (* TODO: move? *)
+
+Type execution = “:execution_state -> α execution_result”;
+
 Theorem return_bind[simp]:
   bind (return x) f = f x
 Proof
@@ -108,8 +111,31 @@ QED
 
 (* -- *)
 
+(*
+Definition no_change_to_code_size_def:
+  no_change_to_code_size (a1: evm_accounts) (a2: evm_accounts) =
+  ∀x. 0 < LENGTH (a1 x).code ⇒ LENGTH (a2 x).code = LENGTH (a1 x).code
+End
+
+Theorem no_change_to_code_size_refl[simp]:
+  no_change_to_code_size a a
+Proof
+  rw[no_change_to_code_size_def]
+QED
+
+Theorem no_change_to_code_size_trans[simp]:
+  no_change_to_code_size x y ∧
+  no_change_to_code_size y z ⇒
+  no_change_to_code_size x z
+Proof
+  rw[no_change_to_code_size_def]
+QED
+*)
+
+Theorem no_change_to_code_size_trans[local] = TRUTH;
+
 Definition decreases_gas_def:
-  decreases_gas strict (m: execution_state -> α execution_result) =
+  decreases_gas strict (m: α execution) =
     ∀s. case s.contexts of
       [] => (SND (m s)).contexts = []
     | c::cs =>
@@ -120,8 +146,14 @@ Definition decreases_gas_def:
           c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
         (wf_context c ⇒ wf_context c') ∧
         (*
-        (wf_accounts s.rollback.accounts ⇒ wf_accounts (SND (m s)).rollback.accounts) ∧
-        *)
+        (wf_accounts s.rollback.accounts ⇒
+         wf_accounts (SND (m s)).rollback.accounts) ∧
+         *)
+         (*
+        (no_change_to_code_size
+           s.rollback.accounts
+           (SND (m s)).rollback.accounts) ∧
+           *)
         if strict ∧ ISL (FST (m s))
         then c.gasUsed < c'.gasUsed
         else c.gasUsed ≤ c'.gasUsed
@@ -157,6 +189,7 @@ Proof
   \\ Cases_on `s.contexts` \\ rw [] \\ gvs []
   \\ Cases_on `sf` \\ simp []
   \\ rpt (qhdtm_x_assum `COND` mp_tac) \\ rw []
+  \\ metis_tac [no_change_to_code_size_trans]
 QED
 
 Theorem decreases_gas_bind:
@@ -480,6 +513,10 @@ Definition decreases_gas_cred_def:
       then (SND (m s)).contexts = []
       else (SND (m s)).contexts ≠ [] ∧
         (ok_state s ⇒ ok_state (SND (m s))) ∧
+        (*
+        no_change_to_code_size
+          s.rollback.accounts (SND (m s)).rollback.accounts ∧
+          *)
         let (p,q) = (contexts_weight n1 (SND (m s)).contexts,
                      contexts_weight n0 s.contexts) in
         if b ∧ ISL (FST (m s))
@@ -556,7 +593,7 @@ Proof
   \\ last_x_assum (qspecl_then [`y`,`r`] mp_tac) \\ simp []
   \\ Cases_on `s.contexts = []` \\ rpt strip_tac \\ gs []
   \\ qhdtm_x_assum `COND` mp_tac \\ IF_CASES_TAC \\ simp []
-  \\ metis_tac lexs
+  \\ metis_tac (no_change_to_code_size_trans::lexs)
 QED
 
 Theorem decreases_gas_cred_true_false:
@@ -586,7 +623,7 @@ Proof
     \\ disch_then (qspec_then `r` mp_tac) \\ fs []
     \\ Cases_on `s.contexts = []` \\ fs []
     \\ qhdtm_x_assum `COND` mp_tac \\ rw []
-    \\ metis_tac (NOT_ISR_ISL::lexs))
+    \\ metis_tac (no_change_to_code_size_trans::NOT_ISR_ISL::lexs))
   \\ Cases_on `s.contexts = []` \\ gs [] \\ metis_tac lexs
 QED
 
@@ -774,9 +811,9 @@ Proof
 QED
 
 Theorem decreases_gas_update_accounts[simp]:
-  (*
-  (∀a. wf_accounts a ⇒ wf_accounts (f a)) ⇒
-  *)
+  (* (∀a. wf_accounts a ⇒ wf_accounts (f a)) ∧
+  (∀a. no_change_to_code_size a (f a))
+  ⇒ *)
   decreases_gas F (update_accounts f)
 Proof
   rw[decreases_gas_def, update_accounts_def]
@@ -1001,6 +1038,15 @@ Proof
   \\ metis_tac [decreases_gas_cred_get_static_push_context]
 QED
 
+(*
+Theorem no_change_to_code_size_transfer_value[simp]:
+  no_change_to_code_size a (transfer_value x y z a)
+Proof
+  rw[no_change_to_code_size_def, transfer_value_def]
+  \\ rw[update_account_def, APPLY_UPDATE_THM, lookup_account_def]
+QED
+*)
+
 Theorem decreases_gas_cred_proceed_call[simp]:
   stipend < r ⇒
   decreases_gas_cred F r 0 (proceed_call op sender address value
@@ -1016,7 +1062,7 @@ Proof
   >- (
     rw [Abbr`v1`]
     \\ irule decreases_gas_update_accounts
-    \\ gs[] )
+    \\ gs[])
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ gen_tac
   \\ qpat_abbrev_tac `v4 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ gen_tac
@@ -1474,7 +1520,12 @@ Theorem decreases_gas_write_storage[simp]:
 Proof
   rw [write_storage_def]
   \\ irule_at Any decreases_gas_update_accounts
-  \\ rw[]
+  \\ reverse(rw[])
+  (*
+  >- (
+    rw[(*no_change_to_code_size_def,*) update_account_def, lookup_account_def,
+       APPLY_UPDATE_THM] \\ rw[] )
+  *)
   \\ irule wf_accounts_update_account
   \\ gs[wf_accounts_def, lookup_account_def]
   \\ gs[wf_account_state_def]
@@ -1572,6 +1623,82 @@ Proof
   \\ Cases_on `x.contexts` \\ gvs []
 QED
 
+(*
+Theorem step_create_code_lemma:
+  do
+    accounts <- get_accounts;
+    assert (LENGTH x' ≤ 49152) OutOfGas;
+    access_address
+      (if two then address_for_create2 senderAddress (EL 3 x) x'
+       else
+         address_for_create senderAddress (lookup_account senderAddress accounts).nonce);
+    gasLeft <- get_gas_left;
+    consume_gas (gasLeft − gasLeft DIV 64);
+    assert_not_static;
+    set_return_data [];
+    sucDepth <- get_num_contexts;
+    if
+      (lookup_account senderAddress accounts).balance < w2n (HD x) ∨
+      SUC (lookup_account senderAddress accounts).nonce ≥ 18446744073709551616 ∨
+      sucDepth > 1024
+    then
+      abort_unuse (gasLeft − gasLeft DIV 64)
+    else if
+      account_already_created
+        (lookup_account
+           (if two then address_for_create2 senderAddress (EL 3 x) x'
+            else
+              address_for_create senderAddress
+                (lookup_account senderAddress accounts).nonce) accounts)
+    then
+      abort_create_exists senderAddress (lookup_account senderAddress accounts)
+    else
+      f accounts gasLeft
+  od =
+  do
+    accounts <- get_accounts;
+    assert (LENGTH x' ≤ 49152) OutOfGas;
+    access_address
+      (if two then address_for_create2 senderAddress (EL 3 x) x'
+       else
+         address_for_create senderAddress (lookup_account senderAddress accounts).nonce);
+    gasLeft <- get_gas_left;
+    consume_gas (gasLeft − gasLeft DIV 64);
+    assert_not_static;
+    set_return_data [];
+    sucDepth <- get_num_contexts;
+    if
+      (lookup_account senderAddress accounts).balance < w2n (HD x) ∨
+      SUC (lookup_account senderAddress accounts).nonce ≥ 18446744073709551616 ∨
+      sucDepth > 1024
+    then
+      abort_unuse (gasLeft − gasLeft DIV 64)
+    else if
+      account_already_created
+        (lookup_account
+           (if two then address_for_create2 senderAddress (EL 3 x) x'
+            else
+              address_for_create senderAddress
+                (lookup_account senderAddress accounts).nonce) accounts)
+    then
+      do a <- get_accounts;
+         assert (a = accounts) Impossible;
+         abort_create_exists senderAddress (lookup_account senderAddress a)
+      od
+    else
+      f accounts gasLeft
+  od
+Proof
+  rw[FUN_EQ_THM, bind_def, ignore_bind_def, get_accounts_def, return_def,
+     assert_not_static_def, set_return_data_def, get_num_contexts_def,
+     assert_def, access_address_def, get_gas_left_def, get_current_context_def,
+     fail_def, consume_gas_def, get_static_def, set_current_context_def]
+   \\ rw[] \\ gvs[]
+   \\ rw[bind_def, ignore_bind_def] \\ gvs[]
+   \\ rw[bind_def, ignore_bind_def, get_accounts_def, return_def, assert_def] \\ gvs[]
+QED
+*)
+
 Theorem decreases_gas_cred_step_create[simp]:
   decreases_gas_cred T 0 0 (step_create two)
 Proof
@@ -1592,7 +1719,12 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
+  (*
+  \\ simp[GSYM ignore_bind_def]
+  \\ rw[step_create_code_lemma]
+  *)
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
+  \\ simp[ignore_bind_def]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ qpat_abbrev_tac `v4 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
@@ -1612,13 +1744,13 @@ Proof
   >- ( irule decreases_gas_cred_abort_unuse \\ simp[] )
   \\ IF_CASES_TAC
   >- (
-    rw[abort_create_exists_def, ignore_bind_def]
-    \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-    \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-    \\ irule decreases_gas_update_accounts \\ rw[]
-    \\ irule wf_accounts_update_account \\ rw[]
-    \\ gs[wf_account_state_def, wf_accounts_def, lookup_account_def]
-    )
+    irule decreases_gas_imp \\ rw[]
+    \\ rw[abort_create_exists_def]
+    \\ irule decreases_gas_ignore_bind_right
+    \\ irule_at Any decreases_gas_ignore_bind_right
+    \\ rw[]
+    \\ qexists_tac`F` \\ rw[]
+    \\ qexists_tac`F` \\ rw[] )
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
@@ -1945,5 +2077,738 @@ Proof
   \\ CASE_TAC \\ gs[]
   \\ rw[Once whileTheory.OWHILE_THM]
 QED
+
+Definition preserves_wf_accounts_def:
+  preserves_wf_accounts (m: α execution) =
+  ∀s. wf_accounts (s.rollback.accounts) ⇒
+      wf_accounts (SND (m s)).rollback.accounts
+End
+
+Theorem preserves_wf_accounts_bind:
+  (∀x. preserves_wf_accounts (f x)) ∧
+  preserves_wf_accounts g
+  ⇒
+  preserves_wf_accounts (bind g f)
+Proof
+  rw[preserves_wf_accounts_def, bind_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ metis_tac[SND]
+QED
+
+Theorem preserves_wf_accounts_ignore_bind:
+  preserves_wf_accounts f ∧
+  preserves_wf_accounts g
+  ⇒
+  preserves_wf_accounts (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  \\ irule preserves_wf_accounts_bind
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_current_context[simp]:
+  preserves_wf_accounts get_current_context
+Proof
+  rw[preserves_wf_accounts_def, get_current_context_def]
+  \\ rw[return_def, fail_def]
+QED
+
+Theorem preserves_wf_accounts_assert[simp]:
+  preserves_wf_accounts (assert b e)
+Proof
+  rw[preserves_wf_accounts_def, assert_def]
+QED
+
+Theorem preserves_wf_accounts_set_current_context[simp]:
+  preserves_wf_accounts (set_current_context c)
+Proof
+  rw[preserves_wf_accounts_def, set_current_context_def]
+  \\ rw[fail_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_return[simp]:
+  preserves_wf_accounts (return x)
+Proof
+  rw[return_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_fail[simp]:
+  preserves_wf_accounts (fail x)
+Proof
+  rw[fail_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_pop_stack[simp]:
+  preserves_wf_accounts (pop_stack n)
+Proof
+  rw[pop_stack_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_consume_gas[simp]:
+  preserves_wf_accounts (consume_gas n)
+Proof
+  rw[consume_gas_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_push_stack[simp]:
+  preserves_wf_accounts (push_stack n)
+Proof
+  rw[push_stack_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_binop[simp]:
+  preserves_wf_accounts (step_binop x y)
+Proof
+  rw[step_binop_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_modop[simp]:
+  preserves_wf_accounts (step_modop x y)
+Proof
+  rw[step_modop_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_monop[simp]:
+  preserves_wf_accounts (step_monop x y)
+Proof
+  rw[step_monop_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_tx_params[simp]:
+  preserves_wf_accounts get_tx_params
+Proof
+  rw[get_tx_params_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_step_txParams[simp]:
+  preserves_wf_accounts (step_txParams x y)
+Proof
+  rw[step_txParams_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_context[simp]:
+  preserves_wf_accounts (step_context x y)
+Proof
+  rw[step_context_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_msgParams[simp]:
+  preserves_wf_accounts (step_msgParams x y)
+Proof
+  rw[step_msgParams_def]
+QED
+
+Theorem preserves_wf_accounts_memory_expansion_info[simp]:
+  preserves_wf_accounts (memory_expansion_info c e)
+Proof
+  rw[memory_expansion_info_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_write_memory[simp]:
+  preserves_wf_accounts (write_memory c e)
+Proof
+  rw[write_memory_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_read_memory[simp]:
+  preserves_wf_accounts (read_memory c e)
+Proof
+  rw[read_memory_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_expand_memory[simp]:
+  preserves_wf_accounts (expand_memory c)
+Proof
+  rw[expand_memory_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_copy_to_memory[simp]:
+  (∀f. e = SOME f ⇒ preserves_wf_accounts f) ⇒
+  preserves_wf_accounts (copy_to_memory a b c d e)
+Proof
+  rw[copy_to_memory_def, max_expansion_range_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ TRY(irule preserves_wf_accounts_ignore_bind \\ rw[])
+  \\ CASE_TAC \\ gs[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_copy_to_memory[simp]:
+  (∀f. y = SOME f ⇒ preserves_wf_accounts f) ⇒
+  preserves_wf_accounts (step_copy_to_memory x y)
+Proof
+  rw[step_copy_to_memory_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_exp[simp]:
+  preserves_wf_accounts step_exp
+Proof
+  rw[step_exp_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_keccak256[simp]:
+  preserves_wf_accounts step_keccak256
+Proof
+  rw[step_keccak256_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_accounts[simp]:
+  preserves_wf_accounts get_accounts
+Proof
+  rw[get_accounts_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_access_address[simp]:
+  preserves_wf_accounts (access_address a)
+Proof
+  rw[access_address_def, preserves_wf_accounts_def, return_def, fail_def]
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_access_slot[simp]:
+  preserves_wf_accounts (access_slot a)
+Proof
+  rw[access_slot_def, preserves_wf_accounts_def, return_def, fail_def]
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_balance[simp]:
+  preserves_wf_accounts step_balance
+Proof
+  rw[step_balance_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_call_data[simp]:
+  preserves_wf_accounts get_call_data
+Proof
+  rw[get_call_data_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_call_data_load[simp]:
+  preserves_wf_accounts step_call_data_load
+Proof
+  rw[step_call_data_load_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_code[simp]:
+  preserves_wf_accounts (get_code x)
+Proof
+  rw[get_code_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_return_data[simp]:
+  preserves_wf_accounts get_return_data
+Proof
+  rw[get_return_data_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_return_data_check[simp]:
+  preserves_wf_accounts (get_return_data_check y x)
+Proof
+  rw[get_return_data_check_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_ext_code_copy[simp]:
+  preserves_wf_accounts step_ext_code_copy
+Proof
+  rw[step_ext_code_copy_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_copy_to_memory
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_ext_code_size[simp]:
+  preserves_wf_accounts step_ext_code_size
+Proof
+  rw[step_ext_code_size_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_ext_code_hash[simp]:
+  preserves_wf_accounts step_ext_code_hash
+Proof
+  rw[step_ext_code_hash_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_return_data_copy[simp]:
+  preserves_wf_accounts step_return_data_copy
+Proof
+  rw[step_return_data_copy_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_copy_to_memory
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_block_hash[simp]:
+  preserves_wf_accounts step_block_hash
+Proof
+  rw[step_block_hash_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_callee[simp]:
+  preserves_wf_accounts get_callee
+Proof
+  rw[get_callee_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_self_balance[simp]:
+  preserves_wf_accounts step_self_balance
+Proof
+  rw[step_self_balance_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_pop[simp]:
+  preserves_wf_accounts step_pop
+Proof
+  rw[step_pop_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_mload[simp]:
+  preserves_wf_accounts step_mload
+Proof
+  rw[step_mload_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_mstore[simp]:
+  preserves_wf_accounts (step_mstore x)
+Proof
+  rw[step_mstore_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_tStorage[simp]:
+  preserves_wf_accounts get_tStorage
+Proof
+  rw[get_tStorage_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_step_sload[simp]:
+  preserves_wf_accounts (step_sload x)
+Proof
+  rw[step_sload_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_set_jump_dest[simp]:
+  preserves_wf_accounts (set_jump_dest x)
+Proof
+  rw[set_jump_dest_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_jump[simp]:
+  preserves_wf_accounts step_jump
+Proof
+  rw[step_jump_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_jumpi[simp]:
+  preserves_wf_accounts step_jumpi
+Proof
+  rw[step_jumpi_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_push[simp]:
+  preserves_wf_accounts (step_push x y)
+Proof
+  rw[step_push_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_dup[simp]:
+  preserves_wf_accounts (step_dup x)
+Proof
+  rw[step_dup_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_swap[simp]:
+  preserves_wf_accounts (step_swap x)
+Proof
+  rw[step_swap_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_push_logs[simp]:
+  preserves_wf_accounts (push_logs x)
+Proof
+  rw[push_logs_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_static[simp]:
+  preserves_wf_accounts get_static
+Proof
+  rw[get_static_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_assert_not_static[simp]:
+  preserves_wf_accounts assert_not_static
+Proof
+  rw[assert_not_static_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_log[simp]:
+  preserves_wf_accounts (step_log x)
+Proof
+  rw[step_log_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_set_tStorage[simp]:
+  preserves_wf_accounts (set_tStorage x)
+Proof
+  rw[set_tStorage_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_write_transient_storage[simp]:
+  preserves_wf_accounts (write_transient_storage x y z)
+Proof
+  rw[write_transient_storage_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_write_storage[simp]:
+  preserves_wf_accounts (write_storage x y z)
+Proof
+  rw[write_storage_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+  \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
+  \\ rw[update_account_def, lookup_account_def]
+  \\ gs[wf_accounts_def, APPLY_UPDATE_THM]
+  \\ rw[] \\ gs[wf_account_state_def]
+QED
+
+Theorem preserves_wf_accounts_update_gas_refund_def[simp]:
+  preserves_wf_accounts (update_gas_refund x)
+Proof
+  Cases_on`x` >>
+  rw[update_gas_refund_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_original[simp]:
+  preserves_wf_accounts get_original
+Proof
+  rw[get_original_def, preserves_wf_accounts_def]
+  \\ rw[return_def, fail_def]
+QED
+
+Theorem preserves_wf_accounts_get_gas_left[simp]:
+  preserves_wf_accounts get_gas_left
+Proof
+  rw[get_gas_left_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_current_code[simp]:
+  preserves_wf_accounts get_current_code
+Proof
+  rw[get_current_code_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_num_contexts[simp]:
+  preserves_wf_accounts get_num_contexts
+Proof
+  rw[get_num_contexts_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_get_value[simp]:
+  preserves_wf_accounts get_value
+Proof
+  rw[get_value_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_caller[simp]:
+  preserves_wf_accounts get_caller
+Proof
+  rw[get_caller_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_rollback[simp]:
+  preserves_wf_accounts get_rollback
+Proof
+  rw[get_rollback_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_step_sstore_gas_consumption[simp]:
+  preserves_wf_accounts (step_sstore_gas_consumption x y z)
+Proof
+  rw[step_sstore_gas_consumption_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_sstore[simp]:
+  preserves_wf_accounts (step_sstore x)
+Proof
+  rw[step_sstore_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_finish[simp]:
+  preserves_wf_accounts finish
+Proof
+  rw[finish_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_revert[simp]:
+  preserves_wf_accounts revert
+Proof
+  rw[revert_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_set_return_data[simp]:
+  preserves_wf_accounts (set_return_data x)
+Proof
+  rw[set_return_data_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_return[simp]:
+  preserves_wf_accounts (step_return x)
+Proof
+  rw[step_return_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_invalid[simp]:
+  preserves_wf_accounts step_invalid
+Proof
+  rw[step_invalid_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_add_to_delete[simp]:
+  preserves_wf_accounts (add_to_delete x)
+Proof
+  rw[add_to_delete_def, preserves_wf_accounts_def, return_def]
+QED
+
+val defs = [bind_def, ignore_bind_def, access_address_def,
+        get_callee_def, preserves_wf_accounts_def, pop_stack_def,
+        get_current_context_def, assert_def, set_current_context_def,
+        assert_not_static_def, add_to_delete_def, finish_def,
+        set_return_data_def, get_num_contexts_def, get_rollback_def,
+        get_static_def, set_accounts_def, update_accounts_def, get_gas_left_def,
+        get_original_def, get_accounts_def, consume_gas_def, return_def, fail_def]
+
+Theorem preserves_wf_accounts_step_self_destruct[simp]:
+  preserves_wf_accounts step_self_destruct
+Proof
+  rw[step_self_destruct_def]
+  \\ rw defs \\ rw[]
+  \\ rw defs \\ rw[]
+  \\ rw defs
+  \\ gs[wf_accounts_def, update_account_def, transfer_value_def]
+  \\ rw[APPLY_UPDATE_THM, lookup_account_def]
+  \\ gs[wf_account_state_def]
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_unuse_gas[simp]:
+  preserves_wf_accounts (unuse_gas x)
+Proof
+  rw[unuse_gas_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_inc_pc[simp]:
+  preserves_wf_accounts inc_pc
+Proof
+  rw[inc_pc_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_abort_unuse[simp]:
+  preserves_wf_accounts (abort_unuse x)
+Proof
+  rw[abort_unuse_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_abort_call_value[simp]:
+  preserves_wf_accounts (abort_call_value x)
+Proof
+  rw[abort_call_value_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_push_context[simp]:
+  preserves_wf_accounts (push_context x)
+Proof
+  rw[push_context_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_update_accounts_transfer_value[simp]:
+  preserves_wf_accounts (update_accounts (transfer_value x y z))
+Proof
+  rw[update_accounts_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
+  preserves_wf_accounts (dispatch_precompiles x)
+Proof
+  rw[dispatch_precompiles_def]
+  \\ cheat
+QED
+
+Theorem preserves_wf_accounts_step_call[simp]:
+  preserves_wf_accounts (step_call x)
+Proof
+  rw[step_call_def, UNCURRY] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[])) >>
+  rw[proceed_call_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_create[simp]:
+  preserves_wf_accounts (step_create x)
+Proof
+  simp[step_create_def]
+  \\ qpat_abbrev_tac`b1 = COND _ _ _`
+  \\ qpat_abbrev_tac`b2 = COND _ _ _`
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ qpat_abbrev_tac`b3 = COND _ _ _`
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ rw defs
+  \\ rw[] \\ rw[] \\ gvs[]
+  \\ rw (abort_unuse_def::unuse_gas_def::push_stack_def::inc_pc_def::defs)
+  \\ rw[] \\ gvs[]
+  \\ rw (abort_create_exists_def::push_stack_def::inc_pc_def::defs)
+  \\ rw (proceed_create_def::push_context_def::defs)
+  \\ gs[update_account_def, lookup_account_def, wf_accounts_def,
+        transfer_value_def, wf_account_state_def, APPLY_UPDATE_THM]
+  \\ rw[APPLY_UPDATE_THM] \\ gs[account_already_created_def] \\ rw[] \\ gs[]
+QED
+
+Theorem preserves_wf_accounts_step_inst[simp]:
+  preserves_wf_accounts (step_inst op)
+Proof
+  Cases_on`op` \\ rw[step_inst_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+(*
+Theorem step_preserves_wf_state:
+  wf_state s ⇒ wf_state (SND (step s))
+Proof
+  mp_tac decreases_gas_step
+  \\ rewrite_tac[decreases_gas_cred_def]
+  \\ rw[wf_state_def]
+  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[] )
+  >- cheat
+  >- ( first_x_assum(qspec_then`s`mp_tac) \\ simp[ok_state_def])
+  >- cheat
+QED
+*)
 
 val () = export_theory();
