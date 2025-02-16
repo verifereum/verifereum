@@ -94,16 +94,12 @@ Datatype:
    |>
 End
 
-Definition wf_context_def:
-  wf_context c ⇔
-    LENGTH c.stack ≤ stack_limit
-End
-
 Datatype:
   execution_state =
   <| contexts : context list
    ; txParams : transaction_parameters
    ; rollback : rollback_state
+   ; msdomain : access_sets
    |>
 End
 
@@ -215,20 +211,6 @@ Proof
   rw[initial_context_def]
 QED
 
-Theorem wf_initial_context[simp]:
-  wf_context (initial_context rb callee c s rd t)
-Proof
-  rw[wf_context_def]
-QED
-
-Definition wf_state_def:
-  wf_state s ⇔
-    s.contexts ≠ [] ∧
-    LENGTH s.contexts ≤ context_limit ∧
-    EVERY wf_context s.contexts ∧
-    wf_accounts s.rollback.accounts
-End
-
 Definition precompile_addresses_def:
   precompile_addresses : address fset =
   fset_ABS (GENLIST (n2w o SUC) 10)
@@ -269,13 +251,6 @@ Definition apply_intrinsic_cost_def:
   )
 End
 
-Theorem wf_context_apply_intrinsic_cost[simp]:
-  wf_context (apply_intrinsic_cost a c) =
-  wf_context c
-Proof
-  rw[apply_intrinsic_cost_def, wf_context_def]
-QED
-
 Definition initial_rollback_def:
   initial_rollback accounts accesses =
   <| accounts := accounts; accesses := accesses;
@@ -304,32 +279,21 @@ Definition code_from_tx_def:
 End
 
 Definition initial_state_def:
-  initial_state static c h b a t =
-  case pre_transaction_updates a t of NONE => NONE |
+  initial_state dom static chainId prevHashes blk accs tx =
+  case pre_transaction_updates accs tx of NONE => NONE |
   SOME accounts =>
-    let callee = callee_from_tx_to t.from t.nonce t.to in
-    let accesses = initial_access_sets b.coinBase callee t in
-    let code = code_from_tx a t in
-    let rd = if IS_SOME t.to then empty_return_destination else Code callee in
+    let callee = callee_from_tx_to tx.from tx.nonce tx.to in
+    let accesses = initial_access_sets blk.coinBase callee tx in
+    let code = code_from_tx accs tx in
+    let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback accounts accesses in
-    let ctxt = initial_context rb callee code static rd t in
+    let ctxt = initial_context rb callee code static rd tx in
     SOME $
-    <| contexts := [apply_intrinsic_cost t.accessList $ ctxt]
-     ; txParams := initial_tx_params c h b t
+    <| contexts := [apply_intrinsic_cost tx.accessList $ ctxt]
+     ; txParams := initial_tx_params chainId prevHashes blk tx
      ; rollback := rb
+     ; msdomain := dom
      |>
 End
-
-Theorem wf_initial_state:
-  wf_accounts a ∧ initial_state static c h b a t = SOME s
-  ⇒
-  wf_state s
-Proof
-  rw[wf_accounts_def, wf_state_def, initial_state_def,
-     pre_transaction_updates_def, update_account_def,
-     initial_rollback_def, code_from_tx_def, lookup_account_def] \\ rw[]
-  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
-  \\ rw[]
-QED
 
 val () = export_theory();

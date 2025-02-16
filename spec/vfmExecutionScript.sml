@@ -118,6 +118,9 @@ Datatype:
   | AddressCollision
   | InvalidContractPrefix
   | Reverted
+  (* semantic invariants/assumptions (not EVM exceptions) *)
+  | OutsideDomain (address + storage_key)
+  | Unimplemented
   | Impossible
 End
 
@@ -408,22 +411,26 @@ End
 
 Definition access_address_def:
   access_address a s =
-  let addresses = s.rollback.accesses.addresses in
-  let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
-  let newRollback = s.rollback with accesses := newAccesses in
-    return
-      (if fIN a addresses then warm_access_cost else cold_access_cost)
-      (s with rollback := newRollback)
+  if fIN a s.msdomain.addresses then
+    let addresses = s.rollback.accesses.addresses in
+    let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
+    let newRollback = s.rollback with accesses := newAccesses in
+      return
+        (if fIN a addresses then warm_access_cost else cold_access_cost)
+        (s with rollback := newRollback)
+  else fail (OutsideDomain (INL a)) s
 End
 
 Definition access_slot_def:
   access_slot x s =
-  let storageKeys = s.rollback.accesses.storageKeys in
-  let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
-  let newRollback = s.rollback with accesses := newAccesses in
-    return
-      (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
-      (s with rollback := newRollback)
+  if fIN x s.msdomain.storageKeys then
+    let storageKeys = s.rollback.accesses.storageKeys in
+    let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
+    let newRollback = s.rollback with accesses := newAccesses in
+      return
+        (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
+        (s with rollback := newRollback)
+  else fail (OutsideDomain (INR x)) s
 End
 
 Definition zero_warm_def:
@@ -1046,7 +1053,7 @@ End
 Definition precompile_ecrecover_def:
   precompile_ecrecover = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
@@ -1110,35 +1117,35 @@ End
 Definition precompile_ripemd_160_def:
   precompile_ripemd_160 = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_ecadd_def:
   precompile_ecadd = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_ecmul_def:
   precompile_ecmul = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_ecpairing_def:
   precompile_ecpairing = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
 Definition precompile_blake2f_def:
   precompile_blake2f = do
     (* TODO *)
-    finish
+    fail Unimplemented
   od
 End
 
@@ -1483,8 +1490,8 @@ Definition post_transaction_accounting_def:
 End
 
 Definition run_create_def:
-  run_create static chainId prevHashes blk accounts tx =
-  case initial_state static chainId prevHashes blk accounts tx of
+  run_create dom static chainId prevHashes blk accounts tx =
+  case initial_state dom static chainId prevHashes blk accounts tx of
     NONE => NONE
   | SOME s => SOME $
     let ctxt = HD s.contexts in
@@ -1507,8 +1514,8 @@ Definition run_create_def:
 End
 
 Definition run_transaction_def:
-  run_transaction static chainId prevHashes blk accounts tx =
-  case run_create static chainId prevHashes blk accounts tx of
+  run_transaction dom static chainId prevHashes blk accounts tx =
+  case run_create dom static chainId prevHashes blk accounts tx of
      | SOME (INL result) => SOME result
      | SOME (INR (acc, s1)) => (case run s1 of
        | SOME (INR r, s2) => SOME $
@@ -1531,37 +1538,37 @@ Definition update_beacon_block_def:
 End
 
 Definition run_block_def:
-  run_block chainId prevHashes accounts b =
+  run_block dom chainId prevHashes accounts b =
   FOLDL
     (λx tx.
        OPTION_BIND x (λ(ls, a).
          OPTION_MAP (λ(r, a). (SNOC r ls, a)) $
-         run_transaction F chainId prevHashes b a tx))
+         run_transaction dom F chainId prevHashes b a tx))
     (SOME ([], update_beacon_block b accounts))
     b.transactions
 End
 
 Definition run_blocks_def:
-  run_blocks chainId prevHashes accounts bs =
+  run_blocks dom chainId prevHashes accounts bs =
   FOLDL
     (λx b.
       OPTION_BIND x (λ(ls, h, a).
         OPTION_MAP (λ(rs, a). (SNOC rs ls, b.hash::h, a)) $
-          run_block chainId h a b))
+          run_block dom chainId h a b))
     (SOME ([], prevHashes, accounts))
     bs
 End
 
 Definition run_block_to_hash_def:
-  run_block_to_hash n2 chainId prevHashes accounts blk =
-  case run_block chainId prevHashes accounts blk
+  run_block_to_hash n2 dom chainId prevHashes accounts blk =
+  case run_block dom chainId prevHashes accounts blk
     of NONE => NONE
      | SOME (rs, s) => state_root_clocked n2 s
 End
 
 Definition run_blocks_to_hash_def:
-  run_blocks_to_hash n2 chainId prevHashes accounts bs =
-  case run_blocks chainId prevHashes accounts bs
+  run_blocks_to_hash n2 dom chainId prevHashes accounts bs =
+  case run_blocks dom chainId prevHashes accounts bs
     of NONE => NONE
      | SOME (rs, hs, s) => state_root_clocked n2 s
 End

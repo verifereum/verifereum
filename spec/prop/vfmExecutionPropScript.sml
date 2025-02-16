@@ -1,19 +1,135 @@
 open HolKernel boolLib bossLib Parse
-     sumTheory pairTheory relationTheory arithmeticTheory
-     vfmConstantsTheory vfmContextTheory vfmExecutionTheory;
+     combinTheory sumTheory pairTheory relationTheory arithmeticTheory listTheory
+     vfmStateTheory vfmConstantsTheory vfmContextTheory vfmExecutionTheory;
 
 val () = new_theory "vfmExecutionProp";
 
+(* TODO: move? *)
+
+Type execution = “:execution_state -> α execution_result”;
+
+Theorem return_bind[simp]:
+  bind (return x) f = f x
+Proof
+  rw[bind_def, return_def, FUN_EQ_THM]
+QED
+
+Theorem return_ignore_bind[simp]:
+  ignore_bind (return x) f = f
+Proof
+  rw[ignore_bind_def, return_def]
+QED
+
+Theorem bind_assoc[simp]:
+  bind (bind x f) g =
+  bind x (λa. bind (f a) g)
+Proof
+  rw[bind_def, FUN_EQ_THM]
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+QED
+
+(* TODO: this probably needs to depend on block number (for hardforks) *)
+Definition wf_account_state_def:
+  wf_account_state a
+  ⇔ a.nonce < 2 ** 64                  (* https://eips.ethereum.org/EIPS/eip-2681 *)
+  ∧ LENGTH a.code <= 2 ** 14 + 2 ** 13 (* https://eips.ethereum.org/EIPS/eip-170 *)
+End
+
+Theorem wf_empty_account_state[simp]:
+  wf_account_state empty_account_state
+Proof
+  rw[empty_account_state_def, wf_account_state_def]
+QED
+
+Definition wf_accounts_def:
+  wf_accounts a ⇔ ∀x. wf_account_state (a x)
+End
+
+Theorem wf_accounts_transfer_value[simp]:
+  wf_accounts a ⇒
+  wf_accounts (transfer_value x y z a)
+Proof
+  rw[wf_accounts_def, wf_account_state_def, transfer_value_def,
+     update_account_def, APPLY_UPDATE_THM]
+  \\ rw[lookup_account_def]
+QED
+
+Theorem wf_accounts_update_account:
+  wf_accounts a ∧ wf_account_state x ⇒
+  wf_accounts (update_account addr x a)
+Proof
+  rw[wf_accounts_def, update_account_def, APPLY_UPDATE_THM]
+  \\ rw[]
+QED
+
+Definition wf_context_def:
+  wf_context c ⇔
+    LENGTH c.stack ≤ stack_limit ∧
+    c.gasUsed ≤ c.msgParams.gasLimit
+End
+
+Definition all_accounts_def:
+  all_accounts s =
+  s.rollback.accounts :: (MAP (λc. c.rollback.accounts) s.contexts)
+End
+
+Definition wf_state_def:
+  wf_state s ⇔
+    s.contexts ≠ [] ∧
+    LENGTH s.contexts ≤ SUC context_limit ∧
+    EVERY wf_context s.contexts ∧
+    EVERY wf_accounts (all_accounts s)
+End
+
+Definition ok_state_def:
+  ok_state s ⇔
+    EVERY wf_context s.contexts
+End
+
+Theorem wf_initial_context[simp]:
+  wf_context (initial_context rb callee c s rd t)
+Proof
+  rw[wf_context_def]
+QED
+
+Theorem wf_context_apply_intrinsic_cost:
+  wf_context (apply_intrinsic_cost a c) =
+  (wf_context c ∧
+   c.gasUsed ≤ c.msgParams.gasLimit - intrinsic_cost a c.msgParams)
+Proof
+  rw[apply_intrinsic_cost_def, wf_context_def]
+QED
+
+Theorem wf_initial_state:
+  wf_accounts a ∧ initial_state d st c h b a t = SOME s
+  ⇒
+  wf_state s
+Proof
+  rw[wf_accounts_def, wf_state_def, initial_state_def,
+     pre_transaction_updates_def, update_account_def,
+     initial_rollback_def, code_from_tx_def, lookup_account_def,
+     wf_context_apply_intrinsic_cost, all_accounts_def] \\ rw[]
+  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
+  \\ rw[wf_context_apply_intrinsic_cost]
+  \\ rw[apply_intrinsic_cost_def]
+  \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
+  \\ gs[wf_account_state_def]
+QED
+
+(* -- *)
+
 Definition decreases_gas_def:
-  decreases_gas strict (m: execution_state -> α execution_result) =
+  decreases_gas strict (m: α execution) =
     ∀s. case s.contexts of
       [] => (SND (m s)).contexts = []
     | c::cs =>
       ∃c'.
         (SND (m s)).contexts = c'::cs ∧
         c'.msgParams.gasLimit = c.msgParams.gasLimit ∧
-        (c.gasUsed < c'.gasUsed ⇒
-          c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
+        (SND (m s)).msdomain = s.msdomain ∧
+        (c.gasUsed < c'.gasUsed ⇒ c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
+        (wf_context c ⇒ wf_context c') ∧
         if strict ∧ ISL (FST (m s))
         then c.gasUsed < c'.gasUsed
         else c.gasUsed ≤ c'.gasUsed
@@ -49,6 +165,7 @@ Proof
   \\ Cases_on `s.contexts` \\ rw [] \\ gvs []
   \\ Cases_on `sf` \\ simp []
   \\ rpt (qhdtm_x_assum `COND` mp_tac) \\ rw []
+  \\ metis_tac []
 QED
 
 Theorem decreases_gas_bind:
@@ -132,6 +249,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_consume_gas_bind[simp]:
@@ -150,6 +268,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_pop[simp]:
@@ -169,6 +288,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_push[simp]:
@@ -204,6 +324,8 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def, LENGTH_TAKE_EQ] \\ rw[]
+  \\ Cases_on`h.stack` \\ gs[]
 QED
 
 Theorem decreases_gas_memory_expansion_info[simp]:
@@ -224,6 +346,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_get_static[simp]:
@@ -266,6 +389,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_log[simp]:
@@ -299,6 +423,7 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def]
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_reraise[simp]:
@@ -324,6 +449,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_get_num_contexts[simp]:
@@ -353,11 +479,6 @@ Definition unused_gas_def:
   unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
 End
 
-Definition ok_state_def:
-  ok_state s ⇔
-    (∀c. c ∈ set s.contexts ⇒ c.gasUsed ≤ c.msgParams.gasLimit)
-End
-
 Definition contexts_weight_def:
   contexts_weight n c = (unused_gas c + n, LENGTH c)
 End
@@ -368,6 +489,7 @@ Definition decreases_gas_cred_def:
       then (SND (m s)).contexts = []
       else (SND (m s)).contexts ≠ [] ∧
         (ok_state s ⇒ ok_state (SND (m s))) ∧
+        (SND (m s)).msdomain = s.msdomain ∧
         let (p,q) = (contexts_weight n1 (SND (m s)).contexts,
                      contexts_weight n0 s.contexts) in
         if b ∧ ISL (FST (m s))
@@ -444,7 +566,7 @@ Proof
   \\ last_x_assum (qspecl_then [`y`,`r`] mp_tac) \\ simp []
   \\ Cases_on `s.contexts = []` \\ rpt strip_tac \\ gs []
   \\ qhdtm_x_assum `COND` mp_tac \\ IF_CASES_TAC \\ simp []
-  \\ metis_tac lexs
+  \\ metis_tac (lexs)
 QED
 
 Theorem decreases_gas_cred_true_false:
@@ -552,27 +674,6 @@ Proof
   \\ rw [contexts_weight_def, LEX_DEF, unused_gas_def]
 QED
 
-Theorem return_bind[simp]:
-  bind (return x) f = f x
-Proof
-  rw[bind_def, return_def, FUN_EQ_THM]
-QED
-
-Theorem return_ignore_bind[simp]:
-  ignore_bind (return x) f = f
-Proof
-  rw[ignore_bind_def, return_def]
-QED
-
-Theorem bind_assoc[simp]:
-  bind (bind x f) g =
-  bind x (λa. bind (f a) g)
-Proof
-  rw[bind_def, FUN_EQ_THM]
-  \\ CASE_TAC \\ rw[]
-  \\ CASE_TAC \\ rw[]
-QED
-
 Theorem decreases_gas_revert[simp]:
   decreases_gas T revert
 Proof
@@ -587,7 +688,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def,
     cold_access_cost_def, warm_access_cost_def]
-  \\ Cases_on `s.contexts` \\ rw []
+  \\ Cases_on `s.contexts` \\ rw [fail_def]
 QED
 
 Theorem decreases_gas_access_address_bind:
@@ -600,7 +701,7 @@ Proof
   \\ rw [access_address_def, decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def,
-    cold_access_cost_def, warm_access_cost_def]
+    cold_access_cost_def, warm_access_cost_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
 QED
 
@@ -622,7 +723,7 @@ Proof
   \\ qexistsl_tac [`F`,`sf`,`λx. 1 < x`] \\ simp []
   \\ rw [access_address_def, decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
-    set_current_context_def,
+    set_current_context_def, fail_def,
     cold_access_cost_def, warm_access_cost_def]
 QED
 
@@ -646,13 +747,20 @@ Proof
     contexts_weight_def, unused_gas_def]
   \\ qhdtm_x_assum `COND` mp_tac
   \\ qpat_abbrev_tac `v1 = COND a b' c` \\ strip_tac
-  \\ rw [] \\ qmatch_goalsub_abbrev_tac `f s'`
+  \\ rw [] \\ gs[EVERY_MEM]
+  \\ gs[wf_context_def]
+  \\ qmatch_goalsub_abbrev_tac `f s'`
   \\ qpat_abbrev_tac `n' = SUM (MAP _ t)`
   >- (gs []
     \\ qmatch_goalsub_abbrev_tac`_ rr bb`
     \\ qmatch_asmsub_abbrev_tac`¬(_ aa rr)`
     \\ `($< LEX $<) aa bb` suffices_by metis_tac lexs
     \\ rw [Abbr`aa`,Abbr`bb`,LEX_DEF])
+  >- (gs[]
+    \\ qmatch_goalsub_abbrev_tac`_ rr bb`
+    \\ qmatch_asmsub_abbrev_tac`¬(_ aa bb)`
+    \\ `¬($< LEX $<) rr aa` suffices_by metis_tac lexs
+    \\ rw[Abbr`rr`,Abbr`aa`, LEX_DEF] )
   >- (qmatch_goalsub_abbrev_tac`_ bb rr`
     \\ qmatch_asmsub_abbrev_tac`_ aa rr`
     \\ `¬($< LEX $<) bb aa` suffices_by metis_tac lexs
@@ -676,6 +784,9 @@ Proof
 QED
 
 Theorem decreases_gas_update_accounts[simp]:
+  (* (∀a. wf_accounts a ⇒ wf_accounts (f a)) ∧
+  (∀a. no_change_to_code_size a (f a))
+  ⇒ *)
   decreases_gas F (update_accounts f)
 Proof
   rw[decreases_gas_def, update_accounts_def]
@@ -855,10 +966,20 @@ Proof
   rw[dispatch_precompiles_def]
 QED
 
+Theorem decreases_gas_cred_bind_g_0:
+  decreases_gas F g ∧ (∀x. decreases_gas_cred F n0 0 (f x)) ⇒
+  decreases_gas_cred F n0 0 (bind g f)
+Proof
+  strip_tac \\ irule decreases_gas_cred_mono
+  \\ irule_at Any decreases_gas_cred_bind_g
+  \\ qexistsl_tac [`λ_. T`, `n0`, `F`, `F`] \\ rw []
+QED
+
 Theorem decreases_gas_cred_get_static_push_context:
   (∀st.
     (ctx st).msgParams.gasLimit < n0 ∧
-    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit) ⇒
+    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit ∧
+    LENGTH (ctx st).stack ≤ stack_limit) ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; push_context (ctx st) od)
 Proof
   simp [decreases_gas_cred_def, get_static_def, push_context_def, return_def,
@@ -866,13 +987,17 @@ Proof
     get_current_context_def]
   \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
   \\ first_x_assum (qspec_then `h.msgParams.static` mp_tac)
-  \\ gvs [ok_state_def] \\ metis_tac [LT_IMP_LE]
+  \\ gvs [ok_state_def]
+  \\ rw[]
+  \\ gvs[wf_context_def]
 QED
 
-Theorem decreases_gas_cred_get_static_push_context_bind: ∀ctx.
+Theorem decreases_gas_cred_get_static_push_context_bind:
+  ∀ctx.
   (∀st.
     (ctx st).msgParams.gasLimit < n0 ∧
-    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit) ∧
+    (ctx st).gasUsed ≤ (ctx st).msgParams.gasLimit ∧
+    LENGTH (ctx st).stack ≤ stack_limit) ∧
   decreases_gas_cred F 0 0 f ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; _ <- push_context (ctx st); f od)
 Proof
@@ -886,14 +1011,14 @@ Proof
   \\ metis_tac [decreases_gas_cred_get_static_push_context]
 QED
 
-Theorem decreases_gas_cred_bind_g_0:
-  decreases_gas F g ∧ (∀x. decreases_gas_cred F n0 0 (f x)) ⇒
-  decreases_gas_cred F n0 0 (bind g f)
+(*
+Theorem no_change_to_code_size_transfer_value[simp]:
+  no_change_to_code_size a (transfer_value x y z a)
 Proof
-  strip_tac \\ irule decreases_gas_cred_mono
-  \\ irule_at Any decreases_gas_cred_bind_g
-  \\ qexistsl_tac [`λ_. T`, `n0`, `F`, `F`] \\ rw []
+  rw[no_change_to_code_size_def, transfer_value_def]
+  \\ rw[update_account_def, APPLY_UPDATE_THM, lookup_account_def]
 QED
+*)
 
 Theorem decreases_gas_cred_proceed_call[simp]:
   stipend < r ⇒
@@ -907,7 +1032,10 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ reverse (rw [])
-  >- rw [Abbr`v1`]
+  >- (
+    rw [Abbr`v1`]
+    \\ irule decreases_gas_update_accounts
+    \\ gs[])
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ gen_tac
   \\ qpat_abbrev_tac `v4 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ gen_tac
@@ -929,7 +1057,7 @@ Proof
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ Cases_on `s.contexts` >- gs [] \\ rw [] \\ rw [] \\ gs []
-  >- (fsrw_tac [DNF_ss] [] \\ simp [])
+  >- gs[wf_context_def]
   \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF]
 QED
 
@@ -941,6 +1069,7 @@ Proof
     decreases_gas_def, ok_state_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_cred_abort_call_value[simp]:
@@ -1116,6 +1245,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_copy_to_memory[simp]:
@@ -1291,7 +1421,7 @@ Proof
   \\ qexistsl_tac [`F`,`T`,`λx. 0 < x`]
   \\ rw [return_def, warm_access_cost_def]
   >- (pop_assum mp_tac \\
-    rw [access_slot_def, return_def,
+    rw [access_slot_def, return_def, fail_def,
       cold_sload_cost_def, warm_access_cost_def])
   \\ irule decreases_gas_consume_gas_bind \\ rw []
   \\ irule_at Any decreases_gas_bind_false \\ rw []
@@ -1333,6 +1463,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_sstore_gas_consumption[simp]:
@@ -1362,6 +1493,15 @@ Theorem decreases_gas_write_storage[simp]:
 Proof
   rw [write_storage_def]
   \\ irule_at Any decreases_gas_update_accounts
+  \\ reverse(rw[])
+  (*
+  >- (
+    rw[(*no_change_to_code_size_def,*) update_account_def, lookup_account_def,
+       APPLY_UPDATE_THM] \\ rw[] )
+  *)
+  \\ irule wf_accounts_update_account
+  \\ gs[wf_accounts_def, lookup_account_def]
+  \\ gs[wf_account_state_def]
 QED
 
 Theorem decreases_gas_step_sstore[simp]:
@@ -1392,6 +1532,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
+  \\ gs[wf_context_def]
 QED
 
 Theorem decreases_gas_step_jump[simp]:
@@ -1475,7 +1616,12 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
+  (*
+  \\ simp[GSYM ignore_bind_def]
+  \\ rw[step_create_code_lemma]
+  *)
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
+  \\ simp[ignore_bind_def]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ qpat_abbrev_tac `v4 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
@@ -1495,9 +1641,13 @@ Proof
   >- ( irule decreases_gas_cred_abort_unuse \\ simp[] )
   \\ IF_CASES_TAC
   >- (
-    rw[abort_create_exists_def, ignore_bind_def]
-    \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-    \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] )
+    irule decreases_gas_imp \\ rw[]
+    \\ rw[abort_create_exists_def]
+    \\ irule decreases_gas_ignore_bind_right
+    \\ irule_at Any decreases_gas_ignore_bind_right
+    \\ rw[]
+    \\ qexists_tac`F` \\ rw[]
+    \\ qexists_tac`F` \\ rw[] )
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
@@ -1753,6 +1903,7 @@ Proof
       \\ Cases_on`t` \\ gvs[] >- metis_tac lexs
       \\ reverse IF_CASES_TAC \\ fs [DISJ_IMP_THM, FORALL_AND_THM,
         contexts_weight_def, LEX_DEF, unused_gas_def]
+      \\ gvs[wf_context_def]
     )
     \\ simp [handle_create_def]
     \\ irule decreases_gas_imp \\ rw []
@@ -1823,5 +1974,2080 @@ Proof
   \\ CASE_TAC \\ gs[]
   \\ rw[Once whileTheory.OWHILE_THM]
 QED
+
+Definition preserves_wf_accounts_def:
+  preserves_wf_accounts (m: α execution) =
+  ∀s. EVERY wf_accounts (all_accounts s) ⇒
+      EVERY wf_accounts (all_accounts $ SND (m s))
+End
+
+Theorem preserves_wf_accounts_bind:
+  (∀x. preserves_wf_accounts (f x)) ∧
+  preserves_wf_accounts g
+  ⇒
+  preserves_wf_accounts (bind g f)
+Proof
+  rw[preserves_wf_accounts_def, bind_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ metis_tac[SND]
+QED
+
+Theorem preserves_wf_accounts_bind_pred:
+  (∀x. p x ⇒ preserves_wf_accounts (f x)) ∧
+  (∀s a. EVERY wf_accounts (all_accounts s) ∧ FST (g s) = (INL a) ⇒ p a) ∧
+  preserves_wf_accounts g
+  ⇒
+  preserves_wf_accounts (bind g f)
+Proof
+  rw[preserves_wf_accounts_def, bind_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ metis_tac[SND, FST]
+QED
+
+Theorem preserves_wf_accounts_ignore_bind:
+  preserves_wf_accounts f ∧
+  preserves_wf_accounts g
+  ⇒
+  preserves_wf_accounts (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  \\ irule preserves_wf_accounts_bind
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_current_context[simp]:
+  preserves_wf_accounts get_current_context
+Proof
+  rw[preserves_wf_accounts_def, get_current_context_def]
+  \\ rw[return_def, fail_def]
+QED
+
+Theorem preserves_wf_accounts_bind_get_current_context:
+  (∀x. wf_accounts x.rollback.accounts ⇒ preserves_wf_accounts (f x))
+  ⇒
+  preserves_wf_accounts (bind get_current_context f)
+Proof
+  strip_tac
+  \\ irule preserves_wf_accounts_bind_pred \\ rw[]
+  \\ qexists_tac`λc. wf_accounts c.rollback.accounts` \\ rw[]
+  \\ gs[get_current_context_def, fail_def, return_def]
+  \\ Cases_on`s.contexts` \\ gs[all_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_assert[simp]:
+  preserves_wf_accounts (assert b e)
+Proof
+  rw[preserves_wf_accounts_def, assert_def]
+QED
+
+Theorem preserves_wf_accounts_set_current_context[simp]:
+  wf_accounts (c.rollback.accounts) ⇒
+  preserves_wf_accounts (set_current_context c)
+Proof
+  rw[preserves_wf_accounts_def, set_current_context_def]
+  \\ rw[fail_def, return_def]
+  \\ gs[all_accounts_def]
+  \\ Cases_on`s.contexts` \\ gs[]
+QED
+
+Theorem preserves_wf_accounts_return[simp]:
+  preserves_wf_accounts (return x)
+Proof
+  rw[return_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_fail[simp]:
+  preserves_wf_accounts (fail x)
+Proof
+  rw[fail_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_pop_stack[simp]:
+  preserves_wf_accounts (pop_stack n)
+Proof
+  rw[pop_stack_def]
+  \\ irule preserves_wf_accounts_bind_pred \\ rw[]
+  \\ qexists_tac`λc. wf_accounts c.rollback.accounts`
+  \\ rw[get_current_context_def, fail_def, return_def]
+  >- (
+    irule preserves_wf_accounts_ignore_bind \\ rw[]
+    \\ irule preserves_wf_accounts_ignore_bind \\ rw[])
+  \\ Cases_on`s.contexts` \\ gs[all_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_consume_gas[simp]:
+  preserves_wf_accounts (consume_gas n)
+Proof
+  rw[consume_gas_def]
+  \\ irule preserves_wf_accounts_bind_get_current_context \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_push_stack[simp]:
+  preserves_wf_accounts (push_stack n)
+Proof
+  rw[push_stack_def]
+  \\ irule preserves_wf_accounts_bind_get_current_context \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_binop[simp]:
+  preserves_wf_accounts (step_binop x y)
+Proof
+  rw[step_binop_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_modop[simp]:
+  preserves_wf_accounts (step_modop x y)
+Proof
+  rw[step_modop_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_monop[simp]:
+  preserves_wf_accounts (step_monop x y)
+Proof
+  rw[step_monop_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_tx_params[simp]:
+  preserves_wf_accounts get_tx_params
+Proof
+  rw[get_tx_params_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_step_txParams[simp]:
+  preserves_wf_accounts (step_txParams x y)
+Proof
+  rw[step_txParams_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_context[simp]:
+  preserves_wf_accounts (step_context x y)
+Proof
+  rw[step_context_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_msgParams[simp]:
+  preserves_wf_accounts (step_msgParams x y)
+Proof
+  rw[step_msgParams_def]
+QED
+
+Theorem preserves_wf_accounts_memory_expansion_info[simp]:
+  preserves_wf_accounts (memory_expansion_info c e)
+Proof
+  rw[memory_expansion_info_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_write_memory[simp]:
+  preserves_wf_accounts (write_memory c e)
+Proof
+  rw[write_memory_def]
+  \\ irule preserves_wf_accounts_bind_get_current_context \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_read_memory[simp]:
+  preserves_wf_accounts (read_memory c e)
+Proof
+  rw[read_memory_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_expand_memory[simp]:
+  preserves_wf_accounts (expand_memory c)
+Proof
+  rw[expand_memory_def]
+  \\ irule preserves_wf_accounts_bind_get_current_context \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_copy_to_memory[simp]:
+  (∀f. e = SOME f ⇒ preserves_wf_accounts f) ⇒
+  preserves_wf_accounts (copy_to_memory a b c d e)
+Proof
+  rw[copy_to_memory_def, max_expansion_range_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ TRY(irule preserves_wf_accounts_ignore_bind \\ rw[])
+  \\ CASE_TAC \\ gs[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_copy_to_memory[simp]:
+  (∀f. y = SOME f ⇒ preserves_wf_accounts f) ⇒
+  preserves_wf_accounts (step_copy_to_memory x y)
+Proof
+  rw[step_copy_to_memory_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_exp[simp]:
+  preserves_wf_accounts step_exp
+Proof
+  rw[step_exp_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_keccak256[simp]:
+  preserves_wf_accounts step_keccak256
+Proof
+  rw[step_keccak256_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_accounts[simp]:
+  preserves_wf_accounts get_accounts
+Proof
+  rw[get_accounts_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_access_address[simp]:
+  preserves_wf_accounts (access_address a)
+Proof
+  rw[access_address_def, preserves_wf_accounts_def, return_def, fail_def]
+  \\ rw[] \\ gs[all_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_access_slot[simp]:
+  preserves_wf_accounts (access_slot a)
+Proof
+  rw[access_slot_def, preserves_wf_accounts_def, return_def, fail_def]
+  \\ rw[] \\ gs[all_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_step_balance[simp]:
+  preserves_wf_accounts step_balance
+Proof
+  rw[step_balance_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_call_data[simp]:
+  preserves_wf_accounts get_call_data
+Proof
+  rw[get_call_data_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_call_data_load[simp]:
+  preserves_wf_accounts step_call_data_load
+Proof
+  rw[step_call_data_load_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_code[simp]:
+  preserves_wf_accounts (get_code x)
+Proof
+  rw[get_code_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_return_data[simp]:
+  preserves_wf_accounts get_return_data
+Proof
+  rw[get_return_data_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_return_data_check[simp]:
+  preserves_wf_accounts (get_return_data_check y x)
+Proof
+  rw[get_return_data_check_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_ext_code_copy[simp]:
+  preserves_wf_accounts step_ext_code_copy
+Proof
+  rw[step_ext_code_copy_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_copy_to_memory
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_ext_code_size[simp]:
+  preserves_wf_accounts step_ext_code_size
+Proof
+  rw[step_ext_code_size_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_ext_code_hash[simp]:
+  preserves_wf_accounts step_ext_code_hash
+Proof
+  rw[step_ext_code_hash_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_return_data_copy[simp]:
+  preserves_wf_accounts step_return_data_copy
+Proof
+  rw[step_return_data_copy_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_copy_to_memory
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_block_hash[simp]:
+  preserves_wf_accounts step_block_hash
+Proof
+  rw[step_block_hash_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_callee[simp]:
+  preserves_wf_accounts get_callee
+Proof
+  rw[get_callee_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_self_balance[simp]:
+  preserves_wf_accounts step_self_balance
+Proof
+  rw[step_self_balance_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_pop[simp]:
+  preserves_wf_accounts step_pop
+Proof
+  rw[step_pop_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_mload[simp]:
+  preserves_wf_accounts step_mload
+Proof
+  rw[step_mload_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_mstore[simp]:
+  preserves_wf_accounts (step_mstore x)
+Proof
+  rw[step_mstore_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_get_tStorage[simp]:
+  preserves_wf_accounts get_tStorage
+Proof
+  rw[get_tStorage_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_step_sload[simp]:
+  preserves_wf_accounts (step_sload x)
+Proof
+  rw[step_sload_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_rollback[simp]:
+  preserves_wf_accounts get_rollback
+Proof
+  rw[get_rollback_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_bind_get_rollback:
+  (∀x. wf_accounts x.accounts ⇒ preserves_wf_accounts (f x))
+  ⇒
+  preserves_wf_accounts (bind get_rollback f)
+Proof
+  strip_tac
+  \\ irule preserves_wf_accounts_bind_pred
+  \\ rw[]
+  \\ qexists_tac`λx. wf_accounts x.accounts`
+  \\ rw[get_rollback_def, return_def, all_accounts_def]
+  \\ gs[]
+QED
+
+val tac =
+  rpt ((irule preserves_wf_accounts_bind_get_current_context \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_bind_get_rollback \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]));
+
+Theorem preserves_wf_accounts_set_jump_dest[simp]:
+  preserves_wf_accounts (set_jump_dest x)
+Proof
+  rw[set_jump_dest_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_step_jump[simp]:
+  preserves_wf_accounts step_jump
+Proof
+  rw[step_jump_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_jumpi[simp]:
+  preserves_wf_accounts step_jumpi
+Proof
+  rw[step_jumpi_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_push[simp]:
+  preserves_wf_accounts (step_push x y)
+Proof
+  rw[step_push_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_dup[simp]:
+  preserves_wf_accounts (step_dup x)
+Proof
+  rw[step_dup_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_swap[simp]:
+  preserves_wf_accounts (step_swap x)
+Proof
+  rw[step_swap_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_push_logs[simp]:
+  preserves_wf_accounts (push_logs x)
+Proof
+  rw[push_logs_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_get_static[simp]:
+  preserves_wf_accounts get_static
+Proof
+  rw[get_static_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_assert_not_static[simp]:
+  preserves_wf_accounts assert_not_static
+Proof
+  rw[assert_not_static_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_log[simp]:
+  preserves_wf_accounts (step_log x)
+Proof
+  rw[step_log_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_set_tStorage[simp]:
+  preserves_wf_accounts (set_tStorage x)
+Proof
+  rw[set_tStorage_def, preserves_wf_accounts_def, return_def, all_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_write_transient_storage[simp]:
+  preserves_wf_accounts (write_transient_storage x y z)
+Proof
+  rw[write_transient_storage_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_write_storage[simp]:
+  preserves_wf_accounts (write_storage x y z)
+Proof
+  rw[write_storage_def] >> tac
+  \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
+  \\ rw[update_account_def, lookup_account_def]
+  \\ gs[wf_accounts_def, APPLY_UPDATE_THM, all_accounts_def]
+  \\ rw[] \\ gs[wf_account_state_def]
+QED
+
+Theorem preserves_wf_accounts_update_gas_refund_def[simp]:
+  preserves_wf_accounts (update_gas_refund x)
+Proof
+  Cases_on`x` >>
+  rw[update_gas_refund_def] >>
+  tac
+QED
+
+Theorem preserves_wf_accounts_get_original[simp]:
+  preserves_wf_accounts get_original
+Proof
+  rw[get_original_def, preserves_wf_accounts_def]
+  \\ rw[return_def, fail_def]
+QED
+
+Theorem preserves_wf_accounts_get_gas_left[simp]:
+  preserves_wf_accounts get_gas_left
+Proof
+  rw[get_gas_left_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_current_code[simp]:
+  preserves_wf_accounts get_current_code
+Proof
+  rw[get_current_code_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_num_contexts[simp]:
+  preserves_wf_accounts get_num_contexts
+Proof
+  rw[get_num_contexts_def, preserves_wf_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_get_value[simp]:
+  preserves_wf_accounts get_value
+Proof
+  rw[get_value_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_get_caller[simp]:
+  preserves_wf_accounts get_caller
+Proof
+  rw[get_caller_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_sstore_gas_consumption[simp]:
+  preserves_wf_accounts (step_sstore_gas_consumption x y z)
+Proof
+  rw[step_sstore_gas_consumption_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_sstore[simp]:
+  preserves_wf_accounts (step_sstore x)
+Proof
+  rw[step_sstore_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_finish[simp]:
+  preserves_wf_accounts finish
+Proof
+  rw[finish_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_revert[simp]:
+  preserves_wf_accounts revert
+Proof
+  rw[revert_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_set_return_data[simp]:
+  preserves_wf_accounts (set_return_data x)
+Proof
+  rw[set_return_data_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_step_return[simp]:
+  preserves_wf_accounts (step_return x)
+Proof
+  rw[step_return_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_invalid[simp]:
+  preserves_wf_accounts step_invalid
+Proof
+  rw[step_invalid_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_add_to_delete[simp]:
+  preserves_wf_accounts (add_to_delete x)
+Proof
+  rw[add_to_delete_def, preserves_wf_accounts_def, return_def, all_accounts_def]
+QED
+
+val defs = [bind_def, ignore_bind_def, access_address_def,
+        get_callee_def, preserves_wf_accounts_def, pop_stack_def,
+        get_current_context_def, assert_def, set_current_context_def,
+        assert_not_static_def, add_to_delete_def, finish_def,
+        set_return_data_def, get_num_contexts_def, get_rollback_def,
+        get_static_def, set_accounts_def, update_accounts_def, get_gas_left_def,
+        get_original_def, get_accounts_def, consume_gas_def, return_def, fail_def]
+
+Theorem wf_account_state_with_balance[simp]:
+  wf_account_state (a with balance updated_by b) = wf_account_state a
+Proof
+  rw[wf_account_state_def]
+QED
+
+Theorem preserves_wf_accounts_step_self_destruct[simp]:
+  preserves_wf_accounts step_self_destruct
+Proof
+  rw[step_self_destruct_def]
+  \\ rw defs \\ rw[]
+  \\ rw defs \\ rw[]
+  \\ rw defs
+  \\ gs[wf_accounts_def, update_account_def, transfer_value_def,
+        all_accounts_def, lookup_account_def]
+  \\ rw[APPLY_UPDATE_THM, lookup_account_def] \\ rw[]
+  \\ Cases_on`s.contexts` \\ gs[wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_unuse_gas[simp]:
+  preserves_wf_accounts (unuse_gas x)
+Proof
+  rw[unuse_gas_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_inc_pc[simp]:
+  preserves_wf_accounts inc_pc
+Proof
+  rw[inc_pc_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_abort_unuse[simp]:
+  preserves_wf_accounts (abort_unuse x)
+Proof
+  rw[abort_unuse_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_abort_call_value[simp]:
+  preserves_wf_accounts (abort_call_value x)
+Proof
+  rw[abort_call_value_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_push_context[simp]:
+  wf_accounts x.rollback.accounts ⇒
+  preserves_wf_accounts (push_context x)
+Proof
+  rw[push_context_def, preserves_wf_accounts_def, return_def, all_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_update_accounts_transfer_value[simp]:
+  preserves_wf_accounts (update_accounts (transfer_value x y z))
+Proof
+  rw[update_accounts_def, preserves_wf_accounts_def, return_def,
+     all_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_ecrecover[simp]:
+  preserves_wf_accounts precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_ecadd[simp]:
+  preserves_wf_accounts precompile_ecadd
+Proof
+  rw[precompile_ecadd_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_ecmul[simp]:
+  preserves_wf_accounts precompile_ecmul
+Proof
+  rw[precompile_ecmul_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_ecpairing[simp]:
+  preserves_wf_accounts precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_blake2f[simp]:
+  preserves_wf_accounts precompile_blake2f
+Proof
+  rw[precompile_blake2f_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_modexp[simp]:
+  preserves_wf_accounts precompile_modexp
+Proof
+  rw[precompile_modexp_def]
+  \\ rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_precompile_sha2_256[simp]:
+  preserves_wf_accounts precompile_sha2_256
+Proof
+  rw[precompile_sha2_256_def]
+  \\ rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_precompile_identity[simp]:
+  preserves_wf_accounts precompile_identity
+Proof
+  rw[precompile_identity_def]
+  \\ rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_precompile_ripemd_160[simp]:
+  preserves_wf_accounts precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def]
+QED
+
+Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
+  preserves_wf_accounts (dispatch_precompiles x)
+Proof
+  rw[dispatch_precompiles_def]
+QED
+
+Theorem preserves_wf_accounts_step_call[simp]:
+  preserves_wf_accounts (step_call x)
+Proof
+  rw[step_call_def, UNCURRY] >> tac
+  \\ rw[proceed_call_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_bind_get_accounts:
+  (∀x. wf_accounts x ⇒ preserves_wf_accounts (f x))
+  ⇒
+  preserves_wf_accounts (bind get_accounts f)
+Proof
+  strip_tac
+  \\ irule preserves_wf_accounts_bind_pred
+  \\ rw[]
+  \\ qexists_tac`wf_accounts`
+  \\ rw[get_accounts_def, return_def, all_accounts_def]
+  \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_step_create[simp]:
+  preserves_wf_accounts (step_create x)
+Proof
+  simp[step_create_def]
+  \\ qpat_abbrev_tac`b1 = COND _ _ _`
+  \\ qpat_abbrev_tac`b2 = COND _ _ _`
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ qpat_abbrev_tac`b3 = COND _ _ _`
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_wf_accounts_bind_get_accounts
+  \\ simp[] \\ gen_tac \\ strip_tac
+  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ qpat_abbrev_tac`b4 = COND _ _ _`
+  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+  \\ IF_CASES_TAC >- simp[]
+  \\ IF_CASES_TAC >- (
+    simp[abort_create_exists_def]
+    \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+    \\ conj_tac >- tac
+    \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
+    \\ gs[all_accounts_def, update_account_def]
+    \\ gs[wf_accounts_def, APPLY_UPDATE_THM]
+    \\ rw[]
+    \\ gs[lookup_account_def, wf_account_state_def] )
+  \\ rw[proceed_create_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[preserves_wf_accounts_def, update_accounts_def, return_def]
+    \\ gs[all_accounts_def, update_account_def]
+    \\ gs[wf_accounts_def, APPLY_UPDATE_THM]
+    \\ rw[]
+    \\ gs[lookup_account_def, wf_account_state_def] )
+  \\ irule preserves_wf_accounts_bind_get_rollback
+  \\ simp[] \\ gen_tac \\ strip_tac
+  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
+  \\ gs[all_accounts_def, update_account_def, transfer_value_def]
+  \\ rw[] \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
+  \\ gs[lookup_account_def, wf_account_state_def, APPLY_UPDATE_THM]
+  \\ gs[account_already_created_def]
+QED
+
+Theorem preserves_wf_accounts_step_inst[simp]:
+  preserves_wf_accounts (step_inst op)
+Proof
+  Cases_on`op` \\ rw[step_inst_def]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_handle:
+  preserves_wf_accounts f ∧
+  (∀e. preserves_wf_accounts (g e))
+  ⇒
+  preserves_wf_accounts (handle f g)
+Proof
+  rw[handle_def, preserves_wf_accounts_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ metis_tac[SND]
+QED
+
+Theorem preserves_wf_accounts_get_output_to[simp]:
+  preserves_wf_accounts get_output_to
+Proof
+  rw[get_output_to_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_pop_and_incorporate_context[simp]:
+  preserves_wf_accounts (pop_and_incorporate_context x)
+Proof
+  rw[pop_and_incorporate_context_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ rw[bind_def, ignore_bind_def, pop_context_def, unuse_gas_def,
+        preserves_wf_accounts_def, fail_def, return_def, assert_def,
+        get_current_context_def, set_current_context_def, update_gas_refund_def,
+        push_logs_def]
+  \\ rw[] \\ rw[]
+  \\ rw[get_current_context_def, set_current_context_def, bind_def,
+        ignore_bind_def, return_def, fail_def]
+  \\ gs[all_accounts_def]
+  \\ Cases_on`s.contexts` \\ gs[set_rollback_def, return_def]
+  \\ Cases_on`t` \\ gs[]
+QED
+
+Theorem preserves_wf_accounts_reraise[simp]:
+  preserves_wf_accounts (reraise e)
+Proof
+  rw[reraise_def, preserves_wf_accounts_def]
+QED
+
+Theorem preserves_wf_accounts_step[simp]:
+  preserves_wf_accounts step
+Proof
+  rw[step_def]
+  \\ irule preserves_wf_accounts_handle
+  \\ reverse conj_tac
+  >- (
+    irule preserves_wf_accounts_bind \\ rw[]
+    \\ CASE_TAC \\ rw[]
+    \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+    \\ rw[inc_pc_or_jump_def]
+    \\ irule preserves_wf_accounts_bind_get_current_context \\ rw[]
+    \\ CASE_TAC \\ rw[]
+    \\ irule preserves_wf_accounts_ignore_bind \\ rw[] )
+  \\ rw[handle_step_def]
+  \\ irule preserves_wf_accounts_handle
+  \\ conj_tac
+  >- (
+    simp[handle_exception_def] \\ gen_tac
+    \\ irule preserves_wf_accounts_ignore_bind
+    \\ reverse conj_tac
+    >- (
+      rw[]
+      \\ irule preserves_wf_accounts_bind \\ rw[]
+      \\ irule preserves_wf_accounts_ignore_bind \\ rw[] )
+    \\ irule preserves_wf_accounts_bind
+    \\ rw[]
+    \\ irule preserves_wf_accounts_bind \\ rw[]
+    \\ irule preserves_wf_accounts_bind \\ rw[]
+    \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+    \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+    \\ CASE_TAC \\ rw[] \\ CASE_TAC \\ rw[]
+    \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+    \\ irule preserves_wf_accounts_ignore_bind \\ rw[])
+  \\ rw[handle_create_def]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ irule preserves_wf_accounts_bind \\ rw[]
+  \\ CASE_TAC \\ CASE_TAC \\ CASE_TAC \\ rw[]
+  >- (
+    tac
+    \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
+    \\ gs[all_accounts_def, update_account_def]
+    \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
+    \\ gs[lookup_account_def, wf_account_state_def] )
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
+  \\ rw[preserves_wf_accounts_def, assert_def, bind_def, update_accounts_def,
+        ignore_bind_def, return_def, reraise_def]
+  \\ gs[all_accounts_def, update_account_def, lookup_account_def]
+  \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
+  \\ gs[wf_account_state_def]
+QED
+
+Definition limits_num_contexts_def:
+  limits_num_contexts n1 n2 (m: α execution) =
+  ∀s. LENGTH s.contexts < n1 ⇒
+      LENGTH (SND (m s)).contexts < n2
+End
+
+Theorem limits_num_contexts_bind:
+  (∀x. limits_num_contexts n2 n3 (f x)) ∧
+  limits_num_contexts n1 n2 g ∧
+  n2 ≤ n3
+  ⇒
+  limits_num_contexts n1 n3 (bind g f)
+Proof
+  rw[limits_num_contexts_def, bind_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem limits_num_contexts_bind_same:
+  (∀x. limits_num_contexts n n (f x)) ∧
+  limits_num_contexts n n g
+  ⇒
+  limits_num_contexts n n (bind g f)
+Proof
+  strip_tac
+  \\ irule limits_num_contexts_bind
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
+(*
+Theorem limits_num_contexts_bind_pred:
+  (∀x. p x ⇒ limits_num_contexts (f x)) ∧
+  (∀s a. EVERY wf_accounts (all_accounts s) ∧ FST (g s) = (INL a) ⇒ p a) ∧
+  limits_num_contexts g
+  ⇒
+  limits_num_contexts (bind g f)
+Proof
+  rw[limits_num_contexts_def, bind_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ metis_tac[SND, FST]
+QED
+*)
+
+Theorem limits_num_contexts_ignore_bind:
+  limits_num_contexts n2 n3 f ∧
+  limits_num_contexts n1 n2 g ∧
+  n2 ≤ n3
+  ⇒
+  limits_num_contexts n1 n3 (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  \\ irule limits_num_contexts_bind \\ rw[]
+  \\ goal_assum (first_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
+Theorem limits_num_contexts_ignore_bind_same:
+  limits_num_contexts n n f ∧
+  limits_num_contexts n n g
+  ⇒
+  limits_num_contexts n n (ignore_bind g f)
+Proof
+  strip_tac
+  \\ irule limits_num_contexts_ignore_bind
+  \\ goal_assum(first_assum o mp_then Any mp_tac)
+  \\ rw[]
+QED
+
+Theorem limits_num_contexts_get_current_context[simp]:
+  limits_num_contexts n n get_current_context
+Proof
+  rw[limits_num_contexts_def, get_current_context_def]
+  \\ rw[return_def, fail_def]
+QED
+
+Theorem limits_num_contexts_assert[simp]:
+  limits_num_contexts n n (assert b e)
+Proof
+  rw[limits_num_contexts_def, assert_def]
+QED
+
+Theorem limits_num_contexts_set_current_context[simp]:
+  limits_num_contexts n n (set_current_context c)
+Proof
+  rw[limits_num_contexts_def, set_current_context_def]
+  \\ rw[fail_def, return_def]
+  \\ gs[all_accounts_def]
+  \\ Cases_on`s.contexts` \\ gs[]
+QED
+
+Theorem limits_num_contexts_return[simp]:
+  limits_num_contexts n n (return x)
+Proof
+  rw[return_def, limits_num_contexts_def]
+QED
+
+Theorem limits_num_contexts_fail[simp]:
+  limits_num_contexts n n (fail x)
+Proof
+  rw[fail_def, limits_num_contexts_def]
+QED
+
+val tac = rpt (
+  (irule limits_num_contexts_bind_same \\ rw[]) ORELSE
+  (irule limits_num_contexts_ignore_bind_same \\ rw[])
+)
+
+Theorem limits_num_contexts_pop_stack[simp]:
+  limits_num_contexts n n (pop_stack m)
+Proof
+  rw[pop_stack_def] \\ tac
+QED
+
+Theorem limits_num_contexts_consume_gas[simp]:
+  limits_num_contexts n n (consume_gas m)
+Proof
+  rw[consume_gas_def] \\ tac
+QED
+
+Theorem limits_num_contexts_push_stack[simp]:
+  limits_num_contexts n n (push_stack m)
+Proof
+  rw[push_stack_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_binop[simp]:
+  limits_num_contexts n n (step_binop x y)
+Proof
+  rw[step_binop_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_modop[simp]:
+  limits_num_contexts n n (step_modop x y)
+Proof
+  rw[step_modop_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_monop[simp]:
+  limits_num_contexts n n (step_monop x y)
+Proof
+  rw[step_monop_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_tx_params[simp]:
+  limits_num_contexts n n get_tx_params
+Proof
+  rw[get_tx_params_def, limits_num_contexts_def, return_def]
+QED
+
+Theorem limits_num_contexts_step_txParams[simp]:
+  limits_num_contexts n n (step_txParams x y)
+Proof
+  rw[step_txParams_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_context[simp]:
+  limits_num_contexts n n (step_context x y)
+Proof
+  rw[step_context_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_msgParams[simp]:
+  limits_num_contexts n n (step_msgParams x y)
+Proof
+  rw[step_msgParams_def]
+QED
+
+Theorem limits_num_contexts_memory_expansion_info[simp]:
+  limits_num_contexts n n (memory_expansion_info c e)
+Proof
+  rw[memory_expansion_info_def] \\ tac
+QED
+
+Theorem limits_num_contexts_write_memory[simp]:
+  limits_num_contexts n n (write_memory c e)
+Proof
+  rw[write_memory_def] \\ tac
+QED
+
+Theorem limits_num_contexts_read_memory[simp]:
+  limits_num_contexts n n (read_memory c e)
+Proof
+  rw[read_memory_def] \\ tac
+QED
+
+Theorem limits_num_contexts_expand_memory[simp]:
+  limits_num_contexts n n (expand_memory c)
+Proof
+  rw[expand_memory_def] \\ tac
+QED
+
+Theorem limits_num_contexts_copy_to_memory[simp]:
+  (∀f. e = SOME f ⇒ limits_num_contexts n n f) ⇒
+  limits_num_contexts n n (copy_to_memory a b c d e)
+Proof
+  rw[copy_to_memory_def, max_expansion_range_def]
+  \\ irule limits_num_contexts_bind_same \\ rw[]
+  \\ irule limits_num_contexts_ignore_bind_same \\ rw[]
+  \\ irule limits_num_contexts_bind_same \\ rw[]
+  \\ TRY(irule limits_num_contexts_ignore_bind_same \\ rw[])
+  \\ CASE_TAC \\ gs[]
+  \\ irule limits_num_contexts_bind_same \\ rw[]
+  \\ irule limits_num_contexts_ignore_bind_same \\ rw[]
+QED
+
+Theorem limits_num_contexts_step_copy_to_memory[simp]:
+  (∀f. y = SOME f ⇒ limits_num_contexts n n f) ⇒
+  limits_num_contexts n n (step_copy_to_memory x y)
+Proof
+  rw[step_copy_to_memory_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_exp[simp]:
+  limits_num_contexts n n step_exp
+Proof
+  rw[step_exp_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_keccak256[simp]:
+  limits_num_contexts n n step_keccak256
+Proof
+  rw[step_keccak256_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_accounts[simp]:
+  limits_num_contexts n n get_accounts
+Proof
+  rw[get_accounts_def, limits_num_contexts_def, return_def]
+QED
+
+Theorem limits_num_contexts_access_address[simp]:
+  limits_num_contexts n n (access_address a)
+Proof
+  rw[access_address_def, limits_num_contexts_def, return_def, fail_def]
+  \\ rw[] \\ gs[all_accounts_def]
+QED
+
+Theorem limits_num_contexts_access_slot[simp]:
+  limits_num_contexts n n (access_slot a)
+Proof
+  rw[access_slot_def, limits_num_contexts_def, return_def, fail_def]
+  \\ rw[] \\ gs[all_accounts_def]
+QED
+
+Theorem limits_num_contexts_step_balance[simp]:
+  limits_num_contexts n n step_balance
+Proof
+  rw[step_balance_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_call_data[simp]:
+  limits_num_contexts n n get_call_data
+Proof
+  rw[get_call_data_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_call_data_load[simp]:
+  limits_num_contexts n n step_call_data_load
+Proof
+  rw[step_call_data_load_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_code[simp]:
+  limits_num_contexts n n (get_code x)
+Proof
+  rw[get_code_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_return_data[simp]:
+  limits_num_contexts n n get_return_data
+Proof
+  rw[get_return_data_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_return_data_check[simp]:
+  limits_num_contexts n n (get_return_data_check y x)
+Proof
+  rw[get_return_data_check_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_ext_code_copy[simp]:
+  limits_num_contexts n n step_ext_code_copy
+Proof
+  rw[step_ext_code_copy_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_ext_code_size[simp]:
+  limits_num_contexts n n step_ext_code_size
+Proof
+  rw[step_ext_code_size_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_ext_code_hash[simp]:
+  limits_num_contexts n n step_ext_code_hash
+Proof
+  rw[step_ext_code_hash_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_return_data_copy[simp]:
+  limits_num_contexts n n step_return_data_copy
+Proof
+  rw[step_return_data_copy_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_block_hash[simp]:
+  limits_num_contexts n n step_block_hash
+Proof
+  rw[step_block_hash_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_callee[simp]:
+  limits_num_contexts n n get_callee
+Proof
+  rw[get_callee_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_self_balance[simp]:
+  limits_num_contexts n n step_self_balance
+Proof
+  rw[step_self_balance_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_pop[simp]:
+  limits_num_contexts n n step_pop
+Proof
+  rw[step_pop_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_mload[simp]:
+  limits_num_contexts n n step_mload
+Proof
+  rw[step_mload_def] \\ tac
+QED
+
+Theorem limits_num_contexts_step_mstore[simp]:
+  limits_num_contexts n n (step_mstore x)
+Proof
+  rw[step_mstore_def] \\ tac
+QED
+
+Theorem limits_num_contexts_get_tStorage[simp]:
+  limits_num_contexts n n get_tStorage
+Proof
+  rw[get_tStorage_def, limits_num_contexts_def, return_def]
+QED
+
+Theorem limits_num_contexts_step_sload[simp]:
+  limits_num_contexts n n (step_sload x)
+Proof
+  rw[step_sload_def] >> tac
+QED
+
+Theorem limits_num_contexts_get_rollback[simp]:
+  limits_num_contexts n n get_rollback
+Proof
+  rw[get_rollback_def, limits_num_contexts_def, return_def]
+QED
+
+Theorem limits_num_contexts_set_jump_dest[simp]:
+  limits_num_contexts n n (set_jump_dest x)
+Proof
+  rw[set_jump_dest_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_jump[simp]:
+  limits_num_contexts n n step_jump
+Proof
+  rw[step_jump_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_jumpi[simp]:
+  limits_num_contexts n n step_jumpi
+Proof
+  rw[step_jumpi_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_push[simp]:
+  limits_num_contexts n n (step_push x y)
+Proof
+  rw[step_push_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_dup[simp]:
+  limits_num_contexts n n (step_dup x)
+Proof
+  rw[step_dup_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_swap[simp]:
+  limits_num_contexts n n (step_swap x)
+Proof
+  rw[step_swap_def] >> tac
+QED
+
+Theorem limits_num_contexts_push_logs[simp]:
+  limits_num_contexts n n (push_logs x)
+Proof
+  rw[push_logs_def] >> tac
+QED
+
+Theorem limits_num_contexts_get_static[simp]:
+  limits_num_contexts n n get_static
+Proof
+  rw[get_static_def] >> tac
+QED
+
+Theorem limits_num_contexts_assert_not_static[simp]:
+  limits_num_contexts n n assert_not_static
+Proof
+  rw[assert_not_static_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_log[simp]:
+  limits_num_contexts n n (step_log x)
+Proof
+  rw[step_log_def] >> tac
+QED
+
+Theorem limits_num_contexts_set_tStorage[simp]:
+  limits_num_contexts n n (set_tStorage x)
+Proof
+  rw[set_tStorage_def, limits_num_contexts_def, return_def, all_accounts_def]
+QED
+
+Theorem limits_num_contexts_write_transient_storage[simp]:
+  limits_num_contexts n n (write_transient_storage x y z)
+Proof
+  rw[write_transient_storage_def] >> tac
+QED
+
+Theorem limits_num_contexts_write_storage[simp]:
+  limits_num_contexts n n (write_storage x y z)
+Proof
+  rw[write_storage_def] >> tac
+  \\ rw[limits_num_contexts_def, update_accounts_def, return_def]
+QED
+
+Theorem limits_num_contexts_update_gas_refund_def[simp]:
+  limits_num_contexts n n (update_gas_refund x)
+Proof
+  Cases_on`x` >>
+  rw[update_gas_refund_def] >>
+  tac
+QED
+
+Theorem limits_num_contexts_get_original[simp]:
+  limits_num_contexts n n get_original
+Proof
+  rw[get_original_def, limits_num_contexts_def]
+  \\ rw[return_def, fail_def]
+QED
+
+Theorem limits_num_contexts_get_gas_left[simp]:
+  limits_num_contexts n n get_gas_left
+Proof
+  rw[get_gas_left_def] >> tac
+QED
+
+Theorem limits_num_contexts_get_current_code[simp]:
+  limits_num_contexts n n get_current_code
+Proof
+  rw[get_current_code_def] >> tac
+QED
+
+Theorem limits_num_contexts_get_num_contexts[simp]:
+  limits_num_contexts n n get_num_contexts
+Proof
+  rw[get_num_contexts_def, limits_num_contexts_def, return_def]
+QED
+
+Theorem limits_num_contexts_get_value[simp]:
+  limits_num_contexts n n get_value
+Proof
+  rw[get_value_def] >> tac
+QED
+
+Theorem limits_num_contexts_get_caller[simp]:
+  limits_num_contexts n n get_caller
+Proof
+  rw[get_caller_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_sstore_gas_consumption[simp]:
+  limits_num_contexts n n (step_sstore_gas_consumption x y z)
+Proof
+  rw[step_sstore_gas_consumption_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_sstore[simp]:
+  limits_num_contexts n n (step_sstore x)
+Proof
+  rw[step_sstore_def] >> tac
+QED
+
+Theorem limits_num_contexts_finish[simp]:
+  limits_num_contexts n n finish
+Proof
+  rw[finish_def, limits_num_contexts_def]
+QED
+
+Theorem limits_num_contexts_revert[simp]:
+  limits_num_contexts n n revert
+Proof
+  rw[revert_def, limits_num_contexts_def]
+QED
+
+Theorem limits_num_contexts_set_return_data[simp]:
+  limits_num_contexts n n (set_return_data x)
+Proof
+  rw[set_return_data_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_return[simp]:
+  limits_num_contexts n n (step_return x)
+Proof
+  rw[step_return_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_invalid[simp]:
+  limits_num_contexts n n step_invalid
+Proof
+  rw[step_invalid_def] >> tac
+QED
+
+Theorem limits_num_contexts_add_to_delete[simp]:
+  limits_num_contexts n n (add_to_delete x)
+Proof
+  rw[add_to_delete_def, limits_num_contexts_def, return_def, all_accounts_def]
+QED
+
+Theorem limits_num_contexts_step_self_destruct[simp]:
+  limits_num_contexts n n step_self_destruct
+Proof
+  rw[step_self_destruct_def] \\ tac
+  \\ rw[update_accounts_def, set_accounts_def, limits_num_contexts_def,
+        return_def]
+QED
+
+Theorem limits_num_contexts_unuse_gas[simp]:
+  limits_num_contexts n n (unuse_gas x)
+Proof
+  rw[unuse_gas_def] >> tac
+QED
+
+Theorem limits_num_contexts_inc_pc[simp]:
+  limits_num_contexts n n inc_pc
+Proof
+  rw[inc_pc_def] >> tac
+QED
+
+Theorem limits_num_contexts_abort_unuse[simp]:
+  limits_num_contexts n n (abort_unuse x)
+Proof
+  rw[abort_unuse_def] >> tac
+QED
+
+Theorem limits_num_contexts_abort_call_value[simp]:
+  limits_num_contexts n n (abort_call_value x)
+Proof
+  rw[abort_call_value_def] >> tac
+QED
+
+Theorem limits_num_contexts_push_context[simp]:
+  limits_num_contexts n (SUC n) (push_context x)
+Proof
+  rw[push_context_def, limits_num_contexts_def, return_def, all_accounts_def]
+QED
+
+Theorem limits_num_contexts_update_accounts_transfer_value[simp]:
+  limits_num_contexts n n (update_accounts (transfer_value x y z))
+Proof
+  rw[update_accounts_def, limits_num_contexts_def, return_def,
+     all_accounts_def]
+QED
+
+Theorem limits_num_contexts_precompile_ecrecover[simp]:
+  limits_num_contexts n n precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def]
+QED
+
+Theorem limits_num_contexts_precompile_ecadd[simp]:
+  limits_num_contexts n n precompile_ecadd
+Proof
+  rw[precompile_ecadd_def]
+QED
+
+Theorem limits_num_contexts_precompile_ecmul[simp]:
+  limits_num_contexts n n precompile_ecmul
+Proof
+  rw[precompile_ecmul_def]
+QED
+
+Theorem limits_num_contexts_precompile_ecpairing[simp]:
+  limits_num_contexts n n precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def]
+QED
+
+Theorem limits_num_contexts_precompile_blake2f[simp]:
+  limits_num_contexts n n precompile_blake2f
+Proof
+  rw[precompile_blake2f_def]
+QED
+
+Theorem limits_num_contexts_precompile_modexp[simp]:
+  limits_num_contexts n n precompile_modexp
+Proof
+  rw[precompile_modexp_def] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_sha2_256[simp]:
+  limits_num_contexts n n precompile_sha2_256
+Proof
+  rw[precompile_sha2_256_def] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_identity[simp]:
+  limits_num_contexts n n precompile_identity
+Proof
+  rw[precompile_identity_def] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_ripemd_160[simp]:
+  limits_num_contexts n n precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def]
+QED
+
+Theorem limits_num_contexts_dispatch_precompiles[simp]:
+  limits_num_contexts n n (dispatch_precompiles x)
+Proof
+  rw[dispatch_precompiles_def]
+QED
+
+Theorem limits_num_contexts_mono:
+  limits_num_contexts n1 n2 f ∧ n0 ≤ n1 ∧ n2 ≤ n3 ⇒
+  limits_num_contexts n0 n3 f
+Proof
+  rw[limits_num_contexts_def]
+  \\ first_x_assum(qspec_then`s`mp_tac)
+  \\ rw[]
+QED
+
+Theorem limits_num_contexts_check:
+  (n > m ⇒ limits_num_contexts n n2 f) ∧
+  (∀n1. n1 ≤ (MIN (PRE n) m) ⇒ limits_num_contexts (SUC n1) n2 g)
+  ⇒
+  limits_num_contexts n n2 (do
+    sd <- get_num_contexts;
+    if sd > m then f else g
+  od)
+Proof
+  rw[limits_num_contexts_def, bind_def, ignore_bind_def,
+     get_num_contexts_def, return_def]
+  \\ rw[]
+  \\ first_x_assum irule
+  \\ Cases_on`n ≤ m` \\ gs[]
+  >- (qexists_tac`PRE n` \\ gs[])
+  \\ qexists_tac`m` \\ gs[]
+QED
+
+Theorem limits_num_contexts_step_call:
+  0 < n ∧ n ≤ context_limit + 2 ⇒
+  limits_num_contexts n (MIN (SUC n) (context_limit + 2)) (step_call x)
+Proof
+  strip_tac
+  \\ gs[step_call_def, UNCURRY]
+  \\ qpat_abbrev_tac`b1 = COND _ _ _`
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ qpat_abbrev_tac`b2 = COND _ _ _`
+  \\ qpat_abbrev_tac`b3 = COND _ _ _`
+  \\ qpat_abbrev_tac`b4 = COND _ _ _`
+  \\ qpat_abbrev_tac`b5 = COND _ _ _`
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ qpat_abbrev_tac`b6 = COND _ _ _`
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[Abbr`b5`]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ rw[]
+  >- ( irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[] )
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[]
+  \\ irule limits_num_contexts_check \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    strip_tac
+    \\ irule limits_num_contexts_mono
+    \\ qexistsl_tac[`n`,`n`] \\ simp[] )
+  \\ gen_tac \\ strip_tac
+  \\ simp[proceed_call_def]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
+  \\ reverse conj_tac >- rw[]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_ignore_bind
+  \\ qexists_tac`SUC (SUC n1)`
+  \\ gs[]
+  \\ irule limits_num_contexts_mono
+  \\ qexistsl_tac[`n1 + 2`,`n1 + 2`] \\ rw[]
+QED
+
+Theorem limits_num_contexts_step_create:
+  0 < n ∧ n ≤ context_limit + 2 ⇒
+  limits_num_contexts n (MIN (SUC n) (context_limit + 2)) (step_create x)
+Proof
+  strip_tac
+  \\ gs[step_create_def]
+  \\ qpat_abbrev_tac`b1 = COND _ _ _`
+  \\ qpat_abbrev_tac`b2 = COND _ _ _`
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ qpat_abbrev_tac`b3 = COND _ _ _`
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ qpat_abbrev_tac`b4 = COND _ _ _`
+  \\ qmatch_goalsub_abbrev_tac`b5 ∨ _`
+  \\ Cases_on`b5` \\ gs[]
+  >- (
+    irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[]
+    \\ tac )
+  \\ qmatch_goalsub_abbrev_tac`b5 ∨ _`
+  \\ Cases_on`b5` \\ gs[]
+  >- (
+    irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[]
+    \\ tac )
+  \\ irule limits_num_contexts_check
+  \\ reverse conj_tac
+  >- (
+    strip_tac
+    \\ irule limits_num_contexts_mono
+    \\ qexistsl_tac[`n`,`n`] \\ simp[] )
+  \\ gen_tac \\ strip_tac
+  \\ simp[Abbr`b4`]
+  \\ `SUC n1 ≤ n` by gs[]
+  \\ `n ≤ MIN (SUC n) 1026` by gs[]
+  \\ IF_CASES_TAC
+  >- (
+    irule limits_num_contexts_mono
+    \\ qexistsl_tac[`n`,`n`] \\ simp[]
+    \\ rw[abort_create_exists_def]
+    \\ tac
+    \\ rw[limits_num_contexts_def, update_accounts_def, return_def])
+  \\ simp[proceed_create_def]
+  \\ qpat_abbrev_tac`b4 = COND _ _ _`
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
+  \\ reverse conj_tac >- rw[limits_num_contexts_def, update_accounts_def, return_def]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[]
+  \\ gen_tac
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
+  \\ reverse conj_tac >- rw[limits_num_contexts_def, update_accounts_def, return_def]
+  \\ irule limits_num_contexts_mono
+  \\ qexistsl_tac[`SUC n1`,`SUC(SUC n1)`] \\ rw[]
+  \\ gs[]
+QED
+
+Theorem limits_num_contexts_step_inst:
+  n = context_limit + 2 ⇒
+  limits_num_contexts n n (step_inst op)
+Proof
+  Cases_on`op` \\ rw[step_inst_def]
+  >- (irule limits_num_contexts_ignore_bind_same \\ rw[])
+  \\ `MIN (SUC 1026) (context_limit + 2) = 1026` by rw[]
+  \\ `0 < 1026` by rw[]
+  \\ `1026 ≤ context_limit + 2` by rw[]
+  \\ drule_at Any limits_num_contexts_step_create \\ simp[]
+  \\ drule_at Any limits_num_contexts_step_call \\ simp[]
+QED
+
+Theorem limits_num_contexts_handle:
+  limits_num_contexts n n f ∧
+  (∀e. limits_num_contexts n n (g e))
+  ⇒
+  limits_num_contexts n n (handle f g)
+Proof
+  rw[handle_def, limits_num_contexts_def]
+  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[]
+  \\ metis_tac[SND]
+QED
+
+Theorem limits_num_contexts_get_output_to[simp]:
+  limits_num_contexts n n get_output_to
+Proof
+  rw[get_output_to_def] \\ tac
+QED
+
+Theorem limits_num_contexts_pop_and_incorporate_context[simp]:
+  limits_num_contexts n n (pop_and_incorporate_context x)
+Proof
+  rw[pop_and_incorporate_context_def]
+  \\ tac
+  \\ rw[bind_def, ignore_bind_def, pop_context_def, unuse_gas_def,
+        limits_num_contexts_def, fail_def, return_def, assert_def,
+        get_current_context_def, set_current_context_def, update_gas_refund_def,
+        push_logs_def, set_rollback_def]
+  \\ rw[] \\ rw[]
+  \\ Cases_on`s.contexts` \\ gs[]
+QED
+
+Theorem limits_num_contexts_reraise[simp]:
+  limits_num_contexts n n (reraise e)
+Proof
+  rw[reraise_def, limits_num_contexts_def]
+QED
+
+Theorem limits_num_contexts_step[simp]:
+  n = context_limit + 2 ⇒
+  limits_num_contexts n n step
+Proof
+  rw[step_def]
+  \\ irule limits_num_contexts_handle
+  \\ reverse conj_tac
+  >- (
+    irule limits_num_contexts_bind_same \\ rw[]
+    >- ( irule limits_num_contexts_step_inst \\ rw[] )
+    \\ CASE_TAC \\ rw[]
+    >- ( irule limits_num_contexts_step_inst \\ rw[] )
+    \\ irule limits_num_contexts_ignore_bind_same \\ rw[]
+    \\ TRY ( irule limits_num_contexts_step_inst \\ rw[] )
+    \\ rw[inc_pc_or_jump_def]
+    \\ tac
+    \\ CASE_TAC \\ rw[]
+    \\ tac)
+  \\ rw[handle_step_def]
+  \\ irule limits_num_contexts_handle
+  \\ conj_tac
+  >- (
+    simp[handle_exception_def] \\ gen_tac
+    \\ irule limits_num_contexts_ignore_bind_same
+    \\ reverse conj_tac
+    >- ( rw[] \\ tac )
+    \\ irule limits_num_contexts_bind_same \\ rw[]
+    \\ irule limits_num_contexts_bind_same \\ rw[]
+    \\ irule limits_num_contexts_bind_same \\ rw[]
+    \\ irule limits_num_contexts_ignore_bind_same \\ rw[]
+    \\ irule limits_num_contexts_ignore_bind_same \\ rw[]
+    \\ CASE_TAC \\ rw[] \\ CASE_TAC \\ rw[]
+    \\ tac )
+  \\ rw[handle_create_def]
+  \\ tac
+  \\ CASE_TAC \\ CASE_TAC \\ CASE_TAC \\ rw[]
+  \\ tac
+  >- rw[limits_num_contexts_def, update_accounts_def, return_def]
+  \\ rw[limits_num_contexts_def, assert_def, bind_def, update_accounts_def,
+        ignore_bind_def, return_def, reraise_def]
+QED
+
+Theorem step_preserves_wf_state:
+  wf_state s ⇒ wf_state (SND (step s))
+Proof
+  mp_tac decreases_gas_step
+  \\ mp_tac preserves_wf_accounts_step
+  \\ mp_tac (GEN_ALL limits_num_contexts_step)
+  \\ rewrite_tac[decreases_gas_cred_def, preserves_wf_accounts_def,
+                 limits_num_contexts_def]
+  \\ rw[wf_state_def]
+  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[] )
+  >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
+  >- ( first_x_assum(qspec_then`s`mp_tac) \\ simp[ok_state_def])
+QED
+
+Definition sub_access_sets_def:
+  sub_access_sets s1 s2 ⇔
+  toSet s1.addresses ⊆ toSet s2.addresses ∧
+  toSet s1.storageKeys ⊆ toSet s2.storageKeys
+End
+
+Definition ignores_extra_domain_def:
+  ignores_extra_domain (m: α execution) =
+  ∀s r t d2.
+    sub_access_sets s.msdomain d2 ∧
+    m s = (r, t)
+    ⇒
+    t.msdomain = s.msdomain ∧
+    m (s with msdomain := d2) = (r, t with msdomain := d2)
+End
+
+Theorem handle_ignores_extra_domain:
+  ignores_extra_domain f ∧
+  (∀e. ignores_extra_domain (g e))
+  ⇒
+  ignores_extra_domain (handle f g)
+Proof
+  rw[handle_def, ignores_extra_domain_def]
+  \\ gvs[CaseEq"prod",CaseEq"sum"]
+  \\ first_x_assum (drule_then drule) \\ gs[]
+  \\ strip_tac
+  \\ first_x_assum (drule_at Any) \\ gs[]
+  \\ disch_then drule \\ rw[]
+QED
+
+Theorem bind_ignores_extra_domain:
+  ignores_extra_domain g ∧
+  (∀x. ignores_extra_domain (f x))
+  ⇒
+  ignores_extra_domain (monad_bind g f)
+Proof
+  simp[ignores_extra_domain_def, bind_def]
+  \\ ntac 2 strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ gs[CaseEq"prod"]
+  \\ first_x_assum(drule_then drule)
+  \\ strip_tac \\ gs[CaseEq"sum"]
+  \\ first_x_assum (drule_at Any) \\ simp[]
+  \\ disch_then drule \\ rw[]
+QED
+
+Theorem ignore_bind_ignores_extra_domain:
+  ignores_extra_domain g ∧
+  ignores_extra_domain f
+  ⇒
+  ignores_extra_domain (ignore_bind g f)
+Proof
+  simp[ignore_bind_def]
+  \\ strip_tac
+  \\ irule bind_ignores_extra_domain
+  \\ rw[]
+QED
+
+Theorem return_ignores_extra_domain[simp]:
+  ignores_extra_domain (return x)
+Proof
+  rw[return_def, ignores_extra_domain_def]
+QED
+
+val tac = rpt (
+  (irule bind_ignores_extra_domain \\ rw[]) ORELSE
+  (irule ignore_bind_ignores_extra_domain \\ rw[])
+);
+
+Theorem get_current_context_ignores_extra_domain[simp]:
+  ignores_extra_domain get_current_context
+Proof
+  simp[get_current_context_def, ignores_extra_domain_def]
+  \\ rw[fail_def, return_def]
+QED
+
+Theorem get_gas_left_ignores_extra_domain[simp]:
+  ignores_extra_domain get_gas_left
+Proof
+  rw[get_gas_left_def] \\ tac
+QED
+
+Theorem assert_ignores_extra_domain[simp]:
+  ignores_extra_domain (assert e n)
+Proof
+  rw[assert_def, ignores_extra_domain_def]
+QED
+
+Theorem set_current_context_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_current_context n)
+Proof
+  rw[set_current_context_def, ignores_extra_domain_def, fail_def, return_def]
+  \\ gvs[CaseEq"prod",CaseEq"bool"]
+QED
+
+Theorem consume_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (consume_gas n)
+Proof
+  rw[consume_gas_def] \\ tac
+QED
+
+Theorem set_return_data_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_return_data n)
+Proof
+  rw[set_return_data_def] \\ tac
+QED
+
+Theorem reraise_ignores_extra_domain[simp]:
+  ignores_extra_domain (reraise n)
+Proof
+  rw[reraise_def, ignores_extra_domain_def]
+QED
+
+Theorem inc_pc_ignores_extra_domain[simp]:
+  ignores_extra_domain inc_pc
+Proof
+  rw[inc_pc_def] \\ tac
+QED
+
+Theorem get_output_to_ignores_extra_domain[simp]:
+  ignores_extra_domain get_output_to
+Proof
+  rw[get_output_to_def] \\ tac
+QED
+
+Theorem get_return_data_ignores_extra_domain[simp]:
+  ignores_extra_domain get_return_data
+Proof
+  rw[get_return_data_def] \\ tac
+QED
+
+Theorem get_num_contexts_ignores_extra_domain[simp]:
+  ignores_extra_domain get_num_contexts
+Proof
+  rw[get_num_contexts_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem pop_context_ignores_extra_domain[simp]:
+  ignores_extra_domain pop_context
+Proof
+  rw[pop_context_def, ignores_extra_domain_def, return_def, fail_def]
+  \\ gvs[CaseEq"bool"]
+QED
+
+Theorem unuse_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (unuse_gas n)
+Proof
+  rw[unuse_gas_def] \\ tac
+QED
+
+Theorem push_logs_ignores_extra_domain[simp]:
+  ignores_extra_domain (push_logs n)
+Proof
+  rw[push_logs_def] \\ tac
+QED
+
+Theorem push_stack_ignores_extra_domain[simp]:
+  ignores_extra_domain (push_stack n)
+Proof
+  rw[push_stack_def] \\ tac
+QED
+
+Theorem update_gas_refund_ignores_extra_domain[simp]:
+  ignores_extra_domain (update_gas_refund n)
+Proof
+  Cases_on`n` \\ rw[update_gas_refund_def] \\ tac
+QED
+
+Theorem set_rollback_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_rollback n)
+Proof
+  rw[set_rollback_def, ignores_extra_domain_def, return_def, fail_def]
+QED
+
+Theorem pop_and_incorporate_context_ignores_extra_domain[simp]:
+  ignores_extra_domain (pop_and_incorporate_context x)
+Proof
+  rw[pop_and_incorporate_context_def] \\ tac
+QED
+
+Theorem write_memory_ignores_extra_domain[simp]:
+  ignores_extra_domain (write_memory n m)
+Proof
+  rw[write_memory_def] \\ tac
+QED
+
+Theorem handle_exception_ignores_extra_domain[simp]:
+  ignores_extra_domain (handle_exception e)
+Proof
+  simp[handle_exception_def]
+  \\ irule ignore_bind_ignores_extra_domain
+  \\ conj_tac
+  >- ( rw[] \\ tac )
+  \\ tac
+  \\ BasicProvers.TOP_CASE_TAC
+  >- tac
+  \\ rw[]
+  \\ tac
+QED
+
+Theorem update_accounts_ignores_extra_domain[simp]:
+  ignores_extra_domain (update_accounts x)
+Proof
+  rw[update_accounts_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem handle_create_ignores_extra_domain[simp]:
+  ignores_extra_domain (handle_create e)
+Proof
+  simp[handle_create_def]
+  \\ tac
+  \\ BasicProvers.TOP_CASE_TAC \\ simp[]
+  \\ BasicProvers.TOP_CASE_TAC \\ simp[]
+  \\ tac
+QED
+
+Theorem handle_step_ignores_extra_domain[simp]:
+  ignores_extra_domain (handle_step e)
+Proof
+  rw[handle_step_def]
+  \\ irule handle_ignores_extra_domain
+  \\ rw[]
+QED
+
+Theorem inc_pc_or_jump_ignores_extra_domain[simp]:
+  ignores_extra_domain (inc_pc_or_jump x)
+Proof
+  rw[inc_pc_or_jump_def]
+  \\ tac
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ tac \\ rw[]
+QED
+
+(*
+Theorem step_ignores_extra_domain:
+  ignores_extra_domain step
+Proof
+  rw[step_def]
+  \\ irule handle_ignores_extra_domain \\ rw[]
+  \\ tac
+  \\ TRY BasicProvers.TOP_CASE_TAC
+  \\ tac
+QED
+*)
 
 val () = export_theory();
