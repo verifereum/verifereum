@@ -127,18 +127,9 @@ Definition decreases_gas_def:
       ∃c'.
         (SND (m s)).contexts = c'::cs ∧
         c'.msgParams.gasLimit = c.msgParams.gasLimit ∧
-        (c.gasUsed < c'.gasUsed ⇒
-          c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
+        (SND (m s)).msdomain = s.msdomain ∧
+        (c.gasUsed < c'.gasUsed ⇒ c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
         (wf_context c ⇒ wf_context c') ∧
-        (*
-        (wf_accounts s.rollback.accounts ⇒
-         wf_accounts (SND (m s)).rollback.accounts) ∧
-         *)
-         (*
-        (no_change_to_code_size
-           s.rollback.accounts
-           (SND (m s)).rollback.accounts) ∧
-           *)
         if strict ∧ ISL (FST (m s))
         then c.gasUsed < c'.gasUsed
         else c.gasUsed ≤ c'.gasUsed
@@ -498,10 +489,7 @@ Definition decreases_gas_cred_def:
       then (SND (m s)).contexts = []
       else (SND (m s)).contexts ≠ [] ∧
         (ok_state s ⇒ ok_state (SND (m s))) ∧
-        (*
-        no_change_to_code_size
-          s.rollback.accounts (SND (m s)).rollback.accounts ∧
-          *)
+        (SND (m s)).msdomain = s.msdomain ∧
         let (p,q) = (contexts_weight n1 (SND (m s)).contexts,
                      contexts_weight n0 s.contexts) in
         if b ∧ ISL (FST (m s))
@@ -1607,82 +1595,6 @@ Proof
     get_num_contexts_def, set_current_context_def, get_current_context_def]
   \\ Cases_on `x.contexts` \\ gvs []
 QED
-
-(*
-Theorem step_create_code_lemma:
-  do
-    accounts <- get_accounts;
-    assert (LENGTH x' ≤ 49152) OutOfGas;
-    access_address
-      (if two then address_for_create2 senderAddress (EL 3 x) x'
-       else
-         address_for_create senderAddress (lookup_account senderAddress accounts).nonce);
-    gasLeft <- get_gas_left;
-    consume_gas (gasLeft − gasLeft DIV 64);
-    assert_not_static;
-    set_return_data [];
-    sucDepth <- get_num_contexts;
-    if
-      (lookup_account senderAddress accounts).balance < w2n (HD x) ∨
-      SUC (lookup_account senderAddress accounts).nonce ≥ 18446744073709551616 ∨
-      sucDepth > 1024
-    then
-      abort_unuse (gasLeft − gasLeft DIV 64)
-    else if
-      account_already_created
-        (lookup_account
-           (if two then address_for_create2 senderAddress (EL 3 x) x'
-            else
-              address_for_create senderAddress
-                (lookup_account senderAddress accounts).nonce) accounts)
-    then
-      abort_create_exists senderAddress (lookup_account senderAddress accounts)
-    else
-      f accounts gasLeft
-  od =
-  do
-    accounts <- get_accounts;
-    assert (LENGTH x' ≤ 49152) OutOfGas;
-    access_address
-      (if two then address_for_create2 senderAddress (EL 3 x) x'
-       else
-         address_for_create senderAddress (lookup_account senderAddress accounts).nonce);
-    gasLeft <- get_gas_left;
-    consume_gas (gasLeft − gasLeft DIV 64);
-    assert_not_static;
-    set_return_data [];
-    sucDepth <- get_num_contexts;
-    if
-      (lookup_account senderAddress accounts).balance < w2n (HD x) ∨
-      SUC (lookup_account senderAddress accounts).nonce ≥ 18446744073709551616 ∨
-      sucDepth > 1024
-    then
-      abort_unuse (gasLeft − gasLeft DIV 64)
-    else if
-      account_already_created
-        (lookup_account
-           (if two then address_for_create2 senderAddress (EL 3 x) x'
-            else
-              address_for_create senderAddress
-                (lookup_account senderAddress accounts).nonce) accounts)
-    then
-      do a <- get_accounts;
-         assert (a = accounts) Impossible;
-         abort_create_exists senderAddress (lookup_account senderAddress a)
-      od
-    else
-      f accounts gasLeft
-  od
-Proof
-  rw[FUN_EQ_THM, bind_def, ignore_bind_def, get_accounts_def, return_def,
-     assert_not_static_def, set_return_data_def, get_num_contexts_def,
-     assert_def, access_address_def, get_gas_left_def, get_current_context_def,
-     fail_def, consume_gas_def, get_static_def, set_current_context_def]
-   \\ rw[] \\ gvs[]
-   \\ rw[bind_def, ignore_bind_def] \\ gvs[]
-   \\ rw[bind_def, ignore_bind_def, get_accounts_def, return_def, assert_def] \\ gvs[]
-QED
-*)
 
 Theorem decreases_gas_cred_step_create[simp]:
   decreases_gas_cred T 0 0 (step_create two)
@@ -3892,5 +3804,250 @@ Proof
   >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
   >- ( first_x_assum(qspec_then`s`mp_tac) \\ simp[ok_state_def])
 QED
+
+Definition sub_access_sets_def:
+  sub_access_sets s1 s2 ⇔
+  toSet s1.addresses ⊆ toSet s2.addresses ∧
+  toSet s1.storageKeys ⊆ toSet s2.storageKeys
+End
+
+Definition ignores_extra_domain_def:
+  ignores_extra_domain (m: α execution) =
+  ∀s r t d2.
+    sub_access_sets s.msdomain d2 ∧
+    m s = (r, t)
+    ⇒
+    t.msdomain = s.msdomain ∧
+    m (s with msdomain := d2) = (r, t with msdomain := d2)
+End
+
+Theorem handle_ignores_extra_domain:
+  ignores_extra_domain f ∧
+  (∀e. ignores_extra_domain (g e))
+  ⇒
+  ignores_extra_domain (handle f g)
+Proof
+  rw[handle_def, ignores_extra_domain_def]
+  \\ gvs[CaseEq"prod",CaseEq"sum"]
+  \\ first_x_assum (drule_then drule) \\ gs[]
+  \\ strip_tac
+  \\ first_x_assum (drule_at Any) \\ gs[]
+  \\ disch_then drule \\ rw[]
+QED
+
+Theorem bind_ignores_extra_domain:
+  ignores_extra_domain g ∧
+  (∀x. ignores_extra_domain (f x))
+  ⇒
+  ignores_extra_domain (monad_bind g f)
+Proof
+  simp[ignores_extra_domain_def, bind_def]
+  \\ ntac 2 strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ gs[CaseEq"prod"]
+  \\ first_x_assum(drule_then drule)
+  \\ strip_tac \\ gs[CaseEq"sum"]
+  \\ first_x_assum (drule_at Any) \\ simp[]
+  \\ disch_then drule \\ rw[]
+QED
+
+Theorem ignore_bind_ignores_extra_domain:
+  ignores_extra_domain g ∧
+  ignores_extra_domain f
+  ⇒
+  ignores_extra_domain (ignore_bind g f)
+Proof
+  simp[ignore_bind_def]
+  \\ strip_tac
+  \\ irule bind_ignores_extra_domain
+  \\ rw[]
+QED
+
+Theorem return_ignores_extra_domain[simp]:
+  ignores_extra_domain (return x)
+Proof
+  rw[return_def, ignores_extra_domain_def]
+QED
+
+val tac = rpt (
+  (irule bind_ignores_extra_domain \\ rw[]) ORELSE
+  (irule ignore_bind_ignores_extra_domain \\ rw[])
+);
+
+Theorem get_current_context_ignores_extra_domain[simp]:
+  ignores_extra_domain get_current_context
+Proof
+  simp[get_current_context_def, ignores_extra_domain_def]
+  \\ rw[fail_def, return_def]
+QED
+
+Theorem get_gas_left_ignores_extra_domain[simp]:
+  ignores_extra_domain get_gas_left
+Proof
+  rw[get_gas_left_def] \\ tac
+QED
+
+Theorem assert_ignores_extra_domain[simp]:
+  ignores_extra_domain (assert e n)
+Proof
+  rw[assert_def, ignores_extra_domain_def]
+QED
+
+Theorem set_current_context_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_current_context n)
+Proof
+  rw[set_current_context_def, ignores_extra_domain_def, fail_def, return_def]
+  \\ gvs[CaseEq"prod",CaseEq"bool"]
+QED
+
+Theorem consume_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (consume_gas n)
+Proof
+  rw[consume_gas_def] \\ tac
+QED
+
+Theorem set_return_data_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_return_data n)
+Proof
+  rw[set_return_data_def] \\ tac
+QED
+
+Theorem reraise_ignores_extra_domain[simp]:
+  ignores_extra_domain (reraise n)
+Proof
+  rw[reraise_def, ignores_extra_domain_def]
+QED
+
+Theorem inc_pc_ignores_extra_domain[simp]:
+  ignores_extra_domain inc_pc
+Proof
+  rw[inc_pc_def] \\ tac
+QED
+
+Theorem get_output_to_ignores_extra_domain[simp]:
+  ignores_extra_domain get_output_to
+Proof
+  rw[get_output_to_def] \\ tac
+QED
+
+Theorem get_return_data_ignores_extra_domain[simp]:
+  ignores_extra_domain get_return_data
+Proof
+  rw[get_return_data_def] \\ tac
+QED
+
+Theorem get_num_contexts_ignores_extra_domain[simp]:
+  ignores_extra_domain get_num_contexts
+Proof
+  rw[get_num_contexts_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem pop_context_ignores_extra_domain[simp]:
+  ignores_extra_domain pop_context
+Proof
+  rw[pop_context_def, ignores_extra_domain_def, return_def, fail_def]
+  \\ gvs[CaseEq"bool"]
+QED
+
+Theorem unuse_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (unuse_gas n)
+Proof
+  rw[unuse_gas_def] \\ tac
+QED
+
+Theorem push_logs_ignores_extra_domain[simp]:
+  ignores_extra_domain (push_logs n)
+Proof
+  rw[push_logs_def] \\ tac
+QED
+
+Theorem push_stack_ignores_extra_domain[simp]:
+  ignores_extra_domain (push_stack n)
+Proof
+  rw[push_stack_def] \\ tac
+QED
+
+Theorem update_gas_refund_ignores_extra_domain[simp]:
+  ignores_extra_domain (update_gas_refund n)
+Proof
+  Cases_on`n` \\ rw[update_gas_refund_def] \\ tac
+QED
+
+Theorem set_rollback_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_rollback n)
+Proof
+  rw[set_rollback_def, ignores_extra_domain_def, return_def, fail_def]
+QED
+
+Theorem pop_and_incorporate_context_ignores_extra_domain[simp]:
+  ignores_extra_domain (pop_and_incorporate_context x)
+Proof
+  rw[pop_and_incorporate_context_def] \\ tac
+QED
+
+Theorem write_memory_ignores_extra_domain[simp]:
+  ignores_extra_domain (write_memory n m)
+Proof
+  rw[write_memory_def] \\ tac
+QED
+
+Theorem handle_exception_ignores_extra_domain[simp]:
+  ignores_extra_domain (handle_exception e)
+Proof
+  simp[handle_exception_def]
+  \\ irule ignore_bind_ignores_extra_domain
+  \\ conj_tac
+  >- ( rw[] \\ tac )
+  \\ tac
+  \\ BasicProvers.TOP_CASE_TAC
+  >- tac
+  \\ rw[]
+  \\ tac
+QED
+
+Theorem update_accounts_ignores_extra_domain[simp]:
+  ignores_extra_domain (update_accounts x)
+Proof
+  rw[update_accounts_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem handle_create_ignores_extra_domain[simp]:
+  ignores_extra_domain (handle_create e)
+Proof
+  simp[handle_create_def]
+  \\ tac
+  \\ BasicProvers.TOP_CASE_TAC \\ simp[]
+  \\ BasicProvers.TOP_CASE_TAC \\ simp[]
+  \\ tac
+QED
+
+Theorem handle_step_ignores_extra_domain[simp]:
+  ignores_extra_domain (handle_step e)
+Proof
+  rw[handle_step_def]
+  \\ irule handle_ignores_extra_domain
+  \\ rw[]
+QED
+
+Theorem inc_pc_or_jump_ignores_extra_domain[simp]:
+  ignores_extra_domain (inc_pc_or_jump x)
+Proof
+  rw[inc_pc_or_jump_def]
+  \\ tac
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ tac \\ rw[]
+QED
+
+(*
+Theorem step_ignores_extra_domain:
+  ignores_extra_domain step
+Proof
+  rw[step_def]
+  \\ irule handle_ignores_extra_domain \\ rw[]
+  \\ tac
+  \\ TRY BasicProvers.TOP_CASE_TAC
+  \\ tac
+QED
+*)
 
 val () = export_theory();
