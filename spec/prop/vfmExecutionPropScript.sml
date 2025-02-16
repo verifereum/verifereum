@@ -4388,20 +4388,116 @@ Proof
   rw[step_sstore_def] \\ tac
 QED
 
-(*
+Theorem set_accounts_ignores_extra_domain[simp]:
+  ignores_extra_domain (set_accounts _)
+Proof
+  rw[set_accounts_def] \\ tac
+QED
+
+Theorem add_to_delete_ignores_extra_domain[simp]:
+  ignores_extra_domain (add_to_delete _)
+Proof
+  rw[add_to_delete_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem step_self_destruct_ignores_extra_domain[simp]:
+  ignores_extra_domain step_self_destruct
+Proof
+  rw[step_self_destruct_def] \\ tac
+QED
+
+Theorem abort_unuse_ignores_extra_domain[simp]:
+  ignores_extra_domain (abort_unuse x)
+Proof
+  rw[abort_unuse_def] \\ tac
+QED
+
+Theorem abort_call_value_ignores_extra_domain[simp]:
+  ignores_extra_domain (abort_call_value x)
+Proof
+  rw[abort_call_value_def] \\ tac
+QED
+
+Theorem abort_create_exists_ignores_extra_domain[simp]:
+  ignores_extra_domain (abort_create_exists x y)
+Proof
+  rw[abort_create_exists_def] \\ tac
+QED
+
+Theorem get_caller_ignores_extra_domain[simp]:
+  ignores_extra_domain get_caller
+Proof
+  rw[get_caller_def] \\ tac
+QED
+
+Theorem get_value_ignores_extra_domain[simp]:
+  ignores_extra_domain get_value
+Proof
+  rw[get_value_def] \\ tac
+QED
+
+Theorem get_rollback_ignores_extra_domain[simp]:
+  ignores_extra_domain get_rollback
+Proof
+  rw[get_rollback_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem push_context_ignores_extra_domain[simp]:
+  ignores_extra_domain (push_context x)
+Proof
+  rw[push_context_def, ignores_extra_domain_def, return_def]
+QED
+
+Theorem dispatch_precompiles_ignores_extra_domain[simp]:
+  ignores_extra_domain (dispatch_precompiles x)
+Proof
+  cheat
+QED
+
+Theorem proceed_call_ignores_extra_domain[simp]:
+  ignores_extra_domain (proceed_call a b c d e f g h i)
+Proof
+  simp[proceed_call_def] \\ tac
+QED
+
+Theorem proceed_create_ignores_extra_domain[simp]:
+  ignores_extra_domain (proceed_create a b c d e f g)
+Proof
+  simp[proceed_create_def] \\ tac
+QED
+
+Theorem step_call_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_call x)
+Proof
+  simp[step_call_def, UNCURRY] \\ tac
+QED
+
+Theorem step_create_ignores_extra_domain[simp]:
+  ignores_extra_domain (step_create x)
+Proof
+  simp[step_create_def] \\ tac
+QED
+
 Theorem step_inst_ignores_extra_domain[simp]:
   ignores_extra_domain (step_inst op)
 Proof
   Cases_on`op` \\ rw[step_inst_def] \\ tac
+QED
 
+(*
 Theorem step_ignores_extra_domain:
   ignores_extra_domain step
 Proof
   rw[step_def]
+  handle_step_def
+  handle_create_def <- needs to abort earlier
   \\ irule handle_ignores_extra_domain \\ rw[]
   \\ tac
   \\ TRY BasicProvers.TOP_CASE_TAC
-  \\ tac
+  \\ tac \\ rw[handle_step_def]
+  \\ rw[handle_def, handle_create_def, bind_def, CaseEq"prod", CaseEq"sum"]
+  \\ rw[PULL_EXISTS, get_return_data_def, bind_def, return_def,
+        get_current_context_def, fail_def]
 QED
 *)
 
