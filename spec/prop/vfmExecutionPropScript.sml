@@ -2748,11 +2748,70 @@ Proof
   rw[update_accounts_def, preserves_wf_accounts_def, return_def]
 QED
 
+Theorem preserves_wf_accounts_precompile_ecrecover[simp]:
+  preserves_wf_accounts precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_ecadd[simp]:
+  preserves_wf_accounts precompile_ecadd
+Proof
+  rw[precompile_ecadd_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_ecmul[simp]:
+  preserves_wf_accounts precompile_ecmul
+Proof
+  rw[precompile_ecmul_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_ecpairing[simp]:
+  preserves_wf_accounts precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_blake2f[simp]:
+  preserves_wf_accounts precompile_blake2f
+Proof
+  rw[precompile_blake2f_def]
+QED
+
+Theorem preserves_wf_accounts_precompile_modexp[simp]:
+  preserves_wf_accounts precompile_modexp
+Proof
+  rw[precompile_modexp_def]
+  \\ rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_precompile_sha2_256[simp]:
+  preserves_wf_accounts precompile_sha2_256
+Proof
+  rw[precompile_sha2_256_def]
+  \\ rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_precompile_identity[simp]:
+  preserves_wf_accounts precompile_identity
+Proof
+  rw[precompile_identity_def]
+  \\ rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_precompile_ripemd_160[simp]:
+  preserves_wf_accounts precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def]
+QED
+
 Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
   preserves_wf_accounts (dispatch_precompiles x)
 Proof
   rw[dispatch_precompiles_def]
-  \\ cheat
 QED
 
 Theorem preserves_wf_accounts_step_call[simp]:
