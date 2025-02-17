@@ -89,14 +89,13 @@ Datatype:
    ; addRefund  : num
    ; subRefund  : num
    ; logs       : event list
-   ; rollback   : rollback_state
    ; msgParams  : message_parameters
    |>
 End
 
 Datatype:
   execution_state =
-  <| contexts : context list
+  <| contexts : (context # rollback_state) list
    ; txParams : transaction_parameters
    ; rollback : rollback_state
    ; msdomain : access_sets
@@ -180,7 +179,7 @@ Definition initial_tx_params_def:
 End
 
 Definition initial_context_def:
-  initial_context rb callee code static rd t =
+  initial_context callee code static rd t =
   <| stack      := []
    ; memory     := []
    ; pc         := 0
@@ -190,23 +189,21 @@ Definition initial_context_def:
    ; addRefund  := 0
    ; subRefund  := 0
    ; logs       := []
-   ; rollback   := rb
    ; msgParams  := initial_msg_params callee code static rd t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context rb fr c s rd t).stack = [] ∧
-  (initial_context rb fr c s rd t).memory = [] ∧
-  (initial_context rb fr c s rd t).pc = 0 ∧
-  (initial_context rb fr c s rd t).jumpDest = NONE ∧
-  (initial_context rb fr c s rd t).returnData = [] ∧
-  (initial_context rb fr c s rd t).gasUsed = 0 ∧
-  (initial_context rb fr c s rd t).addRefund = 0 ∧
-  (initial_context rb fr c s rd t).subRefund = 0 ∧
-  (initial_context rb fr c s rd t).logs = [] ∧
-  (initial_context rb fr c s rd t).rollback = rb ∧
-  (initial_context rb fr c s rd t).msgParams  = initial_msg_params fr c s rd t
+  (initial_context fr c s rd t).stack = [] ∧
+  (initial_context fr c s rd t).memory = [] ∧
+  (initial_context fr c s rd t).pc = 0 ∧
+  (initial_context fr c s rd t).jumpDest = NONE ∧
+  (initial_context fr c s rd t).returnData = [] ∧
+  (initial_context fr c s rd t).gasUsed = 0 ∧
+  (initial_context fr c s rd t).addRefund = 0 ∧
+  (initial_context fr c s rd t).subRefund = 0 ∧
+  (initial_context fr c s rd t).logs = [] ∧
+  (initial_context fr c s rd t).msgParams  = initial_msg_params fr c s rd t
 Proof
   rw[initial_context_def]
 QED
@@ -287,9 +284,9 @@ Definition initial_state_def:
     let code = code_from_tx accs tx in
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback accounts accesses in
-    let ctxt = initial_context rb callee code static rd tx in
+    let ctxt = initial_context callee code static rd tx in
     SOME $
-    <| contexts := [apply_intrinsic_cost tx.accessList $ ctxt]
+    <| contexts := [(apply_intrinsic_cost tx.accessList $ ctxt, rb)]
      ; txParams := initial_tx_params chainId prevHashes blk tx
      ; rollback := rb
      ; msdomain := dom

@@ -190,7 +190,7 @@ Definition get_current_context_def:
   if s.contexts = [] then
     fail Impossible s
   else
-    return (HD s.contexts) s
+    return (FST (HD s.contexts)) s
 End
 
 Definition set_current_context_def:
@@ -198,7 +198,7 @@ Definition set_current_context_def:
   if s.contexts = [] then
     fail Impossible s
   else
-    return () (s with contexts := c::(TL s.contexts))
+    return () (s with contexts := (c, SND(HD s.contexts))::(TL s.contexts))
 End
 
 Definition get_num_contexts_def:
@@ -206,7 +206,7 @@ Definition get_num_contexts_def:
 End
 
 Definition push_context_def:
-  push_context c s = return () $ s with contexts updated_by CONS c
+  push_context crb s = return () $ s with contexts updated_by CONS crb
 End
 
 Definition pop_context_def:
@@ -254,7 +254,7 @@ Definition get_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return (LAST s.contexts).rollback.accounts s
+      return (SND (LAST s.contexts)).accounts s
 End
 
 Definition get_gas_left_def:
@@ -1002,7 +1002,8 @@ Definition proceed_create_def:
     update_accounts $
       transfer_value senderAddress address value o
       update_account address (toCreate with nonce updated_by SUC);
-    push_context $ initial_context rollback address code F (Code address) subContextTx
+    push_context
+      (initial_context address code F (Code address) subContextTx, rollback)
   od
 End
 
@@ -1195,8 +1196,8 @@ Definition proceed_call_def:
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
-    context <<- initial_context rollback callee code subStatic outputTo subContextTx;
-    push_context context;
+    context <<- initial_context callee code subStatic outputTo subContextTx;
+    push_context (context, rollback);
     if fIN address precompile_addresses
     then dispatch_precompiles address
     else return ()
@@ -1362,13 +1363,14 @@ End
 Definition pop_and_incorporate_context_def:
   pop_and_incorporate_context success = do
     calleeGasLeft <- get_gas_left;
-    callee <- pop_context;
+    callee_rb <- pop_context;
+    callee <<- FST callee_rb;
     unuse_gas calleeGasLeft;
     if success then do
       push_logs callee.logs;
       update_gas_refund (callee.addRefund, callee.subRefund)
     od else
-      set_rollback callee.rollback
+      set_rollback (SND callee_rb)
   od
 End
 
@@ -1468,7 +1470,7 @@ Definition post_transaction_accounting_def:
   let (gasLimit, gasUsed, addRefund, subRefund, logs, returnData) =
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
     then (0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
-    else let ctxt = HD t.contexts in
+    else let ctxt = FST $ HD t.contexts in
       (ctxt.msgParams.gasLimit, ctxt.gasUsed,
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
@@ -1503,7 +1505,7 @@ Definition run_create_def:
   case initial_state dom static chainId prevHashes blk accounts tx of
     NONE => NONE
   | SOME s => SOME $
-    let ctxt = HD s.contexts in
+    let ctxt = FST $ HD s.contexts in
     let calleeAddress = ctxt.msgParams.callee in
     if IS_SOME tx.to then
       INR $ (s.rollback.accounts, s with rollback updated_by
@@ -1514,7 +1516,10 @@ Definition run_create_def:
       let callee = lookup_account calleeAddress accounts in
       if account_already_created callee then
         INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
-              (s with contexts := [ctxt with gasUsed := ctxt.msgParams.gasLimit])
+              (s with contexts := [
+                (ctxt with gasUsed := ctxt.msgParams.gasLimit,
+                 SND $ HD s.contexts)
+               ])
       else
         INR $ (accounts, s with rollback updated_by (λr. r with accounts updated_by (
           transfer_value tx.from calleeAddress tx.value o
