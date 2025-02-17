@@ -1393,8 +1393,7 @@ Definition handle_create_def:
 End
 
 Definition handle_exception_def:
-  handle_exception e =
-  if vfm_abort e then reraise e else do
+  handle_exception e = do
     success <<- (e = NONE);
     if ¬success ∧ e ≠ SOME Reverted then do
       gasLeft <- get_gas_left;
@@ -1426,7 +1425,9 @@ Definition handle_exception_def:
 End
 
 Definition handle_step_def:
-  handle_step e = handle (handle_create e) handle_exception
+  handle_step e =
+  if vfm_abort e then reraise e else
+  handle (handle_create e) handle_exception
 End
 
 Definition step_def:

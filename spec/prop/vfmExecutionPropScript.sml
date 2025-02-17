@@ -1853,7 +1853,6 @@ Proof
     \\ irule decreases_gas_cred_handle
     \\ CONJ_TAC >- (
       simp [handle_exception_def] \\ strip_tac
-      \\ IF_CASES_TAC >- rw[]
       \\ irule decreases_gas_cred_ignore_bind_mono
       \\ CONV_TAC SWAP_EXISTS_CONV \\ qexists_tac `F`
       \\ simp []
@@ -2894,7 +2893,6 @@ Proof
   \\ conj_tac
   >- (
     simp[handle_exception_def] \\ gen_tac
-    \\ IF_CASES_TAC >- gs[]
     \\ irule preserves_wf_accounts_ignore_bind
     \\ reverse conj_tac
     >- (
@@ -3776,7 +3774,6 @@ Proof
   \\ conj_tac
   >- (
     simp[handle_exception_def] \\ gen_tac
-    \\ IF_CASES_TAC >- gs[]
     \\ irule limits_num_contexts_ignore_bind_same
     \\ reverse conj_tac
     >- ( rw[] \\ tac )
@@ -3825,7 +3822,7 @@ Definition ignores_extra_domain_def:
         m (s with msdomain := d2) = (r, t with msdomain := d2))
 End
 
-Theorem handle_ignores_extra_domain:
+Theorem handle_ignores_extra_domain_allow:
   ignores_extra_domain f ∧
   (∀e. if (∃x. e = SOME (OutsideDomain x))
        then (∀s. ∃t. (g e) s = (INR e, t) ∧ t.msdomain = s.msdomain)
@@ -3839,6 +3836,21 @@ Proof
   \\ first_x_assum(qspec_then`e`mp_tac) \\ rw[]
   \\ gs[]
   \\ metis_tac[PAIR_EQ]
+QED
+
+Theorem handle_ignores_extra_domain:
+  ignores_extra_domain f ∧
+  (∀s x. FST (f s) ≠ INR (SOME (OutsideDomain x))) ∧
+  (∀e. (∀x. e ≠ SOME (OutsideDomain x)) ⇒ ignores_extra_domain (g e))
+  ⇒
+  ignores_extra_domain (handle f g)
+Proof
+  rw[handle_def, ignores_extra_domain_def]
+  \\ gvs[CaseEq"prod",CaseEq"sum"]
+  \\ first_x_assum drule \\ gs[]
+  \\ first_x_assum(qspec_then`e`mp_tac) \\ rw[]
+  \\ gs[]
+  \\ metis_tac[PAIR_EQ, FST]
 QED
 
 Theorem bind_ignores_extra_domain:
@@ -4001,7 +4013,6 @@ Theorem handle_exception_ignores_extra_domain[simp]:
   ignores_extra_domain (handle_exception e)
 Proof
   simp[handle_exception_def]
-  \\ IF_CASES_TAC >- gs[]
   \\ irule ignore_bind_ignores_extra_domain
   \\ conj_tac
   >- ( rw[] \\ tac )
@@ -4034,7 +4045,15 @@ Proof
   rw[handle_step_def]
   \\ irule handle_ignores_extra_domain
   \\ rw[]
-  \\ rw[handle_exception_def, reraise_def]
+  \\ rw[handle_create_def, bind_def, ignore_bind_def, get_return_data_def,
+        get_output_to_def, get_current_context_def, fail_def, return_def]
+  \\ BasicProvers.TOP_CASE_TAC \\ rw[reraise_def]
+  >- (strip_tac \\ gs[])
+  \\ BasicProvers.TOP_CASE_TAC \\ rw[reraise_def]
+  \\ rw[assert_def, bind_def, reraise_def, consume_gas_def,
+        get_current_context_def, return_def, ignore_bind_def,
+        set_current_context_def, update_accounts_def]
+  >- (strip_tac \\ gs[])
 QED
 
 Theorem inc_pc_or_jump_ignores_extra_domain[simp]:
@@ -4484,21 +4503,15 @@ Proof
   Cases_on`op` \\ rw[step_inst_def] \\ tac
 QED
 
-(*
 Theorem step_ignores_extra_domain:
   ignores_extra_domain step
 Proof
   rw[step_def]
-  handle_step_def
-  handle_create_def <- needs to abort earlier
-  \\ irule handle_ignores_extra_domain \\ rw[]
+  \\ irule handle_ignores_extra_domain_allow \\ rw[]
+  >- ( rw[handle_step_def, reraise_def] )
   \\ tac
-  \\ TRY BasicProvers.TOP_CASE_TAC
-  \\ tac \\ rw[handle_step_def]
-  \\ rw[handle_def, handle_create_def, bind_def, CaseEq"prod", CaseEq"sum"]
-  \\ rw[PULL_EXISTS, get_return_data_def, bind_def, return_def,
-        get_current_context_def, fail_def]
+  \\ BasicProvers.TOP_CASE_TAC \\ rw[]
+  \\ tac
 QED
-*)
 
 val () = export_theory();
