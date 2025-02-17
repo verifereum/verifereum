@@ -460,6 +460,15 @@ val () = “get_return_data_check x y s” |>
   SIMP_CONV std_ss [get_return_data_check_def, bind_def, ignore_bind_def]
   |> cv_auto_trans;
 
+val set_current_context_pre_def = cv_auto_trans_pre set_current_context_def;
+
+Theorem set_current_context_pre[cv_pre]:
+  set_current_context_pre c s
+Proof
+  rw[set_current_context_pre_def]
+  \\ Cases_on`s` \\ rw[] \\ gs[]
+QED
+
 val () = “set_return_data r s” |>
   SIMP_CONV std_ss [set_return_data_def, bind_def, LET_RATOR]
   |> cv_auto_trans;
@@ -528,7 +537,7 @@ Theorem pop_stack_INL_LENGTH:
   pop_stack n s = (INL x, y) ⇒
   LENGTH x = n ∧
   s.contexts ≠ [] ∧
-  n ≤ LENGTH (HD s.contexts).stack
+  n ≤ LENGTH (FST (HD s.contexts)).stack
 Proof
   rw[pop_stack_def, bind_def, ignore_bind_def, get_current_context_def,
      fail_def, return_def, assert_def, CaseEq"sum", CaseEq"prod"]
@@ -751,7 +760,7 @@ val () = “inc_pc_or_jump n s” |>
 
 val () = “pop_and_incorporate_context b s” |>
   SIMP_CONV std_ss [
-    pop_and_incorporate_context_def,
+    pop_and_incorporate_context_def, LET_RATOR,
     bind_def, ignore_bind_def, COND_RATOR
   ] |> cv_auto_trans;
 
@@ -843,8 +852,9 @@ Theorem run_create_pre[cv_pre]:
   run_create_pre d st c p b a t
 Proof
   rw[run_create_pre_def, initial_state_def,
-     pre_transaction_updates_def,
+     pre_transaction_updates_def, execution_state_component_equality,
      initial_rollback_def, code_from_tx_def]
+  \\ strip_tac \\ gvs[]
 QED
 
 val () = run_transaction_def |> cv_auto_trans;
