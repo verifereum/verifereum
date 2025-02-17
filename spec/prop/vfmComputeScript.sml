@@ -772,9 +772,11 @@ val () = “handle_exception e s” |>
     prod_CASE_rator, return_destination_CASE_rator
   ] |> cv_auto_trans;
 
+val () = cv_auto_trans vfm_abort_def;
+
 val () = “handle_step e s” |>
   SIMP_CONV std_ss [
-    handle_step_def, bind_def, ignore_bind_def
+    handle_step_def, bind_def, ignore_bind_def, COND_RATOR
   ] |> cv_auto_trans;
 
 val () = “step s” |>
