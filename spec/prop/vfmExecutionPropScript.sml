@@ -1694,12 +1694,6 @@ Proof
   \\ irule_at Any decreases_gas_set_return_data \\ rw []
 QED
 
-Theorem decreases_gas_set_accounts[simp]:
-  decreases_gas F (set_accounts x)
-Proof
-  rw [set_accounts_def]
-QED
-
 Theorem decreases_gas_add_to_delete[simp]:
   decreases_gas F (add_to_delete a)
 Proof
@@ -1725,7 +1719,7 @@ Proof
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_assert_not_static \\ rw []
   \\ irule_at Any decreases_gas_ignore_bind_right
-  \\ irule_at Any decreases_gas_set_accounts \\ rw []
+  \\ irule_at Any decreases_gas_update_accounts \\ rw []
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_original \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right \\ reverse (rw [])
@@ -2611,7 +2605,7 @@ val defs = [bind_def, ignore_bind_def, access_address_def,
         get_current_context_def, assert_def, set_current_context_def,
         assert_not_static_def, add_to_delete_def, finish_def,
         set_return_data_def, get_num_contexts_def, get_rollback_def,
-        get_static_def, set_accounts_def, update_accounts_def, get_gas_left_def,
+        get_static_def, update_accounts_def, get_gas_left_def,
         get_original_def, get_accounts_def, consume_gas_def, return_def, fail_def]
 
 Theorem wf_account_state_with_balance[simp]:
@@ -3433,7 +3427,7 @@ Theorem limits_num_contexts_step_self_destruct[simp]:
   limits_num_contexts n n step_self_destruct
 Proof
   rw[step_self_destruct_def] \\ tac
-  \\ rw[update_accounts_def, set_accounts_def, limits_num_contexts_def,
+  \\ rw[update_accounts_def, limits_num_contexts_def,
         return_def]
 QED
 
