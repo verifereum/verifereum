@@ -228,10 +228,6 @@ Definition update_accounts_def:
     s with rollback updated_by (λr. r with accounts updated_by f)
 End
 
-Definition set_accounts_def:
-  set_accounts a = update_accounts (K a)
-End
-
 Definition get_tStorage_def:
   get_tStorage s = return s.rollback.tStorage s
 End
@@ -946,7 +942,7 @@ Definition step_self_destruct_def:
                      then self_destruct_new_account_cost else 0;
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     assert_not_static;
-    set_accounts $ transfer_value senderAddress address balance accounts;
+    update_accounts $ transfer_value senderAddress address balance;
     original <- get_original;
     originalContract <<- lookup_account senderAddress original;
     if account_empty originalContract then do
