@@ -3788,6 +3788,15 @@ Proof
      account_state_component_equality]
 QED
 
+Theorem accounts_agree_modulo_storage_trans:
+  accounts_agree_modulo_storage a a1 a2 ∧
+  accounts_agree_modulo_storage a a2 a3 ⇒
+  accounts_agree_modulo_storage a a1 a3
+Proof
+  rw[accounts_agree_modulo_storage_def]
+  \\ gvs[account_state_component_equality]
+QED
+
 Definition rollback_states_agree_modulo_accounts_def:
   rollback_states_agree_modulo_accounts r1 r2 ⇔
   r1 = r2 with accounts := r1.accounts
@@ -3798,6 +3807,15 @@ Theorem rollback_states_agree_modulo_accounts_refl[simp]:
 Proof
   rw[rollback_states_agree_modulo_accounts_def,
      rollback_state_component_equality]
+QED
+
+Theorem rollback_states_agree_modulo_accounts_trans:
+  rollback_states_agree_modulo_accounts r1 r2 ∧
+  rollback_states_agree_modulo_accounts r2 r3 ⇒
+  rollback_states_agree_modulo_accounts r1 r3
+Proof
+  rw[rollback_states_agree_modulo_accounts_def]
+  \\ gvs[rollback_state_component_equality]
 QED
 
 Definition states_agree_modulo_accounts_def:
@@ -3815,6 +3833,15 @@ Theorem states_agree_modulo_accounts_refl[simp]:
 Proof
   rw[states_agree_modulo_accounts_def]
   \\ irule EVERY2_refl \\ rw[]
+QED
+
+Theorem states_agree_modulo_accounts_trans:
+  states_agree_modulo_accounts s1 s2 ∧
+  states_agree_modulo_accounts s2 s3 ⇒
+  states_agree_modulo_accounts s1 s3
+Proof
+  rw[states_agree_modulo_accounts_def]
+  \\ metis_tac[rollback_states_agree_modulo_accounts_trans, LIST_REL_trans]
 QED
 
 Definition domain_compatible_def:
@@ -3836,6 +3863,21 @@ Proof
   rw[domain_compatible_def]
   \\ irule EVERY2_refl
   \\ rw[]
+QED
+
+Theorem domain_compatible_trans:
+  domain_compatible s1 s2 ∧
+  domain_compatible s2 s3 ⇒
+  domain_compatible s1 s3
+Proof
+  rw[domain_compatible_def]
+  >- metis_tac[states_agree_modulo_accounts_trans]
+  >- metis_tac[accounts_agree_modulo_storage_trans, LIST_REL_trans,
+               states_agree_modulo_accounts_def]
+  \\ irule LIST_REL_trans
+  \\ gs[states_agree_modulo_accounts_def]
+  \\ qexists_tac`all_accounts s2`
+  \\ gs[]
 QED
 
 Theorem domain_compatible_lengths:
@@ -4296,6 +4338,29 @@ Proof
   \\ gs[all_accounts_def]
 QED
 
+Theorem get_accounts_ignore_extra_domain_slot_bind:
+  (∀x y s.
+    (∀a k. fIN (SK a k) s.msdomain.storageKeys ⇒
+           (x a).storage k = (y a).storage k) ⇒
+         f x s = f y s) ∧
+  (∀x. ignores_extra_domain (f x))
+  ⇒
+  ignores_extra_domain (monad_bind get_accounts f)
+Proof
+  rw[bind_def, get_accounts_def, ignores_extra_domain_def, return_def]
+  >- metis_tac[]
+  \\ first_x_assum drule
+  \\ strip_tac
+  \\ first_x_assum drule
+  \\ strip_tac
+  \\ goal_assum drule
+  \\ first_x_assum(CHANGED_TAC o SUBST1_TAC o SYM)
+  \\ irule EQ_SYM
+  \\ first_x_assum irule
+  \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ gs[all_accounts_def]
+QED
+
 Theorem get_accounts_ignore_extra_domain_pred_bind:
   (∀x y s. p s ∧
     (∀a. fIN a s.msdomain.addresses ⇒ accounts_agree_modulo_storage a x y) ⇒
@@ -4387,6 +4452,48 @@ Proof
   \\ fsrw_tac[DNF_ss][]
   \\ qmatch_goalsub_abbrev_tac`f _ ss`
   \\ first_x_assum(qspec_then`ss`mp_tac)
+  \\ ( reverse impl_tac
+  >- (
+    strip_tac
+    \\ disj1_tac
+    \\ goal_assum drule
+    \\ rw[]
+    \\ gs[domain_compatible_def, states_agree_modulo_accounts_def] ) )
+  \\ gs[domain_compatible_def, Abbr`ss`, all_accounts_def]
+  \\ gs[states_agree_modulo_accounts_def,
+        rollback_states_agree_modulo_accounts_def]
+  \\ gs[rollback_state_component_equality]
+QED
+
+Theorem access_address_ignore_extra_domain_pred_bind:
+  (∀x. ignores_extra_domain_pred
+       (λs. q s ∧ a ∈ toSet s.msdomain.addresses)
+       (f x)) ∧
+  (∀s. q s ⇒ q (SND (access_address a s)))
+  ⇒
+  ignores_extra_domain_pred q (monad_bind (access_address a) f)
+Proof
+  rw[access_address_def, ignores_extra_domain_def, return_def, fail_def,
+     ignores_extra_domain_pred_def, bind_def]
+  \\ gvs[CaseEq"bool", CaseEq"prod", CaseEq"sum"]
+  \\ gs[sub_access_sets_def, SUBSET_DEF, fIN_IN]
+  \\ `cold_access_cost ≠ warm_access_cost` by EVAL_TAC
+  \\ TRY(first_x_assum (drule_at (Pat`f _ _ = _`)) \\ rw[])
+  \\ TRY(
+     gs[domain_compatible_def, states_agree_modulo_accounts_def,
+        rollback_states_agree_modulo_accounts_def,
+        rollback_state_component_equality, all_accounts_def] \\ NO_TAC)
+  \\ fsrw_tac[DNF_ss][]
+  \\ TRY(first_x_assum drule \\ rw[] \\ NO_TAC)
+  \\ TRY (
+    first_x_assum irule \\ gvs[]
+    \\ last_x_assum drule \\ rw[]
+    \\ NO_TAC)
+  \\ qmatch_goalsub_abbrev_tac`f _ ss`
+  \\ first_x_assum(qspec_then`ss`mp_tac)
+  \\ (impl_tac >- (
+    first_x_assum drule \\ rw[]
+    \\ first_x_assum drule \\ rw[] ))
   \\ ( reverse impl_tac
   >- (
     strip_tac
@@ -4826,56 +4933,345 @@ Proof
   rw[write_transient_storage_def] \\ tac
 QED
 
-(*
-TODO: needs to be a bind theorem (similar to get_accounts)
-Theorem get_original_ignores_extra_domain[simp]:
-  ignores_extra_domain get_original
+Theorem get_original_ignores_extra_domain_pred_slot_bind:
+  (∀x y s.
+      p s ∧
+      (∀a k.
+         fIN (SK a k) s.msdomain.storageKeys ⇒
+         (x a).storage k = (y a).storage k) ⇒
+      f x s = f y s) ∧ (∀s s'. p s ∧ domain_compatible s s' ⇒ p s') ∧
+   (∀x. ignores_extra_domain_pred p (f x))
+  ⇒
+  ignores_extra_domain_pred p (monad_bind get_original f)
 Proof
-  rw[get_original_def, ignores_extra_domain_def, return_def, fail_def]
-  \\ gvs[CaseEq"bool"]
-  \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
+  rw[bind_def, get_original_def, ignores_extra_domain_pred_def, return_def,
+     CaseEq"bool",CaseEq"prod",CaseEq"sum", fail_def]
+  \\ TRY (qmatch_rename_tac`_.msdomain = _.msdomain` \\ metis_tac[])
+  \\ fsrw_tac[DNF_ss][]
+  >- ( drule domain_compatible_lengths \\ rw[] )
+  \\ disj2_tac
   \\ qspec_then`s.contexts`strip_assume_tac SNOC_CASES
-  \\ qspec_then`s'.contexts`strip_assume_tac SNOC_CASES
-  \\ gvs[MAP_SNOC, LIST_REL_SNOC]
-  \\ gvs[rollback_states_agree_modulo_accounts_def]
+  \\ qmatch_asmsub_rename_tac`domain_compatible s ss`
+  \\ qspec_then`ss.contexts`strip_assume_tac SNOC_CASES
+  >- ( drule domain_compatible_lengths \\ rw[] )
+  \\ gvs[]
+  \\ first_x_assum irule
+  \\ goal_assum drule \\ rw[]
+  \\ first_x_assum(CHANGED_TAC o SUBST1_TAC o SYM)
+  \\ irule EQ_SYM
+  \\ first_x_assum irule
+  \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ gs[all_accounts_def]
+QED
 
+Theorem get_original_ignores_extra_domain_slot_bind:
+   (∀x y s.
+      (∀a k.
+         fIN (SK a k) s.msdomain.storageKeys ⇒
+         (x a).storage k = (y a).storage k) ⇒
+      f x s = f y s) ∧ (∀x. ignores_extra_domain (f x)) ⇒
+   ignores_extra_domain (monad_bind get_original f)
+Proof
+  rw[bind_def, get_original_def, ignores_extra_domain_def, return_def,
+     CaseEq"bool",CaseEq"prod",CaseEq"sum", fail_def]
+  \\ TRY (qmatch_rename_tac`_.msdomain = _.msdomain` \\ metis_tac[])
+  \\ fsrw_tac[DNF_ss][]
+  >- ( drule domain_compatible_lengths \\ rw[] )
+  \\ disj2_tac
+  \\ qspec_then`s.contexts`strip_assume_tac SNOC_CASES
+  \\ qmatch_asmsub_rename_tac`domain_compatible s ss`
+  \\ qspec_then`ss.contexts`strip_assume_tac SNOC_CASES
+  >- ( drule domain_compatible_lengths \\ rw[] )
+  \\ gvs[]
+  \\ first_x_assum irule
+  \\ goal_assum (drule_at Any) \\ rw[]
+  \\ first_x_assum(CHANGED_TAC o SUBST1_TAC o SYM)
+  \\ irule EQ_SYM
+  \\ first_x_assum irule
+  \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ gs[all_accounts_def]
 QED
 
 Theorem step_sstore_gas_consumption_ignores_extra_domain[simp]:
   ignores_extra_domain (step_sstore_gas_consumption z y x)
 Proof
-  rw[step_sstore_gas_consumption_def] \\ tac
+  simp[step_sstore_gas_consumption_def]
+  \\ qpat_abbrev_tac`b0 = COND _ _ _`
+  \\ irule bind_ignores_extra_domain \\ rw[]
+  \\ irule ignore_bind_ignores_extra_domain \\ rw[]
+  \\ irule get_accounts_ignore_extra_domain_slot_bind
+  \\ conj_tac
+  >- (
+    simp[]
+    \\ rpt gen_tac \\ strip_tac
+    \\ gs[lookup_account_def, lookup_storage_def]
+    \\ simp[bind_def]
+    \\ TOP_CASE_TAC \\ TOP_CASE_TAC \\ gs[]
+    \\ TOP_CASE_TAC \\ TOP_CASE_TAC \\ gs[]
+    \\ `r = s`
+    by gvs[get_original_def, CaseEq"bool", return_def, fail_def]
+    \\ gvs[access_slot_def, CaseEq"bool", return_def, fail_def] )
+  \\ gen_tac \\ simp[]
+  \\ irule get_original_ignores_extra_domain_slot_bind
+  \\ conj_tac
+  >- (
+    simp[]
+    \\ rpt gen_tac \\ strip_tac
+    \\ gs[lookup_account_def, lookup_storage_def]
+    \\ simp[bind_def]
+    \\ TOP_CASE_TAC \\ TOP_CASE_TAC \\ gs[]
+    \\ gvs[access_slot_def, CaseEq"bool", return_def, fail_def] )
+  \\ gen_tac \\ simp[]
+  \\ tac
 QED
 
 Theorem write_storage_ignores_extra_domain[simp]:
   ignores_extra_domain (write_storage x y z)
 Proof
   rw[write_storage_def] \\ tac
+  \\ rw[assert_def, bind_def, reraise_def, consume_gas_def,
+        get_current_context_def, return_def, ignore_bind_def,
+        set_current_context_def, update_accounts_def,
+        ignores_extra_domain_def]
+  \\ gs[domain_compatible_def, all_accounts_def, update_account_def,
+        lookup_account_def, APPLY_UPDATE_THM]
+  \\ gs[states_agree_modulo_accounts_def]
+  \\ gs[rollback_states_agree_modulo_accounts_def]
+  \\ gs[rollback_state_component_equality]
+  \\ gs[accounts_agree_modulo_storage_def, APPLY_UPDATE_THM]
+  \\ rw[]
+  \\ gs[account_state_component_equality]
+  \\ rw[update_storage_def, APPLY_UPDATE_THM]
 QED
 
 Theorem step_sstore_ignores_extra_domain[simp]:
   ignores_extra_domain (step_sstore x)
 Proof
-  rw[step_sstore_def] \\ tac
-QED
-
-Theorem set_accounts_ignores_extra_domain[simp]:
-  ignores_extra_domain (set_accounts _)
-Proof
-  rw[set_accounts_def] \\ tac
+  simp[step_sstore_def] \\ tac
 QED
 
 Theorem add_to_delete_ignores_extra_domain[simp]:
   ignores_extra_domain (add_to_delete _)
 Proof
   rw[add_to_delete_def, ignores_extra_domain_def, return_def]
+  \\ gs[domain_compatible_def, states_agree_modulo_accounts_def,
+        all_accounts_def, rollback_states_agree_modulo_accounts_def]
+  \\ gs[rollback_state_component_equality]
 QED
 
-Theorem step_self_destruct_ignores_extra_domain[simp]:
-  ignores_extra_domain step_self_destruct
+Theorem get_callee_ignores_extra_domain_pred_bind:
+  (∀x. ignores_extra_domain_pred (λs. p s ∧ (∃c r t. s.contexts = (c,r)::t ∧
+                                                     c.msgParams.callee = x))
+        (f x))
+  ⇒
+  ignores_extra_domain_pred p (monad_bind get_callee f)
 Proof
-  rw[step_self_destruct_def] \\ tac
+  rw[ignores_extra_domain_pred_def, bind_def, get_callee_def,
+     get_current_context_def, return_def, fail_def]
+  \\ Cases_on`s.contexts` \\ gvs[]
+  \\ TRY(drule domain_compatible_lengths \\ rw[])
+  \\ fsrw_tac[DNF_ss][]
+  \\ Cases_on`h` \\ gvs[]
+  \\ Cases_on`s'.contexts` \\ gvs[]
+  \\ Cases_on`h` \\ gvs[]
+  \\ first_x_assum drule \\ gvs[]
+  \\ disch_then drule
+  \\ strip_tac
+  \\ goal_assum drule
+  \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def]
 QED
+
+Theorem self_destruct_helper:
+  do
+    accounts <- get_accounts;
+    sender <<- lookup_account senderAddress accounts;
+    balance <<- sender.balance;
+    beneficiaryEmpty <<- account_empty (lookup_account address accounts);
+    transferCost <<-
+      if 0 < balance ∧ beneficiaryEmpty then
+        self_destruct_new_account_cost
+      else 0;
+    consume_gas
+      (static_gas SelfDestruct + zero_warm accessCost + transferCost);
+    assert_not_static;
+    update_accounts (transfer_value senderAddress address balance);
+    original <- get_original;
+    originalContract <<- lookup_account senderAddress original;
+    if account_empty originalContract then
+      do
+        update_accounts
+          (update_account senderAddress (sender with balance := 0));
+        add_to_delete senderAddress
+      od
+    else return ();
+    finish
+  od =
+  do
+    accounts <- get_accounts;
+    sender <<- lookup_account senderAddress accounts;
+    balance <<- sender.balance;
+    beneficiaryEmpty <<- account_empty (lookup_account address accounts);
+    transferCost <<-
+      if 0 < balance ∧ beneficiaryEmpty then
+        self_destruct_new_account_cost
+      else 0;
+    consume_gas
+      (static_gas SelfDestruct + zero_warm accessCost + transferCost);
+    assert_not_static;
+    update_accounts (transfer_value senderAddress address balance);
+    original <- get_original;
+    originalContract <<- lookup_account senderAddress original;
+    if account_empty originalContract then
+      do
+        update_accounts
+          (λa. (senderAddress =+ a senderAddress with balance := 0) a);
+        add_to_delete senderAddress
+      od
+    else return ();
+    finish
+  od
+Proof
+  rw[FUN_EQ_THM, bind_def, ignore_bind_def,
+     assert_not_static_def, update_accounts_def,
+     return_def, fail_def, consume_gas_def, get_original_def,
+     update_accounts_def, get_static_def, get_current_context_def,
+     set_current_context_def, assert_def, get_accounts_def]
+  \\ rw[] \\ gvs[return_def, bind_def]
+  \\ rw[] \\ gvs[return_def, bind_def, update_accounts_def, add_to_delete_def]
+  \\ rw[] \\ gvs[finish_def]
+  \\ gvs[execution_state_component_equality, rollback_state_component_equality]
+  \\ gvs[update_account_def, transfer_value_def, lookup_account_def,
+         APPLY_UPDATE_THM, FUN_EQ_THM]
+  \\ rw[account_state_component_equality, APPLY_UPDATE_THM]
+  \\ rw[]
+QED
+
+Theorem ignores_extra_domain_update_accounts_transfer_value[simp]:
+  ignores_extra_domain (update_accounts (transfer_value x y z))
+Proof
+  rw[update_accounts_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, all_accounts_def,
+         states_agree_modulo_accounts_def,
+         rollback_states_agree_modulo_accounts_def,
+         rollback_state_component_equality, transfer_value_def ]
+  \\ gvs[accounts_agree_modulo_storage_def, update_account_def,
+         APPLY_UPDATE_THM, account_state_component_equality,
+         lookup_account_def]
+  \\ rw[APPLY_UPDATE_THM]
+  \\ rw[]
+QED
+
+(*
+Theorem step_self_destruct_ignores_extra_domain[simp]:
+  ignores_extra_domain_pred (λs. ∀c r t. s.contexts = (c,r)::t ⇒
+    c.msgParams.callee ∈ toSet s.msdomain.addresses)
+  step_self_destruct
+Proof
+  rw[step_self_destruct_def]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- (
+    rw[] \\
+    gvs[pop_stack_def, bind_def, ignore_bind_def, get_current_context_def,
+        fail_def, return_def, assert_def]
+    \\ TOP_CASE_TAC \\ gvs[]
+    \\ TOP_CASE_TAC \\ gvs[CaseEq"bool"]
+    \\ TOP_CASE_TAC \\ gvs[CaseEq"bool"]
+    \\ gvs[set_current_context_def, return_def]
+    \\ qmatch_goalsub_rename_tac`HD s.contexts`
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ qx_gen_tac`args` \\ simp[]
+  \\ qmatch_goalsub_abbrev_tac`access_address address`
+  \\ irule access_address_ignore_extra_domain_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- ( rw[access_address_def, return_def, fail_def] )
+  \\ qx_gen_tac`accessCost`
+  \\ irule get_callee_ignores_extra_domain_pred_bind
+  \\ simp[]
+  \\ qx_gen_tac`senderAddress`
+  \\ simp[]
+  \\ simp[SIMP_RULE(srw_ss())[LET_THM, AC ADD_ASSOC ADD_COMM]self_destruct_helper]
+  \\ irule get_accounts_ignore_extra_domain_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (
+    rw[domain_compatible_def, states_agree_modulo_accounts_def] \\ gvs[]
+    \\ Cases_on`s'.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ conj_tac
+  >- (
+    rpt gen_tac
+    \\ simp[lookup_account_def, update_account_def]
+    \\ rpt strip_tac
+    \\ qmatch_goalsub_abbrev_tac`consume_gas n1`
+    \\ qmatch_goalsub_abbrev_tac`update_accounts a1`
+    \\ qmatch_goalsub_abbrev_tac`ignore_bind (update_accounts u1)
+                                   (add_to_delete _)`
+    \\ qmatch_goalsub_abbrev_tac`lhs = _`
+    \\ qmatch_goalsub_abbrev_tac`consume_gas n2`
+    \\ qmatch_goalsub_abbrev_tac`update_accounts a2`
+    \\ `n1 = n2`
+    by (
+      simp[Abbr`n1`,Abbr`n2`]
+      \\ gvs[fIN_IN, accounts_agree_modulo_storage_def,
+             account_state_component_equality, account_empty_def] )
+    \\ `a1 = a2`
+    by (
+      simp[Abbr`a1`,Abbr`a2`]
+      \\ gvs[fIN_IN, accounts_agree_modulo_storage_def,
+             account_state_component_equality, account_empty_def])
+    \\ simp[Abbr`lhs`] )
+  \\ qx_gen_tac`balance`
+  \\ simp[ignore_bind_def]
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    gen_tac
+    \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`consume_gas nn`
+    \\ simp[consume_gas_def, bind_def, ignore_bind_def, get_current_context_def,
+            assert_def, return_def, fail_def, set_current_context_def]
+    \\ rw[] \\ rw[] )
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    gen_tac
+    \\ strip_tac
+    \\ simp[assert_not_static_def, bind_def, ignore_bind_def, get_current_context_def,
+            assert_def, get_static_def, return_def, fail_def,
+            set_current_context_def])
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    gen_tac
+    \\ strip_tac
+    \\ simp[update_accounts_def, bind_def, ignore_bind_def, get_current_context_def,
+            assert_def, get_static_def, return_def, fail_def,
+            set_current_context_def] )
+  \\ irule get_original_ignores_extra_domain_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (
+    rw[]
+    \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def]
+    \\ Cases_on`s'.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ conj_tac
+  >- (
+    rw[]
+    \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def,
+    account_empty_def, fIN_IN, ]
+
+    \\ Cases_on`s'.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+    \\ rpt gen_tac \\ strip_tac
+
+
+  \\ tac
+QED
+*)
 
 Theorem abort_unuse_ignores_extra_domain[simp]:
   ignores_extra_domain (abort_unuse x)
@@ -4893,6 +5289,14 @@ Theorem abort_create_exists_ignores_extra_domain[simp]:
   ignores_extra_domain (abort_create_exists x y)
 Proof
   rw[abort_create_exists_def] \\ tac
+  \\ rw[update_accounts_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, all_accounts_def,
+         states_agree_modulo_accounts_def,
+         rollback_states_agree_modulo_accounts_def,
+         rollback_state_component_equality ]
+  \\ gvs[accounts_agree_modulo_storage_def, update_account_def,
+         APPLY_UPDATE_THM, account_state_component_equality]
+  \\ rw[]
 QED
 
 Theorem get_caller_ignores_extra_domain[simp]:
@@ -4907,28 +5311,145 @@ Proof
   rw[get_value_def] \\ tac
 QED
 
-Theorem get_rollback_ignores_extra_domain[simp]:
-  ignores_extra_domain get_rollback
-Proof
-  rw[get_rollback_def, ignores_extra_domain_def, return_def]
-QED
-
-Theorem push_context_ignores_extra_domain[simp]:
-  ignores_extra_domain (push_context x)
-Proof
-  rw[push_context_def, ignores_extra_domain_def, return_def]
-QED
-
 Theorem dispatch_precompiles_ignores_extra_domain[simp]:
   ignores_extra_domain (dispatch_precompiles x)
 Proof
   cheat
 QED
 
+Theorem ignores_extra_domain_update_accounts_nonce[simp]:
+  ignores_extra_domain
+    (update_accounts (update_account a (b with nonce updated_by f)))
+Proof
+  rw[update_accounts_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, all_accounts_def,
+         states_agree_modulo_accounts_def,
+         rollback_states_agree_modulo_accounts_def,
+         rollback_state_component_equality, transfer_value_def ]
+  \\ gvs[accounts_agree_modulo_storage_def, update_account_def,
+         APPLY_UPDATE_THM, account_state_component_equality,
+         lookup_account_def]
+  \\ rw[APPLY_UPDATE_THM]
+  \\ rw[]
+QED
+
+Theorem ignores_extra_domain_update_accounts_o[simp]:
+  ignores_extra_domain (update_accounts f) ∧
+  ignores_extra_domain (update_accounts g)
+  ⇒
+  ignores_extra_domain (update_accounts (g o f))
+Proof
+  rw[ignores_extra_domain_def, update_accounts_def, return_def]
+  \\ qmatch_goalsub_abbrev_tac`_ with rollback updated_by gf`
+  \\ `∀s. s with rollback updated_by gf =
+          (s with rollback updated_by (λr. r with accounts updated_by f))
+          with rollback updated_by (λr. r with accounts updated_by g)`
+  by ( rw[execution_state_component_equality, Abbr`gf`] )
+  \\ full_simp_tac std_ss []
+QED
+
+(*
+Theorem get_rollback_ignores_extra_domain[simp]:
+  ignores_extra_domain get_rollback
+Proof
+  rw[get_rollback_def, ignores_extra_domain_def, return_def]
+QED
+*)
+
+Theorem get_rollback_ignores_extra_domain_bind:
+  (∀x y. rollback_states_agree_modulo_accounts x y ⇒
+    ∀s. FST (f x s) = FST (f y s) ∧
+        domain_compatible (SND (f x s)) (SND (f y s))) ∧
+  (∀x. ignores_extra_domain (f x))
+  ⇒
+  ignores_extra_domain (monad_bind get_rollback f)
+Proof
+  rw[get_rollback_def, ignores_extra_domain_def, return_def, bind_def]
+  \\ first_assum drule \\ rw[]
+  \\ first_x_assum(qspecl_then[`s.rollback`,`s'.rollback`]mp_tac)
+  \\ impl_tac
+  >- fs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ disch_then(qspec_then`s'`strip_assume_tac)
+  \\ first_x_assum drule
+  \\ strip_tac
+  \\ gvs[]
+  \\ qexists_tac`SND (f s'.rollback s')`
+  \\ conj_tac >- metis_tac[domain_compatible_trans]
+  \\ metis_tac[PAIR]
+QED
+
+Theorem push_context_ignores_extra_domain[simp]:
+  ignores_extra_domain (push_context c)
+Proof
+  rw[push_context_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ gvs[all_accounts_def]
+QED
+
+Theorem FST_bind_eq:
+  (∀x. FST o (g1 x) = FST o (g2 x))
+  ⇒
+  FST (monad_bind f g1 s) = FST (monad_bind f g2 s)
+Proof
+  rw[bind_def] \\ CASE_TAC \\ CASE_TAC
+  \\ gs[FUN_EQ_THM]
+QED
+
+Theorem SND_bind_domain_compatible:
+  (∀x s. domain_compatible (SND (g1 x s)) (SND (g2 x s)))
+  ⇒
+  domain_compatible (SND (monad_bind f g1 s)) (SND (monad_bind f g2 s))
+Proof
+  rw[bind_def]
+  \\ CASE_TAC
+  \\ CASE_TAC
+  \\ gs[]
+QED
+
+(*
 Theorem proceed_call_ignores_extra_domain[simp]:
   ignores_extra_domain (proceed_call a b c d e f g h i)
 Proof
-  simp[proceed_call_def] \\ tac
+  simp[proceed_call_def]
+
+  this statement still looks wrong
+
+  \\ irule get_rollback_ignores_extra_domain_bind
+  \\ reverse conj_asm2_tac
+  >- ( simp[] \\ gen_tac \\ tac )
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ simp[]
+  \\ qho_match_abbrev_tac`(FST ((ff x) _) = _) ∧ _` \\ gs[]
+  \\ conj_tac
+  >- (
+    simp[Abbr`ff`]
+    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
+    \\ simp[ignore_bind_def]
+    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
+    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
+    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
+    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
+    \\ simp[bind_def, push_context_def, return_def, COND_RATOR]
+    \\ qmatch_goalsub_abbrev_tac`cc,x`
+    \\ IF_CASES_TAC \\ gs[]
+    \\ cheat (*
+      probably can use these, or just blast all defns:
+      dispatch_precompiles_ignores_extra_domain
+      ignores_extra_domain_def *))
+  \\ simp[Abbr`ff`, ignore_bind_def]
+  \\ rpt (
+    irule SND_bind_domain_compatible
+    \\ simp[] \\ rpt gen_tac )
+  \\ qmatch_goalsub_abbrev_tac`cc,x`
+  \\ simp[bind_def, push_context_def, return_def, COND_RATOR]
+  \\ rw[]
+  >- cheat (* similar to above? *)
+  \\ simp[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ conj_tac
+  >- ( irule EVERY2_refl \\ simp[] )
+  \\ simp[all_accounts_def]
+
+
 QED
 
 Theorem proceed_create_ignores_extra_domain[simp]:
@@ -4965,7 +5486,6 @@ Proof
   \\ BasicProvers.TOP_CASE_TAC \\ rw[]
   \\ tac
 QED
-
 *)
 
 val () = export_theory();
