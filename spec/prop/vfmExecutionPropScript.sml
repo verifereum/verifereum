@@ -5311,10 +5311,70 @@ Proof
   rw[get_value_def] \\ tac
 QED
 
+Theorem fail_ignores_extra_domain[simp]:
+  ignores_extra_domain (fail x)
+Proof
+  rw[ignores_extra_domain_def, fail_def]
+QED
+
+Theorem precompile_ecrecover_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def]
+QED
+
+Theorem precompile_ripemd_160_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def]
+QED
+
+Theorem precompile_sha2_256_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_sha2_256
+Proof
+  rw[precompile_sha2_256_def] \\ tac
+QED
+
+Theorem precompile_identity_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_identity
+Proof
+  rw[precompile_identity_def] \\ tac
+QED
+
+Theorem precompile_modexp_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_modexp
+Proof
+  rw[precompile_modexp_def] \\ tac
+QED
+
+Theorem precompile_ecadd_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_ecadd
+Proof
+  rw[precompile_ecadd_def] \\ tac
+QED
+
+Theorem precompile_ecmul_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_ecmul
+Proof
+  rw[precompile_ecmul_def] \\ tac
+QED
+
+Theorem precompile_ecpairing_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def] \\ tac
+QED
+
+Theorem precompile_blake2f_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_blake2f
+Proof
+  rw[precompile_blake2f_def] \\ tac
+QED
+
 Theorem dispatch_precompiles_ignores_extra_domain[simp]:
   ignores_extra_domain (dispatch_precompiles x)
 Proof
-  cheat
+  rw[dispatch_precompiles_def]
 QED
 
 Theorem ignores_extra_domain_update_accounts_nonce[simp]:
@@ -5357,19 +5417,26 @@ QED
 *)
 
 Theorem get_rollback_ignores_extra_domain_bind:
-  (∀x y. rollback_states_agree_modulo_accounts x y ⇒
-    ∀s. FST (f x s) = FST (f y s) ∧
-        domain_compatible (SND (f x s)) (SND (f y s))) ∧
+  (∀x y s. rollback_states_agree_modulo_accounts x y ∧
+           (∀a. a ∈ toSet s.msdomain.addresses ⇒
+                accounts_agree_modulo_storage a x.accounts y.accounts) ∧
+           (∀a k. SK a k ∈ toSet s.msdomain.storageKeys ⇒
+                (x.accounts a).storage k = (y.accounts a).storage k)
+    ⇒
+    FST (f x s) = FST (f y s) ∧
+    domain_compatible (SND (f x s)) (SND (f y s))) ∧
   (∀x. ignores_extra_domain (f x))
   ⇒
   ignores_extra_domain (monad_bind get_rollback f)
 Proof
   rw[get_rollback_def, ignores_extra_domain_def, return_def, bind_def]
   \\ first_assum drule \\ rw[]
-  \\ first_x_assum(qspecl_then[`s.rollback`,`s'.rollback`]mp_tac)
+  \\ first_x_assum(qspecl_then[`s.rollback`,`s'.rollback`,`s'`]mp_tac)
   \\ impl_tac
-  >- fs[domain_compatible_def, states_agree_modulo_accounts_def]
-  \\ disch_then(qspec_then`s'`strip_assume_tac)
+  >- (
+    fs[domain_compatible_def, states_agree_modulo_accounts_def]
+    \\ gs[all_accounts_def, fIN_IN] )
+  \\ strip_tac
   \\ first_x_assum drule
   \\ strip_tac
   \\ gvs[]
@@ -5377,6 +5444,31 @@ Proof
   \\ conj_tac >- metis_tac[domain_compatible_trans]
   \\ metis_tac[PAIR]
 QED
+
+(*
+Theorem get_rollback_ignores_extra_domain_pred_bind:
+  (∀x y. rollback_states_agree_modulo_accounts x y ⇒
+    ∀s. FST (f x s) = FST (f y s)) ∧
+  (∀x. ignores_extra_domain_pred (λs. x = s.rollback) (f x))
+  ⇒
+  ignores_extra_domain (monad_bind get_rollback f)
+Proof
+  rw[get_rollback_def, ignores_extra_domain_def, return_def,
+     bind_def, ignores_extra_domain_pred_def]
+  \\ first_x_assum(qspecl_then[`s.rollback`,`s'.rollback`]mp_tac)
+  \\ impl_tac
+  >- fs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ disch_then(qspec_then`s'`strip_assume_tac)
+  \\ first_x_assum drule \\ strip_tac
+  \\ first_x_assum drule \\ strip_tac
+  \\ gvs[]
+  \\ qexists_tac`SND (f s'.rollback s')`
+
+  \\ conj_tac >- metis_tac[domain_compatible_trans]
+
+  \\ metis_tac[PAIR]
+QED
+*)
 
 Theorem push_context_ignores_extra_domain[simp]:
   ignores_extra_domain (push_context c)
@@ -5387,7 +5479,7 @@ Proof
 QED
 
 Theorem FST_bind_eq:
-  (∀x. FST o (g1 x) = FST o (g2 x))
+  (∀x s'. f s = (INL x, s') ⇒ FST (g1 x s') = FST (g2 x s'))
   ⇒
   FST (monad_bind f g1 s) = FST (monad_bind f g2 s)
 Proof
@@ -5396,7 +5488,7 @@ Proof
 QED
 
 Theorem SND_bind_domain_compatible:
-  (∀x s. domain_compatible (SND (g1 x s)) (SND (g2 x s)))
+  (∀x s'. f s = (INL x, s') ⇒ domain_compatible (SND (g1 x s')) (SND (g2 x s')))
   ⇒
   domain_compatible (SND (monad_bind f g1 s)) (SND (monad_bind f g2 s))
 Proof
@@ -5406,14 +5498,10 @@ Proof
   \\ gs[]
 QED
 
-(*
 Theorem proceed_call_ignores_extra_domain[simp]:
   ignores_extra_domain (proceed_call a b c d e f g h i)
 Proof
   simp[proceed_call_def]
-
-  this statement still looks wrong
-
   \\ irule get_rollback_ignores_extra_domain_bind
   \\ reverse conj_asm2_tac
   >- ( simp[] \\ gen_tac \\ tac )
@@ -5423,45 +5511,122 @@ Proof
   \\ conj_tac
   >- (
     simp[Abbr`ff`]
-    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
+    \\ irule FST_bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
     \\ simp[ignore_bind_def]
-    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
-    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
-    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
-    \\ irule FST_bind_eq \\ simp[FUN_EQ_THM] \\ rpt gen_tac
+    \\ irule FST_bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule FST_bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule FST_bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule FST_bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
     \\ simp[bind_def, push_context_def, return_def, COND_RATOR]
     \\ qmatch_goalsub_abbrev_tac`cc,x`
     \\ IF_CASES_TAC \\ gs[]
-    \\ cheat (*
-      probably can use these, or just blast all defns:
-      dispatch_precompiles_ignores_extra_domain
-      ignores_extra_domain_def *))
+    \\ qmatch_goalsub_abbrev_tac`dispatch_precompiles c s1`
+    \\ (dispatch_precompiles_ignores_extra_domain
+        |> REWRITE_RULE[ignores_extra_domain_def]
+        |> GEN_ALL
+        |> INST_TYPE[alpha|->“:unit”]
+        |> qspecl_then[`c`,`s1`]mp_tac)
+    \\ qmatch_goalsub_abbrev_tac`FST p`
+    \\ Cases_on`p` \\ simp[]
+    \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`dispatch_precompiles c s2`
+    \\ first_x_assum(qspec_then`s2`mp_tac)
+    \\ impl_tac
+    >- (
+      gs[Abbr`s1`,Abbr`s2`]
+      \\ simp[domain_compatible_def]
+      \\ simp[states_agree_modulo_accounts_def]
+      \\ simp[all_accounts_def] \\ gs[fIN_IN]
+      \\ rw[]
+      \\ TRY (irule EVERY2_refl \\ rw[])
+      \\ first_x_assum irule
+      \\ gvs[get_static_def, get_value_def, get_caller_def, bind_def,
+             return_def, CaseEq"prod", CaseEq"sum", get_current_context_def,
+             fail_def, CaseEq"bool", COND_RATOR, update_accounts_def,
+             read_memory_def] )
+    \\ rw[] \\ rw[] )
   \\ simp[Abbr`ff`, ignore_bind_def]
   \\ rpt (
     irule SND_bind_domain_compatible
-    \\ simp[] \\ rpt gen_tac )
+    \\ simp[] \\ rpt gen_tac \\ strip_tac )
   \\ qmatch_goalsub_abbrev_tac`cc,x`
   \\ simp[bind_def, push_context_def, return_def, COND_RATOR]
   \\ rw[]
-  >- cheat (* similar to above? *)
-  \\ simp[domain_compatible_def, states_agree_modulo_accounts_def]
-  \\ conj_tac
-  >- ( irule EVERY2_refl \\ simp[] )
-  \\ simp[all_accounts_def]
-
-
+  >- (
+    qmatch_goalsub_abbrev_tac`dispatch_precompiles c s1`
+    \\ (dispatch_precompiles_ignores_extra_domain
+        |> REWRITE_RULE[ignores_extra_domain_def]
+        |> GEN_ALL
+        |> INST_TYPE[alpha|->“:unit”]
+        |> qspecl_then[`c`,`s1`]mp_tac)
+    \\ qmatch_goalsub_abbrev_tac`SND p`
+    \\ Cases_on`p` \\ simp[]
+    \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`dispatch_precompiles c s2`
+    \\ first_x_assum(qspec_then`s2`mp_tac)
+    \\ impl_tac
+    >- (
+      gs[Abbr`s1`,Abbr`s2`]
+      \\ simp[domain_compatible_def]
+      \\ simp[states_agree_modulo_accounts_def]
+      \\ simp[all_accounts_def] \\ gs[fIN_IN]
+      \\ rw[]
+      \\ TRY (irule EVERY2_refl \\ rw[])
+      \\ first_x_assum irule
+      \\ gvs[get_static_def, get_value_def, get_caller_def, bind_def,
+             return_def, CaseEq"prod", CaseEq"sum", get_current_context_def,
+             fail_def, CaseEq"bool", COND_RATOR, update_accounts_def,
+             read_memory_def] )
+    \\ rw[] \\ rw[] )
+  \\ simp[domain_compatible_def]
+  \\ simp[states_agree_modulo_accounts_def]
+  \\ simp[all_accounts_def] \\ gs[fIN_IN]
+  \\ rw[] \\ TRY (irule EVERY2_refl \\ rw[])
+  \\ first_x_assum irule
+  \\ gvs[get_static_def, get_value_def, get_caller_def, bind_def,
+         return_def, CaseEq"prod", CaseEq"sum", get_current_context_def,
+         fail_def, CaseEq"bool", COND_RATOR, update_accounts_def,
+         read_memory_def]
 QED
 
 Theorem proceed_create_ignores_extra_domain[simp]:
   ignores_extra_domain (proceed_create a b c d e f g)
 Proof
-  simp[proceed_create_def] \\ tac
+  simp[proceed_create_def]
+  \\ irule ignore_bind_ignores_extra_domain \\ rw[]
+  \\ irule get_rollback_ignores_extra_domain_bind
+  \\ reverse conj_asm2_tac
+  >- ( simp[] \\ gen_tac \\ tac )
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ simp[]
+  \\ conj_tac
+  >- (
+    simp[ignore_bind_def]
+    \\ rpt ( irule FST_bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac )
+    \\ simp[push_context_def, return_def] )
+  \\ simp[ignore_bind_def]
+  \\ rpt (
+    irule SND_bind_domain_compatible
+    \\ simp[] \\ rpt gen_tac \\ strip_tac )
+  \\ qmatch_goalsub_abbrev_tac`cc,x`
+  \\ simp[push_context_def, return_def]
+  \\ simp[domain_compatible_def]
+  \\ simp[states_agree_modulo_accounts_def]
+  \\ simp[all_accounts_def] \\ gs[fIN_IN]
+  \\ rw[] \\ TRY (irule EVERY2_refl \\ rw[])
+  \\ first_x_assum irule
+  \\ gvs[get_static_def, get_value_def, get_caller_def, bind_def,
+         return_def, CaseEq"prod", CaseEq"sum", get_current_context_def,
+         fail_def, CaseEq"bool", COND_RATOR, update_accounts_def,
+         read_memory_def]
 QED
 
+(*
 Theorem step_call_ignores_extra_domain[simp]:
   ignores_extra_domain (step_call x)
 Proof
-  simp[step_call_def, UNCURRY] \\ tac
+  simp[step_call_def, UNCURRY]
+  \\ tac
 QED
 
 Theorem step_create_ignores_extra_domain[simp]:
