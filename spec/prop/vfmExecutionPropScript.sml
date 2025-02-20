@@ -2737,6 +2737,12 @@ Proof
   \\ rw[proceed_call_def] >> tac
 QED
 
+Definition preserves_wf_accounts_pred_def:
+  preserves_wf_accounts_pred p m ⇔
+  ∀s. p s ∧ EVERY wf_accounts (all_accounts s)
+      ⇒ EVERY wf_accounts (all_accounts (SND (m s)))
+End
+
 Theorem preserves_wf_accounts_bind_get_accounts:
   (∀x. wf_accounts x ⇒ preserves_wf_accounts (f x))
   ⇒
@@ -2750,8 +2756,85 @@ Proof
   \\ rw[]
 QED
 
-(*
-TODO: fix
+Theorem preserves_wf_accounts_pred_bind_get_accounts:
+  (∀x. preserves_wf_accounts_pred (λs. x = s.rollback.accounts) (f x))
+  ⇒
+  preserves_wf_accounts (bind get_accounts f)
+Proof
+  rw[preserves_wf_accounts_pred_def, preserves_wf_accounts_def, bind_def]
+  \\ gs[all_accounts_def, get_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_pred_pred_bind:
+   (∀x. preserves_wf_accounts_pred q (f x)) ∧
+   (∀s s'. p s ⇒ q (SND (g s))) ∧
+   preserves_wf_accounts_pred p g ⇒
+   preserves_wf_accounts_pred p (monad_bind g f)
+Proof
+  rw[preserves_wf_accounts_pred_def, bind_def]
+  \\ CASE_TAC \\ gs[] \\ reverse CASE_TAC \\ gs[]
+  >- metis_tac[SND]
+  \\ first_x_assum drule \\ rw[]
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_imp_pred:
+   preserves_wf_accounts g ⇒
+   preserves_wf_accounts_pred p g
+Proof
+  rw[preserves_wf_accounts_pred_def, preserves_wf_accounts_def]
+QED
+
+Theorem wf_accounts_increment_nonce:
+  wf_accounts a ∧ SUC (a x).nonce < 2 ** 64 ⇒
+  wf_accounts (increment_nonce x a)
+Proof
+  rw[wf_accounts_def, wf_account_state_def, increment_nonce_def]
+  \\ gs[update_account_def, lookup_account_def, APPLY_UPDATE_THM]
+  \\ rw[] \\ rw[]
+QED
+
+Theorem preserves_wf_accounts_pred_proceed_create:
+  preserves_wf_accounts_pred (λs.
+    SUC (s.rollback.accounts a).nonce < 2 ** 64 ∧
+    (s.rollback.accounts b).nonce = 0)
+  (proceed_create a b c d e)
+Proof
+  simp[proceed_create_def]
+  \\ simp[ignore_bind_def]
+  \\ irule preserves_wf_accounts_pred_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (
+    qexists_tac`λs. SUC (s.rollback.accounts b).nonce < 2 ** 64 ∧
+                    (s.rollback.accounts a).nonce < 2 ** 64` >>
+    rw[preserves_wf_accounts_pred_def,
+       get_rollback_def, update_accounts_def,
+       push_context_def, bind_def, return_def]
+    \\ gs[all_accounts_def]
+    >- (
+      irule wf_accounts_transfer_value
+      \\ irule wf_accounts_increment_nonce
+      \\ gs[] )
+    \\ (rw[increment_nonce_def, update_account_def,
+           lookup_account_def, APPLY_UPDATE_THM]) )
+  \\ rw[preserves_wf_accounts_pred_def,update_accounts_def]
+  \\ gvs[return_def, all_accounts_def]
+  \\ rw[increment_nonce_def, lookup_account_def,
+        update_account_def, APPLY_UPDATE_THM]
+  \\ gvs[wf_accounts_def, APPLY_UPDATE_THM]
+  \\ rw[]
+  \\ gvs[wf_account_state_def]
+QED
+
+Theorem preserves_wf_accounts_pred_mono:
+  preserves_wf_accounts_pred p f ∧ (∀s. q s ⇒ p s)
+  ⇒
+  preserves_wf_accounts_pred q f
+Proof
+  rw[preserves_wf_accounts_pred_def]
+QED
+
 Theorem preserves_wf_accounts_step_create[simp]:
   preserves_wf_accounts (step_create x)
 Proof
@@ -2765,44 +2848,85 @@ Proof
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
   \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
-
-  \\ irule preserves_wf_accounts_bind_get_accounts
-  \\ simp[] \\ gen_tac \\ strip_tac
-  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
-  \\ qpat_abbrev_tac`b4 = COND _ _ _`
-  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
-  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
-  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
-  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
-  \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
-  \\ IF_CASES_TAC >- simp[]
-  \\ IF_CASES_TAC >- (
-    simp[abort_create_exists_def]
-    \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
-    \\ conj_tac >- tac
-    \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
-    \\ gs[all_accounts_def, update_account_def, increment_nonce_def]
-    \\ gs[wf_accounts_def, APPLY_UPDATE_THM]
-    \\ rw[]
-    \\ gs[lookup_account_def, wf_account_state_def] )
-  \\ rw[proceed_create_def]
-  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
+  \\ irule preserves_wf_accounts_pred_bind_get_accounts
+  \\ qx_gen_tac`accounts` \\ simp[]
+  \\ simp[ignore_bind_def]
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- rw[assert_def]
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- rw[access_address_def, return_def, fail_def]
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- rw[get_gas_left_def, return_def, get_current_context_def,
+        bind_def, fail_def]
+  \\ gen_tac
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
   \\ reverse conj_tac
   >- (
-    rw[preserves_wf_accounts_def, update_accounts_def, return_def]
-    \\ gs[all_accounts_def, update_account_def]
-    \\ gs[wf_accounts_def, APPLY_UPDATE_THM]
-    \\ rw[]
-    \\ gs[lookup_account_def, wf_account_state_def] )
-  \\ irule preserves_wf_accounts_bind_get_rollback
-  \\ simp[] \\ gen_tac \\ strip_tac
-  \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
-  \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
-  \\ gs[all_accounts_def, update_account_def, transfer_value_def]
-  \\ rw[] \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
-  \\ gs[lookup_account_def, wf_account_state_def, APPLY_UPDATE_THM]
+    rw[consume_gas_def, return_def, get_current_context_def, ignore_bind_def,
+       bind_def, fail_def, assert_def, set_current_context_def]
+    \\ rw[] )
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- (
+    rw[assert_not_static_def, return_def, get_current_context_def, ignore_bind_def,
+       bind_def, fail_def, assert_def, set_current_context_def, get_static_def])
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- (
+    rw[set_return_data_def, return_def, get_current_context_def, ignore_bind_def,
+       bind_def, fail_def, assert_def, set_current_context_def, get_static_def])
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- (
+    rw[get_num_contexts_def, return_def, get_current_context_def, ignore_bind_def,
+       bind_def, fail_def, assert_def, set_current_context_def, get_static_def])
+  \\ gen_tac
+  \\ IF_CASES_TAC
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ IF_CASES_TAC
+  >- (
+    simp[abort_create_exists_def]
+    \\ simp[ignore_bind_def]
+    \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+    \\ reverse conj_tac
+    >- (
+      rw[preserves_wf_accounts_pred_def, update_accounts_def, return_def]
+      \\ gvs[all_accounts_def]
+      \\ irule wf_accounts_increment_nonce
+      \\ gs[lookup_account_def] )
+    \\ qexists_tac`K T` \\ rw[]
+    \\ irule preserves_wf_accounts_imp_pred
+    \\ tac )
   \\ gs[account_already_created_def]
+  \\ irule preserves_wf_accounts_pred_mono
+  \\ irule_at Any preserves_wf_accounts_pred_proceed_create
+  \\ simp[]
+  \\ gen_tac \\ strip_tac
+  \\ gvs[lookup_account_def]
 QED
 
 Theorem preserves_wf_accounts_step_inst[simp]:
@@ -2811,7 +2935,6 @@ Proof
   Cases_on`op` \\ rw[step_inst_def]
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
 QED
-*)
 
 Theorem preserves_wf_accounts_handle:
   preserves_wf_accounts f ∧
@@ -2855,7 +2978,6 @@ Proof
   rw[reraise_def, preserves_wf_accounts_def]
 QED
 
-(* TODO: depends on earlier fixes
 Theorem preserves_wf_accounts_step[simp]:
   preserves_wf_accounts step
 Proof
@@ -2908,7 +3030,6 @@ Proof
   \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
   \\ gs[wf_account_state_def]
 QED
-*)
 
 Definition limits_num_contexts_def:
   limits_num_contexts n1 n2 (m: α execution) =
