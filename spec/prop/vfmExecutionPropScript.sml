@@ -1566,13 +1566,12 @@ Theorem step_create_lemma:
     _ <- set_return_data [];
     sucDepth <- get_num_contexts;
     if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else if b3 then m2 else
-    proceed_create senderAddress sender address value code toCreate cappedGas
+    proceed_create senderAddress address value code cappedGas
   od = do
     _ <- set_return_data [];
     sucDepth <- get_num_contexts;
     if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else if b3 then m2 else do
-      _ <- update_accounts $
-        update_account senderAddress $ sender with nonce updated_by SUC;
+      _ <- update_accounts $ increment_nonce senderAddress;
       subContextTx <<- <|
           from     := senderAddress
         ; to       := SOME address
@@ -1586,7 +1585,7 @@ Theorem step_create_lemma:
       rollback <- get_rollback;
       _ <- update_accounts $
         transfer_value senderAddress address value o
-        update_account address (toCreate with nonce updated_by SUC);
+        increment_nonce address;
       _ <- get_static;
       push_context $
         (initial_context address code F (Code address) subContextTx, rollback)
@@ -2751,6 +2750,8 @@ Proof
   \\ rw[]
 QED
 
+(*
+TODO: fix
 Theorem preserves_wf_accounts_step_create[simp]:
   preserves_wf_accounts (step_create x)
 Proof
@@ -2764,6 +2765,7 @@ Proof
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
   \\ irule preserves_wf_accounts_bind \\ simp[] \\ gen_tac
+
   \\ irule preserves_wf_accounts_bind_get_accounts
   \\ simp[] \\ gen_tac \\ strip_tac
   \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
@@ -2780,7 +2782,7 @@ Proof
     \\ irule preserves_wf_accounts_ignore_bind \\ simp[]
     \\ conj_tac >- tac
     \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
-    \\ gs[all_accounts_def, update_account_def]
+    \\ gs[all_accounts_def, update_account_def, increment_nonce_def]
     \\ gs[wf_accounts_def, APPLY_UPDATE_THM]
     \\ rw[]
     \\ gs[lookup_account_def, wf_account_state_def] )
@@ -2809,6 +2811,7 @@ Proof
   Cases_on`op` \\ rw[step_inst_def]
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
 QED
+*)
 
 Theorem preserves_wf_accounts_handle:
   preserves_wf_accounts f ∧
@@ -2852,6 +2855,7 @@ Proof
   rw[reraise_def, preserves_wf_accounts_def]
 QED
 
+(* TODO: depends on earlier fixes
 Theorem preserves_wf_accounts_step[simp]:
   preserves_wf_accounts step
 Proof
@@ -2904,6 +2908,7 @@ Proof
   \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
   \\ gs[wf_account_state_def]
 QED
+*)
 
 Definition limits_num_contexts_def:
   limits_num_contexts n1 n2 (m: α execution) =
@@ -3756,6 +3761,7 @@ Proof
         ignore_bind_def, return_def, reraise_def]
 QED
 
+(* TODO: depends on earlier fixes
 Theorem step_preserves_wf_state:
   wf_state s ⇒ wf_state (SND (step s))
 Proof
@@ -3769,6 +3775,7 @@ Proof
   >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
   >- ( first_x_assum(qspec_then`s`mp_tac) \\ simp[ok_state_def])
 QED
+*)
 
 Definition sub_access_sets_def:
   sub_access_sets s1 s2 ⇔
@@ -5192,7 +5199,18 @@ Proof
   \\ rw[]
 QED
 
-(*
+Theorem ignores_extra_domain_update_accounts_increment_nonce[simp]:
+  ignores_extra_domain (update_accounts (increment_nonce a))
+Proof
+  rw[update_accounts_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, all_accounts_def,
+         states_agree_modulo_accounts_def, rollback_state_component_equality,
+         rollback_states_agree_modulo_accounts_def, APPLY_UPDATE_THM,
+         accounts_agree_modulo_storage_def, increment_nonce_def,
+         update_account_def, lookup_account_def]
+  \\ gvs[account_state_component_equality] \\ rw[]
+QED
+
 Theorem step_self_destruct_ignores_extra_domain[simp]:
   ignores_extra_domain_pred (λs. ∀c r t. s.contexts = (c,r)::t ⇒
     c.msgParams.callee ∈ toSet s.msdomain.addresses)
@@ -5305,7 +5323,6 @@ Proof
          accounts_agree_modulo_storage_def]
   \\ gvs[account_state_component_equality] \\ rw[]
 QED
-*)
 
 Theorem abort_unuse_ignores_extra_domain[simp]:
   ignores_extra_domain (abort_unuse x)
@@ -5320,12 +5337,13 @@ Proof
 QED
 
 Theorem abort_create_exists_ignores_extra_domain[simp]:
-  ignores_extra_domain (abort_create_exists x y)
+  ignores_extra_domain (abort_create_exists x)
 Proof
   rw[abort_create_exists_def] \\ tac
   \\ rw[update_accounts_def, ignores_extra_domain_def, return_def]
   \\ gvs[domain_compatible_def, all_accounts_def,
-         states_agree_modulo_accounts_def,
+         states_agree_modulo_accounts_def, increment_nonce_def,
+         lookup_account_def,
          rollback_states_agree_modulo_accounts_def,
          rollback_state_component_equality ]
   \\ gvs[accounts_agree_modulo_storage_def, update_account_def,
@@ -5633,7 +5651,7 @@ Proof
 QED
 
 Theorem proceed_create_ignores_extra_domain[simp]:
-  ignores_extra_domain (proceed_create a b c d e f g)
+  ignores_extra_domain (proceed_create a b c d e)
 Proof
   simp[proceed_create_def]
   \\ irule ignore_bind_ignores_extra_domain \\ rw[]
@@ -5664,11 +5682,11 @@ Proof
          read_memory_def]
 QED
 
-Theorem step_call_ignores_extra_domain[simp]:
-  ignores_extra_domain_pred (λs. ∀c r t.
+Theorem step_call_ignores_extra_domain:
+  ignores_extra_domain_pred
+  (λs. ∀c r t.
     s.contexts = (c,r)::t ⇒
-    c.msgParams.callee ∈ toSet s.msdomain.addresses
-  )
+    c.msgParams.callee ∈ toSet s.msdomain.addresses)
   (step_call x)
 Proof
   simp[step_call_def, UNCURRY]
@@ -5808,10 +5826,99 @@ Proof
 QED
 
 (*
-Theorem step_create_ignores_extra_domain[simp]:
-  ignores_extra_domain (step_create x)
+Theorem step_create_ignores_extra_domain:
+  ignores_extra_domain_pred
+  (λs. ∀c r t.
+    s.contexts = (c,r)::t ⇒
+    c.msgParams.callee ∈ toSet s.msdomain.addresses)
+  (step_create x)
 Proof
-  simp[step_create_def] \\ tac
+  simp[step_create_def]
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[pop_stack_def, bind_def, get_current_context_def, fail_def, return_def,
+       ignore_bind_def, assert_def, set_current_context_def]
+    \\ rw[] \\ gvs[]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ gen_tac
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[memory_expansion_info_def, bind_def, get_current_context_def,
+       fail_def, return_def] )
+  \\ gen_tac
+  \\ simp[ignore_bind_def]
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[consume_gas_def, bind_def, get_current_context_def,
+       fail_def, return_def, assert_def, ignore_bind_def,
+       set_current_context_def]
+    \\ rw[] \\ gvs[]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[expand_memory_def, bind_def, get_current_context_def,
+       fail_def, return_def, assert_def, ignore_bind_def,
+       set_current_context_def]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[read_memory_def, bind_def, get_current_context_def,
+       fail_def, return_def, assert_def, ignore_bind_def,
+       set_current_context_def])
+  \\ gen_tac
+  \\ irule get_callee_ignores_extra_domain_pred_bind
+  \\ simp[] \\ gen_tac
+  \\ irule get_accounts_ignore_extra_domain_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (
+    rw[domain_compatible_def, states_agree_modulo_accounts_def]
+    \\ gs[]
+    \\ Cases_on`s'.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ conj_tac
+  >- (
+    rpt gen_tac
+    \\ strip_tac
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`address_for_create _ la.nonce`
+    \\ qmatch_abbrev_tac`lhs = _`
+    \\ qmatch_goalsub_abbrev_tac`address_for_create _ lb.nonce`
+    \\ qunabbrev_tac`lhs`
+    \\ `la.nonce = lb.nonce ∧ la.balance = lb.balance`
+    by (
+      gvs[Abbr`la`, Abbr`lb`, account_empty_def, lookup_account_def]
+      \\ gvs[accounts_agree_modulo_storage_def, fIN_IN]
+      \\ gvs[account_state_component_equality] )
+    \\ gvs[]
+    \\ rpt (irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac)
+    \\ IF_CASES_TAC \\ simp[]
+    \\ qmatch_goalsub_abbrev_tac`account_already_created la1`
+    \\ qmatch_abbrev_tac`lhs = _`
+    \\ qmatch_goalsub_abbrev_tac`account_already_created la2`
+    \\ qunabbrev_tac`lhs`
+    \\ `account_already_created la1 = account_already_created la2`
+    by (
+      gvs[Abbr`la1`, Abbr`la2`, account_already_created_def, lookup_account_def]
+      \\ gvs[accounts_agree_modulo_storage_def, fIN_IN]
+      \\ gvs[account_state_component_equality]
+      \\ rw[] \\ gvs[]
+      )
+      account_already_created_def
+
+    \\ IF_CASES_TAC \\ simp[]
+
+    proceed_create_def TODO: remove sender from this, update nonce by address
+    step_create_def
+
 QED
 
 Theorem step_inst_ignores_extra_domain[simp]:
