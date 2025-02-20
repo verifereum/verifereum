@@ -538,6 +538,12 @@ Definition transfer_value_def:
       update_account fromAddress newSender $ accounts
 End
 
+Definition increment_nonce_def:
+  increment_nonce address accounts =
+  let account = lookup_account address accounts in
+    update_account address (account with nonce updated_by SUC) accounts
+End
+
 Definition step_stop_def:
   step_stop = do set_return_data []; finish od
 End
@@ -970,20 +976,17 @@ Definition abort_unuse_def:
 End
 
 Definition abort_create_exists_def:
-  abort_create_exists senderAddress sender = do
-    update_accounts $
-      update_account senderAddress $ sender with nonce updated_by SUC;
+  abort_create_exists senderAddress = do
+    update_accounts $ increment_nonce senderAddress;
     push_stack $ b2w F;
     inc_pc
   od
 End
 
 Definition proceed_create_def:
-  proceed_create senderAddress sender
-    address value code toCreate cappedGas =
+  proceed_create senderAddress address value code cappedGas =
   do
-    update_accounts $
-      update_account senderAddress $ sender with nonce updated_by SUC;
+    update_accounts $ increment_nonce senderAddress;
     subContextTx <<- <|
         from     := senderAddress
       ; to       := SOME address
@@ -997,7 +1000,7 @@ Definition proceed_create_def:
     rollback <- get_rollback;
     update_accounts $
       transfer_value senderAddress address value o
-      update_account address (toCreate with nonce updated_by SUC);
+      increment_nonce address;
     push_context
       (initial_context address code F (Code address) subContextTx, rollback)
   od
@@ -1039,9 +1042,8 @@ Definition step_create_def:
        sucDepth > 1024
     then abort_unuse cappedGas
     else if account_already_created toCreate
-    then abort_create_exists senderAddress sender
-    else proceed_create senderAddress sender
-           address value code toCreate cappedGas
+    then abort_create_exists senderAddress
+    else proceed_create senderAddress address value code cappedGas
   od
 End
 
@@ -1519,7 +1521,7 @@ Definition run_create_def:
       else
         INR $ (accounts, s with rollback updated_by (λr. r with accounts updated_by (
           transfer_value tx.from calleeAddress tx.value o
-          update_account calleeAddress (callee with nonce updated_by SUC)
+          increment_nonce calleeAddress
         )))
 End
 

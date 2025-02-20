@@ -694,12 +694,12 @@ val () = “abort_unuse n s” |>
     abort_unuse_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
-val () = “abort_create_exists x y s” |>
+val () = “abort_create_exists x s” |>
   SIMP_CONV std_ss [
     abort_create_exists_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
-val () = “proceed_create a b c d e f g s” |>
+val () = “proceed_create a b c d e s” |>
   SIMP_CONV std_ss [
     proceed_create_def, bind_def, ignore_bind_def, LET_RATOR, o_DEF
   ] |> cv_auto_trans;
