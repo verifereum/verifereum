@@ -5487,6 +5487,15 @@ Proof
   \\ gs[FUN_EQ_THM]
 QED
 
+Theorem bind_eq:
+  (∀x s'. f s = (INL x, s') ⇒ (g1 x s') = (g2 x s'))
+  ⇒
+  (monad_bind f g1 s) = (monad_bind f g2 s)
+Proof
+  rw[bind_def] \\ CASE_TAC \\ CASE_TAC
+  \\ gs[FUN_EQ_THM]
+QED
+
 Theorem SND_bind_domain_compatible:
   (∀x s'. f s = (INL x, s') ⇒ domain_compatible (SND (g1 x s')) (SND (g2 x s')))
   ⇒
@@ -5621,14 +5630,150 @@ Proof
          read_memory_def]
 QED
 
-(*
 Theorem step_call_ignores_extra_domain[simp]:
-  ignores_extra_domain (step_call x)
+  ignores_extra_domain_pred (λs. ∀c r t.
+    s.contexts = (c,r)::t ⇒
+    c.msgParams.callee ∈ toSet s.msdomain.addresses
+  )
+  (step_call x)
 Proof
   simp[step_call_def, UNCURRY]
+  \\ qpat_abbrev_tac`b0 = COND _ _ _`
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[pop_stack_def, bind_def, get_current_context_def, fail_def, return_def,
+       ignore_bind_def, assert_def, set_current_context_def]
+    \\ rw[] \\ gvs[]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
+  \\ gen_tac
+  \\ qpat_abbrev_tac`b1 = COND _ _ _`
+  \\ qpat_abbrev_tac`b2 = COND _ _ _`
+  \\ qpat_abbrev_tac`b3 = COND _ _ _`
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[memory_expansion_info_def, bind_def, get_current_context_def,
+       fail_def, return_def] )
+  \\ gen_tac
+  \\ irule access_address_ignore_extra_domain_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (
+    rw[access_address_def, bind_def, get_current_context_def,
+       fail_def, return_def] )
+  \\ gen_tac
+  \\ irule get_accounts_ignore_extra_domain_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (
+    rw[domain_compatible_def, states_agree_modulo_accounts_def]
+    \\ gs[]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[]
+  )
+  \\ conj_tac
+  >- (
+    rpt gen_tac
+    \\ strip_tac
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ simp[ignore_bind_def]
+    \\ qmatch_goalsub_abbrev_tac`account_empty la`
+    \\ qmatch_abbrev_tac`lhs = _`
+    \\ qmatch_goalsub_abbrev_tac`account_empty lb`
+    \\ qunabbrev_tac`lhs`
+    \\ `account_empty la = account_empty lb`
+    by (
+      gvs[Abbr`la`, Abbr`lb`, account_empty_def, lookup_account_def]
+      \\ gvs[accounts_agree_modulo_storage_def, fIN_IN]
+      \\ gvs[account_state_component_equality] )
+    \\ gvs[]
+    \\ qmatch_goalsub_abbrev_tac`FST pp`
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`n1 < b1`
+    \\ qmatch_abbrev_tac`lhs = _`
+    \\ qmatch_goalsub_abbrev_tac`n2 < b1`
+    \\ qunabbrev_tac`lhs`
+    \\ `n1 = n2`
+    by (
+      gvs[Abbr`n1`,Abbr`n2`,lookup_account_def,accounts_agree_modulo_storage_def]
+      \\ gvs[fIN_IN, account_state_component_equality]
+      \\ fsrw_tac[DNF_ss][]
+      \\ first_x_assum irule
+      \\ gvs[get_callee_def, bind_def, get_current_context_def, CaseEq"prod",
+             CaseEq"sum", return_def, CaseEq"bool", fail_def]
+      \\ gvs[expand_memory_def, bind_def, get_current_context_def, CaseEq"prod",
+             CaseEq"sum", return_def, CaseEq"bool", fail_def]
+      \\ gvs[set_current_context_def, bind_def, get_current_context_def, CaseEq"prod",
+             CaseEq"sum", return_def, CaseEq"bool", fail_def]
+      \\ gvs[Abbr`b3`, assert_not_static_def, bind_def, set_current_context_def,
+             get_current_context_def, CaseEq"prod", ignore_bind_def, assert_def,
+             CaseEq"sum", return_def, CaseEq"bool", fail_def, COND_RATOR,
+             get_static_def, consume_gas_def, get_gas_left_def]
+      \\ Cases_on`HD s.contexts` \\ gvs[]
+      \\ Cases_on`s.contexts` \\ gvs[] )
+    \\ gs[]
+    \\ IF_CASES_TAC \\ gs[]
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ IF_CASES_TAC \\ gs[]
+    \\ `la.code = lb.code`
+    by (
+      gs[Abbr`la`,Abbr`lb`,lookup_account_def, accounts_agree_modulo_storage_def]
+      \\ gvs[account_state_component_equality, fIN_IN] )
+    \\ simp[])
+  \\ gen_tac
+  \\ simp[ignore_bind_def]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac
+  >- ( rw[get_gas_left_def, bind_def, get_current_context_def,
+          fail_def, return_def] )
+  \\ gen_tac
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- (
+    simp[consume_gas_def, bind_def, get_current_context_def,
+         ignore_bind_def, return_def, fail_def, assert_def, COND_RATOR]
+    \\ gen_tac \\ strip_tac
+    \\ IF_CASES_TAC \\ gs[]
+    \\ IF_CASES_TAC \\ gs[]
+    \\ simp[set_current_context_def, return_def]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[])
+  \\ simp[]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- (
+    simp[Abbr`b3`]
+    \\ reverse conj_tac >- rw[]
+    \\ rw[assert_not_static_def, return_def, bind_def, ignore_bind_def,
+          get_static_def, assert_def, get_current_context_def, fail_def]
+    \\ rw[]
+    \\ Cases_on`s.contexts` \\ gvs[])
+  \\ simp[]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- (
+    simp[]
+    \\ rw[expand_memory_def, get_current_context_def, set_current_context_def,
+          bind_def, return_def, fail_def]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[])
+  \\ simp[]
+  \\ irule get_callee_ignores_extra_domain_pred_bind
+  \\ simp[] \\ gen_tac
+  \\ IF_CASES_TAC
+  >- ( irule ignores_extra_domain_pred_imp \\ simp[] )
+  \\ irule ignores_extra_domain_pred_imp
   \\ tac
 QED
 
+(*
 Theorem step_create_ignores_extra_domain[simp]:
   ignores_extra_domain (step_create x)
 Proof
