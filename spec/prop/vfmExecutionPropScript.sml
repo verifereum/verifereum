@@ -4933,6 +4933,37 @@ Proof
   rw[write_transient_storage_def] \\ tac
 QED
 
+Theorem get_original_ignores_extra_domain_pred_bind:
+  (∀x y s.
+      p s ∧
+      (∀a.
+         fIN a s.msdomain.addresses ⇒
+         accounts_agree_modulo_storage a x y) ⇒
+      f x s = f y s) ∧ (∀s s'. p s ∧ domain_compatible s s' ⇒ p s') ∧
+   (∀x. ignores_extra_domain_pred p (f x))
+  ⇒
+  ignores_extra_domain_pred p (monad_bind get_original f)
+Proof
+  rw[bind_def, get_original_def, ignores_extra_domain_pred_def, return_def,
+     CaseEq"bool",CaseEq"prod",CaseEq"sum", fail_def]
+  \\ TRY (qmatch_rename_tac`_.msdomain = _.msdomain` \\ metis_tac[])
+  \\ fsrw_tac[DNF_ss][]
+  >- ( drule domain_compatible_lengths \\ rw[] )
+  \\ disj2_tac
+  \\ qspec_then`s.contexts`strip_assume_tac SNOC_CASES
+  \\ qmatch_asmsub_rename_tac`domain_compatible s ss`
+  \\ qspec_then`ss.contexts`strip_assume_tac SNOC_CASES
+  >- ( drule domain_compatible_lengths \\ rw[] )
+  \\ gvs[]
+  \\ first_x_assum irule
+  \\ goal_assum drule \\ rw[]
+  \\ first_x_assum(CHANGED_TAC o SUBST1_TAC o SYM)
+  \\ irule EQ_SYM
+  \\ first_x_assum irule
+  \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ gs[all_accounts_def]
+QED
+
 Theorem get_original_ignores_extra_domain_pred_slot_bind:
   (∀x y s.
       p s ∧
@@ -5262,14 +5293,17 @@ Proof
   >- (
     rw[]
     \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def,
-    account_empty_def, fIN_IN, ]
-
-    \\ Cases_on`s'.contexts` \\ gvs[]
-    \\ Cases_on`h` \\ gvs[] )
-    \\ rpt gen_tac \\ strip_tac
-
-
-  \\ tac
+           account_empty_def, fIN_IN, accounts_agree_modulo_storage_def,
+           lookup_account_def, account_state_component_equality] )
+  \\ rw[]
+  \\ irule ignores_extra_domain_pred_imp
+  \\ tac \\ rw[]
+  \\ rw[update_accounts_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, all_accounts_def,
+         states_agree_modulo_accounts_def, rollback_state_component_equality,
+         rollback_states_agree_modulo_accounts_def, APPLY_UPDATE_THM,
+         accounts_agree_modulo_storage_def]
+  \\ gvs[account_state_component_equality] \\ rw[]
 QED
 *)
 
