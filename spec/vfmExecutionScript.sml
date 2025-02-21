@@ -119,7 +119,7 @@ Datatype:
   | InvalidContractPrefix
   | Reverted
   (* semantic invariants/assumptions (not EVM exceptions) *)
-  | OutsideDomain (address + storage_key)
+  | OutsideDomain (address + storage_key + address)
   | Unimplemented
   | Impossible
 End
@@ -433,7 +433,13 @@ Definition access_slot_def:
       return
         (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
         (s with rollback := newRollback)
-  else fail (OutsideDomain (INR x)) s
+  else fail (OutsideDomain (INR (INL x))) s
+End
+
+Definition ensure_storage_in_domain_def:
+  ensure_storage_in_domain a s =
+    assert (fIN a s.msdomain.fullStorages)
+           (OutsideDomain (INR (INR a))) s
 End
 
 Definition zero_warm_def:
@@ -1036,6 +1042,7 @@ Definition step_create_def:
     assert_not_static;
     set_return_data [];
     sucDepth <- get_num_contexts;
+    ensure_storage_in_domain address;
     toCreate <<- lookup_account address accounts;
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨

@@ -1565,11 +1565,13 @@ Theorem step_create_lemma:
   do
     _ <- set_return_data [];
     sucDepth <- get_num_contexts;
+    _ <- ensure_storage_in_domain v4;
     if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else if b3 then m2 else
     proceed_create senderAddress address value code cappedGas
   od = do
     _ <- set_return_data [];
     sucDepth <- get_num_contexts;
+    _ <- ensure_storage_in_domain v4;
     if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else if b3 then m2 else do
       _ <- update_accounts $ increment_nonce senderAddress;
       subContextTx <<- <|
@@ -1598,8 +1600,17 @@ Proof
     get_static_def, get_current_context_def, fail_def] \\ rpt CASE_TAC
   \\ `F` suffices_by rw []
   \\ gvs [update_accounts_def, return_def, get_rollback_def, fail_def,
+          ensure_storage_in_domain_def, assert_def,
     get_num_contexts_def, set_current_context_def, get_current_context_def]
   \\ Cases_on `x.contexts` \\ gvs []
+QED
+
+Theorem decreases_gas_ensure_storage_in_domain[simp]:
+  decreases_gas F (ensure_storage_in_domain _)
+Proof
+  rw[ensure_storage_in_domain_def, decreases_gas_def, assert_def]
+  \\ TOP_CASE_TAC \\ gvs[]
+  \\ TOP_CASE_TAC \\ gvs[]
 QED
 
 Theorem decreases_gas_cred_step_create[simp]:
@@ -1622,10 +1633,6 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
-  (*
-  \\ simp[GSYM ignore_bind_def]
-  \\ rw[step_create_code_lemma]
-  *)
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
   \\ simp[ignore_bind_def]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
@@ -1643,6 +1650,7 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ IF_CASES_TAC
   >- ( irule decreases_gas_cred_abort_unuse \\ simp[] )
   \\ IF_CASES_TAC
@@ -2835,6 +2843,12 @@ Proof
   rw[preserves_wf_accounts_pred_def]
 QED
 
+Theorem preserves_wf_accounts_ensure_storage_in_domain[simp]:
+  preserves_wf_accounts (ensure_storage_in_domain _)
+Proof
+  rw[preserves_wf_accounts_def, ensure_storage_in_domain_def, assert_def]
+QED
+
 Theorem preserves_wf_accounts_step_create[simp]:
   preserves_wf_accounts (step_create x)
 Proof
@@ -2905,6 +2919,14 @@ Proof
     rw[get_num_contexts_def, return_def, get_current_context_def, ignore_bind_def,
        bind_def, fail_def, assert_def, set_current_context_def, get_static_def])
   \\ gen_tac
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- (
+    rw[ensure_storage_in_domain_def, return_def, ignore_bind_def,
+       bind_def, fail_def, assert_def, get_static_def])
   \\ IF_CASES_TAC
   >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
   \\ IF_CASES_TAC
@@ -3673,8 +3695,9 @@ Theorem limits_num_contexts_check:
   od)
 Proof
   rw[limits_num_contexts_def, bind_def, ignore_bind_def,
-     get_num_contexts_def, return_def]
-  \\ rw[]
+     get_num_contexts_def, return_def, ensure_storage_in_domain_def,
+     assert_def]
+  \\ rw[] \\ gvs[]
   \\ first_x_assum irule
   \\ Cases_on`n ≤ m` \\ gs[]
   >- (qexists_tac`PRE n` \\ gs[])
@@ -3727,6 +3750,30 @@ Proof
   \\ qexistsl_tac[`n1 + 2`,`n1 + 2`] \\ rw[]
 QED
 
+Theorem limits_num_contexts_ensure_storage_in_domain[simp]:
+  limits_num_contexts n n (ensure_storage_in_domain _)
+Proof
+  rw[limits_num_contexts_def, ensure_storage_in_domain_def, assert_def]
+QED
+
+Theorem limits_num_contexts_reorder_ensure_storage:
+  limits_num_contexts x y
+  do
+    sucDepth <- get_num_contexts;
+    ensure_storage_in_domain a;
+    f sucDepth
+  od ⇔
+  limits_num_contexts x y
+  do
+    ensure_storage_in_domain a;
+    sucDepth <- get_num_contexts;
+    f sucDepth
+  od
+Proof
+  rw[limits_num_contexts_def, bind_def, ignore_bind_def, get_num_contexts_def,
+     ensure_storage_in_domain_def, assert_def, return_def]
+QED
+
 Theorem limits_num_contexts_step_create:
   0 < n ∧ n ≤ context_limit + 2 ⇒
   limits_num_contexts n (MIN (SUC n) (context_limit + 2)) (step_create x)
@@ -3760,6 +3807,8 @@ Proof
   >- (
     irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[]
     \\ tac )
+  \\ simp[limits_num_contexts_reorder_ensure_storage]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ irule limits_num_contexts_check
   \\ reverse conj_tac
   >- (
@@ -3982,6 +4031,10 @@ Definition domain_compatible_def:
   (∀addr key.
        fIN (SK addr key) s1.msdomain.storageKeys ⇒
        LIST_REL (λa1 a2. (a1 addr).storage key = (a2 addr).storage key)
+         (all_accounts s1) (all_accounts s2)) ∧
+  (∀addr.
+       fIN addr s1.msdomain.fullStorages ⇒
+       LIST_REL (λa1 a2. (a1 addr).storage = (a2 addr).storage)
          (all_accounts s1) (all_accounts s2))
 End
 
@@ -4491,8 +4544,9 @@ QED
 
 Theorem get_accounts_ignore_extra_domain_pred_bind:
   (∀x y s. p s ∧
-    (∀a. fIN a s.msdomain.addresses ⇒ accounts_agree_modulo_storage a x y) ⇒
-         f x s = f y s) ∧
+    (∀a. fIN a s.msdomain.addresses ⇒ accounts_agree_modulo_storage a x y) ∧
+    (∀a. fIN a s.msdomain.fullStorages ⇒ (x a).storage = (y a).storage)
+    ⇒ f x s = f y s) ∧
   (∀s s'. p s ∧ domain_compatible s s' ⇒ p s') ∧
   (∀x. ignores_extra_domain_pred p (f x))
   ⇒
@@ -5594,7 +5648,9 @@ Theorem get_rollback_ignores_extra_domain_bind:
            (∀a. a ∈ toSet s.msdomain.addresses ⇒
                 accounts_agree_modulo_storage a x.accounts y.accounts) ∧
            (∀a k. SK a k ∈ toSet s.msdomain.storageKeys ⇒
-                (x.accounts a).storage k = (y.accounts a).storage k)
+                (x.accounts a).storage k = (y.accounts a).storage k) ∧
+           (∀a. a ∈ toSet s.msdomain.fullStorages ⇒
+                (x.accounts a).storage = (y.accounts a).storage)
     ⇒
     FST (f x s) = FST (f y s) ∧
     domain_compatible (SND (f x s)) (SND (f y s))) ∧
@@ -6028,17 +6084,27 @@ Proof
     \\ qunabbrev_tac`lhs`
     \\ `account_already_created la1 = account_already_created la2`
     by (
-      gvs[Abbr`la1`, Abbr`la2`, account_already_created_def, lookup_account_def]
-      \\ gvs[accounts_agree_modulo_storage_def, fIN_IN]
+      qmatch_asmsub_abbrev_tac`ensure_storage_in_domain toCreate`
+      \\ gvs[Abbr`la1`, Abbr`la2`, account_already_created_def, lookup_account_def]
+      \\ gvs[accounts_agree_modulo_storage_def, fIN_IN,
+             ensure_storage_in_domain_def, assert_def]
       \\ gvs[account_state_component_equality]
       \\ rw[] \\ gvs[]
-      )
-      account_already_created_def
-
-    \\ IF_CASES_TAC \\ simp[]
-
-    proceed_create_def TODO: remove sender from this, update nonce by address
-    step_create_def
+      \\ qmatch_asmsub_rename_tac`toCreate ∈ toSet st.msdomain.fullStorages`
+      \\ `st.msdomain = s.msdomain`
+      by (
+        gvs[get_num_contexts_def, set_return_data_def, assert_not_static_def,
+            bind_def, return_def, ignore_bind_def, get_static_def,
+            get_current_context_def, assert_def, fail_def, CaseEq"prod",
+            CaseEq"sum", set_current_context_def, CaseEq"bool", consume_gas_def,
+            get_gas_left_def, access_address_def] )
+      \\ `toCreate ∈ toSet s.msdomain.addresses`
+      by (
+        gvs[access_address_def, return_def, fail_def, CaseEq"prod",
+            CaseEq"bool", fIN_IN] )
+      \\ gs[])
+    \\ gs[] )
+  \\
 
 QED
 
