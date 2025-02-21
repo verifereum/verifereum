@@ -94,11 +94,19 @@ Datatype:
 End
 
 Datatype:
+  available_domain =
+  <| addresses:    address fset
+   ; storageKeys:  storage_key fset
+   ; fullStorages: address fset
+   |>
+End
+
+Datatype:
   execution_state =
   <| contexts : (context # rollback_state) list
    ; txParams : transaction_parameters
    ; rollback : rollback_state
-   ; msdomain : access_sets
+   ; msdomain : available_domain
    |>
 End
 
@@ -214,7 +222,7 @@ Definition precompile_addresses_def:
 End
 
 Definition initial_access_sets_def:
-  initial_access_sets coinBase callee t =
+  initial_access_sets coinBase callee t : access_sets =
   <| addresses   :=
        fUNION (
          fINSERT t.from $ fINSERT callee $ fINSERT coinBase $
