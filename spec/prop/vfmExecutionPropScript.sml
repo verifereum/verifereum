@@ -3950,7 +3950,8 @@ QED
 Definition sub_access_sets_def:
   sub_access_sets s1 s2 ⇔
   toSet s1.addresses ⊆ toSet s2.addresses ∧
-  toSet s1.storageKeys ⊆ toSet s2.storageKeys
+  toSet s1.storageKeys ⊆ toSet s2.storageKeys ∧
+  toSet s1.fullStorages ⊆ toSet s2.fullStorages
 End
 
 Definition accounts_agree_modulo_storage_def:
@@ -4089,25 +4090,58 @@ val ignores_extra_domain_def =
   SIMP_RULE std_ss [ignores_extra_domain_pred_def]
   ignores_extra_domain_def
 
-Theorem handle_ignores_extra_domain_allow:
-  ignores_extra_domain f ∧
+Theorem handle_ignores_extra_domain_pred_allow:
+  ignores_extra_domain_pred p f ∧
+  (∀s. p s ⇒ p (SND (f s))) ∧
   (∀e. if (∃x. e = SOME (OutsideDomain x))
        then (∀s. ∃t. (g e) s = (INR e, t) ∧
              t.msdomain = s.msdomain ∧
              (∀s'. domain_compatible s s' ⇒
-              ∃t'. (g e) s' = (r, t') ∧
+              ∃t'. (g e) s' = (INR e, t') ∧
                     domain_compatible t t'))
-       else ignores_extra_domain (g e))
+       else ignores_extra_domain_pred p (g e))
   ⇒
-  ignores_extra_domain (handle f g)
+  ignores_extra_domain_pred p (handle f g)
 Proof
-  rw[handle_def, ignores_extra_domain_def]
+  simp[handle_def, ignores_extra_domain_pred_def]
+  \\ strip_tac \\ rpt gen_tac
   \\ gvs[CaseEq"prod",CaseEq"sum"]
-  \\ first_x_assum drule \\ gs[]
-  \\ first_x_assum(qspec_then`e`mp_tac) \\ rw[]
+  \\ strip_tac \\ gvs[]
+  >- (
+    first_x_assum(drule_then drule)
+    \\ simp[] \\ strip_tac
+    \\ gen_tac \\ strip_tac
+    \\ first_x_assum drule \\ strip_tac
+    \\ goal_assum drule \\ simp[] )
+  \\ conj_asm1_tac >- metis_tac[PAIR, SND]
+  \\ conj_tac
+  >- (
+    rw[]
+    \\ first_x_assum(drule_then drule) \\ rw[]
+    \\ first_x_assum(qspec_then`e`mp_tac)
+    \\ rw[]
+    >- ( first_x_assum(qspec_then`s'`mp_tac) \\ rw[] )
+    \\ gs[]
+    \\ first_x_assum(qspec_then`s'`mp_tac)
+    \\ simp[]
+    \\ impl_tac >- metis_tac[SND]
+    \\ rw[] )
+  \\ rw[]
+  \\ first_x_assum(drule_then drule) \\ rw[]
+  \\ first_x_assum(qspec_then`e`mp_tac)
+  \\ rw[]
+  >- (
+    first_x_assum drule \\ rw[] \\ rw[]
+    \\ first_x_assum(qspec_then`s'`mp_tac)
+    \\ rw[]
+    \\ first_x_assum drule \\ rw[]
+    \\ goal_assum drule
+    \\ simp[] )
   \\ gs[]
-  \\ TRY( first_x_assum drule \\ strip_tac \\ gs[] )
-  \\ metis_tac[PAIR_EQ]
+  \\ last_x_assum drule \\ rw[]
+  \\ first_x_assum drule \\ rw[]
+  \\ first_x_assum drule \\ rw[]
+  \\ rw[]
 QED
 
 Theorem handle_ignores_extra_domain:
@@ -6002,7 +6036,15 @@ Proof
   \\ tac
 QED
 
-(*
+Theorem ensure_storage_in_domain_ignores_extra_domain[simp]:
+  ignores_extra_domain (ensure_storage_in_domain a)
+Proof
+  rw[ensure_storage_in_domain_def, ignores_extra_domain_def, assert_def]
+  >- gs[sub_access_sets_def, fIN_IN, SUBSET_DEF]
+  \\ rw[]
+  \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
+QED
+
 Theorem step_create_ignores_extra_domain:
   ignores_extra_domain_pred
   (λs. ∀c r t.
@@ -6104,21 +6146,64 @@ Proof
             CaseEq"bool", fIN_IN] )
       \\ gs[])
     \\ gs[] )
-  \\
-
+  \\ gen_tac
+  \\ irule ignores_extra_domain_pred_imp
+  \\ tac
 QED
 
-Theorem step_inst_ignores_extra_domain[simp]:
-  ignores_extra_domain (step_inst op)
+Theorem step_inst_ignores_extra_domain:
+  ignores_extra_domain_pred
+  (λs. ∀c r t. s.contexts = (c,r)::t ⇒
+       c.msgParams.callee ∈ toSet s.msdomain.addresses)
+  (step_inst op)
 Proof
-  Cases_on`op` \\ rw[step_inst_def] \\ tac
+  Cases_on`op` \\ rw[step_inst_def]
+  \\ TRY (irule ignores_extra_domain_pred_imp \\ simp[] \\ tac \\ NO_TAC)
+  \\ TRY $ irule step_self_balance_ignore_extra_domain
+  \\ TRY $ irule step_create_ignores_extra_domain
+  \\ TRY $ irule step_call_ignores_extra_domain
 QED
 
+(*
 Theorem step_ignores_extra_domain:
-  ignores_extra_domain step
+  ignores_extra_domain_pred
+  (λs. ∀c r t. s.contexts = (c,r)::t ⇒
+       c.msgParams.callee ∈ toSet s.msdomain.addresses)
+  step
 Proof
   rw[step_def]
-  \\ irule handle_ignores_extra_domain_allow \\ rw[]
+  \\ irule handle_ignores_extra_domain_pred_allow
+  \\ simp[]
+  \\ reverse conj_asm2_tac
+  >- (
+    reverse conj_tac
+    >- (
+      irule ignores_extra_domain_imp_pred_bind \\ simp[]
+      \\ reverse conj_tac
+      >- rw[get_current_context_def, fail_def, return_def]
+      \\ rw[]
+      >- irule step_inst_ignores_extra_domain
+      \\ TOP_CASE_TAC
+      >- irule step_inst_ignores_extra_domain
+      \\ simp[ignore_bind_def]
+      \\ irule ignores_extra_domain_imp_pred_pred_bind \\ simp[]
+      \\ reverse conj_tac
+      >- (
+        reverse conj_asm2_tac
+        >- irule step_inst_ignores_extra_domain
+        \\ rw[]
+        \\ gs[ignores_extra_domain_pred_def]
+        \\ first_x_assum (qspec_then`s`mp_tac)
+        \\ simp[]
+        \\ qmatch_goalsub_abbrev_tac`SND pp`
+        \\ Cases_on`pp` \\ simp[]
+        \\ rw[]
+
+
+  \\ rw[]
+  >- (
+    qmatch_goalsub_abbrev_tac`SND (f s)`
+    SND_bind_domain_compatible
   >- ( rw[handle_step_def, reraise_def] )
   \\ tac
   \\ BasicProvers.TOP_CASE_TAC \\ rw[]
