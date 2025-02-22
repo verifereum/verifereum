@@ -35,7 +35,7 @@ Start by reading our [Contributor Guide](/contribute) to learn how to set up you
 ### For Technical Contributors
 
 1. **Join the Community**:
-   - Connect on [Discord](https://discord.gg/a8UUs6Ce6m) (join the #verifereum channel)
+   - Connect on [Zulip](https://hol.zulipchat.com) (join the Verifereum channel)
    - Watch our [GitHub repository](https://github.com/verifereum/verifereum)
 
 2. **Start Contributing**:
@@ -97,4 +97,4 @@ We have opportunities for both technical and non-technical contributions:
 - Project management
 - Grant writing and fundraising
 
-Ready to start? Join our [Discord](https://discord.gg/a8UUs6Ce6m) and check out our [contributor guide](/contribute)!
+Ready to start? Join our [Zulip](https://hol.zulipchat.com) and check out our [contributor guide](/contribute)!

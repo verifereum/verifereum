@@ -52,7 +52,7 @@ HOL4 supports several development environments - choose what works best for you:
    - Good for those new to theorem proving
    - The repository is [here](https://github.com/HOL-Theorem-Prover/hol4-vscode)
 
-Need help with installation? Ask in [Discord](https://discord.gg/a8UUs6Ce6m) #verifereum channel - different approaches work better for different systems and use cases.
+Need help with installation? Ask in [Zulip](https://hol.zulipchat.com) Verifereum channel - different approaches work better for different systems and use cases.
 
 ## Contributing to Verifereum and HOL4
 
@@ -62,7 +62,7 @@ Verifereum and HOL4 are tightly integrated projects. We encourage contributing t
   - Improve the theorem prover infrastructure - see the [GitHub issues](https://github.com/HOL-Theorem-Prover/HOL/issues)
   - Add useful tactics and libraries
   - Fix bugs and enhance performance
-  - Join the HOL4 community discussions (in the same [Discord](https://discord.gg/a8UUs6Ce6m))
+  - Join the HOL4 community discussions (in the same [Zulip](https://hol.zulipchat.com))
 
 - **Verifereum Contributions**
   - Work on EVM formalization
@@ -110,7 +110,7 @@ Here are some active areas where you can contribute:
 ## Getting Started
 
 1. **Join the Community**
-   - Introduce yourself in Discord
+   - Introduce yourself in Zulip
    - Share your interests and background
    - Discuss potential contribution areas
 
@@ -122,7 +122,7 @@ Here are some active areas where you can contribute:
 3. **Find Your Focus**
    - Review current project areas
    - Look at existing issues
-   - Discuss ideas in Discord
+   - Discuss ideas in Zulip
 
 4. **Start Contributing**
    - Begin with small improvements
@@ -131,7 +131,7 @@ Here are some active areas where you can contribute:
 
 ## Getting Help
 
-- Join our [Discord](https://discord.gg/a8UUs6Ce6m)
+- Join our [Zulip](https://hol.zulipchat.com)
 - Contact [Ramana (xrchz)](https://github.com/xrchz)
 - Ask questions on [GitHub issues](https://github.com/verifereum/verifereum/issues)
 
