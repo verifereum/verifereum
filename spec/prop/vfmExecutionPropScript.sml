@@ -3931,7 +3931,6 @@ Proof
         ignore_bind_def, return_def, reraise_def]
 QED
 
-(* TODO: depends on earlier fixes
 Theorem step_preserves_wf_state:
   wf_state s ⇒ wf_state (SND (step s))
 Proof
@@ -3945,7 +3944,6 @@ Proof
   >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
   >- ( first_x_assum(qspec_then`s`mp_tac) \\ simp[ok_state_def])
 QED
-*)
 
 Definition sub_access_sets_def:
   sub_access_sets s1 s2 ⇔
@@ -4069,6 +4067,16 @@ Proof
   rw[domain_compatible_def, states_agree_modulo_accounts_def]
   \\ gs[LIST_REL_EL_EQN]
 QED
+
+Definition domain_has_callee_def:
+  domain_has_callee s ⇔
+  s.msgParams.callee ∈ toSet s.msdomain.addresses
+End
+
+Definition preserves_domain_has_callee_def:
+  preserves_domain_has_callee f ⇔
+  ∀s r t. domain_has_callee s ∧ f s = (r, t) ⇒ domain_has_callee t
+End
 
 Definition ignores_extra_domain_pred_def:
   ignores_extra_domain_pred p m ⇔
@@ -6164,7 +6172,12 @@ Proof
   \\ TRY $ irule step_call_ignores_extra_domain
 QED
 
-(*
+Theorem step_inst_preserves_domain_has_callee:
+  preserves_domain_has_callee (step_inst op)
+Proof
+  cheat
+QED
+
 Theorem step_ignores_extra_domain:
   ignores_extra_domain_pred
   (λs. ∀c r t. s.contexts = (c,r)::t ⇒
@@ -6192,23 +6205,25 @@ Proof
         reverse conj_asm2_tac
         >- irule step_inst_ignores_extra_domain
         \\ rw[]
-        \\ gs[ignores_extra_domain_pred_def]
-        \\ first_x_assum (qspec_then`s`mp_tac)
-        \\ simp[]
-        \\ qmatch_goalsub_abbrev_tac`SND pp`
-        \\ Cases_on`pp` \\ simp[]
-        \\ rw[]
-
-
+        \\ qmatch_goalsub_rename_tac`step_inst op`
+        \\ mp_tac step_inst_preserves_domain_has_callee
+        \\ simp[preserves_domain_has_callee_def]
+        \\ disch_then(qspec_then`s`mp_tac)
+        \\ Cases_on`step_inst op s`
+        \\ rw[domain_has_callee_def] \\ gvs[]
+      )
+      \\ irule ignores_extra_domain_pred_imp
+      \\ rw[] )
+    \\ rw[]
+    >- rw[handle_step_def, reraise_def]
+    \\ irule ignores_extra_domain_pred_imp
+    \\ rw[] )
   \\ rw[]
-  >- (
-    qmatch_goalsub_abbrev_tac`SND (f s)`
-    SND_bind_domain_compatible
-  >- ( rw[handle_step_def, reraise_def] )
-  \\ tac
-  \\ BasicProvers.TOP_CASE_TAC \\ rw[]
-  \\ tac
+  \\ qmatch_goalsub_abbrev_tac`SND (f s)`
+  \\ `preserves_domain_has_callee f` by cheat
+  \\ gs[preserves_domain_has_callee_def]
+  \\ gs[domain_has_callee_def]
+  \\ metis_tac[PAIR]
 QED
-*)
 
 val () = export_theory();
