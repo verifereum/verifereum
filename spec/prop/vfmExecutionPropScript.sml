@@ -7258,7 +7258,7 @@ Proof
   \\ rw[]
 QED
 
-Theorem step_inst_preserves_domain_has_callee:
+Theorem step_inst_preserves_domain_has_callee[simp]:
   preserves_domain_has_callee (K T) (step_inst op)
 Proof
   Cases_on`op` \\ rw[step_inst_def]
@@ -7266,7 +7266,18 @@ Proof
   \\ TRY (irule preserves_domain_has_callee_step_copy_to_memory \\ rw[])
 QED
 
-Theorem step_ignores_extra_domain:
+Theorem preserves_domain_has_callee_inc_pc_or_jump[simp]:
+  preserves_domain_has_callee (K T) (inc_pc_or_jump x)
+Proof
+  rw[inc_pc_or_jump_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ TOP_CASE_TAC
+  >- ( irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  >- ( irule preserves_domain_has_callee_set_current_context \\ rw[] )
+QED
+
+Theorem step_ignores_extra_domain_pred:
   ignores_extra_domain_pred
   (λs. ∀c r t. s.contexts = (c,r)::t ⇒
        c.msgParams.callee ∈ toSet s.msdomain.addresses)
@@ -7292,7 +7303,7 @@ Proof
         \\ rw[]
         \\ qmatch_goalsub_rename_tac`step_inst op`
         \\ mp_tac step_inst_preserves_domain_has_callee
-        \\ simp[preserves_domain_has_callee_def]
+        \\ rewrite_tac[preserves_domain_has_callee_def]
         \\ disch_then(qspec_then`s`mp_tac)
         \\ Cases_on`step_inst op s`
         \\ rw[domain_has_callee_def] \\ gvs[])
@@ -7302,9 +7313,18 @@ Proof
     \\ irule ignores_extra_domain_pred_imp \\ rw[] )
   \\ rw[]
   \\ qmatch_goalsub_abbrev_tac`SND (f s)`
-  \\ `preserves_domain_has_callee (K T) f` by cheat
+  \\ `domain_has_callee s` by fs[domain_has_callee_def]
+  \\ `preserves_domain_has_callee (K T) f` by (
+    qunabbrev_tac`f`
+    \\ irule preserves_domain_has_callee_get_current_context_bind
+    \\ simp[] \\ qx_gen_tac`ss`
+    \\ IF_CASES_TAC >- rw[]
+    \\ TOP_CASE_TAC >- rw[]
+    \\ irule preserves_domain_has_callee_imp
+    \\ irule preserves_domain_has_callee_ignore_bind \\ simp[])
   \\ gs[preserves_domain_has_callee_def]
-  \\ gs[domain_has_callee_def]
+  \\ first_x_assum drule
+  \\ simp[domain_has_callee_def]
   \\ metis_tac[PAIR]
 QED
 
