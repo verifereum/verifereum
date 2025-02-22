@@ -412,9 +412,14 @@ Definition add_to_delete_def:
       (λr. r with toDelete updated_by CONS a)
 End
 
+Definition domain_check_def:
+  domain_check f x =
+  case x of NONE => T | SOME d => f d
+End
+
 Definition access_address_def:
   access_address a s =
-  if fIN a s.msdomain.addresses then
+  if domain_check (λd. fIN a d.addresses) s.msdomain then
     let addresses = s.rollback.accesses.addresses in
     let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
     let newRollback = s.rollback with accesses := newAccesses in
@@ -426,7 +431,7 @@ End
 
 Definition access_slot_def:
   access_slot x s =
-  if fIN x s.msdomain.storageKeys then
+  if domain_check (λd. fIN x d.storageKeys) s.msdomain then
     let storageKeys = s.rollback.accesses.storageKeys in
     let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
     let newRollback = s.rollback with accesses := newAccesses in
@@ -438,7 +443,7 @@ End
 
 Definition ensure_storage_in_domain_def:
   ensure_storage_in_domain a s =
-    assert (fIN a s.msdomain.fullStorages)
+    assert (domain_check (λd. fIN a d.fullStorages) s.msdomain)
            (OutsideDomain (INR (INR a))) s
 End
 
