@@ -7001,11 +7001,42 @@ Proof
   rw[push_context_def]
 QED
 
+Theorem preserves_domain_has_callee_fail[simp]:
+  preserves_domain_has_callee (K T) (fail x)
+Proof
+  rw[fail_def, preserves_domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_precompiles[simp]:
+    preserves_domain_has_callee (K T) precompile_ecrecover
+  ∧ preserves_domain_has_callee (K T) precompile_sha2_256
+  ∧ preserves_domain_has_callee (K T) precompile_ripemd_160
+  ∧ preserves_domain_has_callee (K T) precompile_identity
+  ∧ preserves_domain_has_callee (K T) precompile_modexp
+  ∧ preserves_domain_has_callee (K T) precompile_ecadd
+  ∧ preserves_domain_has_callee (K T) precompile_ecmul
+  ∧ preserves_domain_has_callee (K T) precompile_ecpairing
+  ∧ preserves_domain_has_callee (K T) precompile_blake2f
+Proof
+  rw[precompile_ecrecover_def,
+     precompile_sha2_256_def,
+     precompile_ripemd_160_def,
+     precompile_identity_def,
+     precompile_modexp_def,
+     precompile_ecadd_def,
+     precompile_ecmul_def,
+     precompile_ecpairing_def,
+     precompile_blake2f_def]
+  \\ rpt (
+    (irule preserves_domain_has_callee_bind ORELSE
+     irule preserves_domain_has_callee_ignore_bind)
+    \\ rw[])
+QED
+
 Theorem preserves_domain_has_callee_dispatch_precompiles[simp]:
   preserves_domain_has_callee (K T) (dispatch_precompiles x)
 Proof
   rw[dispatch_precompiles_def]
-  \\ cheat
 QED
 
 Theorem preserves_domain_has_callee_proceed_call[simp]:
