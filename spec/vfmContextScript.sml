@@ -106,7 +106,7 @@ Datatype:
   <| contexts : (context # rollback_state) list
    ; txParams : transaction_parameters
    ; rollback : rollback_state
-   ; msdomain : available_domain
+   ; msdomain : available_domain option (* TODO: add collecting version? *)
    |>
 End
 

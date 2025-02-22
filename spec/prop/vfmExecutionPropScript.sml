@@ -4023,24 +4023,27 @@ QED
 Definition domain_compatible_def:
   domain_compatible s1 s2 ⇔
   states_agree_modulo_accounts s1 s2 ∧
+  domain_check (λd.
   (∀addr.
-       fIN addr s1.msdomain.addresses ⇒
+       fIN addr d.addresses ⇒
        LIST_REL (accounts_agree_modulo_storage addr)
          (all_accounts s1) (all_accounts s2)) ∧
   (∀addr key.
-       fIN (SK addr key) s1.msdomain.storageKeys ⇒
+       fIN (SK addr key) d.storageKeys ⇒
        LIST_REL (λa1 a2. (a1 addr).storage key = (a2 addr).storage key)
          (all_accounts s1) (all_accounts s2)) ∧
   (∀addr.
-       fIN addr s1.msdomain.fullStorages ⇒
+       fIN addr d.fullStorages ⇒
        LIST_REL (λa1 a2. (a1 addr).storage = (a2 addr).storage)
          (all_accounts s1) (all_accounts s2))
+  ) s1.msdomain
 End
 
 Theorem domain_compatible_refl[simp]:
   domain_compatible x x
 Proof
-  rw[domain_compatible_def]
+  rw[domain_compatible_def, domain_check_def]
+  \\ TOP_CASE_TAC \\ rw[]
   \\ irule EVERY2_refl
   \\ rw[]
 QED
@@ -4050,14 +4053,16 @@ Theorem domain_compatible_trans:
   domain_compatible s2 s3 ⇒
   domain_compatible s1 s3
 Proof
-  rw[domain_compatible_def]
+  rw[domain_compatible_def, domain_check_def]
   >- metis_tac[states_agree_modulo_accounts_trans]
-  >- metis_tac[accounts_agree_modulo_storage_trans, LIST_REL_trans,
-               states_agree_modulo_accounts_def]
-  \\ irule LIST_REL_trans
-  \\ gs[states_agree_modulo_accounts_def]
+  \\ pop_assum mp_tac
+  \\ TOP_CASE_TAC
+  \\ TOP_CASE_TAC \\ gvs[]
+  \\ gvs[states_agree_modulo_accounts_def]
+  \\ rw[] \\ irule LIST_REL_trans \\ gs[]
   \\ qexists_tac`all_accounts s2`
-  \\ gs[]
+  \\ gvs[]
+  \\ metis_tac[accounts_agree_modulo_storage_trans]
 QED
 
 Theorem domain_compatible_lengths:
@@ -4070,8 +4075,8 @@ QED
 
 Definition domain_has_callee_def:
   domain_has_callee s ⇔
-  ∀c r t. s.contexts = (c,r)::t ⇒
-    c.msgParams.callee ∈ toSet s.msdomain.addresses
+  ∀c r t d. s.contexts = (c,r)::t ∧ s.msdomain = SOME d ⇒
+    c.msgParams.callee ∈ toSet d.addresses
 End
 
 Definition preserves_domain_has_callee_def:
@@ -4084,9 +4089,10 @@ Definition ignores_extra_domain_pred_def:
   ignores_extra_domain_pred p m ⇔
   ∀s r t. p s ∧ m s = (r, t) ⇒
     t.msdomain = s.msdomain ∧
-    ((∀x. r ≠ INR $ SOME $ OutsideDomain x) ⇒
-      ∀d2. sub_access_sets s.msdomain d2 ⇒
-        m (s with msdomain := d2) = (r, t with msdomain := d2)) ∧
+    (∀d1. (∀x. r ≠ INR $ SOME $ OutsideDomain x) ∧
+           s.msdomain = SOME d1 ⇒
+      ∀d2. sub_access_sets d1 d2 ⇒
+        m (s with msdomain := SOME d2) = (r, t with msdomain := SOME d2)) ∧
     (∀s'. domain_compatible s s' ⇒
           ∃t'. domain_compatible t t' ∧ m s' = (r, t'))
 End
@@ -4377,7 +4383,8 @@ Proof
       \\ gvs[states_agree_modulo_accounts_def]
       \\ Cases_on`s.contexts` \\ gvs[]
       \\ qmatch_goalsub_rename_tac`TL ss.contexts`
-      \\ Cases_on`ss.contexts` \\ gvs[] )
+      \\ Cases_on`ss.contexts` \\ gvs[]
+      \\ gs[domain_check_def] \\ TOP_CASE_TAC \\ gs[])
     \\ strip_tac
     \\ disj2_tac
     \\ goal_assum drule
@@ -4418,7 +4425,8 @@ Proof
   \\ Cases_on`s2.contexts` \\ gvs[]
   \\ TRY (
     gs[domain_compatible_def, states_agree_modulo_accounts_def,
-       all_accounts_def]
+       all_accounts_def, domain_check_def]
+    \\ TOP_CASE_TAC \\ gs[]
     \\ qmatch_goalsub_rename_tac`FST (HD ls)`
     \\ Cases_on`ls` \\ gs[]
     \\ qmatch_asmsub_rename_tac`MAP FST ls = _::_`
@@ -4429,9 +4437,10 @@ Proof
   \\ Cases_on`t` \\ gvs[]
   \\ qmatch_goalsub_rename_tac`FST p`
   \\ Cases_on`p` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`FST p`
-  \\ Cases_on`p` \\ gvs[]
-  \\ gvs[domain_compatible_def]
+  \\ TRY (qmatch_goalsub_rename_tac`FST p`
+          \\ Cases_on`p` \\ gvs[])
+  \\ gvs[domain_compatible_def, domain_check_def]
+  \\ TRY TOP_CASE_TAC
   \\ gvs[states_agree_modulo_accounts_def]
   \\ gvs[all_accounts_def]
 QED
@@ -4467,9 +4476,10 @@ Proof
   \\ rw[ignores_extra_domain_def, update_accounts_def, return_def]
   \\ gvs[domain_compatible_def, all_accounts_def, update_account_def,
          lookup_account_def, APPLY_UPDATE_THM, states_agree_modulo_accounts_def,
-         rollback_states_agree_modulo_accounts_def,
+         rollback_states_agree_modulo_accounts_def, domain_check_def,
          rollback_state_component_equality, accounts_agree_modulo_storage_def,
          account_state_component_equality]
+  \\ TOP_CASE_TAC \\ gs[]
   \\ rw[]
 QED
 
