@@ -4070,12 +4070,14 @@ QED
 
 Definition domain_has_callee_def:
   domain_has_callee s ⇔
-  s.msgParams.callee ∈ toSet s.msdomain.addresses
+  ∀c r t. s.contexts = (c,r)::t ⇒
+    c.msgParams.callee ∈ toSet s.msdomain.addresses
 End
 
 Definition preserves_domain_has_callee_def:
-  preserves_domain_has_callee f ⇔
-  ∀s r t. domain_has_callee s ∧ f s = (r, t) ⇒ domain_has_callee t
+  preserves_domain_has_callee p f ⇔
+  ∀s r t. p s ∧ domain_has_callee s ∧ f s = (r, t) ⇒
+          domain_has_callee t
 End
 
 Definition ignores_extra_domain_pred_def:
@@ -6172,10 +6174,253 @@ Proof
   \\ TRY $ irule step_call_ignores_extra_domain
 QED
 
-Theorem step_inst_preserves_domain_has_callee:
-  preserves_domain_has_callee (step_inst op)
+Theorem preserves_domain_has_callee_bind:
+  preserves_domain_has_callee p g ∧
+  (∀s. p s ⇒ p (SND (g s))) ∧
+  (∀x. preserves_domain_has_callee p (f x))
+  ⇒
+  preserves_domain_has_callee p (monad_bind g f)
 Proof
-  cheat
+  rw[bind_def, preserves_domain_has_callee_def]
+  \\ gvs[CaseEq"prod",CaseEq"sum"]
+  \\ metis_tac[SND]
+QED
+
+Theorem preserves_domain_has_callee_ignore_bind:
+  preserves_domain_has_callee p g ∧
+  (∀s. p s ⇒ p (SND (g s))) ∧
+  preserves_domain_has_callee p f
+  ⇒
+  preserves_domain_has_callee p (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  \\ irule preserves_domain_has_callee_bind
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_get_current_context_bind:
+  (∀x. preserves_domain_has_callee
+       (λs. p s ∧ x.msgParams.callee ∈ toSet s.msdomain.addresses)
+       (f x))
+  ⇒
+  preserves_domain_has_callee p (monad_bind get_current_context f)
+Proof
+  rw[preserves_domain_has_callee_def, bind_def, get_current_context_def,
+     return_def, fail_def, CaseEq"prod", CaseEq"bool", CaseEq"sum"]
+  \\ gvs[]
+  \\ Cases_on`s.contexts` \\ gvs[]
+  \\ Cases_on`h` \\ gvs[]
+  \\ metis_tac[domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_set_current_context:
+  (∀s. p s ⇒ x.msgParams.callee ∈ toSet s.msdomain.addresses)
+  ⇒
+  preserves_domain_has_callee p (set_current_context x)
+Proof
+  rw[set_current_context_def, preserves_domain_has_callee_def]
+  \\ gvs[fail_def, return_def, CaseEq"prod", CaseEq"bool"]
+  \\ gs[domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_set_return_data[simp]:
+  preserves_domain_has_callee (K T) (set_return_data _)
+Proof
+  rw[set_return_data_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_finish[simp]:
+  preserves_domain_has_callee (K T) (finish)
+Proof
+  rw[finish_def, preserves_domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_assert[simp]:
+  preserves_domain_has_callee (K T) (assert b e)
+Proof
+  rw[assert_def, preserves_domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_mono:
+  preserves_domain_has_callee q f ∧ (∀s. p s ⇒ q s) ⇒
+  preserves_domain_has_callee p f
+Proof
+  rw[preserves_domain_has_callee_def]
+  \\ metis_tac[SND]
+QED
+
+Theorem assert_msdomain[simp]:
+  (SND (assert b e s)).msdomain = s.msdomain
+Proof
+  rw[assert_def]
+QED
+
+Theorem return_msdomain[simp]:
+  (SND (return x s)).msdomain = s.msdomain
+Proof
+  rw[return_def]
+QED
+
+Theorem fail_msdomain[simp]:
+  (SND (fail x s)).msdomain = s.msdomain
+Proof
+  rw[fail_def]
+QED
+
+Theorem set_current_context_msdomain[simp]:
+  (SND (set_current_context x s)).msdomain = s.msdomain
+Proof
+  rw[set_current_context_def]
+QED
+
+Theorem preserves_domain_has_callee_return[simp]:
+  preserves_domain_has_callee (K T) (return x)
+Proof
+  rw[return_def, preserves_domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_imp[simp]:
+  preserves_domain_has_callee (K T) f ⇒
+  preserves_domain_has_callee p f
+Proof
+  strip_tac
+  \\ irule preserves_domain_has_callee_mono
+  \\ qexists_tac`K T`
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_pop_stack[simp]:
+  preserves_domain_has_callee (K T) (pop_stack n)
+Proof
+  rw[pop_stack_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_consume_gas[simp]:
+  preserves_domain_has_callee (K T) (consume_gas n)
+Proof
+  rw[consume_gas_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_push_stack[simp]:
+  preserves_domain_has_callee (K T) (push_stack n)
+Proof
+  rw[push_stack_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_binop[simp]:
+  preserves_domain_has_callee (K T) (step_binop x y)
+Proof
+  rw[step_binop_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_modop[simp]:
+  preserves_domain_has_callee (K T) (step_modop x y)
+Proof
+  rw[step_modop_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_monop[simp]:
+  preserves_domain_has_callee (K T) (step_monop x y)
+Proof
+  rw[step_monop_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_exp[simp]:
+  preserves_domain_has_callee (K T) step_exp
+Proof
+  rw[step_exp_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_memory_expansion_info[simp]:
+  preserves_domain_has_callee (K T) (memory_expansion_info x y)
+Proof
+  simp[memory_expansion_info_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ simp[]
+QED
+
+Theorem preserves_domain_has_callee_expand_memory[simp]:
+  preserves_domain_has_callee (K T) (expand_memory x)
+Proof
+  simp[expand_memory_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_read_memory[simp]:
+  preserves_domain_has_callee (K T) (read_memory x y)
+Proof
+  rw[read_memory_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_keccak256[simp]:
+  preserves_domain_has_callee (K T) step_keccak256
+Proof
+  rw[step_keccak256_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_context[simp]:
+  preserves_domain_has_callee (K T) (step_context x y)
+Proof
+  rw[step_context_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_msgParams[simp]:
+  preserves_domain_has_callee (K T) (step_msgParams x y)
+Proof
+  rw[step_msgParams_def]
+QED
+
+Theorem preserves_domain_has_callee_get_tx_params[simp]:
+  preserves_domain_has_callee (K T) get_tx_params
+Proof
+  rw[get_tx_params_def, preserves_domain_has_callee_def, return_def]
+QED
+
+Theorem preserves_domain_has_callee_step_txParams[simp]:
+  preserves_domain_has_callee (K T) (step_txParams x y)
+Proof
+  rw[step_txParams_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem step_inst_preserves_domain_has_callee:
+  preserves_domain_has_callee (K T) (step_inst op)
+Proof
+  Cases_on`op` \\ rw[step_inst_def]
+  \\ TRY (irule preserves_domain_has_callee_ignore_bind \\ rw[])
+  \\ cheat
 QED
 
 Theorem step_ignores_extra_domain:
@@ -6210,8 +6455,7 @@ Proof
         \\ simp[preserves_domain_has_callee_def]
         \\ disch_then(qspec_then`s`mp_tac)
         \\ Cases_on`step_inst op s`
-        \\ rw[domain_has_callee_def] \\ gvs[]
-      )
+        \\ rw[domain_has_callee_def] \\ gvs[])
       \\ irule ignores_extra_domain_pred_imp
       \\ rw[] )
     \\ rw[]
@@ -6220,7 +6464,7 @@ Proof
     \\ rw[] )
   \\ rw[]
   \\ qmatch_goalsub_abbrev_tac`SND (f s)`
-  \\ `preserves_domain_has_callee f` by cheat
+  \\ `preserves_domain_has_callee (K T) f` by cheat
   \\ gs[preserves_domain_has_callee_def]
   \\ gs[domain_has_callee_def]
   \\ metis_tac[PAIR]
