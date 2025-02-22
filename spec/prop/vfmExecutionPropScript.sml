@@ -6415,11 +6415,203 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ rw[]
 QED
 
+Theorem preserves_domain_has_callee_access_address[simp]:
+  preserves_domain_has_callee (K T) (access_address a)
+Proof
+  rw[access_address_def, preserves_domain_has_callee_def, CaseEq"bool",
+     return_def, fail_def]
+  \\ gs[domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_get_accounts[simp]:
+  preserves_domain_has_callee (K T) get_accounts
+Proof
+  rw[get_accounts_def, preserves_domain_has_callee_def, return_def]
+QED
+
+Theorem preserves_domain_has_callee_step_balance[simp]:
+  preserves_domain_has_callee (K T) step_balance
+Proof
+  rw[step_balance_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_get_call_data[simp]:
+  preserves_domain_has_callee (K T) get_call_data
+Proof
+  rw[get_call_data_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_call_data_load[simp]:
+  preserves_domain_has_callee (K T) step_call_data_load
+Proof
+  rw[step_call_data_load_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_write_memory[simp]:
+  preserves_domain_has_callee (K T) (write_memory x y)
+Proof
+  rw[write_memory_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_copy_to_memory[simp]:
+  (∀g. f = SOME g ⇒ preserves_domain_has_callee (K T) g)
+  ⇒
+  preserves_domain_has_callee (K T) (copy_to_memory a b c d f)
+Proof
+  strip_tac
+  \\ simp[copy_to_memory_def, UNCURRY]
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ TOP_CASE_TAC
+  >- (
+    irule preserves_domain_has_callee_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_ignore_bind \\ rw[] )
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_copy_to_memory[simp]:
+  (∀g. f = SOME g ⇒ preserves_domain_has_callee (K T) g)
+  ⇒
+  preserves_domain_has_callee (K T) (step_copy_to_memory x f)
+Proof
+  rw[step_copy_to_memory_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_copy_to_memory
+QED
+
+Theorem preserves_domain_has_callee_get_current_code[simp]:
+  preserves_domain_has_callee (K T) get_current_code
+Proof
+  rw[get_current_code_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_get_code[simp]:
+  preserves_domain_has_callee (K T) (get_code x)
+Proof
+  rw[get_code_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_ext_code_size[simp]:
+  preserves_domain_has_callee (K T) step_ext_code_size
+Proof
+  rw[step_ext_code_size_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_ext_code_copy[simp]:
+  preserves_domain_has_callee (K T) step_ext_code_copy
+Proof
+  rw[step_ext_code_copy_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_get_return_data[simp]:
+  preserves_domain_has_callee (K T) (get_return_data)
+Proof
+  rw[get_return_data_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_get_return_data_check[simp]:
+  preserves_domain_has_callee (K T) (get_return_data_check x y)
+Proof
+  rw[get_return_data_check_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_return_data_copy[simp]:
+  preserves_domain_has_callee (K T) step_return_data_copy
+Proof
+  rw[step_return_data_copy_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_copy_to_memory \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_ext_code_hash[simp]:
+  preserves_domain_has_callee (K T) step_ext_code_hash
+Proof
+  rw[step_ext_code_hash_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_block_hash[simp]:
+  preserves_domain_has_callee (K T) step_block_hash
+Proof
+  rw[step_block_hash_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_get_callee[simp]:
+  preserves_domain_has_callee (K T) get_callee
+Proof
+  rw[get_callee_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_self_balance[simp]:
+  preserves_domain_has_callee (K T) step_self_balance
+Proof
+  rw[step_self_balance_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_pop[simp]:
+  preserves_domain_has_callee (K T) step_pop
+Proof
+  rw[step_pop_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_mload[simp]:
+  preserves_domain_has_callee (K T) step_mload
+Proof
+  rw[step_mload_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
 Theorem step_inst_preserves_domain_has_callee:
   preserves_domain_has_callee (K T) (step_inst op)
 Proof
   Cases_on`op` \\ rw[step_inst_def]
   \\ TRY (irule preserves_domain_has_callee_ignore_bind \\ rw[])
+  \\ TRY (irule preserves_domain_has_callee_step_copy_to_memory \\ rw[])
+
   \\ cheat
 QED
 
