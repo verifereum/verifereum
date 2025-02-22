@@ -7040,27 +7040,192 @@ Proof
   \\ rw[]
 QED
 
-(*
+Theorem preserves_domain_has_callee_access_address_bind:
+  (∀x. preserves_domain_has_callee
+         (λs. a ∈ toSet s.msdomain.addresses ) (f x))
+  ⇒
+  preserves_domain_has_callee p
+    (monad_bind (access_address a) f)
+Proof
+  rw[preserves_domain_has_callee_def, ignore_bind_def, bind_def,
+     access_address_def, return_def, fail_def, CaseEq"bool",
+     CaseEq"prod", CaseEq"sum", fIN_IN]
+  >- (
+    first_x_assum (drule_at (Pos(el 3)))
+    \\ rw[]
+    \\ first_x_assum irule
+    \\ gs[domain_has_callee_def] )
+  >- (
+    first_x_assum irule
+    \\ goal_assum (drule_at (Pos(el 2)))
+    \\ rw[]
+    \\ gs[domain_has_callee_def] )
+  \\ rw[]
+QED
+
+Theorem SND_get_accounts[simp]:
+  SND (get_accounts s) = s
+Proof
+  rw[get_accounts_def]
+QED
+
+Theorem SND_get_gas_left[simp]:
+  SND (get_gas_left s) = s
+Proof
+  rw[get_gas_left_def, get_current_context_def, bind_def, fail_def, return_def]
+QED
+
+Theorem SND_consume_gas_msdomain[simp]:
+  (SND (consume_gas n s)).msdomain = s.msdomain
+Proof
+  rw[consume_gas_def, bind_def, get_current_context_def, return_def, fail_def,
+     assert_def, ignore_bind_def, set_current_context_def]
+  \\ rw[]
+QED
+
+Theorem SND_assert_not_static[simp]:
+  SND (assert_not_static s) = s
+Proof
+  rw[assert_not_static_def, bind_def, ignore_bind_def, get_static_def,
+     get_current_context_def, fail_def, return_def, assert_def]
+QED
+
+Theorem SND_expand_memory_msdomain[simp]:
+  (SND (expand_memory x s)).msdomain = s.msdomain
+Proof
+  rw[expand_memory_def, get_current_context_def, bind_def, ignore_bind_def,
+     return_def, fail_def, set_current_context_def]
+QED
+
+Theorem preserves_domain_has_callee_get_callee_bind:
+  (∀x. preserves_domain_has_callee (λs. p s ∧ x ∈ toSet s.msdomain.addresses)
+       (f x))
+  ⇒
+  preserves_domain_has_callee p (monad_bind get_callee f)
+Proof
+  rw[bind_def, get_callee_def, get_current_context_def,
+     preserves_domain_has_callee_def]
+  \\ gvs[CaseEq"prod",CaseEq"bool",CaseEq"sum",fail_def,return_def]
+  \\ first_x_assum irule
+  \\ goal_assum drule
+  \\ goal_assum drule
+  \\ goal_assum drule
+  \\ gs[domain_has_callee_def]
+  \\ Cases_on`s.contexts` \\ gvs[]
+  \\ Cases_on`h` \\ gvs[]
+QED
+
+Theorem SND_set_return_data_msdomain[simp]:
+  (SND (set_return_data x s)).msdomain = s.msdomain
+Proof
+  rw[set_return_data_def, bind_def, get_current_context_def,
+     fail_def, return_def]
+QED
+
+Theorem SND_get_num_contexts[simp]:
+  SND (get_num_contexts s) = s
+Proof
+  rw[get_num_contexts_def, bind_def, get_current_context_def,
+     fail_def, return_def]
+QED
+
+Theorem SND_update_accounts_msdomain[simp]:
+  (SND (update_accounts f s)).msdomain = s.msdomain
+Proof
+  rw[update_accounts_def, bind_def, get_current_context_def,
+     fail_def, return_def]
+QED
+
 Theorem preserves_domain_has_callee_step_call[simp]:
   preserves_domain_has_callee (K T) (step_call x)
 Proof
   simp[step_call_def, UNCURRY]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_access_address_bind
+  \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ qmatch_goalsub_abbrev_tac`SND cg`
+  \\ irule preserves_domain_has_callee_get_callee_bind \\ simp[]
+  \\ gen_tac
   \\ IF_CASES_TAC >- rw[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ IF_CASES_TAC >- rw[]
-  \\ irule
-*)
+  \\ irule preserves_domain_has_callee_proceed_call
+  \\ simp[]
+QED
+
+Theorem preserves_domain_has_callee_proceed_create:
+  (∀s. p s ⇒ b ∈ toSet s.msdomain.addresses) ∧
+  (∀s. p s ⇒ ∀x. p (SND (update_accounts x s))) ∧
+  (∀s. p s ⇒ ∀cr. (FST cr).msgParams.callee = b ⇒
+                   p (s with contexts updated_by CONS cr))
+  ⇒
+  preserves_domain_has_callee p (proceed_create a b c d e)
+Proof
+  strip_tac
+  \\ rw[proceed_create_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_push_context
+  \\ simp[initial_msg_params_def]
+QED
+
+Theorem preserves_domain_has_callee_ensure_storage_in_domain[simp]:
+  preserves_domain_has_callee (K T) (ensure_storage_in_domain x)
+Proof
+  rw[ensure_storage_in_domain_def, preserves_domain_has_callee_def]
+  \\ gvs[assert_def]
+QED
+
+Theorem SND_ensure_storage_in_domain[simp]:
+  SND (ensure_storage_in_domain a s) = s
+Proof
+  rw[ensure_storage_in_domain_def, assert_def]
+QED
+
+Theorem preserves_domain_has_callee_abort_create_exists[simp]:
+  preserves_domain_has_callee (K T) (abort_create_exists x)
+Proof
+  rw[abort_create_exists_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_create[simp]:
+  preserves_domain_has_callee (K T) (step_create x)
+Proof
+  simp[step_create_def]
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ simp[ignore_bind_def]
+  \\ irule preserves_domain_has_callee_access_address_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ qpat_abbrev_tac`b0 = COND _ _ _`
+  \\ IF_CASES_TAC >- rw[]
+  \\ IF_CASES_TAC >- rw[]
+  \\ irule preserves_domain_has_callee_proceed_create
+  \\ rw[]
+QED
 
 Theorem step_inst_preserves_domain_has_callee:
   preserves_domain_has_callee (K T) (step_inst op)
@@ -7068,8 +7233,6 @@ Proof
   Cases_on`op` \\ rw[step_inst_def]
   \\ TRY (irule preserves_domain_has_callee_ignore_bind \\ rw[])
   \\ TRY (irule preserves_domain_has_callee_step_copy_to_memory \\ rw[])
-
-  \\ cheat
 QED
 
 Theorem step_ignores_extra_domain:
