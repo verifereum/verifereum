@@ -50,7 +50,7 @@ val cv_eval_run_block_rwts = [
 fun trim2 s = Substring.string(Substring.triml 2 (Substring.full s))
 
 (* TODO: build the actual domain from the test *)
-val empty_accs_str = "<| addresses := fEMPTY; storageKeys := fEMPTY |>"
+val empty_accs_str = "NONE"
 
 fun mk_statement isHash test_name prev_hashes =
   if isHash then
