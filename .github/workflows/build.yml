@@ -1,0 +1,38 @@
+name: Veriferim Test Suite
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+    - '**'
+
+jobs:
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Setup polyML
+        run: |
+          git clone https://github.com/polyml/polyml.git
+          cd polyml
+          ./configure
+          make
+          sudo make install
+
+      - name: Verify polyML setu
+        run: poly -v
+
+      - name: Setup HOL4
+        shell: bash
+        run: |
+          git clone https://github.com/HOL-Theorem-Prover/HOL.git
+          cd HOL
+          poly < tools/smart-configure.sml
+          bin/build
+
+      - name: Build Veriferium
+        run: Holmake
