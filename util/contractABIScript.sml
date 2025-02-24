@@ -557,7 +557,34 @@ Theorem dec_enc:
          ListV (REVERSE acc ++ vs))
 Proof
   ho_match_mp_tac enc_ind
-  \\ rw[] \\ gs[]
+  \\ rw[] \\ gs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+  \\ TRY ( qmatch_assum_rename_tac`has_types (REPLICATE n t) []`
+    \\ Cases_on`n` \\ gs[] )
+  \\ TRY ( qmatch_assum_rename_tac`has_types ts []`
+    \\ Cases_on`ts` \\ gs[] )
+  \\ TRY ( qmatch_assum_rename_tac`has_type t (IntV _)`
+    \\ Cases_on `t` \\ gs[]
+    \\ DEP_REWRITE_TAC[TAKE_LENGTH_TOO_LONG]
+    \\ gs[valid_int_bound_def, valid_fixed_bounds_def, int_bits_bound_def]
+    \\ irule w2i_i2w \\ gs[]
+    \\ qpat_x_assum`Num _ < _`mp_tac \\ rw[]
+    \\ TRY (
+      simp[INT_LE_LT] \\ disj1_tac
+      \\ irule INT_LT_TRANS
+      \\ goal_assum drule \\ simp[] )
+    \\ cheat )
+  \\ TRY ( qmatch_assum_rename_tac`has_type t (NumV _)`
+    \\ Cases_on `t` \\ gs[]
+    \\ DEP_REWRITE_TAC[TAKE_LENGTH_TOO_LONG]
+    \\ gs[valid_int_bound_def, valid_fixed_bounds_def]
+    \\ irule LESS_LESS_EQ_TRANS
+    \\ goal_assum drule
+    \\ irule LESS_EQ_TRANS
+    \\ qexists_tac`2 ** 256`
+    \\ (reverse conj_tac >- EVAL_TAC)
+    \\ DEP_REWRITE_TAC[EXP_BASE_LE_MONO]
+    \\ simp[] )
+
   \\ first_x_assum(qspec_then`[]`mp_tac) \\ rw[]
 *)
 
