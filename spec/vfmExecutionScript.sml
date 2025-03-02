@@ -412,39 +412,51 @@ Definition add_to_delete_def:
       (λr. r with toDelete updated_by CONS a)
 End
 
+Definition set_domain_def:
+  set_domain d s = return () (s with msdomain := d)
+End
+
 Definition domain_check_def:
-  domain_check f x =
-  case x of Enforce d => f d | _ => T
+  domain_check err check add cont s =
+  case s.msdomain of
+  | Enforce d =>
+      if check d then cont s else fail (OutsideDomain err) s
+  | Collect d =>
+      ignore_bind (set_domain (Collect (add d))) cont s
 End
 
 Definition access_address_def:
-  access_address a s =
-  if domain_check (λd. fIN a d.addresses) s.msdomain then
-    let addresses = s.rollback.accesses.addresses in
-    let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
-    let newRollback = s.rollback with accesses := newAccesses in
-      return
-        (if fIN a addresses then warm_access_cost else cold_access_cost)
-        (s with rollback := newRollback)
-  else fail (OutsideDomain (INL a)) s
+  access_address a =
+  domain_check (INL a)
+    (λd. fIN a d.addresses)
+    (λd. d with addresses updated_by fINSERT a)
+  (λs. let addresses = s.rollback.accesses.addresses in
+       let newAccesses = s.rollback.accesses with addresses := fINSERT a addresses in
+       let newRollback = s.rollback with accesses := newAccesses in
+         return
+           (if fIN a addresses then warm_access_cost else cold_access_cost)
+           (s with rollback := newRollback))
 End
 
 Definition access_slot_def:
-  access_slot x s =
-  if domain_check (λd. fIN x d.storageKeys) s.msdomain then
-    let storageKeys = s.rollback.accesses.storageKeys in
-    let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
-    let newRollback = s.rollback with accesses := newAccesses in
-      return
-        (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
-        (s with rollback := newRollback)
-  else fail (OutsideDomain (INR (INL x))) s
+  access_slot x =
+  domain_check (INR (INL x))
+    (λd. fIN x d.storageKeys)
+    (λd. d with storageKeys updated_by fINSERT x)
+  (λs. let storageKeys = s.rollback.accesses.storageKeys in
+       let newAccesses = s.rollback.accesses with storageKeys := fINSERT x storageKeys in
+       let newRollback = s.rollback with accesses := newAccesses in
+         return
+           (if fIN x storageKeys then warm_access_cost else cold_sload_cost)
+           (s with rollback := newRollback))
 End
 
 Definition ensure_storage_in_domain_def:
-  ensure_storage_in_domain a s =
-    assert (domain_check (λd. fIN a d.fullStorages) s.msdomain)
-           (OutsideDomain (INR (INR a))) s
+  ensure_storage_in_domain a =
+  domain_check (INR (INR a))
+    (λd. fIN a d.fullStorages)
+    (λd. d with fullStorages updated_by fINSERT a)
+  (return ())
 End
 
 Definition zero_warm_def:
