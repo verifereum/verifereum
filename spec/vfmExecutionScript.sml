@@ -414,7 +414,7 @@ End
 
 Definition domain_check_def:
   domain_check f x =
-  case x of NONE => T | SOME d => f d
+  case x of Enforce d => f d | _ => T
 End
 
 Definition access_address_def:

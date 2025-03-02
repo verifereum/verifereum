@@ -94,11 +94,25 @@ Datatype:
 End
 
 Datatype:
-  available_domain =
+  domain =
   <| addresses:    address fset
    ; storageKeys:  storage_key fset
    ; fullStorages: address fset
    |>
+End
+
+Definition empty_domain_def:
+  empty_domain = <|
+    addresses := fEMPTY
+  ; storageKeys := fEMPTY
+  ; fullStorages := fEMPTY
+  |>
+End
+
+Datatype:
+  domain_mode =
+    Enforce domain
+  | Collect domain
 End
 
 Datatype:
@@ -106,7 +120,7 @@ Datatype:
   <| contexts : (context # rollback_state) list
    ; txParams : transaction_parameters
    ; rollback : rollback_state
-   ; msdomain : available_domain option (* TODO: add collecting version? *)
+   ; msdomain : domain_mode
    |>
 End
 

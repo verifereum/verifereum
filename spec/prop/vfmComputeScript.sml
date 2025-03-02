@@ -418,6 +418,8 @@ QED
 
 val from_to_execution_state = from_to_thm_for “:execution_state”;
 
+val () = cv_auto_trans empty_domain_def;
+
 val sign_extend_pre_def = cv_auto_trans_pre sign_extend_def;
 
 Theorem sign_extend_pre[cv_pre]:
