@@ -596,6 +596,24 @@ val () = “step_stop s” |>
     step_stop_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
+val () = “access_slot x s” |>
+  SIMP_CONV std_ss [
+    access_slot_def, domain_check_def, bind_def, ignore_bind_def,
+    COND_RATOR, LET_RATOR
+  ] |> cv_auto_trans;
+
+val () = “access_address x s” |>
+  SIMP_CONV std_ss [
+    access_address_def, domain_check_def, bind_def, ignore_bind_def,
+    COND_RATOR, LET_RATOR
+  ] |> cv_auto_trans;
+
+val () = “ensure_storage_in_domain x s” |>
+  SIMP_CONV std_ss [
+    ensure_storage_in_domain_def, domain_check_def, bind_def, ignore_bind_def,
+    COND_RATOR, LET_RATOR
+  ] |> cv_auto_trans;
+
 (*
   set_goal([], pre_a)
 *)
