@@ -4,7 +4,7 @@ optionTheory sumTheory listTheory byteTheory wordsTheory alistTheory
 arithmeticTheory finite_setTheory sptreeTheory whileTheory
 recursiveLengthPrefixTheory merklePatriciaTrieTheory vfmRootTheory
 vfmContextTheory vfmStateTheory vfmTransactionTheory vfmExecutionTheory
-vfmExecutionPropTheory vfmTypesTheory;
+vfmDecreasesGasTheory vfmTypesTheory;
 
 val _ = new_theory "vfmCompute";
 
