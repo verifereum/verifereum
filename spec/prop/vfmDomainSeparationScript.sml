@@ -19,6 +19,14 @@ Proof
   rw[subdomain_def]
 QED
 
+Theorem subdomain_trans:
+  subdomain d1 d2 ∧ subdomain d2 d3 ⇒
+  subdomain d1 d3
+Proof
+  rw[subdomain_def]
+  \\ metis_tac[SUBSET_TRANS]
+QED
+
 Definition accounts_agree_modulo_storage_def:
   accounts_agree_modulo_storage addr (a1:evm_accounts) a2 ⇔
   a1 addr = a2 addr with storage := (a1 addr).storage
