@@ -585,16 +585,450 @@ Proof
   \\ irule bind_computes_minimal_domain \\ rw[]
 QED
 
+Theorem get_tx_params_computes_minimal_domain[simp]:
+  computes_minimal_domain get_tx_params
+Proof
+  rw[get_tx_params_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem step_txParams_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_txParams x y)
+Proof
+  rw[step_txParams_def]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem get_call_data_computes_minimal_domain[simp]:
+  computes_minimal_domain get_call_data
+Proof
+  rw[get_call_data_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_call_data_load_computes_minimal_domain[simp]:
+  computes_minimal_domain step_call_data_load
+Proof
+  rw[step_call_data_load_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_ext_code_size_computes_minimal_domain[simp]:
+  computes_minimal_domain step_ext_code_size
+Proof
+  rw[step_ext_code_size_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem copy_to_memory_computes_minimal_domain[simp]:
+  (∀f. b = SOME f ⇒ computes_minimal_domain f) ⇒
+  computes_minimal_domain (copy_to_memory x y z a b)
+Proof
+  rw[copy_to_memory_def, UNCURRY]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ TRY TOP_CASE_TAC \\ gvs[]
+  \\ TRY (irule ignore_bind_computes_minimal_domain \\ rw[])
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem get_code_computes_minimal_domain[simp]:
+  computes_minimal_domain (get_code x)
+Proof
+  rw[get_code_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_ext_code_copy_computes_minimal_domain[simp]:
+  computes_minimal_domain step_ext_code_copy
+Proof
+  rw[step_ext_code_copy_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule copy_to_memory_computes_minimal_domain \\ rw[]
+QED
+
+Theorem get_current_code_computes_minimal_domain[simp]:
+  computes_minimal_domain get_current_code
+Proof
+  rw[get_current_code_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_copy_to_memory_computes_minimal_domain[simp]:
+  (∀f. b = SOME f ⇒ computes_minimal_domain f) ⇒
+  computes_minimal_domain (step_copy_to_memory x b)
+Proof
+  rw[step_copy_to_memory_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem get_return_data_check_computes_minimal_domain[simp]:
+  computes_minimal_domain (get_return_data_check x y)
+Proof
+  rw[get_return_data_check_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_return_data_copy_computes_minimal_domain[simp]:
+  computes_minimal_domain step_return_data_copy
+Proof
+  rw[step_return_data_copy_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_ext_code_hash_computes_minimal_domain[simp]:
+  computes_minimal_domain step_ext_code_hash
+Proof
+  rw[step_ext_code_hash_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_block_hash_computes_minimal_domain[simp]:
+  computes_minimal_domain step_block_hash
+Proof
+  rw[step_block_hash_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem get_callee_computes_minimal_domain[simp]:
+  computes_minimal_domain get_callee
+Proof
+  rw[get_callee_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_self_balance_computes_minimal_domain[simp]:
+  computes_minimal_domain step_self_balance
+Proof
+  rw[step_self_balance_def]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_pop_computes_minimal_domain[simp]:
+  computes_minimal_domain step_pop
+Proof
+  rw[step_pop_def]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_mload_computes_minimal_domain[simp]:
+  computes_minimal_domain step_mload
+Proof
+  rw[step_mload_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_mstore_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_mstore x)
+Proof
+  rw[step_mstore_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem get_tStorage_computes_minimal_domain[simp]:
+  computes_minimal_domain get_tStorage
+Proof
+  rw[get_tStorage_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem access_slot_computes_minimal_domain[simp]:
+  computes_minimal_domain (access_slot x)
+Proof
+  rw[access_slot_def]
+  \\ irule domain_check_computes_minimal_domain
+  \\ rw[]
+  \\ TRY (
+    gvs[subdomain_def, fIN_IN, IN_toSet_fINSERT, SUBSET_DEF]
+    \\ gvs[return_def]
+    \\ rw[domain_component_equality]
+    \\ rw[finite_setTheory.EXTENSION, fIN_IN]
+    \\ metis_tac[])
+  \\ rw[computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem step_sload_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_sload x)
+Proof
+  rw[step_sload_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ TRY $ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+val tac = rpt (
+  (irule ignore_bind_computes_minimal_domain \\ rw[])
+  ORELSE
+  (irule bind_computes_minimal_domain \\ rw[]));
+
+Theorem get_original_computes_minimal_domain[simp]:
+  computes_minimal_domain get_original
+Proof
+  rw[get_original_def, computes_minimal_domain_def, return_def]
+  \\ rpt(pop_assum mp_tac) \\ rw[fail_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem step_sstore_gas_consumption_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_sstore_gas_consumption x y z)
+Proof
+  rw[step_sstore_gas_consumption_def]
+  \\ tac
+QED
+
+Theorem get_static_computes_minimal_domain[simp]:
+  computes_minimal_domain get_static
+Proof
+  rw[get_static_def] \\ tac
+QED
+
+Theorem assert_not_static_computes_minimal_domain[simp]:
+  computes_minimal_domain assert_not_static
+Proof
+  rw[assert_not_static_def] \\ tac
+QED
+
+Theorem write_storage_computes_minimal_domain[simp]:
+  computes_minimal_domain (write_storage x y z)
+Proof
+  rw[write_storage_def] \\ tac
+QED
+
+Theorem set_tStorage_computes_minimal_domain[simp]:
+  computes_minimal_domain (set_tStorage x)
+Proof
+  rw[set_tStorage_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem write_transient_storage_computes_minimal_domain[simp]:
+  computes_minimal_domain (write_transient_storage x y z)
+Proof
+  rw[write_transient_storage_def] \\ tac
+QED
+
+Theorem step_sstore_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_sstore x)
+Proof
+  rw[step_sstore_def] \\ tac
+QED
+
+Theorem set_jump_dest_computes_minimal_domain[simp]:
+  computes_minimal_domain (set_jump_dest x)
+Proof
+  rw[set_jump_dest_def] \\ tac
+QED
+
+Theorem step_jump_computes_minimal_domain[simp]:
+  computes_minimal_domain step_jump
+Proof
+  rw[step_jump_def] \\ tac
+QED
+
+Theorem step_jumpi_computes_minimal_domain[simp]:
+  computes_minimal_domain step_jumpi
+Proof
+  rw[step_jumpi_def] \\ tac
+QED
+
+Theorem step_push_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_push x y)
+Proof
+  rw[step_push_def] \\ tac
+QED
+
+Theorem step_swap_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_swap n)
+Proof
+  rw[step_swap_def] \\ tac
+QED
+
+Theorem step_dup_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_dup n)
+Proof
+  rw[step_dup_def] \\ tac
+QED
+
+Theorem step_log_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_log x)
+Proof
+  rw[step_log_def] \\ tac
+QED
+
+Theorem abort_unuse_computes_minimal_domain[simp]:
+  computes_minimal_domain (abort_unuse x)
+Proof
+  rw[abort_unuse_def] \\ tac
+QED
+
+Theorem ensure_storage_in_domain_computes_minimal_domain[simp]:
+  computes_minimal_domain (ensure_storage_in_domain x)
+Proof
+  rw[ensure_storage_in_domain_def]
+  \\ irule domain_check_computes_minimal_domain
+  \\ rw[]
+  \\ gvs[subdomain_def, fIN_IN, IN_toSet_fINSERT, SUBSET_DEF]
+  \\ rw[domain_component_equality, return_def]
+  \\ rw[finite_setTheory.EXTENSION, fIN_IN]
+  \\ metis_tac[]
+QED
+
+Theorem abort_create_exists_computes_minimal_domain[simp]:
+  computes_minimal_domain (abort_create_exists x)
+Proof
+  rw[abort_create_exists_def] \\ tac
+QED
+
+Theorem get_rollback_computes_minimal_domain[simp]:
+  computes_minimal_domain get_rollback
+Proof
+  rw[get_rollback_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem push_context_computes_minimal_domain[simp]:
+  computes_minimal_domain (push_context x)
+Proof
+  rw[push_context_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem proceed_create_computes_minimal_domain[simp]:
+  computes_minimal_domain (proceed_create a b c d e)
+Proof
+  rw[proceed_create_def] \\ tac
+QED
+
+Theorem step_create_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_create x)
+Proof
+  rw[step_create_def] \\ tac
+QED
+
+Theorem abort_call_value_computes_minimal_domain[simp]:
+  computes_minimal_domain (abort_call_value x)
+Proof
+  rw[abort_call_value_def] \\ tac
+QED
+
+Theorem get_caller_computes_minimal_domain[simp]:
+  computes_minimal_domain get_caller
+Proof
+  rw[get_caller_def] \\ tac
+QED
+
+Theorem get_value_computes_minimal_domain[simp]:
+  computes_minimal_domain get_value
+Proof
+  rw[get_value_def] \\ tac
+QED
+
+Theorem precompiles_compute_minimal_domain[simp]:
+  computes_minimal_domain precompile_sha2_256 ∧
+  computes_minimal_domain precompile_ripemd_160 ∧
+  computes_minimal_domain precompile_identity ∧
+  computes_minimal_domain precompile_modexp ∧
+  computes_minimal_domain precompile_ecadd ∧
+  computes_minimal_domain precompile_ecmul ∧
+  computes_minimal_domain precompile_ecpairing ∧
+  computes_minimal_domain precompile_blake2f ∧
+  computes_minimal_domain precompile_ecrecover
+Proof
+  rw[precompile_sha2_256_def, precompile_ripemd_160_def,
+     precompile_identity_def, precompile_modexp_def,
+     precompile_ecadd_def, precompile_ecmul_def,
+     precompile_ecpairing_def, precompile_blake2f_def,
+     precompile_ecrecover_def]
+  \\ tac
+QED
+
+
+Theorem dispatch_precompiles_computes_minimal_domain[simp]:
+  computes_minimal_domain (dispatch_precompiles x)
+Proof
+  rw[dispatch_precompiles_def]
+QED
+
+Theorem proceed_call_computes_minimal_domain[simp]:
+  computes_minimal_domain (proceed_call a b c d e f g h i)
+Proof
+  rw[proceed_call_def] \\ tac
+QED
+
+Theorem step_call_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_call x)
+Proof
+  rw[step_call_def, UNCURRY] \\ tac
+QED
+
+Theorem revert_computes_minimal_domain[simp]:
+  computes_minimal_domain revert
+Proof
+  rw[revert_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem step_return_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_return x)
+Proof
+  rw[step_return_def] \\ tac
+QED
+
+Theorem step_invalid_computes_minimal_domain[simp]:
+  computes_minimal_domain step_invalid
+Proof
+  rw[step_invalid_def] \\ tac
+QED
+
+Theorem add_to_delete_computes_minimal_domain[simp]:
+  computes_minimal_domain (add_to_delete x)
+Proof
+  rw[add_to_delete_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem step_self_destruct_computes_minimal_domain[simp]:
+  computes_minimal_domain step_self_destruct
+Proof
+  rw[step_self_destruct_def] \\ tac
+QED
+
 Theorem step_inst_computes_minimal_domain[simp]:
   computes_minimal_domain (step_inst x)
 Proof
   Cases_on`x` \\ rw[step_inst_def]
-  \\ TRY (irule ignore_bind_computes_minimal_domain \\ rw[])
-
-  \\ cheat
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
 QED
 
-Theorem step_computes_minimal_domain:
+Theorem step_computes_minimal_domain[simp]:
   computes_minimal_domain step
 Proof
   rw[step_def]
