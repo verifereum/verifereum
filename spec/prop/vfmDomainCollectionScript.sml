@@ -1,9 +1,19 @@
 open HolKernel boolLib bossLib Parse BasicProvers
-     pairTheory
+     pairTheory finite_setTheory pred_setTheory
      vfmExecutionTheory
      vfmContextTheory vfmDomainSeparationTheory;
 
 val () = new_theory "vfmDomainCollection";
+
+(* TODO: move *)
+
+Theorem IN_toSet_fINSERT:
+  x ∈ toSet (fINSERT a s) ⇔ x = a ∨ x ∈ toSet s
+Proof
+  rw[GSYM fIN_IN]
+QED
+
+(* -- *)
 
 Definition computes_minimal_domain_def:
   computes_minimal_domain m =
@@ -253,7 +263,77 @@ Proof
   \\ irule bind_computes_minimal_domain \\ rw[]
 QED
 
-(*
+Theorem pop_context_computes_minimal_domain[simp]:
+  computes_minimal_domain pop_context
+Proof
+  rw[computes_minimal_domain_def, pop_context_def]
+  \\ rpt(pop_assum mp_tac) \\ rw[fail_def, return_def]
+  \\ rw[execution_state_component_equality]
+  \\ gvs[]
+QED
+
+Theorem unuse_gas_computes_minimal_domain[simp]:
+  computes_minimal_domain (unuse_gas x)
+Proof
+  rw[unuse_gas_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem set_rollback_computes_minimal_domain[simp]:
+  computes_minimal_domain (set_rollback x)
+Proof
+  rw[computes_minimal_domain_def, set_rollback_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem push_logs_computes_minimal_domain[simp]:
+  computes_minimal_domain (push_logs x)
+Proof
+  rw[push_logs_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem update_gas_refund_computes_minimal_domain[simp]:
+  computes_minimal_domain (update_gas_refund x)
+Proof
+  Cases_on`x`
+  \\ rw[update_gas_refund_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem pop_and_incorporate_context_computes_minimal_domain[simp]:
+  computes_minimal_domain (pop_and_incorporate_context x)
+Proof
+  rw[pop_and_incorporate_context_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem inc_pc_computes_minimal_domain[simp]:
+  computes_minimal_domain inc_pc
+Proof
+  rw[inc_pc_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem push_stack_computes_minimal_domain[simp]:
+  computes_minimal_domain (push_stack x)
+Proof
+  rw[push_stack_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem write_memory_computes_minimal_domain[simp]:
+  computes_minimal_domain (write_memory x y)
+Proof
+  rw[write_memory_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
 Theorem handle_exception_computes_minimal_domain[simp]:
   (∀x. e ≠ SOME (OutsideDomain x)) ⇒
   computes_minimal_domain (handle_exception e)
@@ -269,7 +349,34 @@ Proof
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ TOP_CASE_TAC \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
 
+Theorem update_accounts_computes_minimal_domain[simp]:
+  computes_minimal_domain (update_accounts x)
+Proof
+  rw[update_accounts_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem handle_create_computes_minimal_domain[simp]:
+  (∀x. e ≠ SOME (OutsideDomain x)) ⇒
+  computes_minimal_domain (handle_create e)
+Proof
+  rw[handle_create_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ TOP_CASE_TAC \\ rw[]
+  \\ TOP_CASE_TAC \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
 
 Theorem handle_step_computes_minimal_domain[simp]:
   (∀x. e ≠ SOME (OutsideDomain x)) ⇒
@@ -278,29 +385,225 @@ Proof
   rw[handle_step_def]
   \\ irule handle_computes_minimal_domain
   \\ rw[]
-  >- (
-    gvs[handle_create_def, bind_def, get_return_data_def,
-        get_current_context_def, CaseEq"prod", CaseEq"sum",
-        CaseEq"bool", fail_def, return_def, get_output_to_def,
-        CaseEq"return_destination", CaseEq"option",
-        return_destination_CASE_rator, reraise_def,
-        option_CASE_rator, assert_def, ignore_bind_def,
-        consume_gas_def, set_current_context_def,
-        update_accounts_def] )
-  >- (
+  \\ gvs[handle_create_def, bind_def, get_return_data_def,
+         get_current_context_def, CaseEq"prod", CaseEq"sum",
+         CaseEq"bool", fail_def, return_def, get_output_to_def,
+         CaseEq"return_destination", CaseEq"option",
+         return_destination_CASE_rator, reraise_def,
+         option_CASE_rator, assert_def, ignore_bind_def,
+         consume_gas_def, set_current_context_def,
+         update_accounts_def]
+QED
 
+Theorem inc_pc_or_jump_computes_minimal_domain[simp]:
+  computes_minimal_domain (inc_pc_or_jump x)
+Proof
+  rw[inc_pc_or_jump_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ TOP_CASE_TAC \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem finish_computes_minimal_domain[simp]:
+  computes_minimal_domain finish
+Proof
+  rw[finish_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem pop_stack_computes_minimal_domain[simp]:
+  computes_minimal_domain (pop_stack x)
+Proof
+  rw[pop_stack_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_binop_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_binop x y)
+Proof
+  rw[step_binop_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_modop_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_modop x y)
+Proof
+  rw[step_modop_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_exp_computes_minimal_domain[simp]:
+  computes_minimal_domain step_exp
+Proof
+  rw[step_exp_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_monop_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_monop x y)
+Proof
+  rw[step_monop_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem memory_expansion_info_computes_minimal_domain[simp]:
+  computes_minimal_domain (memory_expansion_info x y)
+Proof
+  rw[memory_expansion_info_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem expand_memory_computes_minimal_domain[simp]:
+  computes_minimal_domain (expand_memory x)
+Proof
+  rw[expand_memory_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem read_memory_computes_minimal_domain[simp]:
+  computes_minimal_domain (read_memory x y)
+Proof
+  rw[read_memory_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_keccak256_computes_minimal_domain[simp]:
+  computes_minimal_domain step_keccak256
+Proof
+  rw[step_keccak256_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_context_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_context x y)
+Proof
+  rw[step_context_def]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_msgParams_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_msgParams x y)
+Proof
+  rw[step_msgParams_def]
+QED
+
+Theorem domain_check_computes_minimal_domain:
+  computes_minimal_domain f ∧
+  (∀d. subdomain d (up d)) ∧
+  (∀d. ch (up d)) ∧
+  (∀d d'. ¬ch d ∧ subdomain d d' ∧ ¬subdomain (up d) d' ⇒ ¬ch d') ∧
+  (∀d. ch d ⇒ up d = d) ∧
+  (∀d d'. ch d ∧ subdomain d d' ⇒ ch d') ∧
+  (∀s x. FST (f s) ≠ INR (SOME (OutsideDomain x)))
+  ⇒
+  computes_minimal_domain (domain_check err ch up f)
+Proof
+  rw[]
+  \\ gs[computes_minimal_domain_def, domain_check_def,
+        set_domain_def, ignore_bind_def, bind_def, return_def]
+  \\ rpt gen_tac
+  \\ strip_tac
+  \\ conj_tac
+  >- (
+    gvs[CaseEq"domain_mode", CaseEq"bool", fail_def]
+    \\ first_x_assum drule \\ rw[] )
+  \\ conj_tac
+  >- (
+    rw[]
+    \\ gvs[CaseEq"domain_mode", CaseEq"bool", fail_def]
+    \\ first_x_assum drule \\ rw[]
+    \\ first_x_assum(qspec_then`up d'`(CHOOSE_THEN strip_assume_tac))
+    \\ rw[execution_state_component_equality]
+    \\ metis_tac[subdomain_trans] )
+  \\ conj_tac
+  >- (
+    rpt gen_tac \\ strip_tac
+    \\ gvs[CaseEq"domain_mode", CaseEq"bool", fail_def]
+    \\ first_x_assum drule \\ rw[]
+    \\ first_x_assum(qspec_then`up d`(CHOOSE_THEN strip_assume_tac))
+    \\ gvs[]
+    \\ qpat_x_assum`_ = t`(assume_tac o SYM)
+    \\ gvs[]
+    \\ metis_tac[subdomain_trans] )
+  \\ rpt gen_tac
+  \\ strip_tac
+  \\ gvs[CaseEq"domain_mode", CaseEq"bool", fail_def]
+  \\ first_x_assum drule \\ rw[]
+  \\ first_x_assum(qspec_then`up d`(CHOOSE_THEN strip_assume_tac))
+  \\ gvs[]
+  \\ qpat_x_assum`_ = t`(assume_tac o SYM)
+  \\ gvs[]
+  \\ `subdomain d d'` by metis_tac[subdomain_trans]
+  \\ `ch d'` by metis_tac[]
+  \\ Cases_on`ch d''` \\ gvs[]
+  \\ Cases_on`ch d` \\ gvs[]
+  \\ `subdomain (up d) d''` by metis_tac[]
+  \\ metis_tac[]
+QED
+
+Theorem access_address_computes_minimal_domain[simp]:
+  computes_minimal_domain (access_address x)
+Proof
+  rw[access_address_def]
+  \\ irule domain_check_computes_minimal_domain
+  \\ rw[]
+  \\ TRY (
+    gvs[subdomain_def, fIN_IN, IN_toSet_fINSERT, SUBSET_DEF]
+    \\ gvs[return_def]
+    \\ rw[domain_component_equality]
+    \\ rw[finite_setTheory.EXTENSION, fIN_IN]
+    \\ metis_tac[])
+  \\ rw[computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem get_accounts_computes_minimal_domain[simp]:
+  computes_minimal_domain get_accounts
+Proof
+  rw[get_accounts_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
+Theorem step_balance_computes_minimal_domain[simp]:
+  computes_minimal_domain step_balance
+Proof
+  rw[step_balance_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
+Theorem step_inst_computes_minimal_domain[simp]:
+  computes_minimal_domain (step_inst x)
+Proof
+  Cases_on`x` \\ rw[step_inst_def]
+  \\ TRY (irule ignore_bind_computes_minimal_domain \\ rw[])
+
+  \\ cheat
+QED
 
 Theorem step_computes_minimal_domain:
   computes_minimal_domain step
 Proof
   rw[step_def]
   \\ irule handle_computes_minimal_domain
-  \\ conj_tac
+  \\ rw[]
   >- rw[handle_step_def, reraise_def]
-  \\ conj_tac
-  >- (
-  \\ cheat
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ TOP_CASE_TAC \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
 QED
-*)
 
 val () = export_theory();
