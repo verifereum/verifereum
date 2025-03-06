@@ -7,6 +7,72 @@ open HolKernel boolLib bossLib Parse
      vfmStateTheory vfmContextTheory vfmExecutionTheory
      vfmComputeTheory vfmTestHelperTheory
 
+
+datatype 'a TestTree =
+    TestDir of string * ('a TestTree) list
+  | TestFixture of 'a
+
+
+fun collect_fixtures basedir = let
+    fun go base parents = let
+        val ds = OS.FileSys.openDir base
+
+        fun loop acc =
+            case OS.FileSys.readDir ds of
+                NONE => acc
+              | SOME f => let
+                val fullpath = OS.Path.concat(base, f)
+                in
+                    if OS.FileSys.isDir fullpath handle OS.SysErr _ => false
+                    then loop (TestDir (f, go fullpath (parents @ [f])) :: acc)
+                    else loop (TestFixture f :: acc)
+              end
+        val result = loop []
+        val () = OS.FileSys.closeDir ds
+        in
+            result
+        end
+
+    in
+        TestDir (basedir, go basedir [])
+    end
+
+datatype TestResult = TestPass | TestFail | TestPending | TestTimeout
+(*
+fun runWithTimeout (f: unit -> TestResult) (timeoutSeconds: LargeInt.int) : TestResult =
+  let
+    val resultRef = ref TestPending
+    val mutex = Mutex.mutex()
+    val cond = ConditionVar.conditionVar()
+
+    val workerThread = Thread.fork(
+      fn () =>
+        let
+          val result = f()
+        in
+          Mutex.lock mutex;
+          resultRef := result;
+          ConditionVar.signal cond;
+          Mutex.unlock mutex
+        end,
+      []
+    )
+
+    val timeoutTime = Time.now() + Time.fromSeconds timeoutSeconds
+  in
+    Mutex.lock mutex;
+    val didTimeout = not (ConditionVar.waitUntil (cond, mutex, timeoutTime));
+    val result = !resultRef;
+    Mutex.unlock mutex;
+
+    if didTimeout then
+      (Thread.kill workerThread handle _ => ();  (* Handle potential exception *)
+       TestTimeout)
+    else
+      result  (* Return actual test result instead of always TestPass *)
+  end *)
+
+
 val export_theory_no_docs = fn () =>
   Feedback.set_trace "TheoryPP.include_docs" 0
   before export_theory ();
@@ -338,6 +404,10 @@ fun mk_prove_test test_path = let
   fun prove_test test_path test_index = let
     val x = prep_test test_path test_index
   in store_thm x end
-in (List.length test_names, prove_test test_path) end
+in
+  (List.length test_names, prove_test test_path)
+end
+
+
 
 end
