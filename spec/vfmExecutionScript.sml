@@ -1579,10 +1579,10 @@ Definition run_block_def:
   run_block dom chainId prevHashes accounts b =
   FOLDL
     (λx tx.
-       OPTION_BIND x (λ(ls, a).
-         OPTION_MAP (λ(r, a). (SNOC r ls, a)) $
+       OPTION_BIND x (λ(ls, a, dom).
+         OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
          run_transaction dom F chainId prevHashes b a tx))
-    (SOME ([], update_beacon_block b accounts))
+    (SOME ([], update_beacon_block b accounts, dom))
     b.transactions
 End
 
@@ -1590,10 +1590,10 @@ Definition run_blocks_def:
   run_blocks dom chainId prevHashes accounts bs =
   FOLDL
     (λx b.
-      OPTION_BIND x (λ(ls, h, a).
-        OPTION_MAP (λ(rs, a). (SNOC rs ls, b.hash::h, a)) $
+      OPTION_BIND x (λ(ls, h, a, dom).
+        OPTION_MAP (λ(rs, a, dom). (SNOC rs ls, b.hash::h, a, dom)) $
           run_block dom chainId h a b))
-    (SOME ([], prevHashes, accounts))
+    (SOME ([], prevHashes, accounts, dom))
     bs
 End
 
@@ -1601,14 +1601,14 @@ Definition run_block_to_hash_def:
   run_block_to_hash n2 dom chainId prevHashes accounts blk =
   case run_block dom chainId prevHashes accounts blk
     of NONE => NONE
-     | SOME (rs, s) => state_root_clocked n2 s
+     | SOME (rs, s, d) => OPTION_MAP (λh. (h, d)) (state_root_clocked n2 s)
 End
 
 Definition run_blocks_to_hash_def:
   run_blocks_to_hash n2 dom chainId prevHashes accounts bs =
   case run_blocks dom chainId prevHashes accounts bs
     of NONE => NONE
-     | SOME (rs, hs, s) => state_root_clocked n2 s
+     | SOME (rs, hs, s, d) => OPTION_MAP (λh. (h, d)) (state_root_clocked n2 s)
 End
 
 val _ = export_theory();

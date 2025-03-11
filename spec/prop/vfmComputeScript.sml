@@ -880,14 +880,14 @@ QED
 val () = run_transaction_def |> cv_auto_trans;
 
 Definition run_transactions_def:
-  run_transactions d st c h b a rs [] = SOME (REVERSE rs, a) ∧
+  run_transactions d st c h b a rs [] = SOME (REVERSE rs, a, d) ∧
   run_transactions d st c h b a rs (tx::txs) =
   case run_transaction d st c h b a tx of
   | NONE => NONE
-  | SOME (r, a) => run_transactions d st c h b a (r::rs) txs
+  | SOME (r, a) => run_transactions r.domain st c h b a (r::rs) txs
 End
 
-val () = cv_trans run_transactions_def;
+val () = cv_auto_trans run_transactions_def;
 
 Theorem run_block_eq:
   run_block d chainId h a b =
@@ -896,6 +896,7 @@ Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
   \\ qspec_tac(`update_beacon_block b a`,`blk`)
+  \\ qid_spec_tac`d`
   \\ simp_tac std_ss
        [Once (Q.prove(`[]:transaction_result list = REVERSE []`, simp[])), SimpRHS]
   \\ qspec_tac(`[]:transaction_result list`,`rs`)

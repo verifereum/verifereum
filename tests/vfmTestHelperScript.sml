@@ -8,7 +8,13 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite permLib
 val () = new_theory "vfmTestHelper";
 
 Theorem unwind_lemma:
-  ∀P a b. (∃x y. a = x ∧ b = y ∧ P x y) ⇔ P a b
+  (∃x y z. a = x ∧ b = y ∧ c = w ∧ d = z) ⇔ c = w
+Proof
+  rw[]
+QED
+
+Theorem unwind_lemma2:
+  (∃x. a = b ∧ c = x) ⇔ a = b
 Proof
   rw[]
 QED

@@ -54,21 +54,21 @@ val empty_accs_str = "(Collect empty_domain)"
 fun mk_statement isHash test_name prev_hashes =
   if isHash then
     Term[QUOTE(String.concat[
-           "∃n1. run_blocks_to_hash n1 ", empty_accs_str, " 1 [",
+           "∃n1 dom. run_blocks_to_hash n1 ", empty_accs_str, " 1 [",
            String.concatWith "; " (map (fn hash => "n2w " ^ hash) prev_hashes),
            "] ",
            test_name, "_pre ",
            test_name, "_blocks ",
-           "= SOME ", test_name, "_post"])]
+           "= SOME (", test_name, "_post, dom)"])]
   else
     Term[QUOTE(String.concat[
-           "∃rs prevhashes. run_blocks ", empty_accs_str, " 1 [",
+           "∃rs prevhashes dom. run_blocks ", empty_accs_str, " 1 [",
            String.concatWith "; " (map (fn hash => "n2w " ^ hash) prev_hashes),
            "] ",
            test_name, "_pre ",
            test_name, "_blocks ",
            "= SOME (rs, prevhashes, ",
-           test_name, "_post)"])]
+           test_name, "_post, dom)"])]
 
 val account_rwts = [
   account_state_component_equality,
@@ -100,7 +100,7 @@ val mk_tactic =
   \\ rewrite_tac[LET_THM]
   \\ CONV_TAC(ONCE_DEPTH_CONV (BETA_CONV THENC EVAL))
   \\ rewrite_tac[SOME_11, PAIR_EQ]
-  \\ Ho_Rewrite.REWRITE_TAC[unwind_lemma]
+  \\ rewrite_tac[unwind_lemma]
   \\ rewrite_tac[FUN_EQ_THM] \\ gen_tac
   \\ rewrite_tac[APPLY_UPDATE_THM]
   \\ CONV_TAC(RAND_CONV EVAL)
@@ -127,9 +127,9 @@ val mk_tactic =
 
 val mk_tactic_hash =
   exists_tac trie_n
-  \\ CONV_TAC(LAND_CONV cv_eval_raw)
+  \\ CONV_TAC(STRIP_QUANT_CONV(LAND_CONV cv_eval_raw))
   \\ rewrite_tac[to_option_def, SOME_11, to_pair_def, PAIR_EQ]
-  \\ Ho_Rewrite.REWRITE_TAC[UNWIND_THM1]
+  \\ rewrite_tac[unwind_lemma2]
   \\ EVAL_TAC
 
 type account = {
