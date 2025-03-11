@@ -1478,6 +1478,7 @@ Datatype:
    ; logs     : event list
    ; output   : byte list
    ; result   : exception option
+   ; domain   : domain_mode
    |>
 End
 
@@ -1518,7 +1519,8 @@ Definition post_transaction_accounting_def:
   let tr = <| gasUsed := totalGasUsed;
               logs := logs;
               result := result;
-              output := returnData |> in
+              output := returnData;
+              domain := t.msdomain |> in
   (tr, newAccounts)
 End
 
