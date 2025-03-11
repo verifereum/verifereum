@@ -1,1 +1,1 @@
-INCLUDES=../util ../spec ../spec/prop $(HOLDIR)/examples/json
+INCLUDES=../util ../spec ../spec/prop $(HOLDIR)/examples/formal-languages/json
