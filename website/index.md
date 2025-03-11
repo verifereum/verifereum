@@ -23,8 +23,8 @@ Using the [HOL4 theorem prover](https://hol-theorem-prover.org), we're building 
 
 - Active development with regular commits to our [main repository](https://github.com/verifereum/verifereum)
 - Completed formal specification of most EVM operations in HOL4
-- Hosting our first community event (Higher Order Log Cabin) in February 2025, bringing together researchers and developers
-- Making progress on [Vyper](https://vyperlang.org) [semantics formalization](https://github.com/xrchz/vyper-hol)
+- Hosted our first community event (Higher Order Log Cabin) in February 2025, bringing together researchers and developers
+- Working on [Vyper](https://vyperlang.org) [semantics formalisation](https://github.com/verifereum/vyper-hol)
 
 ## Get Involved
 
