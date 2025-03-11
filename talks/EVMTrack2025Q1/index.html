@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Verifereum</title>
+    <link rel=stylesheet href=index.css>
+  </head>
+  <body>
+    <section>
+      <h2>Verifereum</h2>
+      <p class=callout>
+        Formal <span class=highlight>verif</span>ication of implementation
+        correctness for applications that run on the Eth<span class=highlight>ereum</span>
+        virtual machine
+      </p>
+      <div class=center><p>Ramana Kumar</p>
+        <p><a href="https://verifereum.org">https://verifereum.org</a></p></div>
+    </section>
+    <section>
+      <h2>EVM Semantics in HOL4</h2>
+      <p class=callout>
+      What do we have so far?
+      </p>
+      <dl>
+        <dt>Executable Semantics</dt>
+        <dd>
+          <ul>
+            <li>Phrased as easy-to-read monadic <span class=highlight>functions in logic</span></li>
+            <li>Passes <span class=highlight>all major functionality in the EVM test suite</span> at the Cancun revision</li>
+          </ul>
+        </dd>
+        <dt>Proofs about the Semantics</dt>
+        <dd>
+          <ul>
+            <li><span class=highlight>Gas</span> is strictly consumed, and hence <span class=highlight>all calls terminate</span></li>
+            <li><span class=highlight>Separation</span> properties: e.g. execution produces the <span class=highlight>same result in a larger state</span></li>
+            <li>etc... just getting started with more properties...</li>
+          </ul>
+        </dd>
+        <dt>Auxiliary formalisation work</dt>
+        <dd>
+          <ul>
+            <li>Recursive Length Prefix coding</li>
+            <li>Merkle Patricia Trees</li>
+            <li>Keccak256 and other hash functions</li>
+            <li>Contract ABI coding... etc...</li>
+          </ul>
+        </dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Project Directions</h2>
+      <p class=callout>
+      What are we planning to do?
+      </p>
+      <dl>
+        <dt>Verified Compilation for Vyper</dt>
+        <dd>
+          <ul>
+            <li>Formal definition of (a subset of) the <span class=highlight>Vyper language</span> (funded, in progress)</li>
+            <li><span class=highlight>Semantics-preserving compilation</span> from Vyper to EVM (applying for funding)</li>
+            <li><span class=highlight>Production-grade</span> verified compilation of Vyper (guiding star)</li>
+          </ul>
+        </dd>
+        <dt>Proof-Producing Decompilation into Logic</dt>
+        <dd>
+          <ul>
+            <li>Verification technology for <span class=highlight>arbitrary applications</span> (no matter how produced)</li>
+            <li>Applying for funding to prototype this approach (based on existing machine-code decompilation work)</li>
+          </ul>
+        </dd>
+        <dt>Separation Logic for Program Verification</dt>
+        <dd><ul><li>Some experimental work so far</li><li>Will design and implement this next</li></ul></dd>
+        <dt>And more...</dt>
+        <dd>
+          <ul>
+            <li>E.g. verified compilation (with CakeML/Pancake) <span class=italic>of</span> the EVM (not just <span class=italic>to</span> EVM)</li>
+            <li>Free and open source software, all public</li><li>Welcoming, community-driven development</li>
+          </ul>
+        </dd>
+      </dl>
+    </section>
+  </body>
+</html>
