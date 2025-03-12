@@ -1,49 +1,33 @@
 structure readTestJsonLib = struct
-  open HolKernel Json
+  open HolKernel JSONDecode
 
   val ERR = Feedback.mk_HOL_ERR "readTestJsonLib"
 
-  fun get_test_names json_path = let
-      val (json, rest) = Json.fromFile json_path
-  in
-      Json.getKeys' (hd json)
-  end
+  val get_test_names =
+    decodeFile $ JSONDecode.map (List.map fst) rawObject
 
-(* TODO: Move into examples/json *)
-  fun getArray' u =
-      case u of
-          Json.List u => u
-        | _ => raise ERR "getArray'" "expect an associated list"
+  fun decodeAccessList NONE = []
+    | decodeAccessList (SOME j) = decode
+      (array (andThen (fn address =>
+              andThen (fn storageKeys =>
+                succeed {address=address, storageKeys=storageKeys})
+              (field "storageKeys" (array string)))
+              (field "address" string)))
+      j
 
-  fun getAccessListEntry j = let
-    val address = getObject' j "address" |> getString'
-    val storageKeys = getObject' j "storageKeys" |> getArray' |> List.map getString'
-  in
-    {address=address, storageKeys=storageKeys}
-  end
-
-  fun getAccessList' NONE = []
-    | getAccessList' (SOME j) = getArray' j |> List.map getAccessListEntry
-
-  fun getTransactions' block =
-    case getObject block "transactions" of
-      SOME txns => getArray' txns
-    | NONE => getObject' block "rlp_decoded"
-              |> C getObject' "transactions"
-              |> getArray'
-
-  fun getTransaction tx = let
-    val data = getObject' tx "data" |> getString'
-    val gasLimit = getObject' tx "gasLimit" |> getString'
-    val gasPrice = getObject tx "gasPrice" |> Option.map getString'
-    val maxFeePerGas = getObject tx "maxFeePerGas" |> Option.map getString'
-    val maxPriorityFeePerGas = getObject tx "maxPriorityFeePerGas" |> Option.map getString'
-    val nonce = getObject' tx "nonce" |> getString'
-    val sender = getObject' tx "sender" |> getString'
-    val to = getObject' tx "to" |> getString'
-    val value = getObject' tx "value" |> getString'
-    val accessList = getObject tx "accessList" |> getAccessList'
-
+  fun decodeTransaction tx = let
+    fun dt d = decode d tx
+    val data = dt $ field "data" string
+    val gasLimit = dt $ field "gasLimit" string
+    val gasPrice = dt $ try $ field "gasPrice" string
+    val maxFeePerGas = dt $ try $ field "maxFeePerGas" string
+    val maxPriorityFeePerGas = dt $ try $ field "maxPriorityFeePerGas" string
+    val nonce = dt $ field "nonce" string
+    val sender = dt $ field "sender" string
+    val to = dt $ field "to" string
+    val value = dt $ field "value" string
+    val rawAccessList = dt $ try $ field "accessList" raw
+    val accessList = decodeAccessList rawAccessList
   in {
       data=data,
       gasLimit=gasLimit,
@@ -58,33 +42,26 @@ structure readTestJsonLib = struct
     }
   end
 
+  fun fieldOrRlpDecoded k d =
+    orElse (field k d, field "rlp_decoded" (field k d))
 
-  fun getTransactions'' block = getTransactions' block |> List.map
-    getTransaction
-
-  fun getBlockHeader' block =
-    case getObject block "blockHeader" of
-      SOME h => h
-    | NONE => getObject' block "rlp_decoded"
-              |> C getObject' "blockHeader"
-
-  fun getBlock' block = let
-    val bh0 = getBlockHeader' block
-    val bhkeys = bh0 |> getKeys'
+  fun decodeBlock b = let
+    val bh = decode (fieldOrRlpDecoded "blockHeader" raw) b
+    val bhkeys = decode rawObject bh |> List.map fst
     val () = if List.exists (String.isSuffix "andao") bhkeys
              then raise Fail "Unexpected key (looks like randao) in blockheader"
              else ()
-
-    val number = getObject' bh0 "number" |> getString'
-    val hash = getObject' bh0 "hash" |> getString'
-    val parentHash = getObject' bh0 "parentHash" |> getString'
-    val blockGasLimit = getObject' bh0 "gasLimit" |> getString'
-    val baseFeePerGas = getObject' bh0 "baseFeePerGas" |> getString'
-    val prevRandao = getObject' bh0 "mixHash" |> getString'
-    val parentBeaconBlockRoot = getObject' bh0 "parentBeaconBlockRoot" |> getString'
-    val timeStamp = getObject' bh0 "timestamp" |> getString'
-    val coinBase = getObject' bh0 "coinbase" |> getString'
-    val transactions = getTransactions'' block
+    val number = decode (field "number" string) bh
+    val hash = decode (field "hash" string) bh
+    val parentHash = decode (field "parentHash" string) bh
+    val blockGasLimit = decode (field "gasLimit" string) bh
+    val baseFeePerGas = decode (field "baseFeePerGas" string) bh
+    val prevRandao = decode (field "mixHash" string) bh
+    val parentBeaconBlockRoot = decode (field "parentBeaconBlockRoot" string) bh
+    val timeStamp = decode (field "timestamp" string) bh
+    val coinBase = decode (field "coinbase" string) bh
+    val rawTransactions = decode (fieldOrRlpDecoded "transactions" (array raw)) b
+    val transactions = List.map decodeTransaction rawTransactions
   in {
       number=number,
       hash=hash,
@@ -100,9 +77,11 @@ structure readTestJsonLib = struct
   end
 
   fun get_test json_path test_name = let
-    val (json, rest) = Json.fromFile json_path
-    val tobj = Json.getObject' (hd json) test_name
-    val blocks = Json.getObject' tobj "blocks" |> getArray' |> map getBlock'
+    val tobj = decodeFile (field test_name raw) json_path
+    fun dt d = decode d tobj
+
+    val rawBlocks = dt (field "blocks" (array raw))
+    val blocks = List.map decodeBlock rawBlocks
 
     val postState = getObject tobj "postState"
     val postStateHash = getObject tobj "postStateHash" |> Option.map getString'
