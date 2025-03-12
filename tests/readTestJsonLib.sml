@@ -1,10 +1,59 @@
-structure readTestJsonLib = struct
+structure readTestJsonLib :> readTestJsonLib = struct
   open HolKernel JSONDecode
 
-  val ERR = Feedback.mk_HOL_ERR "readTestJsonLib"
+  type accessListEntry = {address: string, storageKeys: string list}
 
-  val get_test_names =
-    decodeFile $ JSONDecode.map (List.map fst) rawObject
+  type transaction = {
+    data: string,
+    gasLimit: string,
+    gasPrice: string option,
+    maxFeePerGas: string option,
+    maxPriorityFeePerGas: string option,
+    nonce: string,
+    sender: string,
+    to: string,
+    value: string,
+    accessList: accessListEntry list
+  }
+
+  type block = {
+    number: string,
+    hash: string,
+    parentHash: string,
+    gasLimit: string,
+    baseFeePerGas: string,
+    prevRandao: string,
+    parentBeaconBlockRoot: string,
+    timeStamp: string,
+    coinBase: string,
+    transactions: transaction list
+  }
+
+  type slot = {
+    key: string,
+    value: string
+  }
+
+  type account = {
+    address: string,
+    balance: string,
+    code: string,
+    nonce: string,
+    storage: slot list
+  }
+
+  type state = account list
+
+  type test = {
+    blocks: block list,
+    pre: state,
+    post: state option,
+    postHash: string option
+  }
+
+  val keysDecoder = JSONDecode.map (List.map fst) rawObject
+
+  val get_test_names = decodeFile keysDecoder
 
   fun decodeAccessList NONE = []
     | decodeAccessList (SOME j) = decode
@@ -47,7 +96,7 @@ structure readTestJsonLib = struct
 
   fun decodeBlock b = let
     val bh = decode (fieldOrRlpDecoded "blockHeader" raw) b
-    val bhkeys = decode rawObject bh |> List.map fst
+    val bhkeys = decode keysDecoder bh
     val () = if List.exists (String.isSuffix "andao") bhkeys
              then raise Fail "Unexpected key (looks like randao) in blockheader"
              else ()
@@ -83,25 +132,21 @@ structure readTestJsonLib = struct
     val rawBlocks = dt (field "blocks" (array raw))
     val blocks = List.map decodeBlock rawBlocks
 
-    val postState = getObject tobj "postState"
-    val postStateHash = getObject tobj "postStateHash" |> Option.map getString'
-    val preState = getObject' tobj "pre"
+    val postState = dt (try (field "postState" raw))
+    val postStateHash = dt (try (field "postStateHash" string))
+    val preState = dt (field "pre" raw)
 
-    val postKeys = Option.map getKeys' postState
-    val preKeys = getKeys' preState
+    val postKeys = Option.map (decode keysDecoder) postState
+    val preKeys = decode keysDecoder preState
 
     fun get_account state addr = let
-        val a = getObject' state addr
-        val balance = getObject' a "balance" |> getString'
-        val code = getObject' a "code" |> getString'
-        val nonce = getObject' a "nonce" |> getString'
-        fun getSlots slots =
-            case slots of
-                AList slots' => List.map (fn (k,v) =>
-                                             { key= k, value= getString' v}) slots'
-              | _ => raise ERR "get_account" "expect an object"
-
-      val storage = getObject' a "storage" |> getSlots
+        val a = decode (field addr raw) state
+        val balance = decode (field "balance" string) a
+        val code = decode (field "code" string) a
+        val nonce = decode (field "nonce" string) a
+        val rawStorage = decode (field "storage" rawObject) a
+        fun slot (k,v) = {key=k, value=decode string v}
+        val storage = List.map slot rawStorage
     in
       {address=addr, balance=balance, code=code, nonce=nonce, storage=storage}
     end
@@ -120,5 +165,4 @@ structure readTestJsonLib = struct
     val test_name = el 1 test_names
     val test2 = get_test json_path test_name
   *)
-
 end
