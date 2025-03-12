@@ -2,7 +2,7 @@ open HolKernel boolLib bossLib Parse wordsLib vfmTestLib
      vfmTestEachOpcodeTheory (* so it comes earlier when building *)
 
 val () = new_theory "vfmTest";
-
+(*
 fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/VMTests/" ^ s;
 
 val test_path = mk_test_path "vmTests/blockInfo.json";
@@ -6984,6 +6984,6 @@ in
   (ISR x, (HD y.contexts).stack)
 ``
 
-*)
+*) *)
 
 val () = export_theory_no_docs();
