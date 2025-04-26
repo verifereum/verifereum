@@ -1,7 +1,8 @@
 structure readTestJsonLib :> readTestJsonLib = struct
   open HolKernel JSONDecode
 
-  type accessListEntry = {address: string, storageKeys: string list}
+  type access_list_entry = {address: string, storageKeys: string list}
+  type access_list = access_list_entry list
 
   type transaction = {
     data: string,
@@ -13,7 +14,7 @@ structure readTestJsonLib :> readTestJsonLib = struct
     sender: string,
     to: string,
     value: string,
-    accessList: accessListEntry list
+    accessList: access_list
   }
 
   type block = {
@@ -264,29 +265,91 @@ structure readTestJsonLib :> readTestJsonLib = struct
                try (field "expectException" string),
                field "state" allocationDecoder))
 
+  type indexed_transaction = {
+    nonce: string,
+    gasPrice: string option,
+    maxPriorityFeePerGas: string option,
+    maxFeePerGas: string option,
+    gasLimit: string list,
+    to: string,
+    value: string list,
+    data: string list,
+    accessList: access_list list option,
+    maxFeePerBlobGas: string option,
+    blobVersionedHashes: string list option,
+    sender: string,
+    secretKey: string
+  }
+
+  type blob_schedule = {
+    target: string,
+    max: string,
+    base_fee_update_fraction: string
+  }
+
+  val blobScheduleDecoder : blob_schedule decoder =
+    andThen (fn (t,m,f) => succeed
+      {target=t, max=m, base_fee_update_fraction=f})
+    (tuple3 (field "target" string,
+             field "max" string,
+             field "base_fee_update_fraction" string))
+
+  val accessListEntryDecoder : access_list_entry decoder =
+    andThen (fn (a,ks) => succeed {address=a, storageKeys=ks})
+      (tuple2 (field "address" string,
+               field "storageKeys" (array string)))
+
+  val accessListDecoder : access_list decoder = array accessListEntryDecoder
+
+  val indexedTransactionDecoder : indexed_transaction decoder =
+    andThen (fn ((n,p,i,f),(l,t,v,d),(a,b,h,s),k) => succeed
+      {nonce=n, gasPrice=p, maxPriorityFeePerGas=i, maxFeePerGas=f,
+       gasLimit=l, to=t, value=v, data=d, accessList=a, maxFeePerBlobGas=b,
+       blobVersionedHashes=h, sender=s, secretKey=k})
+    (tuple4 (tuple4 (field "nonce" string,
+                     try (field "gasPrice" string),
+                     try (field "maxPriorityFeePerGas" string),
+                     try (field "maxFeePerGas" string)),
+             tuple4 (field "gasLimit" (array string),
+                     field "to" string,
+                     field "value" (array string),
+                     field "data" (array string)),
+             tuple4 (try (field "accessLists" (array accessListDecoder)),
+                     try (field "maxFeePerBlobGas" string),
+                     try (field "blobVersionedHashes" (array string)),
+                     field "sender" string),
+             field "secretKey" string))
+
   type state_test = {
     name: string,
     pre: account list,
     env: env,
-    post: post
+    transaction: indexed_transaction,
+    post: post,
+    blobSchedule: blob_schedule option
   }
 
-  fun state_test_fixture_to_tests (fixture_name, fixture) : state_test = let
+  fun state_test_fixture_to_test (fixture_name, fixture) : state_test option = let
     val pre = decode (field "pre" allocationDecoder) fixture
     val env = decode (field "env" envDecoder) fixture
     val posts = decode (field "post"
       (orElse (field fork_name (array postDecoder),
                succeed []))) fixture
-    val post = if List.length posts = 1
-               then List.hd posts
-               else raise Fail ("non-deterministic test: " ^ fixture_name)
-    (* TODO: handle blobSchedule in config? *)
+    val [post] = if List.length posts > 1
+                 then raise Fail ("non-deterministic test: " ^ fixture_name)
+                 else posts
+    val tx = decode (field "transaction" indexedTransactionDecoder) fixture
+    val bs = decode (field "config" (try (field fork_name blobScheduleDecoder))) fixture
   in
-    {name=fixture_name, pre=pre, env=env, post=post}
-  end
+    SOME $
+    {name=fixture_name,
+     pre=pre, env=env, post=post,
+     transaction=tx,
+     blobSchedule=bs}
+  end handle Bind => NONE
 
   val state_test_json_to_tests =
-    decodeFile (JSONDecode.map (List.map state_test_fixture_to_tests) rawObject)
+    decodeFile (JSONDecode.map (List.mapPartial state_test_fixture_to_test) rawObject)
 
   fun get_all_state_tests () =
     "fixtures/state_tests"

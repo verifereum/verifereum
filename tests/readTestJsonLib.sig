@@ -1,7 +1,8 @@
 signature readTestJsonLib = sig
   val get_test_names : string -> string list
 
-  type accessListEntry = {address: string, storageKeys: string list}
+  type access_list_entry = {address: string, storageKeys: string list}
+  type access_list = access_list_entry list
 
   type transaction = {
     data: string,
@@ -13,7 +14,7 @@ signature readTestJsonLib = sig
     sender: string,
     to: string,
     value: string,
-    accessList: accessListEntry list
+    accessList: access_list
   }
 
   type block = {
