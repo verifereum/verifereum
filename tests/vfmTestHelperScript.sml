@@ -7,6 +7,53 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite permLib
 
 val () = new_theory "vfmTestHelper";
 
+Datatype:
+  test_result
+  = Passed
+  | Failed
+  | ExpectedException string
+  | WrongNumTests
+  | StateMismatch
+  | LogsMismatch
+  | OutOfFuel
+End
+
+Definition test_hashes_def:
+  test_hashes fuel st (logs: event list) =
+  case state_root_clocked fuel st
+    of NONE => INR OutOfFuel
+     | SOME sh => INL sh (* TODO: also rlp encode and hash the logs *)
+End
+
+val () = cv_auto_trans test_hashes_def;
+
+Definition run_state_test_def:
+  run_state_test fuel
+    exec preState
+    (expectException: string option)
+    (stateHash: bytes32) (logsHash: bytes32) =
+    case (
+      case exec
+        of NONE =>
+            (if IS_NONE expectException then INR Failed
+             else test_hashes fuel preState [])
+         | SOME (results, postState, dom: domain_mode) =>
+            (if IS_SOME expectException then INR Failed
+             else (
+               case results
+                 of [result] => test_hashes fuel postState result.logs
+                  | _ => INR WrongNumTests
+             )))
+    of INR x => x
+     | INL sh => if sh = word_to_bytes stateHash F
+                 then Passed else StateMismatch
+  (* TODO: check logs, check txbytes *)
+End
+
+val () = cv_auto_trans run_state_test_def;
+
+(* TODO: remove below if unused, once new vfmTestLib is in use *)
+
 Theorem unwind_lemma:
   (∃x y z. a = x ∧ b = y ∧ c = w ∧ d = z) ⇔ c = w
 Proof

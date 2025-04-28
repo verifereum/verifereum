@@ -1,11 +1,15 @@
-structure vfmTestLib = struct
-  open HolKernel JSONDecode vfmContextTheory
-       numSyntax stringSyntax listSyntax wordsSyntax fcpSyntax
+structure vfmTestLib :> vfmTestLib = struct
+  open HolKernel JSONDecode cv_transLib
+  vfmContextTheory vfmComputeTheory vfmTestHelperTheory
+  numSyntax stringSyntax listSyntax wordsSyntax fcpSyntax
 
   fun front n = (curry $ flip List.take) n
   val trim2 = Substring.string o Substring.triml 2 o Substring.full
 
   val fork_name = "Cancun"
+  val chain_id = 1
+
+  val state_root_fuel = 1024
 
   type access_list_entry = {address: string, storageKeys: string list}
   type access_list = access_list_entry list
@@ -230,8 +234,6 @@ structure vfmTestLib = struct
   val byte_ty = mk_word_type (mk_int_numeric_type 8)
   val bytes_ty = mk_list_type byte_ty
 
-  val string_ty = string_ty
-
   val hex_to_rev_bytes_tm =
     mk_thy_const{Name="hex_to_rev_bytes",Thy="keccak",
                  Ty=bytes_ty --> string_ty --> bytes_ty}
@@ -246,6 +248,8 @@ structure vfmTestLib = struct
 
   fun mk_bytes32_tm hex = mk_n2w(mk_num_tm hex, bytes32_bits_ty)
   fun mk_address_tm hex = mk_n2w(mk_num_tm hex, address_bits_ty)
+
+  val zero_bytes32 = mk_n2w(numSyntax.zero_tm, bytes32_bits_ty)
 
   val storage_ty = bytes32_ty --> bytes32_ty
   val empty_storage_tm =
@@ -351,31 +355,93 @@ structure vfmTestLib = struct
     ])
   end
 
-  fun make_state_test_definitions test_number test = let
+  val domain_ty = mk_thy_type{Thy="vfmContext",Tyop="domain",Args=[]}
+  val domain_mode_ty = mk_thy_type{Thy="vfmContext",Tyop="domain_mode",Args=[]}
+  val Collect_tm =
+    mk_thy_const{Thy="vfmContext",Name="Collect",Ty=domain_ty --> domain_mode_ty}
+  val empty_domain_tm =
+    mk_thy_const{Thy="vfmContext",Name="empty_domain",Ty=domain_ty}
+  val Collect_empty_dom_tm = mk_comb(Collect_tm, empty_domain_tm)
+
+  val block_ty = mk_thy_type{Thy="vfmContext",Tyop="block",Args=[]}
+
+  val run_block_tm =
+    prim_mk_const{Thy="vfmExecution",Name="run_block"}
+
+  val run_block_result_ty = #2 $ strip_fun $ type_of run_block_tm
+
+  val run_blocks_tm =
+    prim_mk_const{Thy="vfmExecution",Name="run_blocks"}
+
+  val run_transaction_tm =
+    prim_mk_const{Thy="vfmExecution",Name="run_transaction"}
+
+  val chain_id_tm = numSyntax.term_of_int chain_id
+
+  fun mk_block_tm (env: env) (tx: term) = let
+    val baseFeePerGas_tm = case #baseFee env of NONE => zero_tm
+                              | SOME s => mk_num_tm s
+    val number_tm = mk_num_tm $ #number env
+    val timeStamp_tm = mk_num_tm $ #timestamp env
+    val coinBase_tm = mk_address_tm $ #coinbase env
+    val gasLimit_tm = mk_num_tm $ #gasLimit env
+    val prevRandao_tm = case #random env of NONE => zero_bytes32
+                           | SOME s => mk_bytes32_tm s
+    val hash_tm = zero_bytes32 (* not used in state tests *)
+    val parentBeaconBlockRoot_tm = zero_bytes32 (* ditto *)
+    val transactions_tm = mk_list([tx], transaction_ty)
+  in
+    TypeBase.mk_record(block_ty, [
+      ("baseFeePerGas", baseFeePerGas_tm),
+      ("number", number_tm),
+      ("timeStamp", timeStamp_tm),
+      ("coinBase", coinBase_tm),
+      ("gasLimit", gasLimit_tm),
+      ("prevRandao", prevRandao_tm),
+      ("hash", hash_tm),
+      ("parentBeaconBlockRoot", parentBeaconBlockRoot_tm),
+      ("transactions", transactions_tm)
+    ])
+  end
+
+  val test_result_ty =
+    mk_thy_type{Thy="vfmTestHelper",Tyop="test_result",Args=[]}
+
+  val run_state_test_tm =
+    prim_mk_const{Thy="vfmTransaction",Name="run_state_test"}
+
+  val fuel_tm = numSyntax.term_of_int state_root_fuel
+
+  fun define_state_test test_number test = let
     val name_prefix = String.concat ["state_test_", Int.toString test_number]
 
     val pre_name = String.concat [name_prefix, "_pre_state"]
     val pre_var = mk_var(pre_name, accounts_ty)
     val pre_rhs = mk_accounts_tm_from_list (#pre test)
     val pre_def = new_definition(pre_name ^ "_def", mk_eq(pre_var, pre_rhs))
+    val pre_const = lhs (concl pre_def)
+    val () = cv_trans pre_def
 
     val post_state_name = name_prefix ^ "_post_state"
     val post_state_var = mk_var(post_state_name, accounts_ty)
     val post_state_rhs = mk_accounts_tm_from_list (#state (#post test))
     val post_state_def = new_definition(post_state_name ^ "_def",
                                         mk_eq(post_state_var, post_state_rhs))
+    val () = cv_trans post_state_def
 
     val post_hash_name = name_prefix ^ "_post_hash"
     val post_hash_var = mk_var(post_hash_name, bytes32_ty)
     val post_hash_rhs = mk_bytes32_tm (#hash (#post test))
     val post_hash_def = new_definition(post_hash_name ^ "_def",
                                        mk_eq(post_hash_var, post_hash_rhs))
+    val () = cv_trans_deep_embedding EVAL post_hash_def
 
     val logs_hash_name = name_prefix ^ "_logs_hash"
     val logs_hash_var = mk_var(logs_hash_name, bytes32_ty)
     val logs_hash_rhs = mk_bytes32_tm (#logs (#post test))
     val logs_hash_def = new_definition(logs_hash_name ^ "_def",
                                        mk_eq(logs_hash_var, logs_hash_rhs))
+    val () = cv_trans_deep_embedding EVAL logs_hash_def
 
     val txbytes_name = name_prefix ^ "_txbytes"
     val txbytes_var = mk_var(txbytes_name, bytes_ty)
@@ -383,33 +449,50 @@ structure vfmTestLib = struct
                         trim2 (#txbytes (#post test))
     val txbytes_def = new_definition(txbytes_name ^ "_def",
                                      mk_eq(txbytes_var, txbytes_rhs))
+    val () = cv_trans txbytes_def
 
+    val env = #env test
     val tx_name = name_prefix ^ "_transaction"
     val tx_var = mk_var(tx_name, transaction_ty)
-    val tx_rhs = mk_transaction_tm
-                   (#env test) (#indexes (#post test))
-                   (#transaction test)
+    val tx_rhs = mk_transaction_tm env
+                   (#indexes (#post test)) (#transaction test)
     val tx_def = new_definition(tx_name ^ "_def", mk_eq(tx_var, tx_rhs))
+    val tx_const = lhs (concl tx_def)
+    val () = cv_trans_deep_embedding EVAL tx_def
 
-    (* TODO: expectException *)
-    (* TODO: define term that checks txbytes *)
-    (* TODO: define term that runs transaction *)
-    (* TODO: define term that checks exception *)
-    (* TODO: define term that checks result state *)
-    (* TODO: define term that checks result logs *)
-    (* TODO: cv translate all definitions *)
+    val expectException = #expectException (#post test)
+    val expectException_tm = expectException |>
+      optionSyntax.lift_option
+        (optionSyntax.mk_option string_ty)
+        fromMLstring
+
+    val block_name = name_prefix ^ "_block"
+    val block_var = mk_var(block_name, block_ty)
+    val block_rhs = mk_block_tm env tx_const
+    val block_def = new_definition(block_name ^ "_def",
+                                   mk_eq(block_var, block_rhs))
+    val block_const = lhs (concl block_def)
+    val () = cv_trans block_def
+
+    val prevHashes_tm = mk_nil bytes32_ty
+
+    val exec_name = name_prefix ^ "_exec"
+    val exec_var = mk_var(exec_name, run_block_result_ty)
+    val exec_rhs = list_mk_comb(run_block_tm,
+      [Collect_empty_dom_tm, chain_id_tm, prevHashes_tm, pre_const, block_const])
+    val exec_def = new_definition(exec_name ^ "_def", mk_eq(exec_var, exec_rhs))
+    val exec_const = lhs (concl exec_def)
+    val () = cv_trans exec_def
+
+    val result_name = name_prefix ^ "_result"
+    val result_var = mk_var(result_name, test_result_ty)
+    val result_rhs = list_mk_comb(run_state_test_tm, [
+      fuel_tm, exec_const, pre_const, expectException_tm,
+      lhs(concl post_hash_def), lhs(concl logs_hash_def)])
+    val result_def = new_definition(result_name ^ "_def", result_rhs)
   in
-    pre_def (* TODO: return the final test definition etc. *)
+    result_def
   end
-
-  TypeBase.fields_of``:transaction`` |> List.map #1
-
-  val tests = get_first_n_state_tests 200
-  val test_number = 0
-  val test = List.nth(tests, test_number)
-  List.filter (fn {data,gas,value} => data + gas + value <> 0)
-    (List.map (#indexes o #post) tests)
-  #post test
 
   (*
     Treat each of these separately:
