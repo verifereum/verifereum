@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse wordsLib vfmTestLib
+open HolKernel boolLib bossLib Parse wordsLib vfmLegacyTestLib
 
 val () = new_theory "vfmTestEachOpcode";
 

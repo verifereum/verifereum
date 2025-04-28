@@ -1,4 +1,4 @@
-structure vfmTestLib :> vfmTestLib = struct
+structure vfmLegacyTestLib :> vfmLegacyTestLib = struct
 
 open HolKernel boolLib bossLib Parse
      wordsLib permLib cv_transLib readTestJsonLib
