@@ -1,6 +1,6 @@
 structure vfmTestLib = struct
   open HolKernel JSONDecode vfmContextTheory
-       stringSyntax wordsSyntax fcpSyntax
+       numSyntax stringSyntax listSyntax wordsSyntax fcpSyntax
 
   fun front n = (curry $ flip List.take) n
   val trim2 = Substring.string o Substring.triml 2 o Substring.full
@@ -220,9 +220,6 @@ structure vfmTestLib = struct
     |> List.concat
     |> front n
 
-  val test_number = 2
-  val [_,_,test] = get_first_n_state_tests 3
-
   val address_bits_ty = mk_int_numeric_type 160
   val bytes32_bits_ty = mk_int_numeric_type 256
   val address_ty = mk_word_type address_bits_ty
@@ -231,7 +228,7 @@ structure vfmTestLib = struct
   val accounts_ty = address_ty --> account_ty
 
   val byte_ty = mk_word_type (mk_int_numeric_type 8)
-  val bytes_ty = listSyntax.mk_list_type byte_ty
+  val bytes_ty = mk_list_type byte_ty
 
   val string_ty = string_ty
 
@@ -240,9 +237,9 @@ structure vfmTestLib = struct
                  Ty=bytes_ty --> string_ty --> bytes_ty}
 
   fun mk_hex_to_rev_bytes_tm_from_string str =
-    listSyntax.mk_reverse(
+    mk_reverse(
       list_mk_comb(hex_to_rev_bytes_tm,
-        [listSyntax.mk_nil byte_ty,
+        [mk_nil byte_ty,
          fromMLstring str]))
 
   val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
@@ -256,6 +253,9 @@ structure vfmTestLib = struct
   val update_storage_tm =
     mk_thy_const{Name="update_storage",Thy="vfmState",
                  Ty=bytes32_ty --> bytes32_ty --> storage_ty --> storage_ty}
+
+  val transaction_ty =
+    mk_thy_type{Thy="vfmTransaction",Tyop="transaction",Args=[]}
 
   val empty_accounts_tm =
     mk_thy_const{Name="empty_accounts",Thy="vfmState",Ty=accounts_ty}
@@ -285,15 +285,131 @@ structure vfmTestLib = struct
            mk_account_tm account,
            mk_accounts_tm_from_list ls])
 
+  val effective_gas_price_tm =
+    mk_thy_const{Name="effective_gas_price",Thy="vfmTransaction",
+                 Ty=num --> num --> num --> num}
+
+  val access_list_entry_ty =
+    mk_thy_type{Thy="vfmTransaction",Tyop="access_list_entry",Args=[]}
+  val access_list_ty = mk_list_type access_list_entry_ty
+  val empty_access_list_tm = mk_nil access_list_entry_ty
+
+  fun mk_access_list_entry_tm ({address, storageKeys}: access_list_entry) =
+    TypeBase.mk_record(access_list_entry_ty, [
+      ("account", mk_address_tm address),
+      ("keys", mk_list (List.map mk_bytes32_tm storageKeys, bytes32_ty))
+    ])
+
+  fun mk_access_list_tm ls = mk_list(List.map mk_access_list_entry_tm ls,
+                                     access_list_entry_ty)
+
+  fun mk_transaction_tm (env: env) (ix: indexes) (tx: indexed_transaction) = let
+    val {data=di, gas=gi, value=vi} = ix
+    val to_tm = if #to tx = ""
+                then optionSyntax.mk_none address_ty
+                else optionSyntax.mk_some (mk_address_tm (#to tx))
+    val from_tm = mk_address_tm (#sender tx)
+    val data_tm = mk_hex_to_rev_bytes_tm_from_string $
+                    trim2(List.nth(#data tx, di))
+    val nonce_tm = mk_num_tm (#nonce tx)
+    val value_tm = mk_num_tm (List.nth(#value tx, vi))
+    val gasLimit_tm = mk_num_tm (List.nth(#gasLimit tx, gi))
+    val gasPrice_tm = case #gasPrice tx of
+                           SOME s => mk_num_tm s
+                         | NONE => let
+                                     val mno = mk_num_tm o Option.valOf
+                                     val baseFee_tm = mno $ #baseFee $ env
+                                     val maxFee_tm = mno $ #maxFeePerGas tx
+                                     val prioFee_tm = mno $ #maxPriorityFeePerGas tx
+                                   in
+                                     list_mk_comb(effective_gas_price_tm,
+                                       [baseFee_tm, maxFee_tm, prioFee_tm])
+                                   end
+    val accessList_tm = case #accessList tx of
+                             NONE => empty_access_list_tm
+                           | SOME ls => mk_access_list_tm $ List.nth(ls, di)
+    val blobVersionedHashes_tm = case #blobVersionedHashes tx of
+                                      NONE => mk_nil bytes32_ty
+                                    | SOME ls => mk_list(
+                                        List.map mk_bytes32_tm ls,
+                                        bytes32_ty
+                                      )
+    val blobGasPrice_tm = mk_num_tm "0" (* TODO: calculate blob gas price from
+    excess env? or maybe this doesn't actually need to be on the transaction *)
+  in
+    TypeBase.mk_record(transaction_ty, [
+      ("to", to_tm),
+      ("from", from_tm),
+      ("data", data_tm),
+      ("nonce", nonce_tm),
+      ("value", value_tm),
+      ("gasLimit", gasLimit_tm),
+      ("gasPrice", gasPrice_tm),
+      ("accessList", accessList_tm),
+      ("blobVersionedHashes", blobVersionedHashes_tm),
+      ("blobGasPrice", blobGasPrice_tm)
+    ])
+  end
+
   fun make_state_test_definitions test_number test = let
     val name_prefix = String.concat ["state_test_", Int.toString test_number]
-    val pre_name = String.concat [name_prefix, "_pre"]
+
+    val pre_name = String.concat [name_prefix, "_pre_state"]
     val pre_var = mk_var(pre_name, accounts_ty)
-    val pre_rhs = mk_accounts_tm_from_list pre
+    val pre_rhs = mk_accounts_tm_from_list (#pre test)
     val pre_def = new_definition(pre_name ^ "_def", mk_eq(pre_var, pre_rhs))
+
+    val post_state_name = name_prefix ^ "_post_state"
+    val post_state_var = mk_var(post_state_name, accounts_ty)
+    val post_state_rhs = mk_accounts_tm_from_list (#state (#post test))
+    val post_state_def = new_definition(post_state_name ^ "_def",
+                                        mk_eq(post_state_var, post_state_rhs))
+
+    val post_hash_name = name_prefix ^ "_post_hash"
+    val post_hash_var = mk_var(post_hash_name, bytes32_ty)
+    val post_hash_rhs = mk_bytes32_tm (#hash (#post test))
+    val post_hash_def = new_definition(post_hash_name ^ "_def",
+                                       mk_eq(post_hash_var, post_hash_rhs))
+
+    val logs_hash_name = name_prefix ^ "_logs_hash"
+    val logs_hash_var = mk_var(logs_hash_name, bytes32_ty)
+    val logs_hash_rhs = mk_bytes32_tm (#logs (#post test))
+    val logs_hash_def = new_definition(logs_hash_name ^ "_def",
+                                       mk_eq(logs_hash_var, logs_hash_rhs))
+
+    val txbytes_name = name_prefix ^ "_txbytes"
+    val txbytes_var = mk_var(txbytes_name, bytes_ty)
+    val txbytes_rhs = mk_hex_to_rev_bytes_tm_from_string $
+                        trim2 (#txbytes (#post test))
+    val txbytes_def = new_definition(txbytes_name ^ "_def",
+                                     mk_eq(txbytes_var, txbytes_rhs))
+
+    val tx_name = name_prefix ^ "_transaction"
+    val tx_var = mk_var(tx_name, transaction_ty)
+    val tx_rhs = mk_transaction_tm
+                   (#env test) (#indexes (#post test))
+                   (#transaction test)
+    val tx_def = new_definition(tx_name ^ "_def", mk_eq(tx_var, tx_rhs))
+
+    (* TODO: expectException *)
+    (* TODO: define term that checks txbytes *)
+    (* TODO: define term that runs transaction *)
+    (* TODO: define term that checks exception *)
+    (* TODO: define term that checks result state *)
+    (* TODO: define term that checks result logs *)
+    (* TODO: cv translate all definitions *)
   in
     pre_def (* TODO: return the final test definition etc. *)
   end
+
+  TypeBase.fields_of``:transaction`` |> List.map #1
+
+  val tests = get_first_n_state_tests 200
+  val test_number = 0
+  val test = List.nth(tests, test_number)
+  List.filter (fn {data,gas,value} => data + gas + value <> 0)
+    (List.map (#indexes o #post) tests)
+  #post test
 
   (*
     Treat each of these separately:
