@@ -245,6 +245,24 @@ structure vfmTestLib :> vfmTestLib = struct
         [mk_nil byte_ty,
          fromMLstring str]))
 
+  val bytestr_cache : (string, term) Redblackmap.dict ref =
+    ref $ Redblackmap.mkDict String.compare
+
+  fun mk_cached_bytes_tm str =
+    case Redblackmap.peek(!bytestr_cache, str)
+      of SOME const => const | NONE =>
+  let
+    val n = Redblackmap.numItems $ !bytestr_cache
+    val name = String.concat["bytestr_", Int.toString n]
+    val var = mk_var(name, bytes_ty)
+    val rhs_tm = mk_hex_to_rev_bytes_tm_from_string str
+    val def = new_definition(name ^ "_def", mk_eq(var, rhs_tm))
+    val () = cv_trans_deep_embedding EVAL def
+    val const = lhs (concl def)
+    val cache = Redblackmap.insert(!bytestr_cache, str, const)
+    val () = bytestr_cache := cache
+  in const end
+
   val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
 
   fun mk_bytes32_tm hex = mk_n2w(mk_num_tm hex, bytes32_bits_ty)
@@ -279,7 +297,7 @@ structure vfmTestLib :> vfmTestLib = struct
     TypeBase.mk_record(account_ty, [
       ("balance", mk_num_tm balance),
       ("nonce", mk_num_tm nonce),
-      ("code", mk_hex_to_rev_bytes_tm_from_string (trim2 code)),
+      ("code", mk_cached_bytes_tm (trim2 code)),
       ("storage", mk_storage_tm_from_list storage)
     ])
 
@@ -314,7 +332,7 @@ structure vfmTestLib :> vfmTestLib = struct
                 then optionSyntax.mk_none address_ty
                 else optionSyntax.mk_some (mk_address_tm (#to tx))
     val from_tm = mk_address_tm (#sender tx)
-    val data_tm = mk_hex_to_rev_bytes_tm_from_string $
+    val data_tm = mk_cached_bytes_tm $
                     trim2(List.nth(#data tx, di))
     val nonce_tm = mk_num_tm (#nonce tx)
     val value_tm = mk_num_tm (List.nth(#value tx, vi))
@@ -450,7 +468,7 @@ structure vfmTestLib :> vfmTestLib = struct
                         trim2 (#txbytes (#post test))
     val txbytes_def = new_definition(txbytes_name ^ "_def",
                                      mk_eq(txbytes_var, txbytes_rhs))
-    val () = cv_trans txbytes_def
+    val () = cv_trans_deep_embedding EVAL txbytes_def
 
     val env = #env test
     val tx_name = name_prefix ^ "_transaction"
@@ -473,7 +491,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val block_def = new_definition(block_name ^ "_def",
                                    mk_eq(block_var, block_rhs))
     val block_const = lhs (concl block_def)
-    val () = cv_trans block_def
+    val () = cv_trans_deep_embedding EVAL block_def
 
     val prevHashes_tm = mk_nil bytes32_ty
 
