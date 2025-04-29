@@ -72,6 +72,8 @@ signature vfmTestLib = sig
     blobSchedule: blob_schedule option
   }
 
-  val define_state_test : num -> state_test -> Thm.thm
+  val get_all_state_tests : unit -> state_test list
+  val define_state_test : int -> state_test -> Thm.thm
+  val export_theory_no_docs: unit -> unit
 
 end

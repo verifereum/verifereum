@@ -1,10 +1,13 @@
 structure vfmTestLib :> vfmTestLib = struct
-  open HolKernel JSONDecode cv_transLib
+  open HolKernel boolLib bossLib JSONDecode cv_transLib
   vfmContextTheory vfmComputeTheory vfmTestHelperTheory
   numSyntax stringSyntax listSyntax wordsSyntax fcpSyntax
 
-  fun front n = (curry $ flip List.take) n
   val trim2 = Substring.string o Substring.triml 2 o Substring.full
+
+  val export_theory_no_docs = fn () =>
+    Feedback.set_trace "TheoryPP.include_docs" 0
+    before export_theory ()
 
   val fork_name = "Cancun"
   val chain_id = 1
@@ -216,13 +219,11 @@ structure vfmTestLib :> vfmTestLib = struct
   val state_test_json_to_tests =
     decodeFile (JSONDecode.map (List.mapPartial state_test_fixture_to_test) rawObject)
 
-  fun get_first_n_state_tests n =
+  fun get_all_state_tests () =
     "fixtures/state_tests"
     |> collect_json_files_rec
-    |> front n
     |> List.map state_test_json_to_tests
     |> List.concat
-    |> front n
 
   val address_bits_ty = mk_int_numeric_type 160
   val bytes32_bits_ty = mk_int_numeric_type 256
@@ -408,11 +409,11 @@ structure vfmTestLib :> vfmTestLib = struct
     mk_thy_type{Thy="vfmTestHelper",Tyop="test_result",Args=[]}
 
   val run_state_test_tm =
-    prim_mk_const{Thy="vfmTransaction",Name="run_state_test"}
+    prim_mk_const{Thy="vfmTestHelper",Name="run_state_test"}
 
   val fuel_tm = numSyntax.term_of_int state_root_fuel
 
-  fun define_state_test test_number test = let
+  fun define_state_test test_number (test: state_test) = let
     val name_prefix = String.concat ["state_test_", Int.toString test_number]
 
     val pre_name = String.concat [name_prefix, "_pre_state"]
@@ -489,7 +490,8 @@ structure vfmTestLib :> vfmTestLib = struct
     val result_rhs = list_mk_comb(run_state_test_tm, [
       fuel_tm, exec_const, pre_const, expectException_tm,
       lhs(concl post_hash_def), lhs(concl logs_hash_def)])
-    val result_def = new_definition(result_name ^ "_def", result_rhs)
+    val result_def = new_definition(result_name ^ "_def",
+                                    mk_eq(result_var, result_rhs))
   in
     result_def
   end
