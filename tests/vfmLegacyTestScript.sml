@@ -1,7 +1,7 @@
 open HolKernel boolLib bossLib Parse wordsLib vfmLegacyTestLib
      vfmTestEachOpcodeTheory (* so it comes earlier when building *)
 
-val () = new_theory "vfmTest";
+val () = new_theory "vfmLegacyTest";
 
 fun mk_test_path s = "tests/BlockchainTests/GeneralStateTests/VMTests/" ^ s;
 
