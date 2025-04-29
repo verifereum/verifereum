@@ -1,5 +1,5 @@
 structure vfmTestLib :> vfmTestLib = struct
-  open HolKernel boolLib bossLib JSONDecode cv_transLib
+  open HolKernel boolLib bossLib JSONDecode wordsLib cv_transLib
   vfmContextTheory vfmComputeTheory vfmTestHelperTheory
   numSyntax stringSyntax listSyntax wordsSyntax fcpSyntax
 
@@ -432,6 +432,11 @@ structure vfmTestLib :> vfmTestLib = struct
   fun define_state_test range_prefix test_number (test: state_test) = let
     val name_prefix = String.concat ["state_test_", range_prefix, "_", Int.toString test_number]
 
+    val name_name = name_prefix ^ "_name"
+    val name_var = mk_var(name_name, string_ty)
+    val name_def = new_definition(name_name ^ "_def",
+                                  mk_eq(name_var, fromMLstring (#name test)))
+
     val pre_name = String.concat [name_prefix, "_pre_state"]
     val pre_var = mk_var(pre_name, accounts_ty)
     val pre_rhs = mk_accounts_tm_from_list (#pre test)
@@ -475,7 +480,7 @@ structure vfmTestLib :> vfmTestLib = struct
                    (#indexes (#post test)) (#transaction test)
     val tx_def = new_definition(tx_name ^ "_def", mk_eq(tx_var, tx_rhs))
     val tx_const = lhs (concl tx_def)
-    val () = cv_trans_deep_embedding EVAL tx_def
+    val () = cv_trans tx_def
 
     val expectException = #expectException (#post test)
     val expectException_tm = expectException |>
@@ -489,7 +494,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val block_def = new_definition(block_name ^ "_def",
                                    mk_eq(block_var, block_rhs))
     val block_const = lhs (concl block_def)
-    val () = cv_trans_deep_embedding EVAL block_def
+    val () = cv_trans block_def
 
     val prevHashes_tm = mk_nil bytes32_ty
 

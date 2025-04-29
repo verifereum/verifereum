@@ -13,8 +13,8 @@ Datatype:
   | Failed
   | ExpectedException string
   | WrongNumTests
-  | StateMismatch
-  | LogsMismatch
+  | StateMismatch bytes32
+  | LogsMismatch bytes32
   | OutOfFuel
 End
 
@@ -45,8 +45,10 @@ Definition run_state_test_def:
                   | _ => INR WrongNumTests
              )))
     of INR x => x
-     | INL sh => if sh = word_to_bytes stateHash F
-                 then Passed else StateMismatch
+     | INL sh =>
+         let computedHash = word_of_bytes T 0w sh in
+         if computedHash = stateHash
+         then Passed else StateMismatch computedHash
   (* TODO: check logs, check txbytes *)
 End
 
