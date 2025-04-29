@@ -216,14 +216,12 @@ structure vfmTestLib :> vfmTestLib = struct
      blobSchedule=bs}
   end handle Bind => NONE
 
-  val state_test_json_to_tests =
+  val state_test_json_path_to_tests =
     decodeFile (JSONDecode.map (List.mapPartial state_test_fixture_to_test) rawObject)
 
-  fun get_all_state_tests () =
+  fun get_all_state_test_json_paths () =
     "fixtures/state_tests"
     |> collect_json_files_rec
-    |> List.map state_test_json_to_tests
-    |> List.concat
 
   val address_bits_ty = mk_int_numeric_type 160
   val bytes32_bits_ty = mk_int_numeric_type 256
@@ -431,8 +429,8 @@ structure vfmTestLib :> vfmTestLib = struct
 
   val fuel_tm = numSyntax.term_of_int state_root_fuel
 
-  fun define_state_test test_number (test: state_test) = let
-    val name_prefix = String.concat ["state_test_", Int.toString test_number]
+  fun define_state_test range_prefix test_number (test: state_test) = let
+    val name_prefix = String.concat ["state_test_", range_prefix, "_", Int.toString test_number]
 
     val pre_name = String.concat [name_prefix, "_pre_state"]
     val pre_var = mk_var(pre_name, accounts_ty)
@@ -512,6 +510,17 @@ structure vfmTestLib :> vfmTestLib = struct
                                     mk_eq(result_var, result_rhs))
   in
     result_def
+  end
+
+  fun define_state_tests range_start range_length = let
+    val all_json_paths = get_all_state_test_json_paths ();
+    val json_paths = List.drop(all_json_paths, range_start)
+    val paths_in_range = if range_length < List.length json_paths
+                         then List.take(json_paths, range_length)
+                         else json_paths
+    val tests = List.concat (List.map state_test_json_path_to_tests paths_in_range)
+  in
+    mapi (define_state_test (Int.toString range_start)) tests
   end
 
   (*
