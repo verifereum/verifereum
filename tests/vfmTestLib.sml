@@ -393,6 +393,8 @@ structure vfmTestLib :> vfmTestLib = struct
   val run_transaction_tm =
     prim_mk_const{Thy="vfmExecution",Name="run_transaction"}
 
+  val run_transaction_result_ty = #2 $ strip_fun $ type_of run_transaction_tm
+
   val chain_id_tm = numSyntax.term_of_int chain_id
 
   fun mk_block_tm (env: env) (tx: term) = let
@@ -499,9 +501,10 @@ structure vfmTestLib :> vfmTestLib = struct
     val prevHashes_tm = mk_nil bytes32_ty
 
     val exec_name = name_prefix ^ "_exec"
-    val exec_var = mk_var(exec_name, run_block_result_ty)
-    val exec_rhs = list_mk_comb(run_block_tm,
-      [Collect_empty_dom_tm, chain_id_tm, prevHashes_tm, pre_const, block_const])
+    val exec_var = mk_var(exec_name, run_transaction_result_ty)
+    val exec_rhs = list_mk_comb(run_transaction_tm,
+      [Collect_empty_dom_tm, F, chain_id_tm, prevHashes_tm,
+       block_const, pre_const, tx_const])
     val exec_def = new_definition(exec_name ^ "_def", mk_eq(exec_var, exec_rhs))
     val exec_const = lhs (concl exec_def)
     val () = cv_trans exec_def

@@ -37,13 +37,9 @@ Definition run_state_test_def:
         of NONE =>
             (if IS_NONE expectException then INR Failed
              else test_hashes fuel preState [])
-         | SOME (results, postState, dom: domain_mode) =>
+         | SOME (result, postState) =>
             (if IS_SOME expectException then INR Failed
-             else (
-               case results
-                 of [result] => test_hashes fuel postState result.logs
-                  | _ => INR WrongNumTests
-             )))
+             else test_hashes fuel postState result.logs))
     of INR x => x
      | INL sh =>
          let computedHash = word_of_bytes T 0w sh in
