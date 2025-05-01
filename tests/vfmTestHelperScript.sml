@@ -38,8 +38,8 @@ Definition run_state_test_def:
             (if IS_NONE expectException then INR Failed
              else test_hashes fuel preState [])
          | SOME (result, postState) =>
-            (if IS_SOME expectException then INR Failed
-             else test_hashes fuel postState result.logs))
+            (case expectException of SOME e => INR (ExpectedException e)
+                | _ => test_hashes fuel postState result.logs))
     of INR x => x
      | INL sh =>
          let computedHash = word_of_bytes T 0w sh in
