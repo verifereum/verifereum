@@ -3,7 +3,9 @@ structure vfmTestLib :> vfmTestLib = struct
   vfmContextTheory vfmComputeTheory vfmTestHelperTheory
   numSyntax stringSyntax listSyntax wordsSyntax fcpSyntax
 
-  val trim2 = Substring.string o Substring.triml 2 o Substring.full
+  fun ss f = Substring.string o f o Substring.full
+  fun trimr n = ss $ Substring.trimr n
+  val trim2 = ss $ Substring.triml 2
 
   val export_theory_no_docs = fn () =>
     Feedback.set_trace "TheoryPP.include_docs" 0
@@ -13,6 +15,7 @@ structure vfmTestLib :> vfmTestLib = struct
   val chain_id = 1
 
   val state_root_fuel = 1024
+  val default_limit = Time.fromSeconds 60;
 
   type access_list_entry = {address: string, storageKeys: string list}
   type access_list = access_list_entry list
@@ -529,6 +532,26 @@ structure vfmTestLib :> vfmTestLib = struct
     val tests = List.concat (List.map state_test_json_path_to_tests paths_in_range)
   in
     mapi (define_state_test (Int.toString range_start)) tests
+  end
+
+  val get_result_defs =
+    List.filter (String.isSuffix "result_def" o #1) o
+    definitions
+
+  val eval_rhs = CONV_RULE $ RAND_CONV cv_eval;
+
+  fun save_result_thm limit (result_def_name, result_def) = let
+    val result_name = trimr 4 result_def_name
+    val () = Feedback.HOL_MESG $ String.concat ["Evaluating ", result_name]
+    val start_time = Time.now()
+    val result_eval = Timeout.apply limit eval_rhs result_def
+    val end_time = Time.now()
+    val () = Feedback.HOL_MESG $ String.concat $ [
+               thm_to_string result_eval,
+               " (", Time.fmt 2 $ end_time - start_time, "s)"
+             ]
+  in
+    save_thm(result_name, result_eval)
   end
 
   (*

@@ -77,6 +77,11 @@ signature vfmTestLib = sig
 
   val define_state_test : string -> int -> state_test -> Thm.thm
   val define_state_tests : int -> int -> Thm.thm list
+
+  val get_result_defs : string -> (string * Thm.thm) list
+  val save_result_thm : Time.time -> (string * Thm.thm) -> Thm.thm
+  val default_limit : Time.time
+
   val export_theory_no_docs: unit -> unit
 
 end
