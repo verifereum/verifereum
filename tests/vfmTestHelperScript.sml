@@ -22,7 +22,7 @@ Definition test_hashes_def:
   test_hashes fuel st (logs: event list) =
   case state_root_clocked fuel st
     of NONE => INR OutOfFuel
-     | SOME sh => INL sh (* TODO: also rlp encode and hash the logs *)
+     | SOME sh => INL (sh, Keccak_256_w64 $ rlp_encode $ RLPL $ MAP rlp_event logs)
 End
 
 val () = cv_auto_trans test_hashes_def;
@@ -41,10 +41,13 @@ Definition run_state_test_def:
             (case expectException of SOME e => INR (ExpectedException e)
                 | _ => test_hashes fuel postState result.logs))
     of INR x => x
-     | INL sh =>
-         let computedHash = word_of_bytes T 0w sh in
-         if computedHash = stateHash
-         then Passed else StateMismatch computedHash
+     | INL (sh, lh) =>
+         let computedStateHash = word_of_bytes T 0w sh in
+         let computedLogsHash = word_of_bytes T 0w lh in
+         if computedStateHash = stateHash
+         then if computedLogsHash = logsHash then Passed
+              else LogsMismatch computedLogsHash
+         else StateMismatch computedStateHash
   (* TODO: check logs, check txbytes *)
 End
 
