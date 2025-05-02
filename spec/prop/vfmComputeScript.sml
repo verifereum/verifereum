@@ -546,12 +546,6 @@ Proof
   \\ rw[LENGTH_TAKE_EQ]
 QED
 
-val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
-
-val from_to_transaction = from_to_thm_for “:transaction”;
-
-val () = cv_auto_trans effective_gas_price_def;
-
 val from_to_memory_expansion_info = from_to_thm_for “:memory_expansion_info”;
 
 val () = “memory_expansion_info x y s” |>

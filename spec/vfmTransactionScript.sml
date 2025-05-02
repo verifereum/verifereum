@@ -1,6 +1,7 @@
 open HolKernel boolLib bossLib Parse
+     cv_transLib cv_typeLib wordsLib
      wordsTheory finite_setTheory
-     vfmTypesTheory;
+     vfmTypesTheory recursiveLengthPrefixTheory;
 
 val _ = new_theory "vfmTransaction";
 
@@ -10,6 +11,8 @@ Datatype:
    ; keys    : bytes32 list
    |>
 End
+
+val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
 
 Datatype:
   transaction =
@@ -26,10 +29,25 @@ Datatype:
    |>
 End
 
+val from_to_transaction = from_to_thm_for “:transaction”;
+
 Definition effective_gas_price_def:
   effective_gas_price baseFee maxFee maxPrioFee =
   let prioFee = MIN maxPrioFee (maxFee - baseFee) in
     baseFee + prioFee
 End
+
+val () = cv_auto_trans effective_gas_price_def;
+
+Definition rlp_event_def:
+  rlp_event ev = RLPL [
+    RLPB $ word_to_bytes ev.logger T;
+    RLPL $ MAP (λt. RLPB (word_to_bytes ((w2w t):word32) T))
+           ev.topics;
+    RLPB ev.data
+  ]
+End
+
+val () = cv_auto_trans rlp_event_def;
 
 val _ = export_theory();
