@@ -7,6 +7,14 @@ structure vfmTestLib :> vfmTestLib = struct
   fun trimr n = ss $ Substring.trimr n
   val trim2 = ss $ Substring.triml 2
 
+  fun padl n z s = let
+    val m = String.size s
+  in
+    if m < n
+    then (String.implode (List.tabulate(n-m, K z))) ^ s
+    else s
+  end
+
   val export_theory_no_docs = fn () =>
     Feedback.set_trace "TheoryPP.include_docs" 0
     before export_theory ()
@@ -454,7 +462,9 @@ structure vfmTestLib :> vfmTestLib = struct
     val post_state_rhs = mk_accounts_tm_from_list (#state (#post test))
     val post_state_def = new_definition(post_state_name ^ "_def",
                                         mk_eq(post_state_var, post_state_rhs))
+    (* not needed - do it on demand when debugging
     val () = cv_trans post_state_def
+    *)
 
     val post_hash_name = name_prefix ^ "_post_hash"
     val post_hash_var = mk_var(post_hash_name, bytes32_ty)
@@ -521,6 +531,34 @@ structure vfmTestLib :> vfmTestLib = struct
                                     mk_eq(result_var, result_rhs))
   in
     result_def
+  end
+
+  fun state_test_defn_script_text index json_path = let
+    val sidx = padl 3 #"0" $ Int.toString index
+    val thyn = "vfmStateTestDefs" ^ sidx
+    val text = String.concat [
+      "open HolKernel vfmTestLib;\n",
+      "val () = new_theory \"", thyn, "\";\n",
+      "val tests = state_test_json_path_to_tests \"../../", json_path, "\";\n",
+      "val defs = mapi (define_state_test \"", sidx, "\") tests;\n",
+      "val () = export_theory_no_docs ();\n"
+    ]
+  in
+    (thyn, text)
+  end
+
+  fun generate_state_test_defn_scripts () = let
+    val json_paths = get_all_state_test_json_paths ()
+    val named_scripts = mapi state_test_defn_script_text json_paths
+    fun write_script (thyn, text) = let
+      val path = "state/defs/" ^ thyn ^ "Script.sml"
+      val out = TextIO.openOut path
+      val () = TextIO.output (out, text)
+    in
+      TextIO.closeOut out
+    end
+  in
+    List.app write_script named_scripts
   end
 
   fun define_state_tests range_start range_length = let

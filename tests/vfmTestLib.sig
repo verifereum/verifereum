@@ -75,6 +75,8 @@ signature vfmTestLib = sig
   val get_all_state_test_json_paths : unit -> string list
   val state_test_json_path_to_tests : string -> state_test list
 
+  val generate_state_test_defn_scripts : unit -> unit
+
   val define_state_test : string -> int -> state_test -> Thm.thm
   val define_state_tests : int -> int -> Thm.thm list
 
