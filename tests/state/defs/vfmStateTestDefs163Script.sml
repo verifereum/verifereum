@@ -1,5 +1,5 @@
-open HolKernel vfmTestLib;
+open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmStateTestDefs163";
-val tests = state_test_json_path_to_tests "../../fixtures/state_tests/cancun/eip1153_tstore/tstorage/tload_after_tstore.json";
+val tests = state_test_json_path_to_tests "../../fixtures/state_tests/prague/eip7702_set_code_tx/set_code_txs/set_code_multiple_valid_authorization_tuples_same_signer_increasing_nonce_self_sponsored.json";
 val defs = mapi (define_state_test "163") tests;
 val () = export_theory_no_docs ();

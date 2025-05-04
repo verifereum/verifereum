@@ -1,5 +1,5 @@
-open HolKernel vfmTestLib;
+open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmStateTestDefs196";
-val tests = state_test_json_path_to_tests "../../fixtures/state_tests/cancun/eip6780_selfdestruct/selfdestruct/self_destructing_initcode_create_tx.json";
+val tests = state_test_json_path_to_tests "../../fixtures/state_tests/prague/eip7702_set_code_tx/set_code_txs_2/pointer_to_static_reentry.json";
 val defs = mapi (define_state_test "196") tests;
 val () = export_theory_no_docs ();

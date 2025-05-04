@@ -1,5 +1,5 @@
-open HolKernel vfmTestLib;
+open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmStateTestDefs061";
-val tests = state_test_json_path_to_tests "../../fixtures/state_tests/prague/eip7702_set_code_tx/set_code_txs/deploying_delegation_designation_contract.json";
+val tests = state_test_json_path_to_tests "../../fixtures/state_tests/frontier/opcodes/all_opcodes/all_opcodes.json";
 val defs = mapi (define_state_test "061") tests;
 val () = export_theory_no_docs ();

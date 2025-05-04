@@ -1,5 +1,5 @@
-open HolKernel vfmTestLib;
+open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmStateTestDefs200";
-val tests = state_test_json_path_to_tests "../../fixtures/state_tests/cancun/eip6780_selfdestruct/selfdestruct/calling_from_new_contract_to_pre_existing_contract.json";
+val tests = state_test_json_path_to_tests "../../fixtures/state_tests/shanghai/eip3651_warm_coinbase/warm_coinbase/warm_coinbase_gas_usage.json";
 val defs = mapi (define_state_test "200") tests;
 val () = export_theory_no_docs ();

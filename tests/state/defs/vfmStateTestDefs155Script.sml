@@ -1,5 +1,5 @@
-open HolKernel vfmTestLib;
+open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmStateTestDefs155";
-val tests = state_test_json_path_to_tests "../../fixtures/state_tests/cancun/eip1153_tstore/tstore_reentrancy/tstore_reentrancy.json";
+val tests = state_test_json_path_to_tests "../../fixtures/state_tests/prague/eip7702_set_code_tx/set_code_txs/set_code_address_and_authority_warm_state_call_types.json";
 val defs = mapi (define_state_test "155") tests;
 val () = export_theory_no_docs ();
