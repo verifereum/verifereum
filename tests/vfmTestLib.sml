@@ -5,7 +5,8 @@ structure vfmTestLib :> vfmTestLib = struct
 
   fun ss f = Substring.string o f o Substring.full
   fun trimr n = ss $ Substring.trimr n
-  val trim2 = ss $ Substring.triml 2
+  fun triml n = ss $ Substring.triml n
+  val trim2 = triml 2
 
   fun padl n z s = let
     val m = String.size s
@@ -97,24 +98,26 @@ structure vfmTestLib :> vfmTestLib = struct
     blobSchedule: blob_schedule option
   }
 
-  fun collect_json_files path (dirs, jsons) = let
+  fun collect_files suffix path (dirs, files) = let
     val ds = OS.FileSys.openDir path
-    fun loop (dirs, jsons) =
+    fun loop (dirs, files) =
       case OS.FileSys.readDir ds of
-           NONE => (dirs, jsons)
+           NONE => (dirs, files)
          | SOME file => loop let
              val pf = OS.Path.concat (path, file)
            in
-             if OS.Path.ext file = SOME "json"
-             then (dirs, pf::jsons)
+             if OS.Path.ext file = SOME suffix
+             then (dirs, pf::files)
              else if OS.FileSys.isDir pf
-             then (pf::dirs, jsons)
-             else (dirs, jsons)
+             then (pf::dirs, files)
+             else (dirs, files)
            end
   in
-    loop (dirs, jsons)
+    loop (dirs, files)
     before OS.FileSys.closeDir ds
   end
+
+  val collect_json_files = collect_files "json"
 
   fun collect_json_files_rec start_path = let
     fun loop [] jsons = jsons
@@ -547,18 +550,45 @@ structure vfmTestLib :> vfmTestLib = struct
     (thyn, text)
   end
 
+  fun state_test_result_script_text thyn = let
+    val z = String.size thyn
+    val rthy = Substring.concat [
+                  Substring.substring(thyn, 0, 12),
+                  Substring.substring(thyn, z-3, 3)
+               ]
+    val text = String.concat [
+      "open HolKernel vfmTestLib ", thyn, "Theory; \n",
+      "val () = new_theory \"", rthy, "\";\n",
+      "val () = List.app (ignore o save_result_thm default_limit) $ ",
+      "get_result_defs \"", thyn, "\";\n",
+      "val () = export_theory_no_docs ();\n"
+    ]
+  in
+    (rthy, text)
+  end
+
+  fun write_script dir (thyn, text) = let
+    val path = dir ^ thyn ^ "Script.sml"
+    val out = TextIO.openOut path
+    val () = TextIO.output (out, text)
+  in
+    TextIO.closeOut out
+  end
+
   fun generate_state_test_defn_scripts () = let
     val json_paths = get_all_state_test_json_paths ()
     val named_scripts = mapi state_test_defn_script_text json_paths
-    fun write_script (thyn, text) = let
-      val path = "state/defs/" ^ thyn ^ "Script.sml"
-      val out = TextIO.openOut path
-      val () = TextIO.output (out, text)
-    in
-      TextIO.closeOut out
-    end
   in
-    List.app write_script named_scripts
+    List.app (write_script "state/defs/") named_scripts
+  end
+
+  fun generate_state_test_result_scripts () = let
+    val (_, smls) = collect_files "sml" "state/defs" ([], [])
+    val scripts = List.filter (String.isSuffix "Script.sml") smls
+    val thyns = List.map (ss (Substring.triml 11 o Substring.trimr 10)) smls
+    val named_scripts = List.map state_test_result_script_text thyns
+  in
+    List.app (write_script "state/results/") named_scripts
   end
 
   fun define_state_tests range_start range_length = let
