@@ -1,4 +1,4 @@
 open HolKernel vfmTestAuxLib vfmTestResultLib vfmStateTestDefs180Theory;
 val () = new_theory "vfmStateTest180";
-val () = List.app (ignore o save_result_thm default_limit) $ get_result_defs "vfmStateTestDefs180";
+val () = List.app (ignore o save_result_thm default_limit "vfmStateTestDefs180") $ get_result_defs "vfmStateTestDefs180";
 val () = export_theory_no_docs ();

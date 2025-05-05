@@ -59,7 +59,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val text = String.concat [
       "open HolKernel vfmTestAuxLib vfmTestResultLib ", thyn, "Theory;\n",
       "val () = new_theory \"", rthy, "\";\n",
-      "val () = List.app (ignore o save_result_thm default_limit) $ ",
+      "val () = List.app (ignore o save_result_thm default_limit \"", thyn, "\") $ ",
       "get_result_defs \"", thyn, "\";\n",
       "val () = export_theory_no_docs ();\n"
     ]
