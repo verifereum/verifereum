@@ -68,7 +68,7 @@ structure vfmTestLib :> vfmTestLib = struct
   end
 
   fun write_script dir (thyn, text) = let
-    val path = dir ^ thyn ^ "Script.sml"
+    val path = OS.Path.concat(dir, thyn ^ "Script.sml")
     val out = TextIO.openOut path
     val () = TextIO.output (out, text)
   in
@@ -79,7 +79,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val json_paths = get_all_state_test_json_paths ()
     val named_scripts = mapi state_test_defn_script_text json_paths
   in
-    List.app (write_script "state/defs/") named_scripts
+    List.app (write_script "state/defs") named_scripts
   end
 
   fun generate_state_test_result_scripts () = let
@@ -88,37 +88,59 @@ structure vfmTestLib :> vfmTestLib = struct
     val thyns = List.map (ss (Substring.triml 11 o Substring.trimr 10)) smls
     val named_scripts = List.map state_test_result_script_text thyns
   in
-    List.app (write_script "state/results/") named_scripts
+    List.app (write_script "state/results") named_scripts
   end
 
-  (* TODO: delete?
-  fun define_state_tests range_start range_length = let
-    val all_json_paths = get_all_state_test_json_paths ();
-    val json_paths = List.drop(all_json_paths, range_start)
-    val paths_in_range = if range_length < List.length json_paths
-                         then List.take(json_paths, range_length)
-                         else json_paths
-    val tests = List.concat (List.map state_test_json_path_to_tests paths_in_range)
+  type test_result = {name: string, result: string, seconds: string}
+
+  fun read_test_result_data result_file : test_result = let
+    val inp = TextIO.openIn result_file
+    val line = trimr 1 $ TextIO.inputAll inp
+    val () = TextIO.closeIn inp
+    val [name, result, seconds] = String.fields (equal #",") line
   in
-    mapi (define_state_test (Int.toString range_start)) tests
+    {name=name, result=result, seconds=seconds}
   end
-  *)
+
+  fun mk_test_result_row {name, result, seconds} = let
+    val success = result = "Passed"
+    val result1 = String.concatWith " " $ String.tokens Char.isSpace result
+    val cls = if success then "pass" else "fail"
+  in
+    String.concat [
+      "<tr class=", cls,
+      "><td>", name, "</td>",
+      "<td>", result1, "</td>",
+      "<td>", seconds, "s</td></tr>"
+    ]
+  end
+
+  fun by_name (r1: test_result) (r2: test_result) =
+    string_less (#name r1) (#name r2)
+
+  fun write_test_results_table dir = let
+    val out = TextIO.openOut (OS.Path.concat (dir, "table.html"))
+    val (_, csvs) = collect_files "csv" dir ([], [])
+    val unsorted_data = List.map read_test_result_data csvs
+    val data = sort by_name unsorted_data
+    val pass_count = List.length (List.filter (equal "Passed" o #result) data)
+    val total_count = List.length data
+    val percentage = Real.fmt (StringCvt.FIX (SOME 1)) $
+      100.0 * (Real.fromInt pass_count / Real.fromInt total_count)
+    val () = TextIO.output(out, String.concat [
+      "<div class=rate>Successes: ",
+        Int.toString pass_count, "/", Int.toString total_count,
+        " (", percentage, "%)</div>"])
+    val () = TextIO.output(out,
+      "<table class=results><thead><tr><th>Name</th>" ^
+      "<th>Result</th><th>Time</th></tr></thead>")
+    val () = List.app (curry TextIO.output out o mk_test_result_row) data
+  in
+    TextIO.closeOut out
+  end
 
   (*
-    Treat each of these separately:
     1. State tests
-       a. Pick test naming scheme, maybe numbered
-          with actual name as a string constant?
-       b. Define components of test as HOL constants (produce theory with these
-          definitions)
-       c. CV-translate these constants, using caching and deep embeddings where
-          appropriate (produce theory with these translations, could be same as
-          above)
-       d. Define HOL function that checks a state test following the consumption
-          instructions, and cv-translate it.
-       e. cv-eval test-checking function on all the tests (produce theory that
-          includes these theorems for passing tests, and reports on failing tests
-          too)
     2. Blockchain tests
     3. Legacy state tests (General State Tests ?)
     4. Legacy blockchain tests
