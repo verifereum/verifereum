@@ -85,10 +85,11 @@ structure vfmTestLib :> vfmTestLib = struct
                   Substring.substring(thyn, z-padding, padding)
                ]
     val text = String.concat [
-      "open HolKernel vfmTestAuxLib vfmTestResultLib ", thyn, "Theory;\n",
+      "open HolKernel wordsLib vfmTestAuxLib vfmTestResultLib ", thyn, "Theory;\n",
       "val () = new_theory \"", rthy, "\";\n",
-      "val () = List.app (ignore o save_result_thm default_limit \"", thyn, "\") $ ",
-      "get_result_defs \"", thyn, "\";\n",
+      "val thyn = \"", thyn, "\";\n",
+      "val defs = get_result_defs thyn;\n",
+      "val () = List.app (ignore o save_result_thm default_limit thyn) defs;\n",
       "val () = export_theory_no_docs ();\n"
     ]
   in

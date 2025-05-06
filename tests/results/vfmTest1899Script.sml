@@ -1,4 +1,6 @@
-open HolKernel vfmTestAuxLib vfmTestResultLib vfmTestDefs1899Theory;
+open HolKernel wordsLib vfmTestAuxLib vfmTestResultLib vfmTestDefs1899Theory;
 val () = new_theory "vfmTest1899";
-val () = List.app (ignore o save_result_thm default_limit "vfmTestDefs1899") $ get_result_defs "vfmTestDefs1899";
+val thyn = "vfmTestDefs1899";
+val defs = get_result_defs thyn;
+val () = List.app (ignore o save_result_thm default_limit thyn) defs;
 val () = export_theory_no_docs ();
