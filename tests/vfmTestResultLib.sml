@@ -14,7 +14,7 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
     else "Timeout"
 
   fun save_result_thm limit thyn (result_def_name, result_def) = let
-    val result_name = trimr 4 result_def_name
+    val result_name = trimr (String.size "_def") result_def_name
     val () = Feedback.HOL_MESG $ String.concat ["Evaluating ", result_name]
     val start_time = Time.now()
     val result_eval = Timeout.apply limit eval_rhs result_def
@@ -26,9 +26,10 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
     val () = Feedback.HOL_MESG $ String.concat $ [
                result_name, " = ", result_str, " (", time_str, "s)"
              ]
-    val test_prefix = trimr 7 result_name
+    val test_prefix = trimr (String.size "_result") result_name
     val len = String.size test_prefix
-    val result_suffix = String.substring(test_prefix, 10, len - 10)
+    val strip = String.size "test_"
+    val result_suffix = String.substring(test_prefix, strip, len - strip)
     val csv_name = "result" ^ result_suffix ^ ".csv"
     val test_name = fromHOLstring $ rhs $ concl $
                     fetch thyn $ test_prefix ^ "_name_def"
