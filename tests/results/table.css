@@ -10,9 +10,15 @@ span.pass {
 tr.odd {
   background-color: azure;
 }
-tbody > tr > td:nth-child(3) {
+tbody > tr > td:nth-child(2) {
   text-align: right;
 }
-tbody > tr > td:nth-child(2) {
+tbody > tr > td:nth-child(1) {
   text-align: center;
+  max-width: 12em;
+  word-wrap: break-word;
+}
+tr > td:nth-child(2) {
+  padding-right: 2em;
+  padding-left: 2em;
 }

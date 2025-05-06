@@ -135,13 +135,16 @@ structure vfmTestLib :> vfmTestLib = struct
 
   fun mk_test_result_row {name, result, seconds} = let
     val success = result = "Passed"
-    val result1 = String.concatWith " " $ String.tokens Char.isSpace result
+    val result1 = String.translate (fn c =>
+                    if c = #"|" then "!" else String.str c) $
+                  String.concatWith " " $
+                  String.tokens Char.isSpace result
     val cls = if success then "pass" else "fail"
   in
     String.concat [
-      name, " | [",
-      result1, "]{.", cls, "} | ",
-      seconds, "s\n"
+      "[", result1, "]{.", cls, "} | ",
+      seconds, "s | ",
+      name, "\n"
     ]
   end
 
@@ -165,8 +168,8 @@ structure vfmTestLib :> vfmTestLib = struct
       " (", percentage, "%)\n\n"])
     val () = TextIO.output(out,
       String.concat [
-        "Name | Result | Time\n",
-        "------|---|-\n"
+        "Result | Time | Name\n",
+        "--|-|---\n"
       ])
     val () = List.app (curry TextIO.output out o mk_test_result_row) data
   in

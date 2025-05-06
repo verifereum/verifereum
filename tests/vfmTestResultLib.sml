@@ -1,6 +1,7 @@
 structure vfmTestResultLib :> vfmTestResultLib = struct
 
-  open HolKernel boolLib bossLib vfmTestAuxLib cv_transLib stringSyntax
+  open HolKernel boolLib bossLib vfmTestAuxLib cv_transLib
+       vfmTestHelperTheory stringSyntax wordsSyntax
 
   val get_result_defs =
      List.filter (String.isSuffix "result_def" o #1) o
@@ -8,9 +9,21 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
 
   val eval_rhs = CONV_RULE $ RAND_CONV cv_eval;
 
+  fun test_result_to_string tm =
+    if is_comb tm then let
+      val (ct, at) = dest_comb tm
+      val c = #1 $ dest_const ct
+      val a = if is_string at
+               then fromHOLstring at
+               else String.concat ["0x", Arbnum.toHexString $
+                                         numSyntax.dest_numeral $
+                                         #1 $ dest_n2w at]
+      in String.concat [c, " ", a] end
+    else #1 $ dest_const tm
+
   fun mk_result_string tm =
     if is_eq tm
-    then term_to_string $ rhs tm
+    then test_result_to_string $ rhs tm
     else "Timeout"
 
   fun save_result_thm limit thyn (result_def_name, result_def) = let
