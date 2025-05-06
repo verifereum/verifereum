@@ -19,44 +19,23 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   type state = (string * account) list
 
-  type env = {
-    coinbase: string,
-    gasLimit: string,
-    number: string,
-    difficulty: string,
-    timestamp: string,
-    baseFee: string option,
-    random: string option,
-    excessBlobGas: string option
-  }
-
-  type indexes = {
-    data: int,
-    gas: int,
-    value: int
-  }
-
-  type post = {
-    indexes: indexes,
-    txbytes: string,
-    hash: string,
-    logs: string,
-    expectException: string option,
-    state: state
-  }
-
-  type indexed_transaction = {
+  type transaction = {
+    txtype: string,
+    chainId: string,
     nonce: string,
     gasPrice: string option,
     maxPriorityFeePerGas: string option,
     maxFeePerGas: string option,
-    gasLimit: string list,
+    gasLimit: string,
     to: string,
-    value: string list,
-    data: string list,
-    accessList: access_list list option,
+    value: string,
+    data: string,
+    accessList: access_list option,
     maxFeePerBlobGas: string option,
     blobVersionedHashes: string list option,
+    v: string,
+    r: string,
+    s: string,
     sender: string,
     secretKey: string
   }
@@ -67,13 +46,68 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     base_fee_update_fraction: string
   }
 
-  type state_test = {
+  type config = {
+    network: string,
+    blobSchedule: blob_schedule option
+  }
+
+  type block_header = {
+    parentHash: string,
+    uncleHash: string,
+    coinbase: string,
+    stateRoot: string,
+    transactionsTrie: string,
+    receiptTrie: string,
+    bloom: string,
+    difficulty: string,
+    number: string,
+    gasLimit: string,
+    gasUsed: string,
+    timestamp: string,
+    extraData: string,
+    mixHash: string,
+    nonce: string,
+    hash: string,
+    baseFeePerGas: string,
+    withdrawalsRoot: string,
+    blobGasUsed: string,
+    excessBlobGas: string,
+    parentBeaconBlockRoot: string
+  }
+
+  type withdrawal = {
+    index: string,
+    validatorIndex: string,
+    address: string,
+    amount: string
+  }
+
+  type block = {
+    rlp: string,
+    blockHeader: block_header,
+    blocknumber: string,
+    transactions: transaction list,
+    uncleHeaders: block_header list,
+    withdrawals: withdrawal list option
+  }
+
+  type invalid_block = {
+    expectException: string,
+    rlp: string,
+    rlp_decoded: block option
+  }
+
+  datatype block_or_invalid = Block of block | Invalid of invalid_block
+
+  type test = {
     name: string,
     pre: state,
-    env: env,
-    transaction: indexed_transaction,
-    post: post,
-    blobSchedule: blob_schedule option
+    genesisRLP: string,
+    genesisBlockHeader: block_header,
+    blocks: block_or_invalid list,
+    lastblockhash: string,
+    post: state,
+    config: config
   }
 
   fun slot (k,v) : slot = {key=k, value=decode string v}
@@ -97,35 +131,6 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
            v))
       rawObject
 
-  val envDecoder : env decoder =
-    andThen (fn ((coinbase, gasLimit, number, difficulty),
-                 (timestamp, baseFee, random, excessBlobGas)) =>
-              succeed
-              {coinbase=coinbase, gasLimit=gasLimit, number=number,
-               difficulty=difficulty, timestamp=timestamp, baseFee=baseFee,
-               random=random, excessBlobGas=excessBlobGas})
-      (tuple2 (tuple4 (field "currentCoinbase" string, field "currentGasLimit" string,
-                       field "currentNumber" string, field "currentDifficulty" string),
-               tuple4 (field "currentTimestamp" string,
-                       try (field "currentBaseFee" string),
-                       try (field "currentRandom" string),
-                       try (field "currentExcessBlobGas" string))))
-
-  val indexesDecoder : indexes decoder =
-    andThen (fn (d,g,v) => succeed {data=d, gas=g, value=v})
-      (tuple3 (field "data" int, field "gas" int, field "value" int))
-
-  val postDecoder : post decoder =
-    andThen (fn (i,(t,h,l),e,s) => succeed
-               {indexes=i, txbytes=t, hash=h, logs=l,
-                expectException=e, state=s})
-      (tuple4 (field "indexes" indexesDecoder,
-               tuple3 (field "txbytes" string,
-                       field "hash" string,
-                       field "logs" string),
-               try (field "expectException" string),
-               field "state" allocationDecoder))
-
   val blobScheduleDecoder : blob_schedule decoder =
     andThen (fn (t,m,f) => succeed
       {target=t, max=m, base_fee_update_fraction=f})
@@ -140,46 +145,126 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val accessListDecoder : access_list decoder = array accessListEntryDecoder
 
-  val indexedTransactionDecoder : indexed_transaction decoder =
-    andThen (fn ((n,p,i,f),(l,t,v,d),(a,b,h,s),k) => succeed
+  val transactionDecoder : transaction decoder =
+    andThen (fn ((n,p,i,f),(l,t,v,d),(a,b,h,(sv,sr,ss,sa)),(ty,ci,k)) => succeed
       {nonce=n, gasPrice=p, maxPriorityFeePerGas=i, maxFeePerGas=f,
        gasLimit=l, to=t, value=v, data=d, accessList=a, maxFeePerBlobGas=b,
-       blobVersionedHashes=h, sender=s, secretKey=k})
+       r=sr, s=ss, v=sv,
+       blobVersionedHashes=h, sender=sa, secretKey=k, txtype=ty, chainId=ci})
     (tuple4 (tuple4 (field "nonce" string,
                      try (field "gasPrice" string),
                      try (field "maxPriorityFeePerGas" string),
                      try (field "maxFeePerGas" string)),
-             tuple4 (field "gasLimit" (array string),
+             tuple4 (field "gasLimit" string,
                      field "to" string,
-                     field "value" (array string),
-                     field "data" (array string)),
-             tuple4 (try (field "accessLists" (array accessListDecoder)),
+                     field "value" string,
+                     field "data" string),
+             tuple4 (try (field "accessLists" accessListDecoder),
                      try (field "maxFeePerBlobGas" string),
                      try (field "blobVersionedHashes" (array string)),
-                     field "sender" string),
-             field "secretKey" string))
+                     tuple4 (field "v" string,
+                             field "r" string,
+                             field "s" string,
+                             field "sender" string)),
+             tuple3 (field "type" string,
+                     field "chainId" string,
+                     orElse (field "secretKey" string, succeed ""))))
 
-  fun state_test_fixture_to_test (fixture_name, fixture) : state_test option = let
+  val configDecoder : config decoder =
+    andThen (fn (n,b) => succeed {network=n, blobSchedule=b}) $
+      tuple2 (field "network" string,
+              try (field "blobSchedule" $
+                   field fork_name blobScheduleDecoder))
+
+  val blockHeaderDecoder : block_header decoder =
+    andThen (fn (((ph, uh, cb, sr), (tt, rt, bl, di),
+                  (nu, gl, gu, ts), (ed, mh, no, ha)),
+                 (bf, wr, bg, eb), pr) => succeed $
+              {parentHash=ph, uncleHash=uh, coinbase=cb, stateRoot=sr,
+               transactionsTrie=tt, receiptTrie=rt, bloom=bl, difficulty=di,
+               number=nu, gasLimit=gl, gasUsed=gu, timestamp=ts,
+               extraData=ed, mixHash=mh, nonce=no, hash=ha,
+               baseFeePerGas=bf, withdrawalsRoot=wr, blobGasUsed=bg,
+               excessBlobGas=eb, parentBeaconBlockRoot=pr}) $
+      tuple3 (
+        tuple4 (tuple4 (field "parentHash" string,
+                        field "uncleHash" string,
+                        field "coinbase" string,
+                        field "stateRoot" string),
+                tuple4 (field "transactionsTrie" string,
+                        field "receiptTrie" string,
+                        field "bloom" string,
+                        field "difficulty" string),
+                tuple4 (field "number" string,
+                        field "gasLimit" string,
+                        field "gasUsed" string,
+                        field "timestamp" string),
+                tuple4 (field "extraData" string,
+                        field "mixHash" string,
+                        field "nonce" string,
+                        field "hash" string)),
+        tuple4 (field "baseFeePerGas" string,
+                field "withdrawalsRoot" string,
+                field "blobGasUsed" string,
+                field "excessBlobGas" string),
+        field "parentBeaconBlockRoot" string)
+
+  val withdrawalDecoder : withdrawal decoder =
+    andThen (fn (i,v,a,m) => succeed {
+               index=i, validatorIndex=v,
+               address=a, amount=m}) $
+      tuple4 (field "index" string,
+              field "validatorIndex" string,
+              field "address" string,
+              field "amount" string)
+
+  val blockDecoder : block decoder =
+    andThen (fn ((r,h,n),(t,u,w)) => succeed {
+               rlp=r, blockHeader=h, blocknumber=n,
+               transactions=t, uncleHeaders=u, withdrawals=w}) $
+    tuple2 (tuple3 (orElse (field "rlp" string, succeed ""),
+                    field "blockHeader" blockHeaderDecoder,
+                    field "blocknumber" string),
+            tuple3 (field "transactions" (array transactionDecoder),
+                    field "uncleHeaders" (array blockHeaderDecoder),
+                    try (field "withdrawals" (array withdrawalDecoder))))
+
+  val blockOrInvalidDecoder : block_or_invalid decoder =
+    orElse (andThen (fn (x,r,d) => succeed $ Invalid {
+                       expectException=x,
+                       rlp=r,
+                       rlp_decoded=d }) $
+            tuple3 (field "expectException" string,
+                    field "rlp" string,
+                    try (field "rlp_decoded" blockDecoder)),
+            andThen (succeed o Block) blockDecoder)
+
+  fun test_fixture_to_test (fixture_name, fixture) : test option = let
+    val config = decode (field "config" configDecoder) fixture
+  in if #network config <> fork_name then NONE else let
     val pre = decode (field "pre" allocationDecoder) fixture
-    val env = decode (field "env" envDecoder) fixture
-    val posts = decode (field "post"
-      (orElse (field fork_name (array postDecoder),
-               succeed []))) fixture
-    val [post] = if List.length posts > 1
-                 then raise Fail ("non-deterministic test: " ^ fixture_name)
-                 else posts
-    val tx = decode (field "transaction" indexedTransactionDecoder) fixture
-    val bs = decode (field "config" (try (field fork_name blobScheduleDecoder))) fixture
+    val genesisRLP = decode (field "genesisRLP" string) fixture
+    val genesisBlockHeader = decode
+      (field "genesisBlockHeader" blockHeaderDecoder) fixture
+    val blocks = decode (field "blocks" (array blockOrInvalidDecoder)) fixture
+    val lastblockhash = decode (field "lastblockhash" string) fixture
+    val post = decode (orElse (field "post" allocationDecoder,
+                               field "postState" allocationDecoder)) fixture
   in
-    SOME $
-    {name=fixture_name,
-     pre=pre, env=env, post=post,
-     transaction=tx,
-     blobSchedule=bs}
-  end handle Bind => NONE
+    SOME $ {
+      name=fixture_name,
+      pre=pre,
+      genesisRLP=genesisRLP,
+      genesisBlockHeader=genesisBlockHeader,
+      blocks=blocks,
+      lastblockhash=lastblockhash,
+      post=post,
+      config=config
+    }
+  end end
 
-  val state_test_json_path_to_tests =
-    decodeFile (JSONDecode.map (List.mapPartial state_test_fixture_to_test) rawObject)
+  val json_path_to_tests =
+    decodeFile (JSONDecode.map (List.mapPartial test_fixture_to_test) rawObject)
 
   val address_bits_ty = mk_int_numeric_type 160
   val bytes32_bits_ty = mk_int_numeric_type 256
@@ -384,13 +469,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val test_result_ty =
     mk_thy_type{Thy="vfmTestHelper",Tyop="test_result",Args=[]}
 
-  val run_state_test_tm =
-    prim_mk_const{Thy="vfmTestHelper",Name="run_state_test"}
+  val run_test_tm =
+    prim_mk_const{Thy="vfmTestHelper",Name="run_test"}
 
   val fuel_tm = numSyntax.term_of_int state_root_fuel
 
-  fun define_state_test range_prefix test_number (test: state_test) = let
-    val name_prefix = String.concat ["state_test_", range_prefix, "_", Int.toString test_number]
+  fun define_test range_prefix test_number (test: test) = let
+    val name_prefix = String.concat ["test_", range_prefix, "_", Int.toString test_number]
 
     val name_name = name_prefix ^ "_name"
     val name_var = mk_var(name_name, string_ty)
@@ -471,7 +556,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
     val result_name = name_prefix ^ "_result"
     val result_var = mk_var(result_name, test_result_ty)
-    val result_rhs = list_mk_comb(run_state_test_tm, [
+    val result_rhs = list_mk_comb(run_test_tm, [
       fuel_tm, exec_const, pre_const, expectException_tm,
       lhs(concl post_hash_def), lhs(concl logs_hash_def)])
     val result_def = new_definition(result_name ^ "_def",

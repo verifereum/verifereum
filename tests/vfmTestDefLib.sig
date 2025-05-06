@@ -15,44 +15,23 @@ signature vfmTestDefLib = sig
 
   type state = (string * account) list
 
-  type env = {
-    coinbase: string,
-    gasLimit: string,
-    number: string,
-    difficulty: string,
-    timestamp: string,
-    baseFee: string option,
-    random: string option,
-    excessBlobGas: string option
-  }
-
-  type indexes = {
-    data: int,
-    gas: int,
-    value: int
-  }
-
-  type post = {
-    indexes: indexes,
-    txbytes: string,
-    hash: string,
-    logs: string,
-    expectException: string option,
-    state: state
-  }
-
-  type indexed_transaction = {
+  type transaction = {
+    txtype: string,
+    chainId: string,
     nonce: string,
     gasPrice: string option,
     maxPriorityFeePerGas: string option,
     maxFeePerGas: string option,
-    gasLimit: string list,
+    gasLimit: string,
     to: string,
-    value: string list,
-    data: string list,
-    accessList: access_list list option,
+    value: string,
+    data: string,
+    accessList: access_list option,
     maxFeePerBlobGas: string option,
     blobVersionedHashes: string list option,
+    v: string,
+    r: string,
+    s: string,
     sender: string,
     secretKey: string
   }
@@ -63,17 +42,72 @@ signature vfmTestDefLib = sig
     base_fee_update_fraction: string
   }
 
-  type state_test = {
-    name: string,
-    pre: state,
-    env: env,
-    transaction: indexed_transaction,
-    post: post,
+  type config = {
+    network: string,
     blobSchedule: blob_schedule option
   }
 
-  val state_test_json_path_to_tests : string -> state_test list
+  type block_header = {
+    parentHash: string,
+    uncleHash: string,
+    coinbase: string,
+    stateRoot: string,
+    transactionsTrie: string,
+    receiptTrie: string,
+    bloom: string,
+    difficulty: string,
+    number: string,
+    gasLimit: string,
+    gasUsed: string,
+    timestamp: string,
+    extraData: string,
+    mixHash: string,
+    nonce: string,
+    hash: string,
+    baseFeePerGas: string,
+    withdrawalsRoot: string,
+    blobGasUsed: string,
+    excessBlobGas: string,
+    parentBeaconBlockRoot: string
+  }
 
-  val define_state_test : string -> int -> state_test -> Thm.thm
+  type withdrawal = {
+    index: string,
+    validatorIndex: string,
+    address: string,
+    amount: string
+  }
+
+  type block = {
+    rlp: string,
+    blockHeader: block_header,
+    blocknumber: string,
+    transactions: transaction list,
+    uncleHeaders: block_header list,
+    withdrawals: withdrawal list option
+  }
+
+  type invalid_block = {
+    expectException: string,
+    rlp: string,
+    rlp_decoded: block option
+  }
+
+  datatype block_or_invalid = Block of block | Invalid of invalid_block
+
+  type test = {
+    name: string,
+    pre: state,
+    genesisRLP: string,
+    genesisBlockHeader: block_header,
+    blocks: block_or_invalid list,
+    lastblockhash: string,
+    post: state,
+    config: config
+  }
+
+  val json_path_to_tests : string -> test list
+
+  val define_test : string -> int -> test -> Thm.thm
 
 end
