@@ -30,12 +30,12 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
     val len = String.size test_prefix
     val strip = String.size "test_"
     val result_suffix = String.substring(test_prefix, strip, len - strip)
-    val csv_name = "result" ^ result_suffix ^ ".csv"
+    val csv_name = "result" ^ result_suffix ^ ".nsv"
     val test_name = fromHOLstring $ rhs $ concl $
                     fetch thyn $ test_prefix ^ "_name_def"
     val out = TextIO.openOut csv_name
     val () = TextIO.output(out,
-      String.concatWith "," [test_name, result_str, time_str])
+      String.concatWith "\n" [test_name, result_str, time_str])
     val () = TextIO.output(out, "\n")
     val () = TextIO.closeOut out
   in

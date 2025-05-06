@@ -126,9 +126,9 @@ structure vfmTestLib :> vfmTestLib = struct
 
   fun read_test_result_data result_file : test_result = let
     val inp = TextIO.openIn result_file
-    val line = trimr 1 $ TextIO.inputAll inp
+    val lines = TextIO.inputAll inp
     val () = TextIO.closeIn inp
-    val [name, result, seconds] = String.fields (equal #",") line
+    val [name, result, seconds] = String.tokens (equal #"\n") lines
   in
     {name=name, result=result, seconds=seconds}
   end
@@ -151,8 +151,8 @@ structure vfmTestLib :> vfmTestLib = struct
   fun write_test_results_table () = let
     val dir = "results"
     val out = TextIO.openOut (OS.Path.concat (dir, "table.md"))
-    val (_, csvs) = collect_files "csv" dir ([], [])
-    val unsorted_data = List.map read_test_result_data csvs
+    val (_, nsvs) = collect_files "nsv" dir ([], [])
+    val unsorted_data = List.map read_test_result_data nsvs
     val data = sort by_name unsorted_data
     val pass_count = List.length (List.filter (equal "Passed" o #result) data)
     val total_count = List.length data
