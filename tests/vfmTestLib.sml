@@ -1,6 +1,33 @@
 structure vfmTestLib :> vfmTestLib = struct
   open HolKernel vfmTestAuxLib
 
+  (* TODO: switch to only blockchain tests
+  *    - state tests seem duplicated here anyway (apart from "state test only")
+  *    - legacy tests also seem to be included here (via "static") *)
+
+  val fixtures_url_prefix =
+    "https://github.com/ethereum/execution-spec-tests/releases/download/v4.4.0/"
+  val static_tarball = "fixtures_static.tar.gz"
+  val develop_tarball = "fixtures_develop.tar.gz"
+
+  fun ensure_fixtures () =
+    if OS.FileSys.isDir "fixtures" handle SysErr _ => false
+    then ()
+    else let
+      val curl_static = OS.Process.system $
+        String.concat["curl -LO ", fixtures_url_prefix ^ static_tarball]
+      val curl_develop = OS.Process.system $
+        String.concat["curl -LO ", fixtures_url_prefix ^ develop_tarball]
+      val tar_static = OS.Process.system $
+        String.concat ["tar -xzf ", static_tarball]
+      val tar_develop = OS.Process.system $
+        String.concat ["tar -xzf", develop_tarball]
+    in
+      if List.all OS.Process.isSuccess [
+        curl_static, curl_develop, tar_static, tar_develop
+      ] then () else raise Fail "ensure_fixtures"
+    end
+
   fun collect_files suffix path (dirs, files) = let
     val ds = OS.FileSys.openDir path
     fun loop (dirs, files) =
@@ -36,21 +63,26 @@ structure vfmTestLib :> vfmTestLib = struct
     |> collect_json_files_rec
     |> sort string_less
 
-  fun state_test_defn_script_text index json_path = let
-    val sidx = padl 3 #"0" $ Int.toString index
-    val thyn = "vfmStateTestDefs" ^ sidx
-    val text = String.concat [
-      "open HolKernel vfmTestAuxLib vfmTestDefLib;\n",
-      "val () = new_theory \"", thyn, "\";\n",
-      "val tests = state_test_json_path_to_tests \"../../", json_path, "\";\n",
-      "val defs = mapi (define_state_test \"", sidx, "\") tests;\n",
-      "val () = export_theory_no_docs ();\n"
-    ]
-  in
-    (thyn, text)
-  end
+  fun mk_test_defs_script_text padding path test_type TestType = let
+    fun test_defs_script_text index json_path = let
+      val sidx = padl padding #"0" $ Int.toString index
+      val thyn = String.concat ["vfm", TestType, "Defs", sidx]
+      val text = String.concat [
+        "open HolKernel vfmTestAuxLib vfmTestDefLib;\n",
+        "val () = new_theory \"", thyn, "\";\n",
+        "val tests = ", test_type, "_json_path_to_tests \"", path, json_path, "\";\n",
+        "val defs = mapi (define_", test_type, " \"", sidx, "\") tests;\n",
+        "val () = export_theory_no_docs ();\n"
+      ]
+    in
+      (thyn, text)
+    end
+  in test_defs_script_text end
 
-  fun state_test_result_script_text thyn = let
+  val state_test_defs_script_text =
+    mk_test_defs_script_text 3 "../../" "state_test" "StateTest"
+
+  fun state_test_results_script_text thyn = let
     val z = String.size thyn
     val rthy = Substring.concat [
                   Substring.substring(thyn, 0, 12),
@@ -75,18 +107,18 @@ structure vfmTestLib :> vfmTestLib = struct
     TextIO.closeOut out
   end
 
-  fun generate_state_test_defn_scripts () = let
+  fun generate_state_test_defs_scripts () = let
     val json_paths = get_all_state_test_json_paths ()
-    val named_scripts = mapi state_test_defn_script_text json_paths
+    val named_scripts = mapi state_test_defs_script_text json_paths
   in
     List.app (write_script "state/defs") named_scripts
   end
 
-  fun generate_state_test_result_scripts () = let
+  fun generate_state_test_results_scripts () = let
     val (_, smls) = collect_files "sml" "state/defs" ([], [])
     val scripts = List.filter (String.isSuffix "Script.sml") smls
     val thyns = List.map (ss (Substring.triml 11 o Substring.trimr 10)) smls
-    val named_scripts = List.map state_test_result_script_text thyns
+    val named_scripts = List.map state_test_results_script_text thyns
   in
     List.app (write_script "state/results") named_scripts
   end
@@ -139,11 +171,4 @@ structure vfmTestLib :> vfmTestLib = struct
     TextIO.closeOut out
   end
 
-  (*
-    1. State tests
-    2. Blockchain tests
-    3. Legacy state tests (General State Tests ?)
-    4. Legacy blockchain tests
-    Ignoring for now: Blockchain engine tests, Transaction tests, (other) Legacy tests
-  *)
 end
