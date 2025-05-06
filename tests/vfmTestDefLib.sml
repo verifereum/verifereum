@@ -289,20 +289,23 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val bytestr_cache : (string, term) Redblackmap.dict ref =
     ref $ Redblackmap.mkDict String.compare
 
-  fun mk_cached_bytes_tm str =
-    case Redblackmap.peek(!bytestr_cache, str)
-      of SOME const => const | NONE =>
+  fun mk_cached_bytes_tm str = let
+  val hex = if String.isPrefix "0x" str
+                then trim2 str else str in
+  case Redblackmap.peek(!bytestr_cache, hex)
+    of SOME const => const | NONE =>
   let
     val n = Redblackmap.numItems $ !bytestr_cache
     val name = String.concat["bytestr_", Int.toString n]
     val var = mk_var(name, bytes_ty)
-    val rhs_tm = mk_hex_to_rev_bytes_tm_from_string str
+    val rhs_tm = mk_hex_to_rev_bytes_tm_from_string hex
     val def = new_definition(name ^ "_def", mk_eq(var, rhs_tm))
     val () = cv_trans_deep_embedding EVAL def
     val const = lhs (concl def)
-    val cache = Redblackmap.insert(!bytestr_cache, str, const)
+    val cache = Redblackmap.insert(!bytestr_cache, hex, const)
     val () = bytestr_cache := cache
   in const end
+  end
 
   val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
 
@@ -338,7 +341,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     TypeBase.mk_record(account_ty, [
       ("balance", mk_num_tm balance),
       ("nonce", mk_num_tm nonce),
-      ("code", mk_cached_bytes_tm (trim2 code)),
+      ("code", mk_cached_bytes_tm code),
       ("storage", mk_storage_tm_from_list storage)
     ])
 
@@ -372,7 +375,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                 then optionSyntax.mk_none address_ty
                 else optionSyntax.mk_some (mk_address_tm (#to tx))
     val from_tm = mk_address_tm (#sender tx)
-    val data_tm = mk_cached_bytes_tm $ trim2 $ #data tx
+    val data_tm = mk_cached_bytes_tm $ #data tx
     val nonce_tm = mk_num_tm $ #nonce tx
     val value_tm = mk_num_tm $ #value tx
     val gasLimit_tm = mk_num_tm $ #gasLimit tx

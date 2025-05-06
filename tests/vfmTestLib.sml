@@ -61,9 +61,11 @@ structure vfmTestLib :> vfmTestLib = struct
     |> sort string_less
 
   val padding = 4
+  val test_defs_prefix = "vfmTestDefs"
+
   fun test_defs_script_text index json_path = let
     val sidx = padl padding #"0" $ Int.toString index
-    val thyn = String.concat ["vfmTestDefs", sidx]
+    val thyn = String.concat [test_defs_prefix, sidx]
     val rpth = OS.Path.concat(OS.Path.parentArc, json_path)
     val text = String.concat [
       "open HolKernel vfmTestAuxLib vfmTestDefLib;\n",
@@ -79,8 +81,8 @@ structure vfmTestLib :> vfmTestLib = struct
   fun test_results_script_text thyn = let
     val z = String.size thyn
     val rthy = Substring.concat [
-                  Substring.substring(thyn, 0, 12),
-                  Substring.substring(thyn, z-3, 3)
+                  Substring.full "vfmTest",
+                  Substring.substring(thyn, z-padding, padding)
                ]
     val text = String.concat [
       "open HolKernel vfmTestAuxLib vfmTestResultLib ", thyn, "Theory;\n",
@@ -110,8 +112,10 @@ structure vfmTestLib :> vfmTestLib = struct
 
   fun generate_test_results_scripts () = let
     val (_, smls) = collect_files "sml" "defs" ([], [])
-    val scripts = List.filter (String.isSuffix "Script.sml") smls
-    val thyns = List.map (ss (Substring.triml 11 o Substring.trimr 10)) smls
+    val script_suffix = "Script.sml"
+    val scripts = List.filter (String.isSuffix script_suffix) $
+                  List.map (#file o OS.Path.splitDirFile) smls
+    val thyns = List.map (trimr (String.size script_suffix)) scripts
     val named_scripts = List.map test_results_script_text thyns
   in
     List.app (write_script "results") named_scripts
