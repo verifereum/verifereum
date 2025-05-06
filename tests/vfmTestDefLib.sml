@@ -367,22 +367,19 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   fun mk_access_list_tm ls = mk_list(List.map mk_access_list_entry_tm ls,
                                      access_list_entry_ty)
 
-  fun mk_transaction_tm (env: env) (ix: indexes) (tx: indexed_transaction) = let
-    val {data=di, gas=gi, value=vi} = ix
+  fun mk_transaction_tm baseFee_tm (tx: transaction) = let
     val to_tm = if #to tx = ""
                 then optionSyntax.mk_none address_ty
                 else optionSyntax.mk_some (mk_address_tm (#to tx))
     val from_tm = mk_address_tm (#sender tx)
-    val data_tm = mk_cached_bytes_tm $
-                    trim2(List.nth(#data tx, di))
-    val nonce_tm = mk_num_tm (#nonce tx)
-    val value_tm = mk_num_tm (List.nth(#value tx, vi))
-    val gasLimit_tm = mk_num_tm (List.nth(#gasLimit tx, gi))
+    val data_tm = mk_cached_bytes_tm $ trim2 $ #data tx
+    val nonce_tm = mk_num_tm $ #nonce tx
+    val value_tm = mk_num_tm $ #value tx
+    val gasLimit_tm = mk_num_tm $ #gasLimit tx
     val gasPrice_tm = case #gasPrice tx of
                            SOME s => mk_num_tm s
                          | NONE => let
                                      val mno = mk_num_tm o Option.valOf
-                                     val baseFee_tm = mno $ #baseFee $ env
                                      val maxFee_tm = mno $ #maxFeePerGas tx
                                      val prioFee_tm = mno $ #maxPriorityFeePerGas tx
                                    in
@@ -391,7 +388,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                                    end
     val accessList_tm = case #accessList tx of
                              NONE => empty_access_list_tm
-                           | SOME ls => mk_access_list_tm $ List.nth(ls, di)
+                           | SOME ls => mk_access_list_tm ls
     val blobVersionedHashes_tm = case #blobVersionedHashes tx of
                                       NONE => mk_nil bytes32_ty
                                     | SOME ls => mk_list(
@@ -425,33 +422,19 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val block_ty = mk_thy_type{Thy="vfmContext",Tyop="block",Args=[]}
 
-  val run_block_tm =
-    prim_mk_const{Thy="vfmExecution",Name="run_block"}
-
-  val run_block_result_ty = #2 $ strip_fun $ type_of run_block_tm
-
-  val run_blocks_tm =
-    prim_mk_const{Thy="vfmExecution",Name="run_blocks"}
-
-  val run_transaction_tm =
-    prim_mk_const{Thy="vfmExecution",Name="run_transaction"}
-
-  val run_transaction_result_ty = #2 $ strip_fun $ type_of run_transaction_tm
-
-  val chain_id_tm = numSyntax.term_of_int chain_id
-
-  fun mk_block_tm (env: env) (tx: term) = let
-    val baseFeePerGas_tm = case #baseFee env of NONE => zero_tm
-                              | SOME s => mk_num_tm s
-    val number_tm = mk_num_tm $ #number env
-    val timeStamp_tm = mk_num_tm $ #timestamp env
-    val coinBase_tm = mk_address_tm $ #coinbase env
-    val gasLimit_tm = mk_num_tm $ #gasLimit env
-    val prevRandao_tm = case #random env of NONE => zero_bytes32
-                           | SOME s => mk_bytes32_tm s
-    val hash_tm = zero_bytes32 (* not used in state tests *)
-    val parentBeaconBlockRoot_tm = zero_bytes32 (* ditto *)
-    val transactions_tm = mk_list([tx], transaction_ty)
+  fun mk_block_tm (block: block) = let
+    val header = #blockHeader block
+    val baseFeePerGas_tm = mk_num_tm $ #baseFeePerGas header
+    val number_tm = mk_num_tm $ #number header
+    val timeStamp_tm = mk_num_tm $ #timestamp header
+    val coinBase_tm = mk_address_tm $ #coinbase header
+    val gasLimit_tm = mk_num_tm $ #gasLimit header
+    val prevRandao_tm = mk_bytes32_tm $ #mixHash header
+    val hash_tm = mk_bytes32_tm $ #hash header
+    val parentBeaconBlockRoot_tm = mk_bytes32_tm $ #parentBeaconBlockRoot header
+    val transactions_tm = mk_list(
+      List.map (mk_transaction_tm baseFeePerGas_tm) $
+        #transactions block, transaction_ty)
   in
     TypeBase.mk_record(block_ty, [
       ("baseFeePerGas", baseFeePerGas_tm),
@@ -474,6 +457,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val fuel_tm = numSyntax.term_of_int state_root_fuel
 
+  val optional_block_ty = optionSyntax.mk_option block_ty
+  val invalid_block_ty = pairSyntax.mk_prod(bytes_ty, optional_block_ty)
+  val expectException_ty = pairSyntax.mk_prod(string_ty, invalid_block_ty)
+
+  fun is_invalid (Invalid _) = true | is_invalid _ = false
+  fun dest_block (Block b) = b
+
   fun define_test range_prefix test_number (test: test) = let
     val name_prefix = String.concat ["test_", range_prefix, "_", Int.toString test_number]
 
@@ -491,74 +481,83 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
     val post_state_name = name_prefix ^ "_post_state"
     val post_state_var = mk_var(post_state_name, accounts_ty)
-    val post_state_rhs = mk_accounts_tm_from_list (#state (#post test))
+    val post_state_rhs = mk_accounts_tm_from_list (#post test)
     val post_state_def = new_definition(post_state_name ^ "_def",
                                         mk_eq(post_state_var, post_state_rhs))
-    (* not needed - do it on demand when debugging
+    val post_state_const = lhs $ concl post_state_def
     val () = cv_trans post_state_def
-    *)
 
-    val post_hash_name = name_prefix ^ "_post_hash"
-    val post_hash_var = mk_var(post_hash_name, bytes32_ty)
-    val post_hash_rhs = mk_bytes32_tm (#hash (#post test))
-    val post_hash_def = new_definition(post_hash_name ^ "_def",
-                                       mk_eq(post_hash_var, post_hash_rhs))
-    val () = cv_trans_deep_embedding EVAL post_hash_def
+    val g_rlp_name = name_prefix ^ "_genesis_rlp"
+    val g_rlp_var = mk_var(g_rlp_name, bytes_ty)
+    val g_rlp_rhs = mk_cached_bytes_tm $ #genesisRLP test
+    val g_rlp_def = new_definition(g_rlp_name ^ "_def",
+                                   mk_eq(g_rlp_var, g_rlp_rhs))
+    val g_rlp_const = lhs $ concl g_rlp_def
+    val () = cv_trans g_rlp_def
 
-    val logs_hash_name = name_prefix ^ "_logs_hash"
-    val logs_hash_var = mk_var(logs_hash_name, bytes32_ty)
-    val logs_hash_rhs = mk_bytes32_tm (#logs (#post test))
-    val logs_hash_def = new_definition(logs_hash_name ^ "_def",
-                                       mk_eq(logs_hash_var, logs_hash_rhs))
-    val () = cv_trans_deep_embedding EVAL logs_hash_def
+    val g_root_name = name_prefix ^ "_genesis_root"
+    val g_root_var = mk_var(g_root_name, bytes32_ty)
+    val g_root_rhs = mk_bytes32_tm $ #stateRoot $ #genesisBlockHeader test
+    val g_root_def = new_definition(g_root_name ^ "_def",
+                                    mk_eq(g_root_var, g_root_rhs))
+    val g_root_const = lhs $ concl g_root_def
+    val () = cv_trans_deep_embedding EVAL g_root_def
 
-    val txbytes_name = name_prefix ^ "_txbytes"
-    val txbytes_var = mk_var(txbytes_name, bytes_ty)
-    val txbytes_rhs = mk_hex_to_rev_bytes_tm_from_string $
-                        trim2 (#txbytes (#post test))
-    val txbytes_def = new_definition(txbytes_name ^ "_def",
-                                     mk_eq(txbytes_var, txbytes_rhs))
-    val () = cv_trans_deep_embedding EVAL txbytes_def
+    val g_hash_name = name_prefix ^ "_genesis_hash"
+    val g_hash_var = mk_var(g_hash_name, bytes32_ty)
+    val g_hash_rhs = mk_bytes32_tm $ #hash $ #genesisBlockHeader test
+    val g_hash_def = new_definition(g_hash_name ^ "_def",
+                                    mk_eq(g_hash_var, g_hash_rhs))
+    val g_hash_const = lhs $ concl g_hash_def
+    val () = cv_trans_deep_embedding EVAL g_hash_def
 
-    val env = #env test
-    val tx_name = name_prefix ^ "_transaction"
-    val tx_var = mk_var(tx_name, transaction_ty)
-    val tx_rhs = mk_transaction_tm env
-                   (#indexes (#post test)) (#transaction test)
-    val tx_def = new_definition(tx_name ^ "_def", mk_eq(tx_var, tx_rhs))
-    val tx_const = lhs (concl tx_def)
-    val () = cv_trans tx_def
+    val last_hash_name = name_prefix ^ "_last_hash"
+    val last_hash_var = mk_var(last_hash_name, bytes32_ty)
+    val last_hash_rhs = mk_bytes32_tm $ #lastblockhash test
+    val last_hash_def = new_definition(last_hash_name ^ "_def",
+                                    mk_eq(last_hash_var, last_hash_rhs))
+    val last_hash_const = lhs $ concl last_hash_def
+    val () = cv_trans_deep_embedding EVAL last_hash_def
 
-    val expectException = #expectException (#post test)
-    val expectException_tm = expectException |>
+    val boris = #blocks test
+    val last_index = List.length boris - 1
+    val expectException =
+      if List.exists is_invalid boris
+      then if List.exists is_invalid (List.take(boris, last_index))
+           then raise Fail "invalid block not the last block"
+           else case List.nth(boris, last_index)
+                of Invalid {expectException, rlp, rlp_decoded} =>
+                   SOME (expectException, (rlp, rlp_decoded))
+      else NONE
+    val expectException_tm =
       optionSyntax.lift_option
-        (optionSyntax.mk_option string_ty)
-        fromMLstring
+        (optionSyntax.mk_option expectException_ty)
+        (pairSyntax.lift_prod expectException_ty fromMLstring $
+         pairSyntax.lift_prod invalid_block_ty
+           mk_cached_bytes_tm
+           (optionSyntax.lift_option optional_block_ty mk_block_tm))
+        expectException
 
-    val block_name = name_prefix ^ "_block"
-    val block_var = mk_var(block_name, block_ty)
-    val block_rhs = mk_block_tm env tx_const
-    val block_def = new_definition(block_name ^ "_def",
-                                   mk_eq(block_var, block_rhs))
-    val block_const = lhs (concl block_def)
-    val () = cv_trans block_def
-
-    val prevHashes_tm = mk_nil bytes32_ty
-
-    val exec_name = name_prefix ^ "_exec"
-    val exec_var = mk_var(exec_name, run_transaction_result_ty)
-    val exec_rhs = list_mk_comb(run_transaction_tm,
-      [Collect_empty_dom_tm, F, chain_id_tm, prevHashes_tm,
-       block_const, pre_const, tx_const])
-    val exec_def = new_definition(exec_name ^ "_def", mk_eq(exec_var, exec_rhs))
-    val exec_const = lhs (concl exec_def)
-    val () = cv_trans exec_def
+    val validBlocks = List.map dest_block (
+      if Option.isSome expectException
+      then List.take(boris, last_index)
+      else boris )
+    val validBlocks_tm = listSyntax.mk_list(
+      List.map mk_block_tm validBlocks, block_ty)
+    val blocks_name = name_prefix ^ "_blocks"
+    val blocks_var = mk_var(blocks_name, listSyntax.mk_list_type block_ty)
+    val blocks_def = new_definition(blocks_name ^ "_def",
+                                    mk_eq(blocks_var, validBlocks_tm))
+    val blocks_const = lhs $ concl blocks_def
+    val () = cv_trans blocks_def
 
     val result_name = name_prefix ^ "_result"
     val result_var = mk_var(result_name, test_result_ty)
     val result_rhs = list_mk_comb(run_test_tm, [
-      fuel_tm, exec_const, pre_const, expectException_tm,
-      lhs(concl post_hash_def), lhs(concl logs_hash_def)])
+      fuel_tm, pre_const,
+      g_rlp_const, g_root_const, g_hash_const,
+      blocks_const, last_hash_const, post_state_const,
+      expectException_tm])
     val result_def = new_definition(result_name ^ "_def",
                                     mk_eq(result_var, result_rhs))
   in

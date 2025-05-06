@@ -10,48 +10,54 @@ val () = new_theory "vfmTestHelper";
 Datatype:
   test_result
   = Passed
-  | Failed
+  | GenesisBlockDecodeFailure
+  | GenesisHeaderMismatch bytes32
+  | GenesisStateMismatch bytes32
   | ExpectedException string
-  | WrongNumTests
-  | StateMismatch bytes32
-  | LogsMismatch bytes32
+  | ExceptionMismatch
+  | UnexpectedException
+  | BlockDecodeFailure
+  | LastHashMismatch bytes32
+  | StateMismatch
   | OutOfFuel
 End
 
-Definition test_hashes_def:
-  test_hashes fuel st (logs: event list) =
-  case state_root_clocked fuel st
-    of NONE => INR OutOfFuel
-     | SOME sh => INL (sh, Keccak_256_w64 $ rlp_encode $ RLPL $ MAP rlp_event logs)
+Definition run_test_def:
+  run_test fuel
+    preState
+    (genesisRLP: byte list) (* TODO: check RLP decoding *)
+    genesisHeaderStateRoot (* TODO: check whole header *)
+    genesisHeaderHash
+    validBlocks
+    lastBlockHash
+    postState
+    expectException
+  =
+    case state_root_clocked fuel preState
+    of NONE => OutOfFuel |
+    SOME preStateRootBytes =>
+    let preStateRoot = word_of_bytes T 0w preStateRootBytes in
+    if preStateRoot ≠ genesisHeaderStateRoot
+    then GenesisHeaderMismatch preStateRoot
+    else case
+      (* TODO: check RLP decoding first *)
+      run_blocks (Collect empty_domain) 1 [] preState validBlocks
+    of NONE => UnexpectedException
+     | SOME (_, hashes, computedPostState, dom) =>
+    case expectException of NONE =>
+      let computedHash = case hashes of h::_ => h | _ => genesisHeaderHash in
+      if computedHash <> lastBlockHash then LastHashMismatch computedHash else
+      if computedPostState <> postState then StateMismatch else Passed
+    | SOME (msg, (rlp: word8 list), decoded) =>
+        (* TODO: check RLP *)
+        case decoded of NONE => ExpectedException "block rlp decoding"
+        | SOME invalidBlock =>
+        case run_blocks dom 1 hashes computedPostState [invalidBlock] of
+          NONE => Passed (* TODO: check exception match *)
+        | SOME _ => ExpectedException msg
 End
 
-val () = cv_auto_trans test_hashes_def;
-
-Definition run_state_test_def:
-  run_state_test fuel
-    exec preState
-    (expectException: string option)
-    (stateHash: bytes32) (logsHash: bytes32) =
-    case (
-      case exec
-        of NONE =>
-            (if IS_NONE expectException then INR Failed
-             else test_hashes fuel preState [])
-         | SOME (result, postState) =>
-            (case expectException of SOME e => INR (ExpectedException e)
-                | _ => test_hashes fuel postState result.logs))
-    of INR x => x
-     | INL (sh, lh) =>
-         let computedStateHash = word_of_bytes T 0w sh in
-         let computedLogsHash = word_of_bytes T 0w lh in
-         if computedStateHash = stateHash
-         then if computedLogsHash = logsHash then Passed
-              else LogsMismatch computedLogsHash
-         else StateMismatch computedStateHash
-  (* TODO: check logs, check txbytes *)
-End
-
-val () = cv_auto_trans run_state_test_def;
+val () = cv_auto_trans run_test_def;
 
 (* TODO: remove below if unused, once new vfmTestLib is in use *)
 
