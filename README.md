@@ -4,10 +4,6 @@ Prove functional correctness of Ethereum smart contracts in higher-order logic.
 
 See [https://verifereum.org](https://verifereum.org).
 
-When you clone this repository don't forget to `git submodule update --init` too.
-
-Work in progress.
-
 ## Getting Started
 
 Verifereum is developed in the [HOL](https://hol-theorem-prover.org) Theorem
@@ -68,8 +64,6 @@ as described [here](docs/run-with-docker.md).
 
 3. Clone the Verifereum repo itself ahead of the build e.g., `git clone https://github.com/verifereum/verifereum` or alternative method
 
-   NB don't forget to run `git submodule update --init` too, otherwise the build will fail during the step below
-  
 4. Run Holmake in the `tests` directory to build Verifereum and run the tests.
    They will take a while to run so you can cancel them.
 
