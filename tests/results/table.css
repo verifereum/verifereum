@@ -1,0 +1,18 @@
+table {
+  font-family: sans-serif;
+}
+span.fail {
+  background-color: lightpink;
+}
+span.pass {
+  background-color: lightgreen;
+}
+tr.odd {
+  background-color: azure;
+}
+tbody > tr > td:nth-child(3) {
+  text-align: right;
+}
+tbody > tr > td:nth-child(2) {
+  text-align: center;
+}

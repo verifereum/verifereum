@@ -139,10 +139,9 @@ structure vfmTestLib :> vfmTestLib = struct
     val cls = if success then "pass" else "fail"
   in
     String.concat [
-      "<tr class=", cls,
-      "><td>", name, "</td>",
-      "<td>", result1, "</td>",
-      "<td>", seconds, "s</td></tr>"
+      name, " | [",
+      result1, "]{.", cls, "} | ",
+      seconds, "s\n"
     ]
   end
 
@@ -151,7 +150,7 @@ structure vfmTestLib :> vfmTestLib = struct
 
   fun write_test_results_table () = let
     val dir = "results"
-    val out = TextIO.openOut (OS.Path.concat (dir, "table.html"))
+    val out = TextIO.openOut (OS.Path.concat (dir, "table.md"))
     val (_, csvs) = collect_files "csv" dir ([], [])
     val unsorted_data = List.map read_test_result_data csvs
     val data = sort by_name unsorted_data
@@ -160,12 +159,15 @@ structure vfmTestLib :> vfmTestLib = struct
     val percentage = Real.fmt (StringCvt.FIX (SOME 1)) $
       100.0 * (Real.fromInt pass_count / Real.fromInt total_count)
     val () = TextIO.output(out, String.concat [
-      "<div class=rate>Successes: ",
-        Int.toString pass_count, "/", Int.toString total_count,
-        " (", percentage, "%)</div>"])
+      "Successes: ",
+      Int.toString pass_count, "/",
+      Int.toString total_count,
+      " (", percentage, "%)\n\n"])
     val () = TextIO.output(out,
-      "<table class=results><thead><tr><th>Name</th>" ^
-      "<th>Result</th><th>Time</th></tr></thead>")
+      String.concat [
+        "Name | Result | Time\n",
+        "------|---|-\n"
+      ])
     val () = List.app (curry TextIO.output out o mk_test_result_row) data
   in
     TextIO.closeOut out

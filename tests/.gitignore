@@ -1,4 +1,5 @@
 fixtures
 fixtures_*.tar.gz
 result*.csv
+table.md
 table.html
