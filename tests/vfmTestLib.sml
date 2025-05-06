@@ -149,7 +149,8 @@ structure vfmTestLib :> vfmTestLib = struct
   fun by_name (r1: test_result) (r2: test_result) =
     string_less (#name r1) (#name r2)
 
-  fun write_test_results_table dir = let
+  fun write_test_results_table () = let
+    val dir = "results"
     val out = TextIO.openOut (OS.Path.concat (dir, "table.html"))
     val (_, csvs) = collect_files "csv" dir ([], [])
     val unsorted_data = List.map read_test_result_data csvs
