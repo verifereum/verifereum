@@ -1,9 +1,6 @@
 structure vfmTestLib :> vfmTestLib = struct
-  open HolKernel vfmTestAuxLib
 
-  (* TODO: switch to only blockchain tests
-  *    - state tests seem duplicated here anyway (apart from "state test only")
-  *    - legacy tests also seem to be included here (via "static") *)
+  open HolKernel vfmTestAuxLib
 
   val fixtures_url_prefix =
     "https://github.com/ethereum/execution-spec-tests/releases/download/v4.4.0/"
@@ -58,31 +55,28 @@ structure vfmTestLib :> vfmTestLib = struct
     loop [start_path] []
   end
 
-  fun get_all_state_test_json_paths () =
-    "fixtures/state_tests"
+  fun get_all_test_json_paths () =
+    "fixtures/blockchain_tests"
     |> collect_json_files_rec
     |> sort string_less
 
-  fun mk_test_defs_script_text padding path test_type TestType = let
-    fun test_defs_script_text index json_path = let
-      val sidx = padl padding #"0" $ Int.toString index
-      val thyn = String.concat ["vfm", TestType, "Defs", sidx]
-      val text = String.concat [
-        "open HolKernel vfmTestAuxLib vfmTestDefLib;\n",
-        "val () = new_theory \"", thyn, "\";\n",
-        "val tests = ", test_type, "_json_path_to_tests \"", path, json_path, "\";\n",
-        "val defs = mapi (define_", test_type, " \"", sidx, "\") tests;\n",
-        "val () = export_theory_no_docs ();\n"
-      ]
-    in
-      (thyn, text)
-    end
-  in test_defs_script_text end
+  val padding = 4
+  fun test_defs_script_text index json_path = let
+    val sidx = padl padding #"0" $ Int.toString index
+    val thyn = String.concat ["vfmTestDefs", sidx]
+    val rpth = OS.Path.concat(OS.Path.parentArc, json_path)
+    val text = String.concat [
+      "open HolKernel vfmTestAuxLib vfmTestDefLib;\n",
+      "val () = new_theory \"", thyn, "\";\n",
+      "val tests = json_path_to_tests \"", rpth, "\";\n",
+      "val defs = mapi (define_test \"", sidx, "\") tests;\n",
+      "val () = export_theory_no_docs ();\n"
+    ]
+  in
+    (thyn, text)
+  end
 
-  val state_test_defs_script_text =
-    mk_test_defs_script_text 3 "../../" "state_test" "StateTest"
-
-  fun state_test_results_script_text thyn = let
+  fun test_results_script_text thyn = let
     val z = String.size thyn
     val rthy = Substring.concat [
                   Substring.substring(thyn, 0, 12),
@@ -107,20 +101,20 @@ structure vfmTestLib :> vfmTestLib = struct
     TextIO.closeOut out
   end
 
-  fun generate_state_test_defs_scripts () = let
-    val json_paths = get_all_state_test_json_paths ()
-    val named_scripts = mapi state_test_defs_script_text json_paths
+  fun generate_test_defs_scripts () = let
+    val json_paths = get_all_test_json_paths ()
+    val named_scripts = mapi test_defs_script_text json_paths
   in
-    List.app (write_script "state/defs") named_scripts
+    List.app (write_script "defs") named_scripts
   end
 
-  fun generate_state_test_results_scripts () = let
-    val (_, smls) = collect_files "sml" "state/defs" ([], [])
+  fun generate_test_results_scripts () = let
+    val (_, smls) = collect_files "sml" "defs" ([], [])
     val scripts = List.filter (String.isSuffix "Script.sml") smls
     val thyns = List.map (ss (Substring.triml 11 o Substring.trimr 10)) smls
-    val named_scripts = List.map state_test_results_script_text thyns
+    val named_scripts = List.map test_results_script_text thyns
   in
-    List.app (write_script "state/results") named_scripts
+    List.app (write_script "results") named_scripts
   end
 
   type test_result = {name: string, result: string, seconds: string}

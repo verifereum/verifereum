@@ -1,5 +1,0 @@
-open HolKernel vfmTestAuxLib vfmTestDefLib;
-val () = new_theory "vfmStateTestDefs059";
-val tests = state_test_json_path_to_tests "../../fixtures/state_tests/cancun/eip7516_blobgasfee/blobgasfee_opcode/blobbasefee_stack_overflow.json";
-val defs = mapi (define_state_test "059") tests;
-val () = export_theory_no_docs ();
