@@ -159,7 +159,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                      field "to" string,
                      field "value" string,
                      field "data" string),
-             tuple4 (try (field "accessLists" accessListDecoder),
+             tuple4 (try (field "accessList" accessListDecoder),
                      try (field "maxFeePerBlobGas" string),
                      try (field "blobVersionedHashes" (array string)),
                      tuple4 (field "v" string,
