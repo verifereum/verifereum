@@ -88,7 +88,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     blocknumber: string,
     transactions: transaction list,
     uncleHeaders: block_header list,
-    withdrawals: withdrawal list option
+    withdrawals: withdrawal list
   }
 
   type invalid_block = {
@@ -227,7 +227,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                     field "blocknumber" string),
             tuple3 (field "transactions" (array transactionDecoder),
                     field "uncleHeaders" (array blockHeaderDecoder),
-                    try (field "withdrawals" (array withdrawalDecoder))))
+                    orElse (field "withdrawals" (array withdrawalDecoder),
+                            succeed [])))
 
   val blockOrInvalidDecoder : block_or_invalid decoder =
     orElse (andThen (fn (x,r,d) => succeed $ Invalid {
@@ -323,6 +324,9 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val transaction_ty =
     mk_thy_type{Thy="vfmTransaction",Tyop="transaction",Args=[]}
+
+  val withdrawal_ty =
+    mk_thy_type{Thy="vfmContext",Tyop="withdrawal",Args=[]}
 
   val empty_accounts_tm =
     mk_thy_const{Name="empty_accounts",Thy="vfmState",Ty=accounts_ty}
@@ -425,6 +429,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val block_ty = mk_thy_type{Thy="vfmContext",Tyop="block",Args=[]}
 
+  fun mk_withdrawal_tm {index, validatorIndex, address, amount} =
+    TypeBase.mk_record(withdrawal_ty, [
+      ("withdrawalIndex", mk_num_tm index),
+      ("validatorIndex", mk_num_tm validatorIndex),
+      ("withdrawalAddress", mk_address_tm address),
+      ("withdrawalAmount", mk_num_tm amount)])
+
   fun mk_block_tm (block: block) = let
     val header = #blockHeader block
     val baseFeePerGas_tm = mk_num_tm $ #baseFeePerGas header
@@ -438,6 +449,9 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val transactions_tm = mk_list(
       List.map (mk_transaction_tm baseFeePerGas_tm) $
         #transactions block, transaction_ty)
+    val withdrawals_tm = mk_list(
+      List.map mk_withdrawal_tm $ #withdrawals block,
+      withdrawal_ty)
   in
     TypeBase.mk_record(block_ty, [
       ("baseFeePerGas", baseFeePerGas_tm),
@@ -448,7 +462,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("prevRandao", prevRandao_tm),
       ("hash", hash_tm),
       ("parentBeaconBlockRoot", parentBeaconBlockRoot_tm),
-      ("transactions", transactions_tm)
+      ("transactions", transactions_tm),
+      ("withdrawals", withdrawals_tm)
     ])
   end
 

@@ -84,7 +84,7 @@ signature vfmTestDefLib = sig
     blocknumber: string,
     transactions: transaction list,
     uncleHeaders: block_header list,
-    withdrawals: withdrawal list option
+    withdrawals: withdrawal list
   }
 
   type invalid_block = {

@@ -125,6 +125,15 @@ Datatype:
 End
 
 Datatype:
+  withdrawal = <|
+    withdrawalIndex: num;
+    validatorIndex: num;
+    withdrawalAddress: address;
+    withdrawalAmount: num
+  |>
+End
+
+Datatype:
   block =
   <| baseFeePerGas         : num
    ; number                : num
@@ -135,6 +144,7 @@ Datatype:
    ; hash                  : bytes32
    ; parentBeaconBlockRoot : bytes32
    ; transactions          : transaction list
+   ; withdrawals           : withdrawal list
    |>
 End
 

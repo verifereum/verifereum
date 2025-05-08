@@ -1575,15 +1575,42 @@ Definition update_beacon_block_def:
   update_account addr (a with storage := s2) accounts
 End
 
+Definition process_withdrawal_def:
+  process_withdrawal w (a, dm) =
+  let addr = w.withdrawalAddress in
+  OPTION_BIND
+    (case dm
+      of Collect d =>
+           SOME $ Collect $ d with addresses updated_by fINSERT addr
+       | Enforce d =>
+           if fIN addr d.addresses then SOME $ Enforce d else NONE)
+    (λdm. SOME (
+      update_account addr
+        (lookup_account addr a with balance updated_by
+         (+) (w.withdrawalAmount * 10 ** 9)) a,
+      dm))
+End
+
+Definition process_withdrawals_def:
+  process_withdrawals [] x = SOME x ∧
+  process_withdrawals (w::ws) x =
+  OPTION_BIND (process_withdrawal w x)
+    (process_withdrawals ws)
+End
+
 Definition run_block_def:
   run_block dom chainId prevHashes accounts b =
-  FOLDL
-    (λx tx.
-       OPTION_BIND x (λ(ls, a, dom).
-         OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
-         run_transaction dom F chainId prevHashes b a tx))
-    (SOME ([], update_beacon_block b accounts, dom))
-    b.transactions
+  OPTION_BIND (
+    FOLDL
+      (λx tx.
+         OPTION_BIND x (λ(ls, a, dom).
+           OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
+           run_transaction dom F chainId prevHashes b a tx))
+      (SOME ([], update_beacon_block b accounts, dom))
+      b.transactions )
+  (λ(r, a, d).
+    OPTION_BIND (process_withdrawals b.withdrawals (a, d))
+      (λ(a, d). SOME (r, a, d)))
 End
 
 Definition run_blocks_def:

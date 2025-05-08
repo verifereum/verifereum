@@ -10,6 +10,13 @@ val _ = new_theory "vfmCompute";
 
 (* TODO: move *)
 
+Theorem OPTION_BIND_eq_case:
+  OPTION_BIND x f =
+  case x of NONE => NONE | SOME a => f a
+Proof
+  CASE_TAC \\ rw[]
+QED
+
 Theorem word_lsl_modexp:
   word_lsl (w:'a word) n =
   if n < dimindex(:'a) then
@@ -885,10 +892,18 @@ val () = cv_auto_trans run_transactions_def;
 
 Theorem run_block_eq:
   run_block d chainId h a b =
-  run_transactions d F chainId h b (update_beacon_block b a) [] b.transactions
+  case
+    run_transactions d F chainId h b
+      (update_beacon_block b a) [] b.transactions
+  of NONE => NONE
+   | SOME (r, a, d) =>
+     (case process_withdrawals b.withdrawals (a, d) of
+           NONE => NONE
+         | SOME (a, d) => SOME (r, a, d))
 Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
+  \\ qspec_tac(`b.withdrawals`,`ws`)
   \\ qspec_tac(`update_beacon_block b a`,`blk`)
   \\ qid_spec_tac`d`
   \\ simp_tac std_ss
@@ -896,11 +911,19 @@ Proof
   \\ qspec_tac(`[]:transaction_result list`,`rs`)
   \\ Induct_on`ts`
   \\ rw[run_transactions_def]
-  \\ CASE_TAC \\ gs[]
+  \\ CASE_TAC \\ gs[UNCURRY, CaseEq"prod"]
+  >- metis_tac[PAIR]
   >- ( last_x_assum kall_tac \\ Induct_on`ts` \\ rw[] )
-  \\ CASE_TAC \\ simp[]
-  \\ rw[SNOC_APPEND, REVERSE_APPEND]
+  \\ qmatch_goalsub_rename_tac`SND p`
+  \\ PairCases_on`p`
+  \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
 QED
+
+val () = cv_auto_trans process_withdrawal_def;
+
+val () = process_withdrawals_def
+         |> SRULE [OPTION_BIND_eq_case]
+         |> cv_auto_trans;
 
 val () = cv_auto_trans run_block_eq;
 
