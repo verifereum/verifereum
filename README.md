@@ -34,14 +34,6 @@ as described [here](docs/run-with-docker.md).
     rm -r polyml-master
     ```
 
-    iii. For M1 Macs you may need to edit the `/usr/local/bin/polyc` script on line line 44 and 46 to remove the quotes otherwise it'll error with `g++ -std=gnu++11: command not found`.
-
-    >        ${LINK} ...
-
-    instead of
-
-    >        "${LINK}" ...
-
 2.  Install and build HOL4
 
     i. Download the source code from the HOL GitHub repository
