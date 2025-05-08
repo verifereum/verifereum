@@ -122,18 +122,26 @@ structure vfmTestLib :> vfmTestLib = struct
     List.app (write_script "results") named_scripts
   end
 
-  type test_result = {name: string, result: string, seconds: string}
+  type test_result = {
+    name: string,
+    result: string,
+    seconds: string,
+    index: string
+  }
 
   fun read_test_result_data result_file : test_result = let
     val inp = TextIO.openIn result_file
     val lines = TextIO.inputAll inp
     val () = TextIO.closeIn inp
     val [name, result, seconds] = String.tokens (equal #"\n") lines
+    val index = result_file |> OS.Path.splitDirFile |> #file
+                            |> OS.Path.splitBaseExt |> #base
+                            |> triml (String.size "result")
   in
-    {name=name, result=result, seconds=seconds}
+    {name=name, result=result, seconds=seconds, index=index}
   end
 
-  fun mk_test_result_row {name, result, seconds} = let
+  fun mk_test_result_row {name, result, seconds, index} = let
     val success = result = "Passed"
     val result1 = String.translate (fn c =>
                     if c = #"|" then "!" else String.str c) $
@@ -143,8 +151,7 @@ structure vfmTestLib :> vfmTestLib = struct
   in
     String.concat [
       "[", result1, "]{.", cls, "} | ",
-      seconds, "s | ",
-      name, "\n"
+      seconds, "s | ", name, " | ", index, "\n"
     ]
   end
 
@@ -168,8 +175,8 @@ structure vfmTestLib :> vfmTestLib = struct
       " (", percentage, "%)\n\n"])
     val () = TextIO.output(out,
       String.concat [
-        "Result | Time | Name\n",
-        "--|-|---\n"
+        "Result | Time | Name | Index\n",
+        "--|-|---|-\n"
       ])
     val () = List.app (curry TextIO.output out o mk_test_result_row) data
   in
