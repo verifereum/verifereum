@@ -56,7 +56,7 @@ as described [here](docs/run-with-docker.md).
 
 3. Clone the Verifereum repo itself ahead of the build e.g., `git clone https://github.com/verifereum/verifereum` or alternative method
 
-4. Run Holmake in the `tests` directory to build Verifereum and run the tests.
+4. Run Holmake in the `tests/results` directory to build Verifereum and run the tests. You may need to run `vfmTestLib.ensure_fixtures()` first. Better automation for preparing the tests is coming soon.
    They will take a while to run so you can cancel them.
 
     ```bash
