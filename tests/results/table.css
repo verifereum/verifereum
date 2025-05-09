@@ -1,5 +1,6 @@
 table {
   font-family: sans-serif;
+  max-width: 100%;
 }
 span.fail {
   background-color: lightpink;
@@ -17,6 +18,13 @@ tbody > tr > td:nth-child(1) {
   text-align: center;
   max-width: 12em;
   word-wrap: break-word;
+}
+tbody > tr > td:nth-child(4) {
+  text-align: center;
+}
+tbody > tr >td:nth-child(3) {
+  word-wrap: break-word;
+  max-width: 24em;
 }
 tr > td:nth-child(2) {
   padding-right: 2em;
