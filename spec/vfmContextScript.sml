@@ -136,6 +136,7 @@ End
 Datatype:
   block =
   <| baseFeePerGas         : num
+   ; excessBlobGas         : num
    ; number                : num
    ; timeStamp             : num
    ; coinBase              : address
@@ -286,10 +287,28 @@ Definition initial_rollback_def:
      tStorage := empty_transient_storage; toDelete := [] |>
 End
 
+Definition fake_exponential_def:
+  fake_exponential f n d =
+  (SND $ SND $
+     WHILE (λ(a,i,r). 0 < a)
+     (λ(a,i,r). ((a * n) DIV (d * i), i + 1, r + a))
+     (f * d, 1, 0))
+  DIV d
+End
+
+Definition base_fee_per_blob_gas_def:
+  base_fee_per_blob_gas blk =
+    fake_exponential
+      min_base_fee_per_blob_gas
+      blk.excessBlobGas
+      blob_base_fee_update_fraction
+End
+
 Definition pre_transaction_updates_def:
-  pre_transaction_updates a t =
+  pre_transaction_updates a blobBaseFee t =
   let sender = lookup_account t.from a in
-  let fee = t.gasLimit * t.gasPrice in (* TODO: add blob gas fee *)
+  let fee = t.gasLimit * t.gasPrice +
+            total_blob_gas t * blobBaseFee in
   (* TODO: ensure sender has no code *)
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
   if sender.balance < fee + t.value then NONE else
@@ -309,7 +328,8 @@ End
 
 Definition initial_state_def:
   initial_state dom static chainId prevHashes blk accs tx =
-  case pre_transaction_updates accs tx of NONE => NONE |
+  case pre_transaction_updates
+         accs (base_fee_per_blob_gas blk) tx of NONE => NONE |
   SOME accounts =>
     let callee = callee_from_tx_to tx.from tx.nonce tx.to in
     let accesses = initial_access_sets blk.coinBase callee tx in

@@ -1,7 +1,8 @@
 open HolKernel boolLib bossLib Parse
      cv_transLib cv_typeLib wordsLib
      wordsTheory finite_setTheory
-     vfmTypesTheory recursiveLengthPrefixTheory;
+     vfmConstantsTheory vfmTypesTheory
+     recursiveLengthPrefixTheory;
 
 val _ = new_theory "vfmTransaction";
 
@@ -25,7 +26,6 @@ Datatype:
    ; gasPrice   : num
    ; accessList : access_list_entry list
    ; blobVersionedHashes : bytes32 list
-   ; blobGasPrice : num
    |>
 End
 
@@ -38,6 +38,12 @@ Definition effective_gas_price_def:
 End
 
 val () = cv_auto_trans effective_gas_price_def;
+
+Definition total_blob_gas_def:
+  total_blob_gas tx = gas_per_blob * LENGTH tx.blobVersionedHashes
+End
+
+val () = cv_auto_trans total_blob_gas_def;
 
 Definition rlp_event_def:
   rlp_event ev = RLPL [

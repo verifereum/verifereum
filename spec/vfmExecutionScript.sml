@@ -1018,7 +1018,7 @@ Definition proceed_create_def:
       ; data     := []
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
-      ; blobGasPrice := 0; blobVersionedHashes := []
+      ; blobVersionedHashes := []
     |>;
     rollback <- get_rollback;
     update_accounts $
@@ -1214,7 +1214,7 @@ Definition proceed_call_def:
       ; data     := data
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
-      ; blobGasPrice := 0; blobVersionedHashes := []
+      ; blobVersionedHashes := []
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);

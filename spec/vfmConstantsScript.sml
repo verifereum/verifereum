@@ -111,4 +111,12 @@ Definition gas_per_blob_def:
   gas_per_blob = 2n ** 17
 End
 
+Definition min_base_fee_per_blob_gas_def:
+  min_base_fee_per_blob_gas = 1n
+End
+
+Definition blob_base_fee_update_fraction_def:
+  blob_base_fee_update_fraction = 3338477n
+End
+
 val () = export_theory();

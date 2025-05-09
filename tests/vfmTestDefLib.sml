@@ -402,8 +402,6 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                                         List.map mk_bytes32_tm ls,
                                         bytes32_ty
                                       )
-    val blobGasPrice_tm = mk_num_tm "0" (* TODO: calculate blob gas price from
-    excess env? or maybe this doesn't actually need to be on the transaction *)
   in
     TypeBase.mk_record(transaction_ty, [
       ("to", to_tm),
@@ -414,8 +412,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("gasLimit", gasLimit_tm),
       ("gasPrice", gasPrice_tm),
       ("accessList", accessList_tm),
-      ("blobVersionedHashes", blobVersionedHashes_tm),
-      ("blobGasPrice", blobGasPrice_tm)
+      ("blobVersionedHashes", blobVersionedHashes_tm)
     ])
   end
 
@@ -439,6 +436,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   fun mk_block_tm (block: block) = let
     val header = #blockHeader block
     val baseFeePerGas_tm = mk_num_tm $ #baseFeePerGas header
+    val excessBlobGas_tm = mk_num_tm $ #excessBlobGas header
     val number_tm = mk_num_tm $ #number header
     val timeStamp_tm = mk_num_tm $ #timestamp header
     val coinBase_tm = mk_address_tm $ #coinbase header
@@ -455,6 +453,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   in
     TypeBase.mk_record(block_ty, [
       ("baseFeePerGas", baseFeePerGas_tm),
+      ("excessBlobGas", excessBlobGas_tm),
       ("number", number_tm),
       ("timeStamp", timeStamp_tm),
       ("coinBase", coinBase_tm),

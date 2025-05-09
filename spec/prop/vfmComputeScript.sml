@@ -829,6 +829,56 @@ val () = cv_auto_trans pre_transaction_updates_def;
 
 val () = cv_auto_trans code_from_tx_def;
 
+Definition fake_exp_aux_def:
+  fake_exp_aux n d a i r =
+  if 0 < a then
+    fake_exp_aux n d (a * n DIV (d * i)) (i + 1) (r + a)
+  else r
+Termination
+  WF_REL_TAC‘inv_image ($< LEX $<) (λ(n,d,a,i,r). (SUC (MAX n d) - i, a))’
+  \\ rw[]
+  \\ Cases_on`n = 0`
+  \\ gs[DIV_LT_X, LEFT_ADD_DISTRIB, ADD1]
+  \\ Cases_on`d = 0` \\ gvs[]
+  \\ Cases_on`i * d = 0` \\ gvs[DIV_LT_X, MAX_DEF]
+  \\ Cases_on`n < d * i` \\ gs[]
+  \\ gs[SUB_LEFT_LESS]
+  \\ Cases_on`i < d` \\ gs[]
+  \\ Cases_on`i < n` \\ gs[]
+  \\ `d ≤ i` by gs[]
+  \\ `n ≤ i` by gs[]
+  \\ `d * i ≤ n` by gs[]
+  \\ `d * n ≤ d * i` by gs[]
+  \\ `d * n ≤ n` by metis_tac[LESS_EQ_TRANS]
+  \\ gs[]
+  \\ `d = 1` by gs[]
+  \\ gvs[]
+End
+
+val () = cv_auto_trans fake_exp_aux_def;
+
+Theorem fake_exp_eq:
+  fake_exponential f n d =
+  fake_exp_aux n d (f * d) 1 0 DIV d
+Proof
+  rw[fake_exponential_def]
+  \\ AP_THM_TAC \\ AP_TERM_TAC
+  \\ qmatch_goalsub_abbrev_tac`WHILE nz fz`
+  \\ qspec_tac(`0n`,`x`)
+  \\ qspec_tac(`1n`,`y`)
+  \\ qspec_tac(`d * f`,`z`)
+  \\ qunabbrev_tac`fz`
+  \\ qid_spec_tac`d`
+  \\ qid_spec_tac`n`
+  \\ qunabbrev_tac`nz`
+  \\ recInduct fake_exp_aux_ind
+  \\ rw[]
+  \\ simp[Once fake_exp_aux_def]
+  \\ simp[Once WHILE]
+QED
+
+val () = cv_auto_trans fake_exp_eq;
+
 val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
