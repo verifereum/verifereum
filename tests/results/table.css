@@ -11,6 +11,9 @@ span.pass {
 tr.odd {
   background-color: azure;
 }
+tr.hide {
+  display: none;
+}
 tbody > tr > td:nth-child(2) {
   text-align: right;
 }
