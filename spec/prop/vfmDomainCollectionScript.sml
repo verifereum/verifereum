@@ -930,6 +930,14 @@ Proof
   \\ rw[execution_state_component_equality]
 QED
 
+Theorem set_original_computes_minimal_domain[simp]:
+  computes_minimal_domain (set_original a)
+Proof
+  rw[computes_minimal_domain_def, set_original_def]
+  \\ gvs[CaseEq"bool", CaseEq"prod", fail_def, return_def]
+  \\ gvs[execution_state_component_equality]
+QED
+
 Theorem proceed_create_computes_minimal_domain[simp]:
   computes_minimal_domain (proceed_create a b c d e)
 Proof

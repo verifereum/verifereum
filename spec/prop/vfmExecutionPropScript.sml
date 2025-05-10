@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse BasicProvers
-     combinTheory pairTheory
+     combinTheory pairTheory listTheory
      vfmStateTheory vfmContextTheory vfmExecutionTheory;
 
 val () = new_theory "vfmExecutionProp";
@@ -966,27 +966,37 @@ Proof
   \\ simp[ignore_bind_def]
   \\ irule preserves_wf_accounts_pred_pred_bind
   \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[preserves_wf_accounts_pred_def,update_accounts_def]
+    \\ gvs[return_def, all_accounts_def]
+    \\ rw[increment_nonce_def, lookup_account_def,
+          update_account_def, APPLY_UPDATE_THM]
+    \\ gvs[wf_accounts_def, APPLY_UPDATE_THM]
+    \\ rw[]
+    \\ gvs[wf_account_state_def] )
+  \\ qexists_tac`λs. SUC (s.rollback.accounts b).nonce < 2 ** 64 ∧
+                    (s.rollback.accounts a).nonce < 2 ** 64`
+  >> reverse conj_tac
+  >- (
+    rw[increment_nonce_def, update_account_def,
+       update_accounts_def, lookup_account_def, APPLY_UPDATE_THM] )
+  \\ rw[preserves_wf_accounts_pred_def, set_original_def,
+        get_original_def, get_rollback_def, update_accounts_def,
+        push_context_def, bind_def, return_def]
+  \\ rw[fail_def]
+  \\ gs[all_accounts_def]
   \\ conj_tac
   >- (
-    qexists_tac`λs. SUC (s.rollback.accounts b).nonce < 2 ** 64 ∧
-                    (s.rollback.accounts a).nonce < 2 ** 64` >>
-    rw[preserves_wf_accounts_pred_def,
-       get_rollback_def, update_accounts_def,
-       push_context_def, bind_def, return_def]
-    \\ gs[all_accounts_def]
-    >- (
-      irule wf_accounts_transfer_value
-      \\ irule wf_accounts_increment_nonce
-      \\ gs[] )
-    \\ (rw[increment_nonce_def, update_account_def,
-           lookup_account_def, APPLY_UPDATE_THM]) )
-  \\ rw[preserves_wf_accounts_pred_def,update_accounts_def]
-  \\ gvs[return_def, all_accounts_def]
-  \\ rw[increment_nonce_def, lookup_account_def,
-        update_account_def, APPLY_UPDATE_THM]
-  \\ gvs[wf_accounts_def, APPLY_UPDATE_THM]
-  \\ rw[]
-  \\ gvs[wf_account_state_def]
+    irule wf_accounts_transfer_value
+    \\ irule wf_accounts_increment_nonce
+    \\ gs[] )
+  \\ rw[EVERY_MAP, EVERY_SNOC]
+  \\ gs[EVERY_MEM, MEM_MAP, PULL_EXISTS]
+  >- metis_tac[rich_listTheory.MEM_FRONT, list_CASES]
+  \\ irule wf_accounts_update_account
+  \\ gs[EVERY_MEM, MEM_MAP, PULL_EXISTS]
+  \\ metis_tac[rich_listTheory.LAST_MEM]
 QED
 
 Theorem preserves_wf_accounts_pred_mono:
@@ -1951,6 +1961,14 @@ Proof
   \\ rw[]
 QED
 
+Theorem limits_num_contexts_set_original[simp]:
+  limits_num_contexts n n (set_original a)
+Proof
+  rw[limits_num_contexts_def, set_original_def]
+  \\ rw[return_def]
+  \\ Cases_on`s.contexts` \\ gvs[]
+QED
+
 Theorem limits_num_contexts_step_create:
   0 < n ∧ n ≤ context_limit + 2 ⇒
   limits_num_contexts n (MIN (SUC n) (context_limit + 2)) (step_create x)
@@ -2007,8 +2025,9 @@ Proof
   \\ qpat_abbrev_tac`b4 = COND _ _ _`
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
   \\ reverse conj_tac >- rw[limits_num_contexts_def, update_accounts_def, return_def]
-  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[]
-  \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
   \\ reverse conj_tac >- rw[limits_num_contexts_def, update_accounts_def, return_def]
   \\ irule limits_num_contexts_mono

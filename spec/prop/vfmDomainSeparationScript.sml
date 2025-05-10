@@ -1996,6 +1996,53 @@ Proof
      fail_def, return_def]
 QED
 
+Theorem get_original_set_original_ignores_extra_domain:
+  ignores_extra_domain f ⇒
+  ignores_extra_domain
+    (do original <- get_original;
+        set_original (update_account addr a original);
+        f od)
+Proof
+  rw[ignores_extra_domain_def, bind_def, ignore_bind_def,
+     get_original_def, set_original_def, return_def, fail_def]
+  \\ gvs[CaseEq"prod", CaseEq"sum", CaseEq"bool"]
+  \\ TRY(first_x_assum drule \\ rw[] \\ NO_TAC)
+  >- (
+    fsrw_tac[DNF_ss][]
+    \\ drule domain_compatible_lengths
+    \\ simp[] )
+  >- (
+    fsrw_tac[DNF_ss][]
+    \\ rpt disj2_tac
+    \\ first_x_assum drule
+    \\ simp[]
+    \\ qmatch_goalsub_abbrev_tac`f ss`
+    \\ disch_then(qspec_then`ss`mp_tac)
+    \\ reverse impl_tac
+    >- (
+      rw[]
+      \\ rpt disj2_tac
+      \\ goal_assum drule
+      \\ imp_res_tac domain_compatible_lengths
+      \\ rpt strip_tac \\ gvs[] )
+    \\ qpat_x_assum`!_. _`kall_tac
+    \\ qpat_x_assum`!_. _`kall_tac
+    \\ qpat_x_assum`domain_compatible _ _`mp_tac
+    \\ simp[domain_compatible_def, Abbr`ss`, all_accounts_def,
+            states_agree_modulo_accounts_def]
+    \\ qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES \\ gvs[]
+    \\ qspec_then`s'.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES \\ gvs[]
+    \\ rw[] \\ TRY(CASE_TAC \\ gvs[] \\ rw[])
+    \\ gvs[EVERY2_MAP, LIST_REL_SNOC]
+    \\ gvs[rollback_states_agree_modulo_accounts_def,
+           accounts_agree_modulo_storage_def]
+    \\ gvs[rollback_state_component_equality,
+           account_state_component_equality,
+           update_account_def, APPLY_UPDATE_THM]
+    \\ rw[]
+    \\ gvs[MAP_FRONT])
+QED
+
 Theorem proceed_create_ignores_extra_domain[simp]:
   ignores_extra_domain (proceed_create a b c d e)
 Proof
@@ -2003,7 +2050,11 @@ Proof
   \\ irule ignore_bind_ignores_extra_domain \\ rw[]
   \\ irule get_rollback_ignores_extra_domain_bind
   \\ reverse conj_asm2_tac
-  >- ( simp[] \\ gen_tac \\ tac )
+  >- (
+    simp[]
+    \\ gen_tac
+    \\ irule get_original_set_original_ignores_extra_domain
+    \\ tac)
   \\ rpt gen_tac \\ strip_tac
   \\ rpt gen_tac \\ simp[]
   \\ conj_tac
@@ -2020,7 +2071,13 @@ Proof
   \\ simp[domain_compatible_def, domain_check_def]
   \\ simp[states_agree_modulo_accounts_def]
   \\ simp[all_accounts_def] \\ gs[fIN_IN]
-  \\ `s'.msdomain = s.msdomain` by metis_tac[SND_update_accounts_msdomain, SND]
+  \\ gvs[get_original_def, set_original_def, CaseEq"bool",
+         fail_def, return_def]
+  \\ qmatch_goalsub_rename_tac`MAP SND s'.contexts`
+  \\ `s'.msdomain = s.msdomain` by (
+    qpat_x_assum`update_accounts _ _ = _`
+      (mp_tac o Q.AP_TERM`λx. (SND x).msdomain`)
+    \\ simp[SND_update_accounts_msdomain] )
   \\ rw[] \\ TRY (irule EVERY2_refl \\ rw[])
   \\ first_x_assum irule
   \\ gvs[get_static_def, get_value_def, get_caller_def, bind_def,
@@ -3308,9 +3365,23 @@ Proof
   \\ simp[]
 QED
 
+Theorem preserves_domain_has_callee_set_original[simp]:
+  preserves_domain_has_callee p (set_original a)
+Proof
+  rw[preserves_domain_has_callee_def, set_original_def]
+  \\ gvs[CaseEq"bool", fail_def, return_def]
+  \\ gvs[domain_has_callee_def]
+  \\ Cases_on`s.contexts` \\ gvs[]
+  \\ Cases_on`h` \\ gvs[] \\ rw[]
+  \\ gvs[APPEND_EQ_CONS]
+  \\ Cases_on`t` \\ gvs[]
+QED
+
 Theorem preserves_domain_has_callee_proceed_create:
   (∀s d. p s ∧ s.msdomain = Enforce d ⇒ b ∈ toSet d.addresses) ∧
   (∀s. p s ⇒ ∀x. p (SND (update_accounts x s))) ∧
+  (∀s. p s ⇒ p (SND (get_original s))) ∧
+  (∀s. p s ⇒ ∀a. p (SND (set_original a s))) ∧
   (∀s. p s ⇒ ∀cr. (FST cr).msgParams.callee = b ⇒
                    p (s with contexts updated_by CONS cr))
   ⇒
@@ -3320,6 +3391,8 @@ Proof
   \\ rw[proceed_create_def]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_push_context
   \\ rw[initial_msg_params_def]
@@ -3377,6 +3450,8 @@ Proof
   \\ IF_CASES_TAC >- rw[]
   \\ irule preserves_domain_has_callee_proceed_create
   \\ rw[]
+  \\ gvs[get_original_def, set_original_def]
+  \\ pop_assum mp_tac \\ rw[]
 QED
 
 Theorem step_inst_preserves_domain_has_callee[simp]:

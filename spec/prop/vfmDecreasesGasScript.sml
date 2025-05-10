@@ -1487,6 +1487,8 @@ Theorem step_create_lemma:
         ; blobVersionedHashes := []
       |>;
       rollback <- get_rollback;
+      original <- get_original;
+      set_original $ update_account address empty_account_state original;
       _ <- update_accounts $
         transfer_value senderAddress address value o
         increment_nonce address;
@@ -1506,7 +1508,7 @@ Proof
     get_num_contexts_def, set_current_context_def, get_current_context_def]
   \\ Cases_on `x.contexts` \\ gvs [domain_check_def]
   \\ gvs[CaseEq"domain_mode", CaseEq"bool", return_def, fail_def,
-         ignore_bind_def, bind_def, set_domain_def]
+         ignore_bind_def, bind_def, set_domain_def, set_original_def]
 QED
 
 Theorem decreases_gas_ensure_storage_in_domain[simp]:
@@ -1518,6 +1520,37 @@ Proof
   \\ TOP_CASE_TAC \\ gvs[]
   \\ TOP_CASE_TAC \\ gvs[return_def]
   \\ TOP_CASE_TAC \\ gvs[]
+QED
+
+Theorem decreases_gas_cred_bind_set_original[simp]:
+  decreases_gas_cred F n1 n2 f ⇒
+  decreases_gas_cred F n1 n2 (ignore_bind (set_original a) f)
+Proof
+  rw[decreases_gas_cred_def, ignore_bind_def, bind_def, set_original_def]
+  \\ rw[return_def, fail_def]
+  \\ Cases_on`s.contexts = []` \\ gvs[SNOC_APPEND]
+  \\ qmatch_goalsub_abbrev_tac`f ss`
+  \\ `ss.contexts ≠ []`
+  by ( strip_tac \\ gvs[Abbr`ss`] )
+  \\ first_x_assum (qspec_then`ss`mp_tac)
+  \\ rw[]
+  >- (
+    first_x_assum irule
+    \\ gs[ok_state_def, Abbr`ss`, EVERY_MEM, FORALL_PROD]
+    \\ rw[] \\ first_x_assum irule
+    \\ metis_tac[rich_listTheory.MEM_FRONT, list_CASES,
+                 rich_listTheory.LAST_MEM, pair_CASES, FST, SND] )
+  \\ irule transitive_LE_LEX_LE
+  \\ goal_assum drule
+  \\ qmatch_goalsub_abbrev_tac`_ x1 x2`
+  \\ `x1 = x2`
+  by (
+    unabbrev_all_tac
+    \\ reverse $ rw[contexts_weight_def, rich_listTheory.LENGTH_FRONT, PRE_SUB1]
+    >- (Cases_on`LENGTH s.contexts` \\ gs[])
+    \\ qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES
+    \\ gs[SNOC_APPEND] )
+  \\ rw[LEX_DEF, UNCURRY]
 QED
 
 Theorem decreases_gas_cred_step_create[simp]:
@@ -1572,6 +1605,9 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
+  \\ gen_tac
+  \\ irule decreases_gas_cred_bind_set_original
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ HO_MATCH_MP_TAC decreases_gas_cred_get_static_push_context
   \\ rw [initial_context_def, initial_msg_params_def]

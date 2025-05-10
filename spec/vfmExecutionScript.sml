@@ -253,6 +253,17 @@ Definition get_original_def:
       return (SND (LAST s.contexts)).accounts s
 End
 
+Definition set_original_def:
+  set_original a s =
+    if s.contexts = [] then
+      fail Impossible s
+    else
+      return () $ s with contexts updated_by
+        (λls. let lc = LAST ls in
+              SNOC (FST lc, SND lc with accounts := a)
+                   (FRONT ls))
+End
+
 Definition get_gas_left_def:
   get_gas_left = do
     context <- get_current_context;
@@ -1034,6 +1045,8 @@ Definition proceed_create_def:
       ; blobVersionedHashes := []
     |>;
     rollback <- get_rollback;
+    original <- get_original;
+    set_original $ update_account address empty_account_state original;
     update_accounts $
       transfer_value senderAddress address value o
       increment_nonce address;
