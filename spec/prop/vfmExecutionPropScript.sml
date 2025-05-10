@@ -1112,6 +1112,12 @@ Proof
   \\ gvs[lookup_account_def]
 QED
 
+Theorem preserves_wf_accounts_step_blob_hash[simp]:
+  preserves_wf_accounts step_blob_hash
+Proof
+  rw[step_blob_hash_def] \\ tac
+QED
+
 Theorem preserves_wf_accounts_step_inst[simp]:
   preserves_wf_accounts (step_inst op)
 Proof
@@ -2008,6 +2014,12 @@ Proof
   \\ irule limits_num_contexts_mono
   \\ qexistsl_tac[`SUC n1`,`SUC(SUC n1)`] \\ rw[]
   \\ gs[]
+QED
+
+Theorem limits_num_contexts_step_blob_hash[simp]:
+  limits_num_contexts n n step_blob_hash
+Proof
+  rw[step_blob_hash_def] \\ tac
 QED
 
 Theorem limits_num_contexts_step_inst:

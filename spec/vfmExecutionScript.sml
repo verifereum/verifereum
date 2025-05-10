@@ -819,6 +819,19 @@ Definition step_block_hash_def:
   od
 End
 
+Definition step_blob_hash_def:
+  step_blob_hash = do
+    args <- pop_stack 1;
+    index <<- w2n $ EL 0 args;
+    consume_gas $ static_gas BlobHash;
+    tx <- get_tx_params;
+    hash <<- if index < LENGTH tx.blobHashes
+             then EL index tx.blobHashes
+             else 0w;
+    push_stack hash
+  od
+End
+
 Definition step_self_balance_def:
   step_self_balance = do
     consume_gas $ static_gas SelfBalance;
@@ -1322,6 +1335,7 @@ Definition step_inst_def:
   ∧ step_inst ChainId = step_txParams ChainId (λt. n2w t.chainId)
   ∧ step_inst SelfBalance = step_self_balance
   ∧ step_inst BaseFee = step_txParams BaseFee (λt. n2w t.baseFeePerGas)
+  ∧ step_inst BlobHash = step_blob_hash
   ∧ step_inst Pop = step_pop
   ∧ step_inst MLoad = step_mload
   ∧ step_inst MStore = step_mstore MStore

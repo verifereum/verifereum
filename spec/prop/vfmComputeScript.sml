@@ -696,6 +696,7 @@ val th = tt step_ext_code_size_def;
 val th = tt step_ext_code_copy_def;
 val th = tt step_ext_code_hash_def;
 val th = tt step_block_hash_def;
+val th = tt step_blob_hash_def;
 val th = tf step_self_balance_def;
 val th = tt step_mload_def;
 val th = tt step_mstore_def;

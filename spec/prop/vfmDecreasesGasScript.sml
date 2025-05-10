@@ -1244,6 +1244,17 @@ Proof
   \\ irule_at Any decreases_gas_get_tx_params \\ rw []
 QED
 
+Theorem decreases_gas_step_blob_hash[simp]:
+  decreases_gas T step_blob_hash
+Proof
+  rw [step_blob_hash_def]
+  \\ irule_at Any decreases_gas_bind_right
+  \\ irule_at Any decreases_gas_pop_stack \\ rw []
+  \\ irule decreases_gas_consume_gas_bind \\ rw []
+  \\ irule_at Any decreases_gas_bind_false
+  \\ irule_at Any decreases_gas_get_tx_params \\ rw []
+QED
+
 Theorem decreases_gas_step_self_balance[simp]:
   decreases_gas T step_self_balance
 Proof

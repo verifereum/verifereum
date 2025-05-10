@@ -17,6 +17,7 @@ Datatype:
    ; blockGasLimit  : num
    ; prevRandao     : bytes32
    ; prevHashes     : bytes32 list
+   ; blobHashes     : bytes32 list
    ; chainId        : num
    |>
 End
@@ -207,6 +208,7 @@ Definition initial_tx_params_def:
    ; blockGasLimit  := b.gasLimit
    ; prevRandao     := b.prevRandao
    ; prevHashes     := h
+   ; blobHashes     := t.blobVersionedHashes
    ; chainId        := c
    |>
 End

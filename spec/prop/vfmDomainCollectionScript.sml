@@ -705,6 +705,15 @@ Proof
   \\ irule bind_computes_minimal_domain \\ rw[]
 QED
 
+Theorem step_blob_hash_computes_minimal_domain[simp]:
+  computes_minimal_domain step_blob_hash
+Proof
+  rw[step_blob_hash_def]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule bind_computes_minimal_domain \\ rw[]
+QED
+
 Theorem get_callee_computes_minimal_domain[simp]:
   computes_minimal_domain get_callee
 Proof

@@ -61,6 +61,7 @@ Datatype:
   | ChainId
   | SelfBalance
   | BaseFee
+  | BlobHash
   | Pop
   | MLoad
   | MStore
@@ -153,6 +154,7 @@ Definition opcode_def:
   ∧ opcode ChainId        = [n2w 0x46]
   ∧ opcode SelfBalance    = [n2w 0x47]
   ∧ opcode BaseFee        = [n2w 0x48]
+  ∧ opcode BlobHash       = [n2w 0x49]
   ∧ opcode Pop            = [n2w 0x50]
   ∧ opcode MLoad          = [n2w 0x51]
   ∧ opcode MStore         = [n2w 0x52]
@@ -243,6 +245,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas ChainId        = 2
   ∧ static_gas SelfBalance    = 5
   ∧ static_gas BaseFee        = 2
+  ∧ static_gas BlobHash       = 3
   ∧ static_gas Pop            = 2
   ∧ static_gas MLoad          = 3
   ∧ static_gas MStore         = 3
@@ -387,6 +390,7 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0x46 then SOME ChainId else
       if opc = n2w 0x47 then SOME SelfBalance else
       if opc = n2w 0x48 then SOME BaseFee else
+      if opc = n2w 0x49 then SOME BlobHash else
       if opc = n2w 0x50 then SOME Pop else
       if opc = n2w 0x51 then SOME MLoad else
       if opc = n2w 0x52 then SOME MStore else

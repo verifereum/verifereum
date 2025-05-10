@@ -1083,6 +1083,12 @@ Proof
   rw[step_block_hash_def] \\ tac
 QED
 
+Theorem step_blob_hash_ignore_extra_domain[simp]:
+  ignores_extra_domain step_blob_hash
+Proof
+  rw[step_blob_hash_def] \\ tac
+QED
+
 Theorem get_callee_ignores_extra_domain[simp]:
   ignores_extra_domain get_callee
 Proof
@@ -2687,6 +2693,15 @@ Theorem preserves_domain_has_callee_step_block_hash[simp]:
   preserves_domain_has_callee (K T) step_block_hash
 Proof
   rw[step_block_hash_def]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_blob_hash[simp]:
+  preserves_domain_has_callee (K T) step_blob_hash
+Proof
+  rw[step_blob_hash_def]
   \\ irule preserves_domain_has_callee_bind \\ rw[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
   \\ irule preserves_domain_has_callee_bind \\ rw[]
