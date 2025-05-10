@@ -253,15 +253,20 @@ Definition get_original_def:
       return (SND (LAST s.contexts)).accounts s
 End
 
+Definition set_last_accounts_def:
+  set_last_accounts a ls =
+  let lc = LAST ls in
+    SNOC (FST lc, SND lc with accounts := a)
+         (FRONT ls)
+End
+
 Definition set_original_def:
   set_original a s =
     if s.contexts = [] then
       fail Impossible s
     else
       return () $ s with contexts updated_by
-        (λls. let lc = LAST ls in
-              SNOC (FST lc, SND lc with accounts := a)
-                   (FRONT ls))
+        (set_last_accounts a)
 End
 
 Definition get_gas_left_def:
@@ -1556,7 +1561,8 @@ Definition run_create_def:
   case initial_state dom static chainId prevHashes blk accounts tx of
     NONE => NONE
   | SOME s => SOME $
-    let ctxt = FST $ HD s.contexts in
+    let crb = HD s.contexts in
+    let ctxt = FST crb in
     let calleeAddress = ctxt.msgParams.callee in
     if IS_SOME tx.to then
       INR $ (s.rollback.accounts, s with rollback updated_by
@@ -1569,13 +1575,19 @@ Definition run_create_def:
         INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
               (s with contexts := [
                 (ctxt with gasUsed := ctxt.msgParams.gasLimit,
-                 SND $ HD s.contexts)
+                 SND crb)
                ])
       else
-        INR $ (accounts, s with rollback updated_by (λr. r with accounts updated_by (
-          transfer_value tx.from calleeAddress tx.value o
-          increment_nonce calleeAddress
-        )))
+        INR $ (accounts, s with <|
+            rollback updated_by (λr. r with accounts updated_by (
+              transfer_value tx.from calleeAddress tx.value o
+              increment_nonce calleeAddress
+            ));
+            contexts updated_by (
+              set_last_accounts $
+              update_account calleeAddress empty_account_state
+                (SND crb).accounts
+            )|>)
 End
 
 Definition run_transaction_def:

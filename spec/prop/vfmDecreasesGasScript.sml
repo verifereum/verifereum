@@ -1508,7 +1508,8 @@ Proof
     get_num_contexts_def, set_current_context_def, get_current_context_def]
   \\ Cases_on `x.contexts` \\ gvs [domain_check_def]
   \\ gvs[CaseEq"domain_mode", CaseEq"bool", return_def, fail_def,
-         ignore_bind_def, bind_def, set_domain_def, set_original_def]
+         ignore_bind_def, bind_def, set_domain_def, set_original_def,
+         set_last_accounts_def]
 QED
 
 Theorem decreases_gas_ensure_storage_in_domain[simp]:
@@ -1531,12 +1532,12 @@ Proof
   \\ Cases_on`s.contexts = []` \\ gvs[SNOC_APPEND]
   \\ qmatch_goalsub_abbrev_tac`f ss`
   \\ `ss.contexts ≠ []`
-  by ( strip_tac \\ gvs[Abbr`ss`] )
+  by ( strip_tac \\ gvs[Abbr`ss`, set_last_accounts_def] )
   \\ first_x_assum (qspec_then`ss`mp_tac)
   \\ rw[]
   >- (
     first_x_assum irule
-    \\ gs[ok_state_def, Abbr`ss`, EVERY_MEM, FORALL_PROD]
+    \\ gs[ok_state_def, Abbr`ss`, EVERY_MEM, FORALL_PROD, set_last_accounts_def]
     \\ rw[] \\ first_x_assum irule
     \\ metis_tac[rich_listTheory.MEM_FRONT, list_CASES,
                  rich_listTheory.LAST_MEM, pair_CASES, FST, SND] )
@@ -1546,7 +1547,8 @@ Proof
   \\ `x1 = x2`
   by (
     unabbrev_all_tac
-    \\ reverse $ rw[contexts_weight_def, rich_listTheory.LENGTH_FRONT, PRE_SUB1]
+    \\ reverse $ rw[contexts_weight_def, rich_listTheory.LENGTH_FRONT, PRE_SUB1,
+                    set_last_accounts_def]
     >- (Cases_on`LENGTH s.contexts` \\ gs[])
     \\ qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES
     \\ gs[SNOC_APPEND] )

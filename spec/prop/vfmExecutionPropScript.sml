@@ -981,7 +981,7 @@ Proof
   >- (
     rw[increment_nonce_def, update_account_def,
        update_accounts_def, lookup_account_def, APPLY_UPDATE_THM] )
-  \\ rw[preserves_wf_accounts_pred_def, set_original_def,
+  \\ rw[preserves_wf_accounts_pred_def, set_original_def, set_last_accounts_def,
         get_original_def, get_rollback_def, update_accounts_def,
         push_context_def, bind_def, return_def]
   \\ rw[fail_def]
@@ -991,7 +991,7 @@ Proof
     irule wf_accounts_transfer_value
     \\ irule wf_accounts_increment_nonce
     \\ gs[] )
-  \\ rw[EVERY_MAP, EVERY_SNOC]
+  \\ rw[EVERY_MAP, EVERY_SNOC, set_last_accounts_def]
   \\ gs[EVERY_MEM, MEM_MAP, PULL_EXISTS]
   >- metis_tac[rich_listTheory.MEM_FRONT, list_CASES]
   \\ irule wf_accounts_update_account
@@ -1965,7 +1965,7 @@ Theorem limits_num_contexts_set_original[simp]:
   limits_num_contexts n n (set_original a)
 Proof
   rw[limits_num_contexts_def, set_original_def]
-  \\ rw[return_def]
+  \\ rw[return_def, set_last_accounts_def]
   \\ Cases_on`s.contexts` \\ gvs[]
 QED
 

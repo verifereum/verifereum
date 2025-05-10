@@ -615,6 +615,11 @@ val () = “ensure_storage_in_domain x s” |>
     COND_RATOR, LET_RATOR
   ] |> cv_auto_trans;
 
+val set_last_accounts_pre_def =
+    “set_last_accounts a c”
+  |> SIMP_CONV std_ss [set_last_accounts_def]
+  |> cv_auto_trans_pre;
+
 val set_original_pre_def = “set_original a s” |>
   SIMP_CONV std_ss [
     set_original_def
@@ -623,8 +628,8 @@ val set_original_pre_def = “set_original a s” |>
 Theorem set_original_pre[cv_pre]:
   set_original_pre a s
 Proof
-  rw[set_original_pre_def]
-  \\ Cases_on`s` \\ gs[]
+  rw[set_original_pre_def, set_last_accounts_pre_def]
+  \\ Cases_on `s` \\ gvs[]
 QED
 
 (*
@@ -937,7 +942,7 @@ Theorem run_create_pre[cv_pre]:
 Proof
   rw[run_create_pre_def, initial_state_def,
      pre_transaction_updates_def, execution_state_component_equality,
-     initial_rollback_def, code_from_tx_def]
+     initial_rollback_def, code_from_tx_def, set_last_accounts_pre_def]
   \\ strip_tac \\ gvs[]
 QED
 
