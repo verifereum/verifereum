@@ -2,8 +2,9 @@ structure vfmTestLib :> vfmTestLib = struct
 
   open HolKernel vfmTestAuxLib
 
-  val fixtures_url_prefix =
-    "https://github.com/ethereum/execution-spec-tests/releases/download/v4.4.0/"
+  val fixtures_url_prefix = String.concat [
+    "https://github.com/ethereum/execution-spec-tests/releases/download/v",
+    fixtures_version, "/" ]
   val static_tarball = "fixtures_static.tar.gz"
   val develop_tarball = "fixtures_develop.tar.gz"
 
@@ -169,7 +170,8 @@ structure vfmTestLib :> vfmTestLib = struct
     val percentage = Real.fmt (StringCvt.FIX (SOME 1)) $
       100.0 * (Real.fromInt pass_count / Real.fromInt total_count)
     val () = TextIO.output(out, String.concat [
-      "Successes: ",
+      fork_name, " tests v", fixtures_version,
+      " Successes: ",
       Int.toString pass_count, "/",
       Int.toString total_count,
       " (", percentage, "%)\n\n"])

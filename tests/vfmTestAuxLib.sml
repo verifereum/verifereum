@@ -20,6 +20,7 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
     Feedback.set_trace "TheoryPP.include_docs" 0
     before export_theory ()
 
+  val fixtures_version = "4.4.0"
   val fork_name = "Cancun"
   val chain_id = 1
 

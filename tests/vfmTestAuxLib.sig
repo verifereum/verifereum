@@ -12,6 +12,7 @@ signature vfmTestAuxLib = sig
   val default_limit : Time.time
   val state_root_fuel : int
 
+  val fixtures_version : string
   val fork_name : string
   val chain_id : int
 
