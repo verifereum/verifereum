@@ -2029,7 +2029,7 @@ Proof
     \\ qpat_x_assum`!_. _`kall_tac
     \\ qpat_x_assum`domain_compatible _ _`mp_tac
     \\ simp[domain_compatible_def, Abbr`ss`, all_accounts_def,
-            states_agree_modulo_accounts_def]
+            states_agree_modulo_accounts_def, set_last_accounts_def]
     \\ qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES \\ gvs[]
     \\ qspec_then`s'.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES \\ gvs[]
     \\ rw[] \\ TRY(CASE_TAC \\ gvs[] \\ rw[])
@@ -3370,7 +3370,7 @@ Theorem preserves_domain_has_callee_set_original[simp]:
 Proof
   rw[preserves_domain_has_callee_def, set_original_def]
   \\ gvs[CaseEq"bool", fail_def, return_def]
-  \\ gvs[domain_has_callee_def]
+  \\ gvs[domain_has_callee_def, set_last_accounts_def]
   \\ Cases_on`s.contexts` \\ gvs[]
   \\ Cases_on`h` \\ gvs[] \\ rw[]
   \\ gvs[APPEND_EQ_CONS]
