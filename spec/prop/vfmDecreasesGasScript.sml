@@ -1485,6 +1485,7 @@ Theorem step_create_lemma:
         (* unused: for concreteness *)
         ; nonce := 0; gasPrice := 0; accessList := []
         ; blobVersionedHashes := []
+        ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
       |>;
       rollback <- get_rollback;
       original <- get_original;

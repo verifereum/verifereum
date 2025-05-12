@@ -26,6 +26,8 @@ Datatype:
    ; gasPrice   : num
    ; accessList : access_list_entry list
    ; blobVersionedHashes : bytes32 list
+   ; maxFeePerBlobGas : num option
+   ; maxFeePerGas : num option
    |>
 End
 
@@ -44,6 +46,15 @@ Definition total_blob_gas_def:
 End
 
 val () = cv_auto_trans total_blob_gas_def;
+
+Definition max_total_cost_def:
+  max_total_cost tx =
+  tx.gasLimit * (case tx.maxFeePerGas of SOME x => x | NONE => tx.gasPrice)
+  + (case tx.maxFeePerBlobGas of SOME x => x * total_blob_gas tx | _ => 0)
+  + tx.value
+End
+
+val () = cv_auto_trans max_total_cost_def;
 
 Definition rlp_event_def:
   rlp_event ev = RLPL [

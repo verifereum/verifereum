@@ -1048,6 +1048,7 @@ Definition proceed_create_def:
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
+      ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
     |>;
     rollback <- get_rollback;
     original <- get_original;
@@ -1246,6 +1247,7 @@ Definition proceed_call_def:
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
+      ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);

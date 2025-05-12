@@ -2,7 +2,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   open HolKernel boolLib bossLib JSONDecode wordsLib cv_transLib
        vfmTestAuxLib vfmComputeTheory vfmTestHelperTheory
-       numSyntax stringSyntax listSyntax wordsSyntax fcpSyntax
+       numSyntax stringSyntax listSyntax optionSyntax wordsSyntax fcpSyntax
 
   type access_list_entry = {address: string, storageKeys: string list}
   type access_list = access_list_entry list
@@ -310,6 +310,9 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
 
+  val num_option = mk_option num
+  val mk_num_option_tm = lift_option num_option mk_num_tm
+
   fun mk_bytes32_tm hex = mk_n2w(mk_num_tm hex, bytes32_bits_ty)
   fun mk_address_tm hex = mk_n2w(mk_num_tm hex, address_bits_ty)
 
@@ -383,6 +386,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val nonce_tm = mk_num_tm $ #nonce tx
     val value_tm = mk_num_tm $ #value tx
     val gasLimit_tm = mk_num_tm $ #gasLimit tx
+    val maxFeePerGas_tm = mk_num_option_tm $ #maxFeePerGas tx
+    val maxFeePerBlobGas_tm = mk_num_option_tm $ #maxFeePerBlobGas tx
     val gasPrice_tm = case #gasPrice tx of
                            SOME s => mk_num_tm s
                          | NONE => let
@@ -412,7 +417,9 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("gasLimit", gasLimit_tm),
       ("gasPrice", gasPrice_tm),
       ("accessList", accessList_tm),
-      ("blobVersionedHashes", blobVersionedHashes_tm)
+      ("blobVersionedHashes", blobVersionedHashes_tm),
+      ("maxFeePerGas", maxFeePerGas_tm),
+      ("maxFeePerBlobGas", maxFeePerBlobGas_tm)
     ])
   end
 
