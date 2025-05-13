@@ -965,9 +965,7 @@ Theorem run_block_eq:
       (update_beacon_block b a) [] b.transactions
   of NONE => NONE
    | SOME (r, a, d) =>
-     (if SUM (MAP total_blob_gas b.transactions) >
-         max_blob_gas_per_block
-      then NONE else
+     (if block_invalid r b then NONE else
       case process_withdrawals b.withdrawals (a, d) of
            NONE => NONE
          | SOME (a, d) => SOME (r, a, d))
@@ -983,19 +981,6 @@ Proof
   \\ Induct_on`ts`
   \\ rw[run_transactions_def]
   >- ( CASE_TAC \\ gs[UNCURRY, CaseEq"prod"] \\ metis_tac[PAIR])
-  \\ qmatch_goalsub_abbrev_tac`COND bg`
-  \\ Cases_on`bg`
-  >- (
-    last_x_assum kall_tac
-    \\ rw[OPTION_BIND_eq_case]
-    \\ qmatch_goalsub_abbrev_tac`option_CASE ff`
-    \\ qmatch_goalsub_abbrev_tac`lhs = _`
-    \\ `lhs = NONE` by ( rw[Abbr`lhs`] \\ CASE_TAC \\ rw[UNCURRY] )
-    \\ CASE_TAC
-    \\ CASE_TAC
-    \\ CASE_TAC
-    \\ CASE_TAC
-    \\ CASE_TAC)
   \\ qmatch_goalsub_abbrev_tac`FOLDL f`
   \\ qmatch_goalsub_abbrev_tac`OPTION_MAP _ rt`
   \\ Cases_on`rt`

@@ -138,6 +138,8 @@ Datatype:
   block =
   <| baseFeePerGas         : num
    ; excessBlobGas         : num
+   ; gasUsed               : num
+   ; blobGasUsed           : num
    ; number                : num
    ; timeStamp             : num
    ; coinBase              : address

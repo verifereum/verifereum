@@ -1639,6 +1639,15 @@ Definition process_withdrawals_def:
     (process_withdrawals ws)
 End
 
+Definition block_invalid_def:
+  block_invalid rs b ⇔
+    let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
+    let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
+    ¬(blobGasUsed < max_blob_gas_per_block ∧
+      blobGasUsed = b.blobGasUsed ∧
+      gasUsed = b.gasUsed)
+End
+
 Definition run_block_def:
   run_block dom chainId prevHashes accounts b =
   OPTION_BIND (
@@ -1650,8 +1659,7 @@ Definition run_block_def:
       (SOME ([], update_beacon_block b accounts, dom))
       b.transactions )
   (λ(r, a, d).
-    if SUM (MAP total_blob_gas b.transactions) >
-       max_blob_gas_per_block then NONE
+    if block_invalid r b then NONE
     else
       OPTION_BIND (process_withdrawals b.withdrawals (a, d))
         (λ(a, d). SOME (r, a, d)))

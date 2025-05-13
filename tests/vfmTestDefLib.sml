@@ -444,6 +444,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val header = #blockHeader block
     val baseFeePerGas_tm = mk_num_tm $ #baseFeePerGas header
     val excessBlobGas_tm = mk_num_tm $ #excessBlobGas header
+    val gasUsed_tm = mk_num_tm $ #gasUsed header
+    val blobGasUsed_tm = mk_num_tm $ #blobGasUsed header
     val number_tm = mk_num_tm $ #number header
     val timeStamp_tm = mk_num_tm $ #timestamp header
     val coinBase_tm = mk_address_tm $ #coinbase header
@@ -461,6 +463,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     TypeBase.mk_record(block_ty, [
       ("baseFeePerGas", baseFeePerGas_tm),
       ("excessBlobGas", excessBlobGas_tm),
+      ("gasUsed", gasUsed_tm),
+      ("blobGasUsed", blobGasUsed_tm),
       ("number", number_tm),
       ("timeStamp", timeStamp_tm),
       ("coinBase", coinBase_tm),
