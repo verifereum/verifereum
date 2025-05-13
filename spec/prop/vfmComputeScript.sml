@@ -959,7 +959,7 @@ End
 val () = cv_auto_trans run_transactions_def;
 
 Theorem run_block_eq:
-  run_block d chainId h a b =
+  run_block d chainId h p a b =
   case
     run_transactions d F chainId h b
       (update_beacon_block b a) [] b.transactions
@@ -990,8 +990,8 @@ Proof
     \\ rw[Abbr`f`]
     \\ rpt (pop_assum kall_tac)
     \\ Induct_on`ts` \\ rw[] )
-  \\ qmatch_goalsub_rename_tac`SOME p`
-  \\ PairCases_on`p` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`SOME q`
+  \\ PairCases_on`q` \\ gvs[]
   \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
 QED
 

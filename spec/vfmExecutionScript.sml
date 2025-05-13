@@ -1649,7 +1649,7 @@ Definition block_invalid_def:
 End
 
 Definition run_block_def:
-  run_block dom chainId prevHashes accounts b =
+  run_block dom chainId prevHashes parent accounts b =
   OPTION_BIND (
     FOLDL
       (λx tx.
@@ -1666,28 +1666,28 @@ Definition run_block_def:
 End
 
 Definition run_blocks_def:
-  run_blocks dom chainId prevHashes accounts bs =
+  run_blocks dom chainId prevHashes parent accounts bs =
   FOLDL
     (λx b.
-      OPTION_BIND x (λ(ls, h, a, dom).
-        OPTION_MAP (λ(rs, a, dom). (SNOC rs ls, b.hash::h, a, dom)) $
-          run_block dom chainId h a b))
-    (SOME ([], prevHashes, accounts, dom))
+      OPTION_BIND x (λ(ls, h, p, a, dom).
+        OPTION_MAP (λ(rs, a, dom). (SNOC rs ls, b.hash::h, b, a, dom)) $
+          run_block dom chainId h p a b))
+    (SOME ([], prevHashes, parent, accounts, dom))
     bs
 End
 
 Definition run_block_to_hash_def:
-  run_block_to_hash n2 dom chainId prevHashes accounts blk =
-  case run_block dom chainId prevHashes accounts blk
+  run_block_to_hash n2 dom chainId prevHashes parent accounts blk =
+  case run_block dom chainId prevHashes parent accounts blk
     of NONE => NONE
      | SOME (rs, s, d) => OPTION_MAP (λh. (h, d)) (state_root_clocked n2 s)
 End
 
 Definition run_blocks_to_hash_def:
-  run_blocks_to_hash n2 dom chainId prevHashes accounts bs =
-  case run_blocks dom chainId prevHashes accounts bs
+  run_blocks_to_hash n2 dom chainId prevHashes parent accounts bs =
+  case run_blocks dom chainId prevHashes parent accounts bs
     of NONE => NONE
-     | SOME (rs, hs, s, d) => OPTION_MAP (λh. (h, d)) (state_root_clocked n2 s)
+     | SOME (rs, hs, p, s, d) => OPTION_MAP (λh. (h, d)) (state_root_clocked n2 s)
 End
 
 val _ = export_theory();

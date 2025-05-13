@@ -452,6 +452,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val gasLimit_tm = mk_num_tm $ #gasLimit header
     val prevRandao_tm = mk_bytes32_tm $ #mixHash header
     val hash_tm = mk_bytes32_tm $ #hash header
+    val stateRoot_tm = mk_bytes32_tm $ #stateRoot header
     val parentBeaconBlockRoot_tm = mk_bytes32_tm $ #parentBeaconBlockRoot header
     val transactions_tm = mk_list(
       List.map (mk_transaction_tm baseFeePerGas_tm) $
@@ -471,6 +472,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("gasLimit", gasLimit_tm),
       ("prevRandao", prevRandao_tm),
       ("hash", hash_tm),
+      ("stateRoot", stateRoot_tm),
       ("parentBeaconBlockRoot", parentBeaconBlockRoot_tm),
       ("transactions", transactions_tm),
       ("withdrawals", withdrawals_tm)
@@ -491,6 +493,10 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   fun is_invalid (Invalid _) = true | is_invalid _ = false
   fun dest_block (Block b) = b
+
+  fun mk_genesis_block (rlp: string) (h: block_header) : block =
+    {rlp = rlp, blockHeader = h, blocknumber = #number h,
+     transactions = [], uncleHeaders = [], withdrawals = []}
 
   fun define_test range_prefix test_number (test: test) = let
     val name_prefix = String.concat ["test_", range_prefix, "_", Int.toString test_number]
@@ -515,29 +521,23 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val post_state_const = lhs $ concl post_state_def
     val () = cv_trans post_state_def
 
+    val g_rlp = #genesisRLP test
     val g_rlp_name = name_prefix ^ "_genesis_rlp"
     val g_rlp_var = mk_var(g_rlp_name, bytes_ty)
-    val g_rlp_rhs = mk_cached_bytes_tm $ #genesisRLP test
+    val g_rlp_rhs = mk_cached_bytes_tm g_rlp
     val g_rlp_def = new_definition(g_rlp_name ^ "_def",
                                    mk_eq(g_rlp_var, g_rlp_rhs))
     val g_rlp_const = lhs $ concl g_rlp_def
     val () = cv_trans g_rlp_def
 
-    val g_root_name = name_prefix ^ "_genesis_root"
-    val g_root_var = mk_var(g_root_name, bytes32_ty)
-    val g_root_rhs = mk_bytes32_tm $ #stateRoot $ #genesisBlockHeader test
-    val g_root_def = new_definition(g_root_name ^ "_def",
-                                    mk_eq(g_root_var, g_root_rhs))
-    val g_root_const = lhs $ concl g_root_def
-    val () = cv_trans_deep_embedding EVAL g_root_def
-
-    val g_hash_name = name_prefix ^ "_genesis_hash"
-    val g_hash_var = mk_var(g_hash_name, bytes32_ty)
-    val g_hash_rhs = mk_bytes32_tm $ #hash $ #genesisBlockHeader test
-    val g_hash_def = new_definition(g_hash_name ^ "_def",
-                                    mk_eq(g_hash_var, g_hash_rhs))
-    val g_hash_const = lhs $ concl g_hash_def
-    val () = cv_trans_deep_embedding EVAL g_hash_def
+    val g_block_name = name_prefix ^ "_genesis_block"
+    val g_block_var = mk_var(g_block_name, block_ty)
+    val g_block_rhs = mk_block_tm $ mk_genesis_block g_rlp
+                                  $ #genesisBlockHeader test
+    val g_block_def = new_definition(g_block_name ^ "_def",
+                                    mk_eq(g_block_var, g_block_rhs))
+    val g_block_const = lhs $ concl g_block_def
+    val () = cv_trans g_block_def
 
     val last_hash_name = name_prefix ^ "_last_hash"
     val last_hash_var = mk_var(last_hash_name, bytes32_ty)
@@ -582,8 +582,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val result_name = name_prefix ^ "_result"
     val result_var = mk_var(result_name, test_result_ty)
     val result_rhs = list_mk_comb(run_test_tm, [
-      fuel_tm, pre_const,
-      g_rlp_const, g_root_const, g_hash_const,
+      fuel_tm, pre_const, g_rlp_const, g_block_const,
       blocks_const, last_hash_const, post_state_const,
       expectException_tm])
     val result_def = new_definition(result_name ^ "_def",

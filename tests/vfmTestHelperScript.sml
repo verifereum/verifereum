@@ -26,8 +26,7 @@ Definition run_test_def:
   run_test fuel
     preState
     (genesisRLP: byte list) (* TODO: check RLP decoding *)
-    genesisHeaderStateRoot (* TODO: check whole header *)
-    genesisHeaderHash
+    (genesisBlock: block)
     validBlocks
     lastBlockHash
     postState
@@ -37,22 +36,22 @@ Definition run_test_def:
     of NONE => OutOfFuel |
     SOME preStateRootBytes =>
     let preStateRoot = word_of_bytes T 0w preStateRootBytes in
-    if preStateRoot ≠ genesisHeaderStateRoot
+    if preStateRoot ≠ genesisBlock.stateRoot
     then GenesisHeaderMismatch preStateRoot
     else case
       (* TODO: check RLP decoding first *)
-      run_blocks (Collect empty_domain) 1 [] preState validBlocks
+      run_blocks (Collect empty_domain) 1 [] genesisBlock preState validBlocks
     of NONE => UnexpectedException
-     | SOME (_, hashes, computedPostState, dom) =>
+     | SOME (_, hashes, parent, computedPostState, dom) =>
     case expectException of NONE =>
-      let computedHash = case hashes of h::_ => h | _ => genesisHeaderHash in
+      let computedHash = case hashes of h::_ => h | _ => genesisBlock.hash in
       if computedHash <> lastBlockHash then LastHashMismatch computedHash else
       if computedPostState <> postState then StateMismatch else Passed
     | SOME (msg, (rlp: word8 list), decoded) =>
         (* TODO: check RLP *)
         case decoded of NONE => ExpectedException "block rlp decoding"
         | SOME invalidBlock =>
-        case run_blocks dom 1 hashes computedPostState [invalidBlock] of
+            case run_blocks dom 1 hashes parent computedPostState [invalidBlock] of
           NONE => Passed (* TODO: check exception match *)
         | SOME _ => ExpectedException msg
 End
