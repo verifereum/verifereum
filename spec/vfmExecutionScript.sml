@@ -1650,8 +1650,11 @@ Definition run_block_def:
       (SOME ([], update_beacon_block b accounts, dom))
       b.transactions )
   (λ(r, a, d).
-    OPTION_BIND (process_withdrawals b.withdrawals (a, d))
-      (λ(a, d). SOME (r, a, d)))
+    if SUM (MAP total_blob_gas b.transactions) >
+       max_blob_gas_per_block then NONE
+    else
+      OPTION_BIND (process_withdrawals b.withdrawals (a, d))
+        (λ(a, d). SOME (r, a, d)))
 End
 
 Definition run_blocks_def:

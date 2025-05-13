@@ -119,4 +119,8 @@ Definition blob_base_fee_update_fraction_def:
   blob_base_fee_update_fraction = 3338477n
 End
 
+Definition max_blob_gas_per_block_def:
+  max_blob_gas_per_block = 786432n
+End
+
 val () = export_theory();

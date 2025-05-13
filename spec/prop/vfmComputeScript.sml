@@ -965,7 +965,10 @@ Theorem run_block_eq:
       (update_beacon_block b a) [] b.transactions
   of NONE => NONE
    | SOME (r, a, d) =>
-     (case process_withdrawals b.withdrawals (a, d) of
+     (if SUM (MAP total_blob_gas b.transactions) >
+         max_blob_gas_per_block
+      then NONE else
+      case process_withdrawals b.withdrawals (a, d) of
            NONE => NONE
          | SOME (a, d) => SOME (r, a, d))
 Proof
@@ -979,11 +982,31 @@ Proof
   \\ qspec_tac(`[]:transaction_result list`,`rs`)
   \\ Induct_on`ts`
   \\ rw[run_transactions_def]
-  \\ CASE_TAC \\ gs[UNCURRY, CaseEq"prod"]
-  >- metis_tac[PAIR]
-  >- ( last_x_assum kall_tac \\ Induct_on`ts` \\ rw[] )
-  \\ qmatch_goalsub_rename_tac`SND p`
-  \\ PairCases_on`p`
+  >- ( CASE_TAC \\ gs[UNCURRY, CaseEq"prod"] \\ metis_tac[PAIR])
+  \\ qmatch_goalsub_abbrev_tac`COND bg`
+  \\ Cases_on`bg`
+  >- (
+    last_x_assum kall_tac
+    \\ rw[OPTION_BIND_eq_case]
+    \\ qmatch_goalsub_abbrev_tac`option_CASE ff`
+    \\ qmatch_goalsub_abbrev_tac`lhs = _`
+    \\ `lhs = NONE` by ( rw[Abbr`lhs`] \\ CASE_TAC \\ rw[UNCURRY] )
+    \\ CASE_TAC
+    \\ CASE_TAC
+    \\ CASE_TAC
+    \\ CASE_TAC
+    \\ CASE_TAC)
+  \\ qmatch_goalsub_abbrev_tac`FOLDL f`
+  \\ qmatch_goalsub_abbrev_tac`OPTION_MAP _ rt`
+  \\ Cases_on`rt`
+  >- (
+    gvs[]
+    \\ disj1_tac
+    \\ rw[Abbr`f`]
+    \\ rpt (pop_assum kall_tac)
+    \\ Induct_on`ts` \\ rw[] )
+  \\ qmatch_goalsub_rename_tac`SOME p`
+  \\ PairCases_on`p` \\ gvs[]
   \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
 QED
 
