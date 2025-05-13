@@ -308,8 +308,14 @@ Definition base_fee_per_blob_gas_def:
       blob_base_fee_update_fraction
 End
 
+Definition versioned_hash_correct_def:
+  versioned_hash_correct (h: bytes32) ⇔
+    get_byte 0w h T = versioned_hash_version_kzg
+End
+
 Definition pre_transaction_updates_def:
   pre_transaction_updates a blobBaseFee t =
+  if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
   let fee = t.gasLimit * t.gasPrice +
