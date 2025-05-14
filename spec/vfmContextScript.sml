@@ -321,9 +321,9 @@ Definition pre_transaction_updates_def:
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
+  if ¬NULL sender.code then NONE else
   let fee = t.gasLimit * t.gasPrice +
             total_blob_gas t * blobBaseFee in
-  (* TODO: ensure sender has no code *)
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
   if sender.balance < fee + t.value then NONE else
   let updatedSender = sender with <|

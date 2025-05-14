@@ -1646,7 +1646,7 @@ Definition block_invalid_def:
     let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
     let excessBlobGas = (p.excessBlobGas + p.blobGasUsed)
                         - target_blob_gas_per_block in
-    ¬(blobGasUsed < max_blob_gas_per_block ∧
+    ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
       gasUsed = b.gasUsed ∧
       excessBlobGas = b.excessBlobGas)
