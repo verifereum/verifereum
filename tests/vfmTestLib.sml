@@ -148,7 +148,9 @@ structure vfmTestLib :> vfmTestLib = struct
                     if c = #"|" then "!" else String.str c) $
                   String.concatWith " " $
                   String.tokens Char.isSpace result
-    val cls = if success then "pass" else "fail"
+    val cls = if success then "passed"
+              else if result = "Timeout" then "timeout"
+              else "fail"
   in
     String.concat [
       "<tr><td><span class=", cls, ">", result1, "</span></td><td>",

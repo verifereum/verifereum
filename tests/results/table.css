@@ -5,7 +5,10 @@ table {
 span.fail {
   background-color: lightpink;
 }
-span.pass {
+span.timeout {
+  background-color: lightyellow;
+}
+span.passed {
   background-color: lightgreen;
 }
 tbody > tr:nth-child(odd of :not(.hide)) {
