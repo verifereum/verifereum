@@ -1,1 +1,4 @@
 INCLUDES=../util ../spec ../spec/prop
+
+runtests.exe: runtests.uo
+	$(protect $(HOLDIR)/bin/buildheap) --exe=main -o $@ $<

@@ -2,3 +2,4 @@ fixtures
 fixtures_*.tar.gz
 result*.nsv
 table.html
+runtests.exe
