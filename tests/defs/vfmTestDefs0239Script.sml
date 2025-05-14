@@ -1,5 +1,5 @@
 open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmTestDefs0239";
-val tests = json_path_to_tests "../fixtures/blockchain_tests/prague/eip7702_set_code_tx/set_code_txs/set_code_all_invalid_authorization_tuples.json";
+val tests = json_path_to_tests "../fixtures/blockchain_tests/prague/eip7702_set_code_tx/set_code_txs/self_code_on_set_code.json";
 val defs = mapi (define_test "0239") tests;
 val () = export_theory_no_docs ();
