@@ -8,7 +8,7 @@ span.fail {
 span.pass {
   background-color: lightgreen;
 }
-tbody > tr:nth-child(odd) {
+tbody > tr:nth-child(odd of :not(.hide)) {
   background-color: azure;
 }
 tr.hide {
