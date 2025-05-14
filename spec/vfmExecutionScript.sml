@@ -1641,12 +1641,15 @@ Definition process_withdrawals_def:
 End
 
 Definition block_invalid_def:
-  block_invalid rs b ⇔
+  block_invalid p rs b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
     let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
+    let excessBlobGas = (p.excessBlobGas + p.blobGasUsed)
+                        - target_blob_gas_per_block in
     ¬(blobGasUsed < max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
-      gasUsed = b.gasUsed)
+      gasUsed = b.gasUsed ∧
+      excessBlobGas = b.excessBlobGas)
 End
 
 Definition run_block_def:
@@ -1660,7 +1663,7 @@ Definition run_block_def:
       (SOME ([], update_beacon_block b accounts, dom))
       b.transactions )
   (λ(r, a, d).
-    if block_invalid r b then NONE
+    if block_invalid parent r b then NONE
     else
       OPTION_BIND (process_withdrawals b.withdrawals (a, d))
         (λ(a, d). SOME (r, a, d)))

@@ -965,7 +965,7 @@ Theorem run_block_eq:
       (update_beacon_block b a) [] b.transactions
   of NONE => NONE
    | SOME (r, a, d) =>
-     (if block_invalid r b then NONE else
+     (if block_invalid p r b then NONE else
       case process_withdrawals b.withdrawals (a, d) of
            NONE => NONE
          | SOME (a, d) => SOME (r, a, d))

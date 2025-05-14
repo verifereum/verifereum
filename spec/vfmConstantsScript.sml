@@ -123,6 +123,10 @@ Definition max_blob_gas_per_block_def:
   max_blob_gas_per_block = 786432n
 End
 
+Definition target_blob_gas_per_block_def:
+  target_blob_gas_per_block = 393216n
+End
+
 Definition versioned_hash_version_kzg_def:
   versioned_hash_version_kzg: byte = 1w
 End
