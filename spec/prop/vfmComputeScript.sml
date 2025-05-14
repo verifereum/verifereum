@@ -839,14 +839,6 @@ val () = initial_access_sets_def
       fBIGUNION_fset_ABS_FOLDL
     ] |> cv_auto_trans;
 
-val () = cv_auto_trans initial_tx_params_def;
-
-val () = cv_auto_trans initial_rollback_def;
-
-val () = cv_auto_trans pre_transaction_updates_def;
-
-val () = cv_auto_trans code_from_tx_def;
-
 Definition fake_exp_aux_def:
   fake_exp_aux n d a i r =
   if 0 < a then
@@ -896,6 +888,14 @@ Proof
 QED
 
 val () = cv_auto_trans fake_exp_eq;
+
+val () = cv_auto_trans initial_tx_params_def;
+
+val () = cv_auto_trans initial_rollback_def;
+
+val () = cv_auto_trans pre_transaction_updates_def;
+
+val () = cv_auto_trans code_from_tx_def;
 
 val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM lookup_account_def] |>

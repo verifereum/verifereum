@@ -11,6 +11,7 @@ Datatype:
   <| origin         : address
    ; gasPrice       : num
    ; baseFeePerGas  : num
+   ; baseFeePerBlobGas : num
    ; blockNumber    : num
    ; blockTimeStamp : num
    ; blockCoinBase  : address
@@ -200,11 +201,29 @@ Definition initial_msg_params_def:
    |>
 End
 
+Definition fake_exponential_def:
+  fake_exponential f n d =
+  (SND $ SND $
+     WHILE (λ(a,i,r). 0 < a)
+     (λ(a,i,r). ((a * n) DIV (d * i), i + 1, r + a))
+     (f * d, 1, 0))
+  DIV d
+End
+
+Definition base_fee_per_blob_gas_def:
+  base_fee_per_blob_gas excessBlobGas =
+    fake_exponential
+      min_base_fee_per_blob_gas
+      excessBlobGas
+      blob_base_fee_update_fraction
+End
+
 Definition initial_tx_params_def:
   initial_tx_params c h b t =
   <| origin         := t.from
    ; gasPrice       := t.gasPrice
    ; baseFeePerGas  := b.baseFeePerGas
+   ; baseFeePerBlobGas := base_fee_per_blob_gas b.excessBlobGas
    ; blockNumber    := b.number
    ; blockTimeStamp := b.timeStamp
    ; blockCoinBase  := b.coinBase
@@ -292,23 +311,6 @@ Definition initial_rollback_def:
      tStorage := empty_transient_storage; toDelete := [] |>
 End
 
-Definition fake_exponential_def:
-  fake_exponential f n d =
-  (SND $ SND $
-     WHILE (λ(a,i,r). 0 < a)
-     (λ(a,i,r). ((a * n) DIV (d * i), i + 1, r + a))
-     (f * d, 1, 0))
-  DIV d
-End
-
-Definition base_fee_per_blob_gas_def:
-  base_fee_per_blob_gas blk =
-    fake_exponential
-      min_base_fee_per_blob_gas
-      blk.excessBlobGas
-      blob_base_fee_update_fraction
-End
-
 Definition versioned_hash_correct_def:
   versioned_hash_correct (h: bytes32) ⇔
     get_byte 0w h T = versioned_hash_version_kzg
@@ -341,8 +343,8 @@ End
 Definition initial_state_def:
   initial_state dom static chainId prevHashes blk accs tx =
   case pre_transaction_updates
-         accs (base_fee_per_blob_gas blk) tx of NONE => NONE |
-  SOME accounts =>
+         accs (base_fee_per_blob_gas blk.excessBlobGas) tx
+  of NONE => NONE | SOME accounts =>
     let callee = callee_from_tx_to tx.from tx.nonce tx.to in
     let accesses = initial_access_sets blk.coinBase callee tx in
     let code = code_from_tx accs tx in
