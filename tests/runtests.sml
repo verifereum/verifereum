@@ -8,7 +8,7 @@ val usage_header = String.concat [
 
 fun err s = TextIO.output(TextIO.stdErr, s)
 
-datatype options = Help | Results | NoResults
+datatype options = Help | Results | NoResults | Generate
 
 val cline_options = [
   {short = "h",
@@ -19,7 +19,11 @@ val cline_options = [
    long = ["results"],
    desc = NoArg (K Results),
    help = "only write results table"},
-  {short = "n",
+  {short = "g",
+   long = ["generate"],
+   desc = NoArg (K Generate),
+   help = "only generate script files"},
+  {short = "nr",
    long = ["noresults"],
    desc = NoArg (K NoResults),
    help = "do not write results table"}
@@ -55,6 +59,13 @@ in
   then die "runtests.exe: error: must be run from the tests directory\n"
   else if List.exists (equal Help) options
   then TextIO.print usage
+  else if List.exists (equal Generate) options
+  then let
+         val () = generate_test_defs_scripts ()
+         val () = TextIO.print "Generated scripts in defs\n"
+         val () = generate_test_results_scripts ()
+         val () = TextIO.print "Generated scripts in results\n"
+       in () end
   else let
     val st = if List.exists (equal Results) options
              then OS.Process.success
