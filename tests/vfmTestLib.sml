@@ -7,9 +7,13 @@ structure vfmTestLib :> vfmTestLib = struct
     fixtures_version, "/" ]
   val static_tarball = "fixtures_static.tar.gz"
   val develop_tarball = "fixtures_develop.tar.gz"
+  val version_file = OS.Path.concat("fixtures", "version.txt")
 
   fun ensure_fixtures () =
-    if OS.FileSys.isDir "fixtures" handle SysErr _ => false
+    if let val inp = TextIO.openIn version_file
+       in TextIO.inputAll inp = fixtures_version
+          before TextIO.closeIn inp
+       end handle Io _ => false
     then ()
     else let
       val curl_static = OS.Process.system $
@@ -17,13 +21,20 @@ structure vfmTestLib :> vfmTestLib = struct
       val curl_develop = OS.Process.system $
         String.concat["curl -LO ", fixtures_url_prefix ^ develop_tarball]
       val tar_static = OS.Process.system $
-        String.concat ["tar -xzf ", static_tarball]
+        String.concat ["tar --recursive-unlink -xzf ", static_tarball]
       val tar_develop = OS.Process.system $
-        String.concat ["tar -xzf", develop_tarball]
+        String.concat ["tar --recursive-unlink -xzf", develop_tarball]
     in
       if List.all OS.Process.isSuccess [
         curl_static, curl_develop, tar_static, tar_develop
-      ] then () else raise Fail "ensure_fixtures"
+      ] then
+        let
+          val out = TextIO.openOut version_file
+        in
+          TextIO.output(out, fixtures_version)
+          before TextIO.closeOut out
+        end
+      else raise Fail "ensure_fixtures"
     end
 
   fun collect_files suffix path (dirs, files) = let
