@@ -27,6 +27,10 @@ Definition init_code_word_cost_def:
   init_code_word_cost = 2n
 End
 
+Definition max_code_size_def:
+  max_code_size = 0x6000n
+End
+
 Definition code_deposit_cost_def:
   code_deposit_cost = 200n
 End

@@ -1083,7 +1083,7 @@ Definition step_create_def:
     address <<- if two
                 then address_for_create2 senderAddress salt code
                 else address_for_create senderAddress nonce;
-    assert (LENGTH code ≤ 2 * 0x6000) OutOfGas;
+    assert (LENGTH code ≤ 2 * max_code_size) OutOfGas;
     access_address address;
     gasLeft <- get_gas_left;
     cappedGas <<- gasLeft - gasLeft DIV 64;
@@ -1441,7 +1441,7 @@ Definition handle_create_def:
       codeGas <<- code_deposit_cost * codeLen;
       assert (case code of h::_ => h ≠ n2w 0xef | _ => T) InvalidContractPrefix;
       consume_gas codeGas;
-      assert (codeLen ≤ 0x6000) OutOfGas;
+      assert (codeLen ≤ max_code_size) OutOfGas;
       update_accounts $ (λaccounts.
         update_account address
           (lookup_account address accounts with code := code)

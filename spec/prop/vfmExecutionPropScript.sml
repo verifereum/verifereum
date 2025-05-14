@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse BasicProvers
      combinTheory pairTheory listTheory
-     vfmStateTheory vfmContextTheory vfmExecutionTheory;
+     vfmStateTheory vfmConstantsTheory vfmContextTheory vfmExecutionTheory;
 
 val () = new_theory "vfmExecutionProp";
 
@@ -1224,7 +1224,7 @@ Proof
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ rw[preserves_wf_accounts_def, assert_def, bind_def, update_accounts_def,
-        ignore_bind_def, return_def, reraise_def]
+        ignore_bind_def, return_def, reraise_def, max_code_size_def]
   \\ gs[all_accounts_def, update_account_def, lookup_account_def]
   \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
   \\ gs[wf_account_state_def]
