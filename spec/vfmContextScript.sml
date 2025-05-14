@@ -318,6 +318,10 @@ End
 
 Definition pre_transaction_updates_def:
   pre_transaction_updates a blobBaseFee t =
+  if (case t.maxFeePerBlobGas of SOME mf =>
+           mf < blobBaseFee ∨
+           NULL t.blobVersionedHashes
+         | _ => F) then NONE else
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
