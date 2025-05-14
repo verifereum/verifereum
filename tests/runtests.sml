@@ -35,7 +35,7 @@ fun main () = let
   val curd = OS.FileSys.getDir()
 in
   if (not o equal "tests") $ #file $ OS.Path.splitDirFile $ OS.FileSys.getDir()
-  then die "error: must be run from the tests directory\n"
+  then die "runtests.exe: error: must be run from the tests directory\n"
   else if not (List.null options)
   then TextIO.print usage
   else let
@@ -46,7 +46,7 @@ in
   in
     if OS.Process.isSuccess st
     then write_test_results_table () before
-         TextIO.print "results written to results/table.html\n"
+         TextIO.print "Results written to results/table.html\n"
     else die "runtests.exe: Holmake failed"
   end
 end handle e => die $ String.concat [exnName e, ": ", exnMessage e]
