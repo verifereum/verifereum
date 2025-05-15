@@ -61,8 +61,10 @@ in
   then TextIO.print usage
   else if List.exists (equal Generate) options
   then let
+         val () = system_or_fail "rm defs" "rm defs/*Script.sml"
          val () = generate_test_defs_scripts ()
          val () = TextIO.print "Generated scripts in defs\n"
+         val () = system_or_fail "rm results" "rm results/*Script.sml"
          val () = generate_test_results_scripts ()
          val () = TextIO.print "Generated scripts in results\n"
        in () end
