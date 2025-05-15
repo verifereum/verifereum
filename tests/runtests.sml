@@ -78,6 +78,6 @@ in
          then ()
          else write_test_results_table () before
               TextIO.print "Results written to results/table.html\n"
-    else die "runtests.exe: Holmake failed"
+    else die "runtests.exe: Holmake failed\n"
   end
-end handle e => die $ String.concat [exnName e, ": ", exnMessage e]
+end handle e => die $ String.concat [exnName e, ": ", exnMessage e, "\n"]
