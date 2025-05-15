@@ -42,7 +42,7 @@ fun thyn i = String.concat [" vfmTest", i, "Theory"]
 fun Holmake indices = String.concat $
   OS.Path.concat(
     OS.Path.concat(Globals.HOLDIR, "bin"),
-    "Holmake") :: List.map thyn indices
+    "Holmake --keep-going") :: List.map thyn indices
 
 fun run indices = let
   val () = ensure_fixtures ()
