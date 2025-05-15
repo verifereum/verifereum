@@ -8,7 +8,8 @@ val usage_header = String.concat [
 
 fun err s = TextIO.output(TextIO.stdErr, s)
 
-datatype options = Help | Results | NoResults | Generate
+datatype options = Help | Results | NoResults | Generate | Option of string
+fun destOption (Option s) = SOME s | destOption _ = NONE
 
 val cline_options = [
   {short = "h",
@@ -26,7 +27,11 @@ val cline_options = [
   {short = "n",
    long = ["noresults"],
    desc = NoArg (K NoResults),
-   help = "do not write results table"}
+   help = "do not write results table"},
+  {short = "o",
+   long = ["option"],
+   desc = ReqArg (Option, "opt"),
+   help = "pass an additional option to Holmake"}
 ]
 val cline_config = {
   argOrder = Permute,
@@ -39,15 +44,17 @@ fun die s = err s before OS.Process.exit OS.Process.failure
 
 fun thyn i = String.concat [" vfmTest", i, "Theory"]
 
-fun Holmake indices = String.concat $
+fun Holmake options indices = String.concat $
   OS.Path.concat(
     OS.Path.concat(Globals.HOLDIR, "bin"),
-    "Holmake --keep-going") :: List.map thyn indices
+    "Holmake --keep-going" ^ options)
+  :: List.map thyn indices
 
-fun run indices = let
+fun run options indices = let
   val () = ensure_fixtures ()
   val () = OS.FileSys.chDir "results"
-  val st = OS.Process.system $ Holmake indices
+  val options = String.concat (List.map (fn x => " " ^ x) options)
+  val st = OS.Process.system $ Holmake options indices
   val () = OS.FileSys.chDir OS.Path.parentArc
 in st end
 
@@ -71,7 +78,7 @@ in
   else let
     val st = if List.exists (equal Results) options
              then OS.Process.success
-             else run indices
+             else run (List.mapPartial destOption options) indices
   in
     if OS.Process.isSuccess st
     then if List.exists (equal NoResults) options
