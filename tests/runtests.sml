@@ -68,10 +68,17 @@ in
   then TextIO.print usage
   else if List.exists (equal Generate) options
   then let
-         val () = system_or_fail "rm defs" "rm defs/*Script.sml"
+         val () = ensure_fixtures ()
+         val old = collect_script_files "defs"
+         val () = OS.FileSys.chDir "defs"
+         val () = List.app OS.FileSys.remove old
+         val () = OS.FileSys.chDir OS.Path.parentArc
          val () = generate_test_defs_scripts ()
          val () = TextIO.print "Generated scripts in defs\n"
-         val () = system_or_fail "rm results" "rm results/*Script.sml"
+         val old = collect_script_files "results"
+         val () = OS.FileSys.chDir "results"
+         val () = List.app OS.FileSys.remove old
+         val () = OS.FileSys.chDir OS.Path.parentArc
          val () = generate_test_results_scripts ()
          val () = TextIO.print "Generated scripts in results\n"
        in () end

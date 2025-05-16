@@ -109,8 +109,10 @@ structure vfmTestLib :> vfmTestLib = struct
     (rthy, text)
   end
 
+  val script_suffix = "Script.sml"
+
   fun write_script dir (thyn, text) = let
-    val path = OS.Path.concat(dir, thyn ^ "Script.sml")
+    val path = OS.Path.concat(dir, thyn ^ script_suffix)
     val out = TextIO.openOut path
     val () = TextIO.output (out, text)
   in
@@ -124,11 +126,15 @@ structure vfmTestLib :> vfmTestLib = struct
     List.app (write_script "defs") named_scripts
   end
 
+  fun collect_script_files dir = let
+    val (_, smls) = collect_files "sml" dir ([], [])
+  in
+     List.filter (String.isSuffix script_suffix) $
+     List.map (#file o OS.Path.splitDirFile) smls
+  end
+
   fun generate_test_results_scripts () = let
-    val (_, smls) = collect_files "sml" "defs" ([], [])
-    val script_suffix = "Script.sml"
-    val scripts = List.filter (String.isSuffix script_suffix) $
-                  List.map (#file o OS.Path.splitDirFile) smls
+    val scripts = collect_script_files "defs"
     val thyns = List.map (trimr (String.size script_suffix)) scripts
     val named_scripts = List.map test_results_script_text thyns
   in
