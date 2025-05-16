@@ -4,7 +4,7 @@ open HolKernel boolLib bossLib Parse BasicProvers
 
 val () = new_theory "vfmExecutionProp";
 
-(* TODO: move? *)
+(* TODO: move to another theory? *)
 
 Type execution = “:execution_state -> α execution_result”;
 

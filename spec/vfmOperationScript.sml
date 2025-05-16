@@ -326,16 +326,6 @@ Proof
   \\ gs[PAD_RIGHT_CONS, PRE_SUB1]
 QED
 
-(* TODO: move *)
-
-Theorem REPLICATE_EQ_CONS:
-  REPLICATE n x = y :: r <=> y = x /\ ?m. n = SUC m /\ r = REPLICATE m x
-Proof
-  Cases_on`n` \\ rw[rich_listTheory.REPLICATE, EQ_IMP_THM]
-QED
-
-(* -- *)
-
 Theorem parse_opcode_cond_thm:
   parse_opcode (opcs: byte list) =
   case opcs of
