@@ -1,6 +1,6 @@
-open HolKernel boolLib bossLib Parse dep_rewrite
-     wordsLib wordsTheory listTheory rich_listTheory combinTheory
-     numposrepTheory arithmeticTheory logrootTheory
+open HolKernel boolLib bossLib Parse dep_rewrite wordsLib
+     wordsTheory listTheory rich_listTheory combinTheory
+     numposrepTheory arithmeticTheory logrootTheory relationTheory
      vfmTypesTheory cv_transLib cv_stdTheory
 
 val _ = new_theory "recursiveLengthPrefix";
@@ -78,10 +78,10 @@ QED
 
 Definition rlp_encode_def:
   rlp_encode (RLPB bs) = rlp_bytes bs ∧
-  rlp_encode (RLPL rs) = rlp_encode_list [] rs ∧
-  rlp_encode_list acc [] = rlp_list $ FLAT $ REVERSE acc ∧
-  rlp_encode_list acc (x::xs) =
-  rlp_encode_list (rlp_encode x :: acc) xs
+  rlp_encode (RLPL rs) = rlp_encode_list_acc [] rs ∧
+  rlp_encode_list_acc acc [] = rlp_list $ FLAT $ REVERSE acc ∧
+  rlp_encode_list_acc acc (x::xs) =
+  rlp_encode_list_acc (rlp_encode x :: acc) xs
 End
 
 val () = cv_auto_trans rlp_encode_def;
@@ -110,11 +110,20 @@ Definition rlp_decode_length_def:
   else NONE
 End
 
+val rlp_decode_length_pre_def = cv_auto_trans_pre rlp_decode_length_def;
+
+Theorem rlp_decode_length_pre[cv_pre]:
+  rlp_decode_length_pre bs
+Proof
+  rw[rlp_decode_length_pre_def]
+QED
+
 Theorem rlp_decode_length_RLPB:
   LENGTH bs < 2 ** 64 ⇒
   ∃offset.
     rlp_decode_length (rlp_encode (RLPB bs)) =
     SOME (offset, LENGTH bs, T) ∧
+    LENGTH (rlp_encode (RLPB bs)) = offset + LENGTH bs ∧
     TAKE (LENGTH bs) (DROP offset (rlp_encode (RLPB bs))) = bs
 Proof
   rw[rlp_encode_def]
@@ -123,7 +132,7 @@ Proof
   \\ IF_CASES_TAC >- rw[]
   \\ qexists_tac`1 + 1 + LOG 256 (LENGTH bs)`
   \\ reverse conj_tac
-  >- rw[DROP_APPEND, LENGTH_n2l, ADD1, TAKE_APPEND]
+  >- ( rw[DROP_APPEND, LENGTH_n2l, ADD1, TAKE_APPEND] \\ gvs[] )
   \\ BasicProvers.LET_ELIM_TAC
   \\ IF_CASES_TAC >- gvs[Abbr`length`]
   \\ gvs[]
@@ -150,5 +159,155 @@ Proof
   \\ qspecl_then[`256`,`LENGTH bs`,`2 ** 64 - 1`]mp_tac LOG_LE_MONO
   \\ simp[Abbr`lenOfListLen`]
 QED
+
+Theorem LENGTH_rlp_list:
+  LENGTH (rlp_list bs) =
+  1 + LENGTH bs +
+  if LENGTH bs < 56 then 0
+  else 1 + LOG 256 (LENGTH bs)
+Proof
+  rw[rlp_list_def, ADD1, LENGTH_n2l] \\ gs[]
+QED
+
+Theorem rlp_decode_length_offset_zero:
+  rlp_decode_length bs = SOME (0,l,b) ==>
+  ((l = 1) ∧ (b = T))
+Proof
+  rewrite_tac[rlp_decode_length_def]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ rpt (pop_assum mp_tac)
+  \\ rw[]
+QED
+
+Theorem rlp_decode_length_length_less_eq:
+  rlp_decode_length bs = SOME (off, len, b) ==>
+  off + len ≤ LENGTH bs
+Proof
+  rewrite_tac[rlp_decode_length_def]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ qpat_x_assum`_ = _`mp_tac
+  \\ rw[]
+QED
+
+Theorem rlp_decode_length_nil[simp]:
+  rlp_decode_length [] = NONE
+Proof
+  rw[rlp_decode_length_def]
+QED
+
+(*
+Definition rlp_decode_list_def:
+  rlp_decode_list bs acc =
+    case rlp_decode_length bs
+      of NONE => REVERSE acc
+       | SOME (offset, dataLen, isBS) =>
+           let bs = DROP offset bs in
+           let data = TAKE dataLen bs in
+           let bs = DROP dataLen bs in
+           let rlp = if isBS then RLPB data
+                     else RLPL $ rlp_decode_list data [] in
+           rlp_decode_list bs (rlp :: acc)
+Termination
+  WF_REL_TAC ‘measure (LENGTH o FST)’
+  \\ rw[] \\ CCONTR_TAC \\ gvs[]
+  \\ TRY $ drule rlp_decode_length_offset_zero \\ rw[]
+  \\ pop_assum mp_tac
+  \\ rw[LENGTH_TAKE_EQ]
+  \\ gvs[NOT_LESS_EQUAL]
+  \\ CCONTR_TAC \\ gvs[NOT_LESS]
+  \\ TRY $ drule rlp_decode_length_offset_zero \\ rw[]
+  \\ drule rlp_decode_length_length_less_eq
+  \\ strip_tac \\ gvs[]
+  \\ qmatch_asmsub_rename_tac`SOME (off,len,_)`
+  \\ `off + len ≤ len` by gs[]
+  \\ Cases_on`off = 0` \\ gs[]
+  \\ drule rlp_decode_length_offset_zero
+  \\ rw[]
+End
+*)
+
+Definition rlp_decode_list_def:
+  rlp_decode_list bs =
+    case rlp_decode_length bs
+      of NONE => []
+       | SOME (offset, dataLen, isBS) =>
+           let bs = DROP offset bs in
+           let data = TAKE dataLen bs in
+           let bs = DROP dataLen bs in
+           let rlp = if isBS then RLPB data
+                     else RLPL $ rlp_decode_list data in
+           rlp :: rlp_decode_list bs
+Termination
+  WF_REL_TAC ‘measure LENGTH’
+  \\ rw[] \\ CCONTR_TAC \\ gvs[]
+  \\ TRY $ drule rlp_decode_length_offset_zero \\ rw[]
+  \\ pop_assum mp_tac
+  \\ rw[LENGTH_TAKE_EQ]
+  \\ gvs[NOT_LESS_EQUAL]
+  \\ CCONTR_TAC \\ gvs[NOT_LESS]
+  \\ TRY $ drule rlp_decode_length_offset_zero \\ rw[]
+  \\ drule rlp_decode_length_length_less_eq
+  \\ strip_tac \\ gvs[]
+  \\ qmatch_asmsub_rename_tac`SOME (off,len,_)`
+  \\ `off + len ≤ len` by gs[]
+  \\ Cases_on`off = 0` \\ gs[]
+  \\ drule rlp_decode_length_offset_zero
+  \\ rw[]
+End
+
+Definition rlp_decode_def:
+  rlp_decode bs =
+  case rlp_decode_list bs of
+     | [rlp] => SOME rlp
+     | _ => NONE
+End
+
+Definition wf_rlp_def:
+  (wf_rlp (RLPB bs) ⇔ LENGTH bs < 2 ** 64) ∧
+  (wf_rlp (RLPL ls) ⇔ EVERY wf_rlp ls)
+Termination
+  WF_REL_TAC ‘measure rlp_size’
+End
+
+val rlp_induction = theorem "rlp_induction";
+
+Theorem rlp_encode_list_map:
+  ∀ls acc. rlp_encode_list_acc acc ls =
+  rlp_list (FLAT (REVERSE (REVERSE (MAP rlp_encode ls) ++ acc)))
+Proof
+  Induct \\ rw[rlp_encode_def]
+QED
+
+(*
+Theorem rlp_decode_encode:
+  (∀x. wf_rlp x ⇒
+       rlp_decode (rlp_encode x) = SOME x) ∧
+  (∀ls.
+    EVERY wf_rlp ls ⇒
+    rlp_decode_list (FLAT (MAP rlp_encode ls)) = ls ∧
+    rlp_decode_list (rlp_list (FLAT (MAP rlp_encode ls))) = [RLPL ls])
+Proof
+  ho_match_mp_tac rlp_induction
+  \\ rw[]
+  >- (
+    rw[rlp_decode_def]
+    \\ rw[Once rlp_decode_list_def]
+    \\ pop_assum mp_tac
+    \\ rewrite_tac[wf_rlp_def]
+    \\ strip_tac
+    \\ drule rlp_decode_length_RLPB
+    \\ strip_tac \\ simp[]
+    \\ rw[DROP_DROP, iffRL DROP_EQ_NIL]
+    \\ rw[Once rlp_decode_list_def])
+  >- (
+    gs[wf_rlp_def, ETA_AX]
+    \\ rw[rlp_decode_def]
+    \\ rw[rlp_encode_def, rlp_encode_list_map] )
+  >- EVAL_TAC
+  >- EVAL_TAC
+  >- (
+    gs[]
+    \\ gs[rlp_encode_def, rlp_encode_list_map]
+*)
 
 val _ = export_theory();
