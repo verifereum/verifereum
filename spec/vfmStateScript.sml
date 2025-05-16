@@ -6,13 +6,25 @@ open HolKernel boolLib bossLib Parse dep_rewrite
 
 val _ = new_theory "vfmState";
 
-(* TODO: move? *)
+Type storage = “:bytes32 -> bytes32”;
 
-Theorem from_sptree_eq_Num_iff:
-  from_sptree_sptree_spt f m = Num n <=> (m = LN ∧ n = 0)
-Proof
-  Cases_on`m` \\ rw[from_sptree_sptree_spt_def]
-QED
+Definition lookup_storage_def:
+  lookup_storage k (s: storage) = s k
+End
+
+Definition update_storage_def:
+  update_storage k v (s: storage) = (k =+ v) s
+End
+
+Definition empty_storage_def:
+  empty_storage: bytes32 -> bytes32 = K 0w
+End
+
+Definition storage_empty_def:
+  storage_empty (s: storage) = (s = empty_storage)
+End
+
+(* cv compute translation for storage *)
 
 Theorem FOLDR_UPDATE_lookup:
   ∀gi ls t.
@@ -44,28 +56,6 @@ Proof
   \\ rw[]
   \\ metis_tac[]
 QED
-
-(* -- *)
-
-Type storage = “:bytes32 -> bytes32”;
-
-Definition lookup_storage_def:
-  lookup_storage k (s: storage) = s k
-End
-
-Definition update_storage_def:
-  update_storage k v (s: storage) = (k =+ v) s
-End
-
-Definition empty_storage_def:
-  empty_storage: bytes32 -> bytes32 = K 0w
-End
-
-Definition storage_empty_def:
-  storage_empty (s: storage) = (s = empty_storage)
-End
-
-(* cv compute translation for storage *)
 
 val from_to_bytes32 = from_to_thm_for “:bytes32”;
 
@@ -188,6 +178,12 @@ Proof
   \\ qpat_x_assum`_ = 0w`mp_tac \\ rw[] \\ gs[]
 QED
 
+Theorem from_sptree_eq_Num_iff:
+  from_sptree_sptree_spt f m = Num n <=> (m = LN ∧ n = 0)
+Proof
+  Cases_on`m` \\ rw[from_sptree_sptree_spt_def]
+QED
+
 Theorem storage_empty_cv_rep[cv_rep]:
   b2c (storage_empty s) =
     cv_eq (from_storage s) (Num 0)
@@ -199,7 +195,6 @@ Proof
   \\ gs[empty_storage_def, FUN_EQ_THM]
   \\ Cases_on`x` \\ gs[]
 QED
-
 
 (* -- *)
 

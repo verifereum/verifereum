@@ -5,16 +5,6 @@ open HolKernel boolLib bossLib Parse BasicProvers
 
 val () = new_theory "vfmDomainCollection";
 
-(* TODO: move *)
-
-Theorem IN_toSet_fINSERT:
-  x ∈ toSet (fINSERT a s) ⇔ x = a ∨ x ∈ toSet s
-Proof
-  rw[GSYM fIN_IN]
-QED
-
-(* -- *)
-
 Definition computes_minimal_domain_def:
   computes_minimal_domain m =
   ∀s r t d. m s = (r, t) ∧ s.msdomain = Collect d ⇒

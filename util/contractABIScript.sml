@@ -8,7 +8,7 @@ val () = new_theory "contractABI";
 
 val () = numLib.prefer_num();
 
-(* TODO: move *)
+(* TODO: move to separate theory? *)
 
 val vars = List.tabulate(32, fn n => mk_var("w" ^ Int.toString n, “:bytes32”))
 
@@ -25,37 +25,6 @@ Proof
   \\ Cases_on`be` \\ gvs[]
   \\ map_every (fn v => BBLAST_TAC \\ qunabbrev_tac[ANTIQUOTE v]) vars
   \\ rw[]
-QED
-
-Theorem c2n_cv_add[simp]:
-  cv$c2n (cv_add v1 v2) = cv$c2n v1 + cv$c2n v2
-Proof
-  Cases_on`v1` \\ Cases_on`v2` \\ rw[]
-QED
-
-Theorem c2n_cv_mul[simp]:
-  cv$c2n (cv_mul v1 v2) = cv$c2n v1 * cv$c2n v2
-Proof
-  Cases_on`v1` \\ Cases_on`v2` \\ rw[]
-QED
-
-Theorem cv_lt_Num_0:
-  (cv$c2b $ cv_lt (Num 0) x) = ∃n. x = Num (SUC n)
-Proof
-  Cases_on`x` \\ rw[cv_lt_def]
-  \\ Cases_on`m` \\ simp[]
-QED
-
-Theorem LENGTH_word_to_bytes_aux[simp]:
-  LENGTH (word_to_bytes_aux n w b) = n
-Proof
-  Induct_on`n` \\ rw[word_to_bytes_aux_def]
-QED
-
-Theorem LENGTH_word_to_bytes[simp]:
-  LENGTH (word_to_bytes (w:'a word) be) = dimindex(:'a) DIV 8
-Proof
-  rw[word_to_bytes_def]
 QED
 
 val () = cv_auto_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_aux_def
