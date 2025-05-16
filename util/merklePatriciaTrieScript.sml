@@ -7,88 +7,6 @@ open HolKernel boolLib bossLib Parse
 
 val _ = new_theory "merklePatriciaTrie";
 
-(* TODO: move *)
-
-(*
-Definition map_keys_def:
-  map_keys d f LN = LN /\
-  map_keys d f (LS x) = insert (f d) x LN /\
-  map_keys d f (BN t1 t2) = (let d2 = SUC (2 * d) in
-    union (map_keys d2 f t1) (map_keys (SUC d2) f t2)) /\
-  map_keys d f (BS t1 x t2) = insert (f d) x $
-    let d2 = SUC (2 * d) in
-      union (map_keys d2 f t1) (map_keys (SUC d2) f t2)
-End
-
-Theorem wf_map_keys[simp]:
-  !d f t. wf (map_keys d f t)
-Proof
-  Induct_on`t`
-  \\ rw[map_keys_def, wf_insert, wf_union]
-QED
-
-Theorem lookup_map_keys:
-  !k f d t.
-  INJ f (domain t) UNIV /\ d <= k ==>
-  lookup (f k) (map_keys d f t) =
-  if k - d IN domain t then
-    lookup (k - d) t
-  else NONE
-Proof
-  Induct_on`t`
-  \\ rw[map_keys_def, lookup_insert]
-  FLOOKUP_MAP_KEYS
-*)
-
-Theorem PERM_toAList_toSortedAList:
-  PERM (toAList t) (toSortedAList t)
-Proof
-  irule PERM_ALL_DISTINCT
-  \\ conj_tac
-  >- ( Cases \\ simp[MEM_toAList, MEM_toSortedAList] )
-  \\ conj_tac
-  >- metis_tac[ALL_DISTINCT_MAP, ALL_DISTINCT_MAP_FST_toAList]
-  >- metis_tac[ALL_DISTINCT_MAP, ALL_DISTINCT_MAP_FST_toSortedAList]
-QED
-
-Theorem OPT_MMAP_IS_SOME:
-  IS_SOME (OPT_MMAP f ls) ⇔ EVERY IS_SOME (MAP f ls)
-Proof
-  Induct_on`ls` \\ rw[]
-  \\ Cases_on`f h` \\ rw[]
-  \\ Cases_on`OPT_MMAP f ls` \\ gs[]
-QED
-
-Theorem ALL_DISTINCT_MAP_DROP_LESS:
-  !ls.
-    n <= m /\
-    ALL_DISTINCT (MAP (DROP m) ls) ==>
-    ALL_DISTINCT (MAP (DROP n) ls)
-Proof
-  Induct \\ rw[] \\ gs[MEM_MAP, PULL_EXISTS]
-  \\ rw[] \\ first_x_assum irule
-  \\ gs[LIST_EQ_REWRITE, EL_DROP, LESS_EQ_EXISTS]
-QED
-
-Theorem NULL_MAP[simp]:
-  NULL (MAP f ls) = NULL ls
-Proof
-  rw[NULL_EQ]
-QED
-
-Theorem PERM_NULL:
-  !l1 l2. PERM l1 l2 ==> NULL l1 = NULL l2
-Proof
-  ho_match_mp_tac PERM_IND
-  \\ rw[NULL_EQ]
-QED
-
-Theorem LENGTH_TL_LESS_EQ:
-  !ls. LENGTH (TL ls) <= LENGTH ls
-Proof
-  Cases \\ rw[]
-QED
-
 Datatype:
   trie_node =
     Leaf      (byte list) (byte list)
@@ -412,7 +330,7 @@ Proof
     \\ simp[Abbr`values`, Abbr`values'`]
     \\ qmatch_goalsub_abbrev_tac`FILTER P`
     \\ `PERM (FILTER P kvs1) (FILTER P kvs2)` by simp[PERM_FILTER]
-    \\ drule PERM_NULL
+    \\ drule PERM_NULL_EQ
     \\ simp[] \\ strip_tac
     \\ IF_CASES_TAC \\ simp[]
     \\ `∃k v. FILTER P kvs1  = [(k, v)]`
