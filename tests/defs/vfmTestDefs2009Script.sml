@@ -1,5 +1,5 @@
 open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmTestDefs2009";
-val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stRevertTest/RevertDepthCreateAddressCollision.json";
+val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stSolidityTest/CallRecursiveMethods.json";
 val defs = mapi (define_test "2009") tests;
 val () = export_theory_no_docs ();

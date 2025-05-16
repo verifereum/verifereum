@@ -1,5 +1,5 @@
 open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmTestDefs1896";
-val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stRandom2/randomStatetest602.json";
+val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stRevertTest/RevertInStaticCall.json";
 val defs = mapi (define_test "1896") tests;
 val () = export_theory_no_docs ();
