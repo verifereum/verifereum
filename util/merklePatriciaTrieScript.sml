@@ -627,7 +627,7 @@ Proof
   rw[make_branch_def]
   \\ AP_THM_TAC
   \\ AP_TERM_TAC
-  \\ rw[FUN_EQ_THM, PAIR_MAP]
+  \\ rw[FUN_EQ_THM, FORALL_PROD, PAIR_MAP]
 QED
 
 val () = make_branch_eta |> cv_auto_trans;
