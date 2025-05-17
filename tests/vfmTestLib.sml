@@ -160,6 +160,17 @@ structure vfmTestLib :> vfmTestLib = struct
     {name=name, result=result, seconds=seconds, index=index}
   end
 
+  fun is_precompile name = let
+    val name = String.translate (String.str o Char.toLower) name
+    fun cnts s = String.isSubstring s name
+  in
+    List.exists cnts [
+      "precomp",
+      "ecmul", "ecadd", "ecpair", "pairing", "ecrec",
+      "pointadd", "pointmul", "ripemd", "blake"
+    ]
+  end
+
   fun mk_test_result_row {name, result, seconds, index} = let
     val success = result = "Passed"
     val result1 = String.translate (fn c =>
@@ -169,10 +180,13 @@ structure vfmTestLib :> vfmTestLib = struct
     val cls = if success then "passed"
               else if result = "Timeout" then "timeout"
               else "fail"
+    val nametd = if is_precompile name
+                 then "<td class=precompile>"
+                 else "<td>"
   in
     String.concat [
       "<tr><td><span class=", cls, ">", result1, "</span></td><td>",
-      seconds, "s</td><td>", name, "</td><td>", index,
+      seconds, "s</td>", nametd, name, "</td><td>", index,
       "</td></tr>\n"
     ]
   end
