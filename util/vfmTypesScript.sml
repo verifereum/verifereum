@@ -46,6 +46,56 @@ Proof
 QED
 *)
 
+Theorem set_byte_160:
+  set_byte a b (w: 160 word) be =
+  let i = byte_index a be in
+       if i =   0 then w2w b        || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00w
+  else if i =   8 then w2w b <<   8 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFw
+  else if i =  16 then w2w b <<  16 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFw
+  else if i =  24 then w2w b <<  24 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFw
+  else if i =  32 then w2w b <<  32 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFw
+  else if i =  40 then w2w b <<  40 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFw
+  else if i =  48 then w2w b <<  48 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFw
+  else if i =  56 then w2w b <<  56 || w && 0xFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFw
+  else if i =  64 then w2w b <<  64 || w && 0xFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFw
+  else if i =  72 then w2w b <<  72 || w && 0xFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFw
+  else if i =  80 then w2w b <<  80 || w && 0xFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFw
+  else if i =  88 then w2w b <<  88 || w && 0xFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFw
+  else if i =  96 then w2w b <<  96 || w && 0xFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 104 then w2w b << 104 || w && 0xFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 112 then w2w b << 112 || w && 0xFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 120 then w2w b << 120 || w && 0xFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 128 then w2w b << 128 || w && 0xFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 136 then w2w b << 136 || w && 0xFFFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else if i = 144 then w2w b << 144 || w && 0xFF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+  else                 w2w b << 152 || w && 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw
+Proof
+  rw_tac std_ss [set_byte_def, word_slice_alt_def]
+  \\ reverse(rpt IF_CASES_TAC)
+  >- (
+    `i = 152`
+    by (
+      qunabbrev_tac`i`
+      \\ full_simp_tac (std_ss ++ boolSimps.LET_ss ++ ARITH_ss) [
+            byte_index_def, EVAL``dimindex(:160)``]
+      \\ `w2n a MOD 20 < 20` by rw[]
+      \\ pop_assum mp_tac
+      \\ qmatch_goalsub_abbrev_tac`z < 20 ⇒ f`
+      \\ simp_tac std_ss [NUMERAL_LESS_THM]
+      \\ strip_tac \\ gs[Abbr`f`]
+      \\ rw[] \\ gs[] )
+    \\ asm_simp_tac std_ss []
+    \\ simp_tac (srw_ss()) []
+    \\ BBLAST_TAC)
+  \\ asm_simp_tac std_ss []
+  \\ simp_tac (srw_ss()) []
+  \\ BBLAST_TAC
+QED
+
+val () = cv_auto_trans set_byte_160;
+
+val () = cv_auto_trans (INST_TYPE [alpha |-> “:160”] word_of_bytes_def);
+
 Theorem set_byte_256:
   set_byte a b (w: 256 word) be =
   let i = byte_index a be in

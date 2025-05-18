@@ -19,9 +19,24 @@ Datatype:
   rlp = RLPB (word8 list) | RLPL (rlp list)
 End
 
-Definition dest_RLPB_def:
+Definition is_RLPL_def[simp]:
+  (is_RLPL (RLPL _) = T) ∧
+  (is_RLPL _ = F)
+End
+
+Definition is_RLPB_def[simp]:
+  (is_RLPB (RLPB _) = T) ∧
+  (is_RLPB _ = F)
+End
+
+Definition dest_RLPB_def[simp]:
   dest_RLPB (RLPB bs) = bs ∧
   dest_RLPB _ = []
+End
+
+Definition dest_RLPL_def[simp]:
+  dest_RLPL (RLPL ls) = ls ∧
+  dest_RLPL _ = []
 End
 
 Definition num_to_be_bytes_def:
