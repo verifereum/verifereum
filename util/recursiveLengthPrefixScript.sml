@@ -249,6 +249,96 @@ Termination
   \\ rw[]
 End
 
+Definition rlp_decode_list_tr_def:
+  rlp_decode_list_tr bs ls stk =
+  case rlp_decode_length bs
+    of NONE => (
+      case stk
+        of [] => REVERSE ls
+         | ((pbs,pls)::stk) =>
+             rlp_decode_list_tr pbs ((RLPL (REVERSE ls))::pls) stk)
+     | SOME (offset, dataLen, isBS) =>
+       let bs = DROP offset bs in
+       let data = TAKE dataLen bs in
+       let bs = DROP dataLen bs in
+       if isBS then
+         rlp_decode_list_tr bs ((RLPB data)::ls) stk
+       else
+         rlp_decode_list_tr data [] ((bs,ls)::stk)
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λ(bs,ls,stk).
+    (LENGTH bs + SUM (MAP (LENGTH o FST) stk),
+     LENGTH stk))’
+  \\ rw[]
+  \\ drule rlp_decode_length_length_less_eq
+  \\ rw[]
+  \\ CCONTR_TAC \\ gvs[]
+  \\ drule rlp_decode_length_offset_zero
+  \\ rw[]
+End
+
+val () = cv_auto_trans rlp_decode_list_tr_def;
+
+Definition unwind_stk_def:
+  unwind_stk [] = [] ∧
+  unwind_stk ((bs,ls)::[]) =
+    REVERSE ls ++ rlp_decode_list bs ∧
+  unwind_stk ((bs,ls)::(pbs,pls)::stk) =
+    unwind_stk ((pbs,(RLPL (REVERSE ls ++ rlp_decode_list bs))::pls)::stk)
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+    (λx. (SUM (MAP (LENGTH o FST) x), LENGTH x))’
+  \\ rw[]
+End
+
+Theorem rlp_decode_list_tr_unwind_stk:
+  ∀bs ls stk.
+    rlp_decode_list_tr bs ls stk =
+    unwind_stk ((bs,ls)::stk)
+Proof
+  ho_match_mp_tac rlp_decode_list_tr_ind
+  \\ rw[]
+  \\ rw[Once rlp_decode_list_tr_def]
+  \\ Cases_on`rlp_decode_length bs` \\ gvs[]
+  >- (
+    CASE_TAC
+    >- (
+      rw[Once unwind_stk_def]
+      \\ rw[Once rlp_decode_list_def] )
+    \\ CASE_TAC \\ gvs[]
+    \\ rw[Once unwind_stk_def, SimpRHS]
+    \\ rw[Once rlp_decode_list_def] )
+  \\ CASE_TAC
+  \\ CASE_TAC
+  \\ gvs[]
+  \\ rw[] \\ gvs[]
+  >- (
+    simp[Once $ oneline unwind_stk_def]
+    \\ CASE_TAC
+    >- (
+      simp[unwind_stk_def]
+      \\ simp[Once rlp_decode_list_def, SimpRHS] )
+    \\ CASE_TAC \\ gvs[]
+    \\ simp[Once unwind_stk_def, SimpRHS]
+    \\ simp[Once rlp_decode_list_def, SimpRHS] )
+  \\ simp[Once $ oneline unwind_stk_def]
+  \\ simp[Once $ oneline unwind_stk_def, SimpRHS]
+  \\ CASE_TAC
+  >- (
+    simp[Once rlp_decode_list_def, SimpRHS]
+    \\ simp[unwind_stk_def] )
+  \\ CASE_TAC
+  \\ simp[Once rlp_decode_list_def, SimpRHS]
+  \\ simp[Once unwind_stk_def]
+QED
+
+Theorem rlp_decode_list_eq_tr:
+  rlp_decode_list bs =
+  rlp_decode_list_tr bs [] []
+Proof
+  rw[rlp_decode_list_tr_unwind_stk, unwind_stk_def]
+QED
+
 Definition rlp_decode_def:
   rlp_decode bs =
   case rlp_decode_list bs of
@@ -256,7 +346,9 @@ Definition rlp_decode_def:
      | _ => NONE
 End
 
-val rlp_induction = theorem "rlp_induction";
+val () = rlp_decode_def
+  |> SRULE [rlp_decode_list_eq_tr]
+  |> cv_auto_trans;
 
 Theorem rlp_encode_list_map:
   ∀ls acc. rlp_encode_list_acc acc ls =
