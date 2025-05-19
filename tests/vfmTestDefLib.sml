@@ -572,6 +572,16 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       else boris )
     val validBlocks_tm = listSyntax.mk_list(
       List.map mk_block_tm validBlocks, block_ty)
+
+    val rlps_tms = List.map (mk_cached_bytes_tm o #rlp) validBlocks
+    val rlps_name = name_prefix ^ "_rlps"
+    val rlps_var = mk_var(rlps_name, listSyntax.mk_list_type bytes_ty)
+    val rlps_rhs = listSyntax.mk_list(rlps_tms, bytes_ty)
+    val rlps_def = new_definition(rlps_name ^ "_def",
+                                  mk_eq(rlps_var, rlps_rhs))
+    val rlps_const = lhs $ concl rlps_def
+    val () = cv_trans rlps_def
+
     val blocks_name = name_prefix ^ "_blocks"
     val blocks_var = mk_var(blocks_name, listSyntax.mk_list_type block_ty)
     val blocks_def = new_definition(blocks_name ^ "_def",
@@ -583,7 +593,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val result_var = mk_var(result_name, test_result_ty)
     val result_rhs = list_mk_comb(run_test_tm, [
       fuel_tm, pre_const, g_rlp_const, g_block_const,
-      blocks_const, last_hash_const, post_state_const,
+      blocks_const, rlps_const, last_hash_const, post_state_const,
       expectException_tm])
     val result_def = new_definition(result_name ^ "_def",
                                     mk_eq(result_var, result_rhs))
