@@ -127,6 +127,18 @@ Proof
   \\ rw[AC longest_common_prefix_assoc longest_common_prefix_comm]
 QED
 
+Theorem ALL_DISTINCT_MAP_DROP_LESS:
+  !ls.
+    n <= m /\
+    ALL_DISTINCT (MAP (DROP m) ls) ==>
+    ALL_DISTINCT (MAP (DROP n) ls)
+Proof
+  Induct \\ rw[] \\ fs[MEM_MAP, PULL_EXISTS]
+  \\ rw[] \\ first_x_assum irule
+  \\ full_simp_tac(srw_ss() ++ numSimps.ARITH_ss)
+     [LIST_EQ_REWRITE, EL_DROP, LENGTH_DROP, LESS_EQ_EXISTS]
+QED
+
 Theorem ALL_DISTINCT_DROP_LENGTH_lcp:
   ∀ls. ALL_DISTINCT ls ⇒
        ALL_DISTINCT (MAP (DROP (LENGTH $ longest_common_prefix_of_list ls)) ls)
@@ -198,7 +210,7 @@ Termination
     \\ conj_tac
     >- (
       irule SUM_MAP_same_LESS
-      \\ simp[Abbr`f`, Abbr`g`, LENGTH_TL_LESS_EQ, EXISTS_MEM]
+      \\ simp[Abbr`f`, Abbr`g`, LENGTH_TL_LE, EXISTS_MEM]
       \\ qmatch_assum_rename_tac`k1 ≠ k2`
       \\ qmatch_asmsub_rename_tac`(k1,v1)::(k2,v2)::_`
       \\ qexists_tac`if NULL k1 then (k2,v2) else (k1,v1)`
