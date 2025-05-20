@@ -1,4 +1,4 @@
-open HolKernel boolLib bossLib Parse
+open HolKernel boolLib bossLib Parse wordsLib
      arithmeticTheory
      vfmTypesTheory cv_stdTheory cv_transLib
 
@@ -242,7 +242,11 @@ Definition endo_def:
   c2 = divNearest (endonegb1 * k) secp256k1N;
   k1 = nsub (nsub k (nmul c1 endoa1)) (nmul c2 endoa2);
   k2 = nsub (nmul endonegb1 c1) (nmul endob2 c2);
-  in (k1, k2)
+  k1neg = (k1 > pow2_128);
+  k2neg = (k2 > pow2_128);
+  k1 = if k1neg then secp256k1N - k1 else k1;
+  k2 = if k2neg then secp256k1N - k2 else k2
+  in (k1, k1neg, k2, k2neg)
 End
 
 val () = cv_trans endo_def;
@@ -287,10 +291,10 @@ Definition mul_def:
   mul p n =
   if n = 0 then zero else
   if p = zero ∨ n = 1 then p else
-  let (k1, k2) = endo n in
+  let (k1, k1neg, k2, k2neg) = endo n in
   let (k1p, k2p) = mul_loop zero zero k1 k2 p in
-  let k1p = if k1 > pow2_128 then neg k1p else k1p in
-  let k2p = if k2 > pow2_128 then neg k2p else k2p in
+  let k1p = if k1neg then neg k1p else k1p in
+  let k2p = if k2neg then neg k2p else k2p in
   let k2p = (fmul (FST k2p) endobeta, FST(SND k2p), SND(SND k2p)) in
   add k1p k2p
 End
@@ -328,6 +332,38 @@ Definition finv_def:
 End
 
 val () = cv_trans finv_def;
+
+Definition finvN_loop_def:
+  finvN_loop a b x y u v =
+  if a = 0 then x else let
+    (q,r) = DIVMOD (0, b, a);
+    m = nsub x (nmul u q);
+    n = nsub y (nmul v q);
+    b = a; a = r; x = u; y = v; u = m; v = n in
+      finvN_loop a b x y u v
+Termination
+  WF_REL_TAC ‘measure FST’
+  \\ rw[]
+  \\ pop_assum mp_tac
+  \\ rw[DIVMOD_CORRECT]
+End
+
+val finvN_loop_pre_def = cv_trans_pre finvN_loop_def;
+
+Theorem finvN_loop_pre[cv_pre]:
+  ∀a b x y u v. finvN_loop_pre a b x y u v
+Proof
+  ho_match_mp_tac finvN_loop_ind
+  \\ rw[]
+  \\ rw[Once finvN_loop_pre_def]
+  \\ gvs[]
+QED
+
+Definition finvN_def:
+  finvN n = finvN_loop n secp256k1N 0 1 1 0
+End
+
+val () = cv_trans finvN_def;
 
 Definition weierstrassEquation_def:
   weierstrassEquation x = let
@@ -440,16 +476,31 @@ End
 
 val () = cv_trans fsqrt_def;
 
-(*
-Definition recover_def:
-  recover r s yParity msgHash = let
+Definition recoverPoint_def:
+  recoverPoint r s yParity (msgHash: bytes32) = let
     y2 = weierstrassEquation r;
     y = fsqrt y2;
+    y = if ODD yParity = ODD y then y else fneg y;
+    R = (r, y, 1n);
+    ir = finvN r;
+    h = (w2n msgHash) MOD secp256k1N;
+    u1 = ((secp256k1N - h) * ir) MOD secp256k1N;
+    u2 = (s * ir) MOD secp256k1N;
+  in add (mul base u1) (mul R u2)
+End
 
-    xmin = num_to_be_bytes r;
-    x = PAD_LEFT 0w 32 xmin;
-    Rbytes = (if EVEN yParity then 0x02w else 0x03w)::x;
-    R = num_of_be_bytes Rbytes;
-*)
+val () = cv_trans recoverPoint_def;
+
+Definition pointToBytes_def:
+ pointToBytes (x,y,z) =
+ let (ax, ay) =
+   if z = 1 then (x, y) else
+   let iz = finv z in
+     (fmul x iz, fmul y iz) in
+ let p = if ODD ay then 0x03w else 0x02w in
+ p :: (PAD_LEFT 0w 32 $ num_to_be_bytes ax)
+End
+
+val () = cv_trans pointToBytes_def;
 
 val () = export_theory();

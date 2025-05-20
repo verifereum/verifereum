@@ -177,10 +177,14 @@ Definition num_to_be_bytes_def:
   if n = 0 then [] else REVERSE $ MAP n2w $ n2l 256 n
 End
 
+val () = cv_auto_trans num_to_be_bytes_def;
+
 Definition num_of_be_bytes_def:
   num_of_be_bytes bs =
   l2n 256 $ MAP w2n $ REVERSE bs
 End
+
+val () = cv_auto_trans num_of_be_bytes_def;
 
 Theorem num_of_to_be_bytes[simp]:
   num_of_be_bytes (num_to_be_bytes n) = n
