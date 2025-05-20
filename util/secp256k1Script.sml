@@ -56,20 +56,20 @@ End
 val () = cv_trans_deep_embedding EVAL zero_def;
 
 Definition fmul_def:
-  fmul x y = (x * y) MOD secp256k1N
+  fmul x y = (x * y) MOD secp256k1P
 End
 
 val () = cv_trans fmul_def;
 
 Definition fadd_def:
-  fadd x y = (x + y) MOD secp256k1N
+  fadd x y = (x + y) MOD secp256k1P
 End
 
 val () = cv_trans fadd_def;
 
 Definition fsub_def:
-  fsub x y = if x < y then x + secp256k1N - y
-             else (x - y) MOD secp256k1N
+  fsub x y = if x < y then x + secp256k1P - y
+             else (x - y) MOD secp256k1P
 End
 
 val () = cv_trans fsub_def;
@@ -112,9 +112,8 @@ Definition add_def:
   t4 = fadd t4 t2;
   t0 = fmul t1 t4;
   y3 = fadd y3 t0;
-  t0 = fmul t1 t4;
+  t0 = fmul t5 t4;
   x3 = fmul t3 x3;
-  x3 = fsub x3 t0;
   x3 = fsub x3 t0;
   t0 = fmul t3 t1;
   z3 = fmul t5 z3;
@@ -199,12 +198,25 @@ End
 
 val () = cv_trans divNearest_def;
 
+Definition nmul_def:
+  nmul x y = (x * y) MOD secp256k1N
+End
+
+val () = cv_trans nmul_def;
+
+Definition nsub_def:
+  nsub x y = if x < y then x + secp256k1N - y
+             else (x - y) MOD secp256k1N
+End
+
+val () = cv_trans nsub_def;
+
 Definition endo_def:
   endo k = let
   c1 = divNearest (endob2 * k) secp256k1N;
   c2 = divNearest (endonegb1 * k) secp256k1N;
-  k1 = fsub (fsub k (fmul c1 endoa1)) (fmul c2 endoa2);
-  k2 = fsub (fmul endonegb1 c1) (fmul endob2 c2);
+  k1 = nsub (nsub k (nmul c1 endoa1)) (nmul c2 endoa2);
+  k2 = nsub (nmul endonegb1 c1) (nmul endob2 c2);
   in (k1, k2)
 End
 
@@ -217,7 +229,7 @@ End
 val () = cv_trans_deep_embedding EVAL endobeta_def;
 
 Definition fneg_def:
-  fneg x = secp256k1N - x
+  fneg x = secp256k1P - x
 End
 
 val () = cv_trans fneg_def;
@@ -230,7 +242,7 @@ val () = cv_trans neg_def;
 
 Definition mul_loop_def:
   mul_loop k1p k2p k1 k2 d =
-  if k1 = 0 ∨ k2 = 0 then (k1p, k2p)
+  if k1 = 0 ∧ k2 = 0 then (k1p, k2p)
   else let
     k1p = if ODD k1 then add k1p d else k1p;
     k2p = if ODD k2 then add k2p d else k2p;
@@ -238,6 +250,10 @@ Definition mul_loop_def:
     k1 = k1 DIV 2;
     k2 = k2 DIV 2
   in mul_loop k1p k2p k1 k2 d
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λ(_,_,k1,k2,_). (k1, k2))’
+  \\ rw[]
+  \\ Cases_on`k1 = 0` \\ gvs[]
 End
 
 val () = cv_trans mul_loop_def;
@@ -261,8 +277,8 @@ Definition finv_loop_def:
   if a = 0 then x else let
     q = b DIV a;
     r = b MOD a;
-    m = x - u * q;
-    n = y - v * q;
+    m = fsub x (fmul u q);
+    n = fsub y (fmul v q);
     b = a; a = r; x = u; y = v; u = m; v = n in
       finv_loop a b x y u v
 End
@@ -270,11 +286,7 @@ End
 val () = cv_trans finv_loop_def;
 
 Definition finv_def:
-  finv n = let
-    a = n MOD secp256k1N;
-    b = secp256k1N;
-    x = finv_loop a b 0 1 1 0 in
-  x MOD secp256k1N
+  finv n = finv_loop n secp256k1P 0 1 1 0
 End
 
 val () = cv_trans finv_def;
@@ -288,12 +300,6 @@ Definition weierstrassEquation_def:
 End
 
 val () = cv_trans weierstrassEquation_def;
-
-Definition p1mod2_def:
-  p1mod2 = (secp256k1N - 1) DIV 2
-End
-
-val () = cv_trans_deep_embedding EVAL p1mod2_def;
 
 Definition fpow_loop_def:
   fpow_loop p d power =
@@ -314,6 +320,12 @@ Definition fpow_def:
 End
 
 val () = cv_trans fpow_def;
+
+Definition p1mod2_def:
+  p1mod2 = (secp256k1P - 1) DIV 2
+End
+
+val () = cv_trans_deep_embedding EVAL p1mod2_def;
 
 Definition fleg_def:
   fleg n = fpow n p1mod2
