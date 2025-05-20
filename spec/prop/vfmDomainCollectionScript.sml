@@ -968,6 +968,13 @@ Proof
   rw[get_value_def] \\ tac
 QED
 
+Theorem revert_computes_minimal_domain[simp]:
+  computes_minimal_domain revert
+Proof
+  rw[revert_def, computes_minimal_domain_def, return_def]
+  \\ rw[execution_state_component_equality]
+QED
+
 Theorem precompiles_compute_minimal_domain[simp]:
   computes_minimal_domain precompile_sha2_256 ∧
   computes_minimal_domain precompile_ripemd_160 ∧
@@ -984,6 +991,8 @@ Proof
      precompile_ecadd_def, precompile_ecmul_def,
      precompile_ecpairing_def, precompile_blake2f_def,
      precompile_ecrecover_def]
+  \\ tac
+  \\ CASE_TAC \\ rw[]
   \\ tac
 QED
 
@@ -1004,13 +1013,6 @@ Theorem step_call_computes_minimal_domain[simp]:
   computes_minimal_domain (step_call x)
 Proof
   rw[step_call_def, UNCURRY] \\ tac
-QED
-
-Theorem revert_computes_minimal_domain[simp]:
-  computes_minimal_domain revert
-Proof
-  rw[revert_def, computes_minimal_domain_def, return_def]
-  \\ rw[execution_state_component_equality]
 QED
 
 Theorem step_return_computes_minimal_domain[simp]:

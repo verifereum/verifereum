@@ -478,6 +478,18 @@ Proof
   \\ Cases_on`s` \\ rw[] \\ gs[]
 QED
 
+val option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+val prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
+val return_destination_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
+
 val () = “set_return_data r s” |>
   SIMP_CONV std_ss [set_return_data_def, bind_def, LET_RATOR]
   |> cv_auto_trans;
@@ -535,6 +547,12 @@ val () = “precompile_identity s” |>
 val () = “precompile_modexp s” |>
    SIMP_CONV std_ss [
        precompile_modexp_def, bind_def, ignore_bind_def, LET_RATOR
+     ] |> cv_auto_trans;
+
+val () = “precompile_ecrecover s” |>
+   SIMP_CONV std_ss [
+       precompile_ecrecover_def, bind_def, ignore_bind_def, LET_RATOR,
+       option_CASE_rator
      ] |> cv_auto_trans;
 
 val () = “precompile_sha2_256 s” |>
@@ -652,18 +670,6 @@ Triviality LET_UNCURRY:
 Proof
   rw[UNCURRY]
 QED
-
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val return_destination_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
 
 fun mconv def =
   SIMP_CONV std_ss [

@@ -1,5 +1,6 @@
  open HolKernel boolLib bossLib Parse monadsyntax dep_rewrite
-     numposrepTheory numTheory arithmeticTheory sha2Theory
+     numposrepTheory numTheory arithmeticTheory
+     sha2Theory secp256k1Theory
      vfmTypesTheory vfmRootTheory vfmContextTheory;
 
 val _ = new_theory "vfmExecution";
@@ -29,6 +30,17 @@ Proof
   \\ Cases_on`e` \\ gs[EXP]
 QED
 (* -- *)
+
+Definition ecrecover_def:
+  ecrecover hash v r s : address option =
+  if ¬(v = 27 ∨ v = 28) then NONE else
+  if ¬(0 < r ∧ r < secp256k1N) then NONE else
+  if ¬(0 < s ∧ s < secp256k1N) then NONE else let
+    yParity = v - 27;
+    point = recoverPoint r s yParity hash;
+    bytes = pointToBytes point
+  in SOME $ word_of_bytes T 0w $ DROP 12 bytes
+End
 
 Definition lookup_transient_storage_def:
   lookup_transient_storage a (t: transient_storage) = t a
@@ -1114,8 +1126,16 @@ End
 
 Definition precompile_ecrecover_def:
   precompile_ecrecover = do
-    (* TODO *)
-    fail Unimplemented
+    input <- get_call_data;
+    consume_gas $ 3000;
+    hash <<- word_of_bytes T (0w:bytes32) $ take_pad_0 32 input;
+    v <<- num_of_be_bytes $ take_pad_0 32 (DROP 32 input);
+    r <<- num_of_be_bytes $ take_pad_0 32 (DROP 64 input);
+    s <<- num_of_be_bytes $ take_pad_0 32 (DROP 96 input);
+    case ecrecover hash v r s of NONE => revert | SOME addr => do
+      set_return_data $ PAD_LEFT 0w 32 $ word_to_bytes addr T;
+      finish
+    od
   od
 End
 

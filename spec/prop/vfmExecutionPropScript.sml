@@ -830,6 +830,10 @@ Theorem preserves_wf_accounts_precompile_ecrecover[simp]:
   preserves_wf_accounts precompile_ecrecover
 Proof
   rw[precompile_ecrecover_def]
+  \\ tac
+  \\ CASE_TAC
+  \\ rw[]
+  \\ tac
 QED
 
 Theorem preserves_wf_accounts_precompile_ecadd[simp]:
@@ -1801,6 +1805,10 @@ Theorem limits_num_contexts_precompile_ecrecover[simp]:
   limits_num_contexts n n precompile_ecrecover
 Proof
   rw[precompile_ecrecover_def]
+  \\ tac
+  \\ CASE_TAC
+  \\ rw[]
+  \\ tac
 QED
 
 Theorem limits_num_contexts_precompile_ecadd[simp]:

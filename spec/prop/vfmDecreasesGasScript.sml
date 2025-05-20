@@ -795,12 +795,17 @@ Theorem decreases_gas_precompile_ecrecover[simp]:
   decreases_gas F precompile_ecrecover
 Proof
   rw[precompile_ecrecover_def]
-  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_bind_false
+  \\ rw []
   \\ irule decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_consume_gas
-  \\ irule_at Any decreases_gas_ignore_bind_false
-  \\ irule_at Any decreases_gas_set_return_data
+  \\ rw[]
+  \\ CASE_TAC
+  >- ( qexists_tac`T` \\ rw[] )
+  \\ qexists_tac`F`
+  \\ irule decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_finish
+  \\ irule_at Any decreases_gas_set_return_data
 QED
 
 Theorem decreases_gas_precompile_ecadd[simp]:

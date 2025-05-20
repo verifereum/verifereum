@@ -1721,6 +1721,10 @@ Theorem precompile_ecrecover_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ecrecover
 Proof
   rw[precompile_ecrecover_def]
+  \\ tac
+  \\ CASE_TAC
+  \\ rw[]
+  \\ tac
 QED
 
 Theorem precompile_ripemd_160_ignores_extra_domain[simp]:
@@ -3212,6 +3216,11 @@ Proof
      precompile_ecmul_def,
      precompile_ecpairing_def,
      precompile_blake2f_def]
+  \\ rpt (
+    (irule preserves_domain_has_callee_bind ORELSE
+     irule preserves_domain_has_callee_ignore_bind)
+    \\ rw[])
+  \\ CASE_TAC \\ rw[]
   \\ rpt (
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)
