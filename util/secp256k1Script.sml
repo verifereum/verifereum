@@ -1,7 +1,32 @@
 open HolKernel boolLib bossLib Parse
+     arithmeticTheory
      vfmTypesTheory cv_stdTheory cv_transLib
 
 val () = new_theory "secp256k1";
+
+(* TODO: move *)
+
+val findq_pre_def = cv_trans_pre findq_thm;
+
+Theorem findq_pre[cv_pre]:
+  findq_pre x
+Proof
+  completeInduct_on`FST(SND x) - SND(SND x)`
+  \\ rw[Once findq_pre_def] \\ gvs[]
+QED
+
+val DIVMOD_pre_def = cv_trans_pre DIVMOD_THM;
+
+Theorem DIVMOD_pre[cv_pre]:
+  DIVMOD_pre x
+Proof
+  completeInduct_on`FST(SND x)`
+  \\ rw[Once DIVMOD_pre_def]
+  \\ first_x_assum irule \\ rw[]
+  \\ CCONTR_TAC \\ gvs[findq_eq_0]
+QED
+
+(* -- *)
 
 Definition secp256k1N_def:
   secp256k1N =
@@ -275,15 +300,28 @@ val () = cv_trans mul_def;
 Definition finv_loop_def:
   finv_loop a b x y u v =
   if a = 0 then x else let
-    q = b DIV a;
-    r = b MOD a;
+    (q,r) = DIVMOD (0, b, a);
     m = fsub x (fmul u q);
     n = fsub y (fmul v q);
     b = a; a = r; x = u; y = v; u = m; v = n in
       finv_loop a b x y u v
+Termination
+  WF_REL_TAC ‘measure FST’
+  \\ rw[]
+  \\ pop_assum mp_tac
+  \\ rw[DIVMOD_CORRECT]
 End
 
-val () = cv_trans finv_loop_def;
+val finv_loop_pre_def = cv_trans_pre finv_loop_def;
+
+Theorem finv_loop_pre[cv_pre]:
+  ∀a b x y u v. finv_loop_pre a b x y u v
+Proof
+  ho_match_mp_tac finv_loop_ind
+  \\ rw[]
+  \\ rw[Once finv_loop_pre_def]
+  \\ gvs[]
+QED
 
 Definition finv_def:
   finv n = finv_loop n secp256k1P 0 1 1 0
