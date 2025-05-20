@@ -1,4 +1,5 @@
-open HolKernel boolLib bossLib Parse cv_stdTheory cv_transLib
+open HolKernel boolLib bossLib Parse
+     vfmTypesTheory cv_stdTheory cv_transLib
 
 val () = new_theory "secp256k1";
 
@@ -55,20 +56,20 @@ End
 val () = cv_trans_deep_embedding EVAL zero_def;
 
 Definition fmul_def:
-  fmul x y = x * y MOD secp256k1N
+  fmul x y = (x * y) MOD secp256k1N
 End
 
 val () = cv_trans fmul_def;
 
 Definition fadd_def:
-  fadd x y = x + y MOD secp256k1N
+  fadd x y = (x + y) MOD secp256k1N
 End
 
 val () = cv_trans fadd_def;
 
 Definition fsub_def:
   fsub x y = if x < y then x + secp256k1N - y
-             else x - y MOD secp256k1N
+             else (x - y) MOD secp256k1N
 End
 
 val () = cv_trans fsub_def;
@@ -277,5 +278,128 @@ Definition finv_def:
 End
 
 val () = cv_trans finv_def;
+
+Definition weierstrassEquation_def:
+  weierstrassEquation x = let
+    x2 = fmul x x;
+    x3 = fmul x2 x;
+    xa = fmul x secp256k1a
+  in fadd (fadd x3 xa) secp256k1b
+End
+
+val () = cv_trans weierstrassEquation_def;
+
+Definition p1mod2_def:
+  p1mod2 = (secp256k1N - 1) DIV 2
+End
+
+val () = cv_trans_deep_embedding EVAL p1mod2_def;
+
+Definition fpow_loop_def:
+  fpow_loop p d power =
+  if power = 0 then p else let
+    p = if ODD power then fmul p d else p;
+    d = fmul d d;
+    power = power DIV 2
+  in fpow_loop p d power
+End
+
+val () = cv_trans fpow_loop_def;
+
+Definition fpow_def:
+  fpow n p =
+  if p = 0 then 1 else
+  if p = 1 then n else
+  fpow_loop 1 n p
+End
+
+val () = cv_trans fpow_def;
+
+Definition fleg_def:
+  fleg n = fpow n p1mod2
+End
+
+val () = cv_trans fleg_def;
+
+Definition sqrtS_def:
+  sqrtS = 6n
+End
+
+val () = cv_trans_deep_embedding EVAL sqrtS_def;
+
+Definition sqrtQ_def:
+  sqrtQ =  p1mod2 ** sqrtS
+End
+
+val () = cv_trans_deep_embedding EVAL sqrtQ_def;
+
+Definition Q1div2_def:
+  Q1div2 = (sqrtQ + 1) DIV 2
+End
+
+val () = cv_trans_deep_embedding EVAL Q1div2_def;
+
+Definition sqrtZ_def:
+  sqrtZ = 5n
+End
+
+val () = cv_trans_deep_embedding EVAL sqrtZ_def;
+
+Definition sqrtcc_def:
+  sqrtcc = fpow sqrtZ sqrtQ
+End
+
+val () = cv_trans_deep_embedding cv_eval sqrtcc_def;
+
+Definition fsqrt_inner_loop_def:
+  fsqrt_inner_loop M t i =
+  if i ≥ M then M else
+  if t = 1 then i else
+    fsqrt_inner_loop M (fmul t t) (SUC i)
+Termination
+  WF_REL_TAC ‘measure (λ(m,t,i). m - i)’
+End
+
+val () = cv_trans fsqrt_inner_loop_def;
+
+Definition fsqrt_loop_def:
+  fsqrt_loop M c t R =
+  if t = 1 then R else
+  if t = 0 then 0 else let
+  i = fsqrt_inner_loop M (fmul t t) 1;
+  exponent = 2 ** (M - i - 1);
+  b = fpow c exponent;
+  c = fmul b b;
+  t = fmul t c;
+  R = fmul R b
+  in if i ≥ M then 0 else fsqrt_loop i c t R
+Termination
+  WF_REL_TAC ‘measure FST’
+End
+
+val () = cv_trans fsqrt_loop_def;
+
+Definition fsqrt_def:
+  fsqrt n =
+  if n = 0 then n else let
+  M = sqrtS;
+  t = fpow n sqrtQ;
+  R = fpow n Q1div2 in
+    fsqrt_loop M sqrtcc t R
+End
+
+val () = cv_trans fsqrt_def;
+
+(*
+Definition recover_def:
+  recover r s yParity msgHash = let
+    y2 = weierstrassEquation r;
+    y = fsqrt y2;
+
+    xmin = num_to_be_bytes r;
+    x = PAD_LEFT 0w 32 xmin;
+    Rbytes = (if EVEN yParity then 0x02w else 0x03w)::x;
+    R = num_of_be_bytes Rbytes;
+*)
 
 val () = export_theory();

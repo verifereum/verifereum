@@ -1,5 +1,6 @@
-open HolKernel boolLib bossLib Parse
-     wordsTheory byteTheory numposrepTheory finite_mapTheory ParseExtras
+open HolKernel boolLib bossLib Parse ParseExtras
+     wordsTheory byteTheory numposrepTheory
+     finite_mapTheory listTheory combinTheory
      keccakTheory wordsLib blastLib cv_transLib cv_stdTheory;
 
 val _ = new_theory "vfmTypes";
@@ -170,5 +171,31 @@ Datatype:
    ; data : byte list
    |>
 End
+
+Definition num_to_be_bytes_def:
+  num_to_be_bytes n : word8 list =
+  if n = 0 then [] else REVERSE $ MAP n2w $ n2l 256 n
+End
+
+Definition num_of_be_bytes_def:
+  num_of_be_bytes bs =
+  l2n 256 $ MAP w2n $ REVERSE bs
+End
+
+Theorem num_of_to_be_bytes[simp]:
+  num_of_be_bytes (num_to_be_bytes n) = n
+Proof
+  rw[num_of_be_bytes_def, num_to_be_bytes_def, MAP_MAP_o, o_DEF]
+  \\ qmatch_goalsub_abbrev_tac`MAP f ls`
+  \\ `MAP f ls = MAP I ls`
+  by (
+    rw[MAP_EQ_f, Abbr`ls`, Abbr`f`]
+    \\ qspec_then`256` mp_tac n2l_BOUND
+    \\ rw[EVERY_MEM]
+    \\ first_x_assum drule \\ rw[] )
+  \\ fs[Abbr`ls`]
+  \\ irule l2n_n2l
+  \\ rw[]
+QED
 
 val _ = export_theory();
