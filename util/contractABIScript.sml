@@ -141,12 +141,6 @@ Definition has_type_def[simp]:
   has_types [] [] = (T) ∧
   has_types (t::ts) (v::vs) = (has_type t v ∧ has_types ts vs) ∧
   has_types _ _ = (F)
-Termination
-  WF_REL_TAC ‘measure (λx.
-  case x of
-       INR (INR (ts, vs)) => abi_value1_size vs
-     | INR (INL (t, vs)) => abi_value1_size vs
-     | INL (t,v) => abi_value_size v)’
 End
 
 val () = cv_auto_trans has_type_def;
@@ -174,10 +168,6 @@ Definition is_dynamic_def[simp]:
   is_dynamic _ = F ∧
   any_dynamic [] = F ∧
   any_dynamic (t::ts) = (is_dynamic t ∨ any_dynamic ts)
-Termination
-  WF_REL_TAC ‘measure (λx.
-  case x of INL t => abi_type_size t
-     | INR ts => abi_type1_size ts)’
 End
 
 val () = cv_auto_trans is_dynamic_def;
@@ -269,16 +259,16 @@ QED
 
 val () = cv_auto_trans enc_number_def;
 
-Theorem abi_value1_size_map:
-  abi_value1_size vs = LENGTH vs + SUM (MAP abi_value_size vs)
+Theorem abi_value1_size_map[simp]:
+  abi_value1_size vs = list_size abi_value_size vs
 Proof
-  Induct_on`vs` \\ rw[abi_value_size_def]
+  Induct_on`vs` \\ rw[abi_value_size_def, list_size_def]
 QED
 
-Theorem abi_type1_size_map:
-  abi_type1_size vs = LENGTH vs + SUM (MAP abi_type_size vs)
+Theorem abi_type1_size_map[simp]:
+  abi_type1_size vs = list_size abi_type_size vs
 Proof
-  Induct_on`vs` \\ rw[abi_type_size_def]
+  Induct_on`vs` \\ rw[abi_type_size_def, list_size_def]
 QED
 
 Definition enc_def[simp]:
@@ -324,7 +314,7 @@ Definition enc_def[simp]:
 Termination
   WF_REL_TAC ‘measure (λx.
     case x of INL (_, v) =>  abi_value_size v
-       | INR (_,_,_,vs,_,_) => abi_value1_size vs)’
+       | INR (_,_,_,vs,_,_) => list_size abi_value_size vs)’
 End
 
 val () = cv_trans enc_def;
@@ -365,7 +355,7 @@ Definition type_to_string_def:
     types_to_string ts (","::type_to_string t::acc)
 Termination
   WF_REL_TAC ‘measure (λx. case x of INL t => abi_type_size t | INR (ts,_) =>
-                           abi_type1_size ts)’
+                           list_size abi_type_size ts)’
 End
 
 Definition digit_def:
@@ -526,7 +516,7 @@ Definition dec_def[simp]:
       dec_tuple ts bs0 (DROP n hds) (v::acc)
 Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
-    (INR (INR (ts,_,_,_))) => (abi_type1_size ts, 0)
+    (INR (INR (ts,_,_,_))) => (list_size abi_type_size ts, 0)
   | (INR (INL (n,_,t,_,_,_))) => (abi_type_size t, n)
   | (INL (t,_)) => (abi_type_size t, 0))’
 End
@@ -696,7 +686,7 @@ Definition enc_length_def[simp]:
     enc_length t v + if is_dynamic t then 32 + a else a
 Termination
   WF_REL_TAC ‘measure (λx. case x of INL (t,v) => abi_value_size v
-                                 | INR (ts, vs, _) => abi_value1_size vs)’
+                                 | INR (ts, vs, _) => list_size abi_value_size vs)’
 End
 
 Theorem enc_length_tuple_add:
@@ -731,6 +721,7 @@ Definition static_length_from_value_def[simp]:
   static_length_from_value (ListV vs) ∧
   static_length_from_value _ = 32
 End
+
 Theorem is_static_LENGTH_enc_from_value:
   (∀t v. has_type t v ∧ is_static t ⇒ LENGTH (enc t v) = static_length_from_value v) ∧
   (∀hl tl ts vs hds tls. has_types ts vs ∧ ¬any_dynamic ts ⇒
