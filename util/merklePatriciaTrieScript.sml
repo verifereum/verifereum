@@ -561,9 +561,6 @@ Definition encode_trie_node_fo_def:
   encode_trie_node_fo_list (x::xs) =
   (let n = case x of NONE => NONE | SOME n => SOME $ encode_trie_node_fo n in
     n :: encode_trie_node_fo_list xs)
-Termination
-  WF_REL_TAC`measure (λx. case x of INR ls => trie_node1_size ls |
-                                    INL t => trie_node_size t)`
 End
 
 Theorem encode_trie_node_fo_thm:
