@@ -24,6 +24,11 @@ Datatype:
   | OutOfFuel
 End
 
+Definition isPassed_def:
+  (isPassed Passed ⇔ T) ∧
+  (isPassed _ ⇔ F)
+End
+
 (* TODO: move to another theory? *)
 
 Definition block_header_from_rlp_def:
@@ -172,36 +177,49 @@ Definition transaction1_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 11 then NONE else
   (* chain_id: U64 *)
-  let nonce = EL 1 ls in
-  if ¬is_RLPB nonce then NONE else
-  let nonce = num_of_be_bytes $ dest_RLPB nonce in
-  let gasPrice = EL 2 ls in
-  if ¬is_RLPB gasPrice then NONE else
-  let gasPrice = num_of_be_bytes $ dest_RLPB gasPrice in
-  let gas = EL 3 ls in
-  if ¬is_RLPB gas then NONE else
-  let gas = num_of_be_bytes $ dest_RLPB gas in
-  let to = EL 4 ls in
-  if ¬is_RLPB to then NONE else
-  let to = dest_RLPB to in
+  let nonceRlp = EL 1 ls in
+  if ¬is_RLPB nonceRlp then NONE else
+  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
+  let gasPriceRlp = EL 2 ls in
+  if ¬is_RLPB gasPriceRlp then NONE else
+  let gasPrice = num_of_be_bytes $ dest_RLPB gasPriceRlp in
+  let gasRlp = EL 3 ls in
+  if ¬is_RLPB gasRlp then NONE else
+  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
+  let toRlp = EL 4 ls in
+  if ¬is_RLPB toRlp then NONE else
+  let to = dest_RLPB toRlp in
   let to = if LENGTH to = 0 then NONE
            else SOME $ word_of_bytes T 0w to in
-  let value = EL 5 ls in
-  if ¬is_RLPB value then NONE else
-  let value = num_of_be_bytes $ dest_RLPB value in
-  let data = EL 6 ls in
-  if ¬is_RLPB data then NONE else
-  let data = dest_RLPB data in
-  let accessList = EL 7 ls in
-  if ¬is_RLPL accessList then NONE else
-  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessList)
+  let valueRlp = EL 5 ls in
+  if ¬is_RLPB valueRlp then NONE else
+  let value = num_of_be_bytes $ dest_RLPB valueRlp in
+  let dataRlp = EL 6 ls in
+  if ¬is_RLPB dataRlp then NONE else
+  let data = dest_RLPB dataRlp in
+  let accessListRlp = EL 7 ls in
+  if ¬is_RLPL accessListRlp then NONE else
+  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
   of NONE => NONE |
   SOME accessList =>
   let yParity = EL 8 ls in
+  if ¬is_RLPB yParity then NONE else
+  let yParity = num_of_be_bytes $ dest_RLPB yParity in
   let r = EL 9 ls in
+  if ¬is_RLPB r then NONE else
+  let r = num_of_be_bytes $ dest_RLPB r in
   let s = EL 10 ls in
+  if ¬is_RLPB s then NONE else
+  let s = num_of_be_bytes $ dest_RLPB s in
+  let txLs = [
+    rlp_number 1; nonceRlp; gasPriceRlp; gasRlp; toRlp;
+    valueRlp; dataRlp; accessListRlp ] in
+  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
+    1w :: rlp_encode (RLPL txLs) in
+  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+  SOME addr =>
   SOME <|
-      from := 0w (* TODO: ecrecover from yParity r s *)
+      from := addr
     ; to := to
     ; data := data
     ; nonce := nonce
@@ -231,39 +249,52 @@ Definition transaction2_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 12 then NONE else
   (* chain_id: U64 *)
-  let nonce = EL 1 ls in
-  if ¬is_RLPB nonce then NONE else
-  let nonce = num_of_be_bytes $ dest_RLPB nonce in
-  let maxPrio = EL 2 ls in
-  if ¬is_RLPB maxPrio then NONE else
-  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrio in
-  let maxFee = EL 3 ls in
-  if ¬is_RLPB maxFee then NONE else
-  let maxFee = num_of_be_bytes $ dest_RLPB maxFee in
-  let gas = EL 4 ls in
-  if ¬is_RLPB gas then NONE else
-  let gas = num_of_be_bytes $ dest_RLPB gas in
-  let to = EL 5 ls in
-  if ¬is_RLPB to then NONE else
-  let to = dest_RLPB to in
+  let nonceRlp = EL 1 ls in
+  if ¬is_RLPB nonceRlp then NONE else
+  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
+  let maxPrioRlp = EL 2 ls in
+  if ¬is_RLPB maxPrioRlp then NONE else
+  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
+  let maxFeeRlp = EL 3 ls in
+  if ¬is_RLPB maxFeeRlp then NONE else
+  let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
+  let gasRlp = EL 4 ls in
+  if ¬is_RLPB gasRlp then NONE else
+  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
+  let toRlp = EL 5 ls in
+  if ¬is_RLPB toRlp then NONE else
+  let to = dest_RLPB toRlp in
   let to = if LENGTH to = 0 then NONE
            else SOME $ word_of_bytes T 0w to in
-  let value = EL 6 ls in
-  if ¬is_RLPB value then NONE else
-  let value = num_of_be_bytes $ dest_RLPB value in
-  let data = EL 7 ls in
-  if ¬is_RLPB data then NONE else
-  let data = dest_RLPB data in
-  let accessList = EL 8 ls in
-  if ¬is_RLPL accessList then NONE else
-  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessList)
+  let valueRlp = EL 6 ls in
+  if ¬is_RLPB valueRlp then NONE else
+  let value = num_of_be_bytes $ dest_RLPB valueRlp in
+  let dataRlp = EL 7 ls in
+  if ¬is_RLPB dataRlp then NONE else
+  let data = dest_RLPB dataRlp in
+  let accessListRlp = EL 8 ls in
+  if ¬is_RLPL accessListRlp then NONE else
+  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
   of NONE => NONE |
   SOME accessList =>
   let yParity = EL 9 ls in
+  if ¬is_RLPB yParity then NONE else
+  let yParity = num_of_be_bytes $ dest_RLPB yParity in
   let r = EL 10 ls in
+  if ¬is_RLPB r then NONE else
+  let r = num_of_be_bytes $ dest_RLPB r in
   let s = EL 11 ls in
+  if ¬is_RLPB s then NONE else
+  let s = num_of_be_bytes $ dest_RLPB s in
+  let txLs = [
+    rlp_number 1; nonceRlp; maxPrioRlp; maxFeeRlp; gasRlp;
+    toRlp; valueRlp; dataRlp; accessListRlp ] in
+  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
+    2w :: rlp_encode (RLPL txLs) in
+  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+  SOME addr =>
   SOME <|
-      from := 0w (* TODO: ecrecover from yParity r s *)
+      from := addr
     ; to := to
     ; data := data
     ; nonce := nonce
@@ -293,47 +324,60 @@ Definition transaction3_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 14 then NONE else
   (* chain_id: U64 *)
-  let nonce = EL 1 ls in
-  if ¬is_RLPB nonce then NONE else
-  let nonce = num_of_be_bytes $ dest_RLPB nonce in
-  let maxPrio = EL 2 ls in
-  if ¬is_RLPB maxPrio then NONE else
-  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrio in
-  let maxFee = EL 3 ls in
-  if ¬is_RLPB maxFee then NONE else
-  let maxFee = num_of_be_bytes $ dest_RLPB maxFee in
-  let gas = EL 4 ls in
-  if ¬is_RLPB gas then NONE else
-  let gas = num_of_be_bytes $ dest_RLPB gas in
-  let to = EL 5 ls in
-  if ¬is_RLPB to then NONE else
-  let to = dest_RLPB to in
+  let nonceRlp = EL 1 ls in
+  if ¬is_RLPB nonceRlp then NONE else
+  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
+  let maxPrioRlp = EL 2 ls in
+  if ¬is_RLPB maxPrioRlp then NONE else
+  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
+  let maxFeeRlp = EL 3 ls in
+  if ¬is_RLPB maxFeeRlp then NONE else
+  let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
+  let gasRlp = EL 4 ls in
+  if ¬is_RLPB gasRlp then NONE else
+  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
+  let toRlp = EL 5 ls in
+  if ¬is_RLPB toRlp then NONE else
+  let to = dest_RLPB toRlp in
   let to = if LENGTH to = 0 then NONE
            else SOME $ word_of_bytes T 0w to in
-  let value = EL 6 ls in
-  if ¬is_RLPB value then NONE else
-  let value = num_of_be_bytes $ dest_RLPB value in
-  let data = EL 7 ls in
-  if ¬is_RLPB data then NONE else
-  let data = dest_RLPB data in
-  let accessList = EL 8 ls in
-  if ¬is_RLPL accessList then NONE else
-  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessList)
+  let valueRlp = EL 6 ls in
+  if ¬is_RLPB valueRlp then NONE else
+  let value = num_of_be_bytes $ dest_RLPB valueRlp in
+  let dataRlp = EL 7 ls in
+  if ¬is_RLPB dataRlp then NONE else
+  let data = dest_RLPB dataRlp in
+  let accessListRlp = EL 8 ls in
+  if ¬is_RLPL accessListRlp then NONE else
+  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
   of NONE => NONE |
   SOME accessList =>
-  let maxBlobFee = EL 9 ls in
-  if ¬is_RLPB maxBlobFee then NONE else
-  let maxBlobFee = num_of_be_bytes $ dest_RLPB maxBlobFee in
-  let blobHashes = EL 10 ls in
-  if ¬is_RLPL blobHashes then NONE else
-  let blobHashes = dest_RLPL blobHashes in
+  let maxBlobFeeRlp = EL 9 ls in
+  if ¬is_RLPB maxBlobFeeRlp then NONE else
+  let maxBlobFee = num_of_be_bytes $ dest_RLPB maxBlobFeeRlp in
+  let blobHashesRlp = EL 10 ls in
+  if ¬is_RLPL blobHashesRlp then NONE else
+  let blobHashes = dest_RLPL blobHashesRlp in
   if ¬(EVERY is_RLPB blobHashes) then NONE else
   let blobHashes = MAP (word_of_bytes T 0w o dest_RLPB) blobHashes in
   let yParity = EL 11 ls in
+  if ¬is_RLPB yParity then NONE else
+  let yParity = num_of_be_bytes $ dest_RLPB yParity in
   let r = EL 12 ls in
+  if ¬is_RLPB r then NONE else
+  let r = num_of_be_bytes $ dest_RLPB r in
   let s = EL 13 ls in
+  if ¬is_RLPB s then NONE else
+  let s = num_of_be_bytes $ dest_RLPB s in
+  let txLs = [
+    rlp_number 1; nonceRlp; maxPrioRlp; maxFeeRlp; gasRlp;
+    toRlp; valueRlp; dataRlp; accessListRlp; maxBlobFeeRlp; blobHashesRlp ] in
+  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
+    3w :: rlp_encode (RLPL txLs) in
+  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+  SOME addr =>
   SOME <|
-      from := 0w (* TODO: ecrecover from yParity r s *)
+      from := addr
     ; to := to
     ; data := data
     ; nonce := nonce
@@ -365,14 +409,21 @@ Definition transaction_from_rlp_def:
     let nonce = EL 0 ls in
     let gasPrice = EL 1 ls in
     let gas = EL 2 ls in
-    let to = dest_RLPB $ EL 3 ls in
+    let toRlp = EL 3 ls in
+    let to = dest_RLPB $ toRlp in
     let value = EL 4 ls in
     let data = EL 5 ls in
-    let v = EL 6 ls in
-    let r = EL 7 ls in
-    let s = EL 8 ls in
+    let v = num_of_be_bytes $ dest_RLPB $ EL 6 ls in
+    let r = num_of_be_bytes $ dest_RLPB $ EL 7 ls in
+    let s = num_of_be_bytes $ dest_RLPB $ EL 8 ls in
+    let txLs = [nonce; gasPrice; gas; toRlp; value; data] in
+    let (txLs, v) = if v = 27 ∨ v = 28 then (txLs, v)
+                    else (txLs ++ (MAP rlp_number [1; 0; 0]), v - 10) in
+    let hash = word_of_bytes T 0w $ Keccak_256_w64 $ rlp_encode $ RLPL txLs in
+    case ecrecover hash v r s of NONE => NONE |
+      SOME addr =>
       SOME <|
-        from := 0w (* TODO: ecrecover from v r s *)
+        from := addr
       ; to := if LENGTH to = 0 then NONE
               else SOME $ word_of_bytes T 0w to
       ; data := dest_RLPB data
@@ -488,13 +539,39 @@ QED
 
 (* -- *)
 
+Definition check_block_rlps_def:
+  check_block_rlps [] [] = Passed ∧
+  check_block_rlps (bs::bss) (blk::blks) = (
+  case OPTION_BIND (rlp_decode bs) block_from_rlp
+    of NONE => BlockDecodeFailure
+     | SOME dcd => if dcd with hash := blk.hash <> blk
+                   then BlockDecodeMismatch
+                   else check_block_rlps bss blks ) ∧
+  check_block_rlps _ _ = BlockDecodeMismatch
+End
+
+val check_block_rlps_pre_def = cv_auto_trans_pre check_block_rlps_def;
+
+Theorem check_block_rlps_pre[cv_pre]:
+  ∀x y. check_block_rlps_pre x y
+Proof
+  ho_match_mp_tac check_block_rlps_ind
+  \\ rw[]
+  \\ rw[Once check_block_rlps_pre_def]
+  \\ gvs[]
+  \\ pop_assum mp_tac
+  \\ CASE_TAC
+  \\ strip_tac
+  \\ gvs[block_component_equality]
+QED
+
 Definition run_test_def:
   run_test fuel
     preState
     genesisRLP
     genesisBlock
     validBlocks
-    (validBlockRLPs: byte list list)
+    validBlockRLPs
     lastBlockHash
     postState
     expectException
@@ -514,7 +591,8 @@ Definition run_test_def:
     if preStateRoot ≠ genesisBlock.stateRoot
     then GenesisHeaderMismatch preStateRoot
     else
-      (* TODO: check validBlockRLPs decode to validBlocks *)
+    let check = check_block_rlps validBlockRLPs validBlocks in
+    if ¬isPassed check then check else
     case
       run_blocks (Collect empty_domain) 1 [] genesisBlock preState validBlocks
     of NONE => UnexpectedException
@@ -523,11 +601,15 @@ Definition run_test_def:
       let computedHash = case hashes of h::_ => h | _ => genesisBlock.hash in
       if computedHash <> lastBlockHash then LastHashMismatch computedHash else
       if computedPostState <> postState then StateMismatch else Passed
-    | SOME (msg, (rlp: word8 list), decoded) =>
-        (* TODO: check rlp decodes to decoded *)
-        case decoded of NONE => ExpectedException "block rlp decoding"
+    | SOME (msg, rlpbs, optblock) =>
+        case OPTION_BIND (rlp_decode rlpbs) block_from_rlp of NONE =>
+          if IS_NONE optblock then Passed else BlockDecodeFailure
+        | SOME decoded =>
+        case optblock of NONE => ExpectedException "block rlp decoding"
         | SOME invalidBlock =>
-            case run_blocks dom 1 hashes parent computedPostState [invalidBlock] of
+          if decoded with hash := invalidBlock.hash <> invalidBlock
+          then BlockDecodeMismatch else
+          case run_blocks dom 1 hashes parent computedPostState [invalidBlock] of
           NONE => Passed (* TODO: check exception match *)
         | SOME _ => ExpectedException msg
 End
