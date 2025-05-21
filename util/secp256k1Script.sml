@@ -491,16 +491,16 @@ End
 
 val () = cv_trans recoverPoint_def;
 
-Definition pointToBytes_def:
- pointToBytes (x,y,z) =
+Definition pointToUncompressedBytes_def:
+ pointToUncompressedBytes (x,y,z) =
  let (ax, ay) =
    if z = 1 then (x, y) else
    let iz = finv z in
      (fmul x iz, fmul y iz) in
- let p = if ODD ay then 0x03w else 0x02w in
- p :: (PAD_LEFT 0w 32 $ num_to_be_bytes ax)
+ (PAD_LEFT 0w 32 $ num_to_be_bytes ax) ++
+ (PAD_LEFT 0w 32 $ num_to_be_bytes ay)
 End
 
-val () = cv_trans pointToBytes_def;
+val () = cv_trans pointToUncompressedBytes_def;
 
 val () = export_theory();

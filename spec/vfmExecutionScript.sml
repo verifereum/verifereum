@@ -38,8 +38,9 @@ Definition ecrecover_def:
   if ¬(0 < s ∧ s < secp256k1N) then NONE else let
     yParity = v - 27;
     point = recoverPoint r s yParity hash;
-    bytes = pointToBytes point
-  in SOME $ word_of_bytes T 0w $ DROP 12 bytes
+    keyBytes = pointToUncompressedBytes point;
+    addrBytes = DROP 12 $ Keccak_256_w64 keyBytes;
+  in SOME $ word_of_bytes T 0w addrBytes
 End
 
 Definition lookup_transient_storage_def:
