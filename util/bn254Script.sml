@@ -62,9 +62,7 @@ Definition add_def:
   t5 = fmul t5 x3;
   x3 = fadd t1 t2;
   t5 = fsub t5 x3;
-  z3 = 0;
-  x3 = fmul b3 t2;
-  z3 = fadd x3 z3;
+  z3 = fmul b3 t2;
   x3 = fsub t1 z3;
   z3 = fadd t1 z3;
   y3 = fmul x3 z3;

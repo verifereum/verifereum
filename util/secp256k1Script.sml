@@ -18,12 +18,6 @@ End
 
 val () = cv_trans_deep_embedding EVAL secp256k1P_def;
 
-Definition secp256k1a_def:
-  secp256k1a = 0n
-End
-
-val () = cv_trans_deep_embedding EVAL secp256k1a_def;
-
 Definition secp256k1b_def:
   secp256k1b = 7n
 End
@@ -77,7 +71,6 @@ val () = cv_trans fsub_def;
 
 Definition add_def:
   add (x1, y1, z1) (x2, y2, z2) = let
-  a = secp256k1a;
   b3 = fmul secp256k1b 3;
   t0 = fmul x1 x2;
   t1 = fmul y1 y2;
@@ -97,20 +90,13 @@ Definition add_def:
   t5 = fmul t5 x3;
   x3 = fadd t1 t2;
   t5 = fsub t5 x3;
-  z3 = fmul secp256k1a t4;
-  x3 = fmul b3 t2;
-  z3 = fadd x3 z3;
+  z3 = fmul b3 t2;
   x3 = fsub t1 z3;
   z3 = fadd t1 z3;
   y3 = fmul x3 z3;
   t1 = fadd t0 t0;
   t1 = fadd t1 t0;
-  t2 = fmul secp256k1a t2;
   t4 = fmul b3 t4;
-  t1 = fadd t1 t2;
-  t2 = fsub t0 t2;
-  t2 = fmul secp256k1a t2;
-  t4 = fadd t4 t2;
   t0 = fmul t1 t4;
   y3 = fadd y3 t0;
   t0 = fmul t5 t4;
@@ -134,21 +120,14 @@ Definition dbl_def:
   t3 = fadd t3 t3;
   z3 = fmul x1 z1;
   z3 = fadd z3 z3;
-  x3 = fmul secp256k1a z3;
   y3 = fmul b3 t2;
-  y3 = fadd x3 y3;
   x3 = fsub t1 y3;
   y3 = fadd t1 y3;
   y3 = fmul x3 y3;
   x3 = fmul t3 x3;
-  z3 = fmul b3 z3;
-  t2 = fmul secp256k1a t2;
-  t3 = fsub t0 t2;
-  t3 = fmul secp256k1a t3;
-  t3 = fadd t3 z3;
+  t3 = fmul b3 z3;
   z3 = fadd t0 t0;
   t0 = fadd z3 t0;
-  t0 = fadd t0 t2;
   t0 = fmul t0 t3;
   y3 = fadd y3 t0;
   t2 = fmul y1 z1;
@@ -336,9 +315,8 @@ val () = cv_trans finvN_def;
 Definition weierstrassEquation_def:
   weierstrassEquation x = let
     x2 = fmul x x;
-    x3 = fmul x2 x;
-    xa = fmul x secp256k1a
-  in fadd (fadd x3 xa) secp256k1b
+    x3 = fmul x2 x
+  in fadd x3 secp256k1b
 End
 
 val () = cv_trans weierstrassEquation_def;
