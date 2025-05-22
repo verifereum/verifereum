@@ -7,11 +7,16 @@ const mk_label = (hidecls) => {
   checkbox.type = 'checkbox'
   checkbox.addEventListener('change', (e) => {
     if (e.currentTarget.checked) {
-      document.querySelectorAll(selector).forEach((tr) =>
-        tr.classList.add('hide'))
+      document.querySelectorAll(selector).forEach((tr) => {
+        tr.classList.add(`hchk-${hidecls}`)
+        tr.classList.add('hide')
+      })
     } else {
-      document.querySelectorAll(selector).forEach((tr) =>
-        tr.classList.remove('hide'))
+      document.querySelectorAll(selector).forEach((tr) => {
+        tr.classList.remove(`hchk-${hidecls}`)
+        if (!tr.classList.toString().includes('hchk-'))
+          tr.classList.remove('hide')
+      })
     }
   })
   label.append(checkbox, span)
