@@ -81,7 +81,6 @@ Datatype:
   abi_value
   = NumV num
   | IntV int
-  | BoolV bool
   | BytesV (byte list)
   | ListV (abi_value list)
 End
