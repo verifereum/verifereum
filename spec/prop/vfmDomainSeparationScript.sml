@@ -1755,6 +1755,10 @@ Theorem precompile_ecadd_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ecadd
 Proof
   rw[precompile_ecadd_def] \\ tac
+  \\ CASE_TAC
+  \\ rw[]
+  \\ CASE_TAC
+  \\ tac
 QED
 
 Theorem precompile_ecmul_ignores_extra_domain[simp]:
@@ -3220,7 +3224,7 @@ Proof
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)
     \\ rw[])
-  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[] \\ TRY CASE_TAC
   \\ rpt (
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)

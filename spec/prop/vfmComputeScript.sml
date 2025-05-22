@@ -555,6 +555,12 @@ val () = “precompile_ecrecover s” |>
        option_CASE_rator
      ] |> cv_auto_trans;
 
+val () = “precompile_ecadd s” |>
+   SIMP_CONV std_ss [
+       precompile_ecadd_def, bind_def, ignore_bind_def, LET_RATOR,
+       option_CASE_rator, prod_CASE_rator
+     ] |> cv_auto_trans;
+
 val () = “precompile_sha2_256 s” |>
    SIMP_CONV std_ss [
        precompile_sha2_256_def, bind_def, ignore_bind_def, LET_RATOR

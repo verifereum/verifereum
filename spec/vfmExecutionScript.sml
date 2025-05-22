@@ -1,6 +1,6 @@
  open HolKernel boolLib bossLib Parse monadsyntax dep_rewrite
      numposrepTheory numTheory arithmeticTheory
-     sha2Theory secp256k1Theory
+     sha2Theory secp256k1Theory bn254Theory
      vfmTypesTheory vfmRootTheory vfmContextTheory;
 
 val _ = new_theory "vfmExecution";
@@ -41,6 +41,17 @@ Definition ecrecover_def:
     keyBytes = pointToUncompressedBytes point;
     addrBytes = DROP 12 $ Keccak_256_w64 keyBytes;
   in SOME $ word_of_bytes T 0w addrBytes
+End
+
+Definition ecadd_def:
+  ecadd (ax, ay) (bx, by) =
+  if ¬(ax < bn254p) then NONE else
+  if ¬(ay < bn254p) then NONE else
+  if ¬(bx < bn254p) then NONE else
+  if ¬(by < bn254p) then NONE else
+  if bn254$fmul ay ay ≠ bn254$weierstrassEquation ax then NONE else
+  if bn254$fmul by by ≠ bn254$weierstrassEquation bx then NONE else
+    SOME $ addAffine (ax, ay) (bx, by)
 End
 
 Definition lookup_transient_storage_def:
@@ -1206,8 +1217,18 @@ End
 
 Definition precompile_ecadd_def:
   precompile_ecadd = do
-    (* TODO *)
-    fail Unimplemented
+    input <- get_call_data;
+    consume_gas $ 500;
+    ax <<- num_of_be_bytes $ take_pad_0 32 input;
+    ay <<- num_of_be_bytes $ take_pad_0 32 (DROP 32 input);
+    bx <<- num_of_be_bytes $ take_pad_0 32 (DROP 64 input);
+    by <<- num_of_be_bytes $ take_pad_0 32 (DROP 96 input);
+    case ecadd (ax, ay) (bx, by) of NONE => revert | SOME (x, y) => do
+      set_return_data $
+        PAD_LEFT 0w 32 (num_to_be_bytes x) ++
+        PAD_LEFT 0w 32 (num_to_be_bytes y);
+      finish
+    od
   od
 End
 

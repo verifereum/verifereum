@@ -812,12 +812,17 @@ Theorem decreases_gas_precompile_ecadd[simp]:
   decreases_gas F precompile_ecadd
 Proof
   rw[precompile_ecadd_def]
-  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_bind_false
+  \\ rw []
   \\ irule decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_consume_gas
+  \\ CASE_TAC
+  >- ( qexists_tac`T` \\ rw[] )
+  \\ qexists_tac`F`
+  \\ CASE_TAC
   \\ irule_at Any decreases_gas_ignore_bind_false
-  \\ irule_at Any decreases_gas_set_return_data
   \\ irule_at Any decreases_gas_finish
+  \\ irule_at Any decreases_gas_set_return_data
 QED
 
 Theorem decreases_gas_precompile_ecmul[simp]:

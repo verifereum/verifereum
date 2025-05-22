@@ -993,6 +993,7 @@ Proof
      precompile_ecrecover_def]
   \\ tac
   \\ CASE_TAC \\ rw[]
+  \\ TRY CASE_TAC
   \\ tac
 QED
 
