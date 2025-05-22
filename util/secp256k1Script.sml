@@ -4,30 +4,6 @@ open HolKernel boolLib bossLib Parse wordsLib
 
 val () = new_theory "secp256k1";
 
-(* TODO: move *)
-
-val findq_pre_def = cv_trans_pre findq_thm;
-
-Theorem findq_pre[cv_pre]:
-  findq_pre x
-Proof
-  completeInduct_on`FST(SND x) - SND(SND x)`
-  \\ rw[Once findq_pre_def] \\ gvs[]
-QED
-
-val DIVMOD_pre_def = cv_trans_pre DIVMOD_THM;
-
-Theorem DIVMOD_pre[cv_pre]:
-  DIVMOD_pre x
-Proof
-  completeInduct_on`FST(SND x)`
-  \\ rw[Once DIVMOD_pre_def]
-  \\ first_x_assum irule \\ rw[]
-  \\ CCONTR_TAC \\ gvs[findq_eq_0]
-QED
-
-(* -- *)
-
 Definition secp256k1N_def:
   secp256k1N =
     0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n
@@ -304,16 +280,12 @@ val () = cv_trans mul_def;
 Definition finv_loop_def:
   finv_loop a b x y u v =
   if a = 0 then x else let
-    (q,r) = DIVMOD (0, b, a);
+    q = b DIV a;
+    r = b MOD a;
     m = fsub x (fmul u q);
     n = fsub y (fmul v q);
     b = a; a = r; x = u; y = v; u = m; v = n in
       finv_loop a b x y u v
-Termination
-  WF_REL_TAC ‘measure FST’
-  \\ rw[]
-  \\ pop_assum mp_tac
-  \\ rw[DIVMOD_CORRECT]
 End
 
 val finv_loop_pre_def = cv_trans_pre finv_loop_def;
@@ -336,16 +308,12 @@ val () = cv_trans finv_def;
 Definition finvN_loop_def:
   finvN_loop a b x y u v =
   if a = 0 then x else let
-    (q,r) = DIVMOD (0, b, a);
+    q = b DIV a;
+    r = b MOD a;
     m = nsub x (nmul u q);
     n = nsub y (nmul v q);
     b = a; a = r; x = u; y = v; u = m; v = n in
       finvN_loop a b x y u v
-Termination
-  WF_REL_TAC ‘measure FST’
-  \\ rw[]
-  \\ pop_assum mp_tac
-  \\ rw[DIVMOD_CORRECT]
 End
 
 val finvN_loop_pre_def = cv_trans_pre finvN_loop_def;
