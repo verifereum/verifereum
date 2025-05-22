@@ -1,9 +1,9 @@
 open HolKernel GetOpt vfmTestLib
 
 val usage_header = String.concat [
-  "runtests.exe [<num> ...]\n",
+  "runtests.exe [options] [<num> ...]\n",
   "Run Verifereum on the EEST suite. If numbers are provided,\n",
-  "only run those tests, otherwise run all tests."
+  "only run those tests, otherwise run all tests. Options:"
 ]
 
 fun err s = TextIO.output(TextIO.stdErr, s)
@@ -15,7 +15,7 @@ val cline_options = [
   {short = "h",
    long = ["help"],
    desc = NoArg (K Help),
-   help = "print help"},
+   help = "only print help"},
   {short = "r",
    long = ["results"],
    desc = NoArg (K Results),
