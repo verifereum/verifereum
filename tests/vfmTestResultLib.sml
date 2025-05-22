@@ -1,7 +1,7 @@
 structure vfmTestResultLib :> vfmTestResultLib = struct
 
   open HolKernel boolLib bossLib vfmTestAuxLib cv_transLib
-       vfmTestHelperTheory stringSyntax wordsSyntax
+       vfmTestRunTheory stringSyntax wordsSyntax
 
   val get_result_defs =
      List.filter (String.isSuffix "result_def" o #1) o

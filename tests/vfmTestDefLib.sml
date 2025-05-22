@@ -1,7 +1,7 @@
 structure vfmTestDefLib :> vfmTestDefLib = struct
 
   open HolKernel boolLib bossLib JSONDecode wordsLib cv_transLib
-       vfmTestAuxLib vfmComputeTheory vfmTestHelperTheory
+       vfmTestAuxLib vfmComputeTheory vfmTestRunTheory
        numSyntax stringSyntax listSyntax optionSyntax wordsSyntax fcpSyntax
 
   type access_list_entry = {address: string, storageKeys: string list}
@@ -480,10 +480,10 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   end
 
   val test_result_ty =
-    mk_thy_type{Thy="vfmTestHelper",Tyop="test_result",Args=[]}
+    mk_thy_type{Thy="vfmTestRun",Tyop="test_result",Args=[]}
 
   val run_test_tm =
-    prim_mk_const{Thy="vfmTestHelper",Name="run_test"}
+    prim_mk_const{Thy="vfmTestRun",Name="run_test"}
 
   val fuel_tm = numSyntax.term_of_int state_root_fuel
 

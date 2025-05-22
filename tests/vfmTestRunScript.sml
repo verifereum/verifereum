@@ -5,7 +5,7 @@ open HolKernel boolLib bossLib Parse wordsLib dep_rewrite permLib
      vfmOperationTheory vfmComputeTheory
      cv_transLib cv_typeTheory
 
-val () = new_theory "vfmTestHelper";
+val () = new_theory "vfmTestRun";
 
 Datatype:
   test_result
