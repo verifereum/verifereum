@@ -1765,6 +1765,10 @@ Theorem precompile_ecmul_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ecmul
 Proof
   rw[precompile_ecmul_def] \\ tac
+  \\ CASE_TAC
+  \\ rw[]
+  \\ CASE_TAC
+  \\ tac
 QED
 
 Theorem precompile_ecpairing_ignores_extra_domain[simp]:

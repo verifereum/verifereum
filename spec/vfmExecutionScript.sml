@@ -49,6 +49,12 @@ Definition ecadd_def:
   else SOME $ addAffine a b
 End
 
+Definition ecmul_def:
+  ecmul p s =
+  if ¬(bn254$validAffine p) then NONE
+  else SOME $ mulAffine p s
+End
+
 Definition lookup_transient_storage_def:
   lookup_transient_storage a (t: transient_storage) = t a
 End
@@ -1231,8 +1237,19 @@ End
 
 Definition precompile_ecmul_def:
   precompile_ecmul = do
-    (* TODO *)
-    fail Unimplemented
+    input <- get_call_data;
+    consume_gas $ 6000;
+    px <<- num_of_be_bytes $ take_pad_0 32 input;
+    py <<- num_of_be_bytes $ take_pad_0 32 (DROP 32 input);
+    s <<- num_of_be_bytes $ take_pad_0 32 (DROP 64 input);
+    case ecmul (px, py) s of
+      NONE => fail OutOfGas
+    | SOME (x, y) => do
+      set_return_data $
+        PAD_LEFT 0w 32 (num_to_be_bytes x) ++
+        PAD_LEFT 0w 32 (num_to_be_bytes y);
+      finish
+    od
   od
 End
 

@@ -10,6 +10,12 @@ End
 
 val () = cv_trans_deep_embedding EVAL bn254p_def;
 
+Definition bn254n_def:
+  bn254n = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
+End
+
+val () = cv_trans_deep_embedding EVAL bn254n_def;
+
 Definition bn254b_def:
   bn254b = 3n
 End
@@ -110,6 +116,59 @@ End
 
 val () = cv_trans finv_def;
 
+Definition dbl_def:
+  dbl (x1, y1, z1) = let
+  b3 = fmul bn254b 3;
+  t0 = fmul x1 x1;
+  t1 = fmul y1 y1;
+  t2 = fmul z1 z1;
+  t3 = fmul x1 y1;
+  t3 = fadd t3 t3;
+  z3 = fmul x1 z1;
+  z3 = fadd z3 z3;
+  y3 = fmul b3 t2;
+  x3 = fsub t1 y3;
+  y3 = fadd t1 y3;
+  y3 = fmul x3 y3;
+  x3 = fmul t3 x3;
+  t3 = fmul b3 z3;
+  z3 = fadd t0 t0;
+  t0 = fadd z3 t0;
+  t0 = fmul t0 t3;
+  y3 = fadd y3 t0;
+  t2 = fmul y1 z1;
+  t2 = fadd t2 t2;
+  t0 = fmul t2 t3;
+  x3 = fsub x3 t0;
+  z3 = fmul t2 t1;
+  z3 = fadd z3 z3;
+  z3 = fadd z3 z3
+  in (x3, y3, z3)
+End
+
+val () = cv_trans dbl_def;
+
+Definition mul_loop_def:
+  mul_loop a p n =
+  if n = 0 then a
+  else let
+    a = if ODD n then add a p else a;
+    p = dbl p;
+    n = n DIV 2
+  in mul_loop a p n
+End
+
+val () = cv_trans mul_loop_def;
+
+Definition mul_def:
+  mul p n =
+  if n = 0 then zero else
+  if p = zero ∨ n = 1 then p else
+    mul_loop zero p (n MOD bn254n)
+End
+
+val () = cv_trans mul_def;
+
 Definition weierstrassEquation_def:
   weierstrassEquation x = let
     x2 = fmul x x;
@@ -151,5 +210,12 @@ Definition addAffine_def:
 End
 
 val () = cv_trans addAffine_def;
+
+Definition mulAffine_def:
+  mulAffine a n =
+  toAffine (mul (fromAffine a) n)
+End
+
+val () = cv_trans mulAffine_def;
 
 val () = export_theory();

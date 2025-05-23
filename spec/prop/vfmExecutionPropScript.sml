@@ -851,6 +851,11 @@ Theorem preserves_wf_accounts_precompile_ecmul[simp]:
   preserves_wf_accounts precompile_ecmul
 Proof
   rw[precompile_ecmul_def]
+  \\ tac
+  \\ CASE_TAC
+  \\ rw[]
+  \\ CASE_TAC
+  \\ tac
 QED
 
 Theorem preserves_wf_accounts_precompile_ecpairing[simp]:
@@ -1831,6 +1836,11 @@ Theorem limits_num_contexts_precompile_ecmul[simp]:
   limits_num_contexts n n precompile_ecmul
 Proof
   rw[precompile_ecmul_def]
+  \\ tac
+  \\ CASE_TAC
+  \\ rw[]
+  \\ CASE_TAC
+  \\ tac
 QED
 
 Theorem limits_num_contexts_precompile_ecpairing[simp]:
