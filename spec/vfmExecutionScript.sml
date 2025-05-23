@@ -1218,7 +1218,7 @@ End
 Definition precompile_ecadd_def:
   precompile_ecadd = do
     input <- get_call_data;
-    consume_gas $ 500;
+    consume_gas $ 150;
     ax <<- num_of_be_bytes $ take_pad_0 32 input;
     ay <<- num_of_be_bytes $ take_pad_0 32 (DROP 32 input);
     bx <<- num_of_be_bytes $ take_pad_0 32 (DROP 64 input);
