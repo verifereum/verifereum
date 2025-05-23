@@ -1218,7 +1218,9 @@ Definition precompile_ecadd_def:
     ay <<- num_of_be_bytes $ take_pad_0 32 (DROP 32 input);
     bx <<- num_of_be_bytes $ take_pad_0 32 (DROP 64 input);
     by <<- num_of_be_bytes $ take_pad_0 32 (DROP 96 input);
-    case ecadd (ax, ay) (bx, by) of NONE => revert | SOME (x, y) => do
+    case ecadd (ax, ay) (bx, by) of
+      NONE => fail OutOfGas
+    | SOME (x, y) => do
       set_return_data $
         PAD_LEFT 0w 32 (num_to_be_bytes x) ++
         PAD_LEFT 0w 32 (num_to_be_bytes y);
