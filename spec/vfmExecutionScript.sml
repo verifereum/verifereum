@@ -44,14 +44,9 @@ Definition ecrecover_def:
 End
 
 Definition ecadd_def:
-  ecadd (ax, ay) (bx, by) =
-  if ¬(ax < bn254p) then NONE else
-  if ¬(ay < bn254p) then NONE else
-  if ¬(bx < bn254p) then NONE else
-  if ¬(by < bn254p) then NONE else
-  if bn254$fmul ay ay ≠ bn254$weierstrassEquation ax then NONE else
-  if bn254$fmul by by ≠ bn254$weierstrassEquation bx then NONE else
-    SOME $ addAffine (ax, ay) (bx, by)
+  ecadd a b =
+  if ¬(bn254$validAffine a ∧ bn254$validAffine b) then NONE
+  else SOME $ addAffine a b
 End
 
 Definition lookup_transient_storage_def:

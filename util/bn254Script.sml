@@ -119,6 +119,15 @@ End
 
 val () = cv_trans weierstrassEquation_def;
 
+Definition validAffine_def:
+  validAffine (x, y) =
+  (x < bn254p ∧ y < bn254p ∧
+   ((x, y) = (0, 0) ∨
+    fmul y y = weierstrassEquation x))
+End
+
+val () = cv_trans validAffine_def;
+
 Definition toAffine_def:
   toAffine (x, y, z) =
   if z = 1 then (x, y) else
