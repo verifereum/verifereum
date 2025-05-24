@@ -1,6 +1,6 @@
  open HolKernel boolLib bossLib Parse monadsyntax dep_rewrite
      numposrepTheory numTheory arithmeticTheory
-     sha2Theory secp256k1Theory bn254Theory
+     sha2Theory secp256k1Theory bn254Theory blake2fTheory
      vfmTypesTheory vfmRootTheory vfmContextTheory;
 
 val _ = new_theory "vfmExecution";
@@ -142,6 +142,7 @@ Datatype:
   | OutOfBoundsRead
   | AddressCollision
   | InvalidContractPrefix
+  | InvalidParameter
   | Reverted
   (* semantic invariants/assumptions (not EVM exceptions) *)
   | OutsideDomain (address + storage_key + address)
@@ -1262,8 +1263,20 @@ End
 
 Definition precompile_blake2f_def:
   precompile_blake2f = do
-    (* TODO *)
-    fail Unimplemented
+    input <- get_call_data;
+    if LENGTH input ≠ 213 then fail InvalidParameter else do
+      rounds <<- num_of_be_bytes $ TAKE 4 input; input <<- DROP 4 input;
+      hs <<- MAP (word_of_bytes F 0w) $ chunks 8 $ TAKE 64 input; input <<- DROP 64 input;
+      ms <<- MAP (word_of_bytes F 0w) $ chunks 8 $ TAKE 128 input; input <<- DROP 128 input;
+      t0 <<- word_of_bytes F 0w $ TAKE 8 input; input <<- DROP 8 input;
+      t1 <<- word_of_bytes F 0w $ TAKE 8 input; input <<- DROP 8 input;
+      flag <<- HD input;
+      consume_gas $ rounds;
+      if ¬(flag = 0w ∨ flag = 1w) then fail InvalidParameter else do
+        set_return_data $ blake2f rounds hs ms t0 t1 flag;
+        finish
+      od
+    od
   od
 End
 

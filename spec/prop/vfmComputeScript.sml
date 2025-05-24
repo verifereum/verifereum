@@ -1,8 +1,8 @@
 open HolKernel boolLib bossLib Parse dep_rewrite blastLib cv_typeTheory
 cv_transLib cv_typeLib cvTheory cv_stdTheory pairTheory combinTheory
-optionTheory sumTheory listTheory byteTheory wordsTheory alistTheory
-arithmeticTheory finite_setTheory sptreeTheory whileTheory
-recursiveLengthPrefixTheory merklePatriciaTrieTheory vfmRootTheory
+optionTheory sumTheory listTheory rich_listTheory byteTheory wordsTheory
+alistTheory arithmeticTheory finite_setTheory sptreeTheory whileTheory
+recursiveLengthPrefixTheory merklePatriciaTrieTheory blake2fTheory vfmRootTheory
 vfmContextTheory vfmStateTheory vfmTransactionTheory vfmExecutionTheory
 vfmDecreasesGasTheory vfmTypesTheory;
 
@@ -566,6 +566,23 @@ val () = “precompile_ecmul s” |>
        precompile_ecmul_def, bind_def, ignore_bind_def, LET_RATOR,
        option_CASE_rator, prod_CASE_rator
      ] |> cv_auto_trans;
+
+val precompile_blake2f_pre_def = “precompile_blake2f s” |>
+   SIMP_CONV std_ss [
+       precompile_blake2f_def, bind_def, ignore_bind_def,
+       LET_RATOR, COND_RATOR
+     ] |> cv_auto_trans_pre;
+
+Theorem precompile_blake2f_pre[cv_pre]:
+  precompile_blake2f_pre s
+Proof
+  rw[precompile_blake2f_pre_def]
+  \\ irule blake2f_pre_length
+  \\ rw[]
+  \\ DEP_REWRITE_TAC[LENGTH_chunks]
+  \\ rw[NULL_EQ]
+  \\ EVAL_TAC \\ rw[bool_to_bit_def]
+QED
 
 val () = “precompile_sha2_256 s” |>
    SIMP_CONV std_ss [

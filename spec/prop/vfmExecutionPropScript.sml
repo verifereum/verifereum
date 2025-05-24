@@ -867,7 +867,7 @@ QED
 Theorem preserves_wf_accounts_precompile_blake2f[simp]:
   preserves_wf_accounts precompile_blake2f
 Proof
-  rw[precompile_blake2f_def]
+  rw[precompile_blake2f_def] \\ tac
 QED
 
 Theorem preserves_wf_accounts_precompile_modexp[simp]:
@@ -1852,7 +1852,7 @@ QED
 Theorem limits_num_contexts_precompile_blake2f[simp]:
   limits_num_contexts n n precompile_blake2f
 Proof
-  rw[precompile_blake2f_def]
+  rw[precompile_blake2f_def] \\ tac
 QED
 
 Theorem limits_num_contexts_precompile_modexp[simp]:
