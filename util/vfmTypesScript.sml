@@ -159,6 +159,13 @@ val () = cv_auto_trans set_byte_256;
 
 val () = cv_auto_trans (INST_TYPE [alpha |-> “:256”] word_of_bytes_def);
 
+val () = cv_trans set_byte_64;
+
+val () = cv_auto_trans $ INST_TYPE [alpha |-> “:64”] word_of_bytes_def;
+
+val () = cv_auto_trans $ INST_TYPE[alpha |-> “:64”]word_to_bytes_aux_def
+val () = cv_trans $ INST_TYPE[alpha |-> “:64”]word_to_bytes_def
+
 val () = cv_auto_trans numposrepTheory.n2l_n2lA;
 
 Type address = “:160 word”
