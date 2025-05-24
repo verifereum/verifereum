@@ -102,6 +102,7 @@ structure vfmTestLib :> vfmTestLib = struct
       "val () = new_theory \"", rthy, "\";\n",
       "val thyn = \"", thyn, "\";\n",
       "val defs = get_result_defs thyn;\n",
+      "val () = remove_nsv_files thyn;\n",
       "val () = List.app (ignore o save_result_thm default_limit thyn) defs;\n",
       "val () = export_theory_no_docs ();\n"
     ]
@@ -131,6 +132,20 @@ structure vfmTestLib :> vfmTestLib = struct
   in
      List.filter (String.isSuffix script_suffix) $
      List.map (#file o OS.Path.splitDirFile) smls
+  end
+
+  fun remove_nsv_files thyn = let
+    val z = String.size thyn
+    val pfx = Substring.concat [
+                Substring.full "result",
+                Substring.substring(thyn, z-padding, padding),
+                Substring.full "_"
+              ]
+    val (_, nsvs) = collect_files "nsv" "." ([], [])
+    val result_nsvs = List.filter (String.isPrefix pfx) $
+                      List.map (#file o OS.Path.splitDirFile) nsvs
+  in
+    List.app OS.FileSys.remove result_nsvs
   end
 
   fun generate_test_results_scripts () = let
