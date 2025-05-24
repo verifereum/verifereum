@@ -1145,7 +1145,7 @@ Definition precompile_ecrecover_def:
     v <<- num_of_be_bytes $ take_pad_0 32 (DROP 32 input);
     r <<- num_of_be_bytes $ take_pad_0 32 (DROP 64 input);
     s <<- num_of_be_bytes $ take_pad_0 32 (DROP 96 input);
-    case ecrecover hash v r s of NONE => revert | SOME addr => do
+    case ecrecover hash v r s of NONE => finish | SOME addr => do
       set_return_data $ PAD_LEFT 0w 32 $ word_to_bytes addr T;
       finish
     od
