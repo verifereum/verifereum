@@ -209,8 +209,17 @@ structure vfmTestLib :> vfmTestLib = struct
   fun by_name (r1: test_result) (r2: test_result) =
     string_less (#name r1) (#name r2)
 
+  fun system_output (cmd, args) = let
+    val proc = Unix.execute (cmd,args)
+  in
+    TextIO.inputAll (Unix.textInstreamOf proc)
+    before ignore $ Unix.reap proc
+  end handle OS.SysErr _ => "unknown"
+
   fun write_test_results_table () = let
     val dir = "results"
+    val uname = system_output ("/usr/bin/uname", ["-nor"])
+    val commit = system_output ("/usr/bin/git", ["rev-parse", "HEAD"])
     val out = TextIO.openOut (OS.Path.concat (dir, "table.html"))
     val (_, nsvs) = collect_files "nsv" dir ([], [])
     val unsorted_data = List.map read_test_result_data nsvs
@@ -225,7 +234,7 @@ structure vfmTestLib :> vfmTestLib = struct
       "<script src=table.js></script></head>\n<body>"])
     val () = TextIO.output(out, String.concat [
       "<p>", fork_name, " tests v", fixtures_version,
-      " Successes: ",
+      " @", commit, " on ", uname, "</p>\n<p>Successes: ",
       Int.toString pass_count, "/",
       Int.toString total_count,
       " (", percentage, "%)</p>\n"])
