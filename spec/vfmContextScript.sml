@@ -298,11 +298,12 @@ End
 
 Definition apply_intrinsic_cost_def:
   apply_intrinsic_cost accessList c =
+  let p = c.msgParams in
+  let k = intrinsic_cost accessList p in
+  let l = p.gasLimit in
+  if l < k then NONE else SOME $
   c with msgParams updated_by (λp.
-    p with gasLimit updated_by (λl.
-      l - intrinsic_cost accessList p
-    )
-  )
+    p with gasLimit updated_by (λl. l - k))
 End
 
 Definition initial_rollback_def:
@@ -356,8 +357,9 @@ Definition initial_state_def:
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback accounts accesses in
     let ctxt = initial_context callee code static rd tx in
+    case apply_intrinsic_cost tx.accessList ctxt of NONE => NONE | SOME ctxt =>
     SOME $
-    <| contexts := [(apply_intrinsic_cost tx.accessList $ ctxt, rb)]
+    <| contexts := [(ctxt, rb)]
      ; txParams := initial_tx_params chainId prevHashes blk tx
      ; rollback := rb
      ; msdomain := dom

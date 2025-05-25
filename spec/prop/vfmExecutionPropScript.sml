@@ -94,11 +94,12 @@ Proof
 QED
 
 Theorem wf_context_apply_intrinsic_cost:
-  wf_context (apply_intrinsic_cost a c) =
+  apply_intrinsic_cost a c = SOME c' ⇒
+  wf_context c' =
   (wf_context c ∧
    c.gasUsed ≤ c.msgParams.gasLimit - intrinsic_cost a c.msgParams)
 Proof
-  rw[apply_intrinsic_cost_def, wf_context_def]
+  rw[apply_intrinsic_cost_def, wf_context_def] \\ rw[]
 QED
 
 Theorem wf_initial_state:
@@ -110,11 +111,12 @@ Proof
      pre_transaction_updates_def, update_account_def,
      initial_rollback_def, code_from_tx_def, lookup_account_def,
      wf_context_apply_intrinsic_cost, all_accounts_def] \\ rw[]
-  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM]
+  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM, CaseEq"option"]
   \\ rw[wf_context_apply_intrinsic_cost]
   \\ rw[apply_intrinsic_cost_def]
   \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
   \\ gs[wf_account_state_def]
+  \\ drule wf_context_apply_intrinsic_cost \\ rw[]
 QED
 
 Theorem SND_return[simp]:

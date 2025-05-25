@@ -978,7 +978,7 @@ Proof
   rw[run_create_pre_def, initial_state_def,
      pre_transaction_updates_def, execution_state_component_equality,
      initial_rollback_def, code_from_tx_def, set_last_accounts_pre_def]
-  \\ strip_tac \\ gvs[]
+  \\ strip_tac \\ gvs[CaseEq"option"]
 QED
 
 val () = run_transaction_def |> cv_auto_trans;
