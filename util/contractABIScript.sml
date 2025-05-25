@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse wordsLib dep_rewrite blastLib
-     listTheory rich_listTheory arithmeticTheory bitTheory
+     pairTheory listTheory rich_listTheory arithmeticTheory bitTheory
      numposrepTheory byteTheory wordsTheory dividesTheory
      integerTheory integer_wordTheory vfmTypesTheory
      cvTheory cv_stdTheory cv_transLib
@@ -87,6 +87,9 @@ End
 
 val abi_type_size_def = definition "abi_type_size_def"
 val abi_value_size_def = definition "abi_value_size_def";
+
+Type abi_fn_type = “:string # abi_type list”;
+Type abi_fn_interface = “:abi_fn_type list”;
 
 Definition valid_int_bound_def:
   valid_int_bound n = (0 < n ∧ n ≤ 256 ∧ n MOD 8 = 0)
@@ -676,6 +679,99 @@ Proof
   val ed = rhs(concl(cv_eval“enc ^ty ^va”))
   val de = rhs(concl(cv_eval“dec ^ty ^ed”))
 *)
+
+Definition dest_ListV_def[simp]:
+  dest_ListV (ListV ls) = ls ∧
+  dest_ListV _ = []
+End
+
+val () = cv_trans dest_ListV_def;
+
+(* TODO: move *)
+Theorem INDEX_OF_pre[cv_pre]:
+  ∀x y. INDEX_OF_pre x y
+Proof
+  Induct_on`y` \\ rw[Once INDEX_OF_pre_cases]
+QED
+(* -- *)
+
+Definition dec_calldata_def:
+  dec_calldata fif bs = let
+    four = TAKE 4 bs;
+    sels = MAP (UNCURRY function_selector) fif
+  in case INDEX_OF four sels of NONE => ("", [])
+        | SOME i => let
+    (name, typs) = EL i fif;
+    args = dec (Tuple typs) (DROP 4 bs)
+  in (name, dest_ListV args)
+End
+
+Definition dec_calldata_tr_def:
+  dec_calldata_tr [] sel bs = ("", []) ∧
+  dec_calldata_tr ((name, typs)::fif) sel bs =
+    if function_selector name typs = sel then
+      (name, dest_ListV $ dec (Tuple typs) bs)
+    else dec_calldata_tr fif sel bs
+End
+
+val () = cv_trans dec_calldata_tr_def;
+
+Theorem dec_calldata_eq_tr:
+  dec_calldata fif bs = dec_calldata_tr fif (TAKE 4 bs) (DROP 4 bs)
+Proof
+  rw[dec_calldata_def]
+  \\ Induct_on`fif`
+  \\ simp[FORALL_PROD]
+  \\ rw[INDEX_OF_def, INDEX_FIND_def]
+  \\ rw[dec_calldata_tr_def]
+  \\ gvs[INDEX_OF_def]
+  \\ simp[Once INDEX_FIND_add]
+  \\ gvs[CaseEq"option", UNCURRY]
+  \\ rw[Once dec_calldata_tr_def, EL_CONS, PRE_SUB1]
+QED
+
+val () = cv_trans dec_calldata_eq_tr;
+
+(*
+val fif = “[
+  ("allowance", [Address]);
+  ("approve", [Address; Address; Uint 256]);
+  ("balanceOf", [Address]);
+  ("burn", [Uint 256]);
+  ("burnFrom", [Address; Uint 256]);
+  ("decimals", []);
+  ("decreaseAllowance", [Address; Uint 256]);
+  ("getInflationCalcTime", []);
+  ("getInflationIntervalRate", []);
+  ("getInflationIntervalStartTime", []);
+  ("getInflationIntervalTime", []);
+  ("getInflationIntervalsPassed", []);
+  ("getInflationRewardsContractAddress", []);
+  ("increaseAllowance", [Address; Uint 256]);
+  ("inflationCalculate", []);
+  ("inflationMintTokens", []);
+  ("name", []);
+  ("swapTokens", [Uint 256]);
+  ("symbol", []);
+  ("totalSupply", []);
+  ("totalSwappedRPL", []);
+  ("transfer", [Address; Uint 256]);
+  ("transferFrom", [Address; Address; Uint 256]);
+  ("version", [])]”
+
+cv_eval “dec_calldata ^fif $
+  REVERSE $ hex_to_rev_bytes []
+    "a9059cbb00000000000000000000000020dc966e61e77fce62e271d5357b32476ef8f3fd000000000000000000000000000000000000000000000035c615d115cafa2400"”
+
+cv_eval “dec_calldata ^fif $
+  REVERSE $ hex_to_rev_bytes []
+    "23b872dd000000000000000000000000e129188380d48fa09a6a89ac91adc761afdc16120000000000000000000000005eda7655e58bdcf149c1545b8fc710b796d79cf7000000000000000000000000000000000000000000000027a72fcb0ac3627400"”
+
+  ``0x20dC966e61E77fcE62E271D5357B32476eF8F3fdn``
+  ``0xe129188380d48Fa09A6a89AC91adc761afDc1612n``
+  ``0x5EDa7655e58bdcF149C1545B8fC710B796D79cF7n``
+*)
+
 
 (* TODO: probably unused, can be deleted: *)
 
