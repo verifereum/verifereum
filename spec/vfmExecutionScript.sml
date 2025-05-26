@@ -35,11 +35,13 @@ Definition ecrecover_def:
   ecrecover hash v r s : address option =
   if ¬(v = 27 ∨ v = 28) then NONE else
   if ¬(0 < r ∧ r < secp256k1N) then NONE else
-  if ¬(0 < s ∧ s < secp256k1N) then NONE else let
+  if ¬(0 < s ∧ s < secp256k1N) then NONE else
+  if ¬(fleg (secp256k1$weierstrassEquation r) = 1) then NONE else let
     yParity = v - 27;
-    point = recoverPoint r s yParity hash;
+    point = recoverPoint r s yParity hash
+  in if point = zero then NONE else let
     keyBytes = pointToUncompressedBytes point;
-    addrBytes = DROP 12 $ Keccak_256_w64 keyBytes;
+    addrBytes = DROP 12 $ Keccak_256_w64 keyBytes
   in SOME $ word_of_bytes T 0w addrBytes
 End
 
