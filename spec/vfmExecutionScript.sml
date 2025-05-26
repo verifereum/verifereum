@@ -1184,9 +1184,10 @@ Definition precompile_modexp_def:
     iterationCount <<-
       if eSize ≤ 32 then
         if eHead = 0 then 0n else bitlength eHead - 1
-      else 8 * (eSize - 32) + bitlength (w2n (n2w eHead: bytes32)) - 1;
+      else 8 * (eSize - 32) + (bitlength (w2n (n2w eHead: bytes32)) - 1);
     calculatedIterationCount <<- MAX iterationCount 1;
-    dynamicGas <<- MAX 200 (multiplicationComplexity * calculatedIterationCount DIV 3);
+    cost <<- multiplicationComplexity * calculatedIterationCount;
+    dynamicGas <<- MAX 200 (cost DIV 3);
     consume_gas dynamicGas;
     m <<- num_from_input_words mSize $ DROP (bSize + eSize) restInputs;
     set_return_data $
