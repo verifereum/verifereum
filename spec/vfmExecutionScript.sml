@@ -1642,7 +1642,9 @@ Definition run_create_def:
     if IS_SOME tx.to then
       INR $ (s.rollback.accounts, s with rollback updated_by
                                    (λr. r with accounts updated_by
-             transfer_value tx.from calleeAddress tx.value))
+             transfer_value tx.from calleeAddress tx.value),
+             if fIN calleeAddress precompile_addresses
+             then SOME calleeAddress else NONE)
     else
       let accounts = s.rollback.accounts in
       let callee = lookup_account calleeAddress accounts in
@@ -1662,14 +1664,19 @@ Definition run_create_def:
               set_last_accounts $
               update_account calleeAddress empty_account_state
                 (SND crb).accounts
-            )|>)
+            )|>, NONE)
 End
 
 Definition run_transaction_def:
   run_transaction dom static chainId prevHashes blk accounts tx =
   case run_create dom static chainId prevHashes blk accounts tx of
      | SOME (INL result) => SOME result
-     | SOME (INR (acc, s1)) => (case run s1 of
+     | SOME (INR (acc, s1, precomp)) => (case
+          case precomp
+            of NONE => run s1
+             | SOME addr => SOME $
+                 handle (dispatch_precompiles addr) handle_step s1
+       of
        | SOME (INR r, s2) => SOME $
           post_transaction_accounting blk tx r acc s2
        | _ => NONE)
