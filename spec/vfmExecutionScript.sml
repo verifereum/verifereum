@@ -145,6 +145,7 @@ Datatype:
   | AddressCollision
   | InvalidContractPrefix
   | InvalidParameter
+  | KZGProofError
   | Reverted
   (* semantic invariants/assumptions (not EVM exceptions) *)
   | OutsideDomain (address + storage_key + address)
@@ -1215,8 +1216,12 @@ End
 
 Definition precompile_ripemd_160_def:
   precompile_ripemd_160 = do
-    (* TODO *)
-    fail Unimplemented
+    input <- get_call_data;
+    wordCount <<- word_size $ LENGTH input;
+    consume_gas $ 600 + 120 * wordCount;
+    hash <<- PAD_LEFT 0w 32 []; (* TODO: compute the actual hash *)
+    set_return_data hash;
+    finish
   od
 End
 
@@ -1259,8 +1264,14 @@ End
 
 Definition precompile_ecpairing_def:
   precompile_ecpairing = do
-    (* TODO *)
-    fail Unimplemented
+    input <- get_call_data;
+    len <<- LENGTH input;
+    consume_gas $ 34000 * (len DIV 192) + 45000;
+    if len MOD 192 ≠ 0 then fail OutOfGas else do
+      result <<- 0w; (* TODO: do the actual pairing check *)
+      set_return_data $ PAD_LEFT 0w 32 [result];
+      finish
+    od
   od
 End
 
@@ -1283,6 +1294,30 @@ Definition precompile_blake2f_def:
   od
 End
 
+Definition point_eval_output_def:
+  point_eval_output =
+    (PAD_LEFT 0w 32 $ num_to_be_bytes 4096) ++
+    (PAD_LEFT 0w 32 $ num_to_be_bytes
+     52435875175126190479447740508185965837690552500527637822603658699938581184513)
+End
+
+Definition precompile_point_eval_def:
+  precompile_point_eval = do
+    input <- get_call_data;
+    if LENGTH input ≠ 192 then fail KZGProofError else do
+      versionedHash <<- TAKE 32 input; input <<- DROP 32 input;
+      z <<- num_of_be_bytes $ TAKE 32 input; input <<- DROP 32 input;
+      y <<- num_of_be_bytes $ TAKE 32 input; input <<- DROP 32 input;
+      commitment <<- TAKE 48 input; input <<- DROP 48 input;
+      proof <<- TAKE 48 input;
+      consume_gas 50000;
+      (* TODO: fail KZGProofError if the proof is wrong *)
+      set_return_data point_eval_output;
+      finish
+    od
+  od
+End
+
 Definition dispatch_precompiles_def:
   dispatch_precompiles (a: address) =
     if a = 0x1w then precompile_ecrecover
@@ -1294,6 +1329,7 @@ Definition dispatch_precompiles_def:
     else if a = 0x7w then precompile_ecmul
     else if a = 0x8w then precompile_ecpairing
     else if a = 0x9w then precompile_blake2f
+    else if a = 0xaw then precompile_point_eval
     else fail Impossible
 End
 

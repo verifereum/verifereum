@@ -1730,7 +1730,7 @@ QED
 Theorem precompile_ripemd_160_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ripemd_160
 Proof
-  rw[precompile_ripemd_160_def]
+  rw[precompile_ripemd_160_def] \\ tac
 QED
 
 Theorem precompile_sha2_256_ignores_extra_domain[simp]:
@@ -1775,6 +1775,12 @@ Theorem precompile_ecpairing_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ecpairing
 Proof
   rw[precompile_ecpairing_def] \\ tac
+QED
+
+Theorem precompile_point_eval_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_point_eval
+Proof
+  rw[precompile_point_eval_def] \\ tac
 QED
 
 Theorem precompile_blake2f_ignores_extra_domain[simp]:
@@ -3214,6 +3220,7 @@ Theorem preserves_domain_has_callee_precompiles[simp]:
   ∧ preserves_domain_has_callee (K T) precompile_ecmul
   ∧ preserves_domain_has_callee (K T) precompile_ecpairing
   ∧ preserves_domain_has_callee (K T) precompile_blake2f
+  ∧ preserves_domain_has_callee (K T) precompile_point_eval
 Proof
   rw[precompile_ecrecover_def,
      precompile_sha2_256_def,
@@ -3223,7 +3230,8 @@ Proof
      precompile_ecadd_def,
      precompile_ecmul_def,
      precompile_ecpairing_def,
-     precompile_blake2f_def]
+     precompile_blake2f_def,
+     precompile_point_eval_def]
   \\ rpt (
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)

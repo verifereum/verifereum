@@ -848,6 +848,7 @@ Proof
   \\ irule decreases_gas_bind_false \\ rw []
   \\ irule decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
   \\ irule_at Any decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_set_return_data
   \\ irule_at Any decreases_gas_finish
@@ -873,6 +874,18 @@ Proof
   \\ irule decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_consume_gas
   \\ qexists_tac`F` \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_point_eval[simp]:
+  decreases_gas F precompile_point_eval
+Proof
+  rw[precompile_point_eval_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
   \\ irule_at Any decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_set_return_data
   \\ irule_at Any decreases_gas_finish

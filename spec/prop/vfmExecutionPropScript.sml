@@ -863,7 +863,7 @@ QED
 Theorem preserves_wf_accounts_precompile_ecpairing[simp]:
   preserves_wf_accounts precompile_ecpairing
 Proof
-  rw[precompile_ecpairing_def]
+  rw[precompile_ecpairing_def] \\ tac
 QED
 
 Theorem preserves_wf_accounts_precompile_blake2f[simp]:
@@ -899,7 +899,13 @@ QED
 Theorem preserves_wf_accounts_precompile_ripemd_160[simp]:
   preserves_wf_accounts precompile_ripemd_160
 Proof
-  rw[precompile_ripemd_160_def]
+  rw[precompile_ripemd_160_def] \\ tac
+QED
+
+Theorem preserves_wf_accounts_precompile_point_eval[simp]:
+  preserves_wf_accounts precompile_point_eval
+Proof
+  rw[precompile_point_eval_def] \\ tac
 QED
 
 Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
@@ -1848,7 +1854,7 @@ QED
 Theorem limits_num_contexts_precompile_ecpairing[simp]:
   limits_num_contexts n n precompile_ecpairing
 Proof
-  rw[precompile_ecpairing_def]
+  rw[precompile_ecpairing_def] \\ tac
 QED
 
 Theorem limits_num_contexts_precompile_blake2f[simp]:
@@ -1878,7 +1884,13 @@ QED
 Theorem limits_num_contexts_precompile_ripemd_160[simp]:
   limits_num_contexts n n precompile_ripemd_160
 Proof
-  rw[precompile_ripemd_160_def]
+  rw[precompile_ripemd_160_def] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_point_eval[simp]:
+  limits_num_contexts n n precompile_point_eval
+Proof
+  rw[precompile_point_eval_def] \\ tac
 QED
 
 Theorem limits_num_contexts_dispatch_precompiles[simp]:

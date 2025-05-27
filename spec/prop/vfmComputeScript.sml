@@ -567,6 +567,22 @@ val () = “precompile_ecmul s” |>
        option_CASE_rator, prod_CASE_rator
      ] |> cv_auto_trans;
 
+val () = “precompile_ecpairing s” |>
+   SIMP_CONV std_ss [
+       precompile_ecpairing_def, bind_def, ignore_bind_def, LET_RATOR,
+       option_CASE_rator, COND_RATOR
+     ] |> cv_auto_trans;
+
+val point_eval_output_eq = CONV_RULE (RAND_CONV cv_eval) point_eval_output_def;
+
+val () = cv_trans_deep_embedding EVAL point_eval_output_eq;
+
+val () = “precompile_point_eval s” |>
+   SIMP_CONV std_ss [
+       precompile_point_eval_def, bind_def, ignore_bind_def, LET_RATOR,
+       COND_RATOR
+     ] |> cv_auto_trans;
+
 val precompile_blake2f_pre_def = “precompile_blake2f s” |>
    SIMP_CONV std_ss [
        precompile_blake2f_def, bind_def, ignore_bind_def,
@@ -587,6 +603,11 @@ QED
 val () = “precompile_sha2_256 s” |>
    SIMP_CONV std_ss [
        precompile_sha2_256_def, bind_def, ignore_bind_def, LET_RATOR
+     ] |> cv_auto_trans;
+
+val () = “precompile_ripemd_160 s” |>
+   SIMP_CONV std_ss [
+       precompile_ripemd_160_def, bind_def, ignore_bind_def, LET_RATOR
      ] |> cv_auto_trans;
 
 Theorem pop_stack_INL_LENGTH:
