@@ -1311,6 +1311,9 @@ Definition precompile_point_eval_def:
       commitment <<- TAKE 48 input; input <<- DROP 48 input;
       proof <<- TAKE 48 input;
       consume_gas 50000;
+      computedHash <<- word_to_bytes (SHA_256_bytes commitment) T;
+      computedVersionedHash <<- versioned_hash_version_kzg :: DROP 1 computedHash;
+      assert (versionedHash = computedVersionedHash) KZGProofError;
       (* TODO: fail KZGProofError if the proof is wrong *)
       set_return_data point_eval_output;
       finish
