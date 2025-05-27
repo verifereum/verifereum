@@ -1775,6 +1775,8 @@ Theorem precompile_ecpairing_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ecpairing
 Proof
   rw[precompile_ecpairing_def] \\ tac
+  \\ CASE_TAC \\ rw[]
+  \\ tac
 QED
 
 Theorem precompile_point_eval_ignores_extra_domain[simp]:

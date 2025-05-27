@@ -48,13 +48,39 @@ End
 Definition ecadd_def:
   ecadd a b =
   if ¬(bn254$validAffine a ∧ bn254$validAffine b) then NONE
-  else SOME $ addAffine a b
+  else SOME $ bn254$addAffine a b
 End
 
 Definition ecmul_def:
   ecmul p s =
   if ¬(bn254$validAffine p) then NONE
-  else SOME $ mulAffine p s
+  else SOME $ bn254$mulAffine p s
+End
+
+Definition ecpairing_def:
+  ecpairing data res =
+  if LENGTH data < 192 then
+    if NULL data then SOME res else NONE
+  else let
+    px = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
+    py = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
+    p = (px, py);
+    in if ¬bn254$validAffine p then NONE else let
+    qxi = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
+    qx1 = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
+    qyi = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
+    qy1 = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
+    q = ((qx1,qxi),(qy1,qyi));
+  in
+    if ¬bn254$validAffineF2 q then NONE else
+    if bn254$mulAffine p bn254n ≠ (0,0) then NONE else
+    if bn254$mulAffineF2 q bn254n ≠ ((0,0),(0,0)) then NONE else
+      ecpairing (DROP 192 data)
+        (if p ≠ (0, 0) ∧ q ≠ ((0,0),(0,0))
+         then bn254$mulFQ12 res (bn254$pairing q p)
+         else res)
+Termination
+  WF_REL_TAC ‘measure (LENGTH o FST)’ \\ rw[]
 End
 
 Definition lookup_transient_storage_def:
@@ -1267,9 +1293,9 @@ Definition precompile_ecpairing_def:
     input <- get_call_data;
     len <<- LENGTH input;
     consume_gas $ 34000 * (len DIV 192) + 45000;
-    if len MOD 192 ≠ 0 then fail OutOfGas else do
-      result <<- 0w; (* TODO: do the actual pairing check *)
-      set_return_data $ PAD_LEFT 0w 32 [result];
+    if len MOD 192 ≠ 0 then fail OutOfGas else
+    case ecpairing input fq12one of NONE => fail OutOfGas | SOME res => do
+      set_return_data $ PAD_LEFT 0w 32 [if res = fq12one then 1w else 0w];
       finish
     od
   od

@@ -218,4 +218,104 @@ End
 
 val () = cv_trans mulAffine_def;
 
+Definition bn254bF2_def:
+  bn254bF2 =
+  (19485874751759354771024239261021720505790618469301721065564631296452457478373n,
+   266929791119991161246907387137283842545076965332900288569378510910307636690n)
+End
+
+val () = cv_trans_deep_embedding EVAL bn254bF2_def;
+
+Definition f2add_def:
+  f2add (x1,xi) (y1,yi) =
+    (fadd x1 y1, fadd xi yi)
+End
+
+val () = cv_trans f2add_def;
+
+Definition f2mul_def:
+  f2mul (x1,xi) (y1,yi) = let
+    t1 = fmul x1 y1;
+    t2 = fmul xi yi;
+    o1 = fsub t1 t2;
+    oi = fsub (fmul (fadd x1 y1) (fadd xi yi)) (fadd t1 t2);
+  in (o1, oi)
+End
+
+val () = cv_trans f2mul_def;
+
+Definition weierstrassEquationF2_def:
+  weierstrassEquationF2 x = let
+    x2 = f2mul x x;
+    x3 = f2mul x2 x
+  in f2add x3 bn254bF2
+End
+
+val () = cv_trans weierstrassEquationF2_def;
+
+Definition validAffineF2_def:
+  validAffineF2 ((x1,xi),(y1,yi)) =
+    (x1 < bn254p ∧ xi < bn254p ∧
+     y1 < bn254p ∧ yi < bn254p ∧
+     (((x1,xi) = (0,0) ∧ (y1,yi) = (0,0)) ∨
+      f2mul (y1,yi) (y1,yi) =
+      weierstrassEquationF2 (x1,xi)))
+End
+
+val () = cv_trans validAffineF2_def;
+
+Definition mulAffineF2_def:
+  mulAffineF2 (p:((num#num)#(num#num))) (n:num) = ((0n,0n),(0n,0n)) (* TODO *)
+End
+
+val () = cv_trans mulAffineF2_def;
+
+Definition pairing_def:
+  pairing (q:((num#num)#(num#num))) (p:(num#num)) =
+    ((((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n))),
+     (((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n)))) (* TODO *)
+End
+
+val () = cv_trans pairing_def;
+
+Definition mulFQ12_def:
+  mulFQ12 (p:((((num#num)#(num#num))#
+               ((num#num)#(num#num))#
+               ((num#num)#(num#num)))#
+              (((num#num)#(num#num))#
+               ((num#num)#(num#num))#
+               ((num#num)#(num#num)))))
+          (q:((((num#num)#(num#num))#
+               ((num#num)#(num#num))#
+               ((num#num)#(num#num)))#
+              (((num#num)#(num#num))#
+               ((num#num)#(num#num))#
+               ((num#num)#(num#num)))))
+  =
+    ((((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n))),
+     (((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n)),
+      ((0n,0n),(0n,0n)))) (* TODO *)
+End
+
+val () = cv_trans mulFQ12_def;
+
+Definition fq12one_def:
+  fq12one =
+  ((((1n,0n),(0n,0n)),
+    ((0n,0n),(0n,0n)),
+    ((0n,0n),(0n,0n))),
+   (((0n,0n),(0n,0n)),
+    ((0n,0n),(0n,0n)),
+    ((0n,0n),(0n,0n))))
+End
+
+val () = cv_trans_deep_embedding EVAL fq12one_def;
+
 val () = export_theory();

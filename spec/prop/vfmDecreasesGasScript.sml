@@ -849,6 +849,7 @@ Proof
   \\ irule decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_consume_gas
   \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
   \\ irule_at Any decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_set_return_data
   \\ irule_at Any decreases_gas_finish
@@ -886,6 +887,8 @@ Proof
   \\ irule decreases_gas_bind_false \\ rw []
   \\ irule decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_assert
   \\ irule_at Any decreases_gas_ignore_bind_false
   \\ irule_at Any decreases_gas_set_return_data
   \\ irule_at Any decreases_gas_finish

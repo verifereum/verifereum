@@ -864,6 +864,8 @@ Theorem preserves_wf_accounts_precompile_ecpairing[simp]:
   preserves_wf_accounts precompile_ecpairing
 Proof
   rw[precompile_ecpairing_def] \\ tac
+  \\ CASE_TAC \\ rw[]
+  \\ tac
 QED
 
 Theorem preserves_wf_accounts_precompile_blake2f[simp]:
@@ -1855,6 +1857,8 @@ Theorem limits_num_contexts_precompile_ecpairing[simp]:
   limits_num_contexts n n precompile_ecpairing
 Proof
   rw[precompile_ecpairing_def] \\ tac
+  \\ CASE_TAC \\ rw[]
+  \\ tac
 QED
 
 Theorem limits_num_contexts_precompile_blake2f[simp]:
