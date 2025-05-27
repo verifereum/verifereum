@@ -245,7 +245,7 @@ val () = cv_trans mul_loop_def;
 Definition mul_def:
   mul p n =
   if n = 0 then zero else
-  if p = zero ∨ n = 1 then p else
+  if SND(SND p) = 0 ∨ n = 1 then p else
   let (k1, k1neg, k2, k2neg) = endo n in
   let (k1p, k2p) = mul_loop zero zero k1 k2 p in
   let k1p = if k1neg then neg k1p else k1p in

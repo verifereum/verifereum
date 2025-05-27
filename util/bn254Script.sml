@@ -163,7 +163,7 @@ val () = cv_trans mul_loop_def;
 Definition mul_def:
   mul p n =
   if n = 0 then zero else
-  if p = zero ∨ n = 1 then p else
+  if SND(SND p) = 0 ∨ n = 1 then p else
     mul_loop zero p (n MOD bn254n)
 End
 
@@ -190,7 +190,7 @@ val () = cv_trans validAffine_def;
 Definition toAffine_def:
   toAffine (x, y, z) =
   if z = 1 then (x, y) else
-  if (x, y, z) = zero then (0, 0) else
+  if z = 0 then (0, 0) else
   let iz = finv z in
     (fmul x iz, fmul y iz)
 End
