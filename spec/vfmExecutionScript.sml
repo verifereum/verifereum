@@ -39,7 +39,7 @@ Definition ecrecover_def:
   if ¬(fleg (secp256k1$weierstrassEquation r) = 1) then NONE else let
     yParity = v - 27;
     point = recoverPoint r s yParity hash
-  in if point = zero then NONE else let
+  in if SND (SND point) = 0 then NONE else let
     keyBytes = pointToUncompressedBytes point;
     addrBytes = DROP 12 $ Keccak_256_w64 keyBytes
   in SOME $ word_of_bytes T 0w addrBytes
