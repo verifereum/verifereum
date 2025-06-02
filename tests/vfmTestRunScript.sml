@@ -358,6 +358,7 @@ Definition transaction3_from_rlp_def:
   let blobHashesRlp = EL 10 ls in
   if ¬is_RLPL blobHashesRlp then NONE else
   let blobHashes = dest_RLPL blobHashesRlp in
+  if IS_NONE to /\ ~(NULL blobHashes) then NONE else
   if ¬(EVERY is_RLPB blobHashes) then NONE else
   let blobHashes = MAP (word_of_bytes T 0w o dest_RLPB) blobHashes in
   let yParity = EL 11 ls in
