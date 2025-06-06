@@ -51,14 +51,61 @@ val () = cv_trans_deep_embedding EVAL G2_def;
 
 (* https://github.com/ethereum/execution-specs/blob/master/src/ethereum/crypto/kzg.py#L71 *)
 Definition KZG_SETUP_G2_MONOMIAL_1_def:
-  KZG_SETUP_G2_MONOMIAL_1 = "0xb5bfd7dd8cdeb128843bc287230af38926187075cbfbefa81009a2ce615ac53d2914e5870cb452d2afaaab24f3499f72185cbfee53492714734429b7b38608e23926c911cceceac9a36851477ba4c60b087041de621000edc98edada20c1def2"
+  KZG_SETUP_G2_MONOMIAL_1 = "b5bfd7dd8cdeb128843bc287230af38926187075cbfbefa81009a2ce615ac53d2914e5870cb452d2afaaab24f3499f72185cbfee53492714734429b7b38608e23926c911cceceac9a36851477ba4c60b087041de621000edc98edada20c1def2"
 End
 
-(* Required: https://github.com/ethereum/py_ecc/blob/main/py_ecc/bls/point_compression.py
+val () = cv_trans_deep_embedding EVAL KZG_SETUP_G2_MONOMIAL_1_def;
 
+(* Required: https://github.com/ethereum/py_ecc/blob/main/py_ecc/bls/point_compression.py
  *)
+Definition get_flags_def:
+  get_flags (z: num) <=>
+    (BIT 383 z, BIT 382 z, BIT 381 z)
+End
+val () = cv_auto_trans get_flags_def;
+
+Definition pow_2_381_def:
+  pow_2_381 <=> 2n EXP 381
+End
+
+val () = cv_trans_deep_embedding EVAL pow_2_381_def;
+
+val () = monadsyntax.enable_monad "option";
+val () = monadsyntax.enable_monadsyntax ();
+
+Definition is_point_at_infinity_def:
+  is_point_at_infinity (z1:num) (z2: num option): bool <=>
+    z1 MOD pow_2_381 = 0n /\ (case z2 of NONE => T | SOME z2' => z2' = 0)
+End
+
+val () = cv_auto_trans is_point_at_infinity_def;
+
+
+Definition decompress_G2_def:
+  decompress_G2 (z1:num) (z2:num) = do
+    (c_flag1, b_flag1, a_flag1) <<- get_flags z1;
+    assert (~c_flag1);
+    is_inf_pt <<- is_point_at_infinity z1 (SOME z2);
+    assert (b_flag1 <> is_inf_pt);
+    if is_inf_pt
+    then do
+      assert a_flag1;
+      fail (* return constant Z1 which is None*)
+    od
+    else do
+      x <<- z1 MOD pow_2_381;
+      assert (x >= bls_modulus);
+      (* return $ (x EXP 3 + b) MOD bls_modulus *)
+    od
+  od
+End
+
 Definition setup1_def:
-  setup1 = ARB:(num#num)#(num#num)  (* KZG_SETUP_G2_MONOMIAL_1 decoded *)
+  setup1 =
+    let b = REVERSE $ hex_to_rev_bytes [] KZG_SETUP_G2_MONOMIAL_1 in
+    let p1 = num_of_be_bytes $ TAKE 48 b in
+    let p2 = num_of_be_bytes $ DROP 48 b in
+    in ARB:(num#num)#(num#num)  (* KZG_SETUP_G2_MONOMIAL_1 decoded *)
 End
 
 Definition commitment_def:
