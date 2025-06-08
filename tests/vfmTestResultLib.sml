@@ -1,7 +1,7 @@
 structure vfmTestResultLib :> vfmTestResultLib = struct
 
   open HolKernel boolLib bossLib vfmTestAuxLib cv_transLib
-       vfmTestRunTheory stringSyntax wordsSyntax
+       vfmTestAuxLib vfmTestRunTheory stringSyntax wordsSyntax
 
   val get_result_defs =
      List.filter (String.isSuffix "result_def" o #1) o
@@ -26,11 +26,13 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
     then test_result_to_string $ rhs tm
     else "Timeout"
 
-  fun save_result_thm limit thyn (result_def_name, result_def) = let
+  fun save_result_thm thyn (result_def_name, result_def) = let
     val result_name = trimr (String.size "_def") result_def_name
-    val () = Feedback.HOL_MESG $ String.concat ["Evaluating ", result_name]
+    val () = Feedback.HOL_MESG $
+      String.concat ["Evaluating ", result_name,
+                     " for up to ", Time.fmt 0 time_limit, "s" ]
     val start_time = Time.now()
-    val result_eval = Timeout.apply limit eval_rhs result_def
+    val result_eval = Timeout.apply time_limit eval_rhs result_def
                       handle Timeout.TIMEOUT _ => TRUTH
     val end_time = Time.now()
     val result_str = mk_result_string $ concl result_eval

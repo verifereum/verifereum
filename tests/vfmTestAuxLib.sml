@@ -25,5 +25,8 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
   val chain_id = 1
 
   val state_root_fuel = 1024
-  val default_limit = Time.fromSeconds 60
+  val time_limit = Option.getOpt
+    (Option.mapPartial Time.fromString
+      (OS.Process.getEnv "VFM_TIME_LIMIT"),
+     Time.fromSeconds 60)
 end

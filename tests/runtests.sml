@@ -8,8 +8,10 @@ val usage_header = String.concat [
 
 fun err s = TextIO.output(TextIO.stdErr, s)
 
-datatype options = Help | Results | NoResults | Generate | Option of string
+datatype options = Help | Results | NoResults | Generate
+                 | Option of string | Limit of string
 fun destOption (Option s) = SOME s | destOption _ = NONE
+fun destLimit (Limit s) = SOME s | destLimit _ = NONE
 
 val cline_options = [
   {short = "h",
@@ -28,6 +30,10 @@ val cline_options = [
    long = ["noresults"],
    desc = NoArg (K NoResults),
    help = "do not write results table"},
+  {short = "t",
+   long = ["time"],
+   desc = ReqArg (Limit, "secs"),
+   help = "override time limit per test"},
   {short = "o",
    long = ["option"],
    desc = ReqArg (Option, "opt"),
@@ -44,17 +50,20 @@ fun die s = err s before OS.Process.exit OS.Process.failure
 
 fun thyn i = String.concat [" vfmTest", i, "Theory"]
 
-fun Holmake options indices = String.concat $
-  OS.Path.concat(
-    OS.Path.concat(Globals.HOLDIR, "bin"),
-    "Holmake --keep-going" ^ options)
+val bare_Holmake = OS.Path.concat(
+  OS.Path.concat(Globals.HOLDIR, "bin"), "Holmake")
+
+fun Holmake limit options indices = String.concat $
+  (case limit of NONE => "" | SOME s => "VFM_TIME_LIMIT="^s^" ")
+  :: bare_Holmake :: " --keep-going" :: options
   :: List.map thyn indices
 
-fun run options indices = let
+fun run limit options indices = let
   val () = ensure_fixtures ()
   val () = OS.FileSys.chDir "results"
   val options = String.concat (List.map (fn x => " " ^ x) options)
-  val st = OS.Process.system $ Holmake options indices
+  val () = ignore $ OS.Process.system $ String.concat [bare_Holmake, " clean"]
+  val st = OS.Process.system $ Holmake limit options indices
   val () = OS.FileSys.chDir OS.Path.parentArc
 in st end
 
@@ -85,7 +94,10 @@ in
   else let
     val st = if List.exists (equal Results) options
              then OS.Process.success
-             else run (List.mapPartial destOption options) indices
+             else run
+               (List.find (fn _ => true) (List.mapPartial destLimit options))
+               (List.mapPartial destOption options)
+               indices
   in
     if OS.Process.isSuccess st
     then if List.exists (equal NoResults) options

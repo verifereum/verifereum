@@ -9,7 +9,7 @@ signature vfmTestAuxLib = sig
 
   val export_theory_no_docs: unit -> unit
 
-  val default_limit : Time.time
+  val time_limit : Time.time
   val state_root_fuel : int
 
   val fixtures_version : string
