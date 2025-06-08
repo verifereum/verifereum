@@ -80,13 +80,26 @@ End
 
 val () = cv_auto_trans is_point_at_infinity_def;
 
+Definition fq2_order_def:
+  fq2_order = (bls_modulus EXP 2) - 1
+End
 
+val () = cv_trans_deep_embedding EVAL fq2_order_def;
+
+(* EIGHTH_ROOTS_OF_UNITY = tuple(FQ2([1, 1]) ** ((FQ2_ORDER * k) // 8) for k in range(8))
+   See: https://github.com/ethereum/py_ecc/blob/04151f01f59f902ab932a51e0ca0ebce3883fc51/py_ecc/bls/constants.py#L10
+*)
+
+(* Definition eighth_roots_of_unity_def:
+  eighth_roots_of_unity = GENLIST (\k. EXP (fq2_order * k) DIV 8) 8 *)
+
+(* See: https://github.com/ethereum/py_ecc/blob/04151f01f59f902ab932a51e0ca0ebce3883fc51/py_ecc/bls/point_compression.py#L175-L226 *)
 Definition decompress_G2_def:
   decompress_G2 (z1:num) (z2:num) = do
     (c_flag1, b_flag1, a_flag1) <<- get_flags z1;
     assert (~c_flag1);
     is_inf_pt <<- is_point_at_infinity z1 (SOME z2);
-    assert (b_flag1 <> is_inf_pt);
+    assert (b_flag1 = is_inf_pt);
     if is_inf_pt
     then do
       assert a_flag1;
@@ -94,7 +107,8 @@ Definition decompress_G2_def:
     od
     else do
       x <<- z1 MOD pow_2_381;
-      assert (x >= bls_modulus);
+      assert (x < bls_modulus);
+      assert (z < bls_modulus)
       (* return $ (x EXP 3 + b) MOD bls_modulus *)
     od
   od
