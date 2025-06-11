@@ -244,6 +244,88 @@ End
 
 val () = cv_trans f2mul_def;
 
+Definition f2muls_def:
+  f2muls (x1, xi) n =
+    (fmul x1 n, fmul xi n)
+End
+
+val () = cv_trans f2muls_def;
+
+Definition f2sqr_def:
+  f2sqr (x1,xi) = let
+    a = fadd x1 xi;
+    b = fsub x1 xi;
+    c = fadd x1 x1;
+  in (fmul a b, fmul c xi)
+End
+
+val () = cv_trans f2sqr_def;
+
+Definition f2sub_def:
+  f2sub (x1,xi) (y1,yi) =
+    (fsub x1 y1, fsub xi yi)
+End
+
+val () = cv_trans f2sub_def;
+
+Definition fneg_def:
+  fneg x = bn254p - x
+End
+
+val () = cv_trans fneg_def;
+
+Definition f2neg_def:
+  f2neg (x1,xi) =
+    (fneg x1, fneg xi)
+End
+
+val () = cv_trans f2neg_def;
+
+Definition f2one_def:
+  f2one = (1n, 0n)
+End
+
+val () = cv_trans_deep_embedding EVAL f2one_def;
+
+Definition f2inv_def:
+  f2inv (x1, xi) = let
+    fr = finv (fadd (fmul x1 x1) (fmul xi xi));
+  in (fmul fr x1, fmul fr (fneg xi))
+End
+
+val () = cv_trans f2inv_def;
+
+Definition f2div_def:
+  f2div x y =
+  f2mul x (f2inv y)
+End
+
+val () = cv_trans f2div_def;
+
+Definition f2div2_def:
+  f2div2 = f2div f2one (f2muls f2one 2)
+End
+
+val () = cv_trans_deep_embedding EVAL f2div2_def;
+
+Definition dbl6_def:
+  dbl6 (x,y,z) = let
+    t0 = f2sqr y;
+    t1 = f2sqr z;
+    t2 = f2mul (f2muls t1 3) bn254bF2;
+    t3 = f2muls t2 3;
+    t4 = f2sub (f2sub (f2sqr (f2add y z)) t1) t0;
+    c0 = f2sub t2 t0;
+    c1 = f2muls (f2sqr x) 3;
+    c2 = f2neg t4;
+    rx = f2mul (f2mul (f2mul (f2sub t0 t3) x) y) f2div2;
+    ry = f2sub (f2sqr (f2mul (f2add t0 t3) f2div2)) (f2muls (f2sqr t2) 3);
+    rz = f2mul t0 t4
+  in (rx, ry, rz)
+End
+
+val () = cv_trans dbl6_def;
+
 Definition weierstrassEquationF2_def:
   weierstrassEquationF2 x = let
     x2 = f2mul x x;
