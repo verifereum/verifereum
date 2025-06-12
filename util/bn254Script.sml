@@ -326,6 +326,108 @@ End
 
 val () = cv_trans dbl6_def;
 
+Definition add6_def:
+  add6 (rx,ry,rz) (qx,qy) = let
+    t0 = f2sub ry (f2mul qy rz);
+    t1 = f2sub rx (f2mul qx rz);
+    c0 = f2sub (f2mul t0 qx) (f2mul t1 qy);
+    c1 = f2neg t0;
+    c2 = t1;
+    t2 = f2sqr t1;
+    t3 = f2mul t2 t1;
+    t4 = f2mul t2 rx;
+    t5 = f2add (f2sub t3 (f2muls t4 2))
+               (f2mul (f2sqr t0) rz);
+    rx = f2mul t1 t5;
+    ry = f2sub (f2mul (f2sub t4 t5) t0)
+               (f2mul t3 ry);
+    rz = f2mul rz t3;
+  in (rx, ry, rz)
+End
+
+val () = cv_trans add6_def;
+
+Definition f2_nonresidue_def:
+  f2_nonresidue = (9n, 1n)
+End
+
+val () = cv_trans_deep_embedding EVAL f2_nonresidue_def;
+
+Definition f6mul01_def:
+  f6mul01 (c0,c1,c2) b0 b1 = let
+    t0 = f2mul c0 b0;
+    t1 = f2mul c1 b1;
+  in (
+    f2add (f2mul (f2sub (f2mul (f2add c1 c2) b1) t1) f2_nonresidue) t0,
+    f2sub (f2sub (f2mul (f2add b0 b1) (f2add c0 c1)) t0) t1,
+    f2add (f2sub (f2mul (f2add c0 c2) b0) t0) t1
+  )
+End
+
+val () = cv_trans f6mul01_def;
+
+Definition f6add_def:
+  f6add (c0,c1,c2) (r0,r1,r2) =
+    (f2add c0 r0,
+     f2add c1 r1,
+     f2add c2 r2)
+End
+
+val () = cv_trans f6add_def;
+
+Definition f6sub_def:
+  f6sub (c0,c1,c2) (r0,r1,r2) =
+    (f2sub c0 r0,
+     f2sub c1 r1,
+     f2sub c2 r2)
+End
+
+val () = cv_trans f6sub_def;
+
+Definition f6mul_def:
+  f6mul (c0,c1,c2) (r0,r1,r2) = let
+    t0 = f2mul c0 r0;
+    t1 = f2mul c1 r1;
+    t2 = f2mul c2 r2;
+  in (
+    f2add t0 (f2mul (f2sub (f2mul (f2add c1 c2) (f2add r1 r2)) (f2add t1 t2))
+              f2_nonresidue),
+    f2add (f2sub (f2mul (f2add c0 c1) (f2add r0 r1)) (f2add t0 t1))
+          (f2mul t2 f2_nonresidue),
+    f2sub (f2add t1 (f2mul (f2add c0 c2) (f2add r0 r2)))
+          (f2add t0 t2)
+    )
+End
+
+val () = cv_trans f6mul_def;
+
+Definition f6mul_nonresidue_def:
+  f6mul_nonresidue (c0,c1:num#num,c2:num#num) =
+    (f2mul c0 f2_nonresidue, c1, c2)
+End
+
+val () = cv_trans f6mul_nonresidue_def;
+
+Definition f12mul034_def:
+  f12mul034 (c0,c1) o0 o3 o4 = let
+    a = (f2mul (FST c0) o0,
+         f2mul (FST (SND c0)) o0,
+         f2mul (SND (SND c0)) o0);
+    b = f6mul01 c1 o3 o4;
+    e = f6mul01 (f6add c0 c1) (f2add o0 o3) o4;
+  in (f6add (f6mul_nonresidue b) a,
+      f6sub e (f6add a b))
+End
+
+val () = cv_trans f12mul034_def;
+
+Definition lineFunction_def:
+  lineFunction c0 c1 c2 f px py =
+  f12mul034 f (f2muls c2 py) (f2muls c1 px) c0
+End
+
+val () = cv_trans lineFunction_def;
+
 Definition weierstrassEquationF2_def:
   weierstrassEquationF2 x = let
     x2 = f2mul x x;
