@@ -545,6 +545,79 @@ val () = cv_trans_rec dec_def (
   \\ Cases_on`p` \\ gs[]
 );
 
+Theorem head_lengths_add:
+  ∀ts n. head_lengths ts n =
+  head_lengths ts 0 + n
+Proof
+  Induct_on`ts`
+  >- (
+    rw[Once head_lengths_def]
+    \\ rw[Once head_lengths_def] )
+  \\ rpt strip_tac
+  \\ simp_tac (srw_ss()) [head_lengths_def]
+  \\ pop_assum(fn th => simp[Once th] \\ simp[Once th, SimpRHS])
+QED
+
+Theorem head_lengths_leq_LENGTH_enc_tuple:
+  ∀ts vs hl tl hds tls n.
+    has_types ts vs ⇒
+    head_lengths ts n + SUM (MAP LENGTH hds) ≤
+    n + LENGTH (enc_tuple hl tl ts vs hds tls)
+Proof
+  Induct \\ Cases_on`vs` \\ rw[REV_REVERSE_LEM]
+  \\ rw[head_lengths_def, LENGTH_FLAT, MAP_REVERSE, SUM_REVERSE]
+  \\ first_x_assum drule
+  \\ qmatch_goalsub_abbrev_tac`enc_tuple hl tlt ts _ hhds ttls`
+  \\ qmatch_goalsub_abbrev_tac`head_lengths ts nn`
+  \\ disch_then(qspecl_then[`hl`,`tlt`,`hhds`,`ttls`,`nn`]mp_tac)
+  \\ rw[Abbr`hhds`]
+  \\ qspecl_then[`ts`,`nn`]mp_tac head_lengths_add
+  \\ rw[Abbr`nn`] \\ gvs[]
+  \\ drule_then drule $ cj 1 enc_has_static_length
+  \\ rw[]
+QED
+
+(*
+Theorem enc_tuple_append_tls:
+  ∀ts vs hl tl hds tls.
+    enc_tuple hl tl ts vs hds tls =
+    let bs = enc_tuple hl tl ts vs [] [] in
+    let n = head_lengths ts 0 in
+      FLAT (REVERSE hds) ++ TAKE n bs ++
+      FLAT (REVERSE tls) ++ DROP n bs
+Proof
+  Induct
+  \\ Cases_on`vs`
+  >- rw[Once enc_def, REV_REVERSE_LEM]
+  >- rw[Once enc_def, REV_REVERSE_LEM]
+  >- rw[Once enc_def, REV_REVERSE_LEM]
+  \\ rpt gen_tac
+  \\ ONCE_REWRITE_TAC[enc_def]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ BasicProvers.VAR_EQ_TAC
+  \\ `tail' = tail` by (unabbrev_all_tac \\ rw[])
+  \\ `head' = head` by (unabbrev_all_tac \\ rw[])
+  \\ rpt BasicProvers.VAR_EQ_TAC
+  \\ qunabbrev_tac`bs`
+  \\ qpat_x_assum`!_. _`(fn th => simp[Once th] \\ mp_tac th)
+  \\ qmatch_goalsub_abbrev_tac`TAKE n (enc_tuple hl tlt ts t h1 t1)`
+  \\ disch_then(qspecl_then[`t`,`hl`,`tlt`,`h1`,`t1`]mp_tac)
+  \\ rw[Abbr`n`]
+  \\ simp[head_lengths_def]
+  \\ qpat_abbrev_tac`m = COND _ _ _`
+  \\ qspecl_then[`ts`,`m`]mp_tac head_lengths_add
+  \\ rw[TAKE_APPEND, DROP_APPEND]
+  \\ `FLAT (REVERSE h1) = head` by rw[Abbr`h1`] \\ pop_assum SUBST_ALL_TAC
+  \\ `FLAT (REVERSE t1) = tail` by rw[Abbr`t1`] \\ pop_assum SUBST_ALL_TAC
+  \\ qmatch_goalsub_abbrev_tac`TAKE hn et`
+
+  \\ disch_then(fn th => simp[Once th, SimpRHS] \\ mp_tac th)
+  \\ disch_then(fn th => simp[Once th, SimpRHS] \\ mp_tac th)
+  \\ qunabbrev_tac`n`
+  \\ rewrite_tac[head_lengths_def]
+  \\ simp_tac (srw_ss()) []
+*)
+
 (*
 Theorem dec_enc:
   (∀t v. has_type t v ⇒ dec t (enc t v) = v) ∧
