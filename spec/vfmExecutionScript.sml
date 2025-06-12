@@ -1,7 +1,8 @@
  open HolKernel boolLib bossLib Parse monadsyntax dep_rewrite
      numposrepTheory numTheory arithmeticTheory
      sha2Theory secp256k1Theory bn254Theory blake2fTheory
-     vfmTypesTheory vfmRootTheory vfmContextTheory;
+     vfmTypesTheory vfmRootTheory vfmContextTheory
+     bls12381Theory;
 
 val _ = new_theory "vfmExecution";
 
@@ -1323,8 +1324,57 @@ End
 Definition point_eval_output_def:
   point_eval_output =
     (PAD_LEFT 0w 32 $ num_to_be_bytes 4096) ++
-    (PAD_LEFT 0w 32 $ num_to_be_bytes
-     52435875175126190479447740508185965837690552500527637822603658699938581184513)
+    (PAD_LEFT 0w 32 $ num_to_be_bytes bls_modulus)
+End
+
+Definition bytes_to_bls_field_def:
+  bytes_to_bls_field (b:word8 list)= do
+    n <<- num_of_be_bytes b;
+    assert (n < bls_modulus) KZGProofError;
+    return n
+  od
+End
+
+(* TODO *)
+Definition g2_proof_of_posession_key_validate_def:
+  g2_proof_of_posession_key_validate = T
+End
+
+Definition validate_kzg_g1_def:
+  validate_kzg_g1 (b: word8 list) = do
+    assert (b = g1_point_at_infinity) KZGProofError;
+    assert (g2_proof_of_posession_key_validate) KZGProofError
+  od
+End
+
+Definition bytes_to_kzg_commitment_def:
+  bytes_to_kzg_commitment (n: word8 list) = do
+    validate_kzg_g1 n;
+    return n
+  od
+End
+
+Definition bytes_to_kzg_proof_def:
+  bytes_to_kzg_proof (n: word8 list) = do
+    validate_kzg_g1 n;
+    return n
+  od
+End
+
+Definition verify_kzg_proof_def:
+  verify_kzg_proof (commitment: word8 list) (z: word8 list) (y: word8 list) (proof: word8 list) = do
+    assert(LENGTH commitment = 48) KZGProofError;
+    assert(LENGTH z = 32) KZGProofError;
+    assert(LENGTH y = 32) KZGProofError;
+    assert(LENGTH proof = 48) KZGProofError;
+
+    ncommitment <- bytes_to_kzg_commitment commitment;
+    nz <- bytes_to_bls_field z;
+    ny <- bytes_to_bls_field y;
+    nproof <- bytes_to_kzg_proof proof;
+
+    assert (pairing_check nz ny nproof) KZGProofError
+  od
 End
 
 Definition precompile_point_eval_def:
@@ -1332,15 +1382,17 @@ Definition precompile_point_eval_def:
     input <- get_call_data;
     if LENGTH input ≠ 192 then fail KZGProofError else do
       versionedHash <<- TAKE 32 input; input <<- DROP 32 input;
-      z <<- num_of_be_bytes $ TAKE 32 input; input <<- DROP 32 input;
-      y <<- num_of_be_bytes $ TAKE 32 input; input <<- DROP 32 input;
+      z <<- TAKE 32 input; input <<- DROP 32 input;
+      y <<- TAKE 32 input; input <<- DROP 32 input;
       commitment <<- TAKE 48 input; input <<- DROP 48 input;
       proof <<- TAKE 48 input;
       consume_gas 50000;
       computedHash <<- word_to_bytes (SHA_256_bytes commitment) T;
       computedVersionedHash <<- versioned_hash_version_kzg :: DROP 1 computedHash;
       assert (versionedHash = computedVersionedHash) KZGProofError;
-      (* TODO: fail KZGProofError if the proof is wrong *)
+
+      verify_kzg_proof commitment z y proof;
+
       set_return_data point_eval_output;
       finish
     od
