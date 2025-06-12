@@ -106,8 +106,10 @@ End
 val () = cv_auto_trans valid_fixed_bounds_def;
 
 Definition valid_length_def[simp]:
-  valid_length NONE _ = T ∧
-  valid_length (SOME n) ls = (LENGTH ls = n)
+  valid_length b ls =
+  let n = LENGTH ls in
+    n < dimword(:256) ∧
+    case b of NONE => T | SOME m => n = m
 End
 
 val () = cv_auto_trans valid_length_def;
@@ -134,9 +136,9 @@ Definition has_type_def[simp]:
   has_type (Fixed n m)  (IntV i)    = (int_bits_bound i m ∧ valid_fixed_bounds n m) ∧
   has_type (Ufixed n m) (NumV v)    = (v < 2 ** m ∧ valid_fixed_bounds n m) ∧
   has_type (Bytes b)    (BytesV bs) = (valid_bytes_bound b ∧ valid_length b bs) ∧
-  has_type (String)     (BytesV bs) = (T) ∧
+  has_type (String)     (BytesV bs) = (valid_length NONE bs) ∧
   has_type (Array b t)  (ListV vs)  = (have_type t vs ∧ valid_length b vs) ∧
-  has_type (Tuple ts)   (ListV vs)  = (has_types ts vs) ∧
+  has_type (Tuple ts)   (ListV vs)  = (valid_length NONE vs ∧ has_types ts vs) ∧
   has_type _            _           = (F) ∧
   have_type t [] = (T) ∧
   have_type t (v::vs) = (has_type t v ∧ have_type t vs) ∧
@@ -622,7 +624,7 @@ Proof
 Theorem dec_enc:
   (∀t v. has_type t v ⇒ dec t (enc t v) = v) ∧
   (∀hl tl ts vs hds tls bs0 bs acc.
-     has_types ts vs ∧
+     has_types ts vs ∧ valid_length NONE vs ∧
      enc_tuple hl tl ts vs hds tls = bs0 ∧
      bs = DROP (SUM (MAP LENGTH hds)) bs0
      ⇒
