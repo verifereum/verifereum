@@ -579,9 +579,9 @@ Proof
   \\ rw[]
 QED
 
-(*
-Theorem enc_tuple_append_tls:
+Theorem enc_tuple_append:
   ∀ts vs hl tl hds tls.
+    has_types ts vs ⇒
     enc_tuple hl tl ts vs hds tls =
     let bs = enc_tuple hl tl ts vs [] [] in
     let n = head_lengths ts 0 in
@@ -595,32 +595,43 @@ Proof
   >- rw[Once enc_def, REV_REVERSE_LEM]
   \\ rpt gen_tac
   \\ ONCE_REWRITE_TAC[enc_def]
+  \\ rewrite_tac[has_type_def]
+  \\ strip_tac
   \\ BasicProvers.LET_ELIM_TAC
   \\ BasicProvers.VAR_EQ_TAC
   \\ `tail' = tail` by (unabbrev_all_tac \\ rw[])
   \\ `head' = head` by (unabbrev_all_tac \\ rw[])
   \\ rpt BasicProvers.VAR_EQ_TAC
   \\ qunabbrev_tac`bs`
-  \\ qpat_x_assum`!_. _`(fn th => simp[Once th] \\ mp_tac th)
-  \\ qmatch_goalsub_abbrev_tac`TAKE n (enc_tuple hl tlt ts t h1 t1)`
-  \\ disch_then(qspecl_then[`t`,`hl`,`tlt`,`h1`,`t1`]mp_tac)
-  \\ rw[Abbr`n`]
+  \\ first_x_assum drule
+  \\ qmatch_goalsub_abbrev_tac`enc_tuple hl tlt ts t hhds ttls`
+  \\ disch_then(qspecl_then[`hl`,`tlt`]mp_tac)
+  \\ disch_then(fn th => simp[Once th] \\ mp_tac th)
+  \\ disch_then(qspecl_then[`[head]`,`[tail]`]mp_tac) \\ rw[]
+  \\ rw[Abbr`hhds`, Abbr`ttls`, Abbr`n`]
   \\ simp[head_lengths_def]
   \\ qpat_abbrev_tac`m = COND _ _ _`
   \\ qspecl_then[`ts`,`m`]mp_tac head_lengths_add
-  \\ rw[TAKE_APPEND, DROP_APPEND]
-  \\ `FLAT (REVERSE h1) = head` by rw[Abbr`h1`] \\ pop_assum SUBST_ALL_TAC
-  \\ `FLAT (REVERSE t1) = tail` by rw[Abbr`t1`] \\ pop_assum SUBST_ALL_TAC
+  \\ rw[]
   \\ qmatch_goalsub_abbrev_tac`TAKE hn et`
+  \\ `m = LENGTH head`
+  by (
+    rw[Abbr`m`, Abbr`head`]
+    \\ irule EQ_SYM
+    \\ irule $ cj 1 enc_has_static_length
+    \\ rw[] )
+  \\ `hn ≤ LENGTH et`
+  by (
+    rw[Abbr`hn`, Abbr`et`]
+    \\ drule head_lengths_leq_LENGTH_enc_tuple
+    \\ disch_then(qspecl_then[`hl`,`tlt`,`[]`,`[]`,`0`]mp_tac)
+    \\ simp[] )
+  \\ simp[TAKE_APPEND, DROP_APPEND, TAKE_LENGTH_TOO_LONG]
+  \\ simp[DROP_LENGTH_TOO_LONG]
+  \\ qmatch_goalsub_abbrev_tac`TAKE xx`
+  \\ `xx = 0` by simp[Abbr`xx`] \\ rw[]
+QED
 
-  \\ disch_then(fn th => simp[Once th, SimpRHS] \\ mp_tac th)
-  \\ disch_then(fn th => simp[Once th, SimpRHS] \\ mp_tac th)
-  \\ qunabbrev_tac`n`
-  \\ rewrite_tac[head_lengths_def]
-  \\ simp_tac (srw_ss()) []
-*)
-
-(*
 Theorem dec_enc:
   (∀t v. has_type t v ⇒ dec t (enc t v) = v) ∧
   (∀hl tl ts vs hds tls bs0 bs acc.
@@ -634,36 +645,80 @@ Theorem dec_enc:
          ListV (REVERSE acc ++ vs))
 Proof
   ho_match_mp_tac enc_ind
-  \\ rw[] \\ gs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
-  \\ TRY ( qmatch_assum_rename_tac`has_types (REPLICATE n t) []`
-    \\ Cases_on`n` \\ gs[] )
-  \\ TRY ( qmatch_assum_rename_tac`has_types ts []`
-    \\ Cases_on`ts` \\ gs[] )
-  \\ TRY ( qmatch_assum_rename_tac`has_type t (IntV _)`
-    \\ Cases_on `t` \\ gs[]
-    \\ DEP_REWRITE_TAC[TAKE_LENGTH_TOO_LONG]
-    \\ gs[valid_int_bound_def, valid_fixed_bounds_def, int_bits_bound_def]
-    \\ irule w2i_i2w \\ gs[]
-    \\ qpat_x_assum`Num _ < _`mp_tac \\ rw[]
-    \\ TRY (
-      simp[INT_LE_LT] \\ disj1_tac
-      \\ irule INT_LT_TRANS
-      \\ goal_assum drule \\ simp[] )
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- (
+    rw[]
+    \\ qmatch_goalsub_abbrev_tac`TAKE 32 et`
+    \\ gvs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+    \\ first_x_assum(qspec_then`[]`mp_tac)
+    \\ rw[]
+    \\ first_x_assum(qspecl_then[`LENGTH vs`,`t`]mp_tac)
+    \\ rw[]
+    \\ pop_assum(SUBST1_TAC o SYM)
+    \\ rpt AP_THM_TAC \\ AP_TERM_TAC
+    \\ `TAKE 32 et = word_to_bytes ((n2w (LENGTH vs)):bytes32) T`
+       suffices_by rw[]
+    \\ drule enc_tuple_append
+    \\ qmatch_asmsub_abbrev_tac`enc_tuple hl tl _ _ hds tls`
+    \\ disch_then(qspecl_then[`hl`,`tl`,`hds`,`tls`]mp_tac)
+    \\ rw[Abbr`tls`, Abbr`hds`, TAKE_APPEND, Abbr`tl`, TAKE_LENGTH_TOO_LONG] )
+  \\ conj_tac >- (
+    rw[TAKE_APPEND, iffRL SUB_EQ_0, TAKE_LENGTH_TOO_LONG]
+    \\ rw[DROP_APPEND, DROP_LENGTH_TOO_LONG, TAKE_APPEND] )
+  \\ conj_tac >- (
+    rw[TAKE_APPEND, iffRL SUB_EQ_0, TAKE_LENGTH_TOO_LONG]
+    \\ rw[DROP_APPEND, DROP_LENGTH_TOO_LONG, TAKE_APPEND] )
+  \\ conj_tac >- rw[TAKE_APPEND, iffRL SUB_EQ_0, TAKE_LENGTH_TOO_LONG]
+  \\ conj_tac >- (
+    rw[]
+    \\ qmatch_goalsub_abbrev_tac`dec t en`
+    \\ `dec t en = dec_number t en`
+    by (
+      `LENGTH en = 32`
+      by ( Cases_on`t` \\ gvs[Abbr`en`] )
+      \\ Cases_on`t` \\ gvs[TAKE_LENGTH_TOO_LONG] )
+    \\ rw[Abbr`en`]
+    \\ irule dec_enc_number
+    \\ rw[] )
+  \\ conj_tac >- (
+    rw[]
+    \\ qmatch_goalsub_abbrev_tac`dec t en`
+    \\ `dec t en = dec_number t en`
+    by (
+      `LENGTH en = 32`
+      by ( Cases_on`t` \\ gvs[Abbr`en`] )
+      \\ Cases_on`t` \\ gvs[TAKE_LENGTH_TOO_LONG] )
+    \\ rw[Abbr`en`]
+    \\ irule dec_enc_number
+    \\ rw[] )
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- (
+    rpt gen_tac \\ strip_tac
+    \\ rpt gen_tac \\ strip_tac
+    \\ rpt BasicProvers.VAR_EQ_TAC
     \\ cheat )
-  \\ TRY ( qmatch_assum_rename_tac`has_type t (NumV _)`
-    \\ Cases_on `t` \\ gs[]
-    \\ DEP_REWRITE_TAC[TAKE_LENGTH_TOO_LONG]
-    \\ gs[valid_int_bound_def, valid_fixed_bounds_def]
-    \\ irule LESS_LESS_EQ_TRANS
-    \\ goal_assum drule
-    \\ irule LESS_EQ_TRANS
-    \\ qexists_tac`2 ** 256`
-    \\ (reverse conj_tac >- EVAL_TAC)
-    \\ DEP_REWRITE_TAC[EXP_BASE_LE_MONO]
-    \\ simp[] )
-
-  \\ first_x_assum(qspec_then`[]`mp_tac) \\ rw[]
-*)
+  \\ conj_tac >- (
+    rw[]
+    >- ( Cases_on`ts` \\ gvs[] )
+    \\ Cases_on`n` \\ gvs[] )
+  \\ rw[]
+QED
 
 (*
   val ty = “String”;
