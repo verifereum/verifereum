@@ -259,6 +259,7 @@ Termination
     (LENGTH bs + SUM (MAP (LENGTH o FST) stk),
      LENGTH stk))’
   \\ rw[]
+  \\ TRY (Cases_on`bs` \\ gvs[] \\ NO_TAC)
   \\ drule rlp_decode_length_length_less_eq
   \\ rw[]
   \\ CCONTR_TAC \\ gvs[]
@@ -278,6 +279,7 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<)
     (λx. (SUM (MAP (LENGTH o FST) x), LENGTH x))’
   \\ rw[]
+  \\ Cases_on`bs` \\ gvs[]
 End
 
 Theorem rlp_decode_list_tr_unwind_stk:
