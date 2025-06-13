@@ -97,6 +97,8 @@ Definition finv_loop_def:
     n = fsub y (fmul v q);
     b = a; a = r; x = u; y = v; u = m; v = n in
       finv_loop a b x y u v
+Termination
+  WF_REL_TAC ‘measure FST’
 End
 
 val finv_loop_pre_def = cv_trans_pre finv_loop_def;
