@@ -493,11 +493,14 @@ val () = cv_trans dest_NumV_def;
 
 Definition dec_def[simp]:
   dec (Tuple ts) bs = dec_tuple ts bs bs [] ∧
-  dec (Array (SOME n) t) bs =
-    dec_array n (if is_dynamic t then NONE else SOME $ static_length t) t bs bs [] ∧
+  dec (Array (SOME n) t) bs = (
+    let lt = if is_dynamic t then NONE else SOME $ static_length t in
+    dec_array n lt t bs bs [] ) ∧
   dec (Array NONE t) bs = (
+    let lt = if is_dynamic t then NONE else SOME $ static_length t in
     let n = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
-      dec_array n (if is_dynamic t then NONE else SOME $ static_length t) t bs (DROP 32 bs) []
+    let bs = DROP 32 bs in
+      dec_array n lt t bs bs []
   ) ∧
   dec (Bytes NONE) bs = (
     let k = dest_NumV (dec_number (Uint 256) (TAKE 32 bs)) in
@@ -633,6 +636,16 @@ Proof
   \\ `xx = 0` by simp[Abbr`xx`] \\ rw[]
 QED
 
+(*
+cv_eval “has_type (Array NONE (Array NONE Bool))
+  (ListV [ListV [NumV 1; NumV 0]; ListV []])”
+
+cv_eval “dec (Array NONE (Array NONE Bool))
+  $ enc (Array NONE (Array NONE Bool))
+(ListV [ListV [NumV 1; NumV 0]; ListV []])
+”
+*)
+
 Theorem dec_enc:
   (∀t v bz.
     has_type t v ∧ LENGTH (enc t v) < dimword(:256) ⇒
@@ -651,21 +664,20 @@ Theorem dec_enc:
      (LENGTH hds = LENGTH tls ⇒
       dec_tuple ts bs0 bs acc = ListV (REVERSE acc ++ vs)) ∧
      ∀n t. ts = REPLICATE n t ⇒
-       dec_array n (if is_dynamic t then NONE else SOME $ static_length t) t bs0 bs acc =
-         ListV (REVERSE acc ++ vs))
+       dec_array n
+         (if is_dynamic t then NONE else SOME $ static_length t)
+         t (if LENGTH hds = LENGTH tls then bs0 else DROP 32 bs0)
+         bs acc =
+           ListV (REVERSE acc ++ vs))
 Proof
   ho_match_mp_tac enc_ind
   \\ conj_tac >- rw[]
   \\ conj_tac >- rw[]
   \\ conj_tac >- (
-    rw[]
+    rpt gen_tac \\ strip_tac
+    \\ rpt gen_tac \\ strip_tac
+    \\ gvs[]
     \\ qmatch_goalsub_abbrev_tac`TAKE 32 (et ++ bz)`
-    \\ gvs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
-    \\ first_x_assum(qspecl_then[`[]`,`bz`]mp_tac)
-    \\ rw[]
-    \\ first_x_assum(qspecl_then[`LENGTH vs`,`t`]mp_tac)
-    \\ rw[]
-    \\ pop_assum(SUBST1_TAC o SYM)
     \\ `32 ≤ LENGTH et ∧ TAKE 32 et = word_to_bytes ((n2w (LENGTH vs)):bytes32) T`
     by (
       drule enc_tuple_append
@@ -673,7 +685,9 @@ Proof
       \\ disch_then(qspecl_then[`hl`,`tl`,`hds`,`tls`]mp_tac)
       \\ rw[Abbr`tls`, Abbr`hds`, TAKE_APPEND, Abbr`tl`,
             TAKE_LENGTH_TOO_LONG, Abbr`et`] )
-    \\ gvs[iffRL SUB_EQ_0] )
+    \\ gvs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
+    \\ first_x_assum(qspecl_then[`[]`,`bz`,`LENGTH vs`,`t`]mp_tac)
+    \\ simp[])
   \\ conj_tac >- (
     rw[TAKE_APPEND, iffRL SUB_EQ_0, TAKE_LENGTH_TOO_LONG]
     \\ rw[DROP_APPEND, DROP_LENGTH_TOO_LONG, TAKE_APPEND] )
@@ -817,9 +831,61 @@ Proof
         \\ strip_tac
         \\ gvs[] )
       \\ Cases \\ simp[Abbr`tts`]
-      \\ strip_tac
+      \\ strip_tac \\ gvs[]
+      \\ rewrite_tac [GSYM APPEND_ASSOC]
+      \\ qmatch_goalsub_abbrev_tac`frhds ++ rest`
+      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]
+      \\ qunabbrev_tac`rest`
+      \\ qmatch_goalsub_abbrev_tac`head ++ rest`
+      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG,
+              TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+      \\ simp[iffRL SUB_EQ_0]
+      \\ `m < dimword(:256)` by gvs[Abbr`m`]
+      \\ simp[Abbr`head`]
+      \\ qunabbrev_tac`m`
+      \\ qmatch_asmsub_rename_tac `REPLICATE m t`
+      \\ first_x_assum(qspecl_then[`m`,`t`]mp_tac)
+      \\ simp[Abbr`rest`]
+      \\ rewrite_tac [GSYM APPEND_ASSOC]
+      \\ qmatch_goalsub_abbrev_tac`frhds ++ rest`
+      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]
+      \\ qunabbrev_tac`rest`
+      \\ qmatch_goalsub_abbrev_tac`head ++ rest`
+      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG,
+              TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+      \\ simp[Abbr`acca`, Abbr`rest`]
+      \\ rewrite_tac[GSYM APPEND_ASSOC]
+      \\ qmatch_goalsub_abbrev_tac`DROP 32 (hh ++ rest)`
+      \\ `LENGTH hh = 32` by simp[Abbr`hh`]
+      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]
+      \\ simp[iffRL SUB_EQ_0]
+      \\ `v = dec t tail`
+      by ( first_x_assum(qspec_then`[]`mp_tac) \\ rw[] )
       \\ gvs[]
-      \\ cheat )
+      \\ strip_tac
+      \\ qmatch_goalsub_abbrev_tac`dec t ttt`
+      \\ `∃rest. ttt = tail ++ rest` suffices_by (
+        strip_tac \\ gvs[] )
+      \\ rw[Abbr`ttt`]
+      >- (
+        gvs[Abbr`mhds`, Abbr`frhds`]
+        \\ simp[DROP_APPEND, TAKE_LENGTH_TOO_LONG]
+        \\ simp[DROP_LENGTH_TOO_LONG, Abbr`hlts`]
+        \\ simp[Abbr`rest`, DROP_APPEND, iffRL SUB_EQ_0, Abbr`tl`, LENGTH_FLAT]
+        \\ simp[SUM_REVERSE, MAP_REVERSE, iffRL SUB_EQ_0]
+        \\ simp[DROP_LENGTH_TOO_LONG, LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE] )
+      \\ simp[Abbr`frhds`] \\ gvs[]
+      \\ Q.ISPEC_THEN`hds`FULL_STRUCT_CASES_TAC SNOC_CASES
+      \\ gvs[]
+      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]
+      \\ simp[DROP_LENGTH_TOO_LONG, Abbr`hlts`]
+      \\ simp[SUM_APPEND, iffRL SUB_EQ_0]
+      \\ simp[Abbr`rest`, DROP_APPEND, iffRL SUB_EQ_0, Abbr`tl`, LENGTH_FLAT]
+      \\ simp[SUM_REVERSE, MAP_REVERSE, iffRL SUB_EQ_0]
+      \\ simp[DROP_LENGTH_TOO_LONG, LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE]
+      \\ simp[Abbr`mhds`, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+      \\ simp[SUM_APPEND, iffRL SUB_EQ_0]
+      \\ simp[DROP_LENGTH_TOO_LONG, LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE])
     \\ gvs[]
     \\ drule enc_tuple_append
     \\ disch_then(qspecl_then[`hlts + mhdst`,`tl`,`tail::hds`,`[]::tls`]mp_tac)
@@ -848,7 +914,7 @@ Proof
       \\ strip_tac
       \\ first_x_assum(qspec_then`[]`mp_tac)
       \\ rw[] )
-    \\ Cases \\ rw[Abbr`tts`] \\ gvs[]
+    \\ Cases \\ simp[Abbr`tts`] \\ strip_tac \\ gvs[]
     \\ first_x_assum(qspecl_then[`v::acc`,`bz`]mp_tac)
     \\ impl_tac >- ( Cases_on`hds` \\ gs[] )
     \\ strip_tac
