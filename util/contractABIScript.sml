@@ -498,7 +498,7 @@ Termination
   | (INL (t,_)) => (abi_type_size t, 0))’
 End
 
-val () = cv_trans_rec dec_def (
+val pre = cv_trans_pre_rec dec_def (
   WF_REL_TAC ‘inv_image ($< LEX $<)
   (λx. case x of
          (INR (INR (ts,_,_,_))) => (cv_size ts, 0)
@@ -509,6 +509,17 @@ val () = cv_trans_rec dec_def (
   \\ qmatch_goalsub_rename_tac`cv_snd p`
   \\ Cases_on`p` \\ gs[]
 );
+
+Theorem dec_pre[cv_pre]:
+  (∀v bs. dec_pre v bs) ∧
+  (∀v0 v v1 v2 v3 acc. dec_array_pre v0 v v1 v2 v3 acc) ∧
+  (∀v v4 v5 acc. dec_tuple_pre v v4 v5 acc)
+Proof
+  ho_match_mp_tac dec_ind
+  \\ rpt strip_tac
+  \\ once_rewrite_tac [pre]
+  \\ simp []
+QED
 
 Theorem head_lengths_add:
   ∀ts n. head_lengths ts n =
