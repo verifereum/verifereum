@@ -8,30 +8,6 @@ val () = new_theory "contractABI";
 
 val () = numLib.prefer_num();
 
-(* TODO: move to separate theory? *)
-
-val vars = List.tabulate(32, fn n => mk_var("w" ^ Int.toString n, “:bytes32”))
-
-Theorem word_to_bytes_word_of_bytes_256[simp]:
-  word_of_bytes be (0w:bytes32) (word_to_bytes w be) = w
-Proof
-  rw[word_to_bytes_def, word_to_bytes_aux_compute]
-  \\ rw[word_of_bytes_def]
-  \\ map_every (fn wn =>
-    qmatch_goalsub_abbrev_tac`set_byte _ _ ^wn`
-    \\ simp[set_byte_get_byte_copy, byte_index_def]
-    \\ pop_assum mp_tac) vars
-  \\ rpt strip_tac
-  \\ Cases_on`be` \\ gvs[]
-  \\ map_every (fn v => BBLAST_TAC \\ qunabbrev_tac[ANTIQUOTE v]) vars
-  \\ rw[]
-QED
-
-val () = cv_auto_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_aux_def
-val () = cv_trans $ INST_TYPE[alpha |-> “:256”]byteTheory.word_to_bytes_def
-
-(* -- *)
-
 Datatype:
   abi_type
   = Uint num
