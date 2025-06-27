@@ -1307,6 +1307,7 @@ Proof
   \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
   \\ gs[all_accounts_def, domain_check_def]
   \\ qpat_x_assum`Enforce _ = _`(assume_tac o SYM) \\ gs[]
+  \\ gvs[LIST_REL_SNOC, MAP_SNOC]
 QED
 
 Theorem get_original_ignores_extra_domain_pred_slot_bind:
@@ -1339,6 +1340,7 @@ Proof
   \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
   \\ gs[all_accounts_def, domain_check_def]
   \\ qpat_x_assum`Enforce _ = _`(assume_tac o SYM) \\ gs[]
+  \\ gvs[LIST_REL_SNOC, MAP_SNOC]
 QED
 
 Theorem get_original_ignores_extra_domain_slot_bind:
@@ -1368,6 +1370,7 @@ Proof
   \\ gs[domain_compatible_def, states_agree_modulo_accounts_def]
   \\ gs[all_accounts_def, domain_check_def]
   \\ qpat_x_assum`Enforce _ = _`(assume_tac o SYM) \\ gs[]
+  \\ gvs[LIST_REL_SNOC, MAP_SNOC]
 QED
 
 Theorem step_sstore_gas_consumption_ignores_extra_domain[simp]:
@@ -2053,7 +2056,7 @@ Proof
     \\ qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES \\ gvs[]
     \\ qspec_then`s'.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES \\ gvs[]
     \\ rw[] \\ TRY(CASE_TAC \\ gvs[] \\ rw[])
-    \\ gvs[EVERY2_MAP, LIST_REL_SNOC]
+    \\ gvs[EVERY2_MAP, LIST_REL_SNOC, MAP_SNOC]
     \\ gvs[rollback_states_agree_modulo_accounts_def,
            accounts_agree_modulo_storage_def]
     \\ gvs[rollback_state_component_equality,
