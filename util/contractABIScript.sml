@@ -822,7 +822,7 @@ Proof
         \\ simp[DROP_LENGTH_TOO_LONG, LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE] )
       \\ simp[Abbr`frhds`] \\ gvs[]
       \\ Q.ISPEC_THEN`hds`FULL_STRUCT_CASES_TAC SNOC_CASES
-      \\ gvs[]
+      \\ gvs[TAKE_SNOC, DROP_SNOC, LENGTH_SNOC]
       \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]
       \\ simp[DROP_LENGTH_TOO_LONG, Abbr`hlts`]
       \\ simp[SUM_APPEND, iffRL SUB_EQ_0]
