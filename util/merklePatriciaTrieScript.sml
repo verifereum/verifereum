@@ -7,12 +7,13 @@ open HolKernel boolLib bossLib Parse
 
 val _ = new_theory "merklePatriciaTrie";
 
-Datatype:
-  trie_node =
-    Leaf      (byte list) (byte list)
-  | Extension (byte list) (trie_node option)
-  | Branch    (trie_node option list) (byte list)
-End
+(* TODO: move? *)
+
+Theorem list_size_sum_map_length:
+  list_size f ls = SUM (MAP f ls) + LENGTH ls
+Proof
+  Induct_on`ls` \\ rw[]
+QED
 
 Definition longest_common_prefix_def:
   longest_common_prefix [] y = [] ∧
@@ -75,6 +76,16 @@ Proof
   \\ rw[]
 QED
 
+Theorem longest_common_prefix_is_nil:
+  longest_common_prefix x y = [] ⇔
+  (x = [] ∨ y = [] ∨ HD x ≠ HD y)
+Proof
+  rw[EQ_IMP_THM]
+  \\ Cases_on `x` \\ gvs[]
+  \\ Cases_on `y` \\ gvs[]
+  \\ gvs[longest_common_prefix_def]
+QED
+
 Definition longest_common_prefix_of_list_def:
   longest_common_prefix_of_list [] = [] ∧
   longest_common_prefix_of_list [x] = x ∧
@@ -127,6 +138,36 @@ Proof
   \\ rw[AC longest_common_prefix_assoc longest_common_prefix_comm]
 QED
 
+Theorem longest_common_prefix_of_list_is_nil:
+  ∀ls. longest_common_prefix_of_list ls = [] ⇔
+  (ls = [] ∨
+   ∃x y. MEM x ls ∧ MEM y ls ∧ longest_common_prefix x y = [])
+Proof
+  Induct_on`ls` \\ rw[]
+  >- gvs[longest_common_prefix_of_list_def]
+  \\ rw[longest_common_prefix_of_list_CONS]
+  \\ gvs[NULL_EQ, longest_common_prefix_is_nil]
+  \\ Cases_on`longest_common_prefix_of_list ls` \\ gvs[]
+  >- metis_tac[]
+  \\ Cases_on`h` \\ gvs[]
+  >- metis_tac[]
+  \\ qmatch_goalsub_rename_tac`h1 = h2 ⇒ _`
+  \\ qspec_then`ls`mp_tac longest_common_prefix_of_list_thm
+  \\ rw[NULL_EQ]
+  \\ Cases_on`h1 ≠ h2` \\ gvs[]
+  >- (
+    Cases_on`ls` \\ gvs[]
+    \\ qmatch_goalsub_rename_tac`h1::t1`
+    \\ qexistsl_tac [`h1::t1`,`h`]
+    \\ simp[]
+    \\ Cases_on`h` \\ gvs[]
+    \\ fsrw_tac[DNF_ss][] \\ rw[] )
+  \\ rw[EQ_IMP_THM]
+  >- metis_tac[]
+  \\ TRY(first_x_assum drule \\ CASE_TAC \\ rw[] \\ NO_TAC)
+  \\ metis_tac[]
+QED
+
 Theorem ALL_DISTINCT_MAP_DROP_LESS:
   !ls.
     n <= m /\
@@ -164,6 +205,13 @@ Proof
   \\ `n = 0` suffices_by simp[]
   \\ simp[Abbr`n`]
 QED
+
+Datatype:
+  trie_node =
+    Leaf      (byte list) (byte list)
+  | Extension (byte list) (trie_node option)
+  | Branch    (trie_node option list) (byte list)
+End
 
 Definition make_branch_def:
   make_branch (kvs: (byte list # byte list) list) (nb: byte) =
@@ -560,9 +608,61 @@ QED
 val () = make_branch_eta |> cv_auto_trans;
 val () = longest_common_prefix_of_list_def |> cv_auto_trans;
 
-(* TODO: maybe in the future we could actually prove termination and avoid the
-* clock throughout this file. note the termination proof will also need to be
-* done on the cv version *)
+(* TODO: prove termination and avoid the clock throughout this file.
+   note the termination proof will also need to be done on the cv version.
+
+Definition patricialise_fused_def:
+  patricialise_fused kvs =
+  (case kvs of
+   | [] => encode_internal_node NONE
+   | [(k,v)] => encode_internal_node $ SOME $ MTL k v
+   | _ => let lcp = longest_common_prefix_of_list (MAP FST kvs) in
+     if NULL lcp then let
+       branches = GENLIST (make_branch kvs o n2w) 16;
+       values = MAP SND (FILTER (NULL o FST) kvs);
+       value = if NULL values then [] else HD values;
+       subnodes = MAP patricialise_fused branches;
+       in encode_internal_node $ SOME $ MTB subnodes value
+     else let
+       dkvs = drop_from_keys (LENGTH lcp) kvs;
+       subnode = patricialise_fused dkvs
+       in encode_internal_node $ SOME $ MTE lcp subnode)
+Termination
+  WF_REL_TAC `measure (list_size (LENGTH o FST))`
+  \\ qmatch_goalsub_abbrev_tac `GENLIST _ nb`
+  \\ simp[MEM_GENLIST, NULL_EQ, PULL_EXISTS]
+  \\ reverse conj_tac
+  \\ rpt gen_tac \\ qmatch_goalsub_abbrev_tac`longest_common_prefix_of_list ls`
+  >- (
+    rw[drop_from_keys_map]
+    \\ qspec_then`ls`mp_tac longest_common_prefix_of_list_thm
+    \\ rw[NULL_EQ]
+    \\ qmatch_goalsub_rename_tac`LENGTH h1`
+    \\ `MEM h1 ls` by rw[Abbr`ls`]
+    \\ qmatch_goalsub_abbrev_tac`LENGTH h1 - LENGTH lcp`
+    \\ `IS_PREFIX h1 lcp` by metis_tac[]
+    \\ `LENGTH lcp ≤ LENGTH h1` by metis_tac[IS_PREFIX_LENGTH]
+    \\ qmatch_goalsub_rename_tac`LENGTH h2 - _ + list_size _ _`
+    \\ `MEM h2 ls` by rw[Abbr`ls`]
+    \\ `IS_PREFIX h2 lcp` by metis_tac[]
+    \\ `LENGTH lcp ≤ LENGTH h2` by metis_tac[IS_PREFIX_LENGTH]
+    \\ simp[list_size_sum_map_length]
+    \\ qmatch_goalsub_abbrev_tac`SUM l1`
+    \\ qmatch_goalsub_abbrev_tac`lhs < _`
+    \\ qmatch_goalsub_abbrev_tac`SUM l2`
+    \\ `SUM l1 <= SUM l2`
+    by (
+      rw[Abbr`l1`,Abbr`l2`]
+      \\ irule SUM_MAP_same_LE
+      \\ rw[EVERY_MEM] )
+    \\ `0 < LENGTH lcp` by ( CCONTR_TAC \\ gvs[] )
+    \\ rw[Abbr`lhs`] )
+  \\ rw[longest_common_prefix_of_list_is_nil]
+  \\ simp[make_branch_def, MAP_MAP_o, o_DEF]
+  \\ rw[list_size_sum_map_length]
+  \\ cheat
+End
+*)
 
 Definition patricialise_fused_clocked_def:
   patricialise_fused_clocked n kvs =
