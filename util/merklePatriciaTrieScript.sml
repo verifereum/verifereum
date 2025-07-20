@@ -707,6 +707,66 @@ Termination
 	\\ CASE_TAC \\ rw[]
 End
 
+Theorem patricialise_fused_thm:
+  ALL_DISTINCT (MAP FST kvs) ⇒
+  patricialise_fused kvs
+    = encode_internal_node $ OPTION_MAP encode_trie_node $ patricialise kvs
+Proof
+  qid_spec_tac`kvs`
+  \\ ho_match_mp_tac patricialise_ind
+  \\ conj_tac
+  >- rw[patricialise_def, patricialise_fused_def]
+  \\ conj_tac
+  >- rw[patricialise_def, patricialise_fused_def, encode_trie_node_def]
+  \\ rpt gen_tac \\ strip_tac
+  \\ strip_tac
+  \\ rewrite_tac[Once patricialise_fused_def]
+  \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
+  \\ rewrite_tac[list_case_def]
+  \\ CONV_TAC (DEPTH_CONV BETA_CONV)
+  \\ rewrite_tac[list_case_def]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ rewrite_tac[Once patricialise_def]
+  \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ simp[Abbr`lcp'`,Abbr`values'`]
+  \\ reverse IF_CASES_TAC
+  \\ simp[encode_trie_node_def]
+  \\ AP_TERM_TAC \\ simp[]
+  >- (
+    gvs[ETA_AX, drop_from_keys_map]
+    \\ first_x_assum irule
+    \\ qunabbrev_tac`dkvs`
+    \\ qunabbrev_tac`lcp`
+    \\ simp[MAP_MAP_o]
+    \\ simp[GSYM MAP_MAP_o]
+    \\ irule ALL_DISTINCT_DROP_LENGTH_lcp
+    \\ rw[] )
+  \\ qunabbrev_tac`branches'`
+  \\ gvs[ETA_AX]
+  \\ simp[Abbr`subnodes`]
+  \\ simp[MAP_MAP_o]
+  \\ rw[MAP_EQ_f]
+  \\ first_x_assum irule
+  \\ gs[]
+  \\ gvs[Abbr`branches`, MEM_GENLIST]
+  \\ rw[make_branch_def]
+  \\ rw[MAP_MAP_o]
+  \\ qmatch_goalsub_abbrev_tac`FILTER P`
+  \\ `ALL_DISTINCT (MAP FST (FILTER P kvs))`
+  by (
+    irule sublist_ALL_DISTINCT
+    \\ first_assum $ irule_at Any
+    \\ irule MAP_SUBLIST
+    \\ rw[FILTER_sublist] )
+  \\ rw[GSYM MAP_MAP_o]
+  \\ irule ALL_DISTINCT_MAP_INJ
+  \\ rw[MEM_MAP, MEM_FILTER, Abbr`P`]
+  \\ rpt(qpat_x_assum`list_case _ _ _`mp_tac)
+  \\ CASE_TAC \\ CASE_TAC
+  \\ rw[] \\ gvs[]
+QED
+
 Definition patricialise_fused_clocked_def:
   patricialise_fused_clocked n kvs =
   (if n = 0n then NONE else
