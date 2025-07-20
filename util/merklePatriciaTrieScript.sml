@@ -608,9 +608,6 @@ QED
 val () = make_branch_eta |> cv_auto_trans;
 val () = longest_common_prefix_of_list_def |> cv_auto_trans;
 
-(* TODO: prove termination and avoid the clock throughout this file.
-   note the termination proof will also need to be done on the cv version.
-
 Definition patricialise_fused_def:
   patricialise_fused kvs =
   (case kvs of
@@ -658,11 +655,57 @@ Termination
     \\ `0 < LENGTH lcp` by ( CCONTR_TAC \\ gvs[] )
     \\ rw[Abbr`lhs`] )
   \\ rw[longest_common_prefix_of_list_is_nil]
+  \\ qmatch_goalsub_abbrev_tac`make_branch ps`
+  \\ `ls = MAP FST ps` by rw[Abbr`ps`, Abbr`ls`]
+  \\ qunabbrev_tac`ls`
+  \\ pop_assum SUBST_ALL_TAC
   \\ simp[make_branch_def, MAP_MAP_o, o_DEF]
   \\ rw[list_size_sum_map_length]
-  \\ cheat
+  \\ rw[make_branch_def]
+  \\ qmatch_goalsub_abbrev_tac`lfp + smp < l1 + (l2 + (l3 + (sm + 2)))`
+  \\ `l1 + l2 + sm = SUM (MAP (LENGTH o FST) ps)` by rw[Abbr`ps`,Abbr`sm`,o_DEF]
+  \\ `l3 + 2 = LENGTH ps` by rw[Abbr`l3`,Abbr`ps`]
+	\\ qmatch_asmsub_abbrev_tac`FILTER P`
+	\\ qmatch_asmsub_abbrev_tac`MAP f1 (FILTER _ _)`
+	\\ qmatch_asmsub_abbrev_tac`MAP f2 ps`
+	\\ `SUM (MAP f2 (FILTER P ps)) ≤ SUM (MAP f2 ps)`
+	by (
+	  irule SUM_SUBLIST
+		\\ irule MAP_SUBLIST
+		\\ rw[FILTER_sublist] )
+  \\ `smp ≤ SUM (MAP (LENGTH o FST) ps)` by (
+    rw[Abbr`smp`, MAP_MAP_o, o_DEF]
+    \\ irule LESS_EQ_TRANS
+		\\ first_assum $ irule_at Any
+    \\ irule SUM_MAP_same_LE
+    \\ simp[Abbr`f1`,Abbr`f2`,EVERY_MEM,MEM_FILTER,Abbr`P`]
+    \\ Cases \\ simp[] \\ CASE_TAC \\ rw[] )
+	\\ Cases_on`lfp < LENGTH ps` >- gvs[]
+	\\ `lfp ≤ LENGTH ps` by simp[Abbr`lfp`, LENGTH_FILTER_LEQ]
+	\\ `lfp = LENGTH ps` by gvs[]
+	\\ `EVERY P ps`
+	by (
+	  spose_not_then strip_assume_tac
+		\\ fs[]
+		\\ drule LENGTH_FILTER_LESS
+		\\ gvs[] )
+	\\ `smp < SUM (MAP (LENGTH o FST) ps)` suffices_by gvs[]
+	\\ rw[Abbr`smp`, MAP_MAP_o, o_DEF]
+	\\ irule LESS_LESS_EQ_TRANS
+	\\ first_assum $ irule_at Any
+	\\ irule SUM_MAP_same_LESS
+	\\ simp[Abbr`f1`,Abbr`f2`,EVERY_MEM,MEM_FILTER,Abbr`P`,EXISTS_MEM]
+	\\ simp[FORALL_PROD, EXISTS_PROD]
+	\\ conj_tac
+	>- ( Cases \\ simp[] \\ CASE_TAC \\ rw[] )
+	\\ gvs[EVERY_MEM, FORALL_PROD, NULL_EQ]
+	\\ gvs[MEM_MAP, EXISTS_PROD]
+	\\ first_assum $ irule_at Any
+	\\ first_assum $ irule_at Any
+	\\ first_assum $ irule_at Any
+	\\ first_x_assum drule
+	\\ CASE_TAC \\ rw[]
 End
-*)
 
 Definition patricialise_fused_clocked_def:
   patricialise_fused_clocked n kvs =
