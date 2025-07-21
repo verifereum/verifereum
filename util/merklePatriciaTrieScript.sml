@@ -767,6 +767,113 @@ Proof
   \\ rw[] \\ gvs[]
 QED
 
+Definition patricialise_fused_list_def:
+  patricialise_fused_list acc [] = REVERSE acc ∧
+  patricialise_fused_list acc (x::xs) =
+  patricialise_fused_list (patricialise_fused x :: acc) xs
+End
+
+Theorem patricialise_fused_list_thm:
+  ∀ls acc. patricialise_fused_list acc ls =
+  REVERSE acc ++ MAP patricialise_fused ls
+Proof
+  Induct \\ rw[patricialise_fused_list_def]
+QED
+
+Theorem patricialise_fused_list_map:
+  MAP patricialise_fused = patricialise_fused_list []
+Proof
+  rw[patricialise_fused_list_thm, FUN_EQ_THM]
+QED
+
+Theorem patricialise_fused_eqns[local] =
+  LIST_CONJ [
+    patricialise_fused_def
+      |> SIMP_RULE std_ss [ETA_AX, patricialise_fused_list_map],
+    cj 1 patricialise_fused_list_def,
+    cj 2 patricialise_fused_list_def
+  ]
+
+val cv_longest_common_prefix_of_list_def =
+  definition "cv_longest_common_prefix_of_list_def";
+
+(*
+val cv_genlist_0_o_make_branch_n2w_16_def =
+  theorem "cv_genlist_0_o_make_branch_n2w_16_def";
+val cv_genlist_0_o_make_branch_n2w_16_ind =
+  theorem "cv_genlist_0_o_make_branch_n2w_16_ind";
+
+Theorem patricialise_fused_cv_termination1[local]:
+  ∀m v n.
+  cv_genlist_0_o_make_branch_n2w_16_def
+  cv$c2b (cv_NULL (cv_longest_common_prefix_of_list (cv_map_fst v))) ⇒
+  cv_size (cv_genlist_0_o_make_branch_n2w_16 m v n) <
+  cv_size v
+Proof
+  ho_match_mp_tac cv_genlist_0_o_make_branch_n2w_16_ind
+  \\ rw[]
+  \\ reverse(rw[Once cv_genlist_0_o_make_branch_n2w_16_def])
+  >- (
+    Cases_on`v` \\ rw[]
+    \\ gvs[Once cv_map_fst_def]
+    \\ gvs[Once cv_longest_common_prefix_of_list_def]
+    \\ gvs[cv_NULL_def]
+    \\ Cases_on`m` \\ gvs[]
+  >- (
+    rw[Once cv_map_fst_def, Once cv_longest_common_prefix_of_list_def,
+       cv_NULL_def, Once cv_genlist_0_o_make_branch_n2w_16_def]
+    \\ gvs[]
+*)
+
+val patricialise_fused_pre_def =
+  cv_auto_trans_pre_rec patricialise_fused_eqns (
+  WF_REL_TAC `inv_image $< (λx.
+    case x of INL v => cv_size v
+            | INR (_,v) => cv_size v)`
+  \\ rw[]
+  \\ (Cases_on`cv_kvs` ORELSE Cases_on`cv_v`) \\ gvs[]
+  \\ cheat);
+
+Theorem patricialise_fused_list_pre:
+  ∀ls. EVERY patricialise_fused_pre ls ⇒
+       ∀acc. patricialise_fused_list_pre acc ls
+Proof
+  Induct \\ rw[]
+  \\ rw[Once patricialise_fused_pre_def]
+QED
+
+Theorem patricialise_fused_pre[cv_pre]:
+  (∀kvs. patricialise_fused_pre kvs) ∧
+  (∀acc ls. patricialise_fused_list_pre acc ls)
+Proof
+  reverse conj_asm1_tac
+  >- (
+    rpt gen_tac
+    \\ irule patricialise_fused_list_pre
+    \\ rw[EVERY_MEM])
+  \\ ho_match_mp_tac patricialise_fused_ind
+  \\ gen_tac \\ strip_tac
+  \\ rewrite_tac[Once patricialise_fused_pre_def]
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ reverse conj_tac \\ strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  >- ( first_x_assum irule \\ rw[] )
+  \\ gen_tac \\ strip_tac
+  \\ simp[NULL_EQ]
+  \\ irule patricialise_fused_list_pre
+  \\ rewrite_tac[GSYM genlist_eq_GENLIST, EVERY_GENLIST]
+  \\ gen_tac \\ strip_tac
+  \\ last_x_assum irule
+  \\ rewrite_tac[genlist_eq_GENLIST]
+  \\ rw[]
+  \\ rewrite_tac[GSYM genlist_eq_GENLIST, MEM_GENLIST]
+  \\ rw[o_DEF]
+  \\ first_x_assum $ irule_at Any
+  \\ rw[]
+QED
+
 Definition patricialise_fused_clocked_def:
   patricialise_fused_clocked n kvs =
   (if n = 0n then NONE else
