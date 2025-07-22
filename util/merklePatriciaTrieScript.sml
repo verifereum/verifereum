@@ -1,6 +1,6 @@
 open HolKernel boolLib bossLib Parse
      listTheory rich_listTheory combinTheory sortingTheory wordsTheory
-     optionTheory arithmeticTheory finite_mapTheory sptreeTheory
+     optionTheory arithmeticTheory finite_mapTheory sptreeTheory whileTheory
      byteTheory pairTheory alistTheory numposrepTheory wordsLib blastLib
      recursiveLengthPrefixTheory vfmTypesTheory
      cv_transLib cv_typeLib cv_typeTheory cv_stdTheory
@@ -8,6 +8,14 @@ open HolKernel boolLib bossLib Parse
 val _ = new_theory "merklePatriciaTrie";
 
 (* TODO: move? *)
+
+Theorem EXISTS_NUM_ADD:
+  ∀P. (∃n:num. P n) ⇔ (∃a b. P (a + b))
+Proof
+  rw[EQ_IMP_THM]
+  \\ TRY(qexistsl_tac[`0`,`n`] \\ rw[])
+  \\ goal_assum drule
+QED
 
 Theorem list_size_sum_map_length:
   list_size f ls = SUM (MAP f ls) + LENGTH ls
@@ -794,14 +802,315 @@ Theorem patricialise_fused_eqns[local] =
     cj 2 patricialise_fused_list_def
   ]
 
-val cv_longest_common_prefix_of_list_def =
-  definition "cv_longest_common_prefix_of_list_def";
+Datatype:
+  patricialise_fused_continuation
+  = DoneK
+  | MTEK (word8 list) patricialise_fused_continuation
+  | MTBK (word8 list) patricialise_fused_continuation
+  | AccK (rlp list) ((word8 list # word8 list) list list) patricialise_fused_continuation
+  | Call1 ((word8 list # word8 list) list) patricialise_fused_continuation
+  | App1 rlp patricialise_fused_continuation
+  | Appn (rlp list) patricialise_fused_continuation
+End
+
+Definition patricialise_fused_cps_def:
+  patricialise_fused_cps kvs c =
+  case kvs of [] => App1 (encode_internal_node NONE) c
+  | [(k,v)] => App1 (encode_internal_node (SOME (MTL k v))) c
+  | _ => let lcp = longest_common_prefix_of_list (MAP FST kvs) in
+    if NULL lcp then let
+      branches = GENLIST (make_branch kvs o n2w) 16;
+      values = MAP SND (FILTER (NULL o FST) kvs);
+      value = if NULL values then [] else HD values;
+    in AccK [] branches (MTBK value c)
+    else let dkvs = drop_from_keys (LENGTH lcp) kvs
+    in Call1 dkvs (MTEK lcp c)
+End
+
+val patricialise_fused_cps_pre_def =
+  cv_auto_trans_pre patricialise_fused_cps_def;
+
+Theorem patricialise_fused_cps_pre[cv_pre]:
+  patricialise_fused_cps_pre kvs c
+Proof
+  rw[patricialise_fused_cps_pre_def]
+  \\ rw[] \\ gvs[NULL_EQ]
+QED
+
+Definition patricialise_fused_list_cps_def:
+  patricialise_fused_list_cps acc [] c =
+    Appn (REVERSE acc) c ∧
+  patricialise_fused_list_cps acc (x::xs) c =
+    Call1 x (AccK acc xs c)
+End
+
+val () = cv_auto_trans patricialise_fused_list_cps_def;
+
+Definition patricialise_fused_step_def:
+  patricialise_fused_step (App1 subnode (MTEK lcp c)) =
+    App1 (encode_internal_node (SOME (MTE lcp subnode))) c ∧
+  patricialise_fused_step (App1 subnode (AccK acc xs c)) =
+    patricialise_fused_list_cps (subnode::acc) xs c ∧
+  patricialise_fused_step (Appn subnodes (MTBK value c)) =
+    App1 (encode_internal_node (SOME (MTB subnodes value))) c ∧
+  patricialise_fused_step (Call1 kvs c) =
+    patricialise_fused_cps kvs c ∧
+  patricialise_fused_step (AccK acc xs c) =
+    patricialise_fused_list_cps acc xs c ∧
+  patricialise_fused_step c = c
+End
+
+val () = cv_auto_trans patricialise_fused_step_def;
+
+Theorem patricialise_fused_list_cps_thm:
+  ∀acc ls.
+    (∀x. MEM x ls ⇒
+      ∀c. ∃n.
+        FUNPOW patricialise_fused_step n (patricialise_fused_cps x c) =
+	App1 (patricialise_fused x) c) ⇒
+    ∃m. FUNPOW patricialise_fused_step m
+          (patricialise_fused_list_cps acc ls c) =
+	Appn (patricialise_fused_list acc ls) c
+Proof
+  Induct_on `ls`
+  \\ rw[patricialise_fused_list_cps_def, patricialise_fused_list_def]
+  >- (qexists_tac `0` \\ rw[])
+  \\ Ho_Rewrite.ONCE_REWRITE_TAC[EXISTS_NUM]
+  \\ disj2_tac \\ simp[Once FUNPOW]
+  \\ rw[patricialise_fused_step_def]
+  \\ first_assum(qspec_then`h`mp_tac)
+  \\ impl_tac >- rw[]
+  \\ disch_then(qspec_then`AccK acc ls c` $ qx_choose_then`m`strip_assume_tac)
+  \\ Ho_Rewrite.ONCE_REWRITE_TAC[EXISTS_NUM_ADD]
+  \\ qexists_tac`m`
+  \\ ONCE_REWRITE_TAC[ADD_COMM]
+  \\ rw[FUNPOW_ADD]
+  \\ Ho_Rewrite.ONCE_REWRITE_TAC[EXISTS_NUM]
+  \\ disj2_tac \\ simp[Once FUNPOW]
+  \\ rw[patricialise_fused_step_def]
+QED
+
+Theorem patricialise_fused_cps_thm:
+  ∀kvs c. ∃n.
+  FUNPOW patricialise_fused_step n
+    (patricialise_fused_cps kvs c) =
+  App1 (patricialise_fused kvs) c
+Proof
+  ho_match_mp_tac patricialise_fused_ind
+  \\ rpt strip_tac
+  \\ rewrite_tac[Once patricialise_fused_cps_def]
+  \\ CASE_TAC
+  >- (
+    rw[patricialise_fused_def]
+    \\ qexists_tac `0` \\ rw[] )
+  \\ CASE_TAC
+  \\ CASE_TAC
+  >- (
+    rw[patricialise_fused_def]
+    \\ qexists_tac `0` \\ rw[] )
+  \\ qmatch_goalsub_abbrev_tac `MAP FST kvs`
+  \\ qmatch_goalsub_abbrev_tac`LET _ lcp`
+  \\ qmatch_asmsub_abbrev_tac`GENLIST _ nb`
+  \\ gvs[]
+  \\ IF_CASES_TAC
+  >- (
+    Ho_Rewrite.ONCE_REWRITE_TAC[EXISTS_NUM]
+    \\ disj2_tac \\ simp[Once FUNPOW]
+    \\ simp[patricialise_fused_step_def]
+    \\ gvs[]
+    \\ rewrite_tac[Once patricialise_fused_def]
+    \\ qmatch_goalsub_abbrev_tac`FUNPOW _ _ x`
+    \\ CASE_TAC >- gvs[]
+    \\ CASE_TAC \\ CASE_TAC >- gvs[]
+    \\ qmatch_goalsub_abbrev_tac `MAP FST kvs`
+    \\ qmatch_goalsub_abbrev_tac`GENLIST _ nbb`
+    \\ gvs[]
+    \\ qunabbrev_tac`x`
+    \\ qmatch_goalsub_abbrev_tac`MTBK value` 
+    \\ qmatch_goalsub_abbrev_tac`MAP _ ls`
+    \\ qpat_x_assum`∀x. _`mp_tac
+    \\ simp[Abbr`kvs`]
+    \\ strip_tac
+    \\ drule patricialise_fused_list_cps_thm
+    \\ disch_then(qspecl_then[`MTBK value c`, `[]`]strip_assume_tac)
+    \\ qexists_tac`SUC m`
+    \\ rw[FUNPOW_SUC]
+    \\ rw[patricialise_fused_step_def]
+    \\ rw[patricialise_fused_list_map, ETA_AX] )
+  \\ rewrite_tac[Once patricialise_fused_def]
+  \\ qmatch_goalsub_abbrev_tac`GENLIST _ nbb`
+  \\ gvs[Abbr`kvs`]
+  \\ qmatch_goalsub_abbrev_tac`drop_from_keys ln kvs`
+  \\ first_x_assum(qspec_then`MTEK lcp c`mp_tac)
+  \\ disch_then(qx_choose_then`n`strip_assume_tac)
+  \\ qexists_tac`1+n+1`
+  \\ simp[Once FUNPOW_ADD]
+  \\ simp[patricialise_fused_step_def]
+  \\ rewrite_tac[Once ADD_COMM]
+  \\ simp[Once FUNPOW_ADD]
+  \\ simp[patricialise_fused_step_def]
+QED
+
+Definition not_App1_DoneK_def[simp]:
+  not_App1_DoneK (App1 x DoneK) = F ∧
+  not_App1_DoneK _ = T
+End
+
+Definition dest_App1_DoneK_def[simp]:
+  dest_App1_DoneK (App1 x DoneK) = x ∧
+  dest_App1_DoneK _ = RLPB []
+End
+
+val () = cv_auto_trans not_App1_DoneK_def;
+val () = cv_auto_trans dest_App1_DoneK_def;
+
+Definition patricialise_fused_cps_run_def:
+  patricialise_fused_cps_run kvs =
+  dest_App1_DoneK $
+    WHILE not_App1_DoneK patricialise_fused_step $
+      patricialise_fused_cps kvs DoneK
+End
+
+Theorem patricialise_fused_cps_run_thm:
+  patricialise_fused_cps_run = patricialise_fused
+Proof
+  rw[FUN_EQ_THM, patricialise_fused_cps_run_def]
+  \\ qspecl_then[`x`,`DoneK`]strip_assume_tac patricialise_fused_cps_thm
+  \\ qmatch_goalsub_abbrev_tac`WHILE P f s`
+  \\ `¬P (FUNPOW f n s)` by simp[Abbr`P`]
+  \\ drule $ SRULE[PULL_EXISTS]WHILE_FUNPOW
+  \\ disch_then SUBST_ALL_TAC
+  \\ numLib.LEAST_ELIM_TAC
+  \\ conj_tac >- metis_tac[]
+  \\ qx_gen_tac`m` \\ rw[]
+  \\ `¬(n < m)` by metis_tac[]
+  \\ `m ≤ n` by simp[]
+  \\ `∀n. FUNPOW f (m + n) s = FUNPOW f m s`
+  by (
+    Induct \\ rw[]
+    \\ rw[GSYM ADD_SUC]
+    \\ rw[Once FUNPOW_SUC]
+    \\ qmatch_goalsub_abbrev_tac`f r`
+    \\ Cases_on`r` \\ gvs[Abbr`P`,Abbr`f`]
+    \\ Cases_on`p` \\ gvs[patricialise_fused_step_def] )
+  \\ gvs[LESS_EQ_EXISTS]
+QED
+
+Definition patricialise_fused_cps_loop_def:
+  patricialise_fused_cps_loop =
+  WHILE not_App1_DoneK patricialise_fused_step
+End
+
+Theorem patricialise_fused_cps_loop_eqn:
+  patricialise_fused_cps_loop x =
+  if not_App1_DoneK x then
+    patricialise_fused_cps_loop $
+      patricialise_fused_step x
+  else x
+Proof
+  rw[Once patricialise_fused_cps_loop_def]
+  \\ rw[Once WHILE]
+  \\ rw[GSYM patricialise_fused_cps_loop_def]
+QED
+
+val patricialise_fused_cps_loop_pre_def =
+  cv_auto_trans_pre patricialise_fused_cps_loop_eqn;
+
+val patricialise_fused_cps_run_pre_def =
+  cv_auto_trans_pre $
+  SRULE [GSYM patricialise_fused_cps_loop_def]
+    patricialise_fused_cps_run_def;
+
+Theorem patricialise_fused_cps_run_pre[cv_pre]:
+  patricialise_fused_cps_run_pre kvs
+Proof
+  rw[patricialise_fused_cps_run_pre_def]
+  \\ qspecl_then[`kvs`,`DoneK`]strip_assume_tac patricialise_fused_cps_thm
+  \\ pop_assum mp_tac
+  \\ qmatch_goalsub_rename_tac`FUNPOW _ _ s`
+  \\ qid_spec_tac`s`
+  \\ Induct_on`n` \\ rw[]
+  \\ rw[Once patricialise_fused_cps_loop_pre_def]
+  \\ first_x_assum irule
+  \\ gs[Once FUNPOW]
+QED
+
+val () =
+  cv_trans $
+  SRULE[FUN_EQ_THM] $ GSYM
+  patricialise_fused_cps_run_thm;
 
 (*
-val cv_genlist_0_o_make_branch_n2w_16_def =
-  theorem "cv_genlist_0_o_make_branch_n2w_16_def";
-val cv_genlist_0_o_make_branch_n2w_16_ind =
-  theorem "cv_genlist_0_o_make_branch_n2w_16_ind";
+
+(* TODO: move *)
+(* also move cv_LEN_add! *)
+Theorem not_cv_NULL_cv_LENGTH_pos:
+  ¬cv$c2b (cv_NULL v) ⇒
+  ∃n. cv_LENGTH v = Num n ∧ 0 < n
+Proof
+  Cases_on `v` \\ rw[cv_NULL_def, cv_LENGTH_def, Once cv_LEN_def]
+  \\ rw[Once keccakTheory.cv_LEN_add]
+  \\ qmatch_goalsub_rename_tac `cv_add _ cv`
+  \\ Cases_on`cv` \\ rw[cvTheory.cv_add_def]
+QED
+
+Theorem cv_size_cv_DROP_leq:
+  ∀n v. cv_size (cv_DROP n v) ≤ cv_size v
+Proof
+  Induct_on `v` \\ rw[]
+  \\ rw[Once cv_DROP_def]
+  \\ irule LESS_EQ_TRANS
+  \\ qmatch_goalsub_rename_tac `cv_DROP _ v2`
+  \\ qexists_tac `cv_size v2`
+  \\ simp[]
+QED
+
+Theorem cv_size_cv_DROP_less:
+  ∀m. 0 < m ∧ cv$c2b (cv_ispair v) ⇒ cv_size (cv_DROP (Num m) v) < cv_size v
+Proof
+  Induct_on`v`
+  \\ rw[Once cv_DROP_def]
+  \\ qmatch_goalsub_rename_tac `cv_DROP _ v2`
+  \\ ntac 2 (pop_assum mp_tac)
+  \\ Cases_on `v2` \\ rw[Once cv_DROP_def]
+  \\ rw[Once cv_DROP_def]
+  \\ gvs[]
+  \\ pop_assum mp_tac \\ rw[]
+  \\ first_x_assum(qspec_then`m-1`mp_tac)
+  \\ simp[]
+QED
+
+(* -- *)
+
+Theorem cv_size_cv_drop_from_keys_leq:
+  ∀cn kvs. cv_size (cv_drop_from_keys cn kvs) ≤ cv_size kvs
+Proof
+  ho_match_mp_tac cv_drop_from_keys_ind
+  \\ rw[]
+  \\ rw[Once cv_drop_from_keys_def]
+  \\ gvs[]
+  \\ Cases_on`kvs` \\ gvs[]
+  \\ Cases_on`g` \\ gvs[]
+  \\ qspecl_then[`cn`,`g''`]assume_tac cv_size_cv_DROP_leq
+  \\ simp[]
+QED
+
+Theorem cv_size_cv_drop_from_keys_less:
+  ∀cn kvs n.
+  cn = Num n ∧ 0 < n ∧ cv$c2b (cv_ispair kvs) ⇒
+  cv_size (cv_drop_from_keys cn kvs) < cv_size kvs
+Proof
+  ho_match_mp_tac cv_drop_from_keys_ind
+  \\ rw[] \\ gvs[]
+  \\ rw[Once cv_drop_from_keys_def]
+  \\ Cases_on `kvs` \\ gvs[]
+  \\ Cases_on `g` \\ gvs[]
+  \\ qmatch_asmsub_rename_tac `cv_ispair g2`
+  \\ Cases_on `g2` \\ gvs[]
+  >- (
+    rw[Once cv_drop_from_keys_def]
+    \\ qmatch_goalsub_rename_tac `cv_DROP _ p`
+    \\ Cases_on `p` \\ rw[Once cv_DROP_def]
 
 Theorem patricialise_fused_cv_termination1[local]:
   ∀m v n.
@@ -823,7 +1132,6 @@ Proof
     rw[Once cv_map_fst_def, Once cv_longest_common_prefix_of_list_def,
        cv_NULL_def, Once cv_genlist_0_o_make_branch_n2w_16_def]
     \\ gvs[]
-*)
 
 val patricialise_fused_pre_def =
   cv_auto_trans_pre_rec patricialise_fused_eqns (
@@ -831,7 +1139,7 @@ val patricialise_fused_pre_def =
     case x of INL v => cv_size v
             | INR (_,v) => cv_size v)`
   \\ rw[]
-  \\ (Cases_on`cv_kvs` ORELSE Cases_on`cv_v`) \\ gvs[]
+  \\ TRY ((Cases_on`cv_kvs` ORELSE Cases_on`cv_v`) \\ gvs[] \\ NO_TAC)
   \\ cheat);
 
 Theorem patricialise_fused_list_pre:
@@ -873,6 +1181,8 @@ Proof
   \\ first_x_assum $ irule_at Any
   \\ rw[]
 QED
+
+*)
 
 Definition patricialise_fused_clocked_def:
   patricialise_fused_clocked n kvs =
