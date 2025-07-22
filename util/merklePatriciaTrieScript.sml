@@ -226,6 +226,35 @@ Definition make_branch_def:
   MAP (TL ## I) $ FILTER (λkv. [nb] ≼ FST kv) kvs
 End
 
+Definition pointwise_sum2_def:
+  pointwise_sum2 [] y = y ∧
+  pointwise_sum2 x [] = x ∧
+  pointwise_sum2 ((x:word8)::xs) (y::ys) =
+    (x+y)::pointwise_sum2 xs ys
+End
+
+Definition pointwise_sum_def:
+  pointwise_sum [] = [] ∧
+  pointwise_sum (x::xs) =
+  pointwise_sum2 x (pointwise_sum xs)
+End
+
+val () = cv_auto_trans pointwise_sum_def;
+
+Theorem NULL_pointwise_sum2:
+  ∀l1 l2. NULL $ pointwise_sum2 l1 l2 ⇔ NULL l1 ∧ NULL l2
+Proof
+  ho_match_mp_tac pointwise_sum2_ind
+  \\ rw[pointwise_sum2_def]
+QED
+
+Theorem NULL_pointwise_sum:
+  ∀ls. NULL $ pointwise_sum ls ⇔ EVERY NULL ls
+Proof
+  Induct
+  \\ rw[pointwise_sum_def, NULL_pointwise_sum2]
+QED
+
 Definition patricialise_def:
   patricialise [] = NONE ∧
   patricialise [(k, v)] = SOME $ Leaf k v ∧
@@ -236,7 +265,7 @@ Definition patricialise_def:
       let
         branches = GENLIST (make_branch kvs o n2w) 16;
         values = MAP SND $ FILTER (NULL o FST) kvs;
-        value = if NULL values then [] else HD values
+        value = pointwise_sum values
       in
         SOME $ Branch (MAP patricialise branches) value
     else
@@ -387,9 +416,41 @@ Proof
 	\\ gvs[]
 QED
 
+Theorem pointwise_sum2_nil[simp]:
+  pointwise_sum2 x [] = x
+Proof
+  Induct_on`x` \\ rw[pointwise_sum2_def]
+QED
+
+Theorem pointwise_sum2_comm:
+  ∀x y. pointwise_sum2 x y = pointwise_sum2 y x
+Proof
+  ho_match_mp_tac pointwise_sum2_ind
+  \\ rw[pointwise_sum2_def]
+QED
+
+Theorem pointwise_sum2_assoc:
+  ∀x y z. pointwise_sum2 x (pointwise_sum2 y z) =
+          pointwise_sum2 (pointwise_sum2 x y) z
+Proof
+  ho_match_mp_tac pointwise_sum2_ind
+  \\ rw[pointwise_sum2_def]
+  \\ Cases_on`z` \\ gvs[pointwise_sum2_def]
+QED
+
+Theorem pointwise_sum_PERM:
+  ∀l1 l2. PERM l1 l2 ⇒
+  pointwise_sum l1 = pointwise_sum l2
+Proof
+  ho_match_mp_tac PERM_IND
+  \\ rw[pointwise_sum_def]
+  \\ Cases_on`l1` \\ gvs[GSYM NULL_EQ, pointwise_sum_def, NULL_pointwise_sum]
+  \\ gvs[AC pointwise_sum2_assoc pointwise_sum2_comm]
+QED
+
 Theorem patricialise_PERM:
   ∀kvs1 kvs2.
-    ALL_DISTINCT (MAP FST kvs1) ∧ PERM kvs1 kvs2 ⇒
+    PERM kvs1 kvs2 ⇒
     patricialise kvs1 = patricialise kvs2
 Proof
   recInduct patricialise_ind
@@ -406,59 +467,28 @@ Proof
   by metis_tac[PERM_MAP]
   \\ drule longest_common_prefix_of_list_PERM
   \\ strip_tac
-  \\ `ALL_DISTINCT (MAP FST kvs1) =
-      ALL_DISTINCT (MAP FST kvs2)` by simp[ALL_DISTINCT_PERM]
   \\ BasicProvers.LET_ELIM_TAC
   \\ simp[]
   \\ reverse IF_CASES_TAC \\ simp[]
   >- (
     first_x_assum irule
     \\ simp[]
-    \\ conj_tac
-    >- (
-      simp[MAP_MAP_o]
-      \\ simp[GSYM MAP_MAP_o]
-      \\ qunabbrev_tac`lcp'`
-      \\ gvs[]
-      \\ irule ALL_DISTINCT_DROP_LENGTH_lcp
-      \\ rw[] )
     \\ irule PERM_MAP
     \\ simp[] )
   \\ reverse conj_tac
   >- (
     simp[Abbr`value`, Abbr`value'`]
+    \\ irule pointwise_sum_PERM
     \\ simp[Abbr`values`, Abbr`values'`]
     \\ qmatch_goalsub_abbrev_tac`FILTER P`
-    \\ `PERM (FILTER P kvs1) (FILTER P kvs2)` by simp[PERM_FILTER]
-    \\ drule PERM_NULL_EQ
-    \\ simp[] \\ strip_tac
-    \\ IF_CASES_TAC \\ simp[]
-    \\ `∃k v. FILTER P kvs1  = [(k, v)]`
-    by (
-      Cases_on`FILTER P kvs1` \\ gs[]
-      \\ fs[FILTER_EQ_CONS, FILTER_EQ_NIL]
-      \\ qmatch_assum_rename_tac`P kv`
-      \\ Cases_on`kv` \\ gs[]
-      \\ qmatch_rename_tac`ls = []`
-      \\ Cases_on`ls` \\ gs[]
-      \\ gvs[FILTER_EQ_CONS]
-      \\ gvs[Abbr`P`, NULL_EQ]
-      \\ gvs[ALL_DISTINCT_APPEND] )
-    \\ gs[] )
+    \\ irule PERM_MAP
+    \\ simp[PERM_FILTER])
   \\ simp[LIST_EQ_REWRITE]
   \\ conj_asm1_tac >- rw[Abbr`branches`, Abbr`branches'`]
   \\ simp[EL_MAP]
   \\ rpt strip_tac
   \\ last_x_assum irule
   \\ simp[]
-	\\ conj_tac
-	>- (
-	  qmatch_asmsub_abbrev_tac`GENLIST _ nb`
-		\\ `x < nb` by gvs[Abbr`branches'`]
-		\\ qunabbrev_tac`branches`
-		\\ simp[EL_GENLIST]
-		\\ irule ALL_DISTINCT_MAP_FST_make_branch
-		\\ gvs[])
   \\ conj_tac >- metis_tac[MEM_EL]
   \\ qmatch_asmsub_abbrev_tac`GENLIST _ st`
   \\ gs[Abbr`branches`, Abbr`branches'`, EL_GENLIST]
@@ -665,7 +695,7 @@ Definition patricialise_fused_def:
      if NULL lcp then let
        branches = GENLIST (make_branch kvs o n2w) 16;
        values = MAP SND (FILTER (NULL o FST) kvs);
-       value = if NULL values then [] else HD values;
+       value = pointwise_sum values;
        subnodes = MAP patricialise_fused branches;
        in encode_internal_node $ SOME $ MTB subnodes value
      else let
@@ -838,21 +868,13 @@ Definition patricialise_fused_cps_def:
     if NULL lcp then let
       branches = GENLIST (make_branch kvs o n2w) 16;
       values = MAP SND (FILTER (NULL o FST) kvs);
-      value = if NULL values then [] else HD values;
+      value = pointwise_sum values;
     in AccK [] branches (MTBK value c)
     else let dkvs = drop_from_keys (LENGTH lcp) kvs
     in Call1 dkvs (MTEK lcp c)
 End
 
-val patricialise_fused_cps_pre_def =
-  cv_auto_trans_pre patricialise_fused_cps_def;
-
-Theorem patricialise_fused_cps_pre[cv_pre]:
-  patricialise_fused_cps_pre kvs c
-Proof
-  rw[patricialise_fused_cps_pre_def]
-  \\ rw[] \\ gvs[NULL_EQ]
-QED
+val () = cv_auto_trans patricialise_fused_cps_def;
 
 Definition patricialise_fused_list_cps_def:
   patricialise_fused_list_cps acc [] c =
