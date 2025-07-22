@@ -24,7 +24,6 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
   val fork_name = "Cancun"
   val chain_id = 1
 
-  val state_root_fuel = 1024
   val time_limit = Option.getOpt
     (Option.mapPartial Time.fromString
       (OS.Process.getEnv "VFM_TIME_LIMIT"),

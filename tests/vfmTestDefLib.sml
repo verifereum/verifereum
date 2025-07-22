@@ -485,8 +485,6 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val run_test_tm =
     prim_mk_const{Thy="vfmTestRun",Name="run_test"}
 
-  val fuel_tm = numSyntax.term_of_int state_root_fuel
-
   val optional_block_ty = optionSyntax.mk_option block_ty
   val invalid_block_ty = pairSyntax.mk_prod(bytes_ty, optional_block_ty)
   val expectException_ty = pairSyntax.mk_prod(string_ty, invalid_block_ty)
@@ -592,7 +590,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val result_name = name_prefix ^ "_result"
     val result_var = mk_var(result_name, test_result_ty)
     val result_rhs = list_mk_comb(run_test_tm, [
-      fuel_tm, pre_const, g_rlp_const, g_block_const,
+      pre_const, g_rlp_const, g_block_const,
       blocks_const, rlps_const, last_hash_const, post_state_const,
       expectException_tm])
     val result_def = new_definition(result_name ^ "_def",

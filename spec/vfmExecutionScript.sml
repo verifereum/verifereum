@@ -1825,17 +1825,17 @@ Definition run_blocks_def:
 End
 
 Definition run_block_to_hash_def:
-  run_block_to_hash n2 dom chainId prevHashes parent accounts blk =
+  run_block_to_hash dom chainId prevHashes parent accounts blk =
   case run_block dom chainId prevHashes parent accounts blk
     of NONE => NONE
-     | SOME (rs, s, d) => OPTION_MAP (λh. (h, d)) (state_root_clocked n2 s)
+     | SOME (rs, s, d) => SOME (state_root s, d)
 End
 
 Definition run_blocks_to_hash_def:
-  run_blocks_to_hash n2 dom chainId prevHashes parent accounts bs =
+  run_blocks_to_hash dom chainId prevHashes parent accounts bs =
   case run_blocks dom chainId prevHashes parent accounts bs
     of NONE => NONE
-     | SOME (rs, hs, p, s, d) => OPTION_MAP (λh. (h, d)) (state_root_clocked n2 s)
+     | SOME (rs, hs, p, s, d) => SOME (state_root s, d)
 End
 
 val _ = export_theory();
