@@ -1,4 +1,4 @@
-name: Veriferium Test Suite
+name: Verifereum Theories Build
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
     - '**'
 
 jobs:
-  tests:
+  build:
     runs-on: ubuntu-latest
     steps:
 
