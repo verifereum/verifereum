@@ -21,7 +21,6 @@ Datatype:
   | BlockDecodeMismatch
   | LastHashMismatch bytes32
   | StateMismatch
-  | OutOfFuel
 End
 
 Definition isPassed_def:
@@ -567,7 +566,7 @@ Proof
 QED
 
 Definition run_test_def:
-  run_test fuel
+  run_test
     preState
     genesisRLP
     genesisBlock
@@ -585,9 +584,7 @@ Definition run_test_def:
     SOME decodedGenesisBlock =>
     if decodedGenesisBlock with hash := genesisBlock.hash <> genesisBlock
     then GenesisBlockDecodeMismatch
-    else case state_root_clocked fuel preState
-    of NONE => OutOfFuel |
-    SOME preStateRootBytes =>
+    else let preStateRootBytes = state_root preState in
     let preStateRoot = word_of_bytes T 0w preStateRootBytes in
     if preStateRoot ≠ genesisBlock.stateRoot
     then GenesisHeaderMismatch preStateRoot
