@@ -114,90 +114,78 @@ Proof
   \\ simp[storage_kvs_def, FORALL_PROD]
 QED
 
-Definition storage_root_clocked_def:
-  storage_root_clocked n (s:storage) = let
-    t = build_spt 0w (dimword (:256)) s;
-    l = toAList t
-  in trie_root_clocked n $ storage_kvs l []
+Definition trie_root_from_kvs_def:
+  trie_root_from_kvs kvs = let
+    r = patricialise_fused kvs;
+    e = rlp_encode r;
+  in 
+    if LENGTH e < 32 then
+      Keccak_256_w64 e
+    else dest_RLPB r
 End
 
-(* cannot prove this because Keccak_256_w64 is not injective
-*  see other comments about removing ALL_DISTINCT or the clock
-Theorem storage_root_clocked_thm:
-  ∃n. storage_root_clocked n s = SOME $ storage_root s
-Proof
-  simp[storage_root_clocked_def, Excl"SIZES_CONV",
-       storage_trie_def, storage_root_def, storage_kvs_thm,
-       trie_root_clocked_def, trie_root_def]
-  \\ qmatch_goalsub_abbrev_tac`rlp_encode r`
-  \\ qmatch_goalsub_abbrev_tac`patricialise_fused_clocked _ kvs`
-  \\ `ALL_DISTINCT (MAP FST kvs)`
-  by (
-    simp[Abbr`kvs`, MAP_MAP_o, o_DEF, UNCURRY, Excl"SIZES_CONV"]
-    \\ qmatch_goalsub_abbrev_tac`build_spt _ n`
-    \\ simp[GSYM MAP_MAP_o, GSYM o_DEF]
-    \\ irule ALL_DISTINCT_MAP_INJ
-    \\ conj_tac
-    >- (
-      rw[LIST_EQ_REWRITE]
-      \\ gvs[EL_MAP, MEM_MAP, Excl"SIZES_CONV"]
-      \\ gs[word_to_hex_list_def, w2l_def, EL_n2l, Excl"SIZES_CONV", dimword_8]
-      \\ first_x_assum drule
-      \\ simp[MOD_MOD_LESS_EQ] )
-    \\ irule ALL_DISTINCT_MAP_INJ
-    \\ conj_tac
-    >- (
-      rw[]
-      \\ `1 < 16n` by simp[]
-      \\ metis_tac[l2n_n2l] )
-    \\ metis_tac[ALL_DISTINCT_MAP_FST_toAList] )
-  \\ drule patricialise_fused_clocked_thm
-  \\ strip_tac
-  \\ qexists_tac`n`
-  \\ pop_assum SUBST_ALL_TAC
-  \\ simp[Excl"SIZES_CONV"]
-  \\ qmatch_goalsub_abbrev_tac`rlp_encode r2`
-  \\ `r2 = r` suffices_by rw[]
-  \\ qunabbrev_tac`r`
-  \\ qunabbrev_tac`r2`
-  \\ AP_TERM_TAC
-  \\ AP_TERM_TAC
-  \\ simp[expanded_storage_trie_def]
-  \\ irule patricialise_PERM
-  \\ qunabbrev_tac`kvs`
-  \\ simp[storage_fmap_def, Excl"SIZES_CONV"]
-  \\ qmatch_goalsub_abbrev_tac`PERM (MAP g sl) (MAP f fl)`
-  \\ `MAP g sl = MAP (f o (n2w ## I)) sl`
-  by simp[MAP_EQ_f, Abbr`g`, Abbr`f`, FORALL_PROD, word_to_hex_list_def,
-          w2l_def, Excl"SIZES_CONV", Abbr`sl`, MEM_toAList, lookup_build_spt]
-  \\ pop_assum SUBST_ALL_TAC
-  \\ simp[GSYM MAP_MAP_o]
-  \\ irule PERM_MAP
-  \\ qunabbrev_tac`fl`
-  \\ qunabbrev_tac`sl`
-  \\ irule PERM_alist_build_fmap_build_spt
-  \\ simp[]
-QED
-*)
+val () = cv_auto_trans trie_root_from_kvs_def;
 
-Definition cv_storage_root_clocked_def:
-  cv_storage_root_clocked (n:cv) (s:cv) =
-  cv_trie_root_clocked n $
+Theorem storage_root_eqn:
+  storage_root (s:storage) = let
+    t = build_spt 0w (dimword (:256)) s;
+    l = toAList t;
+    kvs = storage_kvs l [];
+  in trie_root_from_kvs kvs
+Proof
+  rewrite_tac[trie_root_from_kvs_def, storage_root_def, storage_trie_def,
+              storage_kvs_thm, expanded_storage_trie_def, trie_root_def]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ `PERM (MAP (n2w ## I) l) l'`
+  by (
+    unabbrev_all_tac
+    \\ rewrite_tac[storage_fmap_def]
+    \\ irule PERM_alist_build_fmap_build_spt
+    \\ rw[] )
+  \\ `PERM kvs kvs'`
+  by (
+    qmatch_asmsub_abbrev_tac`MAP f l'`
+    \\ drule_then(qspec_then`f`mp_tac) PERM_MAP
+    \\ rw[Abbr`kvs`, Abbr`kvs'`]
+    \\ irule PERM_TRANS
+    \\ goal_assum $ drule_at Any
+    \\ irule PERM_INTRO
+    \\ rw[MAP_MAP_o, MAP_EQ_f, FORALL_PROD, Abbr`f`]
+    \\ AP_TERM_TAC
+    \\ gvs[Abbr`l`, MEM_toAList]
+    \\ gvs[Abbr`t`, lookup_build_spt] )
+  \\ gvs[GSYM patricialise_fused_thm]
+  \\ `r = root_node`
+  by (
+    rw[Abbr`r`, Abbr`root_node`]
+    \\ rw[patricialise_fused_thm]
+    \\ AP_TERM_TAC
+    \\ AP_TERM_TAC
+    \\ irule patricialise_PERM
+    \\ rw[] )
+  \\ gvs[]
+QED
+
+Definition cv_storage_root_def:
+  cv_storage_root (s:cv) =
+  cv_trie_root_from_kvs $
     cv_storage_kvs (cv_toAList s) (Num 0)
 End
 
-val cv_storage_kvs_thm = theorem "cv_storage_kvs_thm";
+val cv_trie_root_from_kvs_thm =
+  theorem"cv_trie_root_from_kvs_thm";
 
-Theorem cv_storage_root_clocked_rep[cv_rep]:
-  from_option (from_list from_word) $ storage_root_clocked n s =
-  cv_storage_root_clocked (Num n) (from_storage s)
+Theorem cv_storage_root_rep[cv_rep]:
+  from_list from_word $ storage_root s =
+  cv_storage_root (from_storage s)
 Proof
-  simp[cv_storage_root_clocked_def, storage_root_clocked_def,
-       from_storage_def, Excl"SIZES_CONV", cv_trie_root_clocked_thm]
+  simp[cv_storage_root_def, storage_root_eqn,
+       from_storage_def, Excl"SIZES_CONV",
+       cv_trie_root_from_kvs_thm]
   \\ qmatch_goalsub_abbrev_tac`from_sptree_sptree_spt _ t`
   \\ simp[GSYM cv_toAList_thm]
-  \\ simp[cv_storage_kvs_thm |> GSYM |> Q.GEN`acc` |> Q.SPEC`[]` |>
-          SIMP_RULE std_ss [from_list_def]]
+  \\ simp[theorem"cv_storage_kvs_thm"]
+  \\ simp[from_list_def]
 QED
 
 Definition encode_account_def:
@@ -232,54 +220,17 @@ Definition state_root_def:
   state_root a = trie_root $ state_trie a
 End
 
-(* TODO: can't prove this equivalent to below because we don't
-*        know the hash function is injective. could try to remove
-*        the ALL_DISTINCT requirement though. or just avoid the clock
-*        altogether by proving termination of the fused version. *)
-
-Definition encode_account_clocked_def:
-  encode_account_clocked n a =
-  case storage_root_clocked n a.storage of SOME r => (
-    rlp_encode $ RLPL [
-      rlp_number a.nonce;
-      rlp_number a.balance;
-      RLPB $ r;
-      RLPB $ Keccak_256_w64 a.code
-    ] )
-  | NONE => []
-End
-
-(*
-Theorem encode_account_clocked_thm:
-  ∃n. encode_account_clocked n a = encode_account a
-Proof
-  rw[encode_account_def, encode_account_clocked_def]
-  \\ qspec_then`a.storage`strip_assume_tac(Q.GEN`s`storage_root_clocked_thm)
-  \\ qexists_tac`n` \\ simp[]
-QED
-*)
-
-val () = cv_auto_trans encode_account_clocked_def;
-
-Definition state_root_clocked_def:
-  state_root_clocked n (a: evm_accounts) = let
-    t = build_spt empty_account_state (dimword (:160)) a;
-    l = toAList t;
-    kvs = MAP (λp. account_key (n2w $ FST p), encode_account_clocked n (SND p)) l;
-  in trie_root_clocked n kvs
-End
-
 Definition state_kvs_def:
-  state_kvs n [] acc = REVERSE acc ∧
-  state_kvs n ((k,v)::ls) acc =
-  state_kvs n ls ((account_key $ n2w k, encode_account_clocked n v)::acc)
+  state_kvs [] acc = REVERSE acc ∧
+  state_kvs ((k,v)::ls) acc =
+  state_kvs ls ((account_key $ n2w k, encode_account v)::acc)
 End
 
 val () = cv_auto_trans state_kvs_def;
 
 Theorem state_kvs_map:
-  state_kvs n ls acc = REVERSE acc ++ MAP (λp. account_key (n2w $ FST p),
-  encode_account_clocked n (SND p)) ls
+  state_kvs ls acc = REVERSE acc ++ MAP (λp. account_key (n2w $ FST p),
+  encode_account (SND p)) ls
 Proof
   qid_spec_tac`acc`
   \\ Induct_on`ls`
@@ -287,20 +238,59 @@ Proof
   \\ Cases_on`h` \\ rw[state_kvs_def]
 QED
 
-Definition cv_state_root_clocked_def:
-  cv_state_root_clocked (n:cv) (a:cv) =
-  cv_trie_root_clocked n $
-    cv_state_kvs n (cv_toAList a) (Num 0)
+Definition cv_state_root_def:
+  cv_state_root (a:cv) =
+  cv_trie_root_from_kvs $
+    cv_state_kvs (cv_toAList a) (Num 0)
 End
 
 val cv_state_kvs_thm = theorem "cv_state_kvs_thm";
 
-Theorem cv_state_root_clocked_rep[cv_rep]:
-  from_option (from_list from_word) $ state_root_clocked n a =
-  cv_state_root_clocked (Num n) (from_evm_accounts a)
+Theorem state_root_eqn:
+  state_root (a:evm_accounts) = let
+    t = build_spt empty_account_state (dimword (:160)) a;
+    l = toAList t;
+    kvs = state_kvs l []
+  in trie_root_from_kvs kvs
 Proof
-  simp[cv_state_root_clocked_def, state_root_clocked_def,
-       from_evm_accounts_def, Excl"SIZES_CONV", cv_trie_root_clocked_thm]
+  rewrite_tac[trie_root_from_kvs_def, state_root_def, state_trie_def,
+              state_kvs_map, trie_root_def]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ `PERM (MAP (n2w ## I) l) l'`
+  by (
+    unabbrev_all_tac
+    \\ rewrite_tac[accounts_fmap_def]
+    \\ irule PERM_alist_build_fmap_build_spt
+    \\ rw[] )
+  \\ `PERM kvs kvs'`
+  by (
+    qmatch_asmsub_abbrev_tac`MAP f l'`
+    \\ drule_then(qspec_then`f`mp_tac) PERM_MAP
+    \\ rw[Abbr`kvs`, Abbr`kvs'`]
+    \\ irule PERM_TRANS
+    \\ goal_assum $ drule_at Any
+    \\ irule PERM_INTRO
+    \\ rw[MAP_MAP_o, MAP_EQ_f, FORALL_PROD, Abbr`f`])
+  \\ gvs[GSYM patricialise_fused_thm]
+  \\ `r = root_node`
+  by (
+    rw[Abbr`r`, Abbr`root_node`]
+    \\ rw[patricialise_fused_thm]
+    \\ AP_TERM_TAC
+    \\ AP_TERM_TAC
+    \\ rw[Abbr`t'`]
+    \\ irule patricialise_PERM
+    \\ rw[] )
+  \\ gvs[]
+QED
+
+Theorem cv_state_root_rep[cv_rep]:
+  from_list from_word $ state_root a =
+  cv_state_root (from_evm_accounts a)
+Proof
+  simp[cv_state_root_def, state_root_eqn,
+       from_evm_accounts_def, Excl"SIZES_CONV",
+       cv_trie_root_from_kvs_thm]
   \\ qmatch_goalsub_abbrev_tac`from_sptree_sptree_spt _ t`
   \\ simp[GSYM cv_toAList_thm,
           state_kvs_map |> Q.GEN`acc` |> Q.SPEC`[]` |>
