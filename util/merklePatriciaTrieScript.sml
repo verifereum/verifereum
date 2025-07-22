@@ -232,7 +232,6 @@ Definition patricialise_def:
   patricialise kvs = let
     lcp = longest_common_prefix_of_list (MAP FST kvs)
   in
-    if ALL_DISTINCT (MAP FST kvs) then
     if NULL lcp then
       let
         branches = GENLIST (make_branch kvs o n2w) 16;
@@ -243,59 +242,87 @@ Definition patricialise_def:
     else
       SOME $
       Extension lcp (patricialise (MAP (DROP (LENGTH lcp) ## I) kvs))
-    else NONE
 Termination
-  WF_REL_TAC`measure (SUM o (MAP $ LENGTH o FST))`
-  \\ gs[]
-  \\ conj_tac
+  WF_REL_TAC `measure (list_size (LENGTH o FST))`
+  \\ qmatch_goalsub_abbrev_tac `GENLIST _ nb`
+  \\ simp[MEM_GENLIST, NULL_EQ, PULL_EXISTS]
+  \\ reverse conj_tac
+  \\ rpt gen_tac \\ qmatch_goalsub_abbrev_tac`longest_common_prefix_of_list ls`
   >- (
-    rpt gen_tac
-    \\ qmatch_goalsub_abbrev_tac`make_branch kvs`
-    \\ qmatch_goalsub_abbrev_tac`_ ∧ (_ ∧ M) ⇒ _`
-    \\ strip_tac
-    \\ `∃nb. a = make_branch kvs nb`
-    by ( fs[Abbr`M`] \\ metis_tac[] )
-    \\ simp[make_branch_def, MAP_MAP_o, o_DEF]
-    \\ qmatch_goalsub_abbrev_tac `_ < lkvs`
-    \\ `lkvs = SUM (MAP (λx. LENGTH (FST x)) kvs)`
-    by ( simp[Abbr`lkvs`, Abbr`kvs`] )
-    \\ simp[]
-    \\ qmatch_goalsub_abbrev_tac`SUM (MAP f fkvs) < SUM (MAP g kvs)`
-    \\ irule LESS_EQ_LESS_TRANS
-    \\ qexists_tac`SUM (MAP f kvs)`
-    \\ conj_tac
-    >- (
-      irule SUM_MAP_same_LESS
-      \\ simp[Abbr`f`, Abbr`g`, LENGTH_TL_LE, EXISTS_MEM]
-      \\ qmatch_assum_rename_tac`k1 ≠ k2`
-      \\ qmatch_asmsub_rename_tac`(k1,v1)::(k2,v2)::_`
-      \\ qexists_tac`if NULL k1 then (k2,v2) else (k1,v1)`
-      \\ conj_tac >- rw[Abbr`kvs`]
-      \\ rw[NULL_EQ]
-      \\ qmatch_goalsub_rename_tac`TL tt`
-      \\ Cases_on`tt` \\ gs[] )
-    \\ irule SUM_SUBLIST
-    \\ irule MAP_SUBLIST
-    \\ qunabbrev_tac`fkvs`
-    \\ irule FILTER_sublist )
-  \\ rpt gen_tac
-  \\ strip_tac
-  \\ qmatch_goalsub_abbrev_tac`longest_common_prefix_of_list fkvs`
-  \\ qmatch_goalsub_abbrev_tac `_ < lkvs`
-  \\ `lkvs = SUM (MAP LENGTH fkvs)`
-    by ( simp[Abbr`lkvs`, Abbr`fkvs`, MAP_MAP_o, o_DEF] )
-  \\ qmatch_goalsub_abbrev_tac`DROP (LENGTH lcp)`
-  \\ simp[MAP_MAP_o, o_DEF]
-  \\ qmatch_goalsub_abbrev_tac`lhs < _`
-  \\ `lhs = SUM (MAP (flip $- (LENGTH lcp) o LENGTH) fkvs)`
-  by simp[Abbr`fkvs`, Abbr`lhs`, o_DEF, MAP_MAP_o]
-  \\ simp[]
+    rw[]
+    \\ qspec_then`ls`mp_tac longest_common_prefix_of_list_thm
+    \\ rw[NULL_EQ]
+    \\ qmatch_goalsub_rename_tac`LENGTH h1`
+    \\ `MEM h1 ls` by rw[Abbr`ls`]
+    \\ qmatch_goalsub_abbrev_tac`LENGTH h1 - LENGTH lcp`
+    \\ `IS_PREFIX h1 lcp` by metis_tac[]
+    \\ `LENGTH lcp ≤ LENGTH h1` by metis_tac[IS_PREFIX_LENGTH]
+    \\ qmatch_goalsub_rename_tac`LENGTH h2 + (_ + 2)`
+    \\ `MEM h2 ls` by rw[Abbr`ls`]
+    \\ `IS_PREFIX h2 lcp` by metis_tac[]
+    \\ `LENGTH lcp ≤ LENGTH h2` by metis_tac[IS_PREFIX_LENGTH]
+    \\ simp[list_size_sum_map_length]
+    \\ qmatch_goalsub_abbrev_tac`SUM l1`
+    \\ qmatch_goalsub_abbrev_tac`lhs < _`
+    \\ qmatch_goalsub_abbrev_tac`SUM l2`
+    \\ `SUM l1 <= SUM l2`
+    by (
+      rw[Abbr`l1`,Abbr`l2`]
+      \\ irule SUM_MAP_same_LE
+      \\ rw[EVERY_MEM] )
+    \\ `0 < LENGTH lcp` by ( CCONTR_TAC \\ gvs[] )
+    \\ rw[Abbr`lhs`] )
+  \\ rw[longest_common_prefix_of_list_is_nil]
+  \\ qmatch_goalsub_abbrev_tac`make_branch ps`
+  \\ `ls = MAP FST ps` by rw[Abbr`ps`, Abbr`ls`]
+  \\ qunabbrev_tac`ls`
+  \\ pop_assum SUBST_ALL_TAC
+  \\ simp[make_branch_def, MAP_MAP_o, o_DEF]
+  \\ rw[list_size_sum_map_length]
+  \\ rw[make_branch_def]
+  \\ qmatch_goalsub_abbrev_tac`lfp + smp < l1 + (l2 + (l3 + (sm + 2)))`
+  \\ `l1 + l2 + sm = SUM (MAP (LENGTH o FST) ps)` by rw[Abbr`ps`,Abbr`sm`,o_DEF]
+  \\ `l3 + 2 = LENGTH ps` by rw[Abbr`l3`,Abbr`ps`]
+	\\ qmatch_asmsub_abbrev_tac`FILTER P`
+	\\ qmatch_asmsub_abbrev_tac`MAP f1 (FILTER _ _)`
+	\\ qmatch_asmsub_abbrev_tac`MAP f2 ps`
+	\\ `SUM (MAP f2 (FILTER P ps)) ≤ SUM (MAP f2 ps)`
+	by (
+	  irule SUM_SUBLIST
+		\\ irule MAP_SUBLIST
+		\\ rw[FILTER_sublist] )
+  \\ `smp ≤ SUM (MAP (LENGTH o FST) ps)` by (
+    rw[Abbr`smp`, MAP_MAP_o, o_DEF]
+    \\ irule LESS_EQ_TRANS
+		\\ first_assum $ irule_at Any
+    \\ irule SUM_MAP_same_LE
+    \\ simp[Abbr`f1`,Abbr`f2`,EVERY_MEM,MEM_FILTER,Abbr`P`]
+    \\ Cases \\ simp[] \\ CASE_TAC \\ rw[] )
+  \\ Cases_on`lfp < LENGTH ps` >- gvs[]
+  \\ `lfp ≤ LENGTH ps` by simp[Abbr`lfp`, LENGTH_FILTER_LEQ]
+  \\ `lfp = LENGTH ps` by gvs[]
+  \\ `EVERY P ps`
+  by (
+    spose_not_then strip_assume_tac
+  	\\ fs[]
+  	\\ drule LENGTH_FILTER_LESS
+  	\\ gvs[] )
+  \\ `smp < SUM (MAP (LENGTH o FST) ps)` suffices_by gvs[]
+  \\ rw[Abbr`smp`, MAP_MAP_o, o_DEF]
+  \\ irule LESS_LESS_EQ_TRANS
+  \\ first_assum $ irule_at Any
   \\ irule SUM_MAP_same_LESS
-  \\ simp[]
-  \\ `0 < LENGTH lcp` by (Cases_on`lcp` \\ gs[])
-  \\ simp[Abbr`fkvs`]
-  \\ qmatch_assum_rename_tac`k1 ≠ k2`
-  \\ Cases_on`k1` \\ Cases_on`k2` \\ gs[]
+  \\ simp[Abbr`f1`,Abbr`f2`,EVERY_MEM,MEM_FILTER,Abbr`P`,EXISTS_MEM]
+  \\ simp[FORALL_PROD, EXISTS_PROD]
+  \\ conj_tac
+  >- ( Cases \\ simp[] \\ CASE_TAC \\ rw[] )
+  \\ gvs[EVERY_MEM, FORALL_PROD, NULL_EQ]
+  \\ gvs[MEM_MAP, EXISTS_PROD]
+  \\ first_assum $ irule_at Any
+  \\ first_assum $ irule_at Any
+  \\ first_assum $ irule_at Any
+  \\ first_x_assum drule
+  \\ CASE_TAC \\ rw[]
 End
 
 Definition drop_from_keys_def:
@@ -325,33 +352,6 @@ Proof
   \\ Cases \\ simp[drop_from_keys_def]
 QED
 
-Theorem patricialise_ALL_DISTINCT_def:
-  ∀kvs. ALL_DISTINCT (MAP FST kvs) ⇒
-  patricialise kvs =
-  case kvs of [] => NONE
-     | [(k, v)] => SOME $ Leaf k v
-     | _ => let
-       lcp = longest_common_prefix_of_list (MAP FST kvs) in
-         if NULL lcp then
-           let
-             branches = GENLIST (make_branch kvs o n2w) 16;
-             values = MAP SND $ FILTER (NULL o FST) kvs;
-             value = if NULL values then [] else HD values
-           in
-             SOME $ Branch (patricialise_list branches []) value
-         else
-           SOME $
-           Extension lcp (patricialise (drop_from_keys (LENGTH lcp) kvs))
-Proof
-  recInduct patricialise_ind
-  \\ rpt strip_tac
-  >- EVAL_TAC
-  >- EVAL_TAC
-  \\ rewrite_tac[patricialise_def, patricialise_list_map, drop_from_keys_map]
-  \\ asm_rewrite_tac[REVERSE_DEF, APPEND]
-  \\ simp_tac (std_ss ++ ETA_ss) [list_case_def]
-QED
-
 Theorem make_branch_PERM:
   PERM kvs1 kvs2 ==>
   PERM (make_branch kvs1 i) (make_branch kvs2 i)
@@ -362,9 +362,34 @@ Proof
   \\ rw[]
 QED
 
+Theorem ALL_DISTINCT_MAP_FST_make_branch:
+	ALL_DISTINCT (MAP FST ls) ⇒
+  ALL_DISTINCT (MAP FST (make_branch ls x))
+Proof
+  rw[make_branch_def,MAP_MAP_o]
+	\\ rw[GSYM MAP_MAP_o]
+	\\ qmatch_goalsub_abbrev_tac`FILTER P`
+	\\ `P = (λk. case k of [] => F | h::_ => x = h) o FST`
+	by rw[Abbr`P`,FUN_EQ_THM]
+	\\ pop_assum SUBST1_TAC
+	\\ rw[GSYM FILTER_MAP]
+	\\ irule ALL_DISTINCT_MAP_INJ
+	\\ reverse conj_tac
+	>- ( irule FILTER_ALL_DISTINCT \\ rw[] )
+	\\ rw[MEM_FILTER]
+	\\ gvs[EL_ALL_DISTINCT_EL_EQ]
+	\\ gvs[MEM_EL, EL_MAP, Abbr`P`]
+	\\ irule EQ_SYM
+	\\ first_x_assum drule
+	\\ disch_then $ irule o iffLR
+	\\ rpt(qhdtm_x_assum`list_CASE`mp_tac)
+	\\ CASE_TAC \\ CASE_TAC
+	\\ gvs[]
+QED
+
 Theorem patricialise_PERM:
   ∀kvs1 kvs2.
-    PERM kvs1 kvs2 ⇒
+    ALL_DISTINCT (MAP FST kvs1) ∧ PERM kvs1 kvs2 ⇒
     patricialise kvs1 = patricialise kvs2
 Proof
   recInduct patricialise_ind
@@ -385,11 +410,18 @@ Proof
       ALL_DISTINCT (MAP FST kvs2)` by simp[ALL_DISTINCT_PERM]
   \\ BasicProvers.LET_ELIM_TAC
   \\ simp[]
-  \\ IF_CASES_TAC \\ simp[]
   \\ reverse IF_CASES_TAC \\ simp[]
   >- (
     first_x_assum irule
     \\ simp[]
+    \\ conj_tac
+    >- (
+      simp[MAP_MAP_o]
+      \\ simp[GSYM MAP_MAP_o]
+      \\ qunabbrev_tac`lcp'`
+      \\ gvs[]
+      \\ irule ALL_DISTINCT_DROP_LENGTH_lcp
+      \\ rw[] )
     \\ irule PERM_MAP
     \\ simp[] )
   \\ reverse conj_tac
@@ -419,6 +451,14 @@ Proof
   \\ rpt strip_tac
   \\ last_x_assum irule
   \\ simp[]
+	\\ conj_tac
+	>- (
+	  qmatch_asmsub_abbrev_tac`GENLIST _ nb`
+		\\ `x < nb` by gvs[Abbr`branches'`]
+		\\ qunabbrev_tac`branches`
+		\\ simp[EL_GENLIST]
+		\\ irule ALL_DISTINCT_MAP_FST_make_branch
+		\\ gvs[])
   \\ conj_tac >- metis_tac[MEM_EL]
   \\ qmatch_asmsub_abbrev_tac`GENLIST _ st`
   \\ gs[Abbr`branches`, Abbr`branches'`, EL_GENLIST]
@@ -716,7 +756,6 @@ Termination
 End
 
 Theorem patricialise_fused_thm:
-  ALL_DISTINCT (MAP FST kvs) ⇒
   patricialise_fused kvs
     = encode_internal_node $ OPTION_MAP encode_trie_node $ patricialise kvs
 Proof
@@ -727,7 +766,6 @@ Proof
   \\ conj_tac
   >- rw[patricialise_def, patricialise_fused_def, encode_trie_node_def]
   \\ rpt gen_tac \\ strip_tac
-  \\ strip_tac
   \\ rewrite_tac[Once patricialise_fused_def]
   \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
   \\ rewrite_tac[list_case_def]
@@ -760,19 +798,6 @@ Proof
   \\ gvs[Abbr`branches`, MEM_GENLIST]
   \\ rw[make_branch_def]
   \\ rw[MAP_MAP_o]
-  \\ qmatch_goalsub_abbrev_tac`FILTER P`
-  \\ `ALL_DISTINCT (MAP FST (FILTER P kvs))`
-  by (
-    irule sublist_ALL_DISTINCT
-    \\ first_assum $ irule_at Any
-    \\ irule MAP_SUBLIST
-    \\ rw[FILTER_sublist] )
-  \\ rw[GSYM MAP_MAP_o]
-  \\ irule ALL_DISTINCT_MAP_INJ
-  \\ rw[MEM_MAP, MEM_FILTER, Abbr`P`]
-  \\ rpt(qpat_x_assum`list_case _ _ _`mp_tac)
-  \\ CASE_TAC \\ CASE_TAC
-  \\ rw[] \\ gvs[]
 QED
 
 Definition patricialise_fused_list_def:
@@ -793,14 +818,6 @@ Theorem patricialise_fused_list_map:
 Proof
   rw[patricialise_fused_list_thm, FUN_EQ_THM]
 QED
-
-Theorem patricialise_fused_eqns[local] =
-  LIST_CONJ [
-    patricialise_fused_def
-      |> SIMP_RULE std_ss [ETA_AX, patricialise_fused_list_map],
-    cj 1 patricialise_fused_list_def,
-    cj 2 patricialise_fused_list_def
-  ]
 
 Datatype:
   patricialise_fused_continuation
@@ -1040,9 +1057,7 @@ val () =
   SRULE[FUN_EQ_THM] $ GSYM
   patricialise_fused_cps_run_thm;
 
-(*
-
-(* TODO: move *)
+(* TODO: move
 (* also move cv_LEN_add! *)
 Theorem not_cv_NULL_cv_LENGTH_pos:
   ¬cv$c2b (cv_NULL v) ⇒
@@ -1079,380 +1094,7 @@ Proof
   \\ first_x_assum(qspec_then`m-1`mp_tac)
   \\ simp[]
 QED
-
-(* -- *)
-
-Theorem cv_size_cv_drop_from_keys_leq:
-  ∀cn kvs. cv_size (cv_drop_from_keys cn kvs) ≤ cv_size kvs
-Proof
-  ho_match_mp_tac cv_drop_from_keys_ind
-  \\ rw[]
-  \\ rw[Once cv_drop_from_keys_def]
-  \\ gvs[]
-  \\ Cases_on`kvs` \\ gvs[]
-  \\ Cases_on`g` \\ gvs[]
-  \\ qspecl_then[`cn`,`g''`]assume_tac cv_size_cv_DROP_leq
-  \\ simp[]
-QED
-
-Theorem cv_size_cv_drop_from_keys_less:
-  ∀cn kvs n.
-  cn = Num n ∧ 0 < n ∧ cv$c2b (cv_ispair kvs) ⇒
-  cv_size (cv_drop_from_keys cn kvs) < cv_size kvs
-Proof
-  ho_match_mp_tac cv_drop_from_keys_ind
-  \\ rw[] \\ gvs[]
-  \\ rw[Once cv_drop_from_keys_def]
-  \\ Cases_on `kvs` \\ gvs[]
-  \\ Cases_on `g` \\ gvs[]
-  \\ qmatch_asmsub_rename_tac `cv_ispair g2`
-  \\ Cases_on `g2` \\ gvs[]
-  >- (
-    rw[Once cv_drop_from_keys_def]
-    \\ qmatch_goalsub_rename_tac `cv_DROP _ p`
-    \\ Cases_on `p` \\ rw[Once cv_DROP_def]
-
-Theorem patricialise_fused_cv_termination1[local]:
-  ∀m v n.
-  cv_genlist_0_o_make_branch_n2w_16_def
-  cv$c2b (cv_NULL (cv_longest_common_prefix_of_list (cv_map_fst v))) ⇒
-  cv_size (cv_genlist_0_o_make_branch_n2w_16 m v n) <
-  cv_size v
-Proof
-  ho_match_mp_tac cv_genlist_0_o_make_branch_n2w_16_ind
-  \\ rw[]
-  \\ reverse(rw[Once cv_genlist_0_o_make_branch_n2w_16_def])
-  >- (
-    Cases_on`v` \\ rw[]
-    \\ gvs[Once cv_map_fst_def]
-    \\ gvs[Once cv_longest_common_prefix_of_list_def]
-    \\ gvs[cv_NULL_def]
-    \\ Cases_on`m` \\ gvs[]
-  >- (
-    rw[Once cv_map_fst_def, Once cv_longest_common_prefix_of_list_def,
-       cv_NULL_def, Once cv_genlist_0_o_make_branch_n2w_16_def]
-    \\ gvs[]
-
-val patricialise_fused_pre_def =
-  cv_auto_trans_pre_rec patricialise_fused_eqns (
-  WF_REL_TAC `inv_image $< (λx.
-    case x of INL v => cv_size v
-            | INR (_,v) => cv_size v)`
-  \\ rw[]
-  \\ TRY ((Cases_on`cv_kvs` ORELSE Cases_on`cv_v`) \\ gvs[] \\ NO_TAC)
-  \\ cheat);
-
-Theorem patricialise_fused_list_pre:
-  ∀ls. EVERY patricialise_fused_pre ls ⇒
-       ∀acc. patricialise_fused_list_pre acc ls
-Proof
-  Induct \\ rw[]
-  \\ rw[Once patricialise_fused_pre_def]
-QED
-
-Theorem patricialise_fused_pre[cv_pre]:
-  (∀kvs. patricialise_fused_pre kvs) ∧
-  (∀acc ls. patricialise_fused_list_pre acc ls)
-Proof
-  reverse conj_asm1_tac
-  >- (
-    rpt gen_tac
-    \\ irule patricialise_fused_list_pre
-    \\ rw[EVERY_MEM])
-  \\ ho_match_mp_tac patricialise_fused_ind
-  \\ gen_tac \\ strip_tac
-  \\ rewrite_tac[Once patricialise_fused_pre_def]
-  \\ rpt gen_tac \\ strip_tac
-  \\ rpt gen_tac \\ strip_tac
-  \\ rpt gen_tac \\ strip_tac
-  \\ reverse conj_tac \\ strip_tac
-  \\ rpt gen_tac \\ strip_tac
-  >- ( first_x_assum irule \\ rw[] )
-  \\ gen_tac \\ strip_tac
-  \\ simp[NULL_EQ]
-  \\ irule patricialise_fused_list_pre
-  \\ rewrite_tac[GSYM genlist_eq_GENLIST, EVERY_GENLIST]
-  \\ gen_tac \\ strip_tac
-  \\ last_x_assum irule
-  \\ rewrite_tac[genlist_eq_GENLIST]
-  \\ rw[]
-  \\ rewrite_tac[GSYM genlist_eq_GENLIST, MEM_GENLIST]
-  \\ rw[o_DEF]
-  \\ first_x_assum $ irule_at Any
-  \\ rw[]
-QED
-
-*)
-
-Definition patricialise_fused_clocked_def:
-  patricialise_fused_clocked n kvs =
-  (if n = 0n then NONE else
-  (case kvs of
-     | [] => SOME $ encode_internal_node NONE
-     | [(k,v)] => SOME $ encode_internal_node $ SOME $ MTL k v
-     | _ => let lcp = longest_common_prefix_of_list (MAP FST kvs) in
-       if NULL lcp then let
-         branches = GENLIST (make_branch kvs o n2w) 16;
-         values = MAP SND (FILTER (NULL o FST) kvs);
-         value = if NULL values then [] else HD values
-         in case
-           patricialise_fused_clocked_mmap (n - 1) branches []
-         of NONE => NONE |
-            SOME subnodes =>
-            SOME $ encode_internal_node $ SOME $ MTB subnodes value
-       else
-         case patricialise_fused_clocked (n - 1)
-                     (drop_from_keys (LENGTH lcp) kvs)
-         of SOME subnode =>
-            SOME $ encode_internal_node $ SOME $ MTE lcp subnode
-          | NONE => NONE)) ∧
-  patricialise_fused_clocked_mmap 0 _ _ = NONE ∧
-  patricialise_fused_clocked_mmap n [] acc = SOME (REVERSE acc) ∧
-  patricialise_fused_clocked_mmap n (b::bs) acc =
-    case patricialise_fused_clocked (n - 1) b of NONE => NONE
-       | SOME a => patricialise_fused_clocked_mmap (n - 1) bs (a::acc)
-Termination
-  WF_REL_TAC`measure (λx. case x of INL p => FST p | INR p => FST p)`
-End
-
-Theorem patricialise_fused_clocked_add:
-  (∀n kvs m.
-     patricialise_fused_clocked n kvs ≠ NONE ⇒
-     patricialise_fused_clocked (n + m) kvs =
-     patricialise_fused_clocked n kvs) ∧
-  (∀n bs acc m.
-     patricialise_fused_clocked_mmap n bs acc ≠ NONE ⇒
-     patricialise_fused_clocked_mmap (n + m) bs acc =
-     patricialise_fused_clocked_mmap n bs acc)
-Proof
-  ho_match_mp_tac patricialise_fused_clocked_ind
-  \\ conj_tac
-  >- (
-    rpt gen_tac \\ strip_tac
-    \\ gen_tac
-    \\ rewrite_tac[Once patricialise_fused_clocked_def]
-    \\ IF_CASES_TAC >- rw[]
-    \\ BasicProvers.TOP_CASE_TAC
-    >- rw[patricialise_fused_clocked_def]
-    \\ BasicProvers.TOP_CASE_TAC
-    >- rw[patricialise_fused_clocked_def]
-    \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
-    \\ strip_tac
-    \\ rewrite_tac[Once patricialise_fused_clocked_def]
-    \\ IF_CASES_TAC >- gs[]
-    \\ qmatch_goalsub_abbrev_tac`lhs = _`
-    \\ rewrite_tac[Once patricialise_fused_clocked_def]
-    \\ IF_CASES_TAC >- gs[]
-    \\ qunabbrev_tac`lhs`
-    \\ simp_tac std_ss [list_case_def]
-    \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
-    \\ asm_simp_tac std_ss []
-    \\ simp[]
-    \\ qmatch_goalsub_abbrev_tac`NULL lcp`
-    \\ IF_CASES_TAC
-    >- (
-      simp[]
-      \\ AP_THM_TAC
-      \\ AP_THM_TAC
-      \\ AP_TERM_TAC
-      \\ `m + n - 1 = n - 1 + m` by ( Cases_on`n` \\ gs[] )
-      \\ pop_assum SUBST_ALL_TAC
-      \\ last_x_assum irule
-      \\ gs[]
-      \\ simp[Abbr`kvs`]
-      \\ fs[CaseEq"option"] )
-    \\ simp[]
-    \\ AP_THM_TAC
-    \\ AP_THM_TAC
-    \\ AP_TERM_TAC
-    \\ `m + n - 1 = n - 1 + m` by ( Cases_on`n` \\ gs[] )
-    \\ pop_assum SUBST_ALL_TAC
-    \\ first_x_assum irule
-    \\ gs[]
-    \\ reverse conj_tac >- rw[Abbr`kvs`]
-    \\ strip_tac \\ fs[])
-  \\ conj_tac >- rw[Once patricialise_fused_clocked_def]
-  \\ conj_tac >- (
-    rw[patricialise_fused_clocked_def]
-    \\ qmatch_goalsub_rename_tac`m + SUC n`
-    \\ `m + SUC n = SUC (m + n)` by simp[]
-    \\ rw[patricialise_fused_clocked_def] )
-  \\ rw[]
-  \\ qmatch_goalsub_rename_tac`m + SUC n`
-  \\ `m + SUC n = SUC (m + n)` by simp[]
-  \\ pop_assum SUBST_ALL_TAC
-  \\ pop_assum mp_tac
-  \\ rw[Once patricialise_fused_clocked_def]
-  \\ rw[Once patricialise_fused_clocked_def]
-  \\ rw[Once patricialise_fused_clocked_def, SimpRHS]
-  \\ irule EQ_SYM
-  \\ BasicProvers.TOP_CASE_TAC \\ gs[]
-QED
-
-Theorem patricialise_fused_clocked_mmap_thm:
-  ∀bs n acc as.
-    LENGTH bs < n ∧
-    GENLIST (λi. patricialise_fused_clocked (n - i - 1) (EL i bs)) (LENGTH bs) =
-      MAP SOME as ⇒
-    patricialise_fused_clocked_mmap n bs acc = SOME (REVERSE acc ++ as)
-Proof
-  Induct \\ rw[]
-  >- ( Cases_on`n` \\ gs[Once patricialise_fused_clocked_def] )
-  \\ Cases_on`n` \\ gs[]
-  \\ simp[Once patricialise_fused_clocked_def]
-  \\ gs[GENLIST_CONS]
-  \\ Cases_on`as` \\ gs[]
-  \\ qmatch_goalsub_rename_tac`REVERSE acc ++ a :: as`
-  \\ `REVERSE acc ++ a :: as = REVERSE (a::acc) ++ as` by rw[]
-  \\ pop_assum SUBST_ALL_TAC
-  \\ first_x_assum irule
-  \\ simp[]
-  \\ pop_assum(SUBST1_TAC o SYM)
-  \\ simp[LIST_EQ_REWRITE, ADD1]
-QED
-
-Theorem patricialise_fused_clocked_thm:
-  ∀kvs. ALL_DISTINCT (MAP FST kvs) ⇒
-    ∃n. patricialise_fused_clocked n kvs
-        = SOME $ encode_internal_node $ OPTION_MAP encode_trie_node $ patricialise kvs
-Proof
-  recInduct patricialise_ind
-  \\ conj_tac
-  >- rw[patricialise_def, patricialise_fused_clocked_def]
-  \\ conj_tac
-  >- rw[patricialise_def, patricialise_fused_clocked_def, encode_trie_node_def]
-  \\ rpt gen_tac \\ strip_tac
-  \\ once_rewrite_tac[patricialise_def]
-  \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
-  \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
-  \\ simp[]
-  \\ qmatch_goalsub_abbrev_tac`NULL lcp`
-  \\ strip_tac
-  \\ asm_simp_tac std_ss [Once patricialise_fused_clocked_def]
-  \\ simp[Once EXISTS_NUM]
-  \\ qunabbrev_tac`kvs`
-  \\ simp_tac std_ss [list_case_def]
-  \\ qmatch_goalsub_abbrev_tac`FILTER _ kvs`
-  \\ Cases_on`NULL lcp` \\ simp[]
-  >- (
-    simp[encode_trie_node_def, MAP_MAP_o, CaseEq"option"]
-    \\ qmatch_goalsub_abbrev_tac`MTB subnodes _`
-    \\ qmatch_goalsub_abbrev_tac`patricialise_fused_clocked_mmap _ bs`
-    \\ CONV_TAC SWAP_EXISTS_CONV
-    \\ qexists_tac`subnodes` \\ simp[]
-    \\ last_x_assum(qspec_then`lcp`mp_tac)
-    \\ simp[]
-    \\ `EVERY (λa. ALL_DISTINCT (MAP FST a)) bs`
-    by (
-      rw[Abbr`bs`, EVERY_GENLIST, make_branch_def, o_DEF, MAP_MAP_o]
-      \\ qpat_x_assum`ALL_DISTINCT _`mp_tac
-      \\ rpt (pop_assum kall_tac)
-      \\ Induct_on`kvs` \\ rw[]
-      \\ gs[MEM_MAP, MEM_FILTER]
-      \\ Cases_on`h` \\ Cases \\ gs[]
-      \\ qmatch_goalsub_rename_tac`TL a = TL b`
-      \\ Cases_on`a` \\ Cases_on`b` \\ gs[] )
-    \\ fs[EVERY_MEM]
-    \\ simp[GSYM RIGHT_EXISTS_IMP_THM, SKOLEM_THM]
-    \\ simp[RIGHT_EXISTS_IMP_THM]
-    \\ disch_then(qx_choose_then`f`strip_assume_tac)
-    \\ `subnodes = REVERSE [] ++ subnodes` by simp[]
-    \\ pop_assum SUBST1_TAC
-    \\ qexists_tac`SUM (MAP f bs) + LENGTH bs + 1`
-    \\ irule patricialise_fused_clocked_mmap_thm
-    \\ conj_tac >- simp[]
-    \\ simp[GSYM GENLIST_EL_MAP]
-    \\ simp[Abbr`subnodes`]
-    \\ simp[GENLIST_FUN_EQ, EL_MAP]
-    \\ gs[MEM_EL, PULL_EXISTS, ETA_AX]
-    \\ qx_gen_tac`n` \\ strip_tac
-    \\ first_x_assum drule
-    \\ strip_tac
-    \\ qmatch_assum_abbrev_tac`x = SOME _`
-    \\ `x ≠ NONE` by (Cases_on`x` \\ fs[])
-    \\ qunabbrev_tac`x`
-    \\ drule (cj 1 patricialise_fused_clocked_add)
-    \\ qmatch_goalsub_abbrev_tac`_ m _ = _`
-    \\ `f (EL n bs) ≤ m` by (
-      qunabbrev_tac`m`
-      \\ qmatch_goalsub_abbrev_tac`x + y - n`
-      \\ irule LESS_EQ_TRANS
-      \\ qexists_tac`y` \\ simp[]
-      \\ qunabbrev_tac`y`
-      \\ qunabbrev_tac`x`
-      \\ simp[GENLIST_EL_MAP]
-      \\ irule SUM_MAP_MEM_bound
-      \\ metis_tac[MEM_EL] )
-    \\ drule (LESS_EQ_EXISTS |> SPEC_ALL |> iffLR)
-    \\ metis_tac[])
-  \\ gs[GSYM drop_from_keys_map, CaseEq"option"]
-  \\ simp[encode_trie_node_def]
-  \\ qmatch_goalsub_abbrev_tac`MTE lcp subnode`
-  \\ CONV_TAC SWAP_EXISTS_CONV
-  \\ qexists_tac`subnode` \\ simp[]
-  \\ qunabbrev_tac`subnode`
-  \\ simp[ETA_AX]
-  \\ first_x_assum irule
-  \\ simp[drop_from_keys_map]
-  \\ simp[MAP_MAP_o, o_DEF]
-  \\ qmatch_goalsub_abbrev_tac`_ ls`
-  \\ `ls = MAP (DROP $ LENGTH lcp) (MAP FST kvs)`
-  by simp[Abbr`ls`, MAP_MAP_o, o_DEF]
-  \\ pop_assum SUBST1_TAC
-  \\ qunabbrev_tac`lcp`
-  \\ irule ALL_DISTINCT_DROP_LENGTH_lcp
-  \\ simp[]
-QED
-
-val patricialise_fused_clocked_pre_def =
-  cv_auto_trans_pre patricialise_fused_clocked_def;
-
-Theorem patricialise_fused_clocked_pre[cv_pre]:
-  (∀n kvs. patricialise_fused_clocked_pre n kvs) ∧
-  (∀v0 v v1. patricialise_fused_clocked_mmap_pre v0 v v1)
-Proof
-  ho_match_mp_tac patricialise_fused_clocked_ind
-  \\ conj_tac
-  >- (
-    rpt strip_tac
-    \\ rewrite_tac[Once patricialise_fused_clocked_pre_def]
-    \\ strip_tac \\ rpt gen_tac \\ strip_tac
-    \\ rpt gen_tac \\ strip_tac
-    \\ rpt gen_tac \\ strip_tac
-    \\ conj_tac
-    >- (
-      strip_tac \\ gen_tac
-      \\ strip_tac \\ gen_tac
-      \\ strip_tac
-      \\ conj_tac >- rw[NULL_EQ]
-      \\ gen_tac \\ strip_tac
-      \\ first_x_assum irule
-      \\ rpt BasicProvers.VAR_EQ_TAC
-      \\ qmatch_goalsub_abbrev_tac`GENLIST _ nb`
-      \\ simp[genlist_eq_GENLIST] )
-    \\ strip_tac
-    \\ first_x_assum irule
-    \\ rpt BasicProvers.VAR_EQ_TAC
-    \\ simp[] )
-  \\ conj_tac
-  >- rw[Once patricialise_fused_clocked_pre_def]
-  \\ conj_tac
-  >- rw[Once patricialise_fused_clocked_pre_def]
-  \\ rpt gen_tac \\ strip_tac
-  \\ simp[Once patricialise_fused_clocked_pre_def]
-  \\ gs[ADD1]
-QED
-
-Definition trie_root_clocked_def:
-  trie_root_clocked n kvs =
-  case patricialise_fused_clocked n kvs of
-    NONE => NONE
-  | SOME r => SOME $
-    let e = rlp_encode r in
-    if LENGTH e < 32 then Keccak_256_w64 e else dest_RLPB r
-End
-
-val () = cv_auto_trans trie_root_clocked_def;
+-- *)
 
 (*
 
