@@ -289,13 +289,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   in const end
   end
 
-  val mk_num_tm = numSyntax.mk_numeral o Arbnum.fromHexString
+  val num_from_hex = numSyntax.mk_numeral o Arbnum.fromHexString
 
   val num_option = mk_option num
-  val mk_num_option_tm = lift_option num_option mk_num_tm
+  val num_option_from_hex = lift_option num_option num_from_hex
 
-  fun mk_bytes32_tm hex = mk_n2w(mk_num_tm hex, bytes32_bits_ty)
-  fun mk_address_tm hex = mk_n2w(mk_num_tm hex, address_bits_ty)
+  fun bytes32_from_hex hex = mk_n2w(num_from_hex hex, bytes32_bits_ty)
+  fun address_from_hex hex = mk_n2w(num_from_hex hex, address_bits_ty)
 
   val zero_bytes32 = mk_n2w(numSyntax.zero_tm, bytes32_bits_ty)
 
@@ -321,22 +321,23 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   fun mk_storage_tm_from_list ([]: slot list) = empty_storage_tm
     | mk_storage_tm_from_list ({key,value}::ls) =
         list_mk_comb(update_storage_tm,
-          [mk_bytes32_tm key,
-           mk_bytes32_tm value,
+          [bytes32_from_hex key,
+           bytes32_from_hex value,
            mk_storage_tm_from_list ls])
 
   fun mk_account_tm ({balance, code, nonce, storage}: account) =
     TypeBase.mk_record(account_ty, [
-      ("balance", mk_num_tm balance),
-      ("nonce", mk_num_tm nonce),
+      ("balance", num_from_hex balance),
+      ("nonce", num_from_hex nonce),
       ("code", mk_cached_bytes_tm code),
       ("storage", mk_storage_tm_from_list storage)
     ])
 
+
   fun mk_accounts_tm_from_list ([]: state) = empty_accounts_tm
     | mk_accounts_tm_from_list ((address,account)::ls) =
         list_mk_comb(update_account_tm,
-          [mk_address_tm address,
+          [address_from_hex address,
            mk_account_tm account,
            mk_accounts_tm_from_list ls])
 
@@ -347,32 +348,35 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val access_list_entry_ty =
     mk_thy_type{Thy="vfmTransaction",Tyop="access_list_entry",Args=[]}
   val access_list_ty = mk_list_type access_list_entry_ty
+
   val empty_access_list_tm = mk_nil access_list_entry_ty
 
   fun mk_access_list_entry_tm ({address, storageKeys}: access_list_entry) =
     TypeBase.mk_record(access_list_entry_ty, [
-      ("account", mk_address_tm address),
-      ("keys", mk_list (List.map mk_bytes32_tm storageKeys, bytes32_ty))
+      ("account", address_from_hex address),
+      ("keys", mk_list (List.map bytes32_from_hex storageKeys, bytes32_ty))
     ])
 
   fun mk_access_list_tm ls = mk_list(List.map mk_access_list_entry_tm ls,
                                      access_list_entry_ty)
 
+
+
   fun mk_transaction_tm baseFee_tm (tx: transaction) = let
     val to_tm = if #to tx = ""
                 then optionSyntax.mk_none address_ty
-                else optionSyntax.mk_some (mk_address_tm (#to tx))
-    val from_tm = mk_address_tm (#sender tx)
+                else optionSyntax.mk_some (address_from_hex (#to tx))
+    val from_tm = address_from_hex (#sender tx)
     val data_tm = mk_cached_bytes_tm $ #data tx
-    val nonce_tm = mk_num_tm $ #nonce tx
-    val value_tm = mk_num_tm $ #value tx
-    val gasLimit_tm = mk_num_tm $ #gasLimit tx
-    val maxFeePerGas_tm = mk_num_option_tm $ #maxFeePerGas tx
-    val maxFeePerBlobGas_tm = mk_num_option_tm $ #maxFeePerBlobGas tx
+    val nonce_tm = num_from_hex $ #nonce tx
+    val value_tm = num_from_hex $ #value tx
+    val gasLimit_tm = num_from_hex $ #gasLimit tx
+    val maxFeePerGas_tm = num_option_from_hex $ #maxFeePerGas tx
+    val maxFeePerBlobGas_tm = num_option_from_hex $ #maxFeePerBlobGas tx
     val gasPrice_tm = case #gasPrice tx of
-                           SOME s => mk_num_tm s
+                           SOME s => num_from_hex s
                          | NONE => let
-                                     val mno = mk_num_tm o Option.valOf
+                                     val mno = num_from_hex o Option.valOf
                                      val maxFee_tm = mno $ #maxFeePerGas tx
                                      val prioFee_tm = mno $ #maxPriorityFeePerGas tx
                                    in
@@ -385,7 +389,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val blobVersionedHashes_tm = case #blobVersionedHashes tx of
                                       NONE => mk_nil bytes32_ty
                                     | SOME ls => mk_list(
-                                        List.map mk_bytes32_tm ls,
+                                        List.map bytes32_from_hex ls,
                                         bytes32_ty
                                       )
   in
@@ -414,27 +418,29 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val block_ty = mk_thy_type{Thy="vfmContext",Tyop="block",Args=[]}
 
+
   fun mk_withdrawal_tm {index, validatorIndex, address, amount} =
     TypeBase.mk_record(withdrawal_ty, [
-      ("withdrawalIndex", mk_num_tm index),
-      ("validatorIndex", mk_num_tm validatorIndex),
-      ("withdrawalAddress", mk_address_tm address),
-      ("withdrawalAmount", mk_num_tm amount)])
+      ("withdrawalIndex", num_from_hex index),
+      ("validatorIndex", num_from_hex validatorIndex),
+      ("withdrawalAddress", address_from_hex address),
+      ("withdrawalAmount", num_from_hex amount)])
 
   fun mk_block_tm (block: block) = let
     val header = #blockHeader block
-    val baseFeePerGas_tm = mk_num_tm $ #baseFeePerGas header
-    val excessBlobGas_tm = mk_num_tm $ #excessBlobGas header
-    val gasUsed_tm = mk_num_tm $ #gasUsed header
-    val blobGasUsed_tm = mk_num_tm $ #blobGasUsed header
-    val number_tm = mk_num_tm $ #number header
-    val timeStamp_tm = mk_num_tm $ #timestamp header
-    val coinBase_tm = mk_address_tm $ #coinbase header
-    val gasLimit_tm = mk_num_tm $ #gasLimit header
-    val prevRandao_tm = mk_bytes32_tm $ #mixHash header
-    val hash_tm = mk_bytes32_tm $ #hash header
-    val stateRoot_tm = mk_bytes32_tm $ #stateRoot header
-    val parentBeaconBlockRoot_tm = mk_bytes32_tm $ #parentBeaconBlockRoot header
+    val baseFeePerGas_tm = num_from_hex $ #baseFeePerGas header
+    val excessBlobGas_tm = num_from_hex $ #excessBlobGas header
+
+    val gasUsed_tm = num_from_hex $ #gasUsed header
+    val blobGasUsed_tm = num_from_hex $ #blobGasUsed header
+    val number_tm = num_from_hex $ #number header
+    val timeStamp_tm = num_from_hex $ #timestamp header
+    val coinBase_tm = address_from_hex $ #coinbase header
+    val gasLimit_tm = num_from_hex $ #gasLimit header
+    val prevRandao_tm = bytes32_from_hex $ #mixHash header
+    val hash_tm = bytes32_from_hex $ #hash header
+    val stateRoot_tm = bytes32_from_hex $ #stateRoot header
+    val parentBeaconBlockRoot_tm = bytes32_from_hex $ #parentBeaconBlockRoot header
     val transactions_tm = mk_list(
       List.map (mk_transaction_tm baseFeePerGas_tm) $
         #transactions block, transaction_ty)
@@ -520,7 +526,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
     val last_hash_name = name_prefix ^ "_last_hash"
     val last_hash_var = mk_var(last_hash_name, bytes32_ty)
-    val last_hash_rhs = mk_bytes32_tm $ #lastblockhash test
+    val last_hash_rhs = bytes32_from_hex $ #lastblockhash test
     val last_hash_def = new_definition(last_hash_name ^ "_def",
                                     mk_eq(last_hash_var, last_hash_rhs))
     val last_hash_const = lhs $ concl last_hash_def
