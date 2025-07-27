@@ -1,4 +1,4 @@
-signature vfmStateSyntaxLib = sig
+signature vfmStateSyntax = sig
   include Abbrev
 
   val account_ty  : hol_type

@@ -1,4 +1,4 @@
-structure vfmTypesSyntaxLib :> vfmTypesSyntaxLib = struct
+structure vfmTypesSyntax :> vfmTypesSyntax = struct
 
   open HolKernel
   open numSyntax fcpSyntax wordsSyntax optionSyntax listSyntax stringSyntax

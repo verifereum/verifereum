@@ -2,7 +2,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   open HolKernel boolLib bossLib JSONDecode wordsLib cv_transLib
        vfmTestAuxLib vfmComputeTheory vfmTestRunTheory
-       vfmTypesSyntaxLib vfmStateSyntaxLib
+       vfmTypesSyntax vfmStateSyntax
        numSyntax stringSyntax listSyntax optionSyntax wordsSyntax fcpSyntax
 
   type access_list_entry = {address: string, storageKeys: string list}

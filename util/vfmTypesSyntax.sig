@@ -1,4 +1,4 @@
-signature vfmTypesSyntaxLib = sig
+signature vfmTypesSyntax = sig
   include Abbrev
 
   val hex_to_rev_bytes_tm : term
