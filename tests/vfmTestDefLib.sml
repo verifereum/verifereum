@@ -2,7 +2,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   open HolKernel boolLib bossLib JSONDecode wordsLib cv_transLib
        vfmTestAuxLib vfmComputeTheory vfmTestRunTheory
-       vfmTypesSyntax vfmStateSyntax
+       byteStringCacheLib vfmTypesSyntax vfmStateSyntax
        numSyntax stringSyntax listSyntax optionSyntax wordsSyntax fcpSyntax
 
   type access_list_entry = {address: string, storageKeys: string list}
@@ -266,27 +266,6 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val json_path_to_tests =
     decodeFile (JSONDecode.map (List.mapPartial test_fixture_to_test) rawObject)
 
-  val bytestr_cache : (string, term) Redblackmap.dict ref =
-    ref $ Redblackmap.mkDict String.compare
-
-  fun mk_cached_bytes_tm str = let
-  val hex = if String.isPrefix "0x" str
-                then trim2 str else str in
-  case Redblackmap.peek(!bytestr_cache, hex)
-    of SOME const => const | NONE =>
-  let
-    val n = Redblackmap.numItems $ !bytestr_cache
-    val name = String.concat["bytestr_", Int.toString n]
-    val var = mk_var(name, bytes_ty)
-    val rhs_tm = mk_hex_to_rev_bytes_tm_from_string hex
-    val def = new_definition(name ^ "_def", mk_eq(var, rhs_tm))
-    val () = cv_trans_deep_embedding EVAL def
-    val const = lhs (concl def)
-    val cache = Redblackmap.insert(!bytestr_cache, hex, const)
-    val () = bytestr_cache := cache
-  in const end
-  end
-
   val storage_ty = bytes32_ty --> bytes32_ty
   val empty_storage_tm =
     mk_thy_const{Name="empty_storage",Thy="vfmState",Ty=storage_ty}
@@ -317,7 +296,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     TypeBase.mk_record(account_ty, [
       ("balance", num_from_hex balance),
       ("nonce", num_from_hex nonce),
-      ("code", mk_cached_bytes_tm code),
+      ("code", cached_bytes_from_hex code),
       ("storage", mk_storage_tm_from_list storage)
     ])
 
@@ -355,7 +334,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                 then optionSyntax.mk_none address_ty
                 else optionSyntax.mk_some (address_from_hex (#to tx))
     val from_tm = address_from_hex (#sender tx)
-    val data_tm = mk_cached_bytes_tm $ #data tx
+    val data_tm = cached_bytes_from_hex $ #data tx
     val nonce_tm = num_from_hex $ #nonce tx
     val value_tm = num_from_hex $ #value tx
     val gasLimit_tm = num_from_hex $ #gasLimit tx
@@ -497,7 +476,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val g_rlp = #genesisRLP test
     val g_rlp_name = name_prefix ^ "_genesis_rlp"
     val g_rlp_var = mk_var(g_rlp_name, bytes_ty)
-    val g_rlp_rhs = mk_cached_bytes_tm g_rlp
+    val g_rlp_rhs = cached_bytes_from_hex g_rlp
     val g_rlp_def = new_definition(g_rlp_name ^ "_def",
                                    mk_eq(g_rlp_var, g_rlp_rhs))
     val g_rlp_const = lhs $ concl g_rlp_def
@@ -535,7 +514,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
         (optionSyntax.mk_option expectException_ty)
         (pairSyntax.lift_prod expectException_ty fromMLstring $
          pairSyntax.lift_prod invalid_block_ty
-           mk_cached_bytes_tm
+           cached_bytes_from_hex
            (optionSyntax.lift_option optional_block_ty mk_block_tm))
         expectException
 
@@ -546,7 +525,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val validBlocks_tm = listSyntax.mk_list(
       List.map mk_block_tm validBlocks, block_ty)
 
-    val rlps_tms = List.map (mk_cached_bytes_tm o #rlp) validBlocks
+    val rlps_tms = List.map (cached_bytes_from_hex o #rlp) validBlocks
     val rlps_name = name_prefix ^ "_rlps"
     val rlps_var = mk_var(rlps_name, listSyntax.mk_list_type bytes_ty)
     val rlps_rhs = listSyntax.mk_list(rlps_tms, bytes_ty)
