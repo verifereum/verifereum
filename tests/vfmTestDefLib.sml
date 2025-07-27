@@ -2,6 +2,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   open HolKernel boolLib bossLib JSONDecode wordsLib cv_transLib
        vfmTestAuxLib vfmComputeTheory vfmTestRunTheory
+       vfmTypesSyntaxLib vfmStateSyntaxLib
        numSyntax stringSyntax listSyntax optionSyntax wordsSyntax fcpSyntax
 
   type access_list_entry = {address: string, storageKeys: string list}
@@ -266,26 +267,6 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val json_path_to_tests =
     decodeFile (JSONDecode.map (List.mapPartial test_fixture_to_test) rawObject)
-
-  val address_bits_ty = mk_int_numeric_type 160
-  val bytes32_bits_ty = mk_int_numeric_type 256
-  val address_ty = mk_word_type address_bits_ty
-  val bytes32_ty = mk_word_type bytes32_bits_ty
-  val account_ty = mk_thy_type{Thy="vfmState",Tyop="account_state", Args=[]}
-  val accounts_ty = address_ty --> account_ty
-
-  val byte_ty = mk_word_type (mk_int_numeric_type 8)
-  val bytes_ty = mk_list_type byte_ty
-
-  val hex_to_rev_bytes_tm =
-    mk_thy_const{Name="hex_to_rev_bytes",Thy="keccak",
-                 Ty=bytes_ty --> string_ty --> bytes_ty}
-
-  fun mk_hex_to_rev_bytes_tm_from_string str =
-    mk_reverse(
-      list_mk_comb(hex_to_rev_bytes_tm,
-        [mk_nil byte_ty,
-         fromMLstring str]))
 
   val bytestr_cache : (string, term) Redblackmap.dict ref =
     ref $ Redblackmap.mkDict String.compare
