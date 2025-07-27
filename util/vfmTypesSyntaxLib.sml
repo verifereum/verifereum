@@ -1,6 +1,6 @@
 structure vfmTypesSyntaxLib :> vfmTypesSyntaxLib = struct
 
-  open fcpSyntax wordsSyntax listSyntax stringSyntax
+  open numSyntax fcpSyntax wordsSyntax optionSyntax listSyntax stringSyntax
   open keccakTheory (* TODO: move hex_to_rev_bytes out *)
 
   val address_bits_ty = mk_int_numeric_type 160
@@ -20,5 +20,15 @@ structure vfmTypesSyntaxLib :> vfmTypesSyntaxLib = struct
       list_mk_comb(hex_to_rev_bytes_tm,
         [mk_nil byte_ty,
          fromMLstring str]))
+
+  val num_from_hex = numSyntax.mk_numeral o Arbnum.fromHexString
+
+  val num_option = mk_option num
+  val num_option_from_hex = lift_option num_option num_from_hex
+
+  fun bytes32_from_hex hex = mk_n2w(num_from_hex hex, bytes32_bits_ty)
+  fun address_from_hex hex = mk_n2w(num_from_hex hex, address_bits_ty)
+
+  val zero_bytes32 = mk_n2w(numSyntax.zero_tm, bytes32_bits_ty)
 
 end

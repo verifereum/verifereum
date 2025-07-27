@@ -289,16 +289,6 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   in const end
   end
 
-  val num_from_hex = numSyntax.mk_numeral o Arbnum.fromHexString
-
-  val num_option = mk_option num
-  val num_option_from_hex = lift_option num_option num_from_hex
-
-  fun bytes32_from_hex hex = mk_n2w(num_from_hex hex, bytes32_bits_ty)
-  fun address_from_hex hex = mk_n2w(num_from_hex hex, address_bits_ty)
-
-  val zero_bytes32 = mk_n2w(numSyntax.zero_tm, bytes32_bits_ty)
-
   val storage_ty = bytes32_ty --> bytes32_ty
   val empty_storage_tm =
     mk_thy_const{Name="empty_storage",Thy="vfmState",Ty=storage_ty}
