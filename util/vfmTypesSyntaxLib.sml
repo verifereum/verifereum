@@ -1,5 +1,6 @@
 structure vfmTypesSyntaxLib :> vfmTypesSyntaxLib = struct
 
+  open HolKernel
   open numSyntax fcpSyntax wordsSyntax optionSyntax listSyntax stringSyntax
   open keccakTheory (* TODO: move hex_to_rev_bytes out *)
 

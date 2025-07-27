@@ -1,4 +1,5 @@
 signature vfmTypesSyntaxLib = sig
+  include Abbrev
 
   val hex_to_rev_bytes_tm : term
   val mk_hex_to_rev_bytes_tm_from_string : string -> term

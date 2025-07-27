@@ -3,7 +3,7 @@
 open HolKernel
   contractABITheory
   vfmDomainCollectionTheory
-  vfmTestRunTheory
+  vfmTestRunTheory vfmTestDefLib vfmTestResultLib
   (* TODO: add things in prog/ once they are fixed *)
 
 val () = new_theory "verifereum";
