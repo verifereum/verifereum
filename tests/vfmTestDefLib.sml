@@ -113,41 +113,39 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   fun slot (k,v) : slot = {key=k, value=decode string v}
 
-  val storageDecoder : storage decoder = andThen
-    (fn ls => succeed (List.map slot ls))
-    rawObject
+  val storageDecoder : storage decoder =
+    JSONDecode.map (List.map slot) rawObject
 
   val accountDecoder : account decoder =
-    andThen (fn (nonce, balance, code, storage) =>
-             succeed {nonce=nonce, balance=balance,
+    JSONDecode.map (fn (nonce, balance, code, storage) =>
+                     {nonce=nonce, balance=balance,
                       code=code, storage=storage})
     (tuple4 (field "nonce" string, field "balance" string,
              field "code" string, field "storage" storageDecoder))
 
   val allocationDecoder : state decoder =
-    andThen
-      (succeed o List.map
+    JSONDecode.map
+      (List.map
          (fn (k,v) => decode
            (JSONDecode.map (fn a => (k,a)) accountDecoder)
            v))
       rawObject
 
   val blobScheduleDecoder : blob_schedule decoder =
-    andThen (fn (t,m,f) => succeed
-      {target=t, max=m, base_fee_update_fraction=f})
+    JSONDecode.map (fn (t,m,f) => {target=t, max=m, base_fee_update_fraction=f})
     (tuple3 (field "target" string,
              field "max" string,
              field "base_fee_update_fraction" string))
 
   val accessListEntryDecoder : access_list_entry decoder =
-    andThen (fn (a,ks) => succeed {address=a, storageKeys=ks})
+    JSONDecode.map (fn (a,ks) => {address=a, storageKeys=ks})
       (tuple2 (field "address" string,
                field "storageKeys" (array string)))
 
   val accessListDecoder : access_list decoder = array accessListEntryDecoder
 
   val transactionDecoder : transaction decoder =
-    andThen (fn ((n,p,i,f),(l,t,v,d),(a,b,h,(sv,sr,ss,sa)),(ty,ci,k)) => succeed
+    JSONDecode.map (fn ((n,p,i,f),(l,t,v,d),(a,b,h,(sv,sr,ss,sa)),(ty,ci,k)) =>
       {nonce=n, gasPrice=p, maxPriorityFeePerGas=i, maxFeePerGas=f,
        gasLimit=l, to=t, value=v, data=d, accessList=a, maxFeePerBlobGas=b,
        r=sr, s=ss, v=sv,
@@ -172,15 +170,15 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                      orElse (field "secretKey" string, succeed ""))))
 
   val configDecoder : config decoder =
-    andThen (fn (n,b) => succeed {network=n, blobSchedule=b}) $
+    JSONDecode.map (fn (n,b) => {network=n, blobSchedule=b}) $
       tuple2 (field "network" string,
               try (field "blobSchedule" $
                    field fork_name blobScheduleDecoder))
 
   val blockHeaderDecoder : block_header decoder =
-    andThen (fn (((ph, uh, cb, sr), (tt, rt, bl, di),
-                  (nu, gl, gu, ts), (ed, mh, no, ha)),
-                 (bf, wr, bg, eb), pr) => succeed $
+    JSONDecode.map (fn (((ph, uh, cb, sr), (tt, rt, bl, di),
+                         (nu, gl, gu, ts), (ed, mh, no, ha)),
+                        (bf, wr, bg, eb), pr) =>
               {parentHash=ph, uncleHash=uh, coinbase=cb, stateRoot=sr,
                transactionsTrie=tt, receiptTrie=rt, bloom=bl, difficulty=di,
                number=nu, gasLimit=gl, gasUsed=gu, timestamp=ts,
@@ -211,7 +209,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
         field "parentBeaconBlockRoot" string)
 
   val withdrawalDecoder : withdrawal decoder =
-    andThen (fn (i,v,a,m) => succeed {
+    JSONDecode.map (fn (i,v,a,m) => {
                index=i, validatorIndex=v,
                address=a, amount=m}) $
       tuple4 (field "index" string,
@@ -220,7 +218,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
               field "amount" string)
 
   val blockDecoder : block decoder =
-    andThen (fn ((r,h,n),(t,u,w)) => succeed {
+    JSONDecode.map (fn ((r,h,n),(t,u,w)) => {
                rlp=r, blockHeader=h, blocknumber=n,
                transactions=t, uncleHeaders=u, withdrawals=w}) $
     tuple2 (tuple3 (orElse (field "rlp" string, succeed ""),
@@ -232,14 +230,14 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                             succeed [])))
 
   val blockOrInvalidDecoder : block_or_invalid decoder =
-    orElse (andThen (fn (x,r,d) => succeed $ Invalid {
+    orElse (JSONDecode.map (fn (x,r,d) => Invalid {
                        expectException=x,
                        rlp=r,
                        rlp_decoded=d }) $
             tuple3 (field "expectException" string,
                     field "rlp" string,
                     try (field "rlp_decoded" blockDecoder)),
-            andThen (succeed o Block) blockDecoder)
+            JSONDecode.map Block blockDecoder)
 
   fun test_fixture_to_test (fixture_name, fixture) : test option = let
     val config = decode (field "config" configDecoder) fixture
