@@ -88,7 +88,7 @@ Definition block_header_from_rlp_def:
 End
 
 val block_header_from_rlp_pre_def =
-  cv_auto_trans_pre block_header_from_rlp_def;
+  cv_auto_trans_pre "block_header_from_rlp_pre" block_header_from_rlp_def;
 
 Theorem block_header_from_rlp_pre[cv_pre]:
   block_header_from_rlp_pre x
@@ -115,7 +115,7 @@ Definition withdrawal_from_rlp_def:
   |>
 End
 
-val withdrawal_from_rlp_pre_def = cv_auto_trans_pre withdrawal_from_rlp_def;
+val withdrawal_from_rlp_pre_def = cv_auto_trans_pre "withdrawal_from_rlp_pre" withdrawal_from_rlp_def;
 
 Theorem withdrawal_from_rlp_pre[cv_pre]:
   withdrawal_from_rlp_pre x
@@ -141,7 +141,7 @@ Definition access_list_entry_from_rlp_def:
 End
 
 val access_list_entry_from_rlp_pre_def =
-  cv_auto_trans_pre access_list_entry_from_rlp_def;
+  cv_auto_trans_pre "access_list_entry_from_rlp_pre" access_list_entry_from_rlp_def;
 
 Theorem access_list_entry_from_rlp_pre[cv_pre]:
   access_list_entry_from_rlp_pre x
@@ -234,7 +234,7 @@ End
 
 val transaction1_from_rlp_pre_def = transaction1_from_rlp_def
   |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "transaction1_from_rlp_pre";
 
 Theorem transaction1_from_rlp_pre[cv_pre]:
   transaction1_from_rlp_pre x
@@ -309,7 +309,7 @@ End
 
 val transaction2_from_rlp_pre_def = transaction2_from_rlp_def
   |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "transaction2_from_rlp_pre";
 
 Theorem transaction2_from_rlp_pre[cv_pre]:
   transaction2_from_rlp_pre bf x
@@ -393,7 +393,7 @@ End
 
 val transaction3_from_rlp_pre_def = transaction3_from_rlp_def
   |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "transaction3_from_rlp_pre";
 
 Theorem transaction3_from_rlp_pre[cv_pre]:
   transaction3_from_rlp_pre bf x
@@ -450,7 +450,7 @@ Definition transaction_from_rlp_def:
   else NONE
 End
 
-val transaction_from_rlp_pre_def = cv_auto_trans_pre transaction_from_rlp_def;
+val transaction_from_rlp_pre_def = cv_auto_trans_pre "transaction_from_rlp_pre" transaction_from_rlp_def;
 
 Theorem transaction_from_rlp_pre[cv_pre]:
   transaction_from_rlp_pre bf x
@@ -528,7 +528,7 @@ End
 val block_from_rlp_pre_def = block_from_rlp_def
   |> SRULE [GSYM OPT_MMAP_withdrawal_from_rlp_eq,
                GSYM OPT_MMAP_transaction_from_rlp_eq]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "block_from_rlp_pre";
 
 Theorem block_from_rlp_pre[cv_pre]:
   block_from_rlp_pre x
@@ -550,7 +550,7 @@ Definition check_block_rlps_def:
   check_block_rlps _ _ = BlockDecodeMismatch
 End
 
-val check_block_rlps_pre_def = cv_auto_trans_pre check_block_rlps_def;
+val check_block_rlps_pre_def = cv_auto_trans_pre "check_block_rlps_pre" check_block_rlps_def;
 
 Theorem check_block_rlps_pre[cv_pre]:
   ∀x y. check_block_rlps_pre x y
