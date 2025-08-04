@@ -1,9 +1,11 @@
-open HolKernel boolLib bossLib Parse dep_rewrite wordsLib
-     wordsTheory listTheory rich_listTheory combinTheory
-     numposrepTheory arithmeticTheory logrootTheory relationTheory
-     vfmTypesTheory cv_transLib cv_stdTheory
-
-val _ = new_theory "recursiveLengthPrefix";
+Theory recursiveLengthPrefix
+Ancestors
+  arithmetic combin list rich_list
+  numposrep logroot
+  vfmTypes
+Libs
+  wordsLib
+  cv_transLib
 
 (* TODO: move? *)
 
@@ -67,7 +69,7 @@ val rlp_bytes_alt =
     METIS_PROVE[]“A ∧ B ⇔ (if A then B else F)”
   ];
 
-val rlp_bytes_pre_def = cv_auto_trans_pre rlp_bytes_alt;
+val rlp_bytes_pre_def = cv_auto_trans_pre "rlp_bytes_pre" rlp_bytes_alt;
 
 Theorem rlp_bytes_pre[cv_pre]:
   ∀b. rlp_bytes_pre b
@@ -115,7 +117,7 @@ Definition rlp_decode_length_def:
   else NONE
 End
 
-val rlp_decode_length_pre_def = cv_auto_trans_pre rlp_decode_length_def;
+val rlp_decode_length_pre_def = cv_auto_trans_pre "rlp_decode_length_pre" rlp_decode_length_def;
 
 Theorem rlp_decode_length_pre[cv_pre]:
   rlp_decode_length_pre bs
@@ -530,5 +532,3 @@ Proof
   \\ drule SUM_less_EVERY_less
   \\ simp[Abbr`lf`, EVERY_MAP]
 QED
-
-val _ = export_theory();

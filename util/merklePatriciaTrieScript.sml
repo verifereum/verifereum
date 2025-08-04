@@ -370,7 +370,7 @@ Definition nibble_list_to_compact_def:
 End
 
 val () = cv_auto_trans nibble_list_to_bytes_def;
-val nibble_list_to_compact_pre_def = cv_trans_pre nibble_list_to_compact_def;
+val nibble_list_to_compact_pre_def = cv_trans_pre "nibble_list_to_compact_pre" nibble_list_to_compact_def;
 
 Theorem nibble_list_to_compact_pre[cv_pre]:
   nibble_list_to_compact_pre x y
@@ -862,10 +862,11 @@ Proof
 QED
 
 val patricialise_fused_cps_loop_pre_def =
-  cv_auto_trans_pre patricialise_fused_cps_loop_eqn;
+  cv_auto_trans_pre "patricialise_fused_cps_loop_pre"
+    patricialise_fused_cps_loop_eqn;
 
 val patricialise_fused_cps_run_pre_def =
-  cv_auto_trans_pre $
+  cv_auto_trans_pre "patricialise_fused_cps_run_pre" $
   SRULE [GSYM patricialise_fused_cps_loop_def]
     patricialise_fused_cps_run_def;
 
