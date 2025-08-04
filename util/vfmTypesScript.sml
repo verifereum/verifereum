@@ -1,9 +1,10 @@
-open HolKernel boolLib bossLib Parse ParseExtras
-     wordsTheory byteTheory numposrepTheory
-     finite_mapTheory listTheory combinTheory
-     keccakTheory wordsLib blastLib cv_transLib cv_stdTheory;
-
-val _ = new_theory "vfmTypes";
+Theory vfmTypes
+Ancestors
+  byte list combin numposrep words
+  keccak
+Libs
+  blastLib
+  cv_transLib
 
 val _ = tight_equality();
 
@@ -228,5 +229,3 @@ Proof
   \\ irule l2n_n2l
   \\ rw[]
 QED
-
-val _ = export_theory();

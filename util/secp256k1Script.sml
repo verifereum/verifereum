@@ -269,7 +269,7 @@ Termination
   WF_REL_TAC ‘measure FST’
 End
 
-val finv_loop_pre_def = cv_trans_pre finv_loop_def;
+val finv_loop_pre_def = cv_trans_pre "finv_loop_pre" finv_loop_def;
 
 Theorem finv_loop_pre[cv_pre]:
   ∀a b x y u v. finv_loop_pre a b x y u v
@@ -299,7 +299,7 @@ Termination
   WF_REL_TAC ‘measure FST’
 End
 
-val finvN_loop_pre_def = cv_trans_pre finvN_loop_def;
+val finvN_loop_pre_def = cv_trans_pre "finvN_loop_pre" finvN_loop_def;
 
 Theorem finvN_loop_pre[cv_pre]:
   ∀a b x y u v. finvN_loop_pre a b x y u v

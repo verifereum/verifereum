@@ -311,7 +311,7 @@ Definition digit_def:
   digit n = CHR (48 + (MIN 9 n))
 End
 
-val digit_pre_def = cv_trans_pre digit_def;
+val digit_pre_def = cv_trans_pre "digit_pre" digit_def;
 
 Theorem digit_pre[cv_pre]:
   digit_pre n
@@ -474,7 +474,7 @@ Termination
   | (INL (t,_)) => (abi_type_size t, 0))’
 End
 
-val pre = cv_trans_pre_rec dec_def (
+val pre = cv_trans_pre_rec "dec_pre dec_array_pre dec_tuple_pre" dec_def (
   WF_REL_TAC ‘inv_image ($< LEX $<)
   (λx. case x of
          (INR (INR (ts,_,_,_))) => (cv_size ts, 0)

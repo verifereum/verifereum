@@ -75,7 +75,7 @@ Definition body_def:
     (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15)
 End
 
-val body_pre_def = cv_trans_pre body_def;
+val body_pre_def = cv_trans_pre "body_pre" body_def;
 
 Theorem body_pre_length:
   EVERY (λi. i < LENGTH m) s ∧ LENGTH s = 16 ⇒
@@ -95,7 +95,7 @@ Definition loop_def:
   in loop v0 v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 m ss n
 End
 
-val loop_pre_def = cv_trans_pre loop_def;
+val loop_pre_def = cv_trans_pre "loop_pre" loop_def;
 
 Theorem loop_pre_length:
   EVERY (λs. LENGTH s = 16 ∧ EVERY (λi. i < LENGTH m) s) (sigmas ++ ss)
@@ -147,7 +147,7 @@ Definition blake2f_def:
   in FLAT [h0;h1;h2;h3;h4;h5;h6;h7]
 End
 
-val blake2f_pre_def = cv_trans_pre blake2f_def;
+val blake2f_pre_def = cv_trans_pre "blake2f_pre" blake2f_def;
 
 Theorem blake2f_pre_length:
   LENGTH hs = 8 ∧ LENGTH m = 16 ⇒
