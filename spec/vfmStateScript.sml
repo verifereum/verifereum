@@ -9,14 +9,6 @@ Libs
 
 Overload Num[local] = “cv$Num”
 
-(*
-open HolKernel boolLib bossLib Parse dep_rewrite
-     wordsTheory sptreeTheory alistTheory pairTheory
-     combinTheory arithmeticTheory
-     cv_transLib cv_typeLib cvTheory cv_typeTheory cv_stdTheory
-     vfmTypesTheory;
-*)
-
 Type storage = “:bytes32 -> bytes32”;
 
 Definition lookup_storage_def:

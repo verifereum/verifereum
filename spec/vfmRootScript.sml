@@ -1,10 +1,10 @@
-open HolKernel boolLib bossLib Parse wordsLib
-     pairTheory combinTheory listTheory alistTheory wordsTheory
-     sortingTheory sptreeTheory finite_mapTheory
-     merklePatriciaTrieTheory vfmStateTheory
-     cv_transLib cv_typeLib cv_typeTheory cv_stdTheory
-
-val _ = new_theory "vfmRoot";
+Theory vfmRoot
+Ancestors
+  alist list pair combin sorting finite_map sptree words
+  cv_std cv_type merklePatriciaTrie vfmState
+Libs
+  cv_transLib cv_typeLib
+  wordsLib
 
 Definition storage_fmap_def:
   storage_fmap (s: storage) : bytes32 |-> bytes32 =
@@ -169,7 +169,7 @@ QED
 Definition cv_storage_root_def:
   cv_storage_root (s:cv) =
   cv_trie_root_from_kvs $
-    cv_storage_kvs (cv_toAList s) (Num 0)
+    cv_storage_kvs (cv_toAList s) (cv$Num 0)
 End
 
 val cv_trie_root_from_kvs_thm =
@@ -241,7 +241,7 @@ QED
 Definition cv_state_root_def:
   cv_state_root (a:cv) =
   cv_trie_root_from_kvs $
-    cv_state_kvs (cv_toAList a) (Num 0)
+    cv_state_kvs (cv_toAList a) (cv$Num 0)
 End
 
 val cv_state_kvs_thm = theorem "cv_state_kvs_thm";
@@ -298,5 +298,3 @@ Proof
   \\ simp[cv_state_kvs_thm |> GSYM |> Q.GEN`acc` |> Q.SPEC`[]` |>
           SIMP_RULE std_ss [from_list_def]]
 QED
-
-val _ = export_theory();
