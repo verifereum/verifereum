@@ -1,10 +1,7 @@
-open HolKernel boolLib bossLib Parse
-     listTheory rich_listTheory pred_setTheory finite_setTheory
-     byteTheory recursiveLengthPrefixTheory
-     vfmConstantsTheory vfmTypesTheory vfmStateTheory
-     vfmTransactionTheory vfmOperationTheory;
-
-val () = new_theory "vfmContext";
+Theory vfmContext
+Ancestors
+  list rich_list
+  vfmTypes vfmConstants vfmOperation vfmState vfmTransaction
 
 Datatype:
   transaction_parameters =
@@ -365,5 +362,3 @@ Definition initial_state_def:
      ; msdomain := dom
      |>
 End
-
-val () = export_theory();

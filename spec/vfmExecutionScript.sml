@@ -1,9 +1,10 @@
- open HolKernel boolLib bossLib Parse monadsyntax dep_rewrite
-     numposrepTheory numTheory arithmeticTheory
-     sha2Theory secp256k1Theory bn254Theory blake2fTheory
-     vfmTypesTheory vfmRootTheory vfmContextTheory;
-
-val _ = new_theory "vfmExecution";
+Theory vfmExecution
+Ancestors
+  arithmetic
+  blake2f bn254 sha2 secp256k1
+  vfmTypes vfmRoot vfmContext
+Libs
+  monadsyntax
 
 (* TODO: move *)
 Definition modexp_def:
@@ -1837,5 +1838,3 @@ Definition run_blocks_to_hash_def:
     of NONE => NONE
      | SOME (rs, hs, p, s, d) => SOME (state_root s, d)
 End
-
-val _ = export_theory();

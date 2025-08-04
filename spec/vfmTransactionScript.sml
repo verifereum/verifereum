@@ -1,10 +1,10 @@
-open HolKernel boolLib bossLib Parse
-     cv_transLib cv_typeLib wordsLib
-     wordsTheory finite_setTheory
-     vfmConstantsTheory vfmTypesTheory
-     recursiveLengthPrefixTheory;
-
-val _ = new_theory "vfmTransaction";
+Theory vfmTransaction
+Ancestors
+  recursiveLengthPrefix
+  vfmTypes vfmConstants
+Libs
+  cv_transLib cv_typeLib
+  wordsLib
 
 Datatype:
   access_list_entry =
@@ -66,5 +66,3 @@ Definition rlp_event_def:
 End
 
 val () = cv_auto_trans rlp_event_def;
-
-val _ = export_theory();

@@ -1,11 +1,10 @@
-open HolKernel boolLib bossLib Parse
-     wordsLib blastLib
-     listTheory rich_listTheory optionTheory
-     arithmeticTheory wordsTheory
-     vfmTypesTheory
-     cv_transLib cv_stdTheory;
-
-val _ = new_theory "vfmOperation";
+Theory vfmOperation
+Ancestors
+  arithmetic option list rich_list words
+  vfmTypes
+Libs
+  cv_transLib
+  wordsLib
 
 Datatype:
   opname =
@@ -540,5 +539,3 @@ Theorem opcode_not_null[simp]:
 Proof
   Cases_on`op` \\ rw[opcode_def]
 QED
-
-val _ = export_theory();

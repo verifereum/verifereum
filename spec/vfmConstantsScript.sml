@@ -1,6 +1,5 @@
-open HolKernel boolLib bossLib Parse vfmTypesTheory
-
-val () = new_theory "vfmConstants";
+Theory vfmConstants
+Ancestors vfmTypes
 
 Definition stack_limit_def[simp]:
   stack_limit = 1024n
@@ -134,5 +133,3 @@ End
 Definition versioned_hash_version_kzg_def:
   versioned_hash_version_kzg: byte = 1w
 End
-
-val () = export_theory();
