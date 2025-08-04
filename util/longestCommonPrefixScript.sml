@@ -1,8 +1,6 @@
-open HolKernel boolLib bossLib Parse
-     listTheory rich_listTheory
-     arithmeticTheory sortingTheory
-
-val () = new_theory "longestCommonPrefix";
+Theory longestCommonPrefix
+Ancestors
+  arithmetic list rich_list sorting
 
 Definition longest_common_prefix_def:
   longest_common_prefix [] y = [] ∧
@@ -194,5 +192,3 @@ Proof
   \\ `n = 0` suffices_by simp[]
   \\ simp[Abbr`n`]
 QED
-
-val () = export_theory();

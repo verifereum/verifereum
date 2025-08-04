@@ -1,11 +1,13 @@
-open HolKernel boolLib bossLib Parse
-     listTheory rich_listTheory combinTheory sortingTheory wordsTheory
-     optionTheory arithmeticTheory finite_mapTheory sptreeTheory whileTheory
-     byteTheory pairTheory alistTheory numposrepTheory wordsLib blastLib
-     longestCommonPrefixTheory recursiveLengthPrefixTheory vfmTypesTheory
-     cv_transLib cv_typeLib cv_typeTheory cv_stdTheory
-
-val _ = new_theory "merklePatriciaTrie";
+Theory merklePatriciaTrie
+Ancestors
+  arithmetic combin list rich_list pair
+  sorting while words
+  finite_map sptree
+  longestCommonPrefix recursiveLengthPrefix
+  vfmTypes
+Libs
+  cv_transLib
+  blastLib wordsLib
 
 (* TODO: move? *)
 
@@ -1219,5 +1221,3 @@ val correct_root = cv_eval
 val root = cv_eval ``trie_root_clocked 60 ^kvs`` |> concl |> rhs
 
 *)
-
-val _ = export_theory();
