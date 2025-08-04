@@ -1,12 +1,15 @@
-open HolKernel boolLib bossLib Parse dep_rewrite blastLib cv_typeTheory
-cv_transLib cv_typeLib cvTheory cv_stdTheory pairTheory combinTheory
-optionTheory sumTheory listTheory rich_listTheory byteTheory wordsTheory
-alistTheory arithmeticTheory finite_setTheory sptreeTheory whileTheory
-recursiveLengthPrefixTheory merklePatriciaTrieTheory blake2fTheory vfmRootTheory
-vfmContextTheory vfmStateTheory vfmTransactionTheory vfmExecutionTheory
-vfmDecreasesGasTheory vfmTypesTheory;
+Theory vfmCompute
+Ancestors
+  arithmetic combin pair option list rich_list
+  finite_set sptree words while
+  cv cv_type cv_std
+  blake2f
+  vfmState vfmContext vfmExecution vfmDecreasesGas
+Libs
+  cv_transLib cv_typeLib
+  blastLib dep_rewrite
 
-val _ = new_theory "vfmCompute";
+Overload Num[local] = “cv$Num”
 
 (* TODO: move *)
 
@@ -387,7 +390,7 @@ val from_to_execution_state = from_to_thm_for “:execution_state”;
 
 val () = cv_auto_trans empty_domain_def;
 
-val sign_extend_pre_def = cv_auto_trans_pre sign_extend_def;
+val sign_extend_pre_def = cv_auto_trans_pre "sign_extend_pre" sign_extend_def;
 
 Theorem sign_extend_pre[cv_pre]:
   sign_extend_pre n w
@@ -429,7 +432,7 @@ val () = “get_return_data_check x y s” |>
   SIMP_CONV std_ss [get_return_data_check_def, bind_def, ignore_bind_def]
   |> cv_auto_trans;
 
-val set_current_context_pre_def = cv_auto_trans_pre set_current_context_def;
+val set_current_context_pre_def = cv_auto_trans_pre "set_current_context_pre" set_current_context_def;
 
 Theorem set_current_context_pre[cv_pre]:
   set_current_context_pre c s
@@ -547,7 +550,7 @@ val precompile_blake2f_pre_def = “precompile_blake2f s” |>
    SIMP_CONV std_ss [
        precompile_blake2f_def, bind_def, ignore_bind_def,
        LET_RATOR, COND_RATOR
-     ] |> cv_auto_trans_pre;
+     ] |> cv_auto_trans_pre "precompile_blake2f_pre";
 
 Theorem precompile_blake2f_pre[cv_pre]:
   precompile_blake2f_pre s
@@ -646,12 +649,12 @@ val () = “ensure_storage_in_domain x s” |>
 val set_last_accounts_pre_def =
     “set_last_accounts a c”
   |> SIMP_CONV std_ss [set_last_accounts_def]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "set_last_accounts_pre";
 
 val set_original_pre_def = “set_original a s” |>
   SIMP_CONV std_ss [
     set_original_def
-  ] |> cv_auto_trans_pre;
+  ] |> cv_auto_trans_pre "set_original_pre";
 
 Theorem set_original_pre[cv_pre]:
   set_original_pre a s
@@ -694,16 +697,18 @@ fun mconv def =
 ];
 
 fun trans_step_x need_pre def = let
-  val const = def |> SPEC_ALL |> concl |> lhs
-  val stype = #1 $ dom_rng $ type_of const
+  val const_app = def |> SPEC_ALL |> concl |> lhs
+  val const = const_app |> strip_comb |> #1
+  val const_name = const |> dest_const |> #1
+  val stype = #1 $ dom_rng $ type_of const_app
   val s = mk_var("s", stype)
-  val tm = mk_comb(const, s)
+  val tm = mk_comb(const_app, s)
   val xdef = mconv def tm
 in
   if need_pre then let
-    val pre_def = cv_auto_trans_pre xdef
+    val pre_name = const_name^"_pre"
+    val pre_def = cv_auto_trans_pre pre_name xdef
     val pre_a = pre_def |> SPEC_ALL |> concl |> lhs
-    val pre_name = pre_a |> strip_comb |> #1 |> dest_const |> #1
   in
     store_thm(pre_name ^ "[cv_pre]", pre_a, step_x_pre_tac pre_def)
   end
@@ -793,7 +798,7 @@ val step_inst_pre_def = step_inst_def |>
     copy_to_memory_def,
     bind_def, ignore_bind_def, LET_RATOR,
     LET_PROD_RATOR, option_CASE_rator, LET_UNCURRY
-  ] |> cv_auto_trans_pre;
+  ] |> cv_auto_trans_pre "step_inst_pre";
 
 Theorem step_inst_pre[cv_pre]:
   step_inst_pre i s
@@ -918,7 +923,7 @@ val () = initial_state_def |>
   ONCE_REWRITE_RULE[GSYM update_account_def] |>
   cv_auto_trans;
 
-val run_tr_pre_def = cv_trans_pre run_tr_def;
+val run_tr_pre_def = cv_trans_pre "run_tr_pre" run_tr_def;
 
 Theorem run_tr_pre[cv_pre]:
   !x. run_tr_pre x
@@ -935,7 +940,7 @@ val () = cv_trans run_eq_tr;
 val () = cv_auto_trans process_deletions_def;
 
 val post_transaction_accounting_pre_def = post_transaction_accounting_def
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "post_transaction_accounting_pre";
 
 Theorem post_transaction_accounting_pre[cv_pre]:
   ∀blk tx result s t.
@@ -951,7 +956,7 @@ val () = cv_auto_trans empty_return_destination_def;
 
 val run_create_pre_def = run_create_def
   |> SIMP_RULE std_ss [o_DEF]
-  |> cv_auto_trans_pre;
+  |> cv_auto_trans_pre "run_create_pre";
 
 Theorem run_create_pre[cv_pre]:
   run_create_pre d st c p b a t
@@ -1022,5 +1027,3 @@ val () = cv_auto_trans run_block_eq;
 val () = cv_auto_trans run_block_to_hash_def;
 
 val () = cv_auto_trans run_blocks_to_hash_def;
-
-val _ = export_theory();
