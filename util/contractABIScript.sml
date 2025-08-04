@@ -1,10 +1,11 @@
-open HolKernel boolLib bossLib Parse wordsLib dep_rewrite blastLib
-     pairTheory listTheory rich_listTheory arithmeticTheory bitTheory
-     numposrepTheory byteTheory wordsTheory dividesTheory
-     integerTheory integer_wordTheory vfmTypesTheory
-     cvTheory cv_stdTheory cv_transLib
-
-val () = new_theory "contractABI";
+Theory contractABI
+Ancestors
+  arithmetic bit list rich_list pair numposrep
+  integer words integer_word cv cv_std
+  vfmTypes
+Libs
+  cv_transLib
+  wordsLib
 
 val () = numLib.prefer_num();
 
@@ -1148,5 +1149,3 @@ Proof
   \\ gs[LENGTH_TAKE_EQ] \\ rw[ceil32_when_le] \\ rw[]
   \\ metis_tac[le_ceil32, LESS_EQUAL_ANTISYM]
 QED
-
-val () = export_theory();

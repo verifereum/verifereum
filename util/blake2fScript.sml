@@ -1,7 +1,10 @@
-open HolKernel boolLib bossLib Parse wordsLib cv_transLib
-     cv_stdTheory listTheory wordsTheory byteTheory vfmTypesTheory
-
-val () = new_theory "blake2f";
+Theory blake2f
+Ancestors
+  list
+  vfmTypes
+Libs
+  cv_transLib
+  wordsLib
 
 (*
 Definition iv_def:
@@ -158,5 +161,3 @@ Proof
   \\ irule loop_pre_length
   \\ rw[sigmas_def]
 QED
-
-val () = export_theory ();

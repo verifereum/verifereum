@@ -1,8 +1,9 @@
-open HolKernel boolLib bossLib Parse wordsLib
-     arithmeticTheory
-     vfmTypesTheory cv_stdTheory cv_transLib
-
-val () = new_theory "bn254"; (* aka alt_bn128 *)
+Theory bn254 (* aka alt_bn128 *)
+Ancestors
+  vfmTypes
+Libs
+  cv_transLib
+  wordsLib
 
 Definition bn254p_def:
   bn254p = 21888242871839275222246405745257275088696311157297823662689037894645226208583n
@@ -503,5 +504,3 @@ Definition fq12one_def:
 End
 
 val () = cv_trans_deep_embedding EVAL fq12one_def;
-
-val () = export_theory();

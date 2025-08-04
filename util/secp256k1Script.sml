@@ -1,8 +1,9 @@
-open HolKernel boolLib bossLib Parse wordsLib
-     arithmeticTheory
-     vfmTypesTheory cv_stdTheory cv_transLib
-
-val () = new_theory "secp256k1";
+Theory secp256k1
+Ancestors
+  vfmTypes
+Libs
+  cv_transLib
+  wordsLib
 
 Definition secp256k1N_def:
   secp256k1N =
@@ -452,5 +453,3 @@ Definition pointToUncompressedBytes_def:
 End
 
 val () = cv_trans pointToUncompressedBytes_def;
-
-val () = export_theory();
