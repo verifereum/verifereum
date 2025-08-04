@@ -1,10 +1,21 @@
+Theory vfmState
+Ancestors
+  alist arithmetic combin pair sptree words
+  cv cv_std cv_type
+  vfmTypes
+Libs
+  cv_transLib cv_typeLib
+  dep_rewrite
+
+Overload Num[local] = “cv$Num”
+
+(*
 open HolKernel boolLib bossLib Parse dep_rewrite
      wordsTheory sptreeTheory alistTheory pairTheory
      combinTheory arithmeticTheory
      cv_transLib cv_typeLib cvTheory cv_typeTheory cv_stdTheory
      vfmTypesTheory;
-
-val _ = new_theory "vfmState";
+*)
 
 Type storage = “:bytes32 -> bytes32”;
 
@@ -327,5 +338,3 @@ Theorem empty_accounts_cv_rep[cv_rep]:
 Proof
   rw[from_evm_accounts_def, from_sptree_sptree_spt_def]
 QED
-
-val _ = export_theory();
