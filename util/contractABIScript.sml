@@ -887,6 +887,19 @@ Proof
   \\ rw[]
 QED
 
+Definition every_zero_def:
+  (every_zero [] = T) ∧
+  (every_zero ((b:byte)::bs) ⇔ (b = 0w) ∧ every_zero bs)
+End
+
+val () = cv_trans every_zero_def;
+
+Theorem every_zero_intro:
+  EVERY ((=) 0w) = every_zero
+Proof
+  simp[FUN_EQ_THM] \\ Induct \\ rw[every_zero_def]
+QED
+
 Definition valid_enc_def[simp]:
   valid_enc (Tuple ts) bs =
     (LENGTH ts < dimword (:256) ∧
@@ -909,16 +922,24 @@ Definition valid_enc_def[simp]:
     (32 ≤ LENGTH bs ∧
      let dn = dec_number (Uint 256) (TAKE 32 bs) in
      is_num_value dn ∧ let
-     n = dest_NumV dn in
-       32 + n ≤ LENGTH bs) ∧
+     n = dest_NumV dn;
+     pn = if n = 0 then 32 else 32 * ((n - 1) DIV 32 + 2)
+     in
+       pn ≤ LENGTH bs ∧
+       EVERY ((=) 0w) (DROP (32 + n) (TAKE pn bs))) ∧
   valid_enc String bs =
     (32 ≤ LENGTH bs ∧
      let dn = dec_number (Uint 256) (TAKE 32 bs) in
      is_num_value dn ∧ let
-     n = dest_NumV dn in
-       32 + n ≤ LENGTH bs) ∧
+     n = dest_NumV dn;
+     pn = if n = 0 then 32 else 32 * ((n - 1) DIV 32 + 2)
+     in
+       pn ≤ LENGTH bs ∧
+       EVERY ((=) 0w) (DROP (32 + n) (TAKE pn bs))) ∧
   valid_enc (Bytes (SOME m)) bs =
-    (valid_bytes_bound  (SOME m) ∧ m ≤ LENGTH bs) ∧
+    (valid_bytes_bound (SOME m) ∧
+     32 ≤ LENGTH bs ∧
+     EVERY ((=) 0w) (DROP m (TAKE 32 bs))) ∧
   valid_enc t bs =
     (32 ≤ LENGTH bs ∧
      let v = dec_number t (TAKE 32 bs) in
@@ -959,7 +980,8 @@ Termination
 End
 
 val pre = cv_trans_pre_rec
-  "valid_enc_pre valid_enc_array_pre valid_enc_tuple_pre" valid_enc_def (
+  "valid_enc_pre valid_enc_array_pre valid_enc_tuple_pre"
+    (PURE_REWRITE_RULE [every_zero_intro] valid_enc_def) (
   WF_REL_TAC ‘inv_image ($< LEX $<)
   (λx. case x of
          (INR (INR (ts,_,_))) => (cv_size ts, 0)
@@ -1032,13 +1054,15 @@ Proof
     \\ strip_tac)
   \\ conj_tac >- rw[]
   \\ conj_tac >- (
-    rw[]
+    rw[LEFT_ADD_DISTRIB]
     \\ qmatch_goalsub_abbrev_tac`w2n w`
-    \\ qspec_then`w`mp_tac w2n_lt \\ rw[] )
+    \\ qspec_then`w`mp_tac w2n_lt \\ rw[]
+    \\ gvs[LENGTH_TAKE_EQ])
   \\ conj_tac >- (
-    rw[]
+    rw[LEFT_ADD_DISTRIB]
     \\ qmatch_goalsub_abbrev_tac`w2n w`
-    \\ qspec_then`w`mp_tac w2n_lt \\ rw[] )
+    \\ qspec_then`w`mp_tac w2n_lt \\ rw[]
+    \\ gvs[LENGTH_TAKE_EQ])
   \\ conj_tac >- rw[]
   \\ conj_tac >- rw[]
   \\ conj_tac >- rw[]
