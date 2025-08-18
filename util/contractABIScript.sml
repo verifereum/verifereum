@@ -910,8 +910,7 @@ Definition valid_enc_def[simp]:
      valid_enc_array n lt t bs bs) ∧
   valid_enc (Array NONE t) bs =
     (let
-       lt = if is_dynamic t then NONE else SOME $ static_length t
-     in 32 ≤ LENGTH bs ∧ let
+       lt = if is_dynamic t then NONE else SOME $ static_length t;
        dn = dec_number (Uint 256) (TAKE 32 bs)
      in is_num_value dn ∧ let
        n = dest_NumV dn;
@@ -919,34 +918,35 @@ Definition valid_enc_def[simp]:
      in n < dimword (:256) ∧
         valid_enc_array n lt t bs bs) ∧
   valid_enc (Bytes NONE) bs =
-    (32 ≤ LENGTH bs ∧
-     let dn = dec_number (Uint 256) (TAKE 32 bs) in
+    (let
+     ls = TAKE 32 bs; bs = DROP 32 bs;
+     dn = dec_number (Uint 256) ls in
      is_num_value dn ∧ let
      n = dest_NumV dn;
      pn = ceil32 n
      in
-       pn ≤ LENGTH bs ∧
-       EVERY ((=) 0w) (DROP (32 + n) (TAKE pn bs))) ∧
+       n ≤ LENGTH bs ∧
+       EVERY ((=) 0w) (DROP n (TAKE pn bs))) ∧
   valid_enc String bs =
-    (32 ≤ LENGTH bs ∧
-     let dn = dec_number (Uint 256) (TAKE 32 bs) in
+    (let
+     ls = TAKE 32 bs; bs = DROP 32 bs;
+     dn = dec_number (Uint 256) ls in
      is_num_value dn ∧ let
      n = dest_NumV dn;
      pn = ceil32 n
      in
-       pn ≤ LENGTH bs ∧
-       EVERY ((=) 0w) (DROP (32 + n) (TAKE pn bs))) ∧
+       n ≤ LENGTH bs ∧
+       EVERY ((=) 0w) (DROP n (TAKE pn bs))) ∧
   valid_enc (Bytes (SOME m)) bs =
     (valid_bytes_bound (SOME m) ∧
-     32 ≤ LENGTH bs ∧
+     m ≤ LENGTH bs ∧
      EVERY ((=) 0w) (DROP m (TAKE 32 bs))) ∧
   valid_enc t bs =
-    (32 ≤ LENGTH bs ∧
-     let v = dec_number t (TAKE 32 bs) in
+    (let v = dec_number t (TAKE 32 bs) in
      has_type t v) ∧
   valid_enc_array 0 _ _ _ _ = T ∧
   valid_enc_array (SUC n) NONE t bs hds =
-    (32 ≤ LENGTH hds ∧ let
+    (let
       dn = dec_number (Uint 256) (TAKE 32 hds)
      in is_num_value dn ∧ let
       j = dest_NumV dn
@@ -954,23 +954,20 @@ Definition valid_enc_def[simp]:
       valid_enc t (DROP j bs) ∧
       valid_enc_array n NONE t bs (DROP 32 hds)) ∧
   valid_enc_array (SUC n) (SOME l) t bs hds =
-    (l ≤ LENGTH hds ∧
-     valid_enc t (TAKE l hds) ∧
+    (valid_enc t (TAKE l hds) ∧
      valid_enc_array n (SOME l) t bs (DROP l hds)) ∧
   valid_enc_tuple [] _ _ = T ∧
   valid_enc_tuple (t::ts) bs hds =
     (if is_dynamic t then
-       32 ≤ LENGTH hds ∧ let
+       let
          dn = dec_number (Uint 256) (TAKE 32 hds)
        in is_num_value dn ∧ let
          j = dest_NumV dn
-       in j ≤ LENGTH bs ∧
-          valid_enc t (DROP j bs) ∧
+       in valid_enc t (DROP j bs) ∧
           valid_enc_tuple ts bs (DROP 32 hds)
      else let
        n = static_length t
-     in n ≤ LENGTH hds ∧
-        valid_enc t (TAKE n hds) ∧
+     in valid_enc t (TAKE n hds) ∧
         valid_enc_tuple ts bs (DROP n hds))
 Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
