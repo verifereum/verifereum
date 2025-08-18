@@ -923,7 +923,7 @@ Definition valid_enc_def[simp]:
      let dn = dec_number (Uint 256) (TAKE 32 bs) in
      is_num_value dn ∧ let
      n = dest_NumV dn;
-     pn = if n = 0 then 32 else 32 * ((n - 1) DIV 32 + 2)
+     pn = ceil32 n
      in
        pn ≤ LENGTH bs ∧
        EVERY ((=) 0w) (DROP (32 + n) (TAKE pn bs))) ∧
@@ -932,7 +932,7 @@ Definition valid_enc_def[simp]:
      let dn = dec_number (Uint 256) (TAKE 32 bs) in
      is_num_value dn ∧ let
      n = dest_NumV dn;
-     pn = if n = 0 then 32 else 32 * ((n - 1) DIV 32 + 2)
+     pn = ceil32 n
      in
        pn ≤ LENGTH bs ∧
        EVERY ((=) 0w) (DROP (32 + n) (TAKE pn bs))) ∧
