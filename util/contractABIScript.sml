@@ -399,6 +399,8 @@ Definition is_num_value_def[simp]:
   is_num_value _ = F
 End
 
+val () = cv_auto_trans is_num_value_def;
+
 Theorem dec_enc_number:
   has_type t v ∧ is_num_value v
   ⇒ dec_number t (enc_number t v) = v
@@ -884,6 +886,202 @@ Proof
     \\ Cases_on`n` \\ gvs[] )
   \\ rw[]
 QED
+
+Definition valid_enc_def[simp]:
+  valid_enc (Tuple ts) bs =
+    (LENGTH ts < dimword (:256) ∧
+     valid_enc_tuple ts bs bs) ∧
+  valid_enc (Array (SOME n) t) bs =
+    (let lt = if is_dynamic t then NONE else SOME $ static_length t in
+     n < dimword (:256) ∧
+     valid_enc_array n lt t bs bs) ∧
+  valid_enc (Array NONE t) bs =
+    (let
+       lt = if is_dynamic t then NONE else SOME $ static_length t
+     in 32 ≤ LENGTH bs ∧ let
+       dn = dec_number (Uint 256) (TAKE 32 bs)
+     in is_num_value dn ∧ let
+       n = dest_NumV dn;
+       bs = DROP 32 bs
+     in n < dimword (:256) ∧
+        valid_enc_array n lt t bs bs) ∧
+  valid_enc (Bytes NONE) bs =
+    (32 ≤ LENGTH bs ∧
+     let dn = dec_number (Uint 256) (TAKE 32 bs) in
+     is_num_value dn ∧ let
+     n = dest_NumV dn in
+       32 + n ≤ LENGTH bs) ∧
+  valid_enc String bs =
+    (32 ≤ LENGTH bs ∧
+     let dn = dec_number (Uint 256) (TAKE 32 bs) in
+     is_num_value dn ∧ let
+     n = dest_NumV dn in
+       32 + n ≤ LENGTH bs) ∧
+  valid_enc (Bytes (SOME m)) bs =
+    (valid_bytes_bound  (SOME m) ∧ m ≤ LENGTH bs) ∧
+  valid_enc t bs =
+    (32 ≤ LENGTH bs ∧
+     let v = dec_number t (TAKE 32 bs) in
+     has_type t v) ∧
+  valid_enc_array 0 _ _ _ _ = T ∧
+  valid_enc_array (SUC n) NONE t bs hds =
+    (32 ≤ LENGTH hds ∧ let
+      dn = dec_number (Uint 256) (TAKE 32 hds)
+     in is_num_value dn ∧ let
+      j = dest_NumV dn
+     in
+      valid_enc t (DROP j bs) ∧
+      valid_enc_array n NONE t bs (DROP 32 hds)) ∧
+  valid_enc_array (SUC n) (SOME l) t bs hds =
+    (l ≤ LENGTH hds ∧
+     valid_enc t (TAKE l hds) ∧
+     valid_enc_array n (SOME l) t bs (DROP l hds)) ∧
+  valid_enc_tuple [] _ _ = T ∧
+  valid_enc_tuple (t::ts) bs hds =
+    (if is_dynamic t then
+       32 ≤ LENGTH hds ∧ let
+         dn = dec_number (Uint 256) (TAKE 32 hds)
+       in is_num_value dn ∧ let
+         j = dest_NumV dn
+       in j ≤ LENGTH bs ∧
+          valid_enc t (DROP j bs) ∧
+          valid_enc_tuple ts bs (DROP 32 hds)
+     else let
+       n = static_length t
+     in n ≤ LENGTH hds ∧
+        valid_enc t (TAKE n hds) ∧
+        valid_enc_tuple ts bs (DROP n hds))
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+    (INR (INR (ts,_,_))) => (list_size abi_type_size ts, 0)
+  | (INR (INL (n,_,t,_,_))) => (abi_type_size t, n)
+  | (INL (t,_)) => (abi_type_size t, 0))’
+End
+
+val pre = cv_trans_pre_rec
+  "valid_enc_pre valid_enc_array_pre valid_enc_tuple_pre" valid_enc_def (
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+  (λx. case x of
+         (INR (INR (ts,_,_))) => (cv_size ts, 0)
+       | (INR (INL (n,_,t,_,_))) => (cv_size t, cv$c2n n)
+       | (INL (t,_)) => (cv_size t, 0))’
+  \\ rpt conj_tac
+  \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
+  \\ qmatch_goalsub_rename_tac`cv_snd p`
+  \\ Cases_on`p` \\ gs[]
+);
+
+Theorem valid_enc_pre[cv_pre]:
+  (∀v bs. valid_enc_pre v bs) ∧
+  (∀v0 v v1 v2 v3. valid_enc_array_pre v0 v v1 v2 v3) ∧
+  (∀v v4 v5. valid_enc_tuple_pre v v4 v5)
+Proof
+  ho_match_mp_tac valid_enc_ind
+  \\ rpt strip_tac
+  \\ once_rewrite_tac [pre]
+  \\ simp []
+QED
+
+Theorem dec_array_length:
+  ∀n b t bs hds acc.
+  ∃vs. dec_array n b t bs hds acc = ListV (REVERSE acc ++ vs) ∧
+       LENGTH vs = n
+Proof
+  Induct_on `n` \\ rw[]
+  \\ Cases_on`b` \\ rw[]
+  \\ qmatch_goalsub_abbrev_tac`dec_array n b t bs h a`
+  \\ first_x_assum(qspecl_then[`b`,`t`,`bs`,`h`,`a`]mp_tac)
+  \\ rw[] \\ rw[Abbr`a`]
+QED
+
+Theorem dec_has_type:
+  (∀t bs. valid_enc t bs ⇒ has_type t (dec t bs)) ∧
+  (∀n b t bs hds acc.
+    valid_enc_array n b t bs hds ∧
+    n + LENGTH acc < dimword (:256) ∧
+    have_type t (REVERSE acc)
+    ⇒
+    has_type (Array NONE t) (dec_array n b t bs hds acc) ∧
+    has_type (Array (SOME (n + LENGTH acc)) t) (dec_array n b t bs hds acc)) ∧
+  (∀ts bs hds acc as.
+    valid_enc_tuple ts bs hds ∧
+    LENGTH ts + LENGTH acc < dimword (:256) ∧
+    has_types as (REVERSE acc)
+    ⇒
+    has_type (Tuple (as++ts)) (dec_tuple ts bs hds acc))
+Proof
+  ho_match_mp_tac dec_ind
+  \\ conj_tac >- (
+    rw[]
+    \\ first_x_assum(qspec_then`[]`mp_tac)
+    \\ rw[] )
+  \\ conj_tac >- (
+    rpt gen_tac \\ strip_tac
+    \\ simp[] \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`dec_array n b`
+    \\ qspecl_then[`n`,`b`,`t`,`bs`,`bs`,`[]`]mp_tac dec_array_length
+    \\ rw[] \\ simp[]
+    \\ first_x_assum(qspec_then`b`mp_tac)
+    \\ impl_tac >- rw[]
+    \\ rewrite_tac[GSYM AND_IMP_INTRO]
+    \\ impl_tac >- rw[]
+    \\ first_assum $ SUBST1_TAC
+    \\ impl_tac >- gs[]
+    \\ impl_tac >- gs[]
+    \\ rewrite_tac[has_type_def,have_type_has_types_REPLICATE]
+    \\ strip_tac)
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- (
+    rw[]
+    \\ qmatch_goalsub_abbrev_tac`w2n w`
+    \\ qspec_then`w`mp_tac w2n_lt \\ rw[] )
+  \\ conj_tac >- (
+    rw[]
+    \\ qmatch_goalsub_abbrev_tac`w2n w`
+    \\ qspec_then`w`mp_tac w2n_lt \\ rw[] )
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- (
+    rpt gen_tac \\ strip_tac
+    \\ strip_tac
+    \\ gvs[ADD1]
+    \\ first_x_assum irule
+    \\ gvs[has_types_LIST_REL]
+    \\ rewrite_tac[GSYM ADD1, GSYM SNOC_REPLICATE, SNOC_APPEND]
+    \\ simp[] )
+  \\ conj_tac >- (
+    rpt gen_tac \\ strip_tac
+    \\ strip_tac
+    \\ gvs[ADD1]
+    \\ first_x_assum irule
+    \\ gvs[has_types_LIST_REL]
+    \\ rewrite_tac[GSYM ADD1, GSYM SNOC_REPLICATE, SNOC_APPEND]
+    \\ simp[] )
+  \\ conj_tac >- rw[]
+  \\ rpt gen_tac \\ strip_tac
+  \\ gen_tac \\ strip_tac
+  \\ simp[]
+  \\ IF_CASES_TAC \\ gvs[]
+  \\ first_x_assum(qspec_then`as ++ [t]`mp_tac)
+  \\ gvs[has_types_LIST_REL]
+  \\ strip_tac
+  \\ rewrite_tac[Once CONS_APPEND, APPEND_ASSOC] \\ rw[]
+  \\ rewrite_tac[Once CONS_APPEND, APPEND_ASSOC] \\ rw[]
+QED
+
+(* TODO
+Theorem enc_valid:
+  (∀t v. has_type t v ⇒ valid_enc t (enc t v)) ∧
+  (∀hl tl ts vs hds tls.
+   has_types ts vs ⇒
+   valid_enc_array
+*)
 
 (*
   val ty = “String”;
