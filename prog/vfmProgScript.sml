@@ -27,9 +27,6 @@ Datatype:
          | Msdomain   domain_mode
 End
 
-Theorem evm_el_11 = DB.fetch "-" "evm_el_11";
-Theorem evm_el_distinct = DB.fetch "-" "evm_el_distinct";
-
 Type evm_set = “:evm_el set”;
 
 (*-------------------------------------------------------------------------------*
