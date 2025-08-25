@@ -84,59 +84,74 @@ End
 
 (* theorems *)
 
+Theorem PUSH_IN_INTO_IF[local]:
+  !g x y z. x IN (if g then y else z) <=> if g then x IN y else x IN z
+Proof
+  metis_tac[]
+QED
+
 Theorem evm2set'_SUBSET_evm2set[local]:
   ∀y s. evm2set' y s SUBSET evm2set s
 Proof
-  cheat
-(*
-  Cases_on `y` \\ Cases_on `r` \\ Cases_on `r'` \\ Cases_on `r`
-  \\ SIMP_TAC std_ss [SUBSET_DEF,evm2set'_def,evm2set_def,IN_IMAGE,IN_UNION,IN_UNIV]
-  \\ METIS_TAC [NOT_IN_EMPTY]);
-*)
+  rw[evm2set_def]
+  \\ simp[SUBSET_DEF, IN_UNIV, evm2set'_def, PUSH_IN_INTO_IF]
+  \\ rw[]
 QED
 
 Theorem SPLIT_evm2set[local]:
   ∀x s. SPLIT (evm2set s) (evm2set' x s, evm2set'' x s)
 Proof
-  cheat (*
   REPEAT STRIP_TAC
   \\ ASM_SIMP_TAC std_ss [SPLIT_def,EXTENSION,IN_UNION,IN_DIFF,evm2set''_def]
   \\ `evm2set' x s SUBSET evm2set s` by METIS_TAC [evm2set'_SUBSET_evm2set]
   \\ SIMP_TAC bool_ss [DISJOINT_DEF,EXTENSION,IN_INTER,NOT_IN_EMPTY,IN_DIFF]
-  \\ METIS_TAC [SUBSET_DEF]); *)
+  \\ METIS_TAC [SUBSET_DEF]
 QED
-
-val PUSH_IN_INTO_IF = METIS_PROVE []
-  ``!g x y z. x IN (if g then y else z) <=> if g then x IN y else x IN z``;
 
 Theorem SUBSET_evm2set[local]:
   !u s. u SUBSET evm2set s <=> ?y. u = evm2set' y s
 Proof
-  cheat
-(*
   REPEAT STRIP_TAC \\ EQ_TAC \\ REPEAT STRIP_TAC
   \\ ASM_REWRITE_TAC [evm2set'_SUBSET_evm2set]
-  \\ Q.EXISTS_TAC `({ a | a| ?x. aReg a x IN u },
-       { a | a| ?x. aMem a x IN u },{ a | a| ?x. aStatus a x IN u },
-       (?y. aCPSR_Reg y IN u),(?y. aUndef y IN u))`
-  \\ FULL_SIMP_TAC std_ss [evm2set'_def,evm2set_def,EXTENSION,SUBSET_DEF,IN_IMAGE,
-       IN_UNION,GSPECIFICATION,IN_INSERT,NOT_IN_EMPTY,IN_UNIV,PUSH_IN_INTO_IF]
-  \\ STRIP_TAC \\ ASM_REWRITE_TAC [] \\ EQ_TAC \\ REPEAT STRIP_TAC THEN1 METIS_TAC []
-  \\ PAT_X_ASSUM ``!x:'a. b:bool`` (IMP_RES_TAC) \\ FULL_SIMP_TAC std_ss [v_el_11,v_el_distinct]);
-  *)
+  \\ gvs[evm2set_def, SUBSET_DEF]
+  \\ qexists_tac `
+       (if ∃x. Stack x ∈ u then {HasStack} else {}) ∪
+       (if ∃x. Memory x ∈ u then {HasMemory} else {}) ∪
+       (if ∃x. PC x ∈ u then {HasPC} else {}) ∪
+       (if ∃x. JumpDest x ∈ u then {HasJumpDest} else {}) ∪
+       (if ∃x. ReturnData x ∈ u then {HasReturnData} else {}) ∪
+       (if ∃x. GasUsed x ∈ u then {HasGasUsed} else {}) ∪
+       (if ∃x. AddRefund x ∈ u then {HasAddRefund} else {}) ∪
+       (if ∃x. SubRefund x ∈ u then {HasSubRefund} else {}) ∪
+       (if ∃x. Logs x ∈ u then {HasLogs} else {}) ∪
+       (if ∃x. Contexts x ∈ u then {HasContexts} else {}) ∪
+       (if ∃x. TxParams x ∈ u then {HasTxParams} else {}) ∪
+       (if ∃x. Rollback x ∈ u then {HasRollback} else {}) ∪
+       (if ∃x. Msdomain x ∈ u then {HasMsdomain} else {}) ∪
+       {HasParsed n | ∃x. Parsed n x ∈ u}`
+  \\ rewrite_tac[EXTENSION, EQ_IMP_THM]
+  \\ gen_tac \\ strip_tac
+  >- (
+    strip_tac \\ first_x_assum drule
+    \\ simp[evm2set'_def, PUSH_IN_INTO_IF]
+    \\ rw[] \\ goal_assum $ drule )
+  \\ simp[evm2set'_def, PUSH_IN_INTO_IF]
+  \\ strip_tac
+  \\ first_x_assum drule
+  \\ rw[evm2set'_def] \\ rw[]
 QED
 
 Theorem SPLIT_evm2set_EXISTS[local]:
   ∀s u v. SPLIT (evm2set s) (u,v) = ?y. (u = evm2set' y s) /\ (v = evm2set'' y s)
 Proof
-  cheat (*
   REPEAT STRIP_TAC \\ EQ_TAC \\ REPEAT STRIP_TAC \\ ASM_REWRITE_TAC [SPLIT_evm2set]
-  \\ FULL_SIMP_TAC bool_ss [SPLIT_def,evm2set'_def,evm2set''_def]
+  \\ gvs[SPLIT_def]
   \\ `u SUBSET (evm2set s)` by
        (FULL_SIMP_TAC std_ss [EXTENSION,SUBSET_DEF,IN_UNION] \\ METIS_TAC [])
-  \\ FULL_SIMP_TAC std_ss [SUBSET_evm2set] \\ Q.EXISTS_TAC `y` \\ REWRITE_TAC []
-  \\ FULL_SIMP_TAC std_ss [EXTENSION,IN_DIFF,IN_UNION,DISJOINT_DEF,NOT_IN_EMPTY,IN_INTER]
-  \\ METIS_TAC [] *)
+  \\ gvs[evm2set''_def, SUBSET_evm2set]
+  \\ qexists_tac`y` \\ simp[]
+  \\ gvs[EXTENSION, IN_DISJOINT]
+  \\ metis_tac[]
 QED
 
 (*
