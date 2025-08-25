@@ -67,6 +67,7 @@ Definition evm2set'_def:
       (if HasAddRefund ∈ dom  then { AddRefund (current_context.addRefund) } else {}) ∪
       (if HasSubRefund ∈ dom  then { SubRefund (current_context.subRefund) } else {}) ∪
       (if HasLogs ∈ dom       then { Logs (current_context.logs) } else {}) ∪
+      (if HasMsgParams ∈ dom  then { MsgParams current_context.msgParams } else {}) ∪
       (if HasContexts ∈ dom   then { Contexts (TL s.contexts) } else {}) ∪
       (if HasTxParams ∈ dom   then { TxParams s.txParams } else {}) ∪
       (if HasRollback ∈ dom   then { Rollback s.rollback } else {}) ∪
@@ -123,6 +124,7 @@ Proof
        (if ∃x. GasUsed x ∈ u then {HasGasUsed} else {}) ∪
        (if ∃x. AddRefund x ∈ u then {HasAddRefund} else {}) ∪
        (if ∃x. SubRefund x ∈ u then {HasSubRefund} else {}) ∪
+       (if ∃x. MsgParams x ∈ u then {HasMsgParams} else {}) ∪
        (if ∃x. Logs x ∈ u then {HasLogs} else {}) ∪
        (if ∃x. Contexts x ∈ u then {HasContexts} else {}) ∪
        (if ∃x. TxParams x ∈ u then {HasTxParams} else {}) ∪
@@ -182,22 +184,13 @@ QED
 Theorem evm2set''_11[local]:
   !y y' s s'. (evm2set'' y' s' = evm2set'' y s) ==> (y = y')
 Proof
-  cheat (*
-  REPEAT STRIP_TAC \\ CCONTR_TAC
-  \\ `?r m st cp ud. y = (r,m,st,cp,ud)` by METIS_TAC [PAIR]
-  \\ `?r' m' st' cp' ud'. y' = (r',m',st',cp',ud')` by METIS_TAC [PAIR]
-  \\ FULL_SIMP_TAC bool_ss [PAIR_EQ, Excl "lift_disj_eq"] THENL [
-    `?a. ~(a IN r ⇔ a IN r')` by METIS_TAC [EXTENSION]
-    \\ sg `~((?x. aReg a x IN evm2set'' y s) = (?x. aReg a x IN evm2set'' y' s'))`,
-    `?a. ~(a IN m ⇔ a IN m')` by METIS_TAC [EXTENSION]
-    \\ sg `~((?x. aMem a x IN evm2set'' y s) = (?x. aMem a x IN evm2set'' y' s'))`,
-    `?a. ~(a IN st ⇔ a IN st')` by METIS_TAC [EXTENSION]
-    \\ sg `~((?x. aStatus a x IN evm2set'' y s) = (?x. aStatus a x IN evm2set'' y' s'))`,
-    sg `~((?x. aCPSR_Reg x IN evm2set'' y s) = (?x. aCPSR_Reg x IN evm2set'' y' s'))`,
-    sg `~((?x. aUndef x IN evm2set'' y s) = (?x. aUndef x IN evm2set'' y' s'))`]
-  \\ REPEAT (FULL_SIMP_TAC bool_ss [IN_evm2set] \\ METIS_TAC [])
-  \\ Q.PAT_X_ASSUM `evm2set'' _ _ = evm2set'' _ _` (K ALL_TAC)
-  \\ FULL_SIMP_TAC bool_ss [IN_evm2set] \\ METIS_TAC [] *)
+  qsuff_tac`∀y y' s s'. evm2set'' y' s' ⊆ evm2set'' y s ⇒ y ⊆ y'`
+  >- METIS_TAC[SET_EQ_SUBSET]
+  \\ rw[evm2set''_def, evm2set_def, SUBSET_DEF]
+  \\ gvs[evm2set'_def, PUSH_IN_INTO_IF]
+  \\ CCONTR_TAC
+  \\ fsrw_tac[DNF_ss][] (* TODO: faster? *)
+  \\ Cases_on`x` \\ gvs[]
 QED
 
 (*
@@ -222,7 +215,9 @@ QED
 Theorem EMPTY_evm2set[local]:
   (evm2set' dom s = {}) ⇔  dom = {}
 Proof
-  cheat
+  simp[evm2set'_def, PUSH_IN_INTO_IF, CaseEq"bool"]
+  \\ rw[EXTENSION, EQ_IMP_THM]
+  \\ Cases_on`x` \\ rw[]
 QED
 
 (*
