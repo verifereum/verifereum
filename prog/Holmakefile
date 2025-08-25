@@ -1,1 +1,1 @@
-INCLUDES=../spec
+INCLUDES=../spec ../spec/prop $(HOLDIR)/examples/machine-code/hoare-triple
