@@ -1,1 +1,1 @@
-INCLUDES = spec/prop tests
+INCLUDES = spec/prop prog tests
