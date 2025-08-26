@@ -289,7 +289,16 @@ Theorem STAR_evm2set:
    g /\ p (evm2set' dom s))
 Proof
   simp [evm_PC_def,cond_STAR,EQ_STAR]
-  \\ cheat
+  \\ rw[EQ_IMP_THM]
+  >- gvs[evm2set'_def, PUSH_IN_INTO_IF]
+  >- gvs[evm2set'_def, PUSH_IN_INTO_IF]
+  >~ [`PC _ .pc ∈ _`] >- simp[evm2set'_def]
+  \\ qmatch_goalsub_abbrev_tac`p s1`
+  \\ qmatch_asmsub_abbrev_tac`p s2`
+  \\ `s1 = s2` suffices_by rw[]
+  \\ rw[Abbr`s1`, Abbr`s2`]
+  \\ gvs[evm2set'_def, EXTENSION, PUSH_IN_INTO_IF]
+  \\ rw[EQ_IMP_THM]
 QED
 
 val CODE_POOL_evm2set_LEMMA = prove(
@@ -326,20 +335,20 @@ val CODE_POOL_evm2set_2 = prove(
 Theorem CODE_POOL_evm2set:
   CODE_POOL EVM_INSTR {(p,c)} (evm2set' dom s) ⇔
     dom = {HasParsed p} ∧
-    FLOOKUP (FST (HD s.contexts)).msgParams.parsed n = SOME c
+    FLOOKUP (FST (HD s.contexts)).msgParams.parsed p = SOME c
 Proof
-  SIMP_TAC bool_ss [CODE_POOL_def,IMAGE_INSERT,IMAGE_EMPTY,BIGUNION_INSERT,
-    BIGUNION_EMPTY,UNION_EMPTY,EVM_INSTR_def,CODE_POOL_evm2set_LEMMA,
-    GSYM DELETE_DEF, INSERT_SUBSET, EMPTY_SUBSET]
-  \\ cheat (*
-evm2set'_def
-IN_evm2set
-  \\ Cases_on `(31 >< 24) c = V_READ_MEM (p + 3w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `(23 >< 16) c = V_READ_MEM (p + 2w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `(15 ><  8) c = V_READ_MEM (p + 1w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `( 7 ><  0) c = V_READ_MEM (p + 0w) s` \\ ASM_SIMP_TAC std_ss [WORD_ADD_0]
-  \\ ASM_SIMP_TAC std_ss [DELETE_evm2set,EMPTY_evm2set,DIFF_INSERT]
-  \\ ASM_SIMP_TAC std_ss [AC CONJ_COMM CONJ_ASSOC,DIFF_EMPTY,EMPTY_evm2set]); *)
+  rw[CODE_POOL_def, EVM_INSTR_def]
+  \\ simp[evm2set'_def, EXTENSION, PUSH_IN_INTO_IF]
+  \\ EQ_TAC \\ strip_tac
+  >- (
+    first_assum(qspec_then`Parsed p (SOME c)`mp_tac)
+    \\ simp_tac (srw_ss()) []
+    \\ strip_tac
+    \\ Cases \\ simp[] \\ CCONTR_TAC \\ gvs[]
+    \\ fsrw_tac[DNF_ss][EQ_IMP_THM] (* TODO: faster? *)
+    \\ metis_tac[] )
+  \\ Cases \\ simp[]
+  \\ rw[EQ_IMP_THM]
 QED
 
 (*
