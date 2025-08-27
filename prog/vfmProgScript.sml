@@ -55,8 +55,8 @@ Datatype:
           | HasMsdomain
 End
 
-Definition evm2set'_def:
-  evm2set' dom (s:execution_state) =
+Definition evm2set_on_def:
+  evm2set_on dom (s:execution_state) =
     let current_context = FST (HD s.contexts) in
       (if HasStack ∈ dom      then { Stack (current_context.stack) } else {}) ∪
       (if HasMemory ∈ dom     then { Memory (current_context.memory) } else {}) ∪
@@ -76,11 +76,11 @@ Definition evm2set'_def:
 End
 
 Definition evm2set_def:
-  evm2set s = evm2set' UNIV s
+  evm2set s = evm2set_on UNIV s
 End
 
-Definition evm2set''_def:
-  evm2set'' x s = evm2set s DIFF evm2set' x s
+Definition evm2set_without_def:
+  evm2set_without x s = evm2set s DIFF evm2set_on x s
 End
 
 (* theorems *)
@@ -91,29 +91,29 @@ Proof
   metis_tac[]
 QED
 
-Theorem evm2set'_SUBSET_evm2set[local]:
-  ∀y s. evm2set' y s SUBSET evm2set s
+Theorem evm2set_on_SUBSET_evm2set[local]:
+  ∀y s. evm2set_on y s SUBSET evm2set s
 Proof
   rw[evm2set_def]
-  \\ simp[SUBSET_DEF, IN_UNIV, evm2set'_def, PUSH_IN_INTO_IF]
+  \\ simp[SUBSET_DEF, IN_UNIV, evm2set_on_def, PUSH_IN_INTO_IF]
   \\ rw[]
 QED
 
 Theorem SPLIT_evm2set[local]:
-  ∀x s. SPLIT (evm2set s) (evm2set' x s, evm2set'' x s)
+  ∀x s. SPLIT (evm2set s) (evm2set_on x s, evm2set_without x s)
 Proof
   REPEAT STRIP_TAC
-  \\ ASM_SIMP_TAC std_ss [SPLIT_def,EXTENSION,IN_UNION,IN_DIFF,evm2set''_def]
-  \\ `evm2set' x s SUBSET evm2set s` by METIS_TAC [evm2set'_SUBSET_evm2set]
+  \\ ASM_SIMP_TAC std_ss [SPLIT_def,EXTENSION,IN_UNION,IN_DIFF,evm2set_without_def]
+  \\ `evm2set_on x s SUBSET evm2set s` by METIS_TAC [evm2set_on_SUBSET_evm2set]
   \\ SIMP_TAC bool_ss [DISJOINT_DEF,EXTENSION,IN_INTER,NOT_IN_EMPTY,IN_DIFF]
   \\ METIS_TAC [SUBSET_DEF]
 QED
 
 Theorem SUBSET_evm2set[local]:
-  !u s. u SUBSET evm2set s <=> ?y. u = evm2set' y s
+  !u s. u SUBSET evm2set s <=> ?y. u = evm2set_on y s
 Proof
   REPEAT STRIP_TAC \\ EQ_TAC \\ REPEAT STRIP_TAC
-  \\ ASM_REWRITE_TAC [evm2set'_SUBSET_evm2set]
+  \\ ASM_REWRITE_TAC [evm2set_on_SUBSET_evm2set]
   \\ gvs[evm2set_def, SUBSET_DEF]
   \\ qexists_tac `
        (if ∃x. Stack x ∈ u then {HasStack} else {}) ∪
@@ -135,22 +135,22 @@ Proof
   \\ gen_tac \\ strip_tac
   >- (
     strip_tac \\ first_x_assum drule
-    \\ simp[evm2set'_def, PUSH_IN_INTO_IF]
+    \\ simp[evm2set_on_def, PUSH_IN_INTO_IF]
     \\ rw[] \\ goal_assum $ drule )
-  \\ simp[evm2set'_def, PUSH_IN_INTO_IF]
+  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF]
   \\ strip_tac
   \\ first_x_assum drule
-  \\ rw[evm2set'_def] \\ rw[]
+  \\ rw[evm2set_on_def] \\ rw[]
 QED
 
 Theorem SPLIT_evm2set_EXISTS[local]:
-  ∀s u v. SPLIT (evm2set s) (u,v) = ?y. (u = evm2set' y s) /\ (v = evm2set'' y s)
+  ∀s u v. SPLIT (evm2set s) (u,v) = ?y. (u = evm2set_on y s) /\ (v = evm2set_without y s)
 Proof
   REPEAT STRIP_TAC \\ EQ_TAC \\ REPEAT STRIP_TAC \\ ASM_REWRITE_TAC [SPLIT_evm2set]
   \\ gvs[SPLIT_def]
   \\ `u SUBSET (evm2set s)` by
        (FULL_SIMP_TAC std_ss [EXTENSION,SUBSET_DEF,IN_UNION] \\ METIS_TAC [])
-  \\ gvs[evm2set''_def, SUBSET_evm2set]
+  \\ gvs[evm2set_without_def, SUBSET_evm2set]
   \\ qexists_tac`y` \\ simp[]
   \\ gvs[EXTENSION, IN_DISJOINT]
   \\ metis_tac[]
@@ -159,35 +159,35 @@ QED
 (*
 Theorem IN_evm2set[local]:
   (!r x s. aReg r x IN (evm2set s) ⇔ (x = V_READ_REG r s)) /\
-  (!r x s. aReg r x IN (evm2set' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_REG r s) /\ r IN rs) /\
-  (!r x s. aReg r x IN (evm2set'' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_REG r s) /\ ~(r IN rs)) /\
+  (!r x s. aReg r x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_REG r s) /\ r IN rs) /\
+  (!r x s. aReg r x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_REG r s) /\ ~(r IN rs)) /\
   (!p x s. aMem p x IN (evm2set s) ⇔ (x = V_READ_MEM p s)) /\
-  (!p x s. aMem p x IN (evm2set' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MEM p s) /\ p IN ms) /\
-  (!p x s. aMem p x IN (evm2set'' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MEM p s) /\ ~(p IN ms)) /\
+  (!p x s. aMem p x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MEM p s) /\ p IN ms) /\
+  (!p x s. aMem p x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MEM p s) /\ ~(p IN ms)) /\
   (!a x s. aStatus a x IN (evm2set s) ⇔ (x = V_READ_STATUS a s)) /\
-  (!a x s. aStatus a x IN (evm2set' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_STATUS a s) /\ a IN st) /\
-  (!a x s. aStatus a x IN (evm2set'' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_STATUS a s) /\ ~(a IN st)) /\
+  (!a x s. aStatus a x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_STATUS a s) /\ a IN st) /\
+  (!a x s. aStatus a x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_STATUS a s) /\ ~(a IN st)) /\
   (!x s. aCPSR_Reg x IN (evm2set s) ⇔ (x = V_READ_MASKED_CPSR s)) /\
-  (!x s. aCPSR_Reg x IN (evm2set' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MASKED_CPSR s) /\ cp) /\
-  (!x s. aCPSR_Reg x IN (evm2set'' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MASKED_CPSR s) /\ ~cp) /\
+  (!x s. aCPSR_Reg x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MASKED_CPSR s) /\ cp) /\
+  (!x s. aCPSR_Reg x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MASKED_CPSR s) /\ ~cp) /\
   (!x s. aUndef x IN (evm2set s) ⇔ (x = V_READ_UNDEF s)) /\
-  (!x s. aUndef x IN (evm2set' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_UNDEF s) /\ ud) /\
-  (!x s. aUndef x IN (evm2set'' (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_UNDEF s) /\ ~ud)
+  (!x s. aUndef x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_UNDEF s) /\ ud) /\
+  (!x s. aUndef x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_UNDEF s) /\ ~ud)
 Proof
   cheat
   (*
-  SRW_TAC [] [evm2set'_def,evm2set''_def,evm2set_def,IN_UNION,
+  SRW_TAC [] [evm2set_on_def,evm2set_without_def,evm2set_def,IN_UNION,
      IN_INSERT,NOT_IN_EMPTY,IN_DIFF,PUSH_IN_INTO_IF] \\ METIS_TAC []); *)
 QED
 *)
 
-Theorem evm2set''_11[local]:
-  !y y' s s'. (evm2set'' y' s' = evm2set'' y s) ==> (y = y')
+Theorem evm2set_without_11[local]:
+  !y y' s s'. (evm2set_without y' s' = evm2set_without y s) ==> (y = y')
 Proof
-  qsuff_tac`∀y y' s s'. evm2set'' y' s' ⊆ evm2set'' y s ⇒ y ⊆ y'`
+  qsuff_tac`∀y y' s s'. evm2set_without y' s' ⊆ evm2set_without y s ⇒ y ⊆ y'`
   >- METIS_TAC[SET_EQ_SUBSET]
-  \\ rw[evm2set''_def, evm2set_def, SUBSET_DEF]
-  \\ gvs[evm2set'_def, PUSH_IN_INTO_IF]
+  \\ rw[evm2set_without_def, evm2set_def, SUBSET_DEF]
+  \\ gvs[evm2set_on_def, PUSH_IN_INTO_IF]
   \\ CCONTR_TAC
   \\ fsrw_tac[DNF_ss][] (* TODO: faster? *)
   \\ Cases_on`x` \\ gvs[]
@@ -195,27 +195,27 @@ QED
 
 (*
 Theorem DELETE_evm2set[local]:
-  (!a s. (evm2set' (rs,ms,st,cp,ud) s) DELETE aReg a (V_READ_REG a s) =
-         (evm2set' (rs DELETE a,ms,st,cp,ud) s)) /\
-  (!b s. (evm2set' (rs,ms,st,cp,ud) s) DELETE aMem b (V_READ_MEM b s) =
-         (evm2set' (rs,ms DELETE b,st,cp,ud) s)) /\
-  (!c s. (evm2set' (rs,ms,st,cp,ud) s) DELETE aStatus c (V_READ_STATUS c s) =
-         (evm2set' (rs,ms,st DELETE c,cp,ud) s)) /\
-  (!s. (evm2set' (rs,ms,st,cp,ud) s) DELETE aCPSR_Reg (V_READ_MASKED_CPSR s) =
-       (evm2set' (rs,ms,st,F,ud) s)) /\
-  (!s. (evm2set' (rs,ms,st,cp,ud) s) DELETE aUndef (V_READ_UNDEF s) =
-       (evm2set' (rs,ms,st,cp,F) s))``
+  (!a s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aReg a (V_READ_REG a s) =
+         (evm2set_on (rs DELETE a,ms,st,cp,ud) s)) /\
+  (!b s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aMem b (V_READ_MEM b s) =
+         (evm2set_on (rs,ms DELETE b,st,cp,ud) s)) /\
+  (!c s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aStatus c (V_READ_STATUS c s) =
+         (evm2set_on (rs,ms,st DELETE c,cp,ud) s)) /\
+  (!s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aCPSR_Reg (V_READ_MASKED_CPSR s) =
+       (evm2set_on (rs,ms,st,F,ud) s)) /\
+  (!s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aUndef (V_READ_UNDEF s) =
+       (evm2set_on (rs,ms,st,cp,F) s))``
 Proof
-  SRW_TAC [] [evm2set'_def,EXTENSION,IN_UNION,GSPECIFICATION,LEFT_AND_OVER_OR,
+  SRW_TAC [] [evm2set_on_def,EXTENSION,IN_UNION,GSPECIFICATION,LEFT_AND_OVER_OR,
     EXISTS_OR_THM,IN_DELETE,IN_INSERT,NOT_IN_EMPTY,PUSH_IN_INTO_IF]
   \\ Cases_on `x` \\ SRW_TAC [] [] \\ METIS_TAC []
 QED
 *)
 
 Theorem EMPTY_evm2set[local]:
-  (evm2set' dom s = {}) ⇔  dom = {}
+  (evm2set_on dom s = {}) ⇔  dom = {}
 Proof
-  simp[evm2set'_def, PUSH_IN_INTO_IF, CaseEq"bool"]
+  simp[evm2set_on_def, PUSH_IN_INTO_IF, CaseEq"bool"]
   \\ rw[EXTENSION, EQ_IMP_THM]
   \\ Cases_on`x` \\ rw[]
 QED
@@ -261,20 +261,20 @@ End
 
 val lemma =
   METIS_PROVE [SPLIT_evm2set]
-  ``p (evm2set' y s) ==> (?u v. SPLIT (evm2set s) (u,v) /\ p u /\ (\v. v = evm2set'' y s) v)``;
+  ``p (evm2set_on y s) ==> (?u v. SPLIT (evm2set s) (u,v) /\ p u /\ (\v. v = evm2set_without y s) v)``;
 
 Theorem EVM_SPEC_SEMANTICS:
   SPEC EVM_MODEL p {} q =
-  ∀y s seq. p (evm2set' y s) /\ rel_sequence EVM_NEXT_REL seq s ==>
-            ∃k. q (evm2set' y (seq k)) /\ (evm2set'' y s = evm2set'' y (seq k))
+  ∀y s seq. p (evm2set_on y s) /\ rel_sequence EVM_NEXT_REL seq s ==>
+            ∃k. q (evm2set_on y (seq k)) /\ (evm2set_without y s = evm2set_without y (seq k))
 Proof
   SIMP_TAC std_ss [GSYM RUN_EQ_SPEC,RUN_def,EVM_MODEL_def,STAR_def,SEP_REFINE_def]
   \\ REPEAT STRIP_TAC \\ REVERSE EQ_TAC \\ REPEAT STRIP_TAC
   THEN1 (FULL_SIMP_TAC bool_ss [SPLIT_evm2set_EXISTS] \\ METIS_TAC [])
   \\ Q.PAT_X_ASSUM `!s r. b` (STRIP_ASSUME_TAC o UNDISCH o SPEC_ALL o
-     (fn th => MATCH_MP th (UNDISCH lemma))  o Q.SPECL [`s`,`(\v. v = evm2set'' y s)`])
+     (fn th => MATCH_MP th (UNDISCH lemma))  o Q.SPECL [`s`,`(\v. v = evm2set_without y s)`])
   \\ FULL_SIMP_TAC bool_ss [SPLIT_evm2set_EXISTS]
-  \\ IMP_RES_TAC evm2set''_11 \\ Q.EXISTS_TAC `i` \\ METIS_TAC []
+  \\ IMP_RES_TAC evm2set_without_11 \\ Q.EXISTS_TAC `i` \\ METIS_TAC []
 QED
 
 
@@ -283,21 +283,21 @@ QED
 (* ----------------------------------------------------------------------------- *)
 
 Theorem STAR_evm2set:
-  ((evm_PC n * p) (evm2set' dom s) ⇔
-   (n = (FST (HD s.contexts)).pc) /\ HasPC ∈ dom /\ p (evm2set' (dom DELETE HasPC) s)) /\
-  ((cond g * p) (evm2set' dom s) ⇔
-   g /\ p (evm2set' dom s))
+  ((evm_PC n * p) (evm2set_on dom s) ⇔
+   (n = (FST (HD s.contexts)).pc) /\ HasPC ∈ dom /\ p (evm2set_on (dom DELETE HasPC) s)) /\
+  ((cond g * p) (evm2set_on dom s) ⇔
+   g /\ p (evm2set_on dom s))
 Proof
   simp [evm_PC_def,cond_STAR,EQ_STAR]
   \\ rw[EQ_IMP_THM]
-  >- gvs[evm2set'_def, PUSH_IN_INTO_IF]
-  >- gvs[evm2set'_def, PUSH_IN_INTO_IF]
-  >~ [`PC _ .pc ∈ _`] >- simp[evm2set'_def]
+  >- gvs[evm2set_on_def, PUSH_IN_INTO_IF]
+  >- gvs[evm2set_on_def, PUSH_IN_INTO_IF]
+  >~ [`PC _ .pc ∈ _`] >- simp[evm2set_on_def]
   \\ qmatch_goalsub_abbrev_tac`p s1`
   \\ qmatch_asmsub_abbrev_tac`p s2`
   \\ `s1 = s2` suffices_by rw[]
   \\ rw[Abbr`s1`, Abbr`s2`]
-  \\ gvs[evm2set'_def, EXTENSION, PUSH_IN_INTO_IF]
+  \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
   \\ rw[EQ_IMP_THM]
 QED
 
@@ -307,7 +307,7 @@ val CODE_POOL_evm2set_LEMMA = prove(
 
 (*
 val CODE_POOL_evm2set_2 = prove(
-  ``CODE_POOL V_INSTR {(p,c);(q,d)} (evm2set' (rs,ms,st,cp,ud) s) ⇔
+  ``CODE_POOL V_INSTR {(p,c);(q,d)} (evm2set_on (rs,ms,st,cp,ud) s) ⇔
       ({p+3w;p+2w;p+1w;p;q+3w;q+2w;q+1w;q} = ms) /\ (rs = {}) /\ (st = {}) /\ ~cp /\ ~ud /\
       (V_READ_MEM (p + 0w) s = ( 7 ><  0) c) /\
       (V_READ_MEM (p + 1w) s = (15 ><  8) c) /\
@@ -333,12 +333,12 @@ val CODE_POOL_evm2set_2 = prove(
 *)
 
 Theorem CODE_POOL_evm2set:
-  CODE_POOL EVM_INSTR {(p,c)} (evm2set' dom s) ⇔
+  CODE_POOL EVM_INSTR {(p,c)} (evm2set_on dom s) ⇔
     dom = {HasParsed p} ∧
     FLOOKUP (FST (HD s.contexts)).msgParams.parsed p = SOME c
 Proof
   rw[CODE_POOL_def, EVM_INSTR_def]
-  \\ simp[evm2set'_def, EXTENSION, PUSH_IN_INTO_IF]
+  \\ simp[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
   \\ EQ_TAC \\ strip_tac
   >- (
     first_assum(qspec_then`Parsed p (SOME c)`mp_tac)
@@ -397,20 +397,19 @@ val V_OK_WRITE_GE = prove(
   ``V_OK (V_WRITE_GE w4 s) = V_OK s``,
   SIMP_TAC std_ss [V_OK_def] \\ EVAL_TAC);
 
-val UPDATE_evm2set''_GE = prove(
-  ``(!w4. evm2set'' (rs,ms,st,cp,ud) (V_WRITE_GE w4 s) = evm2set'' (rs,ms,st,cp,ud) s)``,
-  SIMP_TAC std_ss [evm2set_def,evm2set''_def,evm2set'_def,REG_OF_UPDATES,
+val UPDATE_evm2set_without_GE = prove(
+  ``(!w4. evm2set_without (rs,ms,st,cp,ud) (V_WRITE_GE w4 s) = evm2set_without (rs,ms,st,cp,ud) s)``,
+  SIMP_TAC std_ss [evm2set_def,evm2set_without_def,evm2set_on_def,REG_OF_UPDATES,
     MEM_OF_UPDATES,V_READ_WRITE,V_READ_UNDEF_def,V_OK_WRITE_GE]
 
-val UPDATE_evm2set'' = store_thm("UPDATE_evm2set''",
-  ``(!a x. a IN rs ==> (evm2set'' (rs,ms,st,cp,ud) (V_WRITE_REG a x s) = evm2set'' (rs,ms,st,cp,ud) s)) /\
-    (!a x. a IN ms ==> (evm2set'' (rs,ms,st,cp,ud) (V_WRITE_MEM a x s) = evm2set'' (rs,ms,st,cp,ud) s)) /\
-    (!b x. b IN st ==> (evm2set'' (rs,ms,st,cp,ud) (V_WRITE_STS b x s) = evm2set'' (rs,ms,st,cp,ud) s)) /\
-    (!a x. evm2set'' (rs,ms,st,cp,ud) (V_WRITE_MEM_WRITE a x s) = evm2set'' (rs,ms,st,cp,ud) s) /\
-    (!a. evm2set'' (rs,ms,st,cp,ud) (V_WRITE_MEM_READ a s) = evm2set'' (rs,ms,st,cp,ud) s) /\
-    (!x y. evm2set'' (rs,ms,st,cp,ud) (CLEAR_EXCLUSIVE_BY_ADDRESS (x,y) s) =
-           evm2set'' (rs,ms,st,cp,ud) s)``,
-  SIMP_TAC std_ss [evm2set_def,evm2set''_def,evm2set'_def,EXTENSION,IN_UNION,
+val UPDATE_evm2set_without = store_thm("UPDATE_evm2set_without",
+  ``(!a x. a IN rs ==> (evm2set_without (rs,ms,st,cp,ud) (V_WRITE_REG a x s) = evm2set_without (rs,ms,st,cp,ud) s)) /\
+    (!a x. a IN ms ==> (evm2set_without (rs,ms,st,cp,ud) (V_WRITE_MEM a x s) = evm2set_without (rs,ms,st,cp,ud) s)) /\
+    (!b x. b IN st ==> (evm2set_without (rs,ms,st,cp,ud) (V_WRITE_STS b x s) = evm2set_without (rs,ms,st,cp,ud) s)) /\
+    (!a x. evm2set_without (rs,ms,st,cp,ud) (V_WRITE_MEM_WRITE a x s) = evm2set_without (rs,ms,st,cp,ud) s) /\
+    (!a. evm2set_without (rs,ms,st,cp,ud) (V_WRITE_MEM_READ a s) = evm2set_without (rs,ms,st,cp,ud) s) /\
+    (!x y. evm2set_without (rs,ms,st,cp,ud) (CLEAR_EXCLUSIVE_BY_ADDRESS (x,y) s) = evm2set_without (rs,ms,st,cp,ud) s)``,
+  SIMP_TAC std_ss [evm2set_def,evm2set_without_def,evm2set_on_def,EXTENSION,IN_UNION,
     IN_IMAGE,IN_DIFF,IN_UNIV,NOT_IN_EMPTY,IN_INSERT,V_READ_WRITE,PUSH_IN_INTO_IF]
   \\ REPEAT STRIP_TAC \\ EQ_TAC \\ REPEAT STRIP_TAC
   \\ Q.PAT_X_ASSUM `xx = yy` (fn th => FULL_SIMP_TAC std_ss [th])
@@ -431,9 +430,9 @@ Theorem IMP_EVM_SPEC_LEMMA[local]:
   ∀p q.
     (∀s dom.
        ∃s'.
-         (p (evm2set' dom s) ==>
-          (step s = (INL (), s')) /\ q (evm2set' dom s') /\
-          (evm2set'' dom s = evm2set'' dom s'))) ==>
+         (p (evm2set_on dom s) ==>
+          (step s = (INL (), s')) /\ q (evm2set_on dom s') /\
+          (evm2set_without dom s = evm2set_without dom s'))) ==>
     SPEC EVM_MODEL p {} q
 Proof
   SIMP_TAC std_ss [RIGHT_EXISTS_IMP_THM] \\ REWRITE_TAC [EVM_SPEC_SEMANTICS]
