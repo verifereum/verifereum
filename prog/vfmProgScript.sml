@@ -512,18 +512,7 @@ Theorem IMP_EVM_SPEC =
    Hoare triples for specific opcodes
  *-------------------------------------------------------------------------------*)
 
-Theorem SPEC_Add:
-  SPEC EVM_MODEL
-    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas Add ≤ p.gasLimit))
-    {(pc,Add)}
-    (evm_Stack (word_add (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
-     evm_PC (pc + LENGTH (opcode Add)) *
-     evm_GasUsed (g + static_gas Add) * evm_MsgParams p)
-Proof
+val binop_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
@@ -550,6 +539,35 @@ Proof
   \\ Cases_on ‘s.contexts’ \\ gvs[]
   \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
   \\ Cases_on ‘p’ \\ gvs[]
+
+Theorem SPEC_Add:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+           g + static_gas Add ≤ p.gasLimit))
+    {(pc,Add)}
+    (evm_Stack (word_add (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode Add)) *
+     evm_GasUsed (g + static_gas Add) * evm_MsgParams p)
+Proof
+  binop_tac
+QED
+
+Theorem SPEC_Mul:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+           g + static_gas Mul ≤ p.gasLimit))
+    {(pc,Mul)}
+    (evm_Stack (word_mul (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode Mul)) *
+     evm_GasUsed (g + static_gas Mul) * evm_MsgParams p)
+Proof
+  binop_tac
 QED
 
 Theorem SPEC_Sub:
@@ -564,6 +582,80 @@ Theorem SPEC_Sub:
      evm_PC (pc + LENGTH (opcode Sub)) *
      evm_GasUsed (g + static_gas Sub) * evm_MsgParams p)
 Proof
+  binop_tac
+QED
+
+Theorem SPEC_Div:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+           g + static_gas Div ≤ p.gasLimit))
+    {(pc,Div)}
+    (evm_Stack (with_zero word_div (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode Div)) *
+     evm_GasUsed (g + static_gas Div) * evm_MsgParams p)
+Proof
+  binop_tac
+QED
+
+Theorem SPEC_SDiv:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+           g + static_gas SDiv ≤ p.gasLimit))
+    {(pc,SDiv)}
+    (evm_Stack (with_zero word_quot (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode SDiv)) *
+     evm_GasUsed (g + static_gas SDiv) * evm_MsgParams p)
+Proof
+  binop_tac
+QED
+
+Theorem SPEC_Mod:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+           g + static_gas Mod ≤ p.gasLimit))
+    {(pc,Mod)}
+    (evm_Stack (with_zero word_mod (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode Mod)) *
+     evm_GasUsed (g + static_gas Mod) * evm_MsgParams p)
+Proof
+  binop_tac
+QED
+
+Theorem SPEC_SMod:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+           g + static_gas SMod ≤ p.gasLimit))
+    {(pc,SMod)}
+    (evm_Stack (with_zero word_rem (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode SMod)) *
+     evm_GasUsed (g + static_gas SMod) * evm_MsgParams p)
+Proof
+  binop_tac
+QED
+
+Theorem SPEC_Pop:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (ss ≠ [] ∧ j = NONE ∧ g + static_gas Pop ≤ p.gasLimit))
+    {(pc,Pop)}
+    (evm_Stack (TL ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode Pop)) *
+     evm_GasUsed (g + static_gas Pop) * evm_MsgParams p)
+Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
@@ -577,10 +669,8 @@ Proof
   \\ gvs [step_inst_def,step_binop_def,pop_stack_def,bind_def,
           ignore_bind_def,get_current_context_def,return_def,assert_def,
           set_current_context_def,consume_gas_def,push_stack_def,
-          inc_pc_or_jump_def,is_call_def]
-  \\ Cases_on ‘(FST (HD s.contexts)).stack’ \\ fs []
-  \\ rename [‘_ = h::hs’]
-  \\ Cases_on ‘hs’ \\ gvs []
+          inc_pc_or_jump_def,is_call_def,step_pop_def]
+  \\ Cases_on ‘(FST (HD s.contexts)).stack’ \\ gvs []
   \\ conj_tac
   >-
    (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
