@@ -21,6 +21,7 @@ Datatype:
          | Logs       (event list)
          | MsgParams  message_parameters
          | Parsed     num (opname option) bool
+         | Exception  (unit + exception option)
          | Contexts   ((context # rollback_state) list)  (* other contexts *)
          | TxParams   transaction_parameters
          | Rollback   rollback_state
@@ -32,10 +33,6 @@ Type evm_set = “:evm_el set”;
 (*-------------------------------------------------------------------------------*
    Converting from execution_state record to v_set
  *-------------------------------------------------------------------------------*)
-
-Definition EVM_READ_UNDEF_def:
-  EVM_READ_UNDEF s = ~(wf_state s)
-End
 
 Datatype:
   evm_dom = HasStack
@@ -49,6 +46,7 @@ Datatype:
           | HasLogs
           | HasMsgParams
           | HasParsed num
+          | HasException
           | HasContexts
           | HasTxParams
           | HasRollback
@@ -56,8 +54,8 @@ Datatype:
 End
 
 Definition evm2set_on_def:
-  evm2set_on dom (s:execution_state) =
-    let current_context = FST (HD s.contexts) in
+  evm2set_on dom (r : unit execution_result) =
+    let s = SND r; current_context = FST (HD s.contexts) in
       (if HasStack ∈ dom      then { Stack (current_context.stack) } else {}) ∪
       (if HasMemory ∈ dom     then { Memory (current_context.memory) } else {}) ∪
       (if HasPC ∈ dom         then { PC (current_context.pc) } else {}) ∪
@@ -72,6 +70,7 @@ Definition evm2set_on_def:
       (if HasTxParams ∈ dom   then { TxParams s.txParams } else {}) ∪
       (if HasRollback ∈ dom   then { Rollback s.rollback } else {}) ∪
       (if HasMsdomain ∈ dom   then { Msdomain s.msdomain } else {}) ∪
+      (if HasException ∈ dom  then { Exception (FST r) } else {}) ∪
       { Parsed n (FLOOKUP current_context.msgParams.parsed n)
                  (n < LENGTH current_context.msgParams.code ∧ wf_state s)
         | HasParsed n ∈ dom }
@@ -132,6 +131,7 @@ Proof
        (if ∃x. TxParams x ∈ u then {HasTxParams} else {}) ∪
        (if ∃x. Rollback x ∈ u then {HasRollback} else {}) ∪
        (if ∃x. Msdomain x ∈ u then {HasMsdomain} else {}) ∪
+       (if ∃x. Exception x ∈ u then {HasException} else {}) ∪
        {HasParsed n | ∃x y. Parsed n x y ∈ u}`
   \\ rewrite_tac[EXTENSION, EQ_IMP_THM]
   \\ gen_tac \\ strip_tac
@@ -189,9 +189,10 @@ Proof
   qsuff_tac`∀y y' s s'. evm2set_without y' s' ⊆ evm2set_without y s ⇒ y ⊆ y'`
   >- METIS_TAC[SET_EQ_SUBSET]
   \\ rw[evm2set_without_def, evm2set_def, SUBSET_DEF]
-  \\ gvs[evm2set_on_def, PUSH_IN_INTO_IF]
+  \\ qpat_x_assum ‘!x. _’ mp_tac
+  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF]
+  \\ srw_tac[DNF_ss][] (* TODO: faster? *)
   \\ CCONTR_TAC
-  \\ fsrw_tac[DNF_ss][] (* TODO: faster? *)
   \\ Cases_on`x` \\ gvs[]
 QED
 
@@ -257,8 +258,12 @@ Definition evm_PC_def:
   evm_PC pc = SEP_EQ { PC pc }
 End
 
+Definition evm_Exception_def:
+  evm_Exception x = SEP_EQ { Exception x }
+End
+
 Definition EVM_NEXT_REL_def:
-  EVM_NEXT_REL s s' = (step s = (INL (), s'))
+  EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
 
 Definition EVM_INSTR_def:
@@ -267,8 +272,8 @@ End
 
 Definition EVM_MODEL_def:
   EVM_MODEL = (evm2set, EVM_NEXT_REL, EVM_INSTR,
-               (λx y. x = (y:execution_state)),
-               (K F):execution_state -> bool)
+               (λx y. x = (y:unit execution_result)),
+               (K F):unit execution_result -> bool)
 End
 
 (* theorems *)
@@ -298,26 +303,29 @@ QED
 
 Theorem STAR_evm2set:
   ((evm_PC n * p) (evm2set_on dom s) ⇔
-   (n = (FST (HD s.contexts)).pc) /\
+   (n = (FST (HD (SND s).contexts)).pc) /\
    HasPC ∈ dom /\ p (evm2set_on (dom DELETE HasPC) s)) /\
   ((evm_Stack ss * p) (evm2set_on dom s) ⇔
-   (ss = (FST (HD s.contexts)).stack) /\
+   (ss = (FST (HD (SND s).contexts)).stack) /\
    HasStack ∈ dom /\ p (evm2set_on (dom DELETE HasStack) s)) /\
   ((evm_GasUsed g * p) (evm2set_on dom s) ⇔
-   (g = (FST (HD s.contexts)).gasUsed) /\
+   (g = (FST (HD (SND s).contexts)).gasUsed) /\
    HasGasUsed ∈ dom /\ p (evm2set_on (dom DELETE HasGasUsed) s)) /\
   ((evm_JumpDest j * p) (evm2set_on dom s) ⇔
-   (j = (FST (HD s.contexts)).jumpDest) /\
+   (j = (FST (HD (SND s).contexts)).jumpDest) /\
    HasJumpDest ∈ dom /\ p (evm2set_on (dom DELETE HasJumpDest) s)) /\
   ((evm_MsgParams p' * p) (evm2set_on dom s) ⇔
-   (p' = (FST (HD s.contexts)).msgParams) /\
+   (p' = (FST (HD (SND s).contexts)).msgParams) /\
    HasMsgParams ∈ dom /\ p (evm2set_on (dom DELETE HasMsgParams) s)) /\
+  ((evm_Exception e * p) (evm2set_on dom s) ⇔
+   (e = FST s) /\
+   HasException ∈ dom /\ p (evm2set_on (dom DELETE HasException) s)) /\
   ((cond b * p) (evm2set_on dom s) ⇔
    b /\ p (evm2set_on dom s))
 Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
-        evm_Stack_def]
+        evm_Stack_def, evm_Exception_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -363,9 +371,9 @@ val CODE_POOL_evm2set_2 = prove(
 Theorem CODE_POOL_evm2set:
   CODE_POOL EVM_INSTR {(p,c)} (evm2set_on dom s) ⇔
     dom = {HasParsed p} ∧
-    FLOOKUP (FST (HD s.contexts)).msgParams.parsed p = SOME c ∧
-    p < LENGTH (FST (HD s.contexts)).msgParams.code ∧
-    wf_state s
+    FLOOKUP (FST (HD (SND s).contexts)).msgParams.parsed p = SOME c ∧
+    p < LENGTH (FST (HD (SND s).contexts)).msgParams.code ∧
+    wf_state (SND s)
 Proof
   rw[CODE_POOL_def, EVM_INSTR_def]
   \\ simp[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
@@ -458,6 +466,7 @@ Theorem UPDATE_evm2set_without[local]:
   s' = s with contexts := (ctxt', rb)::TL s.contexts ∧
   ctxt'.msgParams.parsed = ctxt.msgParams.parsed ∧
   ctxt'.msgParams.code = ctxt.msgParams.code ∧
+  s' = SND r' ∧ s = SND r ∧ FST r' = FST r ∧
   wf_state s' ∧
   (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
   (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
@@ -470,7 +479,7 @@ Theorem UPDATE_evm2set_without[local]:
   (HasMemory ∉ dom ⇒ ctxt'.memory = ctxt.memory) ∧
   (HasPC ∉ dom ⇒ ctxt'.pc = ctxt.pc)
   ⇒
-  evm2set_without dom s' = evm2set_without dom s
+  evm2set_without dom r' = evm2set_without dom r
 Proof
   disch_then assume_tac
   \\ simp[evm2set_without_def]
@@ -490,7 +499,7 @@ Theorem IMP_EVM_SPEC_LEMMA[local]:
     (∀s dom.
        ∃s'.
          (p (evm2set_on dom s) ==>
-          (step s = (INL (), s')) /\ q (evm2set_on dom s') /\
+          (step (SND s) = s') /\ q (evm2set_on dom s') /\
           (evm2set_without dom s = evm2set_without dom s'))) ==>
     SPEC EVM_MODEL p {} q
 Proof
@@ -533,9 +542,10 @@ val binop_tac =
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ Cases_on ‘b’ \\ fs []
   \\ drule step_preserves_wf_state
-  \\ Cases_on ‘step s’ \\ fs []
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
-  \\ ‘s.contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
   \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
           return_def, SF CONJ_ss]
   \\ gvs [step_inst_def,step_binop_def,step_modop_def,pop_stack_def,bind_def,
@@ -543,7 +553,8 @@ val binop_tac =
           set_current_context_def,consume_gas_def,push_stack_def,
           inc_pc_or_jump_def,is_call_def,with_zero_mod_def,step_monop_def,
           step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def]
-  \\ Cases_on ‘(FST (HD s.contexts)).stack’ \\ gvs[]
+  \\ Cases_on ‘(FST (HD (SND r).contexts)).stack’ \\ gvs[]
+  \\ Cases_on ‘FST r’ \\ gvs[]
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`DROP _ hs` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
@@ -553,19 +564,19 @@ val binop_tac =
     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
   \\ irule UPDATE_evm2set_without
   \\ simp[execution_state_component_equality]
-  \\ Cases_on ‘s.contexts’ \\ gvs[]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
   \\ Cases_on ‘p’ \\ gvs[]
 
 Theorem SPEC_Add:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas Add ≤ p.gasLimit))
+           ISL e ∧ g + static_gas Add ≤ p.gasLimit))
     {(pc,Add)}
     (evm_Stack (word_add (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Add)) *
      evm_GasUsed (g + static_gas Add) * evm_MsgParams p)
 Proof binop_tac
@@ -574,12 +585,12 @@ QED
 Theorem SPEC_Mul:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas Mul ≤ p.gasLimit))
+           ISL e ∧ g + static_gas Mul ≤ p.gasLimit))
     {(pc,Mul)}
     (evm_Stack (word_mul (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Mul)) *
      evm_GasUsed (g + static_gas Mul) * evm_MsgParams p)
 Proof binop_tac
@@ -588,12 +599,12 @@ QED
 Theorem SPEC_Sub:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas Sub ≤ p.gasLimit))
+           ISL e ∧ g + static_gas Sub ≤ p.gasLimit))
     {(pc,Sub)}
     (evm_Stack (word_sub (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Sub)) *
      evm_GasUsed (g + static_gas Sub) * evm_MsgParams p)
 Proof binop_tac
@@ -602,12 +613,12 @@ QED
 Theorem SPEC_Div:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas Div ≤ p.gasLimit))
+           ISL e ∧ g + static_gas Div ≤ p.gasLimit))
     {(pc,Div)}
     (evm_Stack (with_zero word_div (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Div)) *
      evm_GasUsed (g + static_gas Div) * evm_MsgParams p)
 Proof binop_tac
@@ -616,12 +627,12 @@ QED
 Theorem SPEC_SDiv:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas SDiv ≤ p.gasLimit))
+           ISL e ∧ g + static_gas SDiv ≤ p.gasLimit))
     {(pc,SDiv)}
     (evm_Stack (with_zero word_quot (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode SDiv)) *
      evm_GasUsed (g + static_gas SDiv) * evm_MsgParams p)
 Proof binop_tac
@@ -630,12 +641,12 @@ QED
 Theorem SPEC_Mod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas Mod ≤ p.gasLimit))
+           ISL e ∧ g + static_gas Mod ≤ p.gasLimit))
     {(pc,Mod)}
     (evm_Stack (with_zero word_mod (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Mod)) *
      evm_GasUsed (g + static_gas Mod) * evm_MsgParams p)
 Proof binop_tac
@@ -644,12 +655,12 @@ QED
 Theorem SPEC_SMod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas SMod ≤ p.gasLimit))
+           ISL e ∧ g + static_gas SMod ≤ p.gasLimit))
     {(pc,SMod)}
     (evm_Stack (with_zero word_rem (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode SMod)) *
      evm_GasUsed (g + static_gas SMod) * evm_MsgParams p)
 Proof binop_tac
@@ -658,12 +669,12 @@ QED
 Theorem SPEC_AddMod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (3 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas AddMod ≤ p.gasLimit))
+           ISL e ∧ g + static_gas AddMod ≤ p.gasLimit))
     {(pc,AddMod)}
     (evm_Stack (with_zero_mod (+) (EL 0 ss) (EL 1 ss) (EL 2 ss) :: DROP 3 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode AddMod)) *
      evm_GasUsed (g + static_gas AddMod) * evm_MsgParams p)
 Proof binop_tac
@@ -672,12 +683,12 @@ QED
 Theorem SPEC_MulMod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (3 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas MulMod ≤ p.gasLimit))
+           ISL e ∧ g + static_gas MulMod ≤ p.gasLimit))
     {(pc,MulMod)}
     (evm_Stack (with_zero_mod $* (EL 0 ss) (EL 1 ss) (EL 2 ss) :: DROP 3 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode MulMod)) *
      evm_GasUsed (g + static_gas MulMod) * evm_MsgParams p)
 Proof binop_tac
@@ -686,12 +697,12 @@ QED
 Theorem SPEC_Exp:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_JumpDest j *
+   evm_JumpDest j * evm_Exception e *
    cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-         g + exp_cost (EL 1 ss) ≤ p.gasLimit))
+         ISL e ∧ g + exp_cost (EL 1 ss) ≤ p.gasLimit))
   {(pc,Exp)}
   (evm_Stack ((EL 0 ss) ** (EL 1 ss) :: DROP 2 ss) *
-   evm_JumpDest j *
+   evm_JumpDest j * evm_Exception e *
    evm_PC (pc + LENGTH (opcode Exp)) *
    evm_GasUsed (g + exp_cost (EL 1 ss)) *
    evm_MsgParams p)
@@ -701,12 +712,12 @@ QED
 Theorem SPEC_SignExtend:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas SignExtend ≤ p.gasLimit))
+           ISL e ∧ g + static_gas SignExtend ≤ p.gasLimit))
     {(pc,SignExtend)}
     (evm_Stack (sign_extend (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode SignExtend)) *
      evm_GasUsed (g + static_gas SignExtend) * evm_MsgParams p)
 Proof binop_tac
@@ -715,12 +726,12 @@ QED
 Theorem SPEC_LT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas LT ≤ p.gasLimit))
+           ISL e ∧ g + static_gas LT ≤ p.gasLimit))
     {(pc,LT)}
     (evm_Stack (b2w ((w2n $ EL 0 ss) < (w2n $ EL 1 ss)) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode LT)) *
      evm_GasUsed (g + static_gas LT) * evm_MsgParams p)
 Proof binop_tac
@@ -729,12 +740,12 @@ QED
 Theorem SPEC_GT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas GT ≤ p.gasLimit))
+           ISL e ∧ g + static_gas GT ≤ p.gasLimit))
     {(pc,GT)}
     (evm_Stack (b2w ((w2n $ EL 0 ss) > (w2n $ EL 1 ss)) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode GT)) *
      evm_GasUsed (g + static_gas GT) * evm_MsgParams p)
 Proof binop_tac
@@ -743,12 +754,12 @@ QED
 Theorem SPEC_SLT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas SLT ≤ p.gasLimit))
+           ISL e ∧ g + static_gas SLT ≤ p.gasLimit))
     {(pc,SLT)}
     (evm_Stack (b2w ((EL 0 ss) < (EL 1 ss)) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode SLT)) *
      evm_GasUsed (g + static_gas SLT) * evm_MsgParams p)
 Proof binop_tac
@@ -757,12 +768,12 @@ QED
 Theorem SPEC_SGT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas SGT ≤ p.gasLimit))
+           ISL e ∧ g + static_gas SGT ≤ p.gasLimit))
     {(pc,SGT)}
     (evm_Stack (b2w ((EL 0 ss) > (EL 1 ss)) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode SGT)) *
      evm_GasUsed (g + static_gas SGT) * evm_MsgParams p)
 Proof binop_tac
@@ -771,12 +782,12 @@ QED
 Theorem SPEC_Eq:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas Eq ≤ p.gasLimit))
+           ISL e ∧ g + static_gas Eq ≤ p.gasLimit))
     {(pc,Eq)}
     (evm_Stack (b2w ((EL 0 ss) = (EL 1 ss)) :: DROP 2 ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Eq)) *
      evm_GasUsed (g + static_gas Eq) * evm_MsgParams p)
 Proof binop_tac
@@ -785,12 +796,12 @@ QED
 Theorem SPEC_IsZero:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      cond (ss ≠ [] ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
-           g + static_gas IsZero ≤ p.gasLimit))
+           ISL e ∧ g + static_gas IsZero ≤ p.gasLimit))
     {(pc,IsZero)}
     (evm_Stack (b2w (EL 0 ss = 0w) :: TL ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode IsZero)) *
      evm_GasUsed (g + static_gas IsZero) * evm_MsgParams p)
 Proof binop_tac
@@ -799,11 +810,11 @@ QED
 Theorem SPEC_Pop:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-     evm_JumpDest j *
-     cond (ss ≠ [] ∧ j = NONE ∧ g + static_gas Pop ≤ p.gasLimit))
+     evm_JumpDest j * evm_Exception e *
+     cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧ g + static_gas Pop ≤ p.gasLimit))
     {(pc,Pop)}
     (evm_Stack (TL ss) *
-     evm_JumpDest j *
+     evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Pop)) *
      evm_GasUsed (g + static_gas Pop) * evm_MsgParams p)
 Proof binop_tac
