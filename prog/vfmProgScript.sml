@@ -315,18 +315,18 @@ Theorem STAR_evm2set:
   ((cond b * p) (evm2set_on dom s) ⇔
    b /\ p (evm2set_on dom s))
 Proof
-  cheat (*
-  simp [evm_PC_def,cond_STAR,EQ_STAR,evm_Stack_def]
+  simp [cond_STAR,EQ_STAR,
+        evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
+        evm_Stack_def]
   \\ rw[EQ_IMP_THM]
-  >- gvs[evm2set_on_def, PUSH_IN_INTO_IF]
-  >- gvs[evm2set_on_def, PUSH_IN_INTO_IF]
-  >~ [`PC _ .pc ∈ _`] >- simp[evm2set_on_def]
+  >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
+  >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   \\ qmatch_goalsub_abbrev_tac`p s1`
   \\ qmatch_asmsub_abbrev_tac`p s2`
   \\ `s1 = s2` suffices_by rw[]
   \\ rw[Abbr`s1`, Abbr`s2`]
   \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
-  \\ rw[EQ_IMP_THM] *)
+  \\ rw[EQ_IMP_THM]
 QED
 
 val CODE_POOL_evm2set_LEMMA = prove(
@@ -451,6 +451,35 @@ val UPDATE_evm2set_without = store_thm("UPDATE_evm2set_without",
   \\ METIS_TAC []);
 *)
 
+Theorem UPDATE_evm2set_without[local]:
+  wf_state s ∧
+  ctxt = FST (HD s.contexts) ∧
+  rb = SND (HD s.contexts) ∧
+  s' = s with contexts := (ctxt', rb)::TL s.contexts ∧
+  ctxt'.msgParams.parsed = ctxt.msgParams.parsed ∧
+  ctxt'.msgParams.code = ctxt.msgParams.code ∧
+  wf_state s' ∧
+  (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
+  (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
+  (HasMsgParams ∉ dom ⇒ ctxt'.msgParams = ctxt.msgParams) ∧
+  (HasLogs ∉ dom ⇒ ctxt'.logs = ctxt.logs) ∧
+  (HasSubRefund ∉ dom ⇒ ctxt'.subRefund = ctxt.subRefund) ∧
+  (HasAddRefund ∉ dom ⇒ ctxt'.addRefund = ctxt.addRefund) ∧
+  (HasReturnData ∉ dom ⇒ ctxt'.returnData = ctxt.returnData) ∧
+  (HasJumpDest ∉ dom ⇒ ctxt'.jumpDest = ctxt.jumpDest) ∧
+  (HasMemory ∉ dom ⇒ ctxt'.memory = ctxt.memory) ∧
+  (HasPC ∉ dom ⇒ ctxt'.pc = ctxt.pc)
+  ⇒
+  evm2set_without dom s' = evm2set_without dom s
+Proof
+  disch_then assume_tac
+  \\ simp[evm2set_without_def]
+  \\ simp[evm2set_def, EXTENSION]
+  \\ simp[evm2set_on_def]
+  \\ Cases \\ simp[PUSH_IN_INTO_IF]
+  \\ rw[Once EQ_IMP_THM] \\ gvs[]
+QED
+
 val V_SPEC_CODE =
   SPEC_CODE |> ISPEC ``EVM_MODEL``
   |> SIMP_RULE std_ss [EVM_MODEL_def]
@@ -516,5 +545,49 @@ Proof
   >-
    (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
-  \\ cheat
+  \\ irule UPDATE_evm2set_without
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘s.contexts’ \\ gvs[]
+  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
+  \\ Cases_on ‘p’ \\ gvs[]
+QED
+
+Theorem SPEC_Sub:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j *
+     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+           g + static_gas Sub ≤ p.gasLimit))
+    {(pc,Sub)}
+    (evm_Stack (word_sub (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j *
+     evm_PC (pc + LENGTH (opcode Sub)) *
+     evm_GasUsed (g + static_gas Sub) * evm_MsgParams p)
+Proof
+  irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ Cases_on ‘b’ \\ fs []
+  \\ drule step_preserves_wf_state
+  \\ Cases_on ‘step s’ \\ fs []
+  \\ strip_tac
+  \\ ‘s.contexts ≠ []’ by fs [wf_state_def]
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, SF CONJ_ss]
+  \\ gvs [step_inst_def,step_binop_def,pop_stack_def,bind_def,
+          ignore_bind_def,get_current_context_def,return_def,assert_def,
+          set_current_context_def,consume_gas_def,push_stack_def,
+          inc_pc_or_jump_def,is_call_def]
+  \\ Cases_on ‘(FST (HD s.contexts)).stack’ \\ fs []
+  \\ rename [‘_ = h::hs’]
+  \\ Cases_on ‘hs’ \\ gvs []
+  \\ conj_tac
+  >-
+   (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
+    \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+  \\ irule UPDATE_evm2set_without
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘s.contexts’ \\ gvs[]
+  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
+  \\ Cases_on ‘p’ \\ gvs[]
 QED
