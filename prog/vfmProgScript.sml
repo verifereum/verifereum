@@ -1,7 +1,7 @@
 Theory vfmProg
 Ancestors
   vfmExecution vfmExecutionProp vfmContext vfmDecreasesGas
-  prog words set_sep pred_set pair
+  prog words set_sep pred_set pair list
 Libs
   wordsLib
 
@@ -262,6 +262,14 @@ Definition evm_Exception_def:
   evm_Exception x = SEP_EQ { Exception x }
 End
 
+Definition evm_Contexts_def:
+  evm_Contexts x = SEP_EQ { Contexts x }
+End
+
+Definition evm_ReturnData_def:
+  evm_ReturnData x = SEP_EQ { ReturnData x }
+End
+
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
@@ -317,15 +325,21 @@ Theorem STAR_evm2set:
   ((evm_MsgParams p' * p) (evm2set_on dom s) ⇔
    (p' = (FST (HD (SND s).contexts)).msgParams) /\
    HasMsgParams ∈ dom /\ p (evm2set_on (dom DELETE HasMsgParams) s)) /\
+  ((evm_ReturnData rd * p) (evm2set_on dom s) ⇔
+   (rd = (FST (HD (SND s).contexts)).returnData) /\
+   HasReturnData ∈ dom /\ p (evm2set_on (dom DELETE HasReturnData) s)) /\
   ((evm_Exception e * p) (evm2set_on dom s) ⇔
    (e = FST s) /\
    HasException ∈ dom /\ p (evm2set_on (dom DELETE HasException) s)) /\
+  ((evm_Contexts c * p) (evm2set_on dom s) ⇔
+   (c = TL (SND s).contexts) /\
+   HasContexts ∈ dom /\ p (evm2set_on (dom DELETE HasContexts) s)) /\
   ((cond b * p) (evm2set_on dom s) ⇔
    b /\ p (evm2set_on dom s))
 Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
-        evm_Stack_def, evm_Exception_def]
+        evm_ReturnData_def, evm_Stack_def, evm_Exception_def, evm_Contexts_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -466,8 +480,9 @@ Theorem UPDATE_evm2set_without[local]:
   s' = s with contexts := (ctxt', rb)::TL s.contexts ∧
   ctxt'.msgParams.parsed = ctxt.msgParams.parsed ∧
   ctxt'.msgParams.code = ctxt.msgParams.code ∧
-  s' = SND r' ∧ s = SND r ∧ FST r' = FST r ∧
+  s' = SND r' ∧ s = SND r ∧
   wf_state s' ∧
+  (HasException ∉ dom ⇒ FST r' = FST r) ∧
   (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
   (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
   (HasMsgParams ∉ dom ⇒ ctxt'.msgParams = ctxt.msgParams) ∧
@@ -567,6 +582,38 @@ val binop_tac =
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
   \\ Cases_on ‘p’ \\ gvs[]
+
+Theorem SPEC_Stop_tx:
+  SPEC EVM_MODEL
+    (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_ReturnData rd * evm_Exception e *
+     cond (NULL cs ∧ (∃m. p.outputTo = Memory m)))
+    {(pc,Stop)}
+    (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_ReturnData [] * evm_Exception (INR NONE))
+Proof
+  irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ Cases_on ‘b’ \\ fs []
+  \\ drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, SF CONJ_ss]
+  \\ gvs [step_inst_def,bind_def,ignore_bind_def,set_return_data_def,
+          get_current_context_def,return_def,set_current_context_def,
+          finish_def,handle_step_def,handle_def,handle_create_def,
+          get_return_data_def,get_output_to_def,handle_exception_def,
+          reraise_def,get_num_contexts_def,NULL_EQ]
+  \\ irule UPDATE_evm2set_without
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
+  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
+  \\ Cases_on ‘p’ \\ gvs[]
+QED
 
 Theorem SPEC_Add:
   SPEC EVM_MODEL
