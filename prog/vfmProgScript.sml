@@ -856,6 +856,130 @@ Theorem SPEC_IsZero:
 Proof binop_tac
 QED
 
+Theorem SPEC_And:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
+           ISL e ∧ g + static_gas And ≤ p.gasLimit))
+    {(pc,And)}
+    (evm_Stack (word_and (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode And)) *
+     evm_GasUsed (g + static_gas And) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_Or:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
+           ISL e ∧ g + static_gas Or ≤ p.gasLimit))
+    {(pc,Or)}
+    (evm_Stack (word_or (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode Or)) *
+     evm_GasUsed (g + static_gas Or) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_XOr:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
+           ISL e ∧ g + static_gas XOr ≤ p.gasLimit))
+    {(pc,XOr)}
+    (evm_Stack (word_xor (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode XOr)) *
+     evm_GasUsed (g + static_gas XOr) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_Not:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (ss ≠ [] ∧ j = NONE ∧
+           ISL e ∧ g + static_gas Not ≤ p.gasLimit))
+    {(pc,Not)}
+    (evm_Stack (¬(HD ss) :: TL ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode Not)) *
+     evm_GasUsed (g + static_gas Not) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_Byte:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
+           ISL e ∧ g + static_gas Byte ≤ p.gasLimit))
+    {(pc,Byte)}
+    (evm_Stack (w2w (get_byte (EL 0 ss) (EL 1 ss) T) :: DROP 2 ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode Byte)) *
+     evm_GasUsed (g + static_gas Byte) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_ShL:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
+           ISL e ∧ g + static_gas ShL ≤ p.gasLimit))
+    {(pc,ShL)}
+    (evm_Stack ((EL 1 ss << w2n (EL 0 ss)) :: DROP 2 ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode ShL)) *
+     evm_GasUsed (g + static_gas ShL) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_ShR:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
+           ISL e ∧ g + static_gas ShR ≤ p.gasLimit))
+    {(pc,ShR)}
+    (evm_Stack ((EL 1 ss >>> w2n (EL 0 ss)) :: DROP 2 ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode ShR)) *
+     evm_GasUsed (g + static_gas ShR) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_SAR:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
+           ISL e ∧ g + static_gas SAR ≤ p.gasLimit))
+    {(pc,SAR)}
+    (evm_Stack ((EL 1 ss >> w2n (EL 0 ss)) :: DROP 2 ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode SAR)) *
+     evm_GasUsed (g + static_gas SAR) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+(*
+Theorem SPEC_Keccak256:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (2 ≤ LENGTH ss ∧ j = NONE
+   )
+  {(pc,Keccak256)}
+  ()
+Proof
+*)
+
 Theorem SPEC_Pop:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
