@@ -561,8 +561,10 @@ val binop_tac =
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
   \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
-          return_def, SF CONJ_ss]
+          return_def, wf_context_def, SF CONJ_ss]
   \\ gvs [step_inst_def,step_binop_def,step_modop_def,pop_stack_def,bind_def,
           ignore_bind_def,get_current_context_def,return_def,assert_def,
           set_current_context_def,consume_gas_def,push_stack_def,
@@ -619,7 +621,7 @@ Theorem SPEC_Add:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas Add ≤ p.gasLimit))
     {(pc,Add)}
     (evm_Stack (word_add (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -633,7 +635,7 @@ Theorem SPEC_Mul:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas Mul ≤ p.gasLimit))
     {(pc,Mul)}
     (evm_Stack (word_mul (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -647,7 +649,7 @@ Theorem SPEC_Sub:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas Sub ≤ p.gasLimit))
     {(pc,Sub)}
     (evm_Stack (word_sub (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -661,7 +663,7 @@ Theorem SPEC_Div:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas Div ≤ p.gasLimit))
     {(pc,Div)}
     (evm_Stack (with_zero word_div (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -675,7 +677,7 @@ Theorem SPEC_SDiv:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas SDiv ≤ p.gasLimit))
     {(pc,SDiv)}
     (evm_Stack (with_zero word_quot (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -689,7 +691,7 @@ Theorem SPEC_Mod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas Mod ≤ p.gasLimit))
     {(pc,Mod)}
     (evm_Stack (with_zero word_mod (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -703,7 +705,7 @@ Theorem SPEC_SMod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas SMod ≤ p.gasLimit))
     {(pc,SMod)}
     (evm_Stack (with_zero word_rem (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -717,7 +719,7 @@ Theorem SPEC_AddMod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (3 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (3 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas AddMod ≤ p.gasLimit))
     {(pc,AddMod)}
     (evm_Stack (with_zero_mod (+) (EL 0 ss) (EL 1 ss) (EL 2 ss) :: DROP 3 ss) *
@@ -731,7 +733,7 @@ Theorem SPEC_MulMod:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (3 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (3 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas MulMod ≤ p.gasLimit))
     {(pc,MulMod)}
     (evm_Stack (with_zero_mod $* (EL 0 ss) (EL 1 ss) (EL 2 ss) :: DROP 3 ss) *
@@ -745,7 +747,7 @@ Theorem SPEC_Exp:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e *
-   cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+   cond (2 ≤ LENGTH ss ∧ j = NONE ∧
          ISL e ∧ g + exp_cost (EL 1 ss) ≤ p.gasLimit))
   {(pc,Exp)}
   (evm_Stack ((EL 0 ss) ** (EL 1 ss) :: DROP 2 ss) *
@@ -760,7 +762,7 @@ Theorem SPEC_SignExtend:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas SignExtend ≤ p.gasLimit))
     {(pc,SignExtend)}
     (evm_Stack (sign_extend (EL 0 ss) (EL 1 ss) :: DROP 2 ss) *
@@ -774,7 +776,7 @@ Theorem SPEC_LT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas LT ≤ p.gasLimit))
     {(pc,LT)}
     (evm_Stack (b2w ((w2n $ EL 0 ss) < (w2n $ EL 1 ss)) :: DROP 2 ss) *
@@ -788,7 +790,7 @@ Theorem SPEC_GT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas GT ≤ p.gasLimit))
     {(pc,GT)}
     (evm_Stack (b2w ((w2n $ EL 0 ss) > (w2n $ EL 1 ss)) :: DROP 2 ss) *
@@ -802,7 +804,7 @@ Theorem SPEC_SLT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas SLT ≤ p.gasLimit))
     {(pc,SLT)}
     (evm_Stack (b2w ((EL 0 ss) < (EL 1 ss)) :: DROP 2 ss) *
@@ -816,7 +818,7 @@ Theorem SPEC_SGT:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas SGT ≤ p.gasLimit))
     {(pc,SGT)}
     (evm_Stack (b2w ((EL 0 ss) > (EL 1 ss)) :: DROP 2 ss) *
@@ -830,7 +832,7 @@ Theorem SPEC_Eq:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (2 ≤ LENGTH ss ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas Eq ≤ p.gasLimit))
     {(pc,Eq)}
     (evm_Stack (b2w ((EL 0 ss) = (EL 1 ss)) :: DROP 2 ss) *
@@ -844,7 +846,7 @@ Theorem SPEC_IsZero:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
      evm_JumpDest j * evm_Exception e *
-     cond (ss ≠ [] ∧ LENGTH ss < stack_limit ∧ j = NONE ∧
+     cond (ss ≠ [] ∧ j = NONE ∧
            ISL e ∧ g + static_gas IsZero ≤ p.gasLimit))
     {(pc,IsZero)}
     (evm_Stack (b2w (EL 0 ss = 0w) :: TL ss) *
