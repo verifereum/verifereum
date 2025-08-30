@@ -577,9 +577,10 @@ val binop_tac =
           ignore_bind_def,get_current_context_def,return_def,assert_def,
           set_current_context_def,consume_gas_def,push_stack_def,
           inc_pc_or_jump_def,is_call_def,with_zero_mod_def,step_monop_def,
-          step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def]
-  \\ Cases_on ‘(FST (HD (SND r).contexts)).stack’ \\ gvs[]
+          step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def,
+          step_msgParams_def,step_context_def]
   \\ Cases_on ‘FST r’ \\ gvs[]
+  \\ TRY(Cases_on ‘(FST (HD (SND r).contexts)).stack’ >- gvs[] \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`DROP _ hs` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
@@ -1049,6 +1050,49 @@ Proof
   \\ Cases_on ‘p’ \\ gvs[]
 QED
 
+Theorem SPEC_Address:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas Address ≤ p.gasLimit))
+  {(pc,Address)}
+  (evm_Stack (w2w (p.callee) :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode Address)) *
+   evm_GasUsed (g + static_gas Address) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+(*
+  | Balance
+  | Origin
+  | Caller
+  | CallValue
+  | CallDataLoad
+  | CallDataSize
+  | CallDataCopy
+  | CodeSize
+  | CodeCopy
+  | GasPrice
+  | ExtCodeSize
+  | ExtCodeCopy
+  | ReturnDataSize
+  | ReturnDataCopy
+  | ExtCodeHash
+  | BlockHash
+  | CoinBase
+  | TimeStamp
+  | Number
+  | PrevRandao
+  | GasLimit
+  | ChainId
+  | SelfBalance
+  | BaseFee
+  | BlobHash
+  | BlobBaseFee
+*)
+
 Theorem SPEC_Pop:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
@@ -1061,3 +1105,34 @@ Theorem SPEC_Pop:
      evm_GasUsed (g + static_gas Pop) * evm_MsgParams p)
 Proof binop_tac
 QED
+
+(*
+  | MLoad
+  | MStore
+  | MStore8
+  | SLoad
+  | SStore
+  | Jump
+  | JumpI
+  | PC
+  | MSize
+  | Gas
+  | JumpDest
+  | TLoad
+  | TStore
+  | MCopy
+  | Push num (word8 list)
+  | Dup num
+  | Swap num
+  | Log num
+  | Create
+  | Call
+  | CallCode
+  | Return
+  | DelegateCall
+  | Create2
+  | StaticCall
+  | Revert
+  | Invalid
+  | SelfDestruct
+*)
