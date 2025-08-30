@@ -270,6 +270,10 @@ Definition evm_ReturnData_def:
   evm_ReturnData x = SEP_EQ { ReturnData x }
 End
 
+Definition evm_Memory_def:
+  evm_Memory x = SEP_EQ { vfmProg$Memory x }
+End
+
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
@@ -328,6 +332,9 @@ Theorem STAR_evm2set:
   ((evm_ReturnData rd * p) (evm2set_on dom s) ⇔
    (rd = (FST (HD (SND s).contexts)).returnData) /\
    HasReturnData ∈ dom /\ p (evm2set_on (dom DELETE HasReturnData) s)) /\
+  ((evm_Memory rd * p) (evm2set_on dom s) ⇔
+   (rd = (FST (HD (SND s).contexts)).memory) /\
+   HasMemory ∈ dom /\ p (evm2set_on (dom DELETE HasMemory) s)) /\
   ((evm_Exception e * p) (evm2set_on dom s) ⇔
    (e = FST s) /\
    HasException ∈ dom /\ p (evm2set_on (dom DELETE HasException) s)) /\
@@ -339,7 +346,8 @@ Theorem STAR_evm2set:
 Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
-        evm_ReturnData_def, evm_Stack_def, evm_Exception_def, evm_Contexts_def]
+        evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
+        evm_Contexts_def, evm_Memory_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -968,17 +976,78 @@ Theorem SPEC_SAR:
 Proof binop_tac
 QED
 
-(*
+Definition memory_cost_def:
+  memory_cost (m: word8 list) offset size =
+  memory_expansion_cost (LENGTH m)
+    (if 0 < size then word_size (offset + size) * 32 else 0)
+End
+
+Definition memory_expand_by_def:
+  memory_expand_by (m: word8 list) offset size =
+  MAX (LENGTH m) (if 0 < size then word_size (offset + size) * 32 else 0)
+  - (LENGTH m)
+End
+
+Definition Keccak256_gas_def:
+  Keccak256_gas m ss =
+    let size = w2n (EL 1 ss); offset = w2n (EL 0 ss) in
+    static_gas Keccak256 +
+    memory_cost m offset size +
+    keccak256_per_word_cost * word_size size
+End
+
+Definition Keccak256_expanded_def:
+  Keccak256_expanded m (ss: bytes32 list) =
+  m ++ REPLICATE (memory_expand_by m (w2n (EL 0 ss)) (w2n (EL 1 ss))) 0w
+End
+
 Theorem SPEC_Keccak256:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_JumpDest j * evm_Exception e *
-   cond (2 ≤ LENGTH ss ∧ j = NONE
-   )
+   evm_JumpDest j * evm_Exception e * evm_Memory m *
+   cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         g + Keccak256_gas m ss ≤ p.gasLimit ∧
+         em = Keccak256_expanded m ss))
   {(pc,Keccak256)}
-  ()
+  (evm_Stack (word_of_bytes T 0w (Keccak_256_w64 $
+               TAKE (w2n (EL 1 ss)) (DROP (w2n (EL 0 ss)) em))
+              :: DROP 2 ss) *
+   evm_JumpDest j * evm_Exception e * evm_Memory em *
+   evm_PC (pc + LENGTH (opcode Keccak256)) *
+   evm_GasUsed (g + Keccak256_gas m ss) * evm_MsgParams p)
 Proof
-*)
+  irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ Cases_on ‘b’ \\ fs []
+  \\ drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, wf_context_def, SF CONJ_ss]
+  \\ gvs [step_inst_def,step_keccak256_def,pop_stack_def,bind_def,
+          ignore_bind_def,get_current_context_def,return_def,assert_def,
+          set_current_context_def,consume_gas_def,push_stack_def,
+          inc_pc_or_jump_def,is_call_def,memory_expansion_info_def,
+          expand_memory_def,read_memory_def,Keccak256_gas_def,
+          memory_cost_def,EL_TAKE,HD_TAKE,Keccak256_expanded_def,
+          memory_expand_by_def]
+  \\ Cases_on ‘(FST (HD (SND r).contexts)).stack’ \\ gvs[]
+  \\ Cases_on ‘FST r’ \\ gvs[]
+  \\ conj_tac
+  >-
+   (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
+    \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+  \\ irule UPDATE_evm2set_without
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
+  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
+  \\ Cases_on ‘p’ \\ gvs[]
+QED
 
 Theorem SPEC_Pop:
   SPEC EVM_MODEL
