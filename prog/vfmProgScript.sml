@@ -630,6 +630,43 @@ Proof
           rollback_state_component_equality]
 QED
 
+Definition memory_cost_def:
+  memory_cost (m: word8 list) offset size =
+  memory_expansion_cost (LENGTH m)
+    (if 0 < size then word_size (offset + size) * 32 else 0)
+End
+
+Definition memory_expand_by_def:
+  memory_expand_by (m: word8 list) offset size =
+  MAX (LENGTH m) (if 0 < size then word_size (offset + size) * 32 else 0)
+  - (LENGTH m)
+End
+
+Definition Keccak256_gas_def:
+  Keccak256_gas m ss =
+    let size = w2n (EL 1 ss); offset = w2n (EL 0 ss) in
+    static_gas Keccak256 +
+    memory_cost m offset size +
+    keccak256_per_word_cost * word_size size
+End
+
+Definition Keccak256_expanded_def:
+  Keccak256_expanded m (ss: bytes32 list) =
+  m ++ REPLICATE (memory_expand_by m (w2n (EL 0 ss)) (w2n (EL 1 ss))) 0w
+End
+
+Definition CallDataCopy_gas_def:
+  CallDataCopy_gas m offset size =
+    static_gas CallDataCopy +
+    memory_copy_cost * (word_size size) +
+    memory_cost m offset size
+End
+
+Definition CallDataCopy_expanded_def:
+  CallDataCopy_expanded m (ss: bytes32 list) =
+  m ++ REPLICATE (memory_expand_by m (w2n (EL 0 ss)) (w2n (EL 2 ss))) 0w
+End
+
 Definition Balance_gas_def:
   Balance_gas rb a =
   static_gas Balance + access_cost rb a
@@ -657,7 +694,10 @@ val binop_tac =
           step_msgParams_def,step_txParams_def,step_context_def,
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
-          get_call_data_def]
+          get_call_data_def,memory_expansion_info_def,
+          expand_memory_def,read_memory_def,Keccak256_gas_def,
+          memory_cost_def,EL_TAKE,Keccak256_expanded_def,
+          memory_expand_by_def,step_keccak256_def]
   \\ Cases_on ‘FST r’ \\ gvs[]
   \\ TRY(Cases_on ‘(FST (HD (SND r).contexts)).stack’ >- gvs[] \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
@@ -1056,31 +1096,6 @@ Theorem SPEC_SAR:
 Proof binop_tac
 QED
 
-Definition memory_cost_def:
-  memory_cost (m: word8 list) offset size =
-  memory_expansion_cost (LENGTH m)
-    (if 0 < size then word_size (offset + size) * 32 else 0)
-End
-
-Definition memory_expand_by_def:
-  memory_expand_by (m: word8 list) offset size =
-  MAX (LENGTH m) (if 0 < size then word_size (offset + size) * 32 else 0)
-  - (LENGTH m)
-End
-
-Definition Keccak256_gas_def:
-  Keccak256_gas m ss =
-    let size = w2n (EL 1 ss); offset = w2n (EL 0 ss) in
-    static_gas Keccak256 +
-    memory_cost m offset size +
-    keccak256_per_word_cost * word_size size
-End
-
-Definition Keccak256_expanded_def:
-  Keccak256_expanded m (ss: bytes32 list) =
-  m ++ REPLICATE (memory_expand_by m (w2n (EL 0 ss)) (w2n (EL 1 ss))) 0w
-End
-
 Theorem SPEC_Keccak256:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
@@ -1095,38 +1110,7 @@ Theorem SPEC_Keccak256:
    evm_JumpDest j * evm_Exception e * evm_Memory em *
    evm_PC (pc + LENGTH (opcode Keccak256)) *
    evm_GasUsed (g + Keccak256_gas m ss) * evm_MsgParams p)
-Proof
-  irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
-  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
-  \\ Cases_on ‘b’ \\ fs []
-  \\ drule step_preserves_wf_state
-  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
-  \\ Cases_on ‘step (SND r)’ \\ fs []
-  \\ strip_tac
-  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
-  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
-    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
-  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
-          return_def, wf_context_def, SF CONJ_ss]
-  \\ gvs [step_inst_def,step_keccak256_def,pop_stack_def,bind_def,
-          ignore_bind_def,get_current_context_def,return_def,assert_def,
-          set_current_context_def,consume_gas_def,push_stack_def,
-          inc_pc_or_jump_def,is_call_def,memory_expansion_info_def,
-          expand_memory_def,read_memory_def,Keccak256_gas_def,
-          memory_cost_def,EL_TAKE,HD_TAKE,Keccak256_expanded_def,
-          memory_expand_by_def]
-  \\ Cases_on ‘(FST (HD (SND r).contexts)).stack’ \\ gvs[]
-  \\ Cases_on ‘FST r’ \\ gvs[]
-  \\ conj_tac
-  >-
-   (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
-    \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
-  \\ irule UPDATE_evm2set_without
-  \\ simp[execution_state_component_equality]
-  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
-  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
-  \\ Cases_on ‘p’ \\ gvs[]
+Proof binop_tac
 QED
 
 Theorem SPEC_Address:
@@ -1234,8 +1218,41 @@ Proof binop_tac
 QED
 
 (*
-  | CallDataCopy
-  | CodeSize
+Theorem SPEC_CallDataCopy:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Memory m *
+   cond (3 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         g + CallDataCopy_gas m (w2n (EL 0 ss)) (w2n (EL 2 ss))
+           ≤ p.gasLimit ∧
+         em = CallDataCopy_expanded m ss))
+  {(pc,CallDataCopy)}
+  (evm_Stack (n2w (LENGTH p.data) :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_Memory (TAKE (w2n (EL 0 ss)) em ++
+               take_pad_0 (w2n (EL 2 ss)) (DROP (w2n (EL 1 ss)) p.data) ++
+               DROP (w2n (EL 0 ss) + w2n (EL 2 ss)) em) *
+   evm_PC (pc + LENGTH (opcode CallDataCopy)) *
+   evm_GasUsed (g + CallDataCopy_gas m (w2n (EL 0 ss)) (w2n (EL 2 ss))) * evm_MsgParams p)
+Proof
+QED
+*)
+
+Theorem SPEC_CodeSize:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas CodeSize ≤ p.gasLimit))
+  {(pc,CodeSize)}
+  (evm_Stack (n2w (LENGTH p.code) :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode CodeSize)) *
+   evm_GasUsed (g + static_gas CodeSize) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+(*
   | CodeCopy
   | GasPrice
   | ExtCodeSize
