@@ -250,6 +250,10 @@ Definition evm_MsgParams_def:
   evm_MsgParams p = SEP_EQ { MsgParams p }
 End
 
+Definition evm_TxParams_def:
+  evm_TxParams t = SEP_EQ { TxParams t }
+End
+
 Definition evm_JumpDest_def:
   evm_JumpDest j = SEP_EQ { JumpDest j }
 End
@@ -346,6 +350,9 @@ Theorem STAR_evm2set:
   ((evm_Rollback rb * p) (evm2set_on dom s) ⇔
    (rb = (SND s).rollback) /\
    HasRollback ∈ dom /\ p (evm2set_on (dom DELETE HasRollback) s)) /\
+  ((evm_TxParams t * p) (evm2set_on dom s) ⇔
+   (t = (SND s).txParams) /\
+   HasTxParams ∈ dom /\ p (evm2set_on (dom DELETE HasTxParams) s)) /\
   ((evm_Msdomain d * p) (evm2set_on dom s) ⇔
    (d = (SND s).msdomain) /\
    HasMsdomain ∈ dom /\ p (evm2set_on (dom DELETE HasMsdomain) s)) /\
@@ -361,7 +368,8 @@ Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
-        evm_Contexts_def, evm_Memory_def, evm_Rollback_def, evm_Msdomain_def]
+        evm_TxParams_def, evm_Contexts_def, evm_Memory_def,
+        evm_Rollback_def, evm_Msdomain_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -646,12 +654,14 @@ val binop_tac =
           set_current_context_def,consume_gas_def,push_stack_def,
           inc_pc_or_jump_def,is_call_def,with_zero_mod_def,step_monop_def,
           step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def,
-          step_msgParams_def,step_context_def,step_balance_def,
-          access_address_split, HD_TAKE, Balance_gas_def, get_accounts_def]
+          step_msgParams_def,step_txParams_def,step_context_def,
+          step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
+          get_accounts_def,get_tx_params_def,step_call_data_load_def,
+          get_call_data_def]
   \\ Cases_on ‘FST r’ \\ gvs[]
   \\ TRY(Cases_on ‘(FST (HD (SND r).contexts)).stack’ >- gvs[] \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
-  \\ TRY(qmatch_goalsub_rename_tac`DROP _ hs` \\ Cases_on`hs` \\ gvs[])
+  \\ TRY(qmatch_goalsub_rename_tac`DROP _ (hs:bytes32 list)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
   \\ conj_tac
   >-
@@ -1151,12 +1161,79 @@ Theorem SPEC_Balance:
 Proof binop_tac
 QED
 
+Theorem SPEC_Origin:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_TxParams t * evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas Origin ≤ p.gasLimit))
+  {(pc,Origin)}
+  (evm_Stack (w2w (t.origin) :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode Origin)) *
+   evm_GasUsed (g + static_gas Origin) *
+   evm_MsgParams p * evm_TxParams t)
+Proof binop_tac
+QED
+
+Theorem SPEC_Caller:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas Caller ≤ p.gasLimit))
+  {(pc,Caller)}
+  (evm_Stack (w2w (p.caller) :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode Caller)) *
+   evm_GasUsed (g + static_gas Caller) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_CallValue:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas CallValue ≤ p.gasLimit))
+  {(pc,CallValue)}
+  (evm_Stack (n2w (p.value) :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode CallValue)) *
+   evm_GasUsed (g + static_gas CallValue) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_CallDataLoad:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         g + static_gas CallDataLoad ≤ p.gasLimit))
+  {(pc,CallDataLoad)}
+  (evm_Stack (word_of_bytes F 0w (REVERSE $ take_pad_0 32 $
+              DROP (w2n (HD ss)) p.data) :: TL ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode CallDataLoad)) *
+   evm_GasUsed (g + static_gas CallDataLoad) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_CallDataSize:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas CallDataSize ≤ p.gasLimit))
+  {(pc,CallDataSize)}
+  (evm_Stack (n2w (LENGTH p.data) :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode CallDataSize)) *
+   evm_GasUsed (g + static_gas CallDataSize) * evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | Origin
-  | Caller
-  | CallValue
-  | CallDataLoad
-  | CallDataSize
   | CallDataCopy
   | CodeSize
   | CodeCopy
