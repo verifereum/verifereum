@@ -274,6 +274,14 @@ Definition evm_Memory_def:
   evm_Memory x = SEP_EQ { vfmProg$Memory x }
 End
 
+Definition evm_Rollback_def:
+  evm_Rollback x = SEP_EQ { Rollback x }
+End
+
+Definition evm_Msdomain_def:
+  evm_Msdomain x = SEP_EQ { Msdomain x }
+End
+
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
@@ -335,6 +343,12 @@ Theorem STAR_evm2set:
   ((evm_Memory rd * p) (evm2set_on dom s) ⇔
    (rd = (FST (HD (SND s).contexts)).memory) /\
    HasMemory ∈ dom /\ p (evm2set_on (dom DELETE HasMemory) s)) /\
+  ((evm_Rollback rb * p) (evm2set_on dom s) ⇔
+   (rb = (SND s).rollback) /\
+   HasRollback ∈ dom /\ p (evm2set_on (dom DELETE HasRollback) s)) /\
+  ((evm_Msdomain d * p) (evm2set_on dom s) ⇔
+   (d = (SND s).msdomain) /\
+   HasMsdomain ∈ dom /\ p (evm2set_on (dom DELETE HasMsdomain) s)) /\
   ((evm_Exception e * p) (evm2set_on dom s) ⇔
    (e = FST s) /\
    HasException ∈ dom /\ p (evm2set_on (dom DELETE HasException) s)) /\
@@ -347,7 +361,7 @@ Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
-        evm_Contexts_def, evm_Memory_def]
+        evm_Contexts_def, evm_Memory_def, evm_Rollback_def, evm_Msdomain_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -485,7 +499,6 @@ Theorem UPDATE_evm2set_without[local]:
   wf_state s ∧
   ctxt = FST (HD s.contexts) ∧
   rb = SND (HD s.contexts) ∧
-  s' = s with contexts := (ctxt', rb)::TL s.contexts ∧
   ctxt'.msgParams.parsed = ctxt.msgParams.parsed ∧
   ctxt'.msgParams.code = ctxt.msgParams.code ∧
   s' = SND r' ∧ s = SND r ∧
@@ -500,7 +513,11 @@ Theorem UPDATE_evm2set_without[local]:
   (HasReturnData ∉ dom ⇒ ctxt'.returnData = ctxt.returnData) ∧
   (HasJumpDest ∉ dom ⇒ ctxt'.jumpDest = ctxt.jumpDest) ∧
   (HasMemory ∉ dom ⇒ ctxt'.memory = ctxt.memory) ∧
-  (HasPC ∉ dom ⇒ ctxt'.pc = ctxt.pc)
+  (HasPC ∉ dom ⇒ ctxt'.pc = ctxt.pc) ∧
+  (s'.contexts = (ctxt', rb)::TL s.contexts) ∧
+  (HasTxParams ∉ dom ⇒ s'.txParams = s.txParams) ∧
+  (HasRollback ∉ dom ⇒ s'.rollback = s.rollback) ∧
+  (HasMsdomain ∉ dom ⇒ s'.msdomain = s.msdomain)
   ⇒
   evm2set_without dom r' = evm2set_without dom r
 Proof
@@ -559,6 +576,57 @@ Definition exp_cost_def:
   exp_cost w = static_gas Exp + exp_per_byte_cost * exponent_byte_size w
 End
 
+Definition msdomain_add_def:
+  msdomain_add a d =
+  case d of Enforce _ => d
+          | Collect x => Collect $ x with addresses updated_by fINSERT a
+End
+
+Definition accesses_add_def:
+  accesses_add a rb =
+  rb with accesses updated_by
+  (λx. x with addresses updated_by fINSERT a)
+End
+
+Theorem accesses_add_accounts[simp]:
+  (accesses_add a rb).accounts = rb.accounts
+Proof
+  rw[accesses_add_def]
+QED
+
+Definition access_cost_def:
+  access_cost rb a =
+  if fIN a rb.accesses.addresses then warm_access_cost else cold_access_cost
+End
+
+Definition access_check_def:
+  access_check d a =
+  case d of Enforce x => fIN a x.addresses
+  | Collect _ => T
+End
+
+Theorem access_address_split:
+  access_check s.msdomain a ⇒
+  access_address a s =
+  (INL (access_cost s.rollback a),
+   s with <| rollback updated_by accesses_add a
+           ; msdomain updated_by msdomain_add a
+           |>)
+Proof
+  simp[access_address_def, domain_check_def]
+  \\ Cases_on `s.msdomain`
+  \\ simp[access_check_def, return_def, bind_def, ignore_bind_def,
+          access_cost_def, set_domain_def, msdomain_add_def,
+          accesses_add_def, access_sets_component_equality,
+          execution_state_component_equality,
+          rollback_state_component_equality]
+QED
+
+Definition Balance_gas_def:
+  Balance_gas rb a =
+  static_gas Balance + access_cost rb a
+End
+
 val binop_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
@@ -578,7 +646,8 @@ val binop_tac =
           set_current_context_def,consume_gas_def,push_stack_def,
           inc_pc_or_jump_def,is_call_def,with_zero_mod_def,step_monop_def,
           step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def,
-          step_msgParams_def,step_context_def]
+          step_msgParams_def,step_context_def,step_balance_def,
+          access_address_split, HD_TAKE, Balance_gas_def, get_accounts_def]
   \\ Cases_on ‘FST r’ \\ gvs[]
   \\ TRY(Cases_on ‘(FST (HD (SND r).contexts)).stack’ >- gvs[] \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
@@ -1064,8 +1133,25 @@ Theorem SPEC_Address:
 Proof binop_tac
 QED
 
+Theorem SPEC_Balance:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         access_check d (w2w (EL 0 ss)) ∧
+         g + Balance_gas rb (w2w (EL 0 ss)) ≤ p.gasLimit))
+  {(pc,Balance)}
+  (evm_Stack (n2w (lookup_account (w2w (EL 0 ss)) rb.accounts).balance ::
+              TL ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode Balance)) *
+   evm_Rollback (accesses_add (w2w (EL 0 ss)) rb) *
+   evm_Msdomain (msdomain_add (w2w (EL 0 ss)) d) *
+   evm_GasUsed (g + Balance_gas rb (w2w (EL 0 ss))) * evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | Balance
   | Origin
   | Caller
   | CallValue
