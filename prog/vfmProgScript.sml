@@ -642,17 +642,16 @@ Definition memory_expand_by_def:
   - (LENGTH m)
 End
 
+Definition expanded_memory_def:
+  expanded_memory (m: word8 list) offset size =
+  m ++ REPLICATE (memory_expand_by m offset size) 0w
+End
+
 Definition Keccak256_gas_def:
-  Keccak256_gas m ss =
-    let size = w2n (EL 1 ss); offset = w2n (EL 0 ss) in
+  Keccak256_gas m offset size =
     static_gas Keccak256 +
     memory_cost m offset size +
     keccak256_per_word_cost * word_size size
-End
-
-Definition Keccak256_expanded_def:
-  Keccak256_expanded m (ss: bytes32 list) =
-  m ++ REPLICATE (memory_expand_by m (w2n (EL 0 ss)) (w2n (EL 1 ss))) 0w
 End
 
 Definition CallDataCopy_gas_def:
@@ -662,21 +661,11 @@ Definition CallDataCopy_gas_def:
     memory_cost m offset size
 End
 
-Definition CallDataCopy_expanded_def:
-  CallDataCopy_expanded m (ss: bytes32 list) =
-  m ++ REPLICATE (memory_expand_by m (w2n (EL 0 ss)) (w2n (EL 2 ss))) 0w
-End
-
 Definition CodeCopy_gas_def:
   CodeCopy_gas m offset size =
     static_gas CodeCopy +
     memory_copy_cost * (word_size size) +
     memory_cost m offset size
-End
-
-Definition CodeCopy_expanded_def:
-  CodeCopy_expanded m (ss: bytes32 list) =
-  m ++ REPLICATE (memory_expand_by m (w2n (EL 0 ss)) (w2n (EL 2 ss))) 0w
 End
 
 Definition Balance_gas_def:
@@ -695,11 +684,6 @@ Definition ExtCodeCopy_gas_def:
     access_cost rb a +
     memory_copy_cost * (word_size size) +
     memory_cost m offset size
-End
-
-Definition ExtCodeCopy_expanded_def:
-  ExtCodeCopy_expanded m (ss: bytes32 list) =
-  m ++ REPLICATE (memory_expand_by m (w2n (EL 1 ss)) (w2n (EL 3 ss))) 0w
 End
 
 val binop_tac =
@@ -728,10 +712,8 @@ val binop_tac =
           get_call_data_def,memory_expansion_info_def,
           get_current_code_def,step_ext_code_copy_def,
           expand_memory_def,read_memory_def,Keccak256_gas_def,
-          memory_cost_def,EL_TAKE,Keccak256_expanded_def,
-          CallDataCopy_expanded_def,CallDataCopy_gas_def,
-          CodeCopy_expanded_def,CodeCopy_gas_def,
-          ExtCodeCopy_gas_def,ExtCodeCopy_expanded_def,
+          memory_cost_def,EL_TAKE,expanded_memory_def,
+          CallDataCopy_gas_def,CodeCopy_gas_def,ExtCodeCopy_gas_def,
           step_copy_to_memory_def,copy_to_memory_def,
           write_memory_def,memory_expand_by_def,step_keccak256_def]
   \\ Cases_on ‘FST r’ \\ gvs[]
@@ -1137,15 +1119,15 @@ Theorem SPEC_Keccak256:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Memory m *
    cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
-         g + Keccak256_gas m ss ≤ p.gasLimit ∧
-         em = Keccak256_expanded m ss))
+         sz = w2n (EL 1 ss) ∧ offset = w2n (EL 0 ss) ∧
+         g + Keccak256_gas m offset sz ≤ p.gasLimit ∧
+         em = expanded_memory m offset sz))
   {(pc,Keccak256)}
   (evm_Stack (word_of_bytes T 0w (Keccak_256_w64 $
-               TAKE (w2n (EL 1 ss)) (DROP (w2n (EL 0 ss)) em))
-              :: DROP 2 ss) *
+               TAKE sz (DROP offset em)) :: DROP 2 ss) *
    evm_JumpDest j * evm_Exception e * evm_Memory em *
    evm_PC (pc + LENGTH (opcode Keccak256)) *
-   evm_GasUsed (g + Keccak256_gas m ss) * evm_MsgParams p)
+   evm_GasUsed (g + Keccak256_gas m offset sz) * evm_MsgParams p)
 Proof binop_tac
 QED
 
@@ -1168,16 +1150,15 @@ Theorem SPEC_Balance:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
    cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
-         access_check d (w2w (EL 0 ss)) ∧
-         g + Balance_gas rb (w2w (EL 0 ss)) ≤ p.gasLimit))
+         a = (w2w (EL 0 ss)) ∧ access_check d a ∧
+         g + Balance_gas rb a ≤ p.gasLimit))
   {(pc,Balance)}
-  (evm_Stack (n2w (lookup_account (w2w (EL 0 ss)) rb.accounts).balance ::
-              TL ss) *
+  (evm_Stack (n2w (lookup_account a rb.accounts).balance :: TL ss) *
    evm_JumpDest j * evm_Exception e *
    evm_PC (pc + LENGTH (opcode Balance)) *
-   evm_Rollback (accesses_add (w2w (EL 0 ss)) rb) *
-   evm_Msdomain (msdomain_add (w2w (EL 0 ss)) d) *
-   evm_GasUsed (g + Balance_gas rb (w2w (EL 0 ss))) * evm_MsgParams p)
+   evm_Rollback (accesses_add a rb) *
+   evm_Msdomain (msdomain_add a d) *
+   evm_GasUsed (g + Balance_gas rb a) * evm_MsgParams p)
 Proof binop_tac
 QED
 
@@ -1258,17 +1239,17 @@ Theorem SPEC_CallDataCopy:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Memory m *
    cond (3 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
-         g + CallDataCopy_gas m (w2n (EL 0 ss)) (w2n (EL 2 ss))
-           ≤ p.gasLimit ∧
-         em = CallDataCopy_expanded m ss))
+         offset = w2n (EL 0 ss) ∧ sz = w2n (EL 2 ss) ∧
+         g + CallDataCopy_gas m offset sz ≤ p.gasLimit ∧
+         em = expanded_memory m offset sz))
   {(pc,CallDataCopy)}
   (evm_Stack (DROP 3 ss) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE (w2n (EL 0 ss)) em ++
-               take_pad_0 (w2n (EL 2 ss)) (DROP (w2n (EL 1 ss)) p.data) ++
-               DROP (w2n (EL 0 ss) + w2n (EL 2 ss)) em) *
+   evm_Memory (TAKE offset em ++
+               take_pad_0 sz (DROP (w2n (EL 1 ss)) p.data) ++
+               DROP (offset + sz) em) *
    evm_PC (pc + LENGTH (opcode CallDataCopy)) *
-   evm_GasUsed (g + CallDataCopy_gas m (w2n (EL 0 ss)) (w2n (EL 2 ss))) * evm_MsgParams p)
+   evm_GasUsed (g + CallDataCopy_gas m offset sz) * evm_MsgParams p)
 Proof binop_tac
 QED
 
@@ -1291,17 +1272,17 @@ Theorem SPEC_CodeCopy:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Memory m *
    cond (3 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
-         g + CodeCopy_gas m (w2n (EL 0 ss)) (w2n (EL 2 ss))
-           ≤ p.gasLimit ∧
-         em = CodeCopy_expanded m ss))
+         offset = w2n (EL 0 ss) ∧ sz = w2n (EL 2 ss) ∧
+         g + CodeCopy_gas m offset sz ≤ p.gasLimit ∧
+         em = expanded_memory m offset sz))
   {(pc,CodeCopy)}
   (evm_Stack (DROP 3 ss) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE (w2n (EL 0 ss)) em ++
-               take_pad_0 (w2n (EL 2 ss)) (DROP (w2n (EL 1 ss)) p.code) ++
-               DROP (w2n (EL 0 ss) + w2n (EL 2 ss)) em) *
+   evm_Memory (TAKE offset em ++
+               take_pad_0 sz (DROP (w2n (EL 1 ss)) p.code) ++
+               DROP (offset + sz) em) *
    evm_PC (pc + LENGTH (opcode CodeCopy)) *
-   evm_GasUsed (g + CodeCopy_gas m (w2n (EL 0 ss)) (w2n (EL 2 ss))) * evm_MsgParams p)
+   evm_GasUsed (g + CodeCopy_gas m offset sz) * evm_MsgParams p)
 Proof binop_tac
 QED
 
@@ -1324,16 +1305,15 @@ Theorem SPEC_ExtCodeSize:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
    cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
-         access_check d (w2w (EL 0 ss)) ∧
-         g + ExtCodeSize_gas rb (w2w (EL 0 ss)) ≤ p.gasLimit))
+         a = w2w (EL 0 ss) ∧ access_check d a ∧
+         g + ExtCodeSize_gas rb a ≤ p.gasLimit))
   {(pc,ExtCodeSize)}
-  (evm_Stack (n2w (LENGTH (lookup_account (w2w (EL 0 ss)) rb.accounts).code)
-              :: TL ss) *
+  (evm_Stack (n2w (LENGTH (lookup_account a rb.accounts).code) :: TL ss) *
    evm_JumpDest j * evm_Exception e *
    evm_PC (pc + LENGTH (opcode ExtCodeSize)) *
-   evm_Rollback (accesses_add (w2w (EL 0 ss)) rb) *
-   evm_Msdomain (msdomain_add (w2w (EL 0 ss)) d) *
-   evm_GasUsed (g + ExtCodeSize_gas rb (w2w (EL 0 ss))) * evm_MsgParams p)
+   evm_Rollback (accesses_add a rb) *
+   evm_Msdomain (msdomain_add a d) *
+   evm_GasUsed (g + ExtCodeSize_gas rb a) * evm_MsgParams p)
 Proof binop_tac
 QED
 
@@ -1342,23 +1322,21 @@ Theorem SPEC_ExtCodeCopy:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Memory m * evm_Rollback rb * evm_Msdomain d *
    cond (4 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
-         access_check d (w2w (EL 0 ss)) ∧
-         g + ExtCodeCopy_gas m rb
-               (w2w (EL 0 ss)) (w2n (EL 1 ss)) (w2n (EL 3 ss))
-           ≤ p.gasLimit ∧
-         em = ExtCodeCopy_expanded m ss))
+         a = w2w (EL 0 ss) ∧ access_check d a ∧
+         offset = w2n (EL 1 ss) ∧ sz = w2n (EL 3 ss) ∧
+         g + ExtCodeCopy_gas m rb a offset sz ≤ p.gasLimit ∧
+         em = expanded_memory m offset sz))
   {(pc,ExtCodeCopy)}
   (evm_Stack (DROP 4 ss) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE (w2n (EL 1 ss)) em ++
-               take_pad_0 (w2n (EL 3 ss)) (DROP (w2n (EL 2 ss))
-                 (lookup_account (w2w (EL 0 ss)) rb.accounts).code) ++
-               DROP (w2n (EL 1 ss) + w2n (EL 3 ss)) em) *
+   evm_Memory (TAKE offset em ++
+               take_pad_0 sz (DROP (w2n (EL 2 ss))
+                 (lookup_account a rb.accounts).code) ++
+               DROP (offset + sz) em) *
    evm_PC (pc + LENGTH (opcode ExtCodeCopy)) *
-   evm_Rollback (accesses_add (w2w (EL 0 ss)) rb) *
-   evm_Msdomain (msdomain_add (w2w (EL 0 ss)) d) *
-   evm_GasUsed (g + ExtCodeCopy_gas m rb
-                      (w2w (EL 0 ss)) (w2n (EL 1 ss)) (w2n (EL 3 ss))) *
+   evm_Rollback (accesses_add a rb) *
+   evm_Msdomain (msdomain_add a d) *
+   evm_GasUsed (g + ExtCodeCopy_gas m rb a offset sz) *
    evm_MsgParams p)
 Proof binop_tac
 QED
