@@ -1285,22 +1285,132 @@ Theorem SPEC_CodeCopy:
 Proof binop_tac
 QED
 
+Theorem SPEC_GasPrice:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas GasPrice ≤ p.gasLimit))
+  {(pc,GasPrice)}
+  (evm_Stack (n2w (t.gasPrice) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode GasPrice)) *
+   evm_GasUsed (g + static_gas GasPrice) * evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | GasPrice
   | ExtCodeSize
   | ExtCodeCopy
   | ReturnDataSize
   | ReturnDataCopy
   | ExtCodeHash
   | BlockHash
-  | CoinBase
-  | TimeStamp
-  | Number
-  | PrevRandao
-  | GasLimit
-  | ChainId
+*)
+
+Theorem SPEC_CoinBase:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas CoinBase ≤ p.gasLimit))
+  {(pc,CoinBase)}
+  (evm_Stack (w2w (t.blockCoinBase) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode CoinBase)) *
+   evm_GasUsed (g + static_gas CoinBase) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_TimeStamp:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas TimeStamp ≤ p.gasLimit))
+  {(pc,TimeStamp)}
+  (evm_Stack (n2w (t.blockTimeStamp) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode TimeStamp)) *
+   evm_GasUsed (g + static_gas TimeStamp) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_Number:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas Number ≤ p.gasLimit))
+  {(pc,Number)}
+  (evm_Stack (n2w (t.blockNumber) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode Number)) *
+   evm_GasUsed (g + static_gas Number) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_PrevRandao:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas PrevRandao ≤ p.gasLimit))
+  {(pc,PrevRandao)}
+  (evm_Stack (t.prevRandao :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode PrevRandao)) *
+   evm_GasUsed (g + static_gas PrevRandao) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_GasLimit:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas GasLimit ≤ p.gasLimit))
+  {(pc,GasLimit)}
+  (evm_Stack (n2w (t.blockGasLimit) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode GasLimit)) *
+   evm_GasUsed (g + static_gas GasLimit) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_ChainId:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas ChainId ≤ p.gasLimit))
+  {(pc,ChainId)}
+  (evm_Stack (n2w (t.chainId) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode ChainId)) *
+   evm_GasUsed (g + static_gas ChainId) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+(*
   | SelfBalance
-  | BaseFee
+*)
+
+Theorem SPEC_BaseFee:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas BaseFee ≤ p.gasLimit))
+  {(pc,BaseFee)}
+  (evm_Stack (n2w (t.baseFeePerGas) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode BaseFee)) *
+   evm_GasUsed (g + static_gas BaseFee) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+(*
   | BlobHash
   | BlobBaseFee
 *)
