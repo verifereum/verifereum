@@ -684,6 +684,24 @@ Definition Balance_gas_def:
   static_gas Balance + access_cost rb a
 End
 
+Definition ExtCodeSize_gas_def:
+  ExtCodeSize_gas rb a =
+  static_gas ExtCodeSize + access_cost rb a
+End
+
+Definition ExtCodeCopy_gas_def:
+  ExtCodeCopy_gas m rb a offset size =
+    static_gas ExtCodeCopy +
+    access_cost rb a +
+    memory_copy_cost * (word_size size) +
+    memory_cost m offset size
+End
+
+Definition ExtCodeCopy_expanded_def:
+  ExtCodeCopy_expanded m (ss: bytes32 list) =
+  m ++ REPLICATE (memory_expand_by m (w2n (EL 1 ss)) (w2n (EL 3 ss))) 0w
+End
+
 val binop_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
@@ -705,13 +723,15 @@ val binop_tac =
           step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def,
           step_msgParams_def,step_txParams_def,step_context_def,
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
+          ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
           get_call_data_def,memory_expansion_info_def,
-          get_current_code_def,
+          get_current_code_def,step_ext_code_copy_def,
           expand_memory_def,read_memory_def,Keccak256_gas_def,
           memory_cost_def,EL_TAKE,Keccak256_expanded_def,
           CallDataCopy_expanded_def,CallDataCopy_gas_def,
           CodeCopy_expanded_def,CodeCopy_gas_def,
+          ExtCodeCopy_gas_def,ExtCodeCopy_expanded_def,
           step_copy_to_memory_def,copy_to_memory_def,
           write_memory_def,memory_expand_by_def,step_keccak256_def]
   \\ Cases_on ‘FST r’ \\ gvs[]
@@ -1299,10 +1319,65 @@ Theorem SPEC_GasPrice:
 Proof binop_tac
 QED
 
+Theorem SPEC_ExtCodeSize:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         access_check d (w2w (EL 0 ss)) ∧
+         g + ExtCodeSize_gas rb (w2w (EL 0 ss)) ≤ p.gasLimit))
+  {(pc,ExtCodeSize)}
+  (evm_Stack (n2w (LENGTH (lookup_account (w2w (EL 0 ss)) rb.accounts).code)
+              :: TL ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode ExtCodeSize)) *
+   evm_Rollback (accesses_add (w2w (EL 0 ss)) rb) *
+   evm_Msdomain (msdomain_add (w2w (EL 0 ss)) d) *
+   evm_GasUsed (g + ExtCodeSize_gas rb (w2w (EL 0 ss))) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_ExtCodeCopy:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Memory m * evm_Rollback rb * evm_Msdomain d *
+   cond (4 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         access_check d (w2w (EL 0 ss)) ∧
+         g + ExtCodeCopy_gas m rb
+               (w2w (EL 0 ss)) (w2n (EL 1 ss)) (w2n (EL 3 ss))
+           ≤ p.gasLimit ∧
+         em = ExtCodeCopy_expanded m ss))
+  {(pc,ExtCodeCopy)}
+  (evm_Stack (DROP 4 ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_Memory (TAKE (w2n (EL 1 ss)) em ++
+               take_pad_0 (w2n (EL 3 ss)) (DROP (w2n (EL 2 ss))
+                 (lookup_account (w2w (EL 0 ss)) rb.accounts).code) ++
+               DROP (w2n (EL 1 ss) + w2n (EL 3 ss)) em) *
+   evm_PC (pc + LENGTH (opcode ExtCodeCopy)) *
+   evm_Rollback (accesses_add (w2w (EL 0 ss)) rb) *
+   evm_Msdomain (msdomain_add (w2w (EL 0 ss)) d) *
+   evm_GasUsed (g + ExtCodeCopy_gas m rb
+                      (w2w (EL 0 ss)) (w2n (EL 1 ss)) (w2n (EL 3 ss))) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_ReturnDataSize:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_ReturnData rd *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas ReturnDataSize ≤ p.gasLimit))
+  {(pc,ReturnDataSize)}
+  (evm_Stack (n2w (LENGTH rd) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_ReturnData rd *
+   evm_PC (pc + LENGTH (opcode ReturnDataSize)) *
+   evm_GasUsed (g + static_gas ReturnDataSize) * evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | ExtCodeSize
-  | ExtCodeCopy
-  | ReturnDataSize
   | ReturnDataCopy
   | ExtCodeHash
   | BlockHash
@@ -1412,8 +1487,21 @@ QED
 
 (*
   | BlobHash
-  | BlobBaseFee
 *)
+
+Theorem SPEC_BlobBaseFee:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas BlobBaseFee ≤ p.gasLimit))
+  {(pc,BlobBaseFee)}
+  (evm_Stack (n2w (t.baseFeePerBlobGas) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode BlobBaseFee)) *
+   evm_GasUsed (g + static_gas BlobBaseFee) * evm_MsgParams p)
+Proof binop_tac
+QED
 
 Theorem SPEC_Pop:
   SPEC EVM_MODEL
