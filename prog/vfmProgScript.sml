@@ -576,7 +576,7 @@ val binop_tac =
           CallDataCopy_gas_def,CodeCopy_gas_def,ExtCodeCopy_gas_def,
           ReturnDataCopy_gas_def,step_return_data_copy_def,
           get_return_data_check_def,get_return_data_def,
-          ExtCodeHash_gas_def,step_ext_code_hash_def,
+          ExtCodeHash_gas_def,step_ext_code_hash_def,step_mload_def,
           step_copy_to_memory_def,copy_to_memory_def,step_blob_hash_def,
           write_memory_def,memory_expand_by_def,step_keccak256_def,
           step_block_hash_def,step_self_balance_def,get_callee_def]
@@ -1439,8 +1439,25 @@ Theorem SPEC_Pop:
 Proof binop_tac
 QED
 
+Theorem SPEC_MLoad:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Memory m *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         offset = w2n (HD ss) ∧
+         g + static_gas MLoad + memory_cost m offset 32 ≤ p.gasLimit ∧
+         em = expanded_memory m offset 32))
+  {(pc,MLoad)}
+  (evm_Stack (word_of_bytes F 0w (REVERSE (TAKE 32 (DROP offset em)))
+              :: TL ss) *
+   evm_JumpDest j * evm_Exception e * evm_Memory em *
+   evm_PC (pc + LENGTH (opcode MLoad)) *
+   evm_GasUsed (g + static_gas MLoad + memory_cost m offset 32) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | MLoad
   | MStore
   | MStore8
   | SLoad
