@@ -478,6 +478,52 @@ Proof
           rollback_state_component_equality]
 QED
 
+Definition msdomain_add_slot_def:
+  msdomain_add_slot a d =
+  case d of Enforce _ => d
+          | Collect x => Collect $ x with storageKeys updated_by fINSERT a
+End
+
+Definition accesses_add_slot_def:
+  accesses_add_slot sk rb =
+  rb with accesses updated_by
+  (λx. x with storageKeys updated_by fINSERT sk)
+End
+
+Theorem accesses_add_slot_accounts[simp]:
+  (accesses_add_slot a rb).accounts = rb.accounts
+Proof
+  rw[accesses_add_slot_def]
+QED
+
+Definition access_slot_cost_def:
+  access_slot_cost rb a =
+  if fIN a rb.accesses.storageKeys then warm_access_cost else cold_sload_cost
+End
+
+Definition access_slot_check_def:
+  access_slot_check d a =
+  case d of Enforce x => fIN a x.storageKeys
+  | Collect _ => T
+End
+
+Theorem access_slot_split:
+  access_slot_check s.msdomain a ⇒
+  access_slot a s =
+  (INL (access_slot_cost s.rollback a),
+   s with <| rollback updated_by accesses_add_slot a
+           ; msdomain updated_by msdomain_add_slot a
+           |>)
+Proof
+  simp[access_slot_def, domain_check_def]
+  \\ Cases_on `s.msdomain`
+  \\ simp[access_slot_check_def, return_def, bind_def, ignore_bind_def,
+          access_slot_cost_def, set_domain_def, msdomain_add_slot_def,
+          accesses_add_slot_def, access_sets_component_equality,
+          execution_state_component_equality,
+          rollback_state_component_equality]
+QED
+
 Definition memory_cost_def:
   memory_cost (m: word8 list) offset size =
   memory_expansion_cost (LENGTH m)
@@ -567,12 +613,13 @@ val binop_tac =
           step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def,
           step_msgParams_def,step_txParams_def,step_context_def,
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
+          access_slot_split,step_sload_def,
           ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
           get_call_data_def,memory_expansion_info_def,
           get_current_code_def,step_ext_code_copy_def,
           expand_memory_def,read_memory_def,Keccak256_gas_def,
-          memory_cost_def,EL_TAKE,expanded_memory_def,
+          memory_cost_def,EL_TAKE,expanded_memory_def,step_mstore_def,
           CallDataCopy_gas_def,CodeCopy_gas_def,ExtCodeCopy_gas_def,
           ReturnDataCopy_gas_def,step_return_data_copy_def,
           get_return_data_check_def,get_return_data_def,
@@ -1457,17 +1504,127 @@ Theorem SPEC_MLoad:
 Proof binop_tac
 QED
 
+Theorem SPEC_MStore:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Memory m *
+   cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         offset = w2n (EL 0 ss) ∧
+         bytes = REVERSE (word_to_bytes (EL 1 ss) F) ∧
+         g + static_gas MStore + memory_cost m offset 32 ≤ p.gasLimit ∧
+         em = expanded_memory m offset 32))
+  {(pc,MStore)}
+  (evm_Stack (DROP 2 ss) *
+   evm_PC (pc + LENGTH (opcode MStore)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_Memory (TAKE offset em ++ bytes ++ DROP (offset + LENGTH bytes) em) *
+   evm_GasUsed (g + static_gas MStore + memory_cost m offset 32) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_MStore8:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Memory m *
+   cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         offset = w2n (EL 0 ss) ∧
+         bytes = [w2w (EL 1 ss)] ∧
+         g + static_gas MStore8 + memory_cost m offset 1 ≤ p.gasLimit ∧
+         em = expanded_memory m offset 1))
+  {(pc,MStore8)}
+  (evm_Stack (DROP 2 ss) *
+   evm_PC (pc + LENGTH (opcode MStore8)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_Memory (TAKE offset em ++ bytes ++ DROP (offset + LENGTH bytes) em) *
+   evm_GasUsed (g + static_gas MStore8 + memory_cost m offset 1) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_SLoad:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         key = HD ss ∧
+         sk = SK p.callee key ∧
+         access_slot_check d sk ∧
+         g + access_slot_cost rb sk ≤ p.gasLimit))
+  {(pc,SLoad)}
+  (evm_Stack (lookup_storage key
+               (lookup_account p.callee rb.accounts).storage :: TL ss) *
+   evm_PC (pc + LENGTH (opcode SLoad)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + access_slot_cost rb sk) *
+   evm_Rollback (accesses_add_slot sk rb) *
+   evm_Msdomain (msdomain_add_slot sk d) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | MStore
-  | MStore8
-  | SLoad
   | SStore
   | Jump
   | JumpI
-  | PC
-  | MSize
-  | Gas
-  | JumpDest
+*)
+
+Theorem SPEC_PC:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (LENGTH ss < stack_limit  ∧ j = NONE ∧ ISL e ∧
+           g + static_gas PC ≤ p.gasLimit))
+    {(pc,PC)}
+    (evm_Stack (n2w pc :: ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode PC)) *
+     evm_GasUsed (g + static_gas PC) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_MSize:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e * evm_Memory m *
+     cond (LENGTH ss < stack_limit  ∧ j = NONE ∧ ISL e ∧
+           g + static_gas MSize ≤ p.gasLimit))
+    {(pc,MSize)}
+    (evm_Stack (n2w (LENGTH m) :: ss) *
+     evm_JumpDest j * evm_Exception e * evm_Memory m *
+     evm_PC (pc + LENGTH (opcode MSize)) *
+     evm_GasUsed (g + static_gas MSize) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_Gas:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+     evm_JumpDest j * evm_Exception e *
+     cond (LENGTH ss < stack_limit  ∧ j = NONE ∧ ISL e ∧
+           g + static_gas Gas ≤ p.gasLimit))
+    {(pc,Gas)}
+    (evm_Stack (n2w (p.gasLimit - g - static_gas Gas) :: ss) *
+     evm_JumpDest j * evm_Exception e *
+     evm_PC (pc + LENGTH (opcode Gas)) *
+     evm_GasUsed (g + static_gas Gas) * evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_JumpDest:
+  SPEC EVM_MODEL
+  (evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (j = NONE ∧ ISL e ∧ g + static_gas JumpDest ≤ p.gasLimit))
+  {(pc,JumpDest)}
+  (evm_PC (pc + LENGTH (opcode JumpDest)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + static_gas JumpDest) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+(*
   | TLoad
   | TStore
   | MCopy
