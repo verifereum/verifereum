@@ -577,13 +577,16 @@ val binop_tac =
           ReturnDataCopy_gas_def,step_return_data_copy_def,
           get_return_data_check_def,get_return_data_def,
           ExtCodeHash_gas_def,step_ext_code_hash_def,
-          step_copy_to_memory_def,copy_to_memory_def,
-          write_memory_def,memory_expand_by_def,step_keccak256_def]
+          step_copy_to_memory_def,copy_to_memory_def,step_blob_hash_def,
+          write_memory_def,memory_expand_by_def,step_keccak256_def,
+          step_block_hash_def,step_self_balance_def,get_callee_def]
   \\ Cases_on ‘FST r’ \\ gvs[]
   \\ TRY(Cases_on ‘(FST (HD (SND r).contexts)).stack’ >- gvs[] \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`DROP _ (hs:bytes32 list)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
+  \\ TRY(qmatch_goalsub_rename_tac`_.txParams.prevHashes`
+         \\ conj_tac >- (rw[] \\ gvs[]))
   \\ conj_tac
   >-
    (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
@@ -1261,9 +1264,23 @@ Theorem SPEC_ExtCodeHash:
 Proof binop_tac
 QED
 
-(*
-  | BlockHash
-*)
+Theorem SPEC_BlockHash:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         number = w2n (HD ss) ∧
+         inRange = (number < t.blockNumber ∧ t.blockNumber - 256 ≤ number) ∧
+         index = t.blockNumber - number - 1 ∧
+         g + static_gas BlockHash ≤ p.gasLimit))
+  {(pc,BlockHash)}
+  (evm_Stack ((if inRange ∧ index < LENGTH t.prevHashes
+               then EL index t.prevHashes else 0w) :: TL ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode BlockHash)) *
+   evm_GasUsed (g + static_gas BlockHash) * evm_MsgParams p)
+Proof binop_tac
+QED
 
 Theorem SPEC_CoinBase:
   SPEC EVM_MODEL
@@ -1349,9 +1366,21 @@ Theorem SPEC_ChainId:
 Proof binop_tac
 QED
 
-(*
-  | SelfBalance
-*)
+Theorem SPEC_SelfBalance:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Rollback rb *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas SelfBalance ≤ p.gasLimit))
+  {(pc,SelfBalance)}
+  (evm_Stack (n2w (lookup_account p.callee rb.accounts).balance :: ss) *
+   evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + LENGTH (opcode SelfBalance)) *
+   evm_Rollback rb *
+   evm_GasUsed (g + static_gas SelfBalance) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
 
 Theorem SPEC_BaseFee:
   SPEC EVM_MODEL
@@ -1367,9 +1396,21 @@ Theorem SPEC_BaseFee:
 Proof binop_tac
 QED
 
-(*
-  | BlobHash
-*)
+Theorem SPEC_BlobHash:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         index = w2n (HD ss) ∧
+         g + static_gas BlobHash ≤ p.gasLimit))
+  {(pc,BlobHash)}
+  (evm_Stack ((if index < LENGTH t.blobHashes
+               then EL index t.blobHashes else 0w):: TL ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode BlobHash)) *
+   evm_GasUsed (g + static_gas BlobHash) * evm_MsgParams p)
+Proof binop_tac
+QED
 
 Theorem SPEC_BlobBaseFee:
   SPEC EVM_MODEL
