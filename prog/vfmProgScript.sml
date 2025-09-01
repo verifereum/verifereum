@@ -158,31 +158,6 @@ Proof
   \\ metis_tac[]
 QED
 
-(*
-Theorem IN_evm2set[local]:
-  (!r x s. aReg r x IN (evm2set s) ⇔ (x = V_READ_REG r s)) /\
-  (!r x s. aReg r x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_REG r s) /\ r IN rs) /\
-  (!r x s. aReg r x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_REG r s) /\ ~(r IN rs)) /\
-  (!p x s. aMem p x IN (evm2set s) ⇔ (x = V_READ_MEM p s)) /\
-  (!p x s. aMem p x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MEM p s) /\ p IN ms) /\
-  (!p x s. aMem p x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MEM p s) /\ ~(p IN ms)) /\
-  (!a x s. aStatus a x IN (evm2set s) ⇔ (x = V_READ_STATUS a s)) /\
-  (!a x s. aStatus a x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_STATUS a s) /\ a IN st) /\
-  (!a x s. aStatus a x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_STATUS a s) /\ ~(a IN st)) /\
-  (!x s. aCPSR_Reg x IN (evm2set s) ⇔ (x = V_READ_MASKED_CPSR s)) /\
-  (!x s. aCPSR_Reg x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MASKED_CPSR s) /\ cp) /\
-  (!x s. aCPSR_Reg x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_MASKED_CPSR s) /\ ~cp) /\
-  (!x s. aUndef x IN (evm2set s) ⇔ (x = V_READ_UNDEF s)) /\
-  (!x s. aUndef x IN (evm2set_on (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_UNDEF s) /\ ud) /\
-  (!x s. aUndef x IN (evm2set_without (rs,ms,st,cp,ud) s) ⇔ (x = V_READ_UNDEF s) /\ ~ud)
-Proof
-  cheat
-  (*
-  SRW_TAC [] [evm2set_on_def,evm2set_without_def,evm2set_def,IN_UNION,
-     IN_INSERT,NOT_IN_EMPTY,IN_DIFF,PUSH_IN_INTO_IF] \\ METIS_TAC []); *)
-QED
-*)
-
 Theorem evm2set_without_11[local]:
   !y y' s s'. (evm2set_without y' s' = evm2set_without y s) ==> (y = y')
 Proof
@@ -196,25 +171,6 @@ Proof
   \\ Cases_on`x` \\ gvs[]
 QED
 
-(*
-Theorem DELETE_evm2set[local]:
-  (!a s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aReg a (V_READ_REG a s) =
-         (evm2set_on (rs DELETE a,ms,st,cp,ud) s)) /\
-  (!b s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aMem b (V_READ_MEM b s) =
-         (evm2set_on (rs,ms DELETE b,st,cp,ud) s)) /\
-  (!c s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aStatus c (V_READ_STATUS c s) =
-         (evm2set_on (rs,ms,st DELETE c,cp,ud) s)) /\
-  (!s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aCPSR_Reg (V_READ_MASKED_CPSR s) =
-       (evm2set_on (rs,ms,st,F,ud) s)) /\
-  (!s. (evm2set_on (rs,ms,st,cp,ud) s) DELETE aUndef (V_READ_UNDEF s) =
-       (evm2set_on (rs,ms,st,cp,F) s))``
-Proof
-  SRW_TAC [] [evm2set_on_def,EXTENSION,IN_UNION,GSPECIFICATION,LEFT_AND_OVER_OR,
-    EXISTS_OR_THM,IN_DELETE,IN_INSERT,NOT_IN_EMPTY,PUSH_IN_INTO_IF]
-  \\ Cases_on `x` \\ SRW_TAC [] [] \\ METIS_TAC []
-QED
-*)
-
 Theorem EMPTY_evm2set[local]:
   (evm2set_on dom s = {}) ⇔  dom = {}
 Proof
@@ -222,17 +178,6 @@ Proof
   \\ rw[EXTENSION, EQ_IMP_THM]
   \\ Cases_on`x` \\ rw[]
 QED
-
-(*
-val V_READ_MASKED_CPSR_THM =
- (SIMP_CONV std_ss [V_READ_MASKED_CPSR_def,encode_psr_def,word_slice_def] THENC
-  ONCE_REWRITE_CONV [METIS_PROVE [] ``p /\ q ⇔ p /\ (p ==> q)``] THENC
-  SIMP_CONV (std_ss++SIZES_ss) [
-    fcpTheory.FCP_BETA,DECIDE “(i<=31⇔i<32:num)/\(i<=26⇔i<27)”] THENC
-  ONCE_REWRITE_CONV [GSYM (METIS_PROVE [] ``p /\ q ⇔ p /\ (p ==> q)``)] THENC
-  SIMP_CONV std_ss [DECIDE ``i<27 /\ i<32 ⇔ i<27``])
-    ``V_READ_MASKED_CPSR s``
-*)
 
 (* ----------------------------------------------------------------------------- *)
 (* Defining the V_MODEL                                                        *)
@@ -385,33 +330,6 @@ val CODE_POOL_evm2set_LEMMA = prove(
   ``!x y z. (x = z INSERT y) ⇔ (z INSERT y) SUBSET x /\ (x DIFF (z INSERT y) = {})``,
   SIMP_TAC std_ss [EXTENSION,SUBSET_DEF,IN_INSERT,NOT_IN_EMPTY,IN_DIFF] \\ METIS_TAC []);
 
-(*
-val CODE_POOL_evm2set_2 = prove(
-  ``CODE_POOL V_INSTR {(p,c);(q,d)} (evm2set_on (rs,ms,st,cp,ud) s) ⇔
-      ({p+3w;p+2w;p+1w;p;q+3w;q+2w;q+1w;q} = ms) /\ (rs = {}) /\ (st = {}) /\ ~cp /\ ~ud /\
-      (V_READ_MEM (p + 0w) s = ( 7 ><  0) c) /\
-      (V_READ_MEM (p + 1w) s = (15 ><  8) c) /\
-      (V_READ_MEM (p + 2w) s = (23 >< 16) c) /\
-      (V_READ_MEM (p + 3w) s = (31 >< 24) c) /\
-      (V_READ_MEM (q + 0w) s = ( 7 ><  0) d) /\
-      (V_READ_MEM (q + 1w) s = (15 ><  8) d) /\
-      (V_READ_MEM (q + 2w) s = (23 >< 16) d) /\
-      (V_READ_MEM (q + 3w) s = (31 >< 24) d)``,
-  SIMP_TAC bool_ss [CODE_POOL_def,IMAGE_INSERT,IMAGE_EMPTY,BIGUNION_INSERT,
-    BIGUNION_EMPTY,UNION_EMPTY,V_INSTR_def,CODE_POOL_evm2set_LEMMA,
-    GSYM DELETE_DEF, INSERT_SUBSET, EMPTY_SUBSET,IN_evm2set,INSERT_UNION_EQ]
-  \\ Cases_on `(31 >< 24) c = V_READ_MEM (p + 3w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `(23 >< 16) c = V_READ_MEM (p + 2w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `(15 ><  8) c = V_READ_MEM (p + 1w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `( 7 ><  0) c = V_READ_MEM (p + 0w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `(31 >< 24) d = V_READ_MEM (q + 3w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `(23 >< 16) d = V_READ_MEM (q + 2w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `(15 ><  8) d = V_READ_MEM (q + 1w) s` \\ ASM_SIMP_TAC std_ss []
-  \\ Cases_on `( 7 ><  0) d = V_READ_MEM (q + 0w) s` \\ ASM_SIMP_TAC std_ss [WORD_ADD_0]
-  \\ ASM_SIMP_TAC std_ss [DELETE_evm2set,EMPTY_evm2set,DIFF_INSERT]
-  \\ ASM_SIMP_TAC std_ss [AC CONJ_COMM CONJ_ASSOC,DIFF_EMPTY,EMPTY_evm2set]);
-*)
-
 Theorem CODE_POOL_evm2set:
   CODE_POOL EVM_INSTR {(p,c)} (evm2set_on dom s) ⇔
     dom = {HasParsed p} ∧
@@ -432,76 +350,6 @@ Proof
   \\ Cases \\ simp[]
   \\ rw[EQ_IMP_THM]
 QED
-
-(*
-val V_WRITE_STS_def = Define `
-  V_WRITE_STS a x s = if a IN {psrN;psrZ;psrC;psrV;psrQ} then V_WRITE_STATUS a x s else s`;
-
-val V_WRITE_STS_INTRO = store_thm("V_WRITE_STS_INTRO",
-  ``(V_WRITE_STATUS psrN x s = V_WRITE_STS psrN x s) /\
-    (V_WRITE_STATUS psrZ x s = V_WRITE_STS psrZ x s) /\
-    (V_WRITE_STATUS psrC x s = V_WRITE_STS psrC x s) /\
-    (V_WRITE_STATUS psrV x s = V_WRITE_STS psrV x s) /\
-    (V_WRITE_STATUS psrQ x s = V_WRITE_STS psrQ x s)``,
-  SIMP_TAC std_ss [V_WRITE_STS_def,IN_INSERT]);
-
-val UNDEF_OF_UPDATES = prove(
-  ``(!a x. V_READ_UNDEF (V_WRITE_REG a x s) = V_READ_UNDEF s) /\
-    (!a x. V_READ_UNDEF (V_WRITE_MEM a x s) = V_READ_UNDEF s) /\
-    (!a x. V_READ_UNDEF (V_WRITE_STS a x s) = V_READ_UNDEF s) /\
-    (!a x. V_READ_UNDEF (V_WRITE_MEM_WRITE a x s) = V_READ_UNDEF s) /\
-    (!a. V_READ_UNDEF (V_WRITE_MEM_READ a s) = V_READ_UNDEF s) /\
-    (!a x y. V_READ_UNDEF (CLEAR_EXCLUSIVE_BY_ADDRESS (x,y) s) = V_READ_UNDEF s)``,
-  SIMP_TAC std_ss [V_READ_UNDEF_def,V_OK_def] \\ REPEAT STRIP_TAC
-  \\ EVAL_TAC \\ SRW_TAC [] [] \\ EVAL_TAC);
-
-val MASKED_CPSR_OF_UPDATES = prove(
-  ``(!a x. V_READ_MASKED_CPSR (V_WRITE_STS a x s) = V_READ_MASKED_CPSR s) /\
-    (!a x. V_READ_MASKED_CPSR (V_WRITE_REG a x s) = V_READ_MASKED_CPSR s) /\
-    (!a x. V_READ_MASKED_CPSR (V_WRITE_MEM a x s) = V_READ_MASKED_CPSR s) /\
-    (!a x. V_READ_MASKED_CPSR (V_WRITE_MEM_WRITE a x s) = V_READ_MASKED_CPSR s) /\
-    (!a. V_READ_MASKED_CPSR (V_WRITE_MEM_READ a s) = V_READ_MASKED_CPSR s) /\
-    (!a x y. V_READ_MASKED_CPSR (CLEAR_EXCLUSIVE_BY_ADDRESS (x,y) s) = V_READ_MASKED_CPSR s)``,
-  SIMP_TAC std_ss [V_READ_MASKED_CPSR_THM,V_OK_def] \\ REPEAT STRIP_TAC THEN1
-   (SIMP_TAC std_ss [V_WRITE_STS_def]
-    \\ Cases_on `a IN {psrN; psrZ; psrC; psrV; psrQ}` \\ ASM_SIMP_TAC std_ss []
-    \\ MATCH_MP_TAC (METIS_PROVE [] ``(x = y) ==> (f x = f y)``)
-    \\ SIMP_TAC std_ss [FUN_EQ_THM] \\ REPEAT STRIP_TAC
-    \\ FULL_SIMP_TAC std_ss [IN_INSERT,NOT_IN_EMPTY] \\ EVAL_TAC)
-  \\ MATCH_MP_TAC (METIS_PROVE [] ``(x = y) ==> (f x = f y)``)
-  \\ SIMP_TAC std_ss [FUN_EQ_THM] \\ REPEAT STRIP_TAC \\ EVAL_TAC);
-
-val V_READ_WRITE = LIST_CONJ [REG_OF_UPDATES,MEM_OF_UPDATES,MASKED_CPSR_OF_UPDATES,
-                                UNDEF_OF_UPDATES,CPSR_COMPONENTS_OF_UPDATES]
-val _ = save_thm("V_READ_WRITE",V_READ_WRITE);
-
-val V_OK_WRITE_GE = prove(
-  ``V_OK (V_WRITE_GE w4 s) = V_OK s``,
-  SIMP_TAC std_ss [V_OK_def] \\ EVAL_TAC);
-
-val UPDATE_evm2set_without_GE = prove(
-  ``(!w4. evm2set_without (rs,ms,st,cp,ud) (V_WRITE_GE w4 s) = evm2set_without (rs,ms,st,cp,ud) s)``,
-  SIMP_TAC std_ss [evm2set_def,evm2set_without_def,evm2set_on_def,REG_OF_UPDATES,
-    MEM_OF_UPDATES,V_READ_WRITE,V_READ_UNDEF_def,V_OK_WRITE_GE]
-
-val UPDATE_evm2set_without = store_thm("UPDATE_evm2set_without",
-  ``(!a x. a IN rs ==> (evm2set_without (rs,ms,st,cp,ud) (V_WRITE_REG a x s) = evm2set_without (rs,ms,st,cp,ud) s)) /\
-    (!a x. a IN ms ==> (evm2set_without (rs,ms,st,cp,ud) (V_WRITE_MEM a x s) = evm2set_without (rs,ms,st,cp,ud) s)) /\
-    (!b x. b IN st ==> (evm2set_without (rs,ms,st,cp,ud) (V_WRITE_STS b x s) = evm2set_without (rs,ms,st,cp,ud) s)) /\
-    (!a x. evm2set_without (rs,ms,st,cp,ud) (V_WRITE_MEM_WRITE a x s) = evm2set_without (rs,ms,st,cp,ud) s) /\
-    (!a. evm2set_without (rs,ms,st,cp,ud) (V_WRITE_MEM_READ a s) = evm2set_without (rs,ms,st,cp,ud) s) /\
-    (!x y. evm2set_without (rs,ms,st,cp,ud) (CLEAR_EXCLUSIVE_BY_ADDRESS (x,y) s) = evm2set_without (rs,ms,st,cp,ud) s)``,
-  SIMP_TAC std_ss [evm2set_def,evm2set_without_def,evm2set_on_def,EXTENSION,IN_UNION,
-    IN_IMAGE,IN_DIFF,IN_UNIV,NOT_IN_EMPTY,IN_INSERT,V_READ_WRITE,PUSH_IN_INTO_IF]
-  \\ REPEAT STRIP_TAC \\ EQ_TAC \\ REPEAT STRIP_TAC
-  \\ Q.PAT_X_ASSUM `xx = yy` (fn th => FULL_SIMP_TAC std_ss [th])
-  \\ FULL_SIMP_TAC std_ss [v_el_distinct,v_el_11]
-  \\ IMP_RES_TAC (METIS_PROVE [] ``x IN s /\ ~(y IN s) ==> ~(x = y:'a)``)
-  \\ ASM_SIMP_TAC std_ss [V_READ_WRITE,UNDEF_OF_UPDATES]
-  \\ SIMP_TAC std_ss [V_WRITE_STS_def] \\ TRY (Cases_on `b IN {psrN; psrZ; psrC; psrV; psrQ}`)
-  \\ FULL_SIMP_TAC std_ss [V_READ_WRITE,UNDEF_OF_UPDATES]
-  \\ METIS_TAC []);
-*)
 
 Theorem UPDATE_evm2set_without[local]:
   wf_state s ∧
