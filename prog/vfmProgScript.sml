@@ -613,7 +613,7 @@ val binop_tac =
           step_pop_def,step_exp_def,exp_cost_def,exponent_byte_size_def,
           step_msgParams_def,step_txParams_def,step_context_def,
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
-          access_slot_split,step_sload_def,
+          access_slot_split,step_sload_def,step_jump_def,set_jump_dest_def,
           ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
           get_call_data_def,memory_expansion_info_def,
@@ -1565,7 +1565,26 @@ QED
 
 (*
   | SStore
-  | Jump
+*)
+
+Theorem SPEC_Jump:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (ss ≠ [] ∧ ISL e ∧
+         w2n (HD ss) < LENGTH p.code ∧
+         FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest ∧
+         g + static_gas Jump ≤ p.gasLimit))
+  {(pc,Jump)}
+  (evm_Stack (TL ss) *
+   evm_PC (w2n (HD ss)) *
+   evm_JumpDest NONE * evm_Exception e *
+   evm_GasUsed (g + static_gas Jump) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+(*
   | JumpI
 *)
 
