@@ -614,7 +614,7 @@ val binop_tac =
           step_msgParams_def,step_txParams_def,step_context_def,
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
           access_slot_split,step_sload_def,step_jump_def,set_jump_dest_def,
-          ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,
+          step_jumpi_def,ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
           get_call_data_def,memory_expansion_info_def,
           get_current_code_def,step_ext_code_copy_def,
@@ -634,10 +634,13 @@ val binop_tac =
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`_.txParams.prevHashes`
          \\ conj_tac >- (rw[] \\ gvs[]))
-  \\ conj_tac
-  >-
+  \\ TRY(qmatch_asmsub_rename_tac`COND (b = 0w) NONE` \\
+         Cases_on`b = 0w` \\
+         gvs[set_current_context_def,return_def,bind_def,
+             assert_def])
+  \\ (conj_tac >-
    (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
-    \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+    \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
   \\ irule UPDATE_evm2set_without
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
@@ -1584,9 +1587,23 @@ Theorem SPEC_Jump:
 Proof binop_tac
 QED
 
-(*
-  | JumpI
-*)
+Theorem SPEC_JumpI:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (2 ≤ LENGTH ss ∧ ISL e ∧
+         (if EL 1 ss = 0w then pc' = pc + LENGTH (opcode JumpI)
+          else pc' = w2n (HD ss) ∧ w2n (HD ss) < LENGTH p.code ∧
+               FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest) ∧
+         g + static_gas JumpI ≤ p.gasLimit))
+  {(pc,JumpI)}
+  (evm_Stack (DROP 2 ss) *
+   evm_PC pc' *
+   evm_JumpDest NONE * evm_Exception e *
+   evm_GasUsed (g + static_gas JumpI) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
 
 Theorem SPEC_PC:
   SPEC EVM_MODEL
