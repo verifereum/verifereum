@@ -231,6 +231,14 @@ Definition evm_Msdomain_def:
   evm_Msdomain x = SEP_EQ { Msdomain x }
 End
 
+Definition evm_AddRefund_def:
+  evm_AddRefund x = SEP_EQ { AddRefund x }
+End
+
+Definition evm_SubRefund_def:
+  evm_SubRefund x = SEP_EQ { SubRefund x }
+End
+
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
@@ -289,6 +297,12 @@ Theorem STAR_evm2set:
   ((evm_ReturnData rd * p) (evm2set_on dom s) ⇔
    (rd = (FST (HD (SND s).contexts)).returnData) /\
    HasReturnData ∈ dom /\ p (evm2set_on (dom DELETE HasReturnData) s)) /\
+  ((evm_AddRefund ad * p) (evm2set_on dom s) ⇔
+   (ad = (FST (HD (SND s).contexts)).addRefund) /\
+   HasAddRefund ∈ dom /\ p (evm2set_on (dom DELETE HasAddRefund) s)) /\
+  ((evm_SubRefund ad * p) (evm2set_on dom s) ⇔
+   (ad = (FST (HD (SND s).contexts)).subRefund) /\
+   HasSubRefund ∈ dom /\ p (evm2set_on (dom DELETE HasSubRefund) s)) /\
   ((evm_Memory rd * p) (evm2set_on dom s) ⇔
    (rd = (FST (HD (SND s).contexts)).memory) /\
    HasMemory ∈ dom /\ p (evm2set_on (dom DELETE HasMemory) s)) /\
@@ -314,7 +328,8 @@ Proof
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
         evm_TxParams_def, evm_Contexts_def, evm_Memory_def,
-        evm_Rollback_def, evm_Msdomain_def]
+        evm_Rollback_def, evm_Msdomain_def,
+        evm_AddRefund_def, evm_SubRefund_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -592,6 +607,58 @@ Definition ExtCodeHash_gas_def:
     static_gas ExtCodeHash + access_cost rb a
 End
 
+Definition sstore_refund_updates_def:
+  sstore_refund_updates originalValue currentValue (value:bytes32) =
+     if currentValue ≠ value then
+       let storageSetRefund =
+         if originalValue = value then
+           if originalValue = 0w then
+             storage_set_cost - warm_access_cost
+           else storage_update_cost - cold_sload_cost - warm_access_cost
+         else 0
+       in if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w
+          then (storageSetRefund + storage_clear_refund,0)
+          else if originalValue ≠ 0w ∧ currentValue = 0w
+          then (storageSetRefund,storage_clear_refund)
+          else (storageSetRefund,0)
+     else (0,0)
+End
+
+Definition sstore_base_gas_def:
+  sstore_base_gas originalValue currentValue (value:bytes32) =
+    if originalValue = currentValue ∧ currentValue ≠ value
+    then if originalValue = 0w then storage_set_cost
+    else storage_update_cost - cold_sload_cost
+    else warm_access_cost
+End
+
+Definition SStore_gas_def:
+  SStore_gas original rb address key value = let
+    accounts = rb.accounts;
+    account = lookup_account address accounts;
+    orig_account = lookup_account address original;
+    currentValue = lookup_storage key account.storage;
+    originalValue = lookup_storage key orig_account.storage;
+    baseDynamicGas = sstore_base_gas originalValue currentValue value;
+    accessCost = access_slot_cost rb (SK address key);
+    dynamicGas = baseDynamicGas + zero_warm accessCost;
+    (add,sub) = sstore_refund_updates originalValue currentValue value;
+  in (dynamicGas, add, sub)
+End
+
+Definition sstore_write_accounts_updater_def:
+  sstore_write_accounts_updater address key value = (λaccounts.
+    let account = lookup_account address accounts in
+    let newAccount = account with storage updated_by update_storage key value
+  in update_account address newAccount accounts)
+End
+
+Definition SStore_write_def:
+  SStore_write address key value rb =
+  rb with accounts updated_by
+    sstore_write_accounts_updater address key value
+End
+
 val binop_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
@@ -614,7 +681,17 @@ val binop_tac =
           step_msgParams_def,step_txParams_def,step_context_def,
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
           access_slot_split,step_sload_def,step_jump_def,set_jump_dest_def,
-          step_jumpi_def,ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,
+          step_jumpi_def,ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,step_sstore_def,
+          assert_not_static_def,get_static_def,
+          step_sstore_gas_consumption_def
+            |> SRULE [GSYM sstore_refund_updates_def,
+                      GSYM sstore_base_gas_def],
+          update_gas_refund_def
+            |> oneline |> SRULE[pair_CASE_def],
+          SStore_gas_def, UNCURRY, LAST_CONS_cond,
+          GSYM sstore_write_accounts_updater_def, SStore_write_def,
+          write_storage_def,update_accounts_def,
+          get_gas_left_def,get_original_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
           get_call_data_def,memory_expansion_info_def,
           get_current_code_def,step_ext_code_copy_def,
@@ -638,6 +715,8 @@ val binop_tac =
          Cases_on`b = 0w` \\
          gvs[set_current_context_def,return_def,bind_def,
              assert_def])
+  \\ TRY(qmatch_assum_abbrev_tac`(ad,sd) = sstore_refund_updates x y z`
+         \\ Cases_on`sstore_refund_updates x y z` \\ gvs[])
   \\ (conj_tac >-
    (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
@@ -1566,9 +1645,31 @@ Theorem SPEC_SLoad:
 Proof binop_tac
 QED
 
-(*
-  | SStore
-*)
+Theorem SPEC_SStore:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
+   evm_AddRefund ar * evm_SubRefund sr * evm_Contexts cs *
+   cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         key = HD ss ∧ value = EL 1 ss ∧
+         ~p.static ∧ call_stipend < p.gasLimit - g ∧
+         sk = SK p.callee key ∧ access_slot_check d sk ∧ cs ≠ [] ∧
+         (cost,ad,sd) =
+           SStore_gas (SND (LAST cs)).accounts rb p.callee key value ∧
+         g + cost ≤ p.gasLimit))
+  {(pc,SStore)}
+  (evm_Stack (DROP 2 ss) *
+   evm_PC (pc + LENGTH (opcode SStore)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + cost) *
+   evm_Rollback (SStore_write p.callee key value $ accesses_add_slot sk rb) *
+   evm_Msdomain (msdomain_add_slot sk d) *
+   evm_AddRefund (ar + ad) *
+   evm_SubRefund (sr + sd) *
+   evm_Contexts cs *
+   evm_MsgParams p)
+Proof binop_tac
+QED
 
 Theorem SPEC_Jump:
   SPEC EVM_MODEL
