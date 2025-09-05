@@ -659,6 +659,14 @@ Definition SStore_write_def:
     sstore_write_accounts_updater address key value
 End
 
+Theorem rollback_with_tStorage_simp:
+  (rb with tStorage updated_by g =
+   rb with tStorage := f rb.tStorage) =
+  (g rb.tStorage = f rb.tStorage)
+Proof
+  rw[rollback_state_component_equality]
+QED
+
 val binop_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
@@ -690,8 +698,9 @@ val binop_tac =
             |> oneline |> SRULE[pair_CASE_def],
           SStore_gas_def, UNCURRY, LAST_CONS_cond,
           GSYM sstore_write_accounts_updater_def, SStore_write_def,
-          write_storage_def,update_accounts_def,
-          get_gas_left_def,get_original_def,
+          rollback_with_tStorage_simp,
+          write_storage_def,update_accounts_def,write_transient_storage_def,
+          get_tStorage_def,set_tStorage_def,get_gas_left_def,get_original_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
           get_call_data_def,memory_expansion_info_def,
           get_current_code_def,step_ext_code_copy_def,
@@ -1761,9 +1770,46 @@ Theorem SPEC_JumpDest:
 Proof binop_tac
 QED
 
+Theorem SPEC_TLoad:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Rollback rb *
+   cond (ss ≠ [] ∧ j = NONE ∧ ISL e ∧
+         key = HD ss ∧
+         g + warm_access_cost ≤ p.gasLimit))
+  {(pc,TLoad)}
+  (evm_Stack (lookup_storage key
+               (lookup_transient_storage p.callee rb.tStorage) :: TL ss) *
+   evm_PC (pc + LENGTH (opcode TLoad)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + warm_access_cost) *
+   evm_Rollback rb *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_TStore:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Rollback rb *
+   cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         key = HD ss ∧ value = EL 1 ss ∧
+         ~p.static ∧ g + warm_access_cost ≤ p.gasLimit))
+  {(pc,TStore)}
+  (evm_Stack (DROP 2 ss) *
+   evm_PC (pc + LENGTH (opcode TStore)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + warm_access_cost) *
+   evm_Rollback (rb with tStorage updated_by (λtStorage.
+                 update_transient_storage p.callee
+                   (update_storage key value
+                     (lookup_transient_storage p.callee tStorage))
+                 tStorage)) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | TLoad
-  | TStore
   | MCopy
   | Push num (word8 list)
   | Dup num
