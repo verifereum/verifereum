@@ -702,8 +702,9 @@ val binop_tac =
           step_msgParams_def,step_txParams_def,step_context_def,
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
           access_slot_split,step_sload_def,step_jump_def,set_jump_dest_def,
-          step_jumpi_def,ExtCodeSize_gas_def,step_ext_code_size_def,get_code_def,step_sstore_def,
-          assert_not_static_def,get_static_def,
+          step_jumpi_def,ExtCodeSize_gas_def,step_ext_code_size_def,
+          get_code_def,step_sstore_def,step_push_def,step_dup_def,
+          step_swap_def,assert_not_static_def,get_static_def,
           step_sstore_gas_consumption_def
             |> SRULE [GSYM sstore_refund_updates_def,
                       GSYM sstore_base_gas_def],
@@ -1865,11 +1866,55 @@ Theorem SPEC_MCopy:
 Proof binop_tac
 QED
 
+Theorem SPEC_Push:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas (Push n bs) ≤ p.gasLimit))
+  {(pc,Push n bs)}
+  (evm_Stack (word_of_bytes F 0w (REVERSE bs) :: ss) *
+   evm_PC (pc + LENGTH (opcode (Push n bs))) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + static_gas (Push n bs)) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_Dup:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (LENGTH ss < stack_limit ∧ n < LENGTH ss ∧
+         j = NONE ∧ ISL e ∧
+         g + static_gas (Dup n) ≤ p.gasLimit))
+  {(pc,Dup n)}
+  (evm_Stack (EL n ss :: ss) *
+   evm_PC (pc + LENGTH (opcode (Dup n))) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + static_gas (Dup n)) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_Swap:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond (SUC n < LENGTH ss ∧
+         j = NONE ∧ ISL e ∧
+         g + static_gas (Swap n) ≤ p.gasLimit))
+  {(pc,Swap n)}
+  (evm_Stack ([EL n (TL ss)] ++ TAKE n (TL ss) ++ [HD ss]
+              ++ DROP (SUC n) (TL ss)) *
+   evm_PC (pc + LENGTH (opcode (Swap n))) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + static_gas (Swap n)) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | MCopy
-  | Push num (word8 list)
-  | Dup num
-  | Swap num
   | Log num
   | Create
   | Call
