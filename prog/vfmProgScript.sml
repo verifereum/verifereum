@@ -239,6 +239,10 @@ Definition evm_SubRefund_def:
   evm_SubRefund x = SEP_EQ { SubRefund x }
 End
 
+Definition evm_Logs_def:
+  evm_Logs x = SEP_EQ { Logs x }
+End
+
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
@@ -303,6 +307,9 @@ Theorem STAR_evm2set:
   ((evm_SubRefund ad * p) (evm2set_on dom s) ⇔
    (ad = (FST (HD (SND s).contexts)).subRefund) /\
    HasSubRefund ∈ dom /\ p (evm2set_on (dom DELETE HasSubRefund) s)) /\
+  ((evm_Logs l * p) (evm2set_on dom s) ⇔
+   (l = (FST (HD (SND s).contexts)).logs) ∧
+   HasLogs ∈ dom ∧ p (evm2set_on (dom DELETE HasLogs) s)) ∧
   ((evm_Memory rd * p) (evm2set_on dom s) ⇔
    (rd = (FST (HD (SND s).contexts)).memory) /\
    HasMemory ∈ dom /\ p (evm2set_on (dom DELETE HasMemory) s)) /\
@@ -328,7 +335,7 @@ Proof
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
         evm_TxParams_def, evm_Contexts_def, evm_Memory_def,
-        evm_Rollback_def, evm_Msdomain_def,
+        evm_Rollback_def, evm_Msdomain_def, evm_Logs_def,
         evm_AddRefund_def, evm_SubRefund_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -703,6 +710,7 @@ val binop_tac =
           step_balance_def,access_address_split,HD_TAKE,Balance_gas_def,
           access_slot_split,step_sload_def,step_jump_def,set_jump_dest_def,
           step_jumpi_def,ExtCodeSize_gas_def,step_ext_code_size_def,
+          step_log_def,push_logs_def,
           get_code_def,step_sstore_def,step_push_def,step_dup_def,
           step_swap_def,assert_not_static_def,get_static_def,
           step_sstore_gas_consumption_def
@@ -1914,8 +1922,32 @@ Theorem SPEC_Swap:
 Proof binop_tac
 QED
 
+Theorem SPEC_Log:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Memory m * evm_Logs l *
+   cond (2 + n ≤ LENGTH ss ∧
+         offset = w2n (EL 0 ss) ∧
+         sz = w2n (EL 1 ss) ∧
+         j = NONE ∧ ISL e ∧
+         ~p.static ∧
+         ev = <|logger := p.callee; topics := TAKE n (DROP 2 ss);
+                data := TAKE sz (DROP offset em)|> ∧
+         dynamicGas = log_topic_cost * n + log_data_cost * sz +
+                      memory_cost m offset sz ∧
+         g + static_gas (Log n) + dynamicGas ≤ p.gasLimit ∧
+         em = expanded_memory m offset sz))
+  {(pc,Log n)}
+  (evm_Stack (DROP (2 + n) ss) *
+   evm_PC (pc + LENGTH (opcode (Log n))) *
+   evm_JumpDest j * evm_Exception e *
+   evm_GasUsed (g + static_gas (Log n) + dynamicGas) *
+   evm_Memory em * evm_Logs (l ++ [ev]) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
 (*
-  | Log num
   | Create
   | Call
   | CallCode
