@@ -1,9 +1,9 @@
 Theory vfmProg
 Ancestors
-  vfmExecution vfmExecutionProp vfmContext vfmDecreasesGas
-  prog words set_sep pred_set pair list
+  vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas
+  prog words set_sep pred_set pair list arithmetic
 Libs
-  wordsLib
+  wordsLib intLib
 
 (*-------------------------------------------------------------------------------*
    State set
@@ -584,6 +584,13 @@ Definition ReturnDataCopy_gas_def:
     memory_cost m offset size
 End
 
+Definition MCopy_gas_def:
+  MCopy_gas m xOffset xSize sz =
+  static_gas MCopy +
+  memory_copy_cost * word_size sz +
+  memory_cost m xOffset xSize
+End
+
 Definition Balance_gas_def:
   Balance_gas rb a =
   static_gas Balance + access_cost rb a
@@ -667,6 +674,12 @@ Proof
   rw[rollback_state_component_equality]
 QED
 
+Definition MCopy_write_def:
+  MCopy_write em offset sourceOffset sz =
+  TAKE offset em ++ TAKE sz (DROP sourceOffset em) ++
+  DROP (offset + sz) (em:word8 list)
+End
+
 val binop_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
@@ -698,7 +711,7 @@ val binop_tac =
             |> oneline |> SRULE[pair_CASE_def],
           SStore_gas_def, UNCURRY, LAST_CONS_cond,
           GSYM sstore_write_accounts_updater_def, SStore_write_def,
-          rollback_with_tStorage_simp,
+          rollback_with_tStorage_simp,MCopy_gas_def,
           write_storage_def,update_accounts_def,write_transient_storage_def,
           get_tStorage_def,set_tStorage_def,get_gas_left_def,get_original_def,
           get_accounts_def,get_tx_params_def,step_call_data_load_def,
@@ -726,6 +739,28 @@ val binop_tac =
              assert_def])
   \\ TRY(qmatch_assum_abbrev_tac`(ad,sd) = sstore_refund_updates x y z`
          \\ Cases_on`sstore_refund_updates x y z` \\ gvs[])
+  \\ TRY(qmatch_goalsub_rename_tac`MCopy_write`
+         \\ conj_tac
+         >- (
+           simp[MCopy_write_def]
+           \\ qmatch_goalsub_abbrev_tac`DROP _ ls`
+           \\ rewrite_tac[LENGTH_TAKE_EQ]
+           \\ IF_CASES_TAC >- rw[]
+           \\ Q.SUBGOAL_THEN `xOffset + xSize ≤ LENGTH ls` assume_tac
+           >- (
+             simp[Abbr`ls`, word_size_def, MAX_DEF]
+             \\ rw[]
+             >- COOPER_TAC
+             \\ pop_assum mp_tac \\ rw[]
+             >- COOPER_TAC
+             \\ gvs[max_expansion_range_def]
+             \\ Cases_on `HD t = 0w` \\ gvs[]
+             \\ qpat_x_assum`_ = (_,_)`mp_tac
+             \\ rw[])
+           \\ qpat_x_assum`_ = (_,_)`mp_tac
+           \\ rw[max_expansion_range_def]
+           \\ pop_assum mp_tac \\ rw[]
+           \\ gvs[]))
   \\ (conj_tac >-
    (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
@@ -1805,6 +1840,27 @@ Theorem SPEC_TStore:
                    (update_storage key value
                      (lookup_transient_storage p.callee tStorage))
                  tStorage)) *
+   evm_MsgParams p)
+Proof binop_tac
+QED
+
+Theorem SPEC_MCopy:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_Memory m *
+   cond (3 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
+         offset = w2n (EL 0 ss) ∧
+         sourceOffset = w2n (EL 1 ss) ∧
+         sz = w2n (EL 2 ss) ∧
+         max_expansion_range (offset,sz) (sourceOffset,sz) = (xOffset,xSize) ∧
+         em = expanded_memory m xOffset xSize ∧
+         g + MCopy_gas m xOffset xSize sz ≤ p.gasLimit))
+  {(pc,MCopy)}
+  (evm_Stack (DROP 3 ss) *
+   evm_PC (pc + LENGTH (opcode MCopy)) *
+   evm_JumpDest j * evm_Exception e *
+   evm_Memory (MCopy_write em offset sourceOffset sz) *
+   evm_GasUsed (g + MCopy_gas m xOffset xSize sz) *
    evm_MsgParams p)
 Proof binop_tac
 QED
