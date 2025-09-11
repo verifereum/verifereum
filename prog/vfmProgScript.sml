@@ -789,7 +789,7 @@ val binop_tac =
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
   \\ end_tac
 
-Theorem SPEC_Stop_last_context:
+Theorem SPEC_Stop_outermost:
   SPEC EVM_MODEL
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
@@ -813,6 +813,50 @@ Proof
           CaseEq"return_destination",CaseEq"prod",CaseEq"sum"]
   \\ end_tac
 QED
+
+(* TODO: need to be able to change the code pool (or include the code from all contexts in it)
+Theorem SPEC_Stop_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧
+         caller = FST (HD cs) ∧
+         calleeGasLeft = p.gasLimit - g ∧
+         calleeGasLeft ≤ caller.gasUsed))
+  {(pc,Stop)}
+  (evm_Stack ((case p.outputTo of Code addr => w2w addr
+                                        | _ => 1w)::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   evm_Contexts (TL cs) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback (case p.outputTo of Memory _ => rb | Code addr =>
+                 rb with accounts updated_by (λaccounts.
+                    update_account addr
+                      (lookup_account addr accounts with code := [])
+                      accounts)) *
+   evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   evm_Logs (caller.logs ++ l) *
+   evm_AddRefund (caller.addRefund + ar) *
+   evm_SubRefund (caller.subRefund + sr))
+Proof
+  start_tac
+  \\ `¬(SUC (LENGTH (TL (SND r).contexts)) ≤ 1)` by (
+       Cases_on`TL (SND r).contexts` \\ gvs[])
+  \\ gvs[step_inst_def,bind_def,ignore_bind_def,set_return_data_def,
+         get_current_context_def,return_def,set_current_context_def,
+         finish_def,handle_step_def,handle_def,handle_create_def,
+         get_return_data_def,get_output_to_def,assert_def,reraise_def,
+         return_destination_case_rator,consume_gas_def,update_accounts_def,
+         CaseEq"prod",CaseEq"sum",CaseEq"return_destination",
+         handle_exception_def,get_num_contexts_def,inc_pc_def,
+         pop_and_incorporate_context_def,push_stack_def,
+         write_memory_def,pop_context_def,unuse_gas_def,push_logs_def,
+         update_gas_refund_def,get_gas_left_def]
+*)
 
 Theorem SPEC_Add:
   SPEC EVM_MODEL
