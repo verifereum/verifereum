@@ -1735,6 +1735,7 @@ Theorem precompile_ripemd_160_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ripemd_160
 Proof
   rw[precompile_ripemd_160_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
 QED
 
 Theorem precompile_sha2_256_ignores_extra_domain[simp]:

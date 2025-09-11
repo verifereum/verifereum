@@ -1,7 +1,7 @@
 Theory vfmExecution
 Ancestors
   arithmetic
-  blake2f bn254 sha2 secp256k1
+  blake2f bn254 sha2 ripemd160[ignore_grammar] secp256k1
   vfmTypes vfmRoot vfmContext
 Libs
   monadsyntax
@@ -1246,9 +1246,12 @@ Definition precompile_ripemd_160_def:
     input <- get_call_data;
     wordCount <<- word_size $ LENGTH input;
     consume_gas $ 600 + 120 * wordCount;
-    hash <<- PAD_LEFT 0w 32 []; (* TODO: compute the actual hash *)
-    set_return_data hash;
-    finish
+    case ripemd160$RIPEMD_160_bytes input of
+      NONE => fail OutOfGas
+    | SOME hsh => do
+        set_return_data $ word_to_bytes hsh T;
+        finish
+      od
   od
 End
 

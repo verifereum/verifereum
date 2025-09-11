@@ -570,7 +570,8 @@ val () = “precompile_sha2_256 s” |>
 
 val () = “precompile_ripemd_160 s” |>
    SIMP_CONV std_ss [
-       precompile_ripemd_160_def, bind_def, ignore_bind_def, LET_RATOR
+       precompile_ripemd_160_def, bind_def, ignore_bind_def, LET_RATOR,
+       option_CASE_rator
      ] |> cv_auto_trans;
 
 Theorem pop_stack_INL_LENGTH:
