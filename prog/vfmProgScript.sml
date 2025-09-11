@@ -687,7 +687,11 @@ Definition MCopy_write_def:
   DROP (offset + sz) (em:word8 list)
 End
 
-val binop_tac =
+Theorem return_destination_case_rator[local] =
+  DatatypeSimps.mk_case_rator_thm_tyinfo $ Option.valOf $
+  TypeBase.read {Thy="vfmContext", Tyop="return_destination"}
+
+val start_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
@@ -701,6 +705,16 @@ val binop_tac =
     Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
   \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
           return_def, wf_context_def, SF CONJ_ss]
+
+val end_tac =
+  irule UPDATE_evm2set_without
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
+  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
+  \\ Cases_on ‘p’ \\ gvs[]
+
+val binop_tac =
+  start_tac
   \\ gvs [step_inst_def,step_binop_def,step_modop_def,pop_stack_def,bind_def,
           ignore_bind_def,get_current_context_def,return_def,assert_def,
           set_current_context_def,consume_gas_def,push_stack_def,
@@ -771,44 +785,33 @@ val binop_tac =
            \\ pop_assum mp_tac \\ rw[]
            \\ gvs[]))
   \\ (conj_tac >-
-   (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
-    \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
-  \\ irule UPDATE_evm2set_without
-  \\ simp[execution_state_component_equality]
-  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
-  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
-  \\ Cases_on ‘p’ \\ gvs[]
+       (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
+        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
+  \\ end_tac
 
-Theorem SPEC_Stop_tx:
+Theorem SPEC_Stop_last_context:
   SPEC EVM_MODEL
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
-     evm_ReturnData rd * evm_Exception e *
-     cond (NULL cs ∧ (∃m. p.outputTo = Memory m)))
+     evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+     cond (NULL cs))
     {(pc,Stop)}
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
-     evm_ReturnData [] * evm_Exception (INR NONE))
+     evm_ReturnData [] * evm_Exception (INR NONE) *
+     evm_Rollback (case p.outputTo of Memory _ => rb | Code addr =>
+                   rb with accounts updated_by (λaccounts.
+                      update_account addr
+                        (lookup_account addr accounts with code := [])
+                        accounts)))
 Proof
-  irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
-  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
-  \\ Cases_on ‘b’ \\ fs []
-  \\ drule step_preserves_wf_state
-  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
-  \\ Cases_on ‘step (SND r)’ \\ fs []
-  \\ strip_tac
-  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
-  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
-          return_def, SF CONJ_ss]
+  start_tac
   \\ gvs [step_inst_def,bind_def,ignore_bind_def,set_return_data_def,
           get_current_context_def,return_def,set_current_context_def,
           finish_def,handle_step_def,handle_def,handle_create_def,
           get_return_data_def,get_output_to_def,handle_exception_def,
-          reraise_def,get_num_contexts_def,NULL_EQ]
-  \\ irule UPDATE_evm2set_without
-  \\ simp[execution_state_component_equality]
-  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
-  \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
-  \\ Cases_on ‘p’ \\ gvs[]
+          reraise_def,get_num_contexts_def,NULL_EQ,assert_def,
+          return_destination_case_rator,consume_gas_def,update_accounts_def,
+          CaseEq"return_destination",CaseEq"prod",CaseEq"sum"]
+  \\ end_tac
 QED
 
 Theorem SPEC_Add:
