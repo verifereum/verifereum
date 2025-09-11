@@ -1,10 +1,9 @@
-open HolKernel boolLib bossLib Parse BasicProvers
-     listTheory pairTheory combinTheory arithmeticTheory
-     pred_setTheory finite_setTheory
-     vfmStateTheory vfmContextTheory
-     vfmExecutionTheory vfmExecutionPropTheory;
-
-val () = new_theory "vfmDomainSeparation";
+Theory vfmDomainSeparation
+Ancestors
+  arithmetic combin list pair pred_set finite_set
+  vfmState vfmContext vfmExecution vfmExecutionProp
+Libs
+  BasicProvers
 
 Definition subdomain_def:
   subdomain s1 s2 ⇔
@@ -215,6 +214,7 @@ Proof
     rw[]
     \\ first_x_assum(drule_then drule) \\ rw[]
     \\ first_x_assum(qspec_then`e`mp_tac)
+    \\ qmatch_asmsub_rename_tac`f s = (_,s')`
     \\ rw[]
     >- ( first_x_assum(qspec_then`s'`mp_tac) \\ rw[] )
     \\ gs[]
@@ -228,7 +228,8 @@ Proof
   \\ rw[]
   >- (
     first_x_assum drule \\ rw[] \\ rw[]
-    \\ first_assum(qspec_then`s'`mp_tac)
+    \\ qmatch_asmsub_rename_tac`f s = (_,s1)`
+    \\ first_assum(qspec_then`s1`mp_tac)
     \\ impl_tac >- rw[] \\ strip_tac
     \\ gvs[]
     \\ first_x_assum drule \\ rw[] \\ simp[]
@@ -3553,5 +3554,3 @@ Proof
   \\ simp[domain_has_callee_def]
   \\ metis_tac[PAIR]
 QED
-
-val () = export_theory();

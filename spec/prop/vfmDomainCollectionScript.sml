@@ -1,9 +1,9 @@
-open HolKernel boolLib bossLib Parse BasicProvers
-     pairTheory finite_setTheory pred_setTheory
-     vfmExecutionTheory
-     vfmContextTheory vfmDomainSeparationTheory;
-
-val () = new_theory "vfmDomainCollection";
+Theory vfmDomainCollection
+Ancestors
+  pair pred_set finite_set
+  vfmContext vfmExecution vfmDomainSeparation
+Libs
+  BasicProvers
 
 Definition computes_minimal_domain_def:
   computes_minimal_domain m =
@@ -1050,5 +1050,3 @@ Proof
   \\ TOP_CASE_TAC \\ rw[]
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
 QED
-
-val () = export_theory();

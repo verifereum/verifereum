@@ -1,8 +1,9 @@
-open HolKernel boolLib bossLib Parse BasicProvers
-     combinTheory pairTheory listTheory
-     vfmStateTheory vfmConstantsTheory vfmContextTheory vfmExecutionTheory;
-
-val () = new_theory "vfmExecutionProp";
+Theory vfmExecutionProp
+Ancestors
+  combin pair list
+  vfmConstants vfmState vfmContext vfmExecution
+Libs
+  BasicProvers
 
 (* TODO: move to another theory? *)
 
@@ -2178,5 +2179,3 @@ Proof
   \\ rw[limits_num_contexts_def, assert_def, bind_def, update_accounts_def,
         ignore_bind_def, return_def, reraise_def]
 QED
-
-val () = export_theory();

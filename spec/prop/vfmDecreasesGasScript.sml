@@ -1,9 +1,9 @@
-open HolKernel boolLib bossLib Parse BasicProvers
-     pairTheory sumTheory listTheory relationTheory arithmeticTheory
-     vfmConstantsTheory vfmContextTheory vfmStateTheory
-     vfmExecutionTheory vfmExecutionPropTheory;
-
-val () = new_theory "vfmDecreasesGas";
+Theory vfmDecreasesGas
+Ancestors
+  arithmetic list pair relation sum
+  vfmConstants vfmState vfmContext vfmExecution vfmExecutionProp
+Libs
+  BasicProvers
 
 Definition decreases_gas_def:
   decreases_gas strict (m: α execution) =
@@ -1975,5 +1975,3 @@ Proof
   >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
   >- ( first_x_assum(qspec_then`s`mp_tac) \\ simp[ok_state_def])
 QED
-
-val () = export_theory();
