@@ -247,9 +247,24 @@ Definition evm_Parsed_def:
   evm_Parsed pc i = SEP_EQ { Parsed pc (SOME i) T }
 End
 
+Definition evm_hide_Parsed_def:
+  evm_hide_Parsed pcs = (λs.
+    ∃fx fy. s = BIGUNION $ IMAGE (λpc. { Parsed pc (fx pc) (fy pc) }) pcs)
+End
+
 Definition evm_Parsed_any_def:
   evm_Parsed_any pc = SEP_EXISTS x y. SEP_EQ {Parsed pc x y}
 End
+
+Theorem evm_Parsed_any_hide:
+  evm_Parsed_any pc = evm_hide_Parsed {pc}
+Proof
+  rw[evm_Parsed_any_def, evm_hide_Parsed_def, Once EXTENSION,
+     SEP_EXISTS, SEP_EQ_def, PULL_EXISTS]
+  \\ rw[Once EQ_IMP_THM]
+  >- ( qexistsl_tac[`K y`,`K y'`] \\ rw[] )
+  >- ( qexistsl_tac[`fx pc`,`fy pc`] \\ rw[] )
+QED
 
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
