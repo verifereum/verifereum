@@ -180,7 +180,7 @@ Proof
 QED
 
 (* ----------------------------------------------------------------------------- *)
-(* Defining the V_MODEL                                                        *)
+(* Defining the EVM_MODEL                                                        *)
 (* ----------------------------------------------------------------------------- *)
 
 Definition evm_Stack_def:
@@ -243,6 +243,14 @@ Definition evm_Logs_def:
   evm_Logs x = SEP_EQ { Logs x }
 End
 
+Definition evm_Parsed_def:
+  evm_Parsed pc i = SEP_EQ { Parsed pc (SOME i) T }
+End
+
+Definition evm_Parsed_any_def:
+  evm_Parsed_any pc = SEP_EXISTS x y. SEP_EQ {Parsed pc x y}
+End
+
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
@@ -279,7 +287,7 @@ QED
 
 
 (* ----------------------------------------------------------------------------- *)
-(* Theorems for construction of |- SPEC V_MODEL ...                            *)
+(* Theorems for construction of |- SPEC EVM_MODEL ...                            *)
 (* ----------------------------------------------------------------------------- *)
 
 Theorem STAR_evm2set:
@@ -328,6 +336,11 @@ Theorem STAR_evm2set:
   ((evm_Contexts c * p) (evm2set_on dom s) ⇔
    (c = TL (SND s).contexts) /\
    HasContexts ∈ dom /\ p (evm2set_on (dom DELETE HasContexts) s)) /\
+  ((evm_Parsed pc i * p) (evm2set_on dom s) ⇔
+   (wf_state (SND s) ∧
+    FLOOKUP (FST (HD (SND s).contexts)).msgParams.parsed pc = SOME i ∧
+    pc < LENGTH (FST (HD (SND s).contexts)).msgParams.code ∧ HasParsed pc IN dom ∧
+    p (evm2set_on (dom DELETE HasParsed pc) s))) ∧
   ((cond b * p) (evm2set_on dom s) ⇔
    b /\ p (evm2set_on dom s))
 Proof
@@ -336,8 +349,10 @@ Proof
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
         evm_TxParams_def, evm_Contexts_def, evm_Memory_def,
         evm_Rollback_def, evm_Msdomain_def, evm_Logs_def,
-        evm_AddRefund_def, evm_SubRefund_def]
+        evm_AddRefund_def, evm_SubRefund_def, evm_Parsed_def]
   \\ rw[EQ_IMP_THM]
+  >>~- ([`pc < _ (* g *)`], gvs[evm2set_on_def, PUSH_IN_INTO_IF])
+  >>~- ([`wf_state _ (* g *)`], gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ ∈ _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >>~- ([`_ = _ (* g *)`] , gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   \\ qmatch_goalsub_abbrev_tac`p s1`
@@ -346,6 +361,38 @@ Proof
   \\ rw[Abbr`s1`, Abbr`s2`]
   \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
   \\ rw[EQ_IMP_THM]
+  \\ strip_tac \\ gvs[]
+QED
+
+Theorem STAR_evm_Parsed_any:
+  ((evm_Parsed_any pc * p) (evm2set_on dom s)) <=>
+  (HasParsed pc IN dom ∧ p (evm2set_on (dom DELETE HasParsed pc) s))
+Proof
+  simp[evm_Parsed_any_def, SEP_EXISTS_THM, STAR_def, PULL_EXISTS, SEP_EQ_def]
+  \\ rw[EQ_IMP_THM]
+  >- (
+    gvs[SPLIT_def]
+    \\ `Parsed pc x y IN evm2set_on dom s` by (gvs[EXTENSION] \\ metis_tac[])
+    \\ gvs[evm2set_on_def, PUSH_IN_INTO_IF])
+  >- (
+    gvs[SPLIT_def]
+    \\ qmatch_goalsub_abbrev_tac`p s1`
+    \\ qmatch_asmsub_abbrev_tac`p s2`
+    \\ `s1 = s2` suffices_by rw[]
+    \\ rw[Abbr`s1`, Abbr`s2`]
+    \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
+    \\ rw[EQ_IMP_THM]
+    \\ fsrw_tac[DNF_ss][EQ_IMP_THM]
+    >- metis_tac[]
+    \\ last_x_assum drule \\ rw[]
+    \\ strip_tac \\ gvs[]
+    \\ Cases_on`y` \\ gvs[])
+  \\ first_assum $ irule_at Any
+  \\ simp[SPLIT_def]
+  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF, EXTENSION]
+  \\ gvs[SF DNF_ss, EQ_IMP_THM]
+  \\ qmatch_goalsub_abbrev_tac`b ⇒ _`
+  \\ qexists_tac`b` \\ rw[Abbr`b`]
 QED
 
 val CODE_POOL_evm2set_LEMMA = prove(
@@ -814,21 +861,22 @@ Proof
   \\ end_tac
 QED
 
-(* TODO: need to be able to change the code pool (or include the code from all contexts in it)
 Theorem SPEC_Stop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_Parsed pc Stop *
    cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧
          caller = FST (HD cs) ∧
          calleeGasLeft = p.gasLimit - g ∧
          calleeGasLeft ≤ caller.gasUsed))
-  {(pc,Stop)}
+  {}
   (evm_Stack ((case p.outputTo of Code addr => w2w addr
                                         | _ => 1w)::caller.stack) *
    evm_Memory (caller.memory) *
    evm_PC (SUC caller.pc) *
+   evm_Parsed_any pc *
    evm_Contexts (TL cs) *
    evm_MsgParams (caller.msgParams) *
    evm_ReturnData [] *
@@ -843,7 +891,20 @@ Theorem SPEC_Stop_inner:
    evm_AddRefund (caller.addRefund + ar) *
    evm_SubRefund (caller.subRefund + sr))
 Proof
-  start_tac
+  irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_def,
+           EMPTY_evm2set,STAR_evm_Parsed_any]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ Cases_on ‘b’ \\ fs []
+  \\ drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, wf_context_def, SF CONJ_ss]
   \\ `¬(SUC (LENGTH (TL (SND r).contexts)) ≤ 1)` by (
        Cases_on`TL (SND r).contexts` \\ gvs[])
   \\ gvs[step_inst_def,bind_def,ignore_bind_def,set_return_data_def,
@@ -856,7 +917,12 @@ Proof
          pop_and_incorporate_context_def,push_stack_def,
          write_memory_def,pop_context_def,unuse_gas_def,push_logs_def,
          update_gas_refund_def,get_gas_left_def]
-*)
+  \\ (conj_tac >-
+       (qpat_x_assum ‘_ = {_}’ mp_tac
+        \\ simp[EXTENSION] \\ rw [EQ_IMP_THM]
+        \\ metis_tac[]))
+  \\ cheat (* TODO *)
+QED
 
 Theorem SPEC_Add:
   SPEC EVM_MODEL
