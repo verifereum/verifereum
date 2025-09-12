@@ -1,7 +1,7 @@
 Theory vfmProg
 Ancestors
   vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas
-  prog words set_sep pred_set pair list arithmetic
+  prog words set_sep pred_set pair list arithmetic finite_map
 Libs
   wordsLib intLib
 
@@ -252,20 +252,6 @@ Definition evm_hide_Parsed_def:
     ∃fx fy. s = BIGUNION $ IMAGE (λpc. { Parsed pc (fx pc) (fy pc) }) pcs)
 End
 
-Definition evm_Parsed_any_def:
-  evm_Parsed_any pc = SEP_EXISTS x y. SEP_EQ {Parsed pc x y}
-End
-
-Theorem evm_Parsed_any_hide:
-  evm_Parsed_any pc = evm_hide_Parsed {pc}
-Proof
-  rw[evm_Parsed_any_def, evm_hide_Parsed_def, Once EXTENSION,
-     SEP_EXISTS, SEP_EQ_def, PULL_EXISTS]
-  \\ rw[Once EQ_IMP_THM]
-  >- ( qexistsl_tac[`K y`,`K y'`] \\ rw[] )
-  >- ( qexistsl_tac[`fx pc`,`fy pc`] \\ rw[] )
-QED
-
 Definition EVM_NEXT_REL_def:
   EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
 End
@@ -379,35 +365,40 @@ Proof
   \\ strip_tac \\ gvs[]
 QED
 
-Theorem STAR_evm_Parsed_any:
-  ((evm_Parsed_any pc * p) (evm2set_on dom s)) <=>
-  (HasParsed pc IN dom ∧ p (evm2set_on (dom DELETE HasParsed pc) s))
+Theorem STAR_evm_hide_Parsed:
+  ((evm_hide_Parsed pcs * p) (evm2set_on dom s)) <=>
+  (IMAGE HasParsed pcs SUBSET dom ∧
+   p (evm2set_on (dom DIFF (IMAGE HasParsed pcs)) s))
 Proof
-  simp[evm_Parsed_any_def, SEP_EXISTS_THM, STAR_def, PULL_EXISTS, SEP_EQ_def]
+  simp[evm_hide_Parsed_def, STAR_def, PULL_EXISTS]
   \\ rw[EQ_IMP_THM]
   >- (
-    gvs[SPLIT_def]
-    \\ `Parsed pc x y IN evm2set_on dom s` by (gvs[EXTENSION] \\ metis_tac[])
+    gvs[SPLIT_def, SUBSET_DEF, PULL_EXISTS]
+    \\ qx_gen_tac `pc` \\ strip_tac
+    \\ Q.SUBGOAL_THEN `Parsed pc (fx pc) (fy pc) IN evm2set_on dom s` assume_tac
+    >- (gvs[Once EXTENSION, PULL_EXISTS] \\ metis_tac[])
     \\ gvs[evm2set_on_def, PUSH_IN_INTO_IF])
   >- (
-    gvs[SPLIT_def]
+    gvs[SPLIT_def, PULL_EXISTS]
     \\ qmatch_goalsub_abbrev_tac`p s1`
     \\ qmatch_asmsub_abbrev_tac`p s2`
     \\ `s1 = s2` suffices_by rw[]
     \\ rw[Abbr`s1`, Abbr`s2`]
-    \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
-    \\ rw[EQ_IMP_THM]
-    \\ fsrw_tac[DNF_ss][EQ_IMP_THM]
+    \\ gvs[evm2set_on_def, Once EXTENSION, PUSH_IN_INTO_IF, PULL_EXISTS]
+    \\ simp[Once EXTENSION, PUSH_IN_INTO_IF]
+    \\ rw[Once EQ_IMP_THM]
+    \\ fsrw_tac[DNF_ss][Once EQ_IMP_THM]
     >- metis_tac[]
     \\ last_x_assum drule \\ rw[]
-    \\ strip_tac \\ gvs[]
-    \\ Cases_on`y` \\ gvs[])
+    \\ strip_tac \\ gvs[])
   \\ first_assum $ irule_at Any
   \\ simp[SPLIT_def]
-  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF, EXTENSION]
-  \\ gvs[SF DNF_ss, EQ_IMP_THM]
-  \\ qmatch_goalsub_abbrev_tac`b ⇒ _`
-  \\ qexists_tac`b` \\ rw[Abbr`b`]
+  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF, Once EXTENSION, PULL_EXISTS]
+  \\ gvs[SF DNF_ss, Once EQ_IMP_THM, SUBSET_DEF]
+  \\ qmatch_goalsub_abbrev_tac`_ _ = fx _`
+  \\ qmatch_goalsub_abbrev_tac`_ < len`
+  \\ qexistsl_tac[`λpc. pc < len ∧ wf_state (SND s)`,`fx`]
+  \\ simp[]
 QED
 
 Theorem STAR_SEP_HIDE_evm_JumpDest:
@@ -910,9 +901,13 @@ Theorem SPEC_Stop_inner:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   ~evm_JumpDest * evm_Parsed pc Stop *
+   ~evm_JumpDest * evm_Parsed pc Stop * evm_hide_Parsed (all_pcs DELETE pc) *
    cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧
          caller = FST (HD cs) ∧
+         all_pcs = (count (LENGTH caller.msgParams.code) ∪
+                    count (LENGTH p.code) ∪
+                    FDOM caller.msgParams.parsed ∪
+                    FDOM p.parsed) ∧
          calleeGasLeft = p.gasLimit - g ∧
          calleeGasLeft ≤ caller.gasUsed))
   {}
@@ -920,7 +915,7 @@ Theorem SPEC_Stop_inner:
                                         | _ => 1w)::caller.stack) *
    evm_Memory (caller.memory) *
    evm_PC (SUC caller.pc) *
-   evm_Parsed_any pc *
+   evm_hide_Parsed all_pcs *
    evm_Contexts (TL cs) *
    evm_MsgParams (caller.msgParams) *
    evm_ReturnData [] *
@@ -938,7 +933,7 @@ Theorem SPEC_Stop_inner:
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_def,
-           EMPTY_evm2set,STAR_evm_Parsed_any,STAR_SEP_HIDE_evm_JumpDest]
+           EMPTY_evm2set,STAR_evm_hide_Parsed,STAR_SEP_HIDE_evm_JumpDest]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ Cases_on ‘b’ \\ fs []
   \\ drule step_preserves_wf_state
@@ -962,11 +957,17 @@ Proof
          pop_and_incorporate_context_def,push_stack_def,
          write_memory_def,pop_context_def,unuse_gas_def,push_logs_def,
          update_gas_refund_def,get_gas_left_def]
+  \\ (rpt (conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS] \\ metis_tac[])))
   \\ (conj_tac >-
-       (qpat_x_assum ‘_ = {_}’ mp_tac
+       (qpat_x_assum ‘_ = {}’ mp_tac
         \\ simp[EXTENSION] \\ rw [EQ_IMP_THM]
         \\ metis_tac[]))
-  \\ cheat (* end_tac: need to SEP_HIDE all the caller's pc values *)
+  \\ irule UPDATE_evm2set_without
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
+  \\ ntac 2 strip_tac
+  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP]
+  \\ metis_tac[]
 QED
 
 Theorem SPEC_Add:
