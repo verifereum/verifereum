@@ -395,6 +395,33 @@ Proof
   \\ qexists_tac`b` \\ rw[Abbr`b`]
 QED
 
+Theorem STAR_SEP_HIDE_evm_JumpDest:
+  (~evm_JumpDest * p) (evm2set_on dom s) <=>
+  HasJumpDest IN dom ∧ p (evm2set_on (dom DELETE HasJumpDest) s)
+Proof
+  rw[evm_JumpDest_def, SEP_HIDE_def, SEP_EXISTS_THM, STAR_def, PULL_EXISTS, SEP_EQ_def]
+  \\ rw[EQ_IMP_THM]
+  >- (
+    gvs[SPLIT_def]
+    \\ `JumpDest x IN evm2set_on dom s` by (gvs[EXTENSION] \\ metis_tac[])
+    \\ gvs[evm2set_on_def, PUSH_IN_INTO_IF])
+  >- (
+    gvs[SPLIT_def]
+    \\ qmatch_goalsub_abbrev_tac`p s1`
+    \\ qmatch_asmsub_abbrev_tac`p s2`
+    \\ `s1 = s2` suffices_by rw[]
+    \\ rw[Abbr`s1`, Abbr`s2`]
+    \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
+    \\ rw[EQ_IMP_THM]
+    \\ fsrw_tac[DNF_ss][EQ_IMP_THM]
+    \\ last_x_assum drule \\ rw[]
+    \\ gvs[])
+  \\ first_assum $ irule_at Any
+  \\ simp[SPLIT_def]
+  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF, EXTENSION]
+  \\ gvs[SF DNF_ss, EQ_IMP_THM]
+QED
+
 val CODE_POOL_evm2set_LEMMA = prove(
   ``!x y z. (x = z INSERT y) ⇔ (z INSERT y) SUBSET x /\ (x DIFF (z INSERT y) = {})``,
   SIMP_TAC std_ss [EXTENSION,SUBSET_DEF,IN_INSERT,NOT_IN_EMPTY,IN_DIFF] \\ METIS_TAC []);
@@ -424,10 +451,9 @@ Theorem UPDATE_evm2set_without[local]:
   wf_state s ∧
   ctxt = FST (HD s.contexts) ∧
   rb = SND (HD s.contexts) ∧
-  ctxt'.msgParams.parsed = ctxt.msgParams.parsed ∧
-  ctxt'.msgParams.code = ctxt.msgParams.code ∧
   s' = SND r' ∧ s = SND r ∧
   wf_state s' ∧
+  ctxt' = FST (HD s'.contexts) ∧
   (HasException ∉ dom ⇒ FST r' = FST r) ∧
   (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
   (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
@@ -439,7 +465,10 @@ Theorem UPDATE_evm2set_without[local]:
   (HasJumpDest ∉ dom ⇒ ctxt'.jumpDest = ctxt.jumpDest) ∧
   (HasMemory ∉ dom ⇒ ctxt'.memory = ctxt.memory) ∧
   (HasPC ∉ dom ⇒ ctxt'.pc = ctxt.pc) ∧
-  (s'.contexts = (ctxt', rb)::TL s.contexts) ∧
+  (∀pc. HasParsed pc ∉ dom ⇒
+        ((pc < LENGTH ctxt'.msgParams.code <=> pc < LENGTH ctxt.msgParams.code) ∧
+         (FLOOKUP ctxt'.msgParams.parsed pc = FLOOKUP ctxt.msgParams.parsed pc))) ∧
+  (HasContexts ∉ dom ⇒ TL s'.contexts = TL s.contexts) ∧
   (HasTxParams ∉ dom ⇒ s'.txParams = s.txParams) ∧
   (HasRollback ∉ dom ⇒ s'.rollback = s.rollback) ∧
   (HasMsdomain ∉ dom ⇒ s'.msdomain = s.msdomain)
@@ -866,7 +895,7 @@ Theorem SPEC_Stop_inner:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   evm_Parsed pc Stop *
+   ~evm_JumpDest * evm_Parsed pc Stop *
    cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧
          caller = FST (HD cs) ∧
          calleeGasLeft = p.gasLimit - g ∧
@@ -887,13 +916,14 @@ Theorem SPEC_Stop_inner:
                       (lookup_account addr accounts with code := [])
                       accounts)) *
    evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   ~evm_JumpDest *
    evm_Logs (caller.logs ++ l) *
    evm_AddRefund (caller.addRefund + ar) *
    evm_SubRefund (caller.subRefund + sr))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_def,
-           EMPTY_evm2set,STAR_evm_Parsed_any]
+           EMPTY_evm2set,STAR_evm_Parsed_any,STAR_SEP_HIDE_evm_JumpDest]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ Cases_on ‘b’ \\ fs []
   \\ drule step_preserves_wf_state
@@ -921,7 +951,7 @@ Proof
        (qpat_x_assum ‘_ = {_}’ mp_tac
         \\ simp[EXTENSION] \\ rw [EQ_IMP_THM]
         \\ metis_tac[]))
-  \\ cheat (* TODO *)
+  \\ cheat (* end_tac: need to SEP_HIDE all the caller's pc values *)
 QED
 
 Theorem SPEC_Add:
