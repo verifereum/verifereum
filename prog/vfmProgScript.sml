@@ -2500,28 +2500,33 @@ Theorem SPEC_Call_fail_depth:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e * evm_Contexts cs *
-   cond (7 ≤ LENGTH ss ∧
-         gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧ value = w2n (EL 2 ss) ∧
-         argsOffset = w2n (EL 3 ss) ∧ argsSize = w2n (EL 4 ss) ∧
-         retOffset = w2n (EL 5 ss) ∧ retSize = w2n (EL 6 ss) ∧
+   cond (6 + vOff ≤ LENGTH ss ∧ vOff = (if call_has_value call_inst then 1 else 0) ∧
+         gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧
+         value = (if 0 < vOff then w2n (EL 2 ss) else 0) ∧
+         argsOffset = w2n (EL (vOff + 2) ss) ∧
+         argsSize = w2n (EL (vOff + 3) ss) ∧
+         retOffset = w2n (EL (vOff + 4) ss) ∧
+         retSize = w2n (EL (vOff + 5) ss) ∧
          max_expansion_range (argsOffset, argsSize) (retOffset, retSize) = (offset, sz) ∧
          em = expanded_memory m offset sz ∧
          access_check d addr ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if 0 < value ∧ account_empty toAccount then new_account_cost else 0) ∧
+         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
+                  then new_account_cost else 0) ∧
          mCost = memory_cost m offset sz ∧
          call_gas value gas (p.gasLimit - g) mCost
            (access_cost rb addr + vCost + cCost) = (dynamicGas, stipend) ∧
-         g + static_gas Call + dynamicGas + mCost ≤ p.gasLimit ∧
+         g + static_gas call_inst + dynamicGas + mCost ≤ p.gasLimit ∧
+         is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
          sender = lookup_account p.callee rb.accounts ∧
          value ≤ sender.balance ∧
          SUC (LENGTH cs) > 1024))
-  {(pc,Call)}
-  (evm_Stack (b2w F :: DROP 7 ss) *
+  {(pc,call_inst)}
+  (evm_Stack (b2w F :: DROP (6 + vOff) ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + static_gas Call + dynamicGas + mCost - stipend) *
+   evm_GasUsed (g + static_gas call_inst + dynamicGas + mCost - stipend) *
    evm_MsgParams p *
    evm_Memory em *
    evm_Rollback (accesses_add addr rb) *
@@ -2549,16 +2554,21 @@ Proof
           return_def, wf_context_def, SF CONJ_ss]
   \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
   \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
+  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
+  \\ `step_inst call_inst = step_call call_inst` by (
+       qpat_x_assum`is_call __`mp_tac \\
+       Cases_on`call_inst` \\ simp[step_inst_def, is_call_def]
+       \\ fs[])
   \\ `stipend ≤ g + dynamicGas + mCost` by (
        qhdtm_x_assum`call_gas`mp_tac
        \\ qpat_x_assum`_ ≤ _.gasLimit`mp_tac
        \\ Cases_on`value = 0` >- gvs[call_gas_def]
        \\ simp[call_value_cost_def, call_stipend_def, call_gas_def, Abbr`vCost`])
-  \\ gvs[step_inst_def, step_call_def, bind_def, return_def, ignore_bind_def,
+  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, call_has_value_def, get_gas_left_def, HD_TAKE]
+         access_address_split, get_gas_left_def, HD_TAKE]
   \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
   \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
   >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
@@ -2567,7 +2577,7 @@ Proof
   \\ gvs[Abbr`s1`,bind_def,ignore_bind_def,set_return_data_def,get_current_context_def,
          return_def,set_current_context_def,get_num_contexts_def,abort_unuse_def,
          unuse_gas_def,assert_def, push_stack_def, inc_pc_def, inc_pc_or_jump_def,
-         is_call_def, Abbr`c`]
+         Abbr`c`]
   \\ conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]
   \\ conj_tac >-
        (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
@@ -2581,28 +2591,37 @@ Theorem SPEC_Call:
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   evm_Parsed pc Call * evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (7 ≤ LENGTH ss ∧
-         gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧ value = w2n (EL 2 ss) ∧
-         argsOffset = w2n (EL 3 ss) ∧ argsSize = w2n (EL 4 ss) ∧
-         retOffset = w2n (EL 5 ss) ∧ retSize = w2n (EL 6 ss) ∧
+   evm_Parsed pc call_inst * evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (6 + vOff ≤ LENGTH ss ∧ vOff = (if call_has_value call_inst then 1 else 0) ∧
+         gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧
+         value = (if 0 < vOff then w2n (EL 2 ss) else 0) ∧
+         argsOffset = w2n (EL (vOff + 2) ss) ∧
+         argsSize = w2n (EL (vOff + 3) ss) ∧
+         retOffset = w2n (EL (vOff + 4) ss) ∧
+         retSize = w2n (EL (vOff + 5) ss) ∧
          max_expansion_range (argsOffset, argsSize) (retOffset, retSize) = (offset, sz) ∧
          em = expanded_memory m offset sz ∧
          access_check d addr ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if 0 < value ∧ account_empty toAccount then new_account_cost else 0) ∧
+         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
+                  then new_account_cost else 0) ∧
          mCost = memory_cost m offset sz ∧
          call_gas value gas (p.gasLimit - g) mCost
            (access_cost rb addr + vCost + cCost) = (dynamicGas, stipend) ∧
-         gasCost = static_gas Call + dynamicGas + mCost ∧
+         gasCost = static_gas call_inst + dynamicGas + mCost ∧
          g + gasCost ≤ p.gasLimit ∧
+         is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
          sender = lookup_account p.callee rb.accounts ∧
          value ≤ sender.balance ∧
          LENGTH cs < 1024 ∧
          data = TAKE (argsSize) (DROP argsOffset em) ∧
-         tx = <|from := p.callee; to := SOME addr; value := value;
+         callee = (if call_inst = CallCode ∨ call_inst = DelegateCall
+                   then p.callee else addr) ∧
+         tx = <|from := if call_inst = DelegateCall then p.caller else p.callee;
+                to := SOME callee;
+                value := if call_inst = DelegateCall then p.value else value;
                 gasLimit := stipend; data := data; nonce := 0; gasPrice := 0;
                 accessList := []; blobVersionedHashes := [];
                 maxFeePerGas := NONE; maxFeePerBlobGas := NONE|> ∧
@@ -2610,12 +2629,13 @@ Theorem SPEC_Call:
          all_pcs = count (LENGTH p.code) ∪ FDOM p.parsed ∪
                    count (LENGTH toAccount.code) ∪
                    FDOM (parse_code 0 FEMPTY toAccount.code) ∧
-         caller = <|stack := DROP 7 ss; memory := em; pc := pc; jumpDest := j;
+         caller = <|stack := DROP (6 + vOff) ss; memory := em; pc := pc; jumpDest := j;
                     returnData := []; gasUsed := g + gasCost; addRefund := ar;
                     subRefund := sr; logs := l; msgParams := p|>))
   {}
   (evm_Stack [] * evm_PC 0 * evm_GasUsed 0 *
-   evm_MsgParams (initial_msg_params addr toAccount.code p.static
+   evm_MsgParams (initial_msg_params callee toAccount.code
+                  (call_inst = StaticCall ∨ p.static)
                   (Memory <|offset := retOffset; size := retSize|>) tx) *
    evm_Memory [] *
    evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
@@ -2624,7 +2644,9 @@ Theorem SPEC_Call:
    evm_Contexts ((caller,cb) :: cs) *
    evm_CachedRB (accesses_add addr rb) *
    evm_Rollback (accesses_add addr rb with accounts updated_by
-                 (transfer_value p.callee addr value)) *
+                 (if call_inst ≠ CallCode ∧ 0 < value
+                  then transfer_value p.callee addr value
+                  else I)) *
    evm_Msdomain (msdomain_add addr d) *
    evm_Exception (INL ()) *
    evm_ReturnData [])
@@ -2648,12 +2670,18 @@ Proof
           return_def, wf_context_def, SF CONJ_ss]
   \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
   \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
-  \\ `g + dynamicGas + mCost ≤ p.gasLimit` by gvs[Abbr`gasCost`]
-  \\ gvs[step_inst_def, step_call_def, bind_def, return_def, ignore_bind_def,
+  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
+  \\ `step_inst call_inst = step_call call_inst` by (
+       qpat_x_assum`is_call __`mp_tac \\
+       Cases_on`call_inst` \\ simp[step_inst_def, is_call_def]
+       \\ fs[])
+  \\ `g + dynamicGas + mCost + static_gas call_inst ≤ p.gasLimit` by gvs[Abbr`gasCost`]
+  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, call_has_value_def, HD_TAKE, get_gas_left_def]
+         access_address_split, HD_TAKE, get_gas_left_def]
+  \\ qpat_x_assum`step_inst _ = _`kall_tac
   \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
   \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
   >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
@@ -2662,18 +2690,20 @@ Proof
   \\ gvs[Abbr`s1`,bind_def,ignore_bind_def,set_return_data_def,get_current_context_def,
          return_def,set_current_context_def,get_num_contexts_def,abort_unuse_def,
          unuse_gas_def,assert_def, push_stack_def, inc_pc_def, inc_pc_or_jump_def,
-         is_call_def, Abbr`c`,proceed_call_def,get_rollback_def,read_memory_def]
-  \\ pop_assum kall_tac \\ qunabbrev_tac`b`
+         Abbr`c`,proceed_call_def,get_rollback_def,read_memory_def]
+  \\ pop_assum kall_tac \\ qunabbrev_tac`b` \\ qunabbrev_tac`a`
   \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
-  \\ Q.SUBGOAL_THEN `(COND a b c) s1 = b s1` assume_tac
-  >- (rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,update_accounts_def,
+  \\ qmatch_goalsub_abbrev_tac`_ with accounts updated_by f`
+  \\ Q.SUBGOAL_THEN `(COND a b c) s1 = update_accounts f s1` assume_tac
+  >- (rw[Abbr`a`,Abbr`b`,Abbr`c`,Abbr`f`,return_def,update_accounts_def,
          bind_def, ignore_bind_def, get_static_def, assert_def,
          get_current_context_def,Abbr`s1`,context_component_equality,
          execution_state_component_equality]
-      \\ simp[transfer_value_def, rollback_state_component_equality])
-  \\ gvs[Abbr`b`, update_accounts_def, Abbr`s1`,Abbr`c`,return_def,
+      \\ gvs[transfer_value_def, rollback_state_component_equality])
+  \\ gvs[update_accounts_def, Abbr`s1`,Abbr`c`,return_def,
          get_caller_def,bind_def,ignore_bind_def,get_current_context_def,
          get_value_def,get_static_def,push_context_def]
+  \\ pop_assum kall_tac
   \\ conj_tac >- gvs[Abbr`em`, expanded_memory_def, memory_expand_by_def]
   \\ gvs[SUBSET_DEF, PULL_EXISTS]
   \\ conj_tac >- metis_tac[]
@@ -2698,11 +2728,8 @@ QED
 
 (*
   | Call precompile
-  | CallCode
   | Return
-  | DelegateCall
   | Create2
-  | StaticCall
   | Revert
   | Invalid
   | SelfDestruct
