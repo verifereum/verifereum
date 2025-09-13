@@ -817,9 +817,14 @@ Definition MCopy_write_def:
   DROP (offset + sz) (em:word8 list)
 End
 
-Theorem return_destination_case_rator[local] =
-  DatatypeSimps.mk_case_rator_thm_tyinfo $ Option.valOf $
+val return_destination_tyinfo = Option.valOf $
   TypeBase.read {Thy="vfmContext", Tyop="return_destination"}
+
+Theorem return_destination_case_rator[local] =
+  DatatypeSimps.mk_case_rator_thm_tyinfo return_destination_tyinfo
+
+Theorem return_destination_case_elim[local] =
+  DatatypeSimps.mk_case_elim_thm_tyinfo return_destination_tyinfo
 
 val start_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
@@ -2724,6 +2729,114 @@ Proof
   \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
   \\ simp[initial_msg_params_def]
   \\ metis_tac[]
+QED
+
+Theorem SPEC_Return_outermost:
+  SPEC EVM_MODEL
+  (evm_Stack ss *
+   evm_PC pc *
+   evm_Contexts cs *
+   evm_Memory m *
+   evm_ReturnData rd *
+   evm_MsgParams p *
+   evm_GasUsed g *
+   evm_Exception e *
+   evm_Rollback rb *
+   cond (2 ≤ LENGTH ss ∧ NULL cs ∧
+         offset = w2n (EL 0 ss) ∧
+         sz = w2n (EL 1 ss) ∧
+         (inst = Return ∨ inst = Revert) ∧
+         em = expanded_memory m offset sz ∧
+         data = TAKE sz (DROP offset em) ∧
+         gasCost = static_gas inst + memory_cost m offset sz + codeCost ∧
+         returnCode = (inst = Return ∧ is_code_dest p.outputTo) ∧
+         (if returnCode then
+            (case data of [] => T | h::_ => h ≠ 239w) ∧
+            (codeCost = code_deposit_cost * LENGTH data) ∧
+            LENGTH data ≤ max_code_size
+          else codeCost = 0) ∧
+         g + gasCost ≤ p.gasLimit))
+  {(pc,inst)}
+  (evm_Stack (DROP 2 ss) *
+   evm_ReturnData data *
+   evm_PC pc *
+   evm_Contexts cs *
+   evm_Rollback (if returnCode then rb with accounts updated_by
+                   (λaccounts.
+                      update_account (case p.outputTo of Code addr => addr)
+                        (lookup_account (case p.outputTo of Code addr => addr)
+                           accounts with code := data) accounts)
+                 else rb) *
+   evm_Memory em *
+   evm_MsgParams p *
+   evm_GasUsed (g + gasCost) *
+   evm_Exception (INR (if inst = Revert then SOME Reverted else NONE)))
+Proof
+  irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ reverse $ Cases_on ‘b’ >- simp[]
+  \\ qmatch_asmsub_abbrev_tac`sz = _ ∧ is_ret ∧ _`
+  \\ last_x_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
+                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
+  \\ qpat_x_assum`is_ret`mp_tac
+  \\ gvs[]
+  \\ drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, wf_context_def, SF CONJ_ss]
+  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
+  \\ strip_tac
+  \\ `step_inst inst = step_return (inst = Return)`
+     by gvs[Abbr`is_ret`, step_inst_def]
+  \\ qpat_x_assum`is_ret`mp_tac
+  \\ gvs [step_return_def,bind_def,ignore_bind_def,pop_stack_def,
+          get_current_context_def,return_def,assert_def,
+          set_current_context_def,memory_expansion_info_def,
+          consume_gas_def]
+  \\ qpat_x_assum`step_inst _ = _`kall_tac
+  \\ qmatch_asmsub_abbrev_tac`COND b1 (INL _)`
+  \\ `b1` by (
+       qpat_x_assum`g + _ ≤ _`mp_tac
+       \\ simp[Abbr`b1`, memory_cost_def, EL_TAKE, HD_TAKE, Abbr`gasCost`]
+       \\ rw[] )
+  \\ gvs[expand_memory_def,bind_def,ignore_bind_def,get_current_context_def,
+         return_def,set_current_context_def,read_memory_def,set_return_data_def]
+  \\ strip_tac
+  \\ reverse $ gvs
+       [Abbr`is_ret`,finish_def,revert_def,handle_step_def,handle_create_def,
+        handle_def,bind_def,ignore_bind_def,reraise_def,get_return_data_def,
+        get_current_context_def,return_def,get_output_to_def,EL_TAKE,HD_TAKE,
+        return_destination_case_elim,handle_exception_def,get_num_contexts_def,
+        NULL_EQ]
+  >- (
+    gvs[Abbr`em`, memory_cost_def, expanded_memory_def, memory_expand_by_def]
+    \\ conj_tac >-
+         (qpat_assum ‘{_} = _’ $ rewrite_tac o single o GSYM
+          \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+    \\ end_tac)
+  \\ Cases_on`p.outputTo` \\ gvs[reraise_def,return_def]
+  >- (
+    gvs[Abbr`em`, memory_cost_def, expanded_memory_def, memory_expand_by_def,
+        Abbr`gasCost`,is_code_dest_def]
+    \\ conj_tac >-
+         (qpat_assum ‘{_} = _’ $ rewrite_tac o single o GSYM
+          \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+    \\ end_tac)
+  \\ gvs[ignore_bind_def,bind_def,assert_def,return_def,Abbr`em`,
+         expanded_memory_def,memory_expand_by_def,is_code_dest_def,
+         consume_gas_def,get_current_context_def,memory_cost_def,
+         set_current_context_def,update_accounts_def,reraise_def]
+  \\ conj_tac >-
+       (qpat_assum ‘{_} = _’ $ rewrite_tac o single o GSYM
+        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+  \\ end_tac
 QED
 
 (*
