@@ -162,6 +162,10 @@ Proof
   \\ metis_tac[]
 QED
 
+Theorem FORALL_evm_el[local] =
+  DatatypeSimps.mk_type_forall_thm_tyinfo $ Option.valOf $
+  TypeBase.read {Thy="vfmProg",Tyop="evm_el"}
+
 Theorem evm2set_without_11[local]:
   !y y' s s'. (evm2set_without y' s' = evm2set_without y s) ==> (y = y')
 Proof
@@ -169,10 +173,11 @@ Proof
   >- METIS_TAC[SET_EQ_SUBSET]
   \\ rw[evm2set_without_def, evm2set_def, SUBSET_DEF]
   \\ qpat_x_assum ‘!x. _’ mp_tac
+  \\ simp[FORALL_evm_el]
   \\ simp[evm2set_on_def, PUSH_IN_INTO_IF]
-  \\ srw_tac[DNF_ss][] (* TODO: faster? *)
-  \\ CCONTR_TAC
+  \\ strip_tac
   \\ Cases_on`x` \\ gvs[]
+  \\ CCONTR_TAC \\ gvs[]
 QED
 
 Theorem EMPTY_evm2set[local]:
@@ -454,11 +459,12 @@ Proof
   \\ simp[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
   \\ EQ_TAC \\ strip_tac
   >- (
-    first_assum(qspec_then`Parsed p (SOME c) T`mp_tac)
+    gvs[FORALL_evm_el]
+    \\ first_assum(qspecl_then[`p`,`SOME c`,`T`]mp_tac)
     \\ simp_tac (srw_ss()) []
     \\ strip_tac
     \\ Cases \\ simp[] \\ CCONTR_TAC \\ gvs[]
-    \\ fsrw_tac[DNF_ss][EQ_IMP_THM] (* TODO: faster? *)
+    \\ fsrw_tac[DNF_ss][EQ_IMP_THM]
     \\ metis_tac[] )
   \\ Cases \\ simp[]
   \\ rw[EQ_IMP_THM]
@@ -2181,9 +2187,13 @@ Theorem SPEC_Create_fail:
 Proof
   qmatch_goalsub_abbrev_tac`~_ ∧ djs ∧ _`
   \\ irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
-  \\ Cases_on ‘b’ \\ fs []
+  \\ reverse $ Cases_on ‘b’ >- simp[]
+  \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
+                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
+  \\ gs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
   \\ Cases_on ‘step (SND r)’ \\ fs []
@@ -2194,39 +2204,29 @@ Proof
   \\ qpat_x_assum`djs`mp_tac
   \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
           return_def, wf_context_def, SF CONJ_ss]
-  \\ qmatch_asmsub_abbrev_tac`sender.nonce`
-  \\ qmatch_asmsub_abbrev_tac`gasLeft DIV 64`
-  \\ qmatch_asmsub_abbrev_tac`_.gasLimit - (g + (codeCost + memCost))`
-  \\ qmatch_asmsub_abbrev_tac`memory_cost m offset sz`
   \\ gvs[step_inst_def, step_create_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
          access_address_split]
-  \\ qmatch_asmsub_abbrev_tac`COND (LENGTH code ≤ 2 * _)`
-  \\ qmatch_assum_abbrev_tac`LENGTH code1 ≤ 2 * _`
-  \\ `code = code1` by (
-    simp[Abbr`code`, Abbr`code1`]
-    \\ simp[expanded_memory_def, memory_expand_by_def])
-  \\ gvs[Abbr`code`]
+  \\ qmatch_asmsub_abbrev_tac`COND (LENGTH code1 ≤ 2 * _)`
+  \\ `code1 = code` by simp[Abbr`code1`, Abbr`code`, Abbr`em`,
+                            expanded_memory_def, memory_expand_by_def]
+  \\ gvs[Abbr`code1`]
   \\ gvs[bind_def, ignore_bind_def, return_def,
          get_current_context_def, get_gas_left_def]
-  \\ qmatch_asmsub_abbrev_tac`COND (gasCost ≤ gasLimit)`
-  \\ `gasCost ≤ gasLimit` by gvs[Abbr`gasCost`,Abbr`gasLimit`,Abbr`gasLeft`]
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
          set_current_context_def, get_num_contexts_def, access_storage_split, HD_TAKE]
   \\ strip_tac \\ fs[]
   \\ pop_assum kall_tac
-  \\ `gasLeft ≤ gasCost + gasLeft DIV 64` by gvs[Abbr`gasCost`]
   \\ gvs[abort_unuse_def, unuse_gas_def, bind_def, ignore_bind_def,
          return_def, fail_def, assert_def, get_current_context_def,
          set_current_context_def, push_stack_def, inc_pc_def,
          inc_pc_or_jump_def, is_call_def]
-  \\ conj_tac >- simp[Abbr`gasCost`]
-  \\ conj_tac >- simp[expanded_memory_def, memory_expand_by_def]
+  \\ conj_tac >- simp[expanded_memory_def, memory_expand_by_def, Abbr`em`]
   \\ conj_tac >-
-       (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
+       (qpat_x_assum ‘{_ } = _’ $ rewrite_tac o single
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
   \\ end_tac
 QED
@@ -2264,9 +2264,13 @@ Theorem SPEC_Create_fail_created:
    evm_Msdomain (msdomain_add_storage addr $ msdomain_add addr d))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
-  \\ Cases_on ‘b’ \\ fs []
+  \\ reverse $ Cases_on ‘b’ >- simp[]
+  \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
+                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
+  \\ gs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
   \\ Cases_on ‘step (SND r)’ \\ fs []
@@ -2276,25 +2280,17 @@ Proof
     Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
   \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
           return_def, wf_context_def, SF CONJ_ss]
-  \\ qmatch_asmsub_abbrev_tac`sender.nonce`
-  \\ qmatch_asmsub_abbrev_tac`gasLeft DIV 64`
-  \\ qmatch_asmsub_abbrev_tac`_.gasLimit - (g + (codeCost + memCost))`
-  \\ qmatch_asmsub_abbrev_tac`memory_cost m offset sz`
   \\ gvs[step_inst_def, step_create_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
          access_address_split]
-  \\ qmatch_asmsub_abbrev_tac`COND (LENGTH code ≤ 2 * _)`
-  \\ qmatch_assum_abbrev_tac`LENGTH code1 ≤ 2 * _`
-  \\ `code = code1` by (
-    simp[Abbr`code`, Abbr`code1`]
-    \\ simp[expanded_memory_def, memory_expand_by_def])
-  \\ gvs[Abbr`code`]
+  \\ qmatch_asmsub_abbrev_tac`COND (LENGTH code1 ≤ 2 * _)`
+  \\ `code1 = code` by simp[Abbr`code1`, Abbr`code`, Abbr`em`,
+                            expanded_memory_def, memory_expand_by_def]
+  \\ gvs[Abbr`code1`]
   \\ gvs[bind_def, ignore_bind_def, return_def,
          get_current_context_def, get_gas_left_def]
-  \\ qmatch_asmsub_abbrev_tac`COND (gasCost ≤ gasLimit)`
-  \\ `gasCost ≤ gasLimit` by gvs[Abbr`gasCost`,Abbr`gasLimit`,Abbr`gasLeft`]
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
          set_current_context_def, get_num_contexts_def, access_storage_split, HD_TAKE,
@@ -2302,10 +2298,9 @@ Proof
          fail_def, assert_def, get_current_context_def,
          set_current_context_def, push_stack_def, inc_pc_def,
          inc_pc_or_jump_def, is_call_def]
-  \\ conj_tac >- simp[Abbr`gasCost`,Abbr`gasLeft`]
-  \\ conj_tac >- simp[expanded_memory_def, memory_expand_by_def]
+  \\ conj_tac >- simp[expanded_memory_def, memory_expand_by_def, Abbr`em`]
   \\ conj_tac >-
-       (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
+       (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
   \\ end_tac
 QED
