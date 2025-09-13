@@ -23,6 +23,7 @@ Datatype:
          | Parsed     num (opname option) bool
          | Exception  (unit + exception option)
          | Contexts   ((context # rollback_state) list)  (* other contexts *)
+         | CachedRB   rollback_state
          | TxParams   transaction_parameters
          | Rollback   rollback_state
          | Msdomain   domain_mode
@@ -48,6 +49,7 @@ Datatype:
           | HasParsed num
           | HasException
           | HasContexts
+          | HasCachedRB
           | HasTxParams
           | HasRollback
           | HasMsdomain
@@ -67,6 +69,7 @@ Definition evm2set_on_def:
       (if HasLogs ∈ dom       then { Logs (current_context.logs) } else {}) ∪
       (if HasMsgParams ∈ dom  then { MsgParams current_context.msgParams } else {}) ∪
       (if HasContexts ∈ dom   then { Contexts (TL s.contexts) } else {}) ∪
+      (if HasCachedRB ∈ dom   then { CachedRB (SND (HD s.contexts)) } else {}) ∪
       (if HasTxParams ∈ dom   then { TxParams s.txParams } else {}) ∪
       (if HasRollback ∈ dom   then { Rollback s.rollback } else {}) ∪
       (if HasMsdomain ∈ dom   then { Msdomain s.msdomain } else {}) ∪
@@ -128,6 +131,7 @@ Proof
        (if ∃x. MsgParams x ∈ u then {HasMsgParams} else {}) ∪
        (if ∃x. Logs x ∈ u then {HasLogs} else {}) ∪
        (if ∃x. Contexts x ∈ u then {HasContexts} else {}) ∪
+       (if ∃x. CachedRB x ∈ u then {HasCachedRB} else {}) ∪
        (if ∃x. TxParams x ∈ u then {HasTxParams} else {}) ∪
        (if ∃x. Rollback x ∈ u then {HasRollback} else {}) ∪
        (if ∃x. Msdomain x ∈ u then {HasMsdomain} else {}) ∪
@@ -213,6 +217,10 @@ End
 
 Definition evm_Contexts_def:
   evm_Contexts x = SEP_EQ { Contexts x }
+End
+
+Definition evm_CachedRB_def:
+  evm_CachedRB x = SEP_EQ { CachedRB x }
 End
 
 Definition evm_ReturnData_def:
@@ -337,6 +345,9 @@ Theorem STAR_evm2set:
   ((evm_Contexts c * p) (evm2set_on dom s) ⇔
    (c = TL (SND s).contexts) /\
    HasContexts ∈ dom /\ p (evm2set_on (dom DELETE HasContexts) s)) /\
+  ((evm_CachedRB rb * p) (evm2set_on dom s) ⇔
+   (rb = SND (HD (SND s).contexts)) ∧
+   HasCachedRB ∈ dom ∧ p (evm2set_on (dom DELETE HasCachedRB) s)) ∧
   ((evm_Parsed pc i * p) (evm2set_on dom s) ⇔
    (wf_state (SND s) ∧
     FLOOKUP (FST (HD (SND s).contexts)).msgParams.parsed pc = SOME i ∧
@@ -348,7 +359,7 @@ Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
-        evm_TxParams_def, evm_Contexts_def, evm_Memory_def,
+        evm_TxParams_def, evm_Contexts_def, evm_CachedRB_def, evm_Memory_def,
         evm_Rollback_def, evm_Msdomain_def, evm_Logs_def,
         evm_AddRefund_def, evm_SubRefund_def, evm_Parsed_def]
   \\ rw[EQ_IMP_THM]
@@ -456,7 +467,6 @@ QED
 Theorem UPDATE_evm2set_without[local]:
   wf_state s ∧
   ctxt = FST (HD s.contexts) ∧
-  rb = SND (HD s.contexts) ∧
   s' = SND r' ∧ s = SND r ∧
   wf_state s' ∧
   ctxt' = FST (HD s'.contexts) ∧
@@ -475,6 +485,7 @@ Theorem UPDATE_evm2set_without[local]:
         ((pc < LENGTH ctxt'.msgParams.code <=> pc < LENGTH ctxt.msgParams.code) ∧
          (FLOOKUP ctxt'.msgParams.parsed pc = FLOOKUP ctxt.msgParams.parsed pc))) ∧
   (HasContexts ∉ dom ⇒ TL s'.contexts = TL s.contexts) ∧
+  (HasCachedRB ∉ dom ⇒ SND (HD s'.contexts) = SND (HD s.contexts)) ∧
   (HasTxParams ∉ dom ⇒ s'.txParams = s.txParams) ∧
   (HasRollback ∉ dom ⇒ s'.rollback = s.rollback) ∧
   (HasMsdomain ∉ dom ⇒ s'.msdomain = s.msdomain)
@@ -931,6 +942,7 @@ Theorem SPEC_Stop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    ~evm_JumpDest * evm_Parsed pc Stop * evm_hide_Parsed (all_pcs DELETE pc) *
    cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧
@@ -948,6 +960,7 @@ Theorem SPEC_Stop_inner:
    evm_PC (SUC caller.pc) *
    evm_hide_Parsed all_pcs *
    evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
    evm_MsgParams (caller.msgParams) *
    evm_ReturnData [] *
    evm_Exception (INL ()) *
