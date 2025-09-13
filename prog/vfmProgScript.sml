@@ -2430,18 +2430,20 @@ Theorem SPEC_Call_fail_balance:
          em = expanded_memory m offset sz ∧
          access_check d addr ∧
          toAccount = lookup_account addr rb.accounts ∧
-         cCost = (if account_empty toAccount then new_account_cost else 0) ∧
+         cCost = (if call_inst = Call ∧ account_empty toAccount
+                  then new_account_cost else 0) ∧
          mCost = memory_cost m offset sz ∧
          call_gas value gas (p.gasLimit - g) mCost
            (access_cost rb addr + call_value_cost + cCost) = (dynamicGas, stipend) ∧
-         g + static_gas Call + dynamicGas + mCost ≤ p.gasLimit ∧
+         g + static_gas call_inst + dynamicGas + mCost ≤ p.gasLimit ∧
          ¬p.static ∧
+         call_has_value call_inst ∧
          sender = lookup_account p.callee rb.accounts ∧
          sender.balance < value))
-  {(pc,Call)}
+  {(pc,call_inst)}
   (evm_Stack (b2w F :: DROP 7 ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + static_gas Call + dynamicGas + mCost - stipend) *
+   evm_GasUsed (g + static_gas call_inst + dynamicGas + mCost - stipend) *
    evm_MsgParams p *
    evm_Memory em *
    evm_Rollback (accesses_add addr rb) *
@@ -2468,17 +2470,24 @@ Proof
           return_def, wf_context_def, SF CONJ_ss]
   \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
   \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
+  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
+  \\ `step_inst call_inst = step_call call_inst` by (
+       qpat_x_assum`call_has_value _`mp_tac \\
+       Cases_on`call_inst` \\ simp[step_inst_def, call_has_value_def] )
   \\ `stipend ≤ g + dynamicGas + mCost` by (
        qhdtm_x_assum`call_gas`mp_tac
        \\ qpat_x_assum`_ ≤ _.gasLimit`mp_tac
        \\ simp[call_value_cost_def, call_stipend_def, call_gas_def])
-  \\ gvs[step_inst_def, step_call_def, bind_def, return_def, ignore_bind_def,
+  \\ `is_call call_inst` by (
+       qpat_x_assum`call_has_value _`mp_tac \\
+       Cases_on`call_inst` \\ simp[call_has_value_def, is_call_def])
+  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, call_has_value_def, get_gas_left_def, HD_TAKE,
+         access_address_split, get_gas_left_def, HD_TAKE,
          assert_not_static_def, get_static_def, abort_call_value_def, push_stack_def,
-         set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def, is_call_def]
+         set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def]
   \\ conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]
   \\ conj_tac >-
        (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
