@@ -628,6 +628,37 @@ Proof
           rollback_state_component_equality]
 QED
 
+Definition access_storage_check_def:
+  access_storage_check d a =
+  case d of Enforce x => fIN a x.fullStorages
+  | Collect _ => T
+End
+
+Definition msdomain_add_storage_def:
+  msdomain_add_storage a d =
+  case d of Enforce _ => d
+  | Collect x => Collect (x with fullStorages updated_by fINSERT a)
+End
+
+Theorem access_storage_split:
+  access_storage_check s.msdomain a ⇒
+  ensure_storage_in_domain a s =
+  (INL (),
+   s with msdomain updated_by msdomain_add_storage a)
+Proof
+  rw[ensure_storage_in_domain_def, access_storage_check_def,
+     domain_check_def, set_domain_def, ignore_bind_def, bind_def, return_def]
+  \\ CASE_TAC \\ gvs[execution_state_component_equality, msdomain_add_storage_def]
+QED
+
+Theorem access_storage_check_msdomain_add[simp]:
+  access_storage_check (msdomain_add a d) =
+  access_storage_check d
+Proof
+  rw[FUN_EQ_THM, access_storage_check_def, msdomain_add_def]
+  \\ CASE_TAC \\ rw[]
+QED
+
 Definition memory_cost_def:
   memory_cost (m: word8 list) offset size =
   memory_expansion_cost (LENGTH m)
@@ -2104,6 +2135,87 @@ Theorem SPEC_Log:
    evm_Memory em * evm_Logs (l ++ [ev]) *
    evm_MsgParams p)
 Proof binop_tac
+QED
+
+Theorem SPEC_Create_fail:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
+   evm_Contexts cs * evm_Msdomain d *
+   cond (3 ≤ LENGTH ss ∧
+         value = w2n (EL 0 ss) ∧ offset = w2n (EL 1 ss) ∧ sz = w2n (EL 2 ss) ∧
+         em = expanded_memory m offset sz ∧
+         gas = static_gas Create + init_code_word_cost * (word_size sz) +
+               memory_cost m offset sz ∧
+         code = TAKE sz (DROP offset em) ∧
+         sender = lookup_account p.callee rb.accounts ∧
+         addr = address_for_create p.callee sender.nonce ∧
+         access_check d addr ∧
+         LENGTH code ≤ 2 * max_code_size ∧
+         gasLeft = p.gasLimit - g - gas ∧
+         cappedGas = gasLeft - gasLeft DIV 64 ∧
+         ¬p.static ∧
+         (sender.balance < value ∨ SUC sender.nonce ≥ 2 ** 64 ∨
+          SUC (LENGTH cs) > 1024) ∧
+         access_storage_check d addr ∧
+         g + gas + cappedGas ≤ p.gasLimit))
+  {(pc,Create)}
+  (evm_Stack (b2w F :: DROP 3 ss) * evm_PC (SUC pc) *
+   evm_GasUsed (g + gas) * evm_MsgParams p *
+   evm_Exception (INL ()) * evm_ReturnData [] *
+   evm_Rollback (accesses_add addr rb) * evm_Memory em * evm_Contexts cs *
+   evm_Msdomain (msdomain_add_storage addr $ msdomain_add addr d))
+Proof
+  qmatch_goalsub_abbrev_tac`~_ ∧ djs ∧ _`
+  \\ irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ Cases_on ‘b’ \\ fs []
+  \\ drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ qpat_x_assum`djs`mp_tac
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, wf_context_def, SF CONJ_ss]
+  \\ qmatch_asmsub_abbrev_tac`sender.nonce`
+  \\ qmatch_asmsub_abbrev_tac`gasLeft DIV 64`
+  \\ qmatch_asmsub_abbrev_tac`_.gasLimit - (g + (codeCost + memCost))`
+  \\ qmatch_asmsub_abbrev_tac`memory_cost m offset sz`
+  \\ gvs[step_inst_def, step_create_def, bind_def, return_def, ignore_bind_def,
+         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
+         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
+         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
+         access_address_split]
+  \\ qmatch_asmsub_abbrev_tac`COND (LENGTH code ≤ 2 * _)`
+  \\ qmatch_assum_abbrev_tac`LENGTH code1 ≤ 2 * _`
+  \\ `code = code1` by (
+    simp[Abbr`code`, Abbr`code1`]
+    \\ simp[expanded_memory_def, memory_expand_by_def])
+  \\ gvs[Abbr`code`]
+  \\ gvs[bind_def, ignore_bind_def, return_def,
+         get_current_context_def, get_gas_left_def]
+  \\ qmatch_asmsub_abbrev_tac`COND (gasCost ≤ gasLimit)`
+  \\ `gasCost ≤ gasLimit` by gvs[Abbr`gasCost`,Abbr`gasLimit`,Abbr`gasLeft`]
+  \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
+         assert_def, return_def, get_current_context_def, set_return_data_def,
+         set_current_context_def, get_num_contexts_def, access_storage_split, HD_TAKE]
+  \\ strip_tac \\ fs[]
+  \\ pop_assum kall_tac
+  \\ `gasLeft ≤ gasCost + gasLeft DIV 64` by gvs[Abbr`gasCost`]
+  \\ gvs[abort_unuse_def, unuse_gas_def, bind_def, ignore_bind_def,
+         return_def, fail_def, assert_def, get_current_context_def,
+         set_current_context_def, push_stack_def, inc_pc_def,
+         inc_pc_or_jump_def, is_call_def]
+  \\ conj_tac >- simp[Abbr`gasCost`]
+  \\ conj_tac >- simp[expanded_memory_def, memory_expand_by_def]
+  \\ conj_tac >-
+       (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
+        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+  \\ end_tac
 QED
 
 (*
