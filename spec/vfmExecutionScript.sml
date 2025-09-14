@@ -1249,7 +1249,7 @@ Definition precompile_ripemd_160_def:
     case ripemd160$RIPEMD_160_bytes input of
       NONE => fail OutOfGas
     | SOME hsh => do
-        set_return_data $ word_to_bytes hsh T;
+        set_return_data $ PAD_LEFT 0w 32 $ word_to_bytes hsh T;
         finish
       od
   od
