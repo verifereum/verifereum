@@ -2839,11 +2839,182 @@ Proof
   \\ end_tac
 QED
 
+Theorem SPEC_Return_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   ~evm_JumpDest * evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ 2 ≤ LENGTH ss ∧
+         offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
+         LENGTH caller.stack < stack_limit ∧
+         (inst = Return ∨ inst = Revert) ∧
+         returnCode = (inst = Return ∧ is_code_dest p.outputTo) ∧
+         caller = FST (HD cs) ∧
+         em = expanded_memory m offset sz ∧
+         data = TAKE sz (DROP offset em) ∧
+         gasCost = static_gas inst + memory_cost m offset sz + codeCost ∧
+         all_pcs = (count (LENGTH caller.msgParams.code) ∪
+                    count (LENGTH p.code) ∪
+                    FDOM caller.msgParams.parsed ∪
+                    FDOM p.parsed) ∧
+         g + gasCost ≤ p.gasLimit ∧
+         calleeGasLeft = p.gasLimit - g - gasCost ∧
+         calleeGasLeft ≤ caller.gasUsed ∧
+         (if returnCode then
+          (case data of [] => T | h::_ => h ≠ 239w) ∧
+          (codeCost = code_deposit_cost * LENGTH data) ∧
+          (LENGTH data ≤ max_code_size) else codeCost = 0)))
+  {}
+  (evm_Stack ((case p.outputTo of
+                 Code addr => (if inst = Return then w2w addr else b2w F)
+               | _ => b2w (inst = Return))::caller.stack) *
+   evm_Memory (case p.outputTo of Code _ => caller.memory | Memory r =>
+               TAKE r.offset caller.memory ++ (TAKE r.size data) ++
+               DROP (r.offset + LENGTH (TAKE r.size data)) caller.memory) *
+   evm_PC (SUC caller.pc) *
+   evm_hide_Parsed all_pcs *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData (if returnCode then [] else data) *
+   evm_Exception (INL ()) *
+   evm_Rollback (if returnCode then case p.outputTo of Code addr =>
+                 rb with accounts updated_by (λaccounts.
+                    update_account addr
+                      (lookup_account addr accounts with code := data)
+                      accounts) else if inst = Revert then cb else rb) *
+   evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   ~evm_JumpDest *
+   evm_Logs (caller.logs ++ if inst = Revert then [] else l) *
+   evm_AddRefund (caller.addRefund + if inst = Revert then 0 else ar) *
+   evm_SubRefund (caller.subRefund + if inst = Revert then 0 else sr))
+Proof
+  irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_def,
+                 EMPTY_evm2set,STAR_evm_hide_Parsed,STAR_SEP_HIDE_evm_JumpDest]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ reverse $ Cases_on ‘b’ >- simp[]
+  \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
+  \\ last_x_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
+                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
+  \\ qpat_x_assum`is_ret`mp_tac
+  \\ gvs[]
+  \\ drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, wf_context_def, SF CONJ_ss]
+  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
+  \\ strip_tac
+  \\ `step_inst inst = step_return (inst = Return)`
+     by gvs[Abbr`is_ret`, step_inst_def]
+  \\ qpat_x_assum`is_ret`mp_tac
+  \\ gvs [step_return_def,bind_def,ignore_bind_def,pop_stack_def,
+          get_current_context_def,return_def,assert_def,
+          set_current_context_def,memory_expansion_info_def,
+          consume_gas_def]
+  \\ qpat_x_assum`step_inst _ = _`kall_tac
+  \\ qmatch_asmsub_abbrev_tac`COND b1 (INL _)`
+  \\ `b1` by (
+       qpat_x_assum`g + _ ≤ _`mp_tac
+       \\ simp[Abbr`b1`, memory_cost_def, EL_TAKE, HD_TAKE, Abbr`gasCost`]
+       \\ rw[] )
+  \\ gvs[expand_memory_def,bind_def,ignore_bind_def,get_current_context_def,
+         return_def,set_current_context_def,read_memory_def,set_return_data_def]
+  \\ strip_tac
+  \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
+  \\ `memory_expansion_cost (LENGTH m)
+      (if 0 < sz then 32 * word_size (offset + sz) else 0) =
+      memory_cost m offset sz` by gvs[memory_cost_def,memory_expand_by_def]
+  \\ `p.gasLimit ≤ g + gasCost + caller.gasUsed`
+     by gvs[Abbr`gasCost`,Abbr`calleeGasLeft`]
+  \\ gs[EL_TAKE,HD_TAKE]
+  \\ qmatch_asmsub_abbrev_tac`m ++ ex`
+  \\ `m ++ ex = expanded_memory m offset sz` by
+     gvs[expanded_memory_def, memory_expand_by_def]
+  \\ gs[Abbr`ex`]
+  \\ pop_assum kall_tac
+  \\ Cases_on`inst = Revert`
+  >- (
+    gvs[revert_def, handle_step_def, handle_create_def, handle_def,
+        return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
+        get_return_data_def, get_current_context_def, return_def, get_output_to_def,
+        handle_exception_def, get_num_contexts_def, pop_and_incorporate_context_def,
+        get_gas_left_def, pop_context_def, unuse_gas_def, set_rollback_def,
+        assert_def,set_current_context_def,inc_pc_def,return_destination_case_rator,
+        CaseEq"return_destination",CaseEq"prod",CaseEq"sum",set_return_data_def,
+        push_stack_def,write_memory_def,EMPTY_evm2set,SUBSET_DEF,PULL_EXISTS,
+        Abbr`calleeGasLeft`]
+    \\ (conj_tac >- metis_tac[])
+    \\ (conj_tac >-
+         (qpat_x_assum ‘_ = {}’ mp_tac
+          \\ fs [EXTENSION, Abbr`all_pcs`]
+          \\ srw_tac[DNF_ss][TO_FLOOKUP]
+          \\ eq_tac \\ rw []
+          \\ first_x_assum(qspec_then`x`mp_tac)
+          \\ simp[]
+          \\ rw[]))
+    \\ irule UPDATE_evm2set_without
+    \\ simp[]
+    \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+    \\ metis_tac[])
+  \\ gvs[finish_def,handle_step_def,handle_create_def,handle_def,
+         get_return_data_def,bind_def,ignore_bind_def,get_output_to_def,
+         get_current_context_def,return_def]
+  \\ Cases_on`p.outputTo`
+  >- (
+    gvs[reraise_def,handle_exception_def,bind_def,ignore_bind_def,get_num_contexts_def,
+        pop_and_incorporate_context_def,get_return_data_def,get_output_to_def,
+        inc_pc_def,set_return_data_def,push_stack_def,write_memory_def,return_def,
+        get_current_context_def,set_current_context_def,get_gas_left_def,
+        pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
+        assert_def,is_code_dest_def,SUBSET_DEF,PULL_EXISTS,EMPTY_evm2set,
+        Abbr`calleeGasLeft`]
+    \\ (conj_tac >- metis_tac[])
+    \\ (conj_tac >-
+         (qpat_x_assum ‘_ = {}’ mp_tac
+          \\ fs [EXTENSION, Abbr`all_pcs`]
+          \\ srw_tac[DNF_ss][TO_FLOOKUP]
+          \\ eq_tac \\ rw []
+          \\ first_x_assum(qspec_then`x`mp_tac)
+          \\ simp[]
+          \\ rw[]))
+    \\ irule UPDATE_evm2set_without
+    \\ simp[]
+    \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+    \\ metis_tac[]) \\
+  gvs[reraise_def,handle_exception_def,bind_def,ignore_bind_def,get_num_contexts_def,
+      pop_and_incorporate_context_def,get_return_data_def,get_output_to_def,
+      inc_pc_def,set_return_data_def,push_stack_def,write_memory_def,return_def,
+      get_current_context_def,set_current_context_def,get_gas_left_def,
+      pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
+      assert_def,is_code_dest_def,SUBSET_DEF,PULL_EXISTS,EMPTY_evm2set,
+      consume_gas_def,update_accounts_def]
+  \\ (conj_tac >- metis_tac[])
+  \\ (conj_tac >-
+       (qpat_x_assum ‘_ = {}’ mp_tac
+        \\ fs [EXTENSION, Abbr`all_pcs`]
+        \\ srw_tac[DNF_ss][TO_FLOOKUP]
+        \\ eq_tac \\ rw []
+        \\ first_x_assum(qspec_then`x`mp_tac)
+        \\ simp[]
+        \\ rw[]))
+  \\ irule UPDATE_evm2set_without
+  \\ simp[]
+  \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+  \\ metis_tac[]
+QED
+
 (*
   | Call precompile
-  | Return
   | Create2
-  | Revert
   | Invalid
   | SelfDestruct
 *)
