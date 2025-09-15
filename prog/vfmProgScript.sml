@@ -2283,14 +2283,20 @@ Theorem SPEC_Create_fail_created:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
    evm_Contexts cs * evm_Msdomain d *
-   cond (3 ≤ LENGTH ss ∧
+   cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧
          value = w2n (EL 0 ss) ∧ offset = w2n (EL 1 ss) ∧ sz = w2n (EL 2 ss) ∧
+         salt = EL 3 ss ∧
          em = expanded_memory m offset sz ∧
-         gas = static_gas Create + init_code_word_cost * (word_size sz) +
+         (inst = Create ∨ inst = Create2) ∧
+         gas = static_gas inst + init_code_word_cost * (word_size sz) +
+               (if inst = Create2 then
+                keccak256_per_word_cost * (word_size sz) else 0) +
                memory_cost m offset sz ∧
          code = TAKE sz (DROP offset em) ∧
          sender = lookup_account p.callee rb.accounts ∧
-         addr = address_for_create p.callee sender.nonce ∧
+         addr = (if inst = Create2
+                 then address_for_create2 p.callee salt code
+                 else address_for_create p.callee sender.nonce) ∧
          access_check d addr ∧
          LENGTH code ≤ 2 * max_code_size ∧
          gasLeft = p.gasLimit - g - gas ∧
@@ -2301,8 +2307,9 @@ Theorem SPEC_Create_fail_created:
          account_already_created (lookup_account addr rb.accounts) ∧
          access_storage_check d addr ∧
          g + gas + cappedGas ≤ p.gasLimit))
-  {(pc,Create)}
-  (evm_Stack (b2w F :: DROP 3 ss) * evm_PC (SUC pc) *
+  {(pc,inst)}
+  (evm_Stack (b2w F :: DROP (if inst = Create2 then 4 else 3) ss) *
+   evm_PC (SUC pc) *
    evm_GasUsed (g + gas + cappedGas) * evm_MsgParams p *
    evm_Exception (INL ()) * evm_ReturnData [] *
    evm_Rollback (accesses_add addr rb
@@ -2310,7 +2317,8 @@ Theorem SPEC_Create_fail_created:
    evm_Memory em * evm_Contexts cs *
    evm_Msdomain (msdomain_add_storage addr $ msdomain_add addr d))
 Proof
-  irule IMP_EVM_SPEC \\ rpt strip_tac
+  qmatch_goalsub_abbrev_tac`em = _ ∧ is_create ∧ _`
+  \\ irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
@@ -2325,27 +2333,35 @@ Proof
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
   \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
     Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ qpat_x_assum`is_create`mp_tac
   \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
           return_def, wf_context_def, SF CONJ_ss]
-  \\ gvs[step_inst_def, step_create_def, bind_def, return_def, ignore_bind_def,
-         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
-         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
-         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split]
-  \\ qmatch_asmsub_abbrev_tac`COND (LENGTH code1 ≤ 2 * _)`
-  \\ `code1 = code` by simp[Abbr`code1`, Abbr`code`, Abbr`em`,
-                            expanded_memory_def, memory_expand_by_def]
-  \\ gvs[Abbr`code1`]
-  \\ gvs[bind_def, ignore_bind_def, return_def,
-         get_current_context_def, get_gas_left_def]
+  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
+  \\ strip_tac
+  \\ `step_inst inst = step_create (inst = Create2)` by (
+       gvs[Abbr`is_create`, step_inst_def] )
+  \\ `(if inst = Create2 then Create2 else Create) = inst`
+     by gs[Abbr`is_create`]
+  \\ `is_call inst` by gs[Abbr`is_create`, is_call_def]
+  \\ qpat_x_assum`is_create`mp_tac
+  \\ qmatch_asmsub_abbrev_tac`largs ≤ LENGTH ss`
+  \\ `1 < largs ∧ 2 < largs ∧ (inst = Create2 ⇒ 3 < largs)` by rw[Abbr`largs`]
+  \\ gvs[step_create_def, bind_def, return_def, ignore_bind_def,
+         pop_stack_def, get_current_context_def, assert_def,
+         set_current_context_def, consume_gas_def, EL_TAKE,
+         read_memory_def, get_callee_def, get_accounts_def,
+         access_address_split, memory_expansion_info_split,
+         expand_memory_split,get_gas_left_def]
+  \\ qpat_x_assum`step_inst _ = _`kall_tac
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
-         set_current_context_def, get_num_contexts_def, access_storage_split, HD_TAKE,
-         abort_create_exists_def, update_accounts_def,
+         set_current_context_def, get_num_contexts_def, access_storage_split,
+         abort_create_exists_def, update_accounts_def, HD_TAKE,
          fail_def, assert_def, get_current_context_def,
          set_current_context_def, push_stack_def, inc_pc_def,
-         inc_pc_or_jump_def, is_call_def]
-  \\ conj_tac >- simp[expanded_memory_def, memory_expand_by_def, Abbr`em`]
+         inc_pc_or_jump_def]
+  \\ strip_tac
+  \\ conj_tac >- simp[Abbr`cappedGas`,Abbr`gasLeft`]
   \\ conj_tac >-
        (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
