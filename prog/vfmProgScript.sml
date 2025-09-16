@@ -3092,4 +3092,32 @@ QED
   | Call precompile
   | Invalid
   | SelfDestruct
+
+open helperLib;
+
+SPEC_COMPOSE_RULE [SPEC_Add,SPEC_Jump]
+
+Example progression:
+ 1. subroutine that adds two given numbers
+ 2. code code that calls code of 1. (in a local way)
+ 3. verify an external call to 2.
+ 4. next level: external call as a transaction
+
+val th = SPEC_Push |> Q.INST [‘n’|->‘1’,‘bs’|->‘[1w]’]
+         |> SRULE [cv_transLib.cv_eval “word_of_bytes F (0w:bytes32) (REVERSE [1w])”]
+val th = SPEC_COMPOSE_RULE [th,th,SPEC_Add] |> SRULE [EL,vfmOperationTheory.opcode_def];
+
+val (th,goal_tm) = SPEC_WEAKEN_RULE th
+  “evm_Stack (2w::ss) * evm_JumpDest j * evm_Exception e *
+   evm_PC (pc + 5) * evm_GasUsed (g + 9) *
+   evm_MsgParams p”
+
+Triviality lemma:
+  ^goal_tm
+Proof
+  cheat
+QED
+
+val th = MP th lemma
+
 *)
