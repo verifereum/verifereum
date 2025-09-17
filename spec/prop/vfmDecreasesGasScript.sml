@@ -914,6 +914,8 @@ Theorem decreases_gas_cred_get_static_push_context:
   (∀st.
     (FST(ctx st)).msgParams.gasLimit < n0 ∧
     (FST(ctx st)).gasUsed ≤ (FST(ctx st)).msgParams.gasLimit ∧
+    (FST(ctx st)).msgParams.parsed =
+      parse_code 0 FEMPTY (FST(ctx st)).msgParams.code ∧
     LENGTH (FST(ctx st)).stack ≤ stack_limit) ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; push_context (ctx st) od)
 Proof
@@ -932,6 +934,8 @@ Theorem decreases_gas_cred_get_static_push_context_bind:
   (∀st.
     (FST (ctx st)).msgParams.gasLimit < n0 ∧
     (FST (ctx st)).gasUsed ≤ (FST (ctx st)).msgParams.gasLimit ∧
+    (FST(ctx st)).msgParams.parsed =
+      parse_code 0 FEMPTY (FST(ctx st)).msgParams.code ∧
     LENGTH (FST (ctx st)).stack ≤ stack_limit) ∧
   decreases_gas_cred F 0 0 f ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; _ <- push_context (ctx st); f od)

@@ -67,7 +67,8 @@ QED
 Definition wf_context_def:
   wf_context c ⇔
     LENGTH c.stack ≤ stack_limit ∧
-    c.gasUsed ≤ c.msgParams.gasLimit
+    c.gasUsed ≤ c.msgParams.gasLimit ∧
+    c.msgParams.parsed = parse_code 0 FEMPTY c.msgParams.code
 End
 
 Definition all_accounts_def:
@@ -91,7 +92,7 @@ End
 Theorem wf_initial_context[simp]:
   wf_context (initial_context callee c s rd t)
 Proof
-  rw[wf_context_def]
+  rw[wf_context_def, initial_msg_params_def]
 QED
 
 Theorem wf_context_apply_intrinsic_cost:
@@ -100,7 +101,7 @@ Theorem wf_context_apply_intrinsic_cost:
   (wf_context c ∧
    c.gasUsed ≤ c.msgParams.gasLimit - intrinsic_cost a c.msgParams)
 Proof
-  rw[apply_intrinsic_cost_def, wf_context_def] \\ rw[]
+  rw[apply_intrinsic_cost_def, wf_context_def] \\ rw[EQ_IMP_THM]
 QED
 
 Theorem wf_initial_state:
