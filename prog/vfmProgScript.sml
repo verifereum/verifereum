@@ -262,7 +262,7 @@ End
 
 Definition evm_hide_Parsed_def:
   evm_hide_Parsed pcs = (λs.
-    ∃fx fy. s = BIGUNION $ IMAGE (λpc. { Parsed pc (fx pc) (fy pc) }) pcs)
+    ∃fx fy. s = IMAGE (λpc. Parsed pc (fx pc) (fy pc)) pcs)
 End
 
 Definition EVM_NEXT_REL_def:
@@ -406,42 +406,21 @@ Proof
     \\ fsrw_tac[DNF_ss][Once EQ_IMP_THM]
     >- metis_tac[]
     \\ last_x_assum drule \\ rw[]
-    \\ strip_tac \\ gvs[])
+    \\ strip_tac \\ gvs[IN_DISJOINT]
+    \\ qmatch_asmsub_abbrev_tac`pa ∈ v`
+    \\ first_x_assum(qspec_then`pa`mp_tac)
+    \\ simp[Abbr`pa`])
   \\ first_assum $ irule_at Any
   \\ simp[SPLIT_def]
-  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF, Once EXTENSION, PULL_EXISTS]
-  \\ gvs[SF DNF_ss, Once EQ_IMP_THM, SUBSET_DEF]
+  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF, Once EXTENSION,
+          PULL_EXISTS, IN_DISJOINT]
+  \\ gvs[SF DNF_ss, Once EQ_IMP_THM, SUBSET_DEF, IN_DISJOINT]
   \\ qmatch_goalsub_abbrev_tac`_ _ = fx _`
   \\ qmatch_goalsub_abbrev_tac`_ < len`
   \\ qexistsl_tac[`λpc. pc < len ∧ wf_state (SND s)`,`fx`]
   \\ simp[]
-QED
-
-Theorem STAR_SEP_HIDE_evm_JumpDest:
-  (~evm_JumpDest * p) (evm2set_on dom s) <=>
-  HasJumpDest IN dom ∧ p (evm2set_on (dom DELETE HasJumpDest) s)
-Proof
-  rw[evm_JumpDest_def, SEP_HIDE_def, SEP_EXISTS_THM, STAR_def, PULL_EXISTS, SEP_EQ_def]
-  \\ rw[EQ_IMP_THM]
-  >- (
-    gvs[SPLIT_def]
-    \\ `JumpDest x IN evm2set_on dom s` by (gvs[EXTENSION] \\ metis_tac[])
-    \\ gvs[evm2set_on_def, PUSH_IN_INTO_IF])
-  >- (
-    gvs[SPLIT_def]
-    \\ qmatch_goalsub_abbrev_tac`p s1`
-    \\ qmatch_asmsub_abbrev_tac`p s2`
-    \\ `s1 = s2` suffices_by rw[]
-    \\ rw[Abbr`s1`, Abbr`s2`]
-    \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
-    \\ rw[EQ_IMP_THM]
-    \\ fsrw_tac[DNF_ss][EQ_IMP_THM]
-    \\ last_x_assum drule \\ rw[]
-    \\ gvs[])
-  \\ first_assum $ irule_at Any
-  \\ simp[SPLIT_def]
-  \\ simp[evm2set_on_def, PUSH_IN_INTO_IF, EXTENSION]
-  \\ gvs[SF DNF_ss, EQ_IMP_THM]
+  \\ rw[]
+  \\ spose_not_then strip_assume_tac \\ gvs[]
 QED
 
 val CODE_POOL_evm2set_LEMMA = prove(
@@ -980,13 +959,13 @@ Theorem SPEC_Stop_inner:
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   ~evm_JumpDest * evm_Parsed pc Stop * evm_hide_Parsed (all_pcs DELETE pc) *
+   evm_JumpDest j * evm_Parsed pc Stop * evm_hide_Parsed (all_pcs DELETE pc) *
    cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧
          caller = FST (HD cs) ∧
-         all_pcs = (count (LENGTH caller.msgParams.code) ∪
-                    count (LENGTH p.code) ∪
-                    FDOM caller.msgParams.parsed ∪
-                    FDOM p.parsed) ∧
+         callee_pcs = (count (LENGTH p.code) ∪ FDOM p.parsed) ∧
+         caller_pcs = (count (LENGTH caller.msgParams.code) ∪
+                       FDOM caller.msgParams.parsed) ∧
+         all_pcs = (callee_pcs ∪ caller_pcs) ∧
          calleeGasLeft = p.gasLimit - g ∧
          calleeGasLeft ≤ caller.gasUsed))
   {}
@@ -1006,14 +985,14 @@ Theorem SPEC_Stop_inner:
                       (lookup_account addr accounts with code := [])
                       accounts)) *
    evm_GasUsed (caller.gasUsed - calleeGasLeft) *
-   ~evm_JumpDest *
+   evm_JumpDest caller.jumpDest *
    evm_Logs (caller.logs ++ l) *
    evm_AddRefund (caller.addRefund + ar) *
    evm_SubRefund (caller.subRefund + sr))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_def,
-           EMPTY_evm2set,STAR_evm_hide_Parsed,STAR_SEP_HIDE_evm_JumpDest]
+           EMPTY_evm2set,STAR_evm_hide_Parsed]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ Cases_on ‘b’ \\ fs []
   \\ drule step_preserves_wf_state
@@ -2921,7 +2900,7 @@ Theorem SPEC_Return_inner:
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   ~evm_JumpDest * evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
+   evm_JumpDest j * evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
    cond (cs ≠ [] ∧ 2 ≤ LENGTH ss ∧
          offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
          LENGTH caller.stack < stack_limit ∧
@@ -2962,14 +2941,14 @@ Theorem SPEC_Return_inner:
                       (lookup_account addr accounts with code := data)
                       accounts) else if inst = Revert then cb else rb) *
    evm_GasUsed (caller.gasUsed - calleeGasLeft) *
-   ~evm_JumpDest *
+   evm_JumpDest caller.jumpDest *
    evm_Logs (caller.logs ++ if inst = Revert then [] else l) *
    evm_AddRefund (caller.addRefund + if inst = Revert then 0 else ar) *
    evm_SubRefund (caller.subRefund + if inst = Revert then 0 else sr))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_def,
-                 EMPTY_evm2set,STAR_evm_hide_Parsed,STAR_SEP_HIDE_evm_JumpDest]
+                 EMPTY_evm2set,STAR_evm_hide_Parsed]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
