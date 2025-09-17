@@ -181,9 +181,10 @@ Proof
 QED
 
 Theorem EMPTY_evm2set[local]:
-  (evm2set_on dom s = {}) ⇔  dom = {}
+  ((evm2set_on dom s = {}) ⇔  dom = {}) ∧
+  ((SEP_EQ {} (evm2set_on dom s)) ⇔ dom = {})
 Proof
-  simp[evm2set_on_def, PUSH_IN_INTO_IF, CaseEq"bool"]
+  simp[evm2set_on_def, PUSH_IN_INTO_IF, CaseEq"bool", SEP_EQ_def]
   \\ rw[EXTENSION, EQ_IMP_THM]
   \\ Cases_on`x` \\ rw[]
 QED
@@ -280,6 +281,12 @@ Definition EVM_MODEL_def:
 End
 
 (* theorems *)
+
+Theorem evm_Parsed_CODE_POOL:
+  evm_Parsed pc i = CODE_POOL EVM_INSTR {(pc,i)}
+Proof
+  rw[evm_Parsed_def, CODE_POOL_def, SEP_EQ_def, EVM_INSTR_def]
+QED
 
 val lemma =
   METIS_PROVE [SPLIT_evm2set]
@@ -951,6 +958,101 @@ Proof
           return_destination_case_rator,consume_gas_def,update_accounts_def,
           CaseEq"return_destination",CaseEq"prod",CaseEq"sum"]
   \\ end_tac
+QED
+
+Theorem CODE_POOL_EMPTY:
+  CODE_POOL i {} = SEP_EQ {}
+Proof
+  rw[CODE_POOL_def, SEP_EQ_def]
+QED
+
+Theorem STAR_CODE_POOL_evm2set:
+  ((CODE_POOL EVM_INSTR c * p) (evm2set_on dom s) ⇔
+   IMAGE (HasParsed o FST) c SUBSET dom ∧
+   (c ≠ {} ⇒ wf_state (SND s)) ∧
+   (∀pc i. (pc,i) ∈ c ⇒
+      FLOOKUP (FST (HD (SND s).contexts)).msgParams.parsed pc = SOME i ∧
+      pc < LENGTH (FST (HD (SND s).contexts)).msgParams.code) ∧
+   p (evm2set_on (dom DIFF IMAGE (HasParsed o FST) c) s))
+Proof
+  rw[Once EXTENSION, SUBSET_DEF, PULL_EXISTS, STAR_def, SPLIT_def,
+     FORALL_PROD]
+  \\ simp[Once EQ_IMP_THM, CODE_POOL_def, PULL_EXISTS, EVM_INSTR_def,
+          IN_DISJOINT, EXISTS_PROD]
+  \\ conj_tac
+  >- (
+    ntac 2 strip_tac
+    \\ simp[PULL_FORALL]
+    \\ gvs[Once EQ_IMP_THM, PULL_EXISTS, SF DNF_ss]
+    \\ last_x_assum mp_tac \\ simp[Once evm2set_on_def, PUSH_IN_INTO_IF]
+    \\ strip_tac
+    \\ conj_tac >- metis_tac[]
+    \\ simp[Once EXTENSION, EXISTS_PROD, PULL_EXISTS]
+    \\ conj_tac >- metis_tac[]
+    \\ qmatch_goalsub_abbrev_tac`p v2`
+    \\ `v2 = v` suffices_by rw[]
+    \\ simp[Abbr`v2`, SET_EQ_SUBSET, SUBSET_DEF, PULL_EXISTS]
+    \\ reverse conj_tac
+    >- (
+        rw[]
+        \\ first_x_assum drule
+        \\ simp[evm2set_on_def, PUSH_IN_INTO_IF]
+        \\ rw[FORALL_PROD]
+        \\ rpt strip_tac
+        \\ first_x_assum drule
+        \\ strip_tac
+        \\ qmatch_asmsub_abbrev_tac`x ∈ v`
+        \\ first_x_assum(qspec_then`x`mp_tac)
+        \\ simp[Abbr`x`]
+        \\ metis_tac[])
+     \\ qpat_x_assum`!x. x ∈ _ ⇒ _`mp_tac
+     \\ simp[evm2set_on_def, PUSH_IN_INTO_IF]
+     \\ rw[] \\ gvs[]
+     \\ qmatch_goalsub_abbrev_tac`x ∈ v`
+     \\ first_x_assum(qspec_then`x`mp_tac) \\ simp[Abbr`x`])
+  \\ strip_tac
+  \\ first_assum $ irule_at Any
+  \\ reverse conj_tac
+  >- (
+    Cases \\ simp[Once evm2set_on_def, PUSH_IN_INTO_IF, EXISTS_PROD]
+    \\ rpt strip_tac \\ gvs[]
+    \\ spose_not_then strip_assume_tac
+    \\ metis_tac[])
+  \\ Cases \\ simp[Once evm2set_on_def, PUSH_IN_INTO_IF]
+  \\ simp[Once evm2set_on_def, PUSH_IN_INTO_IF, FORALL_PROD]
+  \\ gs[Once EXTENSION, EXISTS_PROD, PULL_EXISTS]
+  \\ rw[Once EQ_IMP_THM]
+  \\ metis_tac[]
+QED
+
+Theorem FLOOKUP_parse_code_SOME_less_LENGTH:
+  ∀pc fm code x i.
+    FLOOKUP (parse_code pc fm code) x = SOME i ⇒
+    x ∈ FDOM fm ∨ x < pc + LENGTH code
+Proof
+  ho_match_mp_tac parse_code_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ Cases_on`NULL code` \\ gvs[NULL_EQ]
+  >- gvs[Once parse_code_def, TO_FLOOKUP]
+  \\ qhdtm_x_assum`FLOOKUP`mp_tac
+  \\ rw[Once parse_code_def, NULL_EQ]
+  \\ first_x_assum drule
+  \\ strip_tac \\ gvs[]
+  \\ gvs[NULL_EQ, FLOOKUP_UPDATE]
+  >- (Cases_on`code` \\ gs[])
+  \\ qmatch_asmsub_abbrev_tac`pc + l`
+  \\ Cases_on`l < LENGTH code` \\ gvs[]
+  \\ Cases_on`parse_opcode code`  \\ gvs[]
+  >- (
+    gvs[vfmOperationTheory.opcode_def,Abbr`l`]
+    \\ Cases_on`code` \\ gvs[])
+  \\ gvs[DROP_LENGTH_TOO_LONG]
+  \\ gs[Once parse_code_def]
+  \\ gs[FLOOKUP_UPDATE]
+  \\ Cases_on`pc = x` \\ gvs[]
+  >- (Cases_on`code` \\ gs[])
+  \\ gs[TO_FLOOKUP]
 QED
 
 Theorem SPEC_Stop_inner:
