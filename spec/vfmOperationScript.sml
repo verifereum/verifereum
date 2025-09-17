@@ -279,52 +279,6 @@ Definition static_gas_def[simp]:
   ∧ static_gas SelfDestruct   = 5000
 End
 
-Definition take_pad_0_def:
-  take_pad_0 z l = PAD_RIGHT 0w z (TAKE z l)
-End
-
-Theorem take_pad_0_0[simp]:
-  take_pad_0 0 l = []
-Proof
-  rw[take_pad_0_def, PAD_RIGHT]
-QED
-
-Theorem LENGTH_take_pad_0[simp]:
-  LENGTH (take_pad_0 z l) = z
-Proof
-  rw[take_pad_0_def, bitstringTheory.length_pad_right, LENGTH_TAKE_EQ]
-QED
-
-Theorem take_pad_0_IS_PREFIX:
-  ∃m. take_pad_0 n t ≼ t ++ REPLICATE m 0w
-Proof
-  rw[take_pad_0_def, PAD_RIGHT, IS_PREFIX_APPEND]
-  \\ `t = TAKE n t ++ DROP n t` by simp[]
-  \\ pop_assum(fn th => CONV_TAC(STRIP_QUANT_CONV(LAND_CONV(ONCE_REWRITE_CONV[th]))))
-  \\ simp[REPLICATE_GENLIST, LENGTH_TAKE_EQ]
-  \\ rw[DROP_LENGTH_TOO_LONG]
-  \\ qexists_tac`n - LENGTH t` \\ rw[]
-QED
-
-Theorem PAD_RIGHT_CONS:
-  PAD_RIGHT x y (h::t) = h::PAD_RIGHT x (PRE y) t
-Proof
-  rw[PAD_RIGHT] \\ Cases_on`y` \\ gs[]
-QED
-
-(* alternative characterisation *)
-Theorem take_pad_0_pad_take:
-  take_pad_0 z l = TAKE z (PAD_RIGHT 0w z l)
-Proof
-  rw[take_pad_0_def]
-  \\ qid_spec_tac`z`
-  \\ Induct_on`l`
-  \\ gs[bitstringTheory.length_pad_right]
-  \\ rw[Once TAKE_def]
-  >- EVAL_TAC
-  \\ gs[PAD_RIGHT_CONS, PRE_SUB1]
-QED
-
 Theorem parse_opcode_cond_thm:
   parse_opcode (opcs: byte list) =
   case opcs of

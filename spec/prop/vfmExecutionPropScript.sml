@@ -1,9 +1,37 @@
 Theory vfmExecutionProp
 Ancestors
-  combin pair list
-  vfmConstants vfmState vfmContext vfmExecution
+  combin pair list finite_map
+  vfmConstants vfmOperation vfmState vfmContext vfmExecution
 Libs
   BasicProvers
+
+Theorem FLOOKUP_parse_code_SOME_less_LENGTH:
+  ∀pc fm code x i.
+    FLOOKUP (parse_code pc fm code) x = SOME i ⇒
+    x ∈ FDOM fm ∨ x < pc + LENGTH code
+Proof
+  ho_match_mp_tac parse_code_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ rpt gen_tac \\ strip_tac
+  \\ Cases_on`NULL code` \\ gvs[NULL_EQ]
+  >- gvs[Once parse_code_def, TO_FLOOKUP]
+  \\ qhdtm_x_assum`FLOOKUP`mp_tac
+  \\ rw[Once parse_code_def, NULL_EQ]
+  \\ first_x_assum drule
+  \\ strip_tac \\ gvs[]
+  \\ gvs[NULL_EQ, FLOOKUP_UPDATE]
+  >- (Cases_on`code` \\ gs[])
+  \\ qmatch_asmsub_abbrev_tac`pc + l`
+  \\ Cases_on`l < LENGTH code` \\ gvs[]
+  \\ Cases_on`parse_opcode code`  \\ gvs[]
+  >- (gvs[opcode_def,Abbr`l`] \\ Cases_on`code` \\ gvs[])
+  \\ gvs[DROP_LENGTH_TOO_LONG]
+  \\ gs[Once parse_code_def]
+  \\ gs[FLOOKUP_UPDATE]
+  \\ Cases_on`pc = x` \\ gvs[]
+  >- (Cases_on`code` \\ gs[])
+  \\ gs[TO_FLOOKUP]
+QED
 
 (* TODO: move to another theory? *)
 
