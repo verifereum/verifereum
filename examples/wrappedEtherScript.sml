@@ -1,10 +1,9 @@
-open HolKernel boolLib bossLib Parse wordsLib
-     combinTheory whileTheory
-     vfmContextTheory vfmExecutionTheory vfmStateTheory
-     vfmComputeTheory vfmLogicTheory
-     cv_transLib;
-
-val () = new_theory "wrappedEther";
+Theory wrappedEther
+Ancestors
+  combin
+  vfmState vfmCompute vfmProg
+Libs
+  cv_transLib wordsLib
 
 Definition Keccak_256_string_def:
   Keccak_256_string s =
@@ -12,14 +11,6 @@ Definition Keccak_256_string_def:
 End
 
 val () = cv_auto_trans Keccak_256_string_def;
-
-(*
-Theorem initial_state_contexts:
-  initial_state c ph bk ms tx = SOME s ⇒
-  s.contexts = [
-    apply_intrinsic_cost tx.accessList
-      (initial_context (callee_from_tx_to tx.from tx.nonce tx.to)
-*)
 
 Definition deploy_data_def:
   deploy_data = REVERSE $ hex_to_rev_bytes [] $
@@ -38,6 +29,9 @@ Definition deploy_tx_def:
   ; gasLimit := 1500000
   ; gasPrice := 21000000000
   ; accessList := []
+  ; blobVersionedHashes := []
+  ; maxFeePerBlobGas := NONE
+  ; maxFeePerGas := NONE
   |>
 End
 
@@ -46,6 +40,9 @@ val () = cv_auto_trans deploy_tx_def;
 Definition deploy_block_def:
   deploy_block = <|
     baseFeePerGas := 0 (* fake *)
+  ; excessBlobGas := 0 (* fake *)
+  ; gasUsed := 7965074
+  ; blobGasUsed := 0 (* fake *)
   ; number := 4719568
   ; timeStamp := 1513077455
   ; coinBase := 0x829BD824B016326A401d083B33D092293333A830w
@@ -53,7 +50,9 @@ Definition deploy_block_def:
   ; prevRandao := 0w (* fake *)
   ; hash := 0xd6e5f60d6b2367e74cd2aa520dbeb104826c3932eb482cc16e7f7ef5f8f74799w
   ; parentBeaconBlockRoot := 0w (* fake *)
+  ; stateRoot := 0xb94a65da26a6c94c90376eb814d4f6f3c87d5b4ca515b1293b74a172be755245w
   ; transactions := [deploy_tx] (* not true, many others *)
+  ; withdrawals := []
   |>
 End
 
@@ -74,7 +73,9 @@ val () = cv_auto_trans deploy_accounts_def;
 
 Definition deploy_tx_result_def:
   deploy_tx_result =
-    run_transaction_with_fuel 267 F 1 [] deploy_block deploy_accounts deploy_tx
+    case run_transaction (Collect empty_domain) F 1 []
+           deploy_block deploy_accounts deploy_tx
+    of SOME (res, ms) => SOME (res.result, ms) | _ => NONE
 End
 
 val () = cv_auto_trans deploy_tx_result_def;
@@ -87,9 +88,8 @@ End
 val () = cv_trans_deep_embedding EVAL contract_code_def;
 
 Theorem deploy_produces_correct_code_and_address:
-  ∃res ms.
-    deploy_tx_result = SOME ((res, ms), 0) ∧
-    res.result = NONE ∧
+  ∃ms.
+    deploy_tx_result = SOME (NONE, ms) ∧
     let acc = lookup_account 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2w ms  in
     acc.nonce = 1 ∧
     acc.balance = 0 ∧
@@ -97,10 +97,9 @@ Theorem deploy_produces_correct_code_and_address:
     acc.code = contract_code
 Proof
   CONV_TAC(STRIP_QUANT_CONV(PATH_CONV "lrlr" cv_eval))
-  \\ qmatch_goalsub_abbrev_tac`SOME ((res, ms), _)`
-  \\ qexistsl_tac[`res`,`ms`]
+  \\ qmatch_goalsub_abbrev_tac`SOME (_, ms)`
+  \\ qexistsl_tac[`ms`]
   \\ conj_tac >- rw[]
-  \\ conj_tac >- rw[Abbr`res`]
   \\ rewrite_tac[lookup_account_def]
   \\ qunabbrev_tac`ms`
   \\ rewrite_tac[APPLY_UPDATE_THM]
@@ -175,12 +174,12 @@ Theorem parsed_contract_code_eq =
   parsed_contract_code_def
   |> CONV_RULE(RAND_CONV cv_eval);
 
-val () = cv_auto_trans parsed_contract_code_eq;
+(*
+val () = cv_trans_deep_embedding EVAL parsed_contract_code_eq;
 
 Theorem FLOOKUP_parsed_contract_code_0 =
   cv_eval “FLOOKUP parsed_contract_code 0”;
 
-(*
 Theorem call_follows_abi_4bytes:
   tx.to = SOME addr ∧
   (lookup_account addr ms).code = contract_code ∧
@@ -223,5 +222,3 @@ Proof
   by (
     qunabbrev_tac`g`
 *)
-
-val () = export_theory();
