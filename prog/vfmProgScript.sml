@@ -773,6 +773,21 @@ Proof
      context_component_equality, expanded_memory_def]
 QED
 
+Theorem TAKE_expanded_memory_leq[simp]:
+  n ≤ LENGTH m ⇒
+  TAKE n (expanded_memory m offset sz) = TAKE n m
+Proof
+  rw[expanded_memory_def, TAKE_APPEND1]
+QED
+
+Theorem DROP_size_expanded_memory:
+  32 * word_size (offset + sz) ≤ n ⇒
+  DROP n (expanded_memory m offset sz) = DROP n m
+Proof
+  rw[expanded_memory_def, DROP_APPEND]
+  \\ gvs[memory_expand_by_def, word_size_def]
+QED
+
 Definition Keccak256_gas_def:
   Keccak256_gas m offset size =
     static_gas Keccak256 +

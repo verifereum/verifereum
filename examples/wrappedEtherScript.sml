@@ -1,9 +1,10 @@
 Theory wrappedEther
 Ancestors
-  combin
-  vfmState vfmCompute vfmProg
+  arithmetic byte combin
+  vfmOperation vfmState vfmCompute
+  set_sep prog vfmProg
 Libs
-  cv_transLib wordsLib
+  cv_transLib wordsLib blastLib helperLib
 
 Definition Keccak_256_string_def:
   Keccak_256_string s =
@@ -173,6 +174,532 @@ End
 Theorem parsed_contract_code_eq =
   parsed_contract_code_def
   |> CONV_RULE(RAND_CONV cv_eval);
+
+fun evc tm = tm |> REWRITE_CONV[parsed_contract_code_eq]
+                |> CONV_RULE (RAND_CONV EVAL)
+
+(* TODO: move *)
+Theorem SPEC_JumpI_take:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e *
+   cond
+     (2 ≤ LENGTH ss ∧ ISL e ∧
+      EL 1 ss ≠ 0w ∧
+      w2n (HD ss) < LENGTH p.code ∧
+      FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest ∧
+      g + static_gas JumpI ≤ p.gasLimit))
+  {(pc,JumpI)}
+  (evm_Stack (DROP 2 ss) * evm_PC (w2n (HD ss)) * evm_JumpDest NONE *
+   evm_Exception e * evm_GasUsed (g + static_gas JumpI) *
+   evm_MsgParams p)
+Proof
+  mp_tac (GEN_ALL SPEC_JumpI)
+  \\ rw[SPEC_MOVE_COND]
+QED
+
+Theorem mask_and_w2w:
+  (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw:bytes32) &&
+  w2w (w:address) = w2w w
+Proof
+  blastLib.BBLAST_TAC
+QED
+
+val word_of_bytes_tm = prim_mk_const{Thy="byte",Name="word_of_bytes"};
+val word_to_bytes_tm = prim_mk_const{Thy="byte",Name="word_to_bytes"};
+
+fun word_of_bytes_conv tm =
+  let val (c,args) = strip_comb tm in
+  if length args = 3 andalso
+     same_const word_of_bytes_tm c andalso
+     listSyntax.is_list (el 3 args)
+  then cv_eval tm
+  else raise UNCHANGED
+  end
+
+fun word_to_bytes_conv tm =
+  let val (c,args) = strip_comb tm in
+  if length args = 2 andalso
+     same_const word_to_bytes_tm (fst (strip_comb tm))
+  then cv_eval tm
+  else raise UNCHANGED
+  end
+
+val no_data = ASSUME “(p:message_parameters).data = []”
+
+Triviality conj_repeat:
+  ((a ∧ a ∧ b) = (a ∧ b)) ∧
+  ((a' ⇒ a) ⇒ ((a ∧ a' ∧ b) = (a' ∧ b)))
+Proof
+  rw[EQ_IMP_THM]
+QED
+
+Triviality conj_repeat_last:
+  ((a' ⇒ a) ⇒ ((b ∧ a ∧ a') = (b ∧ a'))) ∧
+  ((a' ⇒ a) ⇒ ((b ∧ a' ∧ a) = (b ∧ a')))
+Proof
+  rw[EQ_IMP_THM]
+QED
+
+local
+  val SPEC_PushG = SPEC_Push |> Q.GENL[`n`,`bs`];
+  val SPEC_DupG = SPEC_Dup |> Q.GEN`n`
+  val SPEC_SwapG = SPEC_Swap |> Q.GEN`n`
+  val SPEC_LogG = SPEC_Log |> Q.GEN`n`
+in
+  fun mk_SPEC_Push n bs = Q.SPECL[n,bs] SPEC_PushG
+  fun mk_SPEC_Dup n = Q.SPEC n SPEC_DupG
+  fun mk_SPEC_Swap n = Q.SPEC n SPEC_SwapG
+  fun mk_SPEC_Log n = Q.SPEC n SPEC_LogG
+end
+
+val spec00 = SPEC_CallValue;
+val spec01 = mk_SPEC_Push `1` `[3w]`;
+val spec02 = mk_SPEC_Push `1` `[0w]`;
+val spec03 = SPEC_Caller;
+val spec04 = mk_SPEC_Push `20`
+  `[255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w;
+    255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w]`;
+val spec05 = SPEC_And;
+val spec06 = spec04;
+val spec07 = spec05;
+val spec08 = mk_SPEC_Dup `1`;
+val spec09 = SPEC_MStore;
+val spec10 = mk_SPEC_Push `1` `[32w]`;
+val spec11 = SPEC_Add;
+val spec12 = mk_SPEC_Swap `0`;
+val spec13 = spec08;
+val spec14 = spec09;
+val spec15 = spec10;
+val spec16 = spec11;
+val spec17 = mk_SPEC_Push `1` `[0w]`;
+val spec18 = SPEC_Keccak256;
+val spec19 = spec17;
+val spec20 = mk_SPEC_Dup `2`;
+val spec21 = spec20;
+val spec22 = SPEC_SLoad;
+val spec23 = SPEC_Add;
+val spec24 = mk_SPEC_Swap `2`;
+val spec25 = SPEC_Pop;
+val spec26 = SPEC_Pop;
+val spec27 = spec08;
+val spec28 = mk_SPEC_Swap `0`;
+val spec29 = SPEC_SStore;
+val spec30 = SPEC_Pop;
+val spec31 = SPEC_Caller;
+val spec32 = spec04;
+val spec33 = SPEC_And;
+val spec34 = mk_SPEC_Push `32`
+  `[225w; 255w; 252w; 196w; 146w; 61w; 4w; 181w; 89w; 244w; 210w;
+    154w; 139w; 252w; 108w; 218w; 4w; 235w; 91w; 13w; 60w; 70w; 7w;
+    81w; 194w; 64w; 44w; 92w; 92w; 201w; 16w; 156w]`;
+val spec35 = SPEC_CallValue;
+val spec36 = mk_SPEC_Push `1` `[64w]`;
+val spec37 = SPEC_MLoad;
+val spec38 = mk_SPEC_Dup `0`;
+val spec39 = mk_SPEC_Dup `2`;
+val spec40 = mk_SPEC_Dup `1`;
+val spec41 = SPEC_MStore;
+val spec42 = mk_SPEC_Push `1` `[32w]`;
+val spec43 = SPEC_Add;
+val spec44 = mk_SPEC_Swap `1`;
+val spec45 = SPEC_Pop;
+val spec46 = SPEC_Pop;
+val spec47 = mk_SPEC_Push `1` `[64w]`;
+val spec48 = SPEC_MLoad;
+val spec49 = mk_SPEC_Dup `0`;
+val spec50 = mk_SPEC_Swap `1`;
+val spec51 = SPEC_Sub;
+val spec52 = mk_SPEC_Swap `0`;
+val spec53 = mk_SPEC_Log `2`;
+val spec53 = SPEC_Jump;
+
+val th10 = SPEC_COMPOSE_RULE [
+  spec00,spec01,spec02,spec03,spec04,spec05,spec06,spec07,spec08,spec09]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [opcode_def, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+        AC CONJ_ASSOC CONJ_COMM, ADD1, mask_and_w2w]
+  |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss) [conj_repeat, mask_and_w2w];
+
+
+val th10m =
+  th10 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+       |> Q.GENL[`offset`,`bytes`,`em`,`j`,`e`]
+       |> SRULE[sumTheory.FORALL_SUM]
+       |> SRULE[GSYM SPEC_MOVE_COND];
+
+val DROP_64_expanded_32_32 =
+  cv_eval “32 * word_size (32 + 32) ≤ 64”
+  |> EQT_ELIM
+  |> MATCH_MP DROP_size_expanded_memory;
+
+(*
+Theorem DROP_offset_expanded:
+  n ≤ LENGTH m ⇒
+  DROP n (expanded_memory m n z) =
+  expanded_memory (DROP n m) 0 z
+Proof
+  rw[expanded_memory_def, listTheory.DROP_APPEND]
+  \\ gvs[iffRL SUB_EQ_0]
+  \\ simp[memory_expand_by_def]
+  \\ rw[MAX_DEF, vfmConstantsTheory.word_size_def]
+  \\ rpt(pop_assum mp_tac) \\ rw[LEFT_ADD_DISTRIB]
+  \\ intLib.COOPER_TAC
+*)
+
+val th18 = SPEC_COMPOSE_RULE [th10m,
+  spec10,spec11,spec12,spec13,spec14,spec15,spec16,spec17]
+  |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [opcode_def, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+        AC CONJ_ASSOC CONJ_COMM, conj_repeat, ADD1]
+  |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss) [
+       conj_repeat_last, DROP_64_expanded_32_32]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss) [
+      cv_eval “32 * word_size (0 + 32) ≤ 32”
+      |> EQT_ELIM
+      |> MATCH_MP DROP_size_expanded_memory];
+
+val th18m =
+  th18 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+       |> Q.GENL[`offset`,`bytes`,`em`]
+       |> SRULE[GSYM SPEC_MOVE_COND];
+
+val th22 = SPEC_COMPOSE_RULE [th18m,spec18,spec19,spec20,spec21]
+  |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [opcode_def, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+        AC CONJ_ASSOC CONJ_COMM, conj_repeat, ADD1]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [conj_repeat_last, listTheory.TAKE_APPEND1,
+        listTheory.TAKE_LENGTH_TOO_LONG,
+        listTheory.DROP_LENGTH_TOO_LONG,
+        listTheory.DROP_APPEND,
+        rich_listTheory.DROP_DROP_T,
+        LENGTH_word_to_bytes,
+        DROP_64_expanded_32_32];
+
+val th22m =
+  th22 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+       |> Q.GENL[`offset`,`em`,`sz`]
+       |> SRULE [GSYM SPEC_MOVE_COND];
+
+val th29 = SPEC_COMPOSE_RULE
+  [th22m, spec22, spec23, spec24, spec25, spec26, spec27, spec28]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+        AC CONJ_ASSOC CONJ_COMM, conj_repeat]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [conj_repeat_last, listTheory.TAKE_LENGTH_TOO_LONG,
+        listTheory.TAKE_APPEND1,
+        LENGTH_word_to_bytes];
+
+Definition slot_word_def:
+  slot_word (a:address) = (
+      REVERSE (word_to_bytes (w2w a : bytes32) F) ++
+      REVERSE (word_to_bytes (3w:bytes32) F))
+End
+
+Theorem LENGTH_slot_word[simp]:
+  LENGTH (slot_word a) = 64
+Proof
+  rw[slot_word_def]
+QED
+
+Theorem expanded_memory_0_leq:
+  32 * word_size sz ≤ LENGTH m ⇒ expanded_memory m 0 sz = m
+Proof
+  rw[expanded_memory_def, memory_expand_by_def]
+QED
+
+Theorem MULT_32_word_size_64:
+  32 * word_size 64 = 64
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition slot_key_def:
+  slot_key (a:address) = word_of_bytes T (0w:bytes32) $
+    Keccak_256_w64 (slot_word a)
+End
+
+Theorem memory_cost_change:
+  (LENGTH m2 = LENGTH m1) ∧
+  (o2 + z2 = o1 + z1) ∧
+  ((z2 = 0) = (z1 = 0))
+  ⇒
+  memory_cost m1 o1 z1 = memory_cost m2 o2 z2
+Proof
+  rw[memory_cost_def]
+QED
+
+Theorem memory_cost_APPEND_DROP_size:
+  LENGTH l1 = n ∧ n ≤ LENGTH l2 ⇒
+  memory_cost (l1 ++ (DROP n l2)) off sz =
+  memory_cost l2 off sz
+Proof
+  strip_tac \\
+  irule memory_cost_change
+  \\ rw[]
+QED
+
+(* TODO: move *)
+Theorem msdomain_add_slot_idem[simp]:
+  msdomain_add_slot k (msdomain_add_slot k d) =
+  msdomain_add_slot k d
+Proof
+  rw[msdomain_add_slot_def]
+  \\ CASE_TAC \\ simp[vfmContextTheory.domain_component_equality]
+QED
+
+Theorem access_slot_check_msdomain_add_slot[simp]:
+  access_slot_check (msdomain_add_slot k' d) k =
+  access_slot_check d k
+Proof
+  rw[access_slot_check_def, msdomain_add_slot_def]
+  \\ CASE_TAC \\ simp[]
+QED
+
+val th29m =
+  th29 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC,
+                 GSYM slot_word_def, GSYM slot_key_def]
+       |> Q.GENL[`key`,`sk`]
+       |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+            [GSYM SPEC_MOVE_COND,expanded_memory_0_leq,MULT_32_word_size_64];
+
+
+val th38 = SPEC_COMPOSE_RULE
+           [th29m, spec29, spec30, spec31, spec32,
+            spec33, spec34, spec35, spec36, spec37]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+        AC CONJ_ASSOC CONJ_COMM, conj_repeat]
+  |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss) [mask_and_w2w];
+
+(* TODO: generalise? *)
+Theorem DROP_64_expanded_memory_append_64_32:
+  LENGTH l1 = 64 ⇒
+  DROP 64 (expanded_memory (l1 ++ l2) 64 32) =
+  expanded_memory l2 0 32
+Proof
+  rw[expanded_memory_def, listTheory.DROP_APPEND,
+     listTheory.DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
+  \\ AP_THM_TAC \\ AP_TERM_TAC
+  \\ rw[memory_expand_by_def, LEFT_ADD_DISTRIB,
+        vfmConstantsTheory.word_size_def]
+  \\ rw[MAX_DEF]
+QED
+
+val th38m =
+  th38 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+  |> Q.GENL[`value`,`em`,`sk`,`key`,`offset`]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [GSYM SPEC_MOVE_COND, conj_repeat_last,
+        DROP_64_expanded_memory_append_64_32]
+
+val th48 = SPEC_COMPOSE_RULE
+           [th38m, spec38, spec39, spec40, spec41, spec42,
+            spec43, spec44, spec45, spec46, spec47]
+    |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+        AC CONJ_ASSOC CONJ_COMM, conj_repeat]
+
+val th48m =
+  th48 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+  |> Q.GENL[`bytes`,`em`,`offset`]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [GSYM SPEC_MOVE_COND, conj_repeat_last]
+
+val th54 =
+  SPEC_COMPOSE_RULE[th48m, spec48, spec49, spec50, spec51, spec52, spec53]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+     [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+      AC CONJ_ASSOC CONJ_COMM, conj_repeat]
+  |> CONV_RULE (DEPTH_CONV word_of_bytes_conv)
+
+val th54m =
+  th54 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+  |> Q.GENL[`em`,`offset`]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [GSYM SPEC_MOVE_COND]
+
+(*
+evc “FLOOKUP parsed_contract_code 0”
+evc “FLOOKUP parsed_contract_code 2”
+evc “FLOOKUP parsed_contract_code 4”
+evc “FLOOKUP parsed_contract_code 5”
+evc “FLOOKUP parsed_contract_code 7”
+evc “FLOOKUP parsed_contract_code 8”
+evc “FLOOKUP parsed_contract_code 9”
+evc “FLOOKUP parsed_contract_code 12”
+evc “FLOOKUP parsed_contract_code 175”
+evc “FLOOKUP parsed_contract_code 176”
+evc “FLOOKUP parsed_contract_code 179”
+evc “FLOOKUP parsed_contract_code 182”
+evc “FLOOKUP parsed_contract_code 1088”
+evc “FLOOKUP parsed_contract_code 1089”
+evc “FLOOKUP parsed_contract_code 1090”
+evc “FLOOKUP parsed_contract_code 1092”
+evc “FLOOKUP parsed_contract_code 1094”
+evc “FLOOKUP parsed_contract_code 1095”
+evc “FLOOKUP parsed_contract_code 1116”
+evc “FLOOKUP parsed_contract_code 1138”
+evc “FLOOKUP parsed_contract_code 1139”
+evc “FLOOKUP parsed_contract_code 1140”
+evc “FLOOKUP parsed_contract_code 1141”
+evc “FLOOKUP parsed_contract_code 1143”
+evc “FLOOKUP parsed_contract_code 1144”
+evc “FLOOKUP parsed_contract_code 1145”
+evc “FLOOKUP parsed_contract_code 1146”
+evc “FLOOKUP parsed_contract_code 1147”
+evc “FLOOKUP parsed_contract_code 1149”
+evc “FLOOKUP parsed_contract_code 1150”
+evc “FLOOKUP parsed_contract_code 1152”
+evc “FLOOKUP parsed_contract_code 1153”
+evc “FLOOKUP parsed_contract_code 1155”
+evc “FLOOKUP parsed_contract_code 1156”
+evc “FLOOKUP parsed_contract_code 1157”
+evc “FLOOKUP parsed_contract_code 1158”
+evc “FLOOKUP parsed_contract_code 1159”
+evc “FLOOKUP parsed_contract_code 1160”
+evc “FLOOKUP parsed_contract_code 1161”
+evc “FLOOKUP parsed_contract_code 1162”
+evc “FLOOKUP parsed_contract_code 1163”
+evc “FLOOKUP parsed_contract_code 1164”
+evc “FLOOKUP parsed_contract_code 1165”
+evc “FLOOKUP parsed_contract_code 1166”
+evc “FLOOKUP parsed_contract_code 1167”
+evc “FLOOKUP parsed_contract_code 1188”
+evc “FLOOKUP parsed_contract_code 1189”
+evc “FLOOKUP parsed_contract_code 1222”
+evc “FLOOKUP parsed_contract_code 1223”
+evc “FLOOKUP parsed_contract_code 1225”
+evc “FLOOKUP parsed_contract_code 1226”
+evc “FLOOKUP parsed_contract_code 1227”
+evc “FLOOKUP parsed_contract_code 1228”
+evc “FLOOKUP parsed_contract_code 1229”
+evc “FLOOKUP parsed_contract_code 1230”
+evc “FLOOKUP parsed_contract_code 1232”
+evc “FLOOKUP parsed_contract_code 1233”
+evc “FLOOKUP parsed_contract_code 1234”
+evc “FLOOKUP parsed_contract_code 1235”
+evc “FLOOKUP parsed_contract_code 1236”
+evc “FLOOKUP parsed_contract_code 1238”
+evc “FLOOKUP parsed_contract_code 1239”
+evc “FLOOKUP parsed_contract_code 1240”
+evc “FLOOKUP parsed_contract_code 1241”
+evc “FLOOKUP parsed_contract_code 1242”
+evc “FLOOKUP parsed_contract_code 1243”
+evc “FLOOKUP parsed_contract_code 1244”
+
+(*
+
+Push 1 [96w]
+Push 1 [64w]
+MStore
+Push 1 [4w]
+CallDataSize
+LT
+Push 2 [0w; 175w]
+JumpI
+JumpDest
+Push 2 [0w; 183w]
+Push 2 [4w; 64w]
+Jump
+JumpDest
+
+CallValue
+Push 1 [3w]
+Push 1 [0w]
+Caller
+Push 20 [255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w;
+         255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w]
+And
+Push 20 [255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w;
+         255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w]
+And
+Dup 1
+MStore
+Push 1 [32w]
+Add
+Swap 0
+Dup 1
+MStore
+Push 1 [32w]
+Add
+Push 1 [0w]
+Keccak256
+Push 1 [0w]
+Dup 2
+Dup 2
+SLoad
+Add
+Swap 2
+Pop
+Pop
+Dup 1
+Swap 0
+SStore
+Pop
+Caller
+Push 20 [255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w;
+         255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w]
+And
+Push 32 [225w; 255w; 252w; 196w; 146w; 61w; 4w; 181w; 89w; 244w; 210w;
+         154w; 139w; 252w; 108w; 218w; 4w; 235w; 91w; 13w; 60w; 70w; 7w;
+         81w; 194w; 64w; 44w; 92w; 92w; 201w; 16w; 156w]
+CallValue
+Push 1 [64w]
+MLoad
+Dup 0
+Dup 2
+Dup 1
+MStore
+Push 1 [32w]
+Add
+Swap 1
+Pop
+Pop
+Push 1 [64w]
+MLoad
+Dup 0
+Swap 1
+Sub
+Swap 0
+Log 2
+Jump
+
+cv_eval “LENGTH (opcode (Log 2))”
+
+*)
+
+
+val spec0 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`1`,`[96w]`]
+val spec1 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`1`,`[64w]`]
+val spec2 = SPEC_MStore
+val spec3 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`1`,`[4w]`]
+val spec4 = SPEC_CallDataSize
+val spec5 = SPEC_LT
+val spec6 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`2`,`[0w; 175w]`]
+val spec7 = SPEC_JumpI_take
+val spec8 = SPEC_JumpDest
+val spec9 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`2`,`[0w; 183w]`]
+val spec10 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`2`,`[4w; 64w]`]
+val spec11 = SPEC_Jump
+
+val th = SPEC_COMPOSE_RULE [spec0,spec1,spec2,spec3,spec4,spec5,spec6,spec7,
+                            spec8,spec9,spec10,spec11]
+         |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
+         |> SIMP_RULE (srw_ss()) [no_data, SEP_CLAUSES, opcode_def,
+                                  AC STAR_ASSOC STAR_COMM]
+         |> SIMP_RULE (srw_ss() ++ ARITH_ss)[ADD1]
+         |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+              [AC CONJ_ASSOC CONJ_COMM,conj_repeat]
+
+*)
 
 (*
 val () = cv_trans_deep_embedding EVAL parsed_contract_code_eq;
