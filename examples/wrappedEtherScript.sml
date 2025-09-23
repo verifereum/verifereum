@@ -178,26 +178,6 @@ Theorem parsed_contract_code_eq =
 fun evc tm = tm |> REWRITE_CONV[parsed_contract_code_eq]
                 |> CONV_RULE (RAND_CONV EVAL)
 
-(* TODO: move *)
-Theorem SPEC_JumpI_take:
-  SPEC EVM_MODEL
-  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_JumpDest j * evm_Exception e *
-   cond
-     (2 ≤ LENGTH ss ∧ ISL e ∧
-      EL 1 ss ≠ 0w ∧
-      w2n (HD ss) < LENGTH p.code ∧
-      FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest ∧
-      g + static_gas JumpI ≤ p.gasLimit))
-  {(pc,JumpI)}
-  (evm_Stack (DROP 2 ss) * evm_PC (w2n (HD ss)) * evm_JumpDest NONE *
-   evm_Exception e * evm_GasUsed (g + static_gas JumpI) *
-   evm_MsgParams p)
-Proof
-  mp_tac (GEN_ALL SPEC_JumpI)
-  \\ rw[SPEC_MOVE_COND]
-QED
-
 Theorem mask_and_w2w:
   (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw:bytes32) &&
   w2w (w:address) = w2w w
