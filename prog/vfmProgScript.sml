@@ -674,6 +674,14 @@ Definition accesses_add_slot_def:
   (λx. x with storageKeys updated_by fINSERT sk)
 End
 
+Theorem accesses_add_slot_idem[simp]:
+  accesses_add_slot k (accesses_add_slot k d) =
+  accesses_add_slot k d
+Proof
+  rw[accesses_add_slot_def]
+  \\ simp[rollback_state_component_equality, access_sets_component_equality]
+QED
+
 Theorem accesses_add_slot_accounts[simp]:
   (accesses_add_slot a rb).accounts = rb.accounts
 Proof

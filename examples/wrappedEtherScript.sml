@@ -5,6 +5,7 @@ Ancestors
   set_sep prog vfmProg
 Libs
   cv_transLib wordsLib blastLib helperLib
+  intLib
 
 Definition slot_word_def:
   slot_word (a:address) = (
@@ -35,7 +36,6 @@ Definition slot_key_def:
     Keccak_256_w64 (slot_word a)
 End
 
-(*
 Theorem memory_cost_change:
   (LENGTH m2 = LENGTH m1) ∧
   (o2 + z2 = o1 + z1) ∧
@@ -45,6 +45,43 @@ Theorem memory_cost_change:
 Proof
   rw[memory_cost_def]
 QED
+
+Theorem memory_expansion_cost_0[simp]:
+  memory_expansion_cost x 0 = 0
+Proof
+  rw[vfmExecutionTheory.memory_expansion_cost_def]
+QED
+
+Theorem word_size_mono_leq:
+  b1 ≤ b2 ⇒ word_size b1 ≤ word_size b2
+Proof
+  rw[vfmConstantsTheory.word_size_def]
+  \\ intLib.COOPER_TAC
+QED
+
+Theorem memory_cost_mono_leq:
+  m1 ≤ m2 ⇒
+  memory_cost m1 ≤ memory_cost m2
+Proof
+  rw[vfmExecutionTheory.memory_cost_def]
+  \\ drule word_size_mono_leq
+  \\ strip_tac
+  \\ irule LESS_EQ_LESS_EQ_MONO
+  \\ simp[]
+  \\ irule DIV_LE_MONOTONE
+  \\ simp[]
+QED
+
+(*
+Theorem memory_cost_APPEND_DROP_LENGTH:
+  LENGTH l1 = n ⇒
+  memory_cost (l1 ++ DROP n l2) n sz =
+  memory_cost l2 n sz
+Proof
+  rw[memory_cost_def]
+  strip_tac
+  DB.find"memory_expansion_cost"
+  \\ irule memory_cost_change
 
 Theorem memory_cost_APPEND_DROP_size:
   LENGTH l1 = n ∧ n ≤ LENGTH l2 ⇒
@@ -343,7 +380,7 @@ val spec50 = mk_SPEC_Swap `1`;
 val spec51 = SPEC_Sub;
 val spec52 = mk_SPEC_Swap `0`;
 val spec53 = mk_SPEC_Log `2`;
-val spec53 = SPEC_Jump;
+val spec54 = SPEC_Jump;
 
 val th10 = SPEC_COMPOSE_RULE [
   spec00,spec01,spec02,spec03,spec04,spec05,spec06,spec07,spec08,spec09]
@@ -458,12 +495,67 @@ Proof
   \\ rw[MAX_DEF]
 QED
 
+Theorem memory_cost_write_more_32_32:
+  LENGTH l1 = 32
+  ⇒
+  memory_cost m1 0 32 +
+  (memory_cost (l1 ++ (DROP 32 m1)) 32 32 + rest) =
+  memory_cost m1 0 (32 + 32) + rest
+Proof
+  rw[memory_cost_def] \\ gvs[]
+  \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
+  \\ rw[vfmConstantsTheory.word_size_def]
+  \\ Cases_on`32 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
+  >- (
+      `memory_cost 32 ≤ memory_cost 64` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (LENGTH m1) ≤ memory_cost 32` by simp[memory_cost_mono_leq]
+   \\ intLib.COOPER_TAC)
+  \\ `LENGTH m1 = 32` by simp[]
+  \\ gvs[]
+QED
+
+Theorem memory_cost_write_more_64_32:
+  LENGTH l1 = 64
+  ⇒
+  memory_cost m1 0 64 +
+  (memory_cost (l1 ++ (DROP 64 m1)) 64 32 + rest) =
+  memory_cost m1 0 (64 + 32) + rest
+Proof
+  rw[memory_cost_def] \\ gvs[]
+  \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
+  \\ rw[vfmConstantsTheory.word_size_def]
+  \\ Cases_on`64 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
+  >- (
+      `memory_cost 64 ≤ memory_cost 96` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (LENGTH m1) ≤ memory_cost 64` by simp[memory_cost_mono_leq]
+   \\ intLib.COOPER_TAC)
+  \\ `LENGTH m1 = 64` by simp[]
+  \\ gvs[]
+QED
+
+Theorem Keccak256_gas_slot_word_0_64:
+  Keccak256_gas (slot_word a ++ m) 0 64 = 42
+Proof
+  rw[Keccak256_gas_def]
+  \\ CONV_TAC(PATH_CONV"lrlr"cv_eval)
+  \\ simp[memory_cost_def]
+  \\ simp[vfmExecutionTheory.memory_expansion_cost_def]
+  \\ rw[vfmConstantsTheory.word_size_def, MAX_DEF]
+QED
+
 val th38m =
   th38 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
   |> Q.GENL[`value`,`em`,`sk`,`key`,`offset`]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [GSYM SPEC_MOVE_COND, conj_repeat_last,
         DROP_64_expanded_memory_append_64_32]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [LENGTH_word_to_bytes,
+        Keccak256_gas_slot_word_0_64,
+        memory_cost_write_more_64_32,
+        memory_cost_write_more_32_32]
 
 val th48 = SPEC_COMPOSE_RULE
            [th38m, spec38, spec39, spec40, spec41, spec42,
@@ -477,19 +569,31 @@ val th48m =
   |> Q.GENL[`bytes`,`em`,`offset`]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [GSYM SPEC_MOVE_COND, conj_repeat_last]
+  |> CONV_RULE (DEPTH_CONV word_of_bytes_conv)
 
-val th54 =
-  SPEC_COMPOSE_RULE[th48m, spec48, spec49, spec50, spec51, spec52, spec53]
+val th53 =
+  SPEC_COMPOSE_RULE[th48m, spec48, spec49, spec50, spec51, spec52]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
      [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
       AC CONJ_ASSOC CONJ_COMM, conj_repeat]
-  |> CONV_RULE (DEPTH_CONV word_of_bytes_conv)
 
-val th54m =
-  th54 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+val th53m =
+  th53 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
   |> Q.GENL[`em`,`offset`]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [GSYM SPEC_MOVE_COND]
+
+(*
+val code_req = th54m |> concl |> strip_comb |> #2 |> el 3;
+
+Theorem code_req_met:
+  pc = 1089 ⇒
+  ∀n i. (n,i) ∈ ^code_req ⇒ FLOOKUP parsed_contract_code n = SOME i
+Proof
+  rw[]
+  \\ CONV_TAC evc
+QED
+*)
 
 (*
 evc “FLOOKUP parsed_contract_code 0”
