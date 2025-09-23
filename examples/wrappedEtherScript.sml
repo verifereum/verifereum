@@ -6,6 +6,57 @@ Ancestors
 Libs
   cv_transLib wordsLib blastLib helperLib
 
+Definition slot_word_def:
+  slot_word (a:address) = (
+      REVERSE (word_to_bytes (w2w a : bytes32) F) ++
+      REVERSE (word_to_bytes (3w:bytes32) F))
+End
+
+Theorem LENGTH_slot_word[simp]:
+  LENGTH (slot_word a) = 64
+Proof
+  rw[slot_word_def]
+QED
+
+Theorem expanded_memory_0_leq:
+  32 * word_size sz ≤ LENGTH m ⇒ expanded_memory m 0 sz = m
+Proof
+  rw[expanded_memory_def, memory_expand_by_def]
+QED
+
+Theorem MULT_32_word_size_64:
+  32 * word_size 64 = 64
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition slot_key_def:
+  slot_key (a:address) = word_of_bytes T (0w:bytes32) $
+    Keccak_256_w64 (slot_word a)
+End
+
+(*
+Theorem memory_cost_change:
+  (LENGTH m2 = LENGTH m1) ∧
+  (o2 + z2 = o1 + z1) ∧
+  ((z2 = 0) = (z1 = 0))
+  ⇒
+  memory_cost m1 o1 z1 = memory_cost m2 o2 z2
+Proof
+  rw[memory_cost_def]
+QED
+
+Theorem memory_cost_APPEND_DROP_size:
+  LENGTH l1 = n ∧ n ≤ LENGTH l2 ⇒
+  memory_cost (l1 ++ (DROP n l2)) off sz =
+  memory_cost l2 off sz
+Proof
+  strip_tac \\
+  irule memory_cost_change
+  \\ rw[]
+QED
+*)
+
 Definition Keccak_256_string_def:
   Keccak_256_string s =
   Keccak_256_w64 $ MAP (n2w o ORD) s
@@ -375,72 +426,6 @@ val th29 = SPEC_COMPOSE_RULE
        [conj_repeat_last, listTheory.TAKE_LENGTH_TOO_LONG,
         listTheory.TAKE_APPEND1,
         LENGTH_word_to_bytes];
-
-Definition slot_word_def:
-  slot_word (a:address) = (
-      REVERSE (word_to_bytes (w2w a : bytes32) F) ++
-      REVERSE (word_to_bytes (3w:bytes32) F))
-End
-
-Theorem LENGTH_slot_word[simp]:
-  LENGTH (slot_word a) = 64
-Proof
-  rw[slot_word_def]
-QED
-
-Theorem expanded_memory_0_leq:
-  32 * word_size sz ≤ LENGTH m ⇒ expanded_memory m 0 sz = m
-Proof
-  rw[expanded_memory_def, memory_expand_by_def]
-QED
-
-Theorem MULT_32_word_size_64:
-  32 * word_size 64 = 64
-Proof
-  CONV_TAC cv_eval
-QED
-
-Definition slot_key_def:
-  slot_key (a:address) = word_of_bytes T (0w:bytes32) $
-    Keccak_256_w64 (slot_word a)
-End
-
-Theorem memory_cost_change:
-  (LENGTH m2 = LENGTH m1) ∧
-  (o2 + z2 = o1 + z1) ∧
-  ((z2 = 0) = (z1 = 0))
-  ⇒
-  memory_cost m1 o1 z1 = memory_cost m2 o2 z2
-Proof
-  rw[memory_cost_def]
-QED
-
-Theorem memory_cost_APPEND_DROP_size:
-  LENGTH l1 = n ∧ n ≤ LENGTH l2 ⇒
-  memory_cost (l1 ++ (DROP n l2)) off sz =
-  memory_cost l2 off sz
-Proof
-  strip_tac \\
-  irule memory_cost_change
-  \\ rw[]
-QED
-
-(* TODO: move *)
-Theorem msdomain_add_slot_idem[simp]:
-  msdomain_add_slot k (msdomain_add_slot k d) =
-  msdomain_add_slot k d
-Proof
-  rw[msdomain_add_slot_def]
-  \\ CASE_TAC \\ simp[vfmContextTheory.domain_component_equality]
-QED
-
-Theorem access_slot_check_msdomain_add_slot[simp]:
-  access_slot_check (msdomain_add_slot k' d) k =
-  access_slot_check d k
-Proof
-  rw[access_slot_check_def, msdomain_add_slot_def]
-  \\ CASE_TAC \\ simp[]
-QED
 
 val th29m =
   th29 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC,

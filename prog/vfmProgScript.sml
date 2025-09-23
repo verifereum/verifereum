@@ -660,6 +660,14 @@ Definition msdomain_add_slot_def:
           | Collect x => Collect $ x with storageKeys updated_by fINSERT a
 End
 
+Theorem msdomain_add_slot_idem[simp]:
+  msdomain_add_slot k (msdomain_add_slot k d) =
+  msdomain_add_slot k d
+Proof
+  rw[msdomain_add_slot_def]
+  \\ CASE_TAC \\ simp[domain_component_equality]
+QED
+
 Definition accesses_add_slot_def:
   accesses_add_slot sk rb =
   rb with accesses updated_by
@@ -698,6 +706,14 @@ Proof
           accesses_add_slot_def, access_sets_component_equality,
           execution_state_component_equality,
           rollback_state_component_equality]
+QED
+
+Theorem access_slot_check_msdomain_add_slot[simp]:
+  access_slot_check (msdomain_add_slot k' d) k =
+  access_slot_check d k
+Proof
+  rw[access_slot_check_def, msdomain_add_slot_def]
+  \\ CASE_TAC \\ simp[]
 QED
 
 Definition access_storage_check_def:
