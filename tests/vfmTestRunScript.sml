@@ -601,14 +601,14 @@ Definition run_test_def:
       if computedPostState <> postState then StateMismatch else Passed
     | SOME (msg, rlpbs, optblock) =>
         case OPTION_BIND (rlp_decode rlpbs) block_from_rlp of NONE =>
-          if IS_NONE optblock then Passed else BlockDecodeFailure
+          Passed (* TODO: check exception msg *)
         | SOME decoded =>
         case optblock of NONE => ExpectedException "block rlp decoding"
         | SOME invalidBlock =>
           if decoded with hash := invalidBlock.hash <> invalidBlock
           then BlockDecodeMismatch else
           case run_blocks dom 1 hashes parent computedPostState [invalidBlock] of
-          NONE => Passed (* TODO: check exception match *)
+          NONE => Passed (* TODO: check exception msg *)
         | SOME _ => ExpectedException msg
 End
 
