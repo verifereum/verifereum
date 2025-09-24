@@ -593,6 +593,34 @@ Proof
   \\ gvs[]
 QED
 
+(* TODO: move *)
+Theorem memory_cost_offset_to_0:
+  0 < sz ⇒
+  memory_cost m off sz = memory_cost m 0 (off + sz)
+Proof
+  rw[memory_cost_def]
+QED
+
+Theorem memory_cost_write_more_96_32:
+  LENGTH l1 = 96
+  ⇒
+  memory_cost m1 0 96 +
+  (memory_cost (l1 ++ (DROP 96 m1)) 96 32 + rest) =
+  memory_cost m1 0 (96 + 32) + rest
+Proof
+  rw[memory_cost_def] \\ gvs[]
+  \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
+  \\ rw[word_size_def]
+  \\ Cases_on`96 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
+  >- (
+      `memory_cost 96 ≤ memory_cost 128` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (LENGTH m1) ≤ memory_cost 96` by simp[memory_cost_mono_leq]
+   \\ intLib.COOPER_TAC)
+  \\ `LENGTH m1 = 96` by simp[]
+  \\ gvs[]
+QED
+
 Theorem Keccak256_gas_slot_word_0_64:
   Keccak256_gas (slot_word a ++ m) 0 64 = 42
 Proof
@@ -773,7 +801,6 @@ Proof
   \\ rw[LENGTH_expanded_memory_geq, MULT_32_word_size_96]
 QED
 
-(* TODO: SPEC_SStore needs to work when cs = [] *)
 (* TODO: simplify by assuming m starts as []? *)
 
 Theorem SPEC_fallback = SPEC_COMPOSE_RULE [smw, SPEC_JumpDest, th55m]
@@ -781,12 +808,15 @@ Theorem SPEC_fallback = SPEC_COMPOSE_RULE [smw, SPEC_JumpDest, th55m]
      [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
       AC CONJ_ASSOC CONJ_COMM, conj_repeat]
   |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
-  |> Q.GENL [`pc`,`j`]
+  |> Q.GENL [`pc`,`j`,`orig_rb`]
   |> Q.SPEC`0`
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
      [LENGTH_TAKE, LENGTH_expanded_memory_geq, iffRL SUB_EQ_0,
       MULT_32_word_size_96, DROP_APPEND, DROP_LENGTH_TOO_LONG,
-      TAKE_APPEND1, LENGTH_word_to_bytes,DROP_DROP_T]
+      TAKE_APPEND1, LENGTH_word_to_bytes,DROP_DROP_T,
+      DROP_size_expanded_memory, MULT_32_word_size_128,
+      Q.SPECL[`64`,`32`](Q.GENL[`off`,`sz`]memory_cost_offset_to_0),
+      memory_cost_write_more_96_32]
   |> SRULE[GSYM AND_IMP_INTRO, evc“FLOOKUP parsed_contract_code 183”,
            cv_eval“LENGTH contract_code”]
   |> SRULE[AND_IMP_INTRO, GSYM SPEC_MOVE_COND, AC CONJ_ASSOC CONJ_COMM]
