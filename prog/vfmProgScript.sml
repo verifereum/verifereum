@@ -998,7 +998,8 @@ val binop_tac =
           memory_cost_def,EL_TAKE,expanded_memory_def,step_mstore_def,
           CallDataCopy_gas_def,CodeCopy_gas_def,ExtCodeCopy_gas_def,
           ReturnDataCopy_gas_def,step_return_data_copy_def,
-          get_return_data_check_def,get_return_data_def,
+          get_return_data_check_def,get_return_data_def,NULL_EQ,
+          Q.ISPEC`SND`COND_RAND,
           ExtCodeHash_gas_def,step_ext_code_hash_def,step_mload_def,
           step_copy_to_memory_def,copy_to_memory_def,step_blob_hash_def,
           write_memory_def,memory_expand_by_def,step_keccak256_def,
@@ -2057,13 +2058,14 @@ Theorem SPEC_SStore:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
-   evm_AddRefund ar * evm_SubRefund sr * evm_Contexts cs *
+   evm_AddRefund ar * evm_SubRefund sr * evm_Contexts cs * evm_CachedRB cb *
    cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
          key = HD ss ∧ value = EL 1 ss ∧
          ~p.static ∧ call_stipend < p.gasLimit - g ∧
-         sk = SK p.callee key ∧ access_slot_check d sk ∧ cs ≠ [] ∧
+         sk = SK p.callee key ∧ access_slot_check d sk ∧
+         (orig_rb = if NULL cs then cb else SND (LAST cs)) ∧
          (cost,ad,sd) =
-           SStore_gas (SND (LAST cs)).accounts rb p.callee key value ∧
+           SStore_gas orig_rb.accounts rb p.callee key value ∧
          g + cost ≤ p.gasLimit))
   {(pc,SStore)}
   (evm_Stack (DROP 2 ss) *
@@ -2075,6 +2077,7 @@ Theorem SPEC_SStore:
    evm_AddRefund (ar + ad) *
    evm_SubRefund (sr + sd) *
    evm_Contexts cs *
+   evm_CachedRB cb *
    evm_MsgParams p)
 Proof binop_tac
 QED
