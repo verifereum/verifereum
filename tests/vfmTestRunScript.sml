@@ -592,7 +592,8 @@ Definition run_test_def:
     let check = check_block_rlps validBlockRLPs validBlocks in
     if ¬isPassed check then check else
     case
-      run_blocks (Collect empty_domain) 1 [] genesisBlock preState validBlocks
+      run_blocks (Collect empty_domain) 1
+        [genesisBlock.hash] genesisBlock preState validBlocks
     of NONE => UnexpectedException
      | SOME (_, hashes, parent, computedPostState, dom) =>
     case expectException of NONE =>
