@@ -1,7 +1,7 @@
 Theory wrappedEther
 Ancestors
-  arithmetic byte combin
-  vfmOperation vfmState vfmCompute
+  arithmetic byte list rich_list combin
+  vfmOperation vfmConstants vfmState vfmCompute
   set_sep prog vfmProg
 Libs
   cv_transLib wordsLib blastLib helperLib
@@ -55,7 +55,7 @@ QED
 Theorem word_size_mono_leq:
   b1 ≤ b2 ⇒ word_size b1 ≤ word_size b2
 Proof
-  rw[vfmConstantsTheory.word_size_def]
+  rw[word_size_def]
   \\ intLib.COOPER_TAC
 QED
 
@@ -397,18 +397,24 @@ val th10m =
        |> SRULE[sumTheory.FORALL_SUM]
        |> SIMP_RULE (srw_ss() ++ ARITH_ss) [GSYM SPEC_MOVE_COND, conj_repeat]
 
-val pre = th10m |> concl |> dest_spec |> #2
-val pres = list_dest dest_star pre
-val (cond, conj) = dest_comb $ last pres
-val conds = strip_conj conj
-val conds = “96 ≤ LENGTH (m:byte list)” ::
-            “TAKE 32 (DROP 64 m) = REVERSE (word_to_bytes (96w:bytes32) F)” ::
-            conds
-val cond = mk_comb(cond, list_mk_conj conds)
-val pres = list_mk_star (List.take(pres, length pres - 1) @ [cond])
-                        “:evm_el set set”
+val evm_domain_ty = “:evm_el set set”;
+fun extract_conds th = let
+  val pre = th |> concl |> dest_spec |> #2
+  val pres = list_dest dest_star pre
+  val front = butlast pres
+  val (cond, conj) = dest_comb $ last pres
+  fun replace conds = let
+    val cond = mk_comb(cond, list_mk_conj conds)
+  in list_mk_star (front @ [cond]) evm_domain_ty end
+in
+  (strip_conj conj, replace)
+end
 
-val (th10wi, gl) = SPEC_STRENGTHEN_RULE th10m pres
+val (conds, replace) = extract_conds th10m
+val (th10wi, gl) = SPEC_STRENGTHEN_RULE th10m $ replace $
+   “96 ≤ LENGTH (m:byte list)” ::
+   “TAKE 32 (DROP 64 m) = REVERSE (word_to_bytes (96w:bytes32) F)” ::
+   conds
 
 Theorem gl[local]:
   ^gl
@@ -442,7 +448,7 @@ Theorem DROP_offset_expanded:
   DROP n (expanded_memory m n z) =
   expanded_memory (DROP n m) 0 z
 Proof
-  rw[expanded_memory_def, listTheory.DROP_APPEND]
+  rw[expanded_memory_def, DROP_APPEND]
   \\ gvs[iffRL SUB_EQ_0]
   \\ simp[memory_expand_by_def]
   \\ rw[MAX_DEF, vfmConstantsTheory.word_size_def]
@@ -488,11 +494,9 @@ val th18m =
        |> Q.GENL[`offset`,`bytes`,`em`]
        |> SRULE[GSYM SPEC_MOVE_COND]
        |> SIMP_RULE (srw_ss() ++ ARITH_ss)
-            [listTheory.TAKE_APPEND1, LENGTH_word_to_bytes,
-             listTheory.TAKE_LENGTH_TOO_LONG,
-             listTheory.DROP_APPEND, rich_listTheory.DROP_DROP_T,
-             listTheory.DROP_LENGTH_TOO_LONG,
-             DROP_64_expanded_32_32]
+            [TAKE_APPEND1, LENGTH_word_to_bytes,
+             TAKE_LENGTH_TOO_LONG, DROP_APPEND, DROP_DROP_T,
+             DROP_LENGTH_TOO_LONG, DROP_64_expanded_32_32]
 
 val th22 = SPEC_COMPOSE_RULE [th18m,spec18,spec19,spec20,spec21]
   |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
@@ -500,13 +504,10 @@ val th22 = SPEC_COMPOSE_RULE [th18m,spec18,spec19,spec20,spec21]
        [opcode_def, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
         AC CONJ_ASSOC CONJ_COMM, conj_repeat, ADD1]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
-       [conj_repeat_last, listTheory.TAKE_APPEND1,
-        listTheory.TAKE_LENGTH_TOO_LONG,
-        listTheory.DROP_LENGTH_TOO_LONG,
-        listTheory.DROP_APPEND,
-        rich_listTheory.DROP_DROP_T,
-        LENGTH_word_to_bytes,
-        DROP_64_expanded_32_32];
+       [conj_repeat_last, TAKE_APPEND1,
+        TAKE_LENGTH_TOO_LONG,
+        DROP_LENGTH_TOO_LONG, DROP_APPEND, DROP_DROP_T,
+        LENGTH_word_to_bytes, DROP_64_expanded_32_32];
 
 val th22m =
   th22 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
@@ -519,8 +520,7 @@ val th29 = SPEC_COMPOSE_RULE
        [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
         AC CONJ_ASSOC CONJ_COMM, conj_repeat]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
-       [conj_repeat_last, listTheory.TAKE_LENGTH_TOO_LONG,
-        listTheory.TAKE_APPEND1,
+       [conj_repeat_last, TAKE_LENGTH_TOO_LONG, TAKE_APPEND1,
         LENGTH_word_to_bytes];
 
 val th29m =
@@ -546,11 +546,10 @@ Theorem DROP_64_expanded_memory_append_64_32:
   DROP 64 (expanded_memory (l1 ++ l2) 64 32) =
   expanded_memory l2 0 32
 Proof
-  rw[expanded_memory_def, listTheory.DROP_APPEND,
-     listTheory.DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
+  rw[expanded_memory_def, DROP_APPEND,
+     DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
   \\ AP_THM_TAC \\ AP_TERM_TAC
-  \\ rw[memory_expand_by_def, LEFT_ADD_DISTRIB,
-        vfmConstantsTheory.word_size_def]
+  \\ rw[memory_expand_by_def, LEFT_ADD_DISTRIB, word_size_def]
   \\ rw[MAX_DEF]
 QED
 
@@ -563,7 +562,7 @@ Theorem memory_cost_write_more_32_32:
 Proof
   rw[memory_cost_def] \\ gvs[]
   \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[vfmConstantsTheory.word_size_def]
+  \\ rw[word_size_def]
   \\ Cases_on`32 < LENGTH m1` \\ gvs[MAX_DEF]
   \\ rw[iffRL SUB_EQ_0] \\ gvs[]
   >- (
@@ -583,7 +582,7 @@ Theorem memory_cost_write_more_64_32:
 Proof
   rw[memory_cost_def] \\ gvs[]
   \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[vfmConstantsTheory.word_size_def]
+  \\ rw[word_size_def]
   \\ Cases_on`64 < LENGTH m1` \\ gvs[MAX_DEF]
   \\ rw[iffRL SUB_EQ_0] \\ gvs[]
   >- (
@@ -601,7 +600,7 @@ Proof
   \\ CONV_TAC(PATH_CONV"lrlr"cv_eval)
   \\ simp[memory_cost_def]
   \\ simp[vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[vfmConstantsTheory.word_size_def, MAX_DEF]
+  \\ rw[word_size_def, MAX_DEF]
 QED
 
 val MULT_32_word_size_96 =
@@ -639,16 +638,14 @@ val th48m =
   |> Q.GENL[`bytes`,`em`,`offset`]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [TAKE_expanded_memory_leq,
-        listTheory.TAKE_APPEND2,
-        listTheory.TAKE_LENGTH_TOO_LONG]
+        TAKE_APPEND2, TAKE_LENGTH_TOO_LONG]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [GSYM SPEC_MOVE_COND, conj_repeat_last]
   |> CONV_RULE (DEPTH_CONV word_of_bytes_conv)
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [expanded_memory_leq, DROP_size_expanded_memory,
         MULT_32_word_size_128,
-        listTheory.DROP_APPEND, rich_listTheory.DROP_DROP_T,
-        listTheory.DROP_LENGTH_TOO_LONG]
+        DROP_APPEND, DROP_DROP_T, DROP_LENGTH_TOO_LONG]
 
 val th53 =
   SPEC_COMPOSE_RULE[th48m, spec48, spec49, spec50, spec51, spec52]
@@ -662,9 +659,9 @@ val th53m =
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [expanded_memory_leq, LENGTH_word_to_bytes,
         DROP_size_expanded_memory, MULT_32_word_size_96,
-        listTheory.DROP_APPEND, listTheory.DROP_LENGTH_TOO_LONG,
-        listTheory.TAKE_APPEND1, rich_listTheory.TAKE_REVERSE,
-        rich_listTheory.LASTN_DROP, memory_cost_none_zero]
+        DROP_APPEND, DROP_LENGTH_TOO_LONG,
+        TAKE_APPEND1, TAKE_REVERSE, LASTN_DROP,
+        memory_cost_none_zero]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [GSYM SPEC_MOVE_COND, conj_repeat_last]
 
@@ -687,23 +684,123 @@ val th55m =
        [expanded_memory_leq, LENGTH_word_to_bytes,
         DROP_size_expanded_memory, MULT_32_word_size_96,
         MULT_32_word_size_128,
-        listTheory.DROP_APPEND, listTheory.DROP_LENGTH_TOO_LONG,
-        listTheory.TAKE_APPEND1, rich_listTheory.TAKE_REVERSE,
-        rich_listTheory.LASTN_DROP, memory_cost_none_zero,
-        NOT_LENGTH_ADD_LEQ, vfmConstantsTheory.log_data_cost_def,
-        vfmConstantsTheory.log_topic_cost_def]
+        DROP_APPEND, DROP_LENGTH_TOO_LONG, TAKE_APPEND1, TAKE_REVERSE,
+        LASTN_DROP, memory_cost_none_zero,
+        NOT_LENGTH_ADD_LEQ, log_data_cost_def, log_topic_cost_def]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [GSYM SPEC_MOVE_COND, conj_repeat_last]
 
 Theorem SPEC_deposit = th55m;
 
-val code_req = th55m |> concl |> strip_comb |> #2 |> el 3;
+val s0 = mk_SPEC_Push `1` `[96w]`
+val s1 = mk_SPEC_Push `1` `[64w]`
+val s2 = SPEC_MStore
+val s3 = mk_SPEC_Push `1` `[4w]`
+val s4 = SPEC_CallDataSize
+val s5 = SPEC_LT
+val s6 = mk_SPEC_Push `2` `[0w; 175w]`
+val s7 = SPEC_JumpI_take
+val s8 = SPEC_JumpDest
+val s9 = mk_SPEC_Push `2` `[0w; 183w]`
+val s10 = mk_SPEC_Push `2` `[4w; 64w]`
+val s11 = SPEC_Jump
+
+val startup =
+  SPEC_COMPOSE_RULE [s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+     [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+      AC CONJ_ASSOC CONJ_COMM, conj_repeat]
+
+val sm =
+  startup |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+  |> Q.GENL[`em`,`offset`,`bytes`]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss) [GSYM SPEC_MOVE_COND]
+  |> CONV_RULE (DEPTH_CONV word_of_bytes_conv)
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss) []
+
+val p = “p:message_parameters”
+fun has_term p = can (find_term (can (match_term p)))
+
+val (conds, replace) = extract_conds sm
+val (smi, gl) = SPEC_STRENGTHEN_RULE sm $ replace $
+   “p.parsed = parsed_contract_code” ::
+   “p.code = contract_code” ::
+   “LENGTH p.data < 4” ::
+   List.filter (fn tm =>
+     not (has_term “^p.code” tm orelse
+          has_term “^p.parsed” tm orelse
+          has_term “^p.data” tm orelse
+          has_term “g + 6n” tm )) conds
+
+Theorem gl[local]:
+  ^gl
+Proof
+  rw[SEP_IMP_def, STAR_def, PULL_EXISTS, cond_def]
+  \\ goal_assum irule
+  \\ conj_tac >- CONV_TAC cv_eval
+  \\ conj_tac >- CONV_TAC cv_eval
+  \\ conj_tac >- CONV_TAC evc
+  \\ conj_tac >- CONV_TAC evc
+  \\ rpt $ goal_assum $ drule
+QED
+
+val smw = MP smi gl
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+       [AC CONJ_ASSOC CONJ_COMM, conj_repeat]
+  |> Q.INST[`e` |-> `INL ()`]
+
+Theorem expanded_memory_0[simp]:
+  expanded_memory m off 0 = m
+Proof
+  rw[expanded_memory_def, memory_expand_by_def]
+QED
+
+Theorem LENGTH_expanded_memory_geq:
+  (sz = 0 ⇒ 32 * word_size off ≤ LENGTH m) ⇒
+  32 * word_size (off + sz) ≤ LENGTH (expanded_memory m off sz)
+Proof
+  Cases_on`sz = 0` \\ gvs[]
+  \\ rw[expanded_memory_def, memory_expand_by_def]
+  \\ rw[MAX_DEF]
+QED
+
+Theorem LENGTH_TAKE_64_expanded_memory_64_32[simp]:
+  LENGTH (TAKE 64 (expanded_memory m 64 32)) = 64
+Proof
+  irule LENGTH_TAKE
+  \\ irule LESS_EQ_TRANS
+  \\ qexists_tac`32 * word_size (64 + 32)`
+  \\ rw[LENGTH_expanded_memory_geq, MULT_32_word_size_96]
+QED
+
+(* TODO: SPEC_SStore needs to work when cs = [] *)
+(* TODO: simplify by assuming m starts as []? *)
+
+Theorem SPEC_fallback = SPEC_COMPOSE_RULE [smw, SPEC_JumpDest, th55m]
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+     [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
+      AC CONJ_ASSOC CONJ_COMM, conj_repeat]
+  |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+  |> Q.GENL [`pc`,`j`]
+  |> Q.SPEC`0`
+  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+     [LENGTH_TAKE, LENGTH_expanded_memory_geq, iffRL SUB_EQ_0,
+      MULT_32_word_size_96, DROP_APPEND, DROP_LENGTH_TOO_LONG,
+      TAKE_APPEND1, LENGTH_word_to_bytes,DROP_DROP_T]
+  |> SRULE[GSYM AND_IMP_INTRO, evc“FLOOKUP parsed_contract_code 183”,
+           cv_eval“LENGTH contract_code”]
+  |> SRULE[AND_IMP_INTRO, GSYM SPEC_MOVE_COND, AC CONJ_ASSOC CONJ_COMM]
+
+val code_req = SPEC_fallback |> concl |> strip_comb |> #2 |> el 3;
 
 Theorem code_req_met:
-  pc = 1089 ⇒
   ∀n i. (n,i) ∈ ^code_req ⇒ FLOOKUP parsed_contract_code n = SOME i
 Proof
-  rw[]
+  rpt gen_tac
+  \\ rewrite_tac[pred_setTheory.IN_INSERT, pairTheory.PAIR_EQ]
+  \\ reverse strip_tac
+  >- gvs[]
+  \\ rpt BasicProvers.VAR_EQ_TAC
   \\ CONV_TAC evc
 QED
 
@@ -779,40 +876,6 @@ evc “FLOOKUP parsed_contract_code 183”
 evc “FLOOKUP parsed_contract_code 184”
 
 (*
-val s0 = mk_SPEC_Push `1` `[96w]`
-val s1 = mk_SPEC_Push `1` `[64w]`
-val s2 = SPEC_MStore
-val s3 = mk_SPEC_Push `1` `[4w]`
-val s4 = SPEC_CallDataSize
-val s5 = SPEC_LT
-val s6 = mk_SPEC_Push `2` `[0w; 175w]`
-val s7 = SPEC_JumpI_take
-val s8 = SPEC_JumpDest
-val s9 = mk_SPEC_Push `2` `[0w; 183w]`
-val s10 = mk_SPEC_Push `2` `[4w; 64w]`
-val s11 = SPEC_Jump
-
-val startup =
-  SPEC_COMPOSE_RULE [s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11]
-  |> SIMP_RULE (srw_ss() ++ ARITH_ss)
-     [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
-      AC CONJ_ASSOC CONJ_COMM, conj_repeat]
-
-val sm =
-  startup |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
-  |> Q.GENL[`em`,`offset`,`bytes`]
-  |> SIMP_RULE (srw_ss() ++ ARITH_ss) [GSYM SPEC_MOVE_COND]
-  |> CONV_RULE (DEPTH_CONV word_of_bytes_conv)
-  |> SIMP_RULE (srw_ss() ++ ARITH_ss) []
-
-at startup, we can assume:
-- memory is at least 96 bytes long
-- at byte 64 is REVERSE (word_to_bytes 96w F)
-
-*)
-
-(*
-
 Push 1 [96w]
 Push 1 [64w]
 MStore
@@ -887,34 +950,7 @@ Sub
 Swap 0
 Log 2
 Jump
-
-cv_eval “LENGTH (opcode (Log 2))”
-
 *)
-
-
-val spec0 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`1`,`[96w]`]
-val spec1 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`1`,`[64w]`]
-val spec2 = SPEC_MStore
-val spec3 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`1`,`[4w]`]
-val spec4 = SPEC_CallDataSize
-val spec5 = SPEC_LT
-val spec6 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`2`,`[0w; 175w]`]
-val spec7 = SPEC_JumpI_take
-val spec8 = SPEC_JumpDest
-val spec9 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`2`,`[0w; 183w]`]
-val spec10 = SPEC_Push |> Q.GENL[`n`,`bs`] |> Q.SPECL[`2`,`[4w; 64w]`]
-val spec11 = SPEC_Jump
-
-val th = SPEC_COMPOSE_RULE [spec0,spec1,spec2,spec3,spec4,spec5,spec6,spec7,
-                            spec8,spec9,spec10,spec11]
-         |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
-         |> SIMP_RULE (srw_ss()) [no_data, SEP_CLAUSES, opcode_def,
-                                  AC STAR_ASSOC STAR_COMM]
-         |> SIMP_RULE (srw_ss() ++ ARITH_ss)[ADD1]
-         |> SIMP_RULE (srw_ss() ++ ARITH_ss)
-              [AC CONJ_ASSOC CONJ_COMM,conj_repeat]
-
 *)
 
 (*
