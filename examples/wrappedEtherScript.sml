@@ -1,40 +1,29 @@
 Theory wrappedEther
 Ancestors
   arithmetic byte list rich_list combin
-  vfmOperation vfmConstants vfmState vfmCompute
+  vfmOperation vfmConstants vfmState vfmExecution vfmCompute
   set_sep prog vfmProg
 Libs
   cv_transLib wordsLib blastLib helperLib
   intLib
 
-Definition slot_word_def:
-  slot_word (a:address) = (
-      REVERSE (word_to_bytes (w2w a : bytes32) F) ++
-      REVERSE (word_to_bytes (3w:bytes32) F))
-End
-
-Theorem LENGTH_slot_word[simp]:
-  LENGTH (slot_word a) = 64
+Theorem NOT_LENGTH_ADD_LEQ:
+  ¬(LENGTH ls + n ≤ n) ⇔ ls ≠ []
 Proof
-  rw[slot_word_def]
+  Cases_on`ls` \\ rw[]
 QED
 
-Theorem expanded_memory_leq:
-  32 * word_size (a + b) ≤ LENGTH m ⇒ expanded_memory m a b = m
-Proof
-  rw[expanded_memory_def, memory_expand_by_def]
-QED
+val MULT_32_word_size_32 =
+  cv_eval “32 * word_size 32”
 
-Theorem MULT_32_word_size_64:
-  32 * word_size 64 = 64
-Proof
-  CONV_TAC cv_eval
-QED
+val MULT_32_word_size_64 =
+  cv_eval “32 * word_size 64”
 
-Definition slot_key_def:
-  slot_key (a:address) = word_of_bytes T (0w:bytes32) $
-    Keccak_256_w64 (slot_word a)
-End
+val MULT_32_word_size_96 =
+  cv_eval “32 * word_size 96”
+
+val MULT_32_word_size_128 =
+  cv_eval “32 * word_size 128”
 
 Theorem memory_cost_change:
   (LENGTH m2 = LENGTH m1) ∧
@@ -43,13 +32,7 @@ Theorem memory_cost_change:
   ⇒
   memory_cost m1 o1 z1 = memory_cost m2 o2 z2
 Proof
-  rw[memory_cost_def]
-QED
-
-Theorem memory_expansion_cost_0[simp]:
-  memory_expansion_cost x 0 = 0
-Proof
-  rw[vfmExecutionTheory.memory_expansion_cost_def]
+  rw[vfmProgTheory.memory_cost_def]
 QED
 
 Theorem word_size_mono_leq:
@@ -72,27 +55,89 @@ Proof
   \\ simp[]
 QED
 
-(*
-Theorem memory_cost_APPEND_DROP_LENGTH:
-  LENGTH l1 = n ⇒
-  memory_cost (l1 ++ DROP n l2) n sz =
-  memory_cost l2 n sz
+(* TODO: general theorem *)
+Theorem memory_cost_write_more_32_32:
+  LENGTH l1 = 32
+  ⇒
+  memory_cost m1 0 32 +
+  (memory_cost (l1 ++ (DROP 32 m1)) 32 32 + rest) =
+  memory_cost m1 0 (32 + 32) + rest
 Proof
-  rw[memory_cost_def]
-  strip_tac
-  DB.find"memory_expansion_cost"
-  \\ irule memory_cost_change
-
-Theorem memory_cost_APPEND_DROP_size:
-  LENGTH l1 = n ∧ n ≤ LENGTH l2 ⇒
-  memory_cost (l1 ++ (DROP n l2)) off sz =
-  memory_cost l2 off sz
-Proof
-  strip_tac \\
-  irule memory_cost_change
-  \\ rw[]
+  rw[memory_cost_def] \\ gvs[]
+  \\ rw[memory_expansion_cost_def]
+  \\ rw[word_size_def]
+  \\ Cases_on`32 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
+  >- (
+      `memory_cost 32 ≤ memory_cost 64` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (LENGTH m1) ≤ memory_cost 32` by simp[memory_cost_mono_leq]
+   \\ intLib.COOPER_TAC)
+  \\ `LENGTH m1 = 32` by simp[]
+  \\ gvs[]
 QED
-*)
+
+Theorem memory_cost_write_more_64_32:
+  LENGTH l1 = 64
+  ⇒
+  memory_cost m1 0 64 +
+  (memory_cost (l1 ++ (DROP 64 m1)) 64 32 + rest) =
+  memory_cost m1 0 (64 + 32) + rest
+Proof
+  rw[memory_cost_def] \\ gvs[]
+  \\ rw[memory_expansion_cost_def]
+  \\ rw[word_size_def]
+  \\ Cases_on`64 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
+  >- (
+      `memory_cost 64 ≤ memory_cost 96` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (LENGTH m1) ≤ memory_cost 64` by simp[memory_cost_mono_leq]
+   \\ intLib.COOPER_TAC)
+  \\ `LENGTH m1 = 64` by simp[]
+  \\ gvs[]
+QED
+
+Theorem memory_cost_write_more_96_32:
+  LENGTH l1 = 96
+  ⇒
+  memory_cost m1 0 96 +
+  (memory_cost (l1 ++ (DROP 96 m1)) 96 32 + rest) =
+  memory_cost m1 0 (96 + 32) + rest
+Proof
+  rw[memory_cost_def] \\ gvs[]
+  \\ rw[memory_expansion_cost_def]
+  \\ rw[word_size_def]
+  \\ Cases_on`96 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
+  >- (
+      `memory_cost 96 ≤ memory_cost 128` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (LENGTH m1) ≤ memory_cost 96` by simp[memory_cost_mono_leq]
+   \\ intLib.COOPER_TAC)
+  \\ `LENGTH m1 = 96` by simp[]
+  \\ gvs[]
+QED
+
+Definition slot_word_def:
+  slot_word (a:address) = (
+      REVERSE (word_to_bytes (w2w a : bytes32) F) ++
+      REVERSE (word_to_bytes (3w:bytes32) F))
+End
+
+Theorem LENGTH_slot_word[simp]:
+  LENGTH (slot_word a) = 64
+Proof
+  rw[slot_word_def]
+QED
+
+Theorem expanded_memory_leq:
+  32 * word_size (a + b) ≤ LENGTH m ⇒ expanded_memory m a b = m
+Proof
+  rw[expanded_memory_def, memory_expand_by_def]
+QED
+
+Definition slot_key_def:
+  slot_key (a:address) = word_of_bytes T (0w:bytes32) $
+    Keccak_256_w64 (slot_word a)
+End
 
 Definition Keccak_256_string_def:
   Keccak_256_string s =
@@ -266,6 +311,43 @@ Theorem parsed_contract_code_eq =
 fun evc tm = tm |> REWRITE_CONV[parsed_contract_code_eq]
                 |> CONV_RULE (RAND_CONV EVAL)
 
+val DROP_64_expanded_32_32 =
+  cv_eval “32 * word_size (32 + 32) ≤ 64”
+  |> EQT_ELIM
+  |> MATCH_MP DROP_size_expanded_memory;
+
+(* TODO: generalise? *)
+Theorem DROP_64_expanded_memory_append_64_32:
+  LENGTH l1 = 64 ⇒
+  DROP 64 (expanded_memory (l1 ++ l2) 64 32) =
+  expanded_memory l2 0 32
+Proof
+  rw[expanded_memory_def, DROP_APPEND,
+     DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
+  \\ AP_THM_TAC \\ AP_TERM_TAC
+  \\ rw[memory_expand_by_def, LEFT_ADD_DISTRIB, word_size_def]
+  \\ rw[MAX_DEF]
+QED
+
+Theorem LENGTH_TAKE_64_expanded_memory_64_32[simp]:
+  LENGTH (TAKE 64 (expanded_memory m 64 32)) = 64
+Proof
+  irule LENGTH_TAKE
+  \\ irule LESS_EQ_TRANS
+  \\ qexists_tac`32 * word_size (64 + 32)`
+  \\ rw[LENGTH_expanded_memory_geq, MULT_32_word_size_96]
+QED
+
+Theorem Keccak256_gas_slot_word_0_64:
+  Keccak256_gas (slot_word a ++ m) 0 64 = 42
+Proof
+  rw[Keccak256_gas_def]
+  \\ CONV_TAC(PATH_CONV"lrlr"cv_eval)
+  \\ simp[memory_cost_def]
+  \\ simp[vfmExecutionTheory.memory_expansion_cost_def]
+  \\ rw[word_size_def, MAX_DEF]
+QED
+
 Theorem mask_and_w2w:
   (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFw:bytes32) &&
   w2w (w:address) = w2w w
@@ -434,36 +516,6 @@ QED
 
 val th10w = MP th10wi gl
 
-val DROP_64_expanded_32_32 =
-  cv_eval “32 * word_size (32 + 32) ≤ 64”
-  |> EQT_ELIM
-  |> MATCH_MP DROP_size_expanded_memory;
-
-val MULT_32_word_size_32 =
-  cv_eval “32 * word_size 32”
-
-(*
-Theorem DROP_offset_expanded:
-  n ≤ LENGTH m ⇒
-  DROP n (expanded_memory m n z) =
-  expanded_memory (DROP n m) 0 z
-Proof
-  rw[expanded_memory_def, DROP_APPEND]
-  \\ gvs[iffRL SUB_EQ_0]
-  \\ simp[memory_expand_by_def]
-  \\ rw[MAX_DEF, vfmConstantsTheory.word_size_def]
-  \\ rpt(pop_assum mp_tac) \\ rw[LEFT_ADD_DISTRIB]
-  \\ intLib.COOPER_TAC
-*)
-
-Theorem memory_cost_none_zero:
-  32 * word_size (a + b) ≤ LENGTH m ⇒
-  memory_cost m a b = 0
-Proof
-  rw[memory_cost_def, vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[MAX_DEF]
-QED
-
 val th10x = th10w
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
      [SPEC_MOVE_COND, MULT_32_word_size_32,
@@ -540,103 +592,6 @@ val th38 = SPEC_COMPOSE_RULE
   |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
   |> SIMP_RULE (srw_ss() ++ ARITH_ss) [mask_and_w2w];
 
-(* TODO: generalise? *)
-Theorem DROP_64_expanded_memory_append_64_32:
-  LENGTH l1 = 64 ⇒
-  DROP 64 (expanded_memory (l1 ++ l2) 64 32) =
-  expanded_memory l2 0 32
-Proof
-  rw[expanded_memory_def, DROP_APPEND,
-     DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
-  \\ AP_THM_TAC \\ AP_TERM_TAC
-  \\ rw[memory_expand_by_def, LEFT_ADD_DISTRIB, word_size_def]
-  \\ rw[MAX_DEF]
-QED
-
-Theorem memory_cost_write_more_32_32:
-  LENGTH l1 = 32
-  ⇒
-  memory_cost m1 0 32 +
-  (memory_cost (l1 ++ (DROP 32 m1)) 32 32 + rest) =
-  memory_cost m1 0 (32 + 32) + rest
-Proof
-  rw[memory_cost_def] \\ gvs[]
-  \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[word_size_def]
-  \\ Cases_on`32 < LENGTH m1` \\ gvs[MAX_DEF]
-  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
-  >- (
-      `memory_cost 32 ≤ memory_cost 64` by simp[memory_cost_mono_leq]
-   \\ `memory_cost (LENGTH m1) ≤ memory_cost 32` by simp[memory_cost_mono_leq]
-   \\ intLib.COOPER_TAC)
-  \\ `LENGTH m1 = 32` by simp[]
-  \\ gvs[]
-QED
-
-Theorem memory_cost_write_more_64_32:
-  LENGTH l1 = 64
-  ⇒
-  memory_cost m1 0 64 +
-  (memory_cost (l1 ++ (DROP 64 m1)) 64 32 + rest) =
-  memory_cost m1 0 (64 + 32) + rest
-Proof
-  rw[memory_cost_def] \\ gvs[]
-  \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[word_size_def]
-  \\ Cases_on`64 < LENGTH m1` \\ gvs[MAX_DEF]
-  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
-  >- (
-      `memory_cost 64 ≤ memory_cost 96` by simp[memory_cost_mono_leq]
-   \\ `memory_cost (LENGTH m1) ≤ memory_cost 64` by simp[memory_cost_mono_leq]
-   \\ intLib.COOPER_TAC)
-  \\ `LENGTH m1 = 64` by simp[]
-  \\ gvs[]
-QED
-
-(* TODO: move *)
-Theorem memory_cost_offset_to_0:
-  0 < sz ⇒
-  memory_cost m off sz = memory_cost m 0 (off + sz)
-Proof
-  rw[memory_cost_def]
-QED
-
-Theorem memory_cost_write_more_96_32:
-  LENGTH l1 = 96
-  ⇒
-  memory_cost m1 0 96 +
-  (memory_cost (l1 ++ (DROP 96 m1)) 96 32 + rest) =
-  memory_cost m1 0 (96 + 32) + rest
-Proof
-  rw[memory_cost_def] \\ gvs[]
-  \\ rw[vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[word_size_def]
-  \\ Cases_on`96 < LENGTH m1` \\ gvs[MAX_DEF]
-  \\ rw[iffRL SUB_EQ_0] \\ gvs[]
-  >- (
-      `memory_cost 96 ≤ memory_cost 128` by simp[memory_cost_mono_leq]
-   \\ `memory_cost (LENGTH m1) ≤ memory_cost 96` by simp[memory_cost_mono_leq]
-   \\ intLib.COOPER_TAC)
-  \\ `LENGTH m1 = 96` by simp[]
-  \\ gvs[]
-QED
-
-Theorem Keccak256_gas_slot_word_0_64:
-  Keccak256_gas (slot_word a ++ m) 0 64 = 42
-Proof
-  rw[Keccak256_gas_def]
-  \\ CONV_TAC(PATH_CONV"lrlr"cv_eval)
-  \\ simp[memory_cost_def]
-  \\ simp[vfmExecutionTheory.memory_expansion_cost_def]
-  \\ rw[word_size_def, MAX_DEF]
-QED
-
-val MULT_32_word_size_96 =
-  cv_eval “32 * word_size 96”
-
-val MULT_32_word_size_128 =
-  cv_eval “32 * word_size 128”
-
 val th38m =
   th38 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
   |> Q.GENL[`value`,`em`,`sk`,`key`,`offset`]
@@ -698,12 +653,6 @@ val th55 =
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
         AC CONJ_ASSOC CONJ_COMM, conj_repeat]
-
-Theorem NOT_LENGTH_ADD_LEQ:
-  ¬(LENGTH ls + n ≤ n) ⇔ ls ≠ []
-Proof
-  Cases_on`ls` \\ rw[]
-QED
 
 val th55m =
   th55 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
@@ -776,30 +725,6 @@ val smw = MP smi gl
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [AC CONJ_ASSOC CONJ_COMM, conj_repeat]
   |> Q.INST[`e` |-> `INL ()`]
-
-Theorem expanded_memory_0[simp]:
-  expanded_memory m off 0 = m
-Proof
-  rw[expanded_memory_def, memory_expand_by_def]
-QED
-
-Theorem LENGTH_expanded_memory_geq:
-  (sz = 0 ⇒ 32 * word_size off ≤ LENGTH m) ⇒
-  32 * word_size (off + sz) ≤ LENGTH (expanded_memory m off sz)
-Proof
-  Cases_on`sz = 0` \\ gvs[]
-  \\ rw[expanded_memory_def, memory_expand_by_def]
-  \\ rw[MAX_DEF]
-QED
-
-Theorem LENGTH_TAKE_64_expanded_memory_64_32[simp]:
-  LENGTH (TAKE 64 (expanded_memory m 64 32)) = 64
-Proof
-  irule LENGTH_TAKE
-  \\ irule LESS_EQ_TRANS
-  \\ qexists_tac`32 * word_size (64 + 32)`
-  \\ rw[LENGTH_expanded_memory_geq, MULT_32_word_size_96]
-QED
 
 (* TODO: simplify by assuming m starts as []? *)
 

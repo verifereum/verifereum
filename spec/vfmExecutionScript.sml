@@ -132,6 +132,12 @@ Definition memory_expansion_cost_def:
     memory_cost newSize - memory_cost oldSize
 End
 
+Theorem memory_expansion_cost_0[simp]:
+  memory_expansion_cost x 0 = 0
+Proof
+  rw[memory_expansion_cost_def]
+QED
+
 Definition call_has_value_def:
   call_has_value op = (op = Call ∨ op = CallCode)
 End

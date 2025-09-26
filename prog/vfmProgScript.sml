@@ -761,6 +761,21 @@ Definition memory_cost_def:
     (if 0 < size then word_size (offset + size) * 32 else 0)
 End
 
+Theorem memory_cost_offset_to_0:
+  0 < sz ⇒
+  memory_cost m off sz = memory_cost m 0 (off + sz)
+Proof
+  rw[memory_cost_def]
+QED
+
+Theorem memory_cost_none_zero:
+  32 * word_size (a + b) ≤ LENGTH m ⇒
+  memory_cost m a b = 0
+Proof
+  rw[memory_cost_def, memory_expansion_cost_def]
+  \\ rw[MAX_DEF]
+QED
+
 Definition memory_expand_by_def:
   memory_expand_by (m: word8 list) offset size =
   MAX (LENGTH m) (if 0 < size then word_size (offset + size) * 32 else 0)
@@ -810,6 +825,21 @@ Theorem DROP_size_expanded_memory:
 Proof
   rw[expanded_memory_def, DROP_APPEND]
   \\ gvs[memory_expand_by_def, word_size_def]
+QED
+
+Theorem LENGTH_expanded_memory_geq:
+  (sz = 0 ⇒ 32 * word_size off ≤ LENGTH m) ⇒
+  32 * word_size (off + sz) ≤ LENGTH (expanded_memory m off sz)
+Proof
+  Cases_on`sz = 0` \\ gvs[]
+  \\ rw[expanded_memory_def, memory_expand_by_def]
+  \\ rw[MAX_DEF]
+QED
+
+Theorem expanded_memory_0[simp]:
+  expanded_memory m off 0 = m
+Proof
+  rw[expanded_memory_def, memory_expand_by_def]
 QED
 
 Definition Keccak256_gas_def:
