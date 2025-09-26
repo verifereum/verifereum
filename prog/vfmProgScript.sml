@@ -268,7 +268,8 @@ Definition evm_hide_Parsed_def:
 End
 
 Definition EVM_NEXT_REL_def:
-  EVM_NEXT_REL (s: unit execution_result) s' = (step (SND s) = s')
+  EVM_NEXT_REL (s: unit execution_result) s' =
+    ((if ISR (FST s) then s else step (SND s)) = s')
 End
 
 Definition EVM_INSTR_def:
@@ -571,7 +572,8 @@ Theorem IMP_EVM_SPEC_LEMMA[local]:
     (∀s dom.
        ∃s'.
          (p (evm2set_on dom s) ==>
-          (step (SND s) = s') /\ q (evm2set_on dom s') /\
+          ((if ISR (FST s) then s else step (SND s)) = s') /\
+           q (evm2set_on dom s') /\
           (evm2set_without dom s = evm2set_without dom s'))) ==>
     SPEC EVM_MODEL p {} q
 Proof
@@ -581,7 +583,7 @@ Proof
   \\ FULL_SIMP_TAC bool_ss [rel_sequence_def,EVM_NEXT_REL_def]
   \\ Q.EXISTS_TAC `SUC 0`
   \\ first_x_assum $ qspec_then ‘0’ mp_tac
-  \\ fs [] \\ rw [] \\ fs []
+  \\ fs [] \\ rw [] \\ fs[] \\ gvs[quantHeuristicsTheory.ISL_exists]
 QED
 
 Theorem IMP_EVM_SPEC =
@@ -982,6 +984,8 @@ val start_tac =
   \\ Cases_on ‘b’ \\ fs []
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR (FST r)` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -1078,7 +1082,7 @@ Theorem SPEC_Stop_outermost:
   SPEC EVM_MODEL
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
-     cond (NULL cs))
+     cond (NULL cs ∧ ISL e))
     {(pc,Stop)}
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_ReturnData [] * evm_Exception (INR NONE) *
@@ -1106,7 +1110,7 @@ Theorem SPEC_Stop_inner:
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc Stop * evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          calleeGasLeft = p.gasLimit - g ∧
@@ -1147,6 +1151,8 @@ Proof
   \\ gvs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -2378,7 +2384,7 @@ Theorem SPEC_Create_fail:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
    evm_Contexts cs * evm_Msdomain d *
-   cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧
+   cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧ ISL e ∧
          value = w2n (EL 0 ss) ∧ offset = w2n (EL 1 ss) ∧ sz = w2n (EL 2 ss) ∧
          salt = EL 3 ss ∧
          em = expanded_memory m offset sz ∧
@@ -2421,6 +2427,8 @@ Proof
   \\ gs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -2470,7 +2478,7 @@ Theorem SPEC_Create_fail_created:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
    evm_Contexts cs * evm_Msdomain d *
-   cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧
+   cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧ ISL e ∧
          value = w2n (EL 0 ss) ∧ offset = w2n (EL 1 ss) ∧ sz = w2n (EL 2 ss) ∧
          salt = EL 3 ss ∧
          em = expanded_memory m offset sz ∧
@@ -2515,6 +2523,8 @@ Proof
   \\ gs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -2563,7 +2573,7 @@ Theorem SPEC_Create:
    evm_CachedRB cb *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
-   cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧
+   cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧ ISL e ∧
          value = w2n (EL 0 ss) ∧ offset = w2n (EL 1 ss) ∧ sz = w2n (EL 2 ss) ∧
          salt = EL 3 ss ∧
          em = expanded_memory m offset sz ∧
@@ -2629,6 +2639,8 @@ Proof
   \\ gs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -2697,7 +2709,7 @@ Theorem SPEC_Call_fail_balance:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e *
-   cond (7 ≤ LENGTH ss ∧
+   cond (7 ≤ LENGTH ss ∧ ISL e ∧
          gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧ value = w2n (EL 2 ss) ∧
          argsOffset = w2n (EL 3 ss) ∧ argsSize = w2n (EL 4 ss) ∧
          retOffset = w2n (EL 5 ss) ∧ retSize = w2n (EL 6 ss) ∧
@@ -2736,6 +2748,8 @@ Proof
   \\ gs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -2775,7 +2789,9 @@ Theorem SPEC_Call_fail_depth:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e * evm_Contexts cs *
-   cond (6 + vOff ≤ LENGTH ss ∧ vOff = (if call_has_value call_inst then 1 else 0) ∧
+   cond (6 + vOff ≤ LENGTH ss ∧
+         vOff = (if call_has_value call_inst then 1 else 0) ∧
+         ISL e ∧
          gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧
          value = (if 0 < vOff then w2n (EL 2 ss) else 0) ∧
          argsOffset = w2n (EL (vOff + 2) ss) ∧
@@ -2820,6 +2836,8 @@ Proof
   \\ gs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -2867,7 +2885,9 @@ Theorem SPEC_Call:
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_Parsed pc call_inst * evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (6 + vOff ≤ LENGTH ss ∧ vOff = (if call_has_value call_inst then 1 else 0) ∧
+   cond (6 + vOff ≤ LENGTH ss ∧
+         vOff = (if call_has_value call_inst then 1 else 0) ∧
+         ISL e ∧
          gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧
          value = (if 0 < vOff then w2n (EL 2 ss) else 0) ∧
          argsOffset = w2n (EL (vOff + 2) ss) ∧
@@ -2937,6 +2957,8 @@ Proof
   \\ gvs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -3017,7 +3039,7 @@ Theorem SPEC_Return_outermost:
    evm_GasUsed g *
    evm_Exception e *
    evm_Rollback rb *
-   cond (2 ≤ LENGTH ss ∧ NULL cs ∧
+   cond (2 ≤ LENGTH ss ∧ NULL cs ∧ ISL e ∧
          offset = w2n (EL 0 ss) ∧
          sz = w2n (EL 1 ss) ∧
          (inst = Return ∨ inst = Revert) ∧
@@ -3059,6 +3081,8 @@ Proof
   \\ gvs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
@@ -3121,7 +3145,7 @@ Theorem SPEC_Return_inner:
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ 2 ≤ LENGTH ss ∧
+   cond (cs ≠ [] ∧ 2 ≤ LENGTH ss ∧ ISL e ∧
          offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
          LENGTH caller.stack < stack_limit ∧
          (inst = Return ∨ inst = Revert) ∧
@@ -3178,6 +3202,8 @@ Proof
   \\ gvs[]
   \\ drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
   \\ Cases_on ‘step (SND r)’ \\ fs []
   \\ strip_tac
   \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
