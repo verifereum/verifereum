@@ -759,6 +759,24 @@ Proof
   \\ CONV_TAC evc
 QED
 
+
+val SPEC_fallback_1 =
+  MATCH_MP SPEC_SUBSET_CODE SPEC_fallback
+  |> Q.SPEC ‘{ (n,i) | FLOOKUP parsed_contract_code n = SOME i }’
+
+Theorem SPEC_fallback_1_lemma:
+  ^(SPEC_fallback_1 |> concl |> dest_imp |> fst)
+Proof
+  rewrite_tac [pred_setTheory.SUBSET_DEF]
+  \\ Cases \\ rpt strip_tac
+  \\ simp_tac (srw_ss()) []
+  \\ irule code_req_met
+  \\ asm_rewrite_tac []
+QED
+
+val SPEC_fallback_2 =
+  MP SPEC_fallback_1 SPEC_fallback_1_lemma
+
 (*
 evc “FLOOKUP parsed_contract_code 0”
 evc “FLOOKUP parsed_contract_code 2”
