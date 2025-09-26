@@ -728,7 +728,8 @@ val smw = MP smi gl
 
 (* TODO: simplify by assuming m starts as []? *)
 
-Theorem SPEC_fallback = SPEC_COMPOSE_RULE [smw, SPEC_JumpDest, th55m]
+Theorem SPEC_fallback_code[local] =
+  SPEC_COMPOSE_RULE [smw, SPEC_JumpDest, th55m]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
      [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
       AC CONJ_ASSOC CONJ_COMM, conj_repeat]
@@ -746,9 +747,9 @@ Theorem SPEC_fallback = SPEC_COMPOSE_RULE [smw, SPEC_JumpDest, th55m]
            cv_eval“LENGTH contract_code”]
   |> SRULE[AND_IMP_INTRO, GSYM SPEC_MOVE_COND, AC CONJ_ASSOC CONJ_COMM]
 
-val code_req = SPEC_fallback |> concl |> strip_comb |> #2 |> el 3;
+val code_req = SPEC_fallback_code |> concl |> strip_comb |> #2 |> el 3;
 
-Theorem code_req_met:
+Theorem code_req_met[local]:
   ∀n i. (n,i) ∈ ^code_req ⇒ FLOOKUP parsed_contract_code n = SOME i
 Proof
   rpt gen_tac
@@ -759,23 +760,100 @@ Proof
   \\ CONV_TAC evc
 QED
 
+Definition fmap_entries_def:
+  fmap_entries fm = {(k,v) | FLOOKUP fm k = SOME v}
+End
 
-val SPEC_fallback_1 =
-  MATCH_MP SPEC_SUBSET_CODE SPEC_fallback
-  |> Q.SPEC ‘{ (n,i) | FLOOKUP parsed_contract_code n = SOME i }’
+val SPEC_fallback_code_lemma =
+  MATCH_MP SPEC_SUBSET_CODE SPEC_fallback_code
+  |> Q.SPEC ‘fmap_entries parsed_contract_code’
 
-Theorem SPEC_fallback_1_lemma:
-  ^(SPEC_fallback_1 |> concl |> dest_imp |> fst)
+Theorem SPEC_fallback_code_cond[local]:
+  ^(SPEC_fallback_code_lemma |> concl |> dest_imp |> fst)
 Proof
   rewrite_tac [pred_setTheory.SUBSET_DEF]
-  \\ Cases \\ rpt strip_tac
-  \\ simp_tac (srw_ss()) []
-  \\ irule code_req_met
-  \\ asm_rewrite_tac []
+  \\ Cases \\ strip_tac
+  \\ simp[fmap_entries_def]
+  \\ drule_then ACCEPT_TAC code_req_met
 QED
 
-val SPEC_fallback_2 =
-  MP SPEC_fallback_1 SPEC_fallback_1_lemma
+Theorem FST_SND_SND_EVM_MODEL[local]:
+  FST(SND(SND EVM_MODEL)) = EVM_INSTR
+Proof
+  rw[EVM_MODEL_def]
+QED
+
+Theorem SPEC_fallback =
+  MP SPEC_fallback_code_lemma SPEC_fallback_code_cond
+  |> ONCE_REWRITE_RULE[GSYM SPEC_CODE]
+  |> REWRITE_RULE[FST_SND_SND_EVM_MODEL]
+
+Theorem rel_sequence_EVM_NEXT_REL_FUNPOW:
+  rel_sequence EVM_NEXT_REL seq s =
+  ∀n. seq n = FUNPOW (λs. if ISR(FST s) then s else step (SND s)) n s
+Proof
+  rw[rel_sequence_def, EVM_NEXT_REL_def, EQ_IMP_THM, FUNPOW_SUC]
+  \\ Induct_on`n`
+  \\ rw[FUNPOW_SUC]
+  \\ metis_tac[]
+QED
+
+Theorem run_tr_rel_sequence_EVM_NEXT_REL:
+  ∀r1a r1d r2a r2d.
+  run_tr (r1a, r1d) = (r2a, r2d) ⇒
+  ∃seq k. rel_sequence EVM_NEXT_REL seq (r1a, r1d) ∧
+          (∀j. k ≤ j ⇒ seq j = (INR r2a, r2d)) ∧
+          (∀j. j < k ⇒ ISL (FST (seq j)))
+Proof
+  ho_match_mp_tac vfmDecreasesGasTheory.run_tr_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once vfmDecreasesGasTheory.run_tr_def]
+  \\ gvs[rel_sequence_EVM_NEXT_REL_FUNPOW, GSYM FUN_EQ_THM]
+  \\ reverse CASE_TAC >- (
+    qexists_tac`0` \\ rw[FUNPOW_SUC] \\
+    Induct_on`j` \\ rw[FUNPOW])
+  \\ rw[] \\ gvs[]
+  \\ qexists_tac`SUC k`
+  \\ conj_tac >- ( Induct \\ gvs[FUNPOW] )
+  \\ Cases \\ gvs[FUNPOW]
+QED
+
+Theorem run_rel_sequence_EVM_NEXT_REL:
+  ∃x r2 seq k.
+    run s1 = SOME (INR x, r2) ∧
+    rel_sequence EVM_NEXT_REL seq (step s1) ∧
+    (∀j. k ≤ j ⇒ seq j = (INR x, r2)) ∧
+    (∀j. j < k ⇒ ISL (FST (seq j)))
+Proof
+  rw[vfmDecreasesGasTheory.run_eq_tr]
+  \\ Cases_on`step s1`
+  \\ CASE_TAC
+  \\ irule run_tr_rel_sequence_EVM_NEXT_REL
+  \\ rw[]
+QED
+
+Theorem run_from_SPEC:
+  SPEC EVM_MODEL P {} Q ∧ P (evm2set (INL (), s1)) ∧
+  (Q = evm_Exception (INR x) * R)
+  ⇒ ∃rs2. run s1 = SOME rs2 ∧ Q (evm2set rs2)
+Proof
+  simp[EVM_SPEC_SEMANTICS, rel_sequence_EVM_NEXT_REL_FUNPOW, evm2set_def]
+  \\ strip_tac
+  \\ first_x_assum drule
+  \\ simp[GSYM FUN_EQ_THM]
+  \\ strip_tac
+  \\ goal_assum $ drule_at Any
+  \\ strip_assume_tac run_rel_sequence_EVM_NEXT_REL
+  \\ gvs[rel_sequence_EVM_NEXT_REL_FUNPOW]
+  \\ Cases_on`k` \\ gvs[]
+  >- gvs[STAR_evm2set]
+  \\ gvs[FUNPOW]
+  \\ qmatch_asmsub_rename_tac `k ≤ _`
+  \\ Cases_on `k ≤ n` \\ gvs[NOT_LESS_EQUAL]
+  \\ first_x_assum drule
+  \\ gvs[STAR_evm2set]
+  \\ qpat_x_assum`INR _ = _`(mp_tac o SYM) \\ rw[]
+QED
 
 (*
 evc “FLOOKUP parsed_contract_code 0”
@@ -847,91 +925,9 @@ evc “FLOOKUP parsed_contract_code 1243”
 evc “FLOOKUP parsed_contract_code 1244”
 evc “FLOOKUP parsed_contract_code 183”
 evc “FLOOKUP parsed_contract_code 184”
-
-(*
-Push 1 [96w]
-Push 1 [64w]
-MStore
-Push 1 [4w]
-CallDataSize
-LT
-Push 2 [0w; 175w]
-JumpI
-JumpDest
-Push 2 [0w; 183w]
-Push 2 [4w; 64w]
-Jump
-JumpDest
-
-CallValue
-Push 1 [3w]
-Push 1 [0w]
-Caller
-Push 20 [255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w;
-         255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w]
-And
-Push 20 [255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w;
-         255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w]
-And
-Dup 1
-MStore
-Push 1 [32w]
-Add
-Swap 0
-Dup 1
-MStore
-Push 1 [32w]
-Add
-Push 1 [0w]
-Keccak256
-Push 1 [0w]
-Dup 2
-Dup 2
-SLoad
-Add
-Swap 2
-Pop
-Pop
-Dup 1
-Swap 0
-SStore
-Pop
-Caller
-Push 20 [255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w;
-         255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w; 255w]
-And
-Push 32 [225w; 255w; 252w; 196w; 146w; 61w; 4w; 181w; 89w; 244w; 210w;
-         154w; 139w; 252w; 108w; 218w; 4w; 235w; 91w; 13w; 60w; 70w; 7w;
-         81w; 194w; 64w; 44w; 92w; 92w; 201w; 16w; 156w]
-CallValue
-Push 1 [64w]
-MLoad
-Dup 0
-Dup 2
-Dup 1
-MStore
-Push 1 [32w]
-Add
-Swap 1
-Pop
-Pop
-Push 1 [64w]
-MLoad
-Dup 0
-Swap 1
-Sub
-Swap 0
-Log 2
-Jump
-*)
 *)
 
 (*
-val () = cv_trans_deep_embedding EVAL parsed_contract_code_eq;
-
-Theorem FLOOKUP_parsed_contract_code_0 =
-  cv_eval “FLOOKUP parsed_contract_code 0”;
-
 Theorem call_follows_abi_4bytes:
   tx.to = SOME addr ∧
   (lookup_account addr ms).code = contract_code ∧
