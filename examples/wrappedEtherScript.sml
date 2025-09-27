@@ -116,16 +116,16 @@ Proof
   \\ gvs[]
 QED
 
-Definition slot_word_def:
-  slot_word (a:address) = (
+Definition balance_slot_word_def:
+  balance_slot_word (a:address) = (
       REVERSE (word_to_bytes (w2w a : bytes32) F) ++
       REVERSE (word_to_bytes (3w:bytes32) F))
 End
 
-Theorem LENGTH_slot_word[simp]:
-  LENGTH (slot_word a) = 64
+Theorem LENGTH_balance_slot_word[simp]:
+  LENGTH (balance_slot_word a) = 64
 Proof
-  rw[slot_word_def]
+  rw[balance_slot_word_def]
 QED
 
 Theorem expanded_memory_leq:
@@ -134,9 +134,9 @@ Proof
   rw[expanded_memory_def, memory_expand_by_def]
 QED
 
-Definition slot_key_def:
-  slot_key (a:address) = word_of_bytes T (0w:bytes32) $
-    Keccak_256_w64 (slot_word a)
+Definition balance_slot_key_def:
+  balance_slot_key (a:address) = word_of_bytes T (0w:bytes32) $
+    Keccak_256_w64 (balance_slot_word a)
 End
 
 Definition Keccak_256_string_def:
@@ -145,6 +145,96 @@ Definition Keccak_256_string_def:
 End
 
 val () = cv_auto_trans Keccak_256_string_def;
+
+Datatype:
+  WETH_state = <|
+    balances : address -> num
+  ; allowances : address -> num
+  ; locked : num
+  ; touched : address set
+  |>
+End
+
+Definition empty_WETH_state_def:
+  empty_WETH_state = <|
+    balances := K 0
+  ; allowances := K 0
+  ; locked := 0
+  ; touched := {}
+  |>
+End
+
+Definition total_balances_def:
+  total_balances ws = SIGMA (ws.balances) ws.touched
+End
+
+Definition wf_WETH_state_def:
+  wf_WETH_state ws ⇔
+    { a | 0 < ws.balances a } SUBSET ws.touched ∧
+    { a | 0 < ws.allowances a } SUBSET ws.touched ∧
+    (∀a. ws.balances a < 2 ** 256) ∧
+    (∀a. ws.allowances a < 2 ** 256) ∧
+    ws.locked < 2 ** 256 ∧
+    total_balances ws ≤ ws.locked
+End
+
+Theorem wf_empty_WETH_state[simp]:
+  wf_WETH_state empty_WETH_state
+Proof
+  rw[wf_WETH_state_def, empty_WETH_state_def, total_balances_def,
+     pred_setTheory.SUM_IMAGE_EMPTY]
+QED
+
+Definition WETH_deposit_def:
+  WETH_deposit a n ws =
+  ws with <|
+    touched updated_by (INSERT) a
+  ; balances updated_by (a =+ (n + ws.balances a))
+  ; locked updated_by ((+) n)
+  |>
+End
+
+Theorem wf_WETH_deposit:
+  wf_WETH_state ws ∧
+  ws.locked + n < 2 ** 256
+  ⇒
+  wf_WETH_state (WETH_deposit a n ws)
+Proof
+  qmatch_goalsub_abbrev_tac`_ < bnd`
+  \\ rw[WETH_deposit_def, wf_WETH_state_def, APPLY_UPDATE_THM]
+  \\ gvs[pred_setTheory.SUBSET_DEF] \\ rw[]
+  \\ gvs[total_balances_def]
+  >- (
+    irule LESS_EQ_LESS_TRANS
+    \\ goal_assum drule
+    \\ simp[]
+    \\ Cases_on`0 < ws.balances a` \\ simp[]
+    \\ irule LESS_EQ_TRANS
+    \\ goal_assum $ drule_at Any
+    \\ irule pred_setTheory.SUM_IMAGE_IN_LE
+    \\ simp[])
+  \\ reverse $ Cases_on`a IN ws.touched`
+  >- (
+    gs[pred_setTheory.SUM_IMAGE_INSERT]
+    \\ `~(0 < ws.balances a)` by metis_tac[]
+    \\ gvs[]
+    \\ qmatch_goalsub_abbrev_tac`s1 <= _`
+    \\ qmatch_asmsub_abbrev_tac`s2 <= _`
+    \\ `s1 = s2` suffices_by rw[]
+    \\ simp[Abbr`s1`,Abbr`s2`]
+    \\ irule pred_setTheory.SUM_IMAGE_CONG
+    \\ rw[APPLY_UPDATE_THM]
+    \\ gvs[] )
+  \\ simp[iffLR pred_setTheory.ABSORPTION]
+  \\ qpat_x_assum`_ <= _`mp_tac
+  \\ drule_then (SUBST1_TAC o SYM) pred_setTheory.INSERT_DELETE
+  \\ simp[pred_setTheory.SUM_IMAGE_INSERT]
+  \\ qmatch_goalsub_abbrev_tac`s1 + _ <= _ ⇒ s2 + _ <= _`
+  \\ `s1 = s2` suffices_by rw[]
+  \\ simp[Abbr`s1`,Abbr`s2`]
+  \\ irule pred_setTheory.SUM_IMAGE_CONG
+  \\ rw[APPLY_UPDATE_THM]
+QED
 
 Definition deploy_data_def:
   deploy_data = REVERSE $ hex_to_rev_bytes [] $
@@ -221,32 +311,41 @@ End
 
 val () = cv_trans_deep_embedding EVAL contract_code_def;
 
-Theorem deploy_produces_correct_code_and_address:
+Definition WETH_EVM_def:
+  WETH_EVM addr ws a =
+  let s = lookup_account addr a in
+  wf_WETH_state ws ∧
+  (∀a. balance_slot_key a ∉ {0w; 1w; 2w} ∧
+       (a ∈ ws.touched ∨ balance_slot_key a ∉ IMAGE balance_slot_key ws.touched) ⇒
+       lookup_storage (balance_slot_key a) s.storage = n2w (ws.balances a)) ∧
+  (* TODO: same for allowances *)
+  s.balance = ws.locked ∧
+  s.code = contract_code ∧
+  s.nonce = 1
+End
+
+Theorem deploy_result_correct:
   ∃ms.
     deploy_tx_result = SOME (NONE, ms) ∧
-    let acc = lookup_account 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2w ms  in
-    acc.nonce = 1 ∧
-    acc.balance = 0 ∧
-    (* acc.storage = TODO ∧ *)
-    acc.code = contract_code
+    WETH_EVM 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2w empty_WETH_state ms
 Proof
   CONV_TAC(STRIP_QUANT_CONV(PATH_CONV "lrlr" cv_eval))
   \\ qmatch_goalsub_abbrev_tac`SOME (_, ms)`
   \\ qexistsl_tac[`ms`]
   \\ conj_tac >- rw[]
-  \\ rewrite_tac[lookup_account_def]
-  \\ qunabbrev_tac`ms`
-  \\ rewrite_tac[APPLY_UPDATE_THM]
-  \\ rewrite_tac[LET_DEF]
-  \\ CONV_TAC (DEPTH_CONV BETA_CONV)
-  \\ IF_CASES_TAC >- (pop_assum mp_tac \\ CONV_TAC(LAND_CONV EVAL) \\ strip_tac)
-  \\ IF_CASES_TAC >- (pop_assum mp_tac \\ CONV_TAC(LAND_CONV EVAL) \\ strip_tac)
-  \\ conj_tac >- rw[]
-  \\ conj_tac >- rw[]
-  (* \\ conj_tac >- ( rw[] ) *)
-  \\ rewrite_tac[account_state_accessors]
-  \\ CONV_TAC (RAND_CONV cv_eval)
-  \\ CONV_TAC (listLib.list_EQ_CONV EVAL)
+  \\ rewrite_tac[WETH_EVM_def]
+  \\ qmatch_goalsub_abbrev_tac`lookup_account addr ms`
+  \\ simp[empty_WETH_state_def]
+  \\ qmatch_asmsub_abbrev_tac`addr =+ s`
+  \\ simp[Abbr`ms`, lookup_account_def, APPLY_UPDATE_THM]
+  \\ simp[Abbr`addr`]
+  \\ reverse conj_tac
+  >- (
+    qunabbrev_tac`s`
+    \\ rewrite_tac[account_state_accessors]
+    \\ CONV_TAC (RAND_CONV cv_eval)
+    \\ CONV_TAC (listLib.list_EQ_CONV EVAL))
+  \\ rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
 QED
 
 (*
@@ -338,8 +437,8 @@ Proof
   \\ rw[LENGTH_expanded_memory_geq, MULT_32_word_size_96]
 QED
 
-Theorem Keccak256_gas_slot_word_0_64:
-  Keccak256_gas (slot_word a ++ m) 0 64 = 42
+Theorem Keccak256_gas_balance_slot_word_0_64:
+  Keccak256_gas (balance_slot_word a ++ m) 0 64 = 42
 Proof
   rw[Keccak256_gas_def]
   \\ CONV_TAC(PATH_CONV"lrlr"cv_eval)
@@ -577,7 +676,7 @@ val th29 = SPEC_COMPOSE_RULE
 
 val th29m =
   th29 |> SRULE [SPEC_MOVE_COND, STAR_ASSOC,
-                 GSYM slot_word_def, GSYM slot_key_def]
+                 GSYM balance_slot_word_def, GSYM balance_slot_key_def]
        |> Q.GENL[`key`,`sk`]
        |> SIMP_RULE (srw_ss() ++ ARITH_ss)
             [GSYM SPEC_MOVE_COND,expanded_memory_leq,MULT_32_word_size_64];
@@ -599,7 +698,7 @@ val th38m =
        [expanded_memory_leq,
         LENGTH_word_to_bytes,
         DROP_64_expanded_memory_append_64_32,
-        Keccak256_gas_slot_word_0_64,
+        Keccak256_gas_balance_slot_word_0_64,
         memory_cost_write_more_64_32,
         MULT_32_word_size_96,
         MULT_32_word_size_64,
