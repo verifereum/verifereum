@@ -592,6 +592,77 @@ Theorem IMP_EVM_SPEC =
           ``CODE_POOL EVM_INSTR c * q'``]) IMP_EVM_SPEC_LEMMA;
 
 (*-------------------------------------------------------------------------------*
+   Theorems for lifting SPEC triples to the run level
+ *-------------------------------------------------------------------------------*)
+
+Theorem rel_sequence_EVM_NEXT_REL_FUNPOW:
+  rel_sequence EVM_NEXT_REL seq s =
+  ∀n. seq n = FUNPOW (λs. if ISR(FST s) then s else step (SND s)) n s
+Proof
+  rw[rel_sequence_def, EVM_NEXT_REL_def, EQ_IMP_THM, FUNPOW_SUC]
+  \\ Induct_on`n`
+  \\ rw[FUNPOW_SUC]
+  \\ metis_tac[]
+QED
+
+Theorem run_tr_rel_sequence_EVM_NEXT_REL:
+  ∀r1a r1d r2a r2d.
+  run_tr (r1a, r1d) = (r2a, r2d) ⇒
+  ∃seq k. rel_sequence EVM_NEXT_REL seq (r1a, r1d) ∧
+          (∀j. k ≤ j ⇒ seq j = (INR r2a, r2d)) ∧
+          (∀j. j < k ⇒ ISL (FST (seq j)))
+Proof
+  ho_match_mp_tac run_tr_ind
+  \\ rpt gen_tac \\ strip_tac
+  \\ simp[Once run_tr_def]
+  \\ gvs[rel_sequence_EVM_NEXT_REL_FUNPOW, GSYM FUN_EQ_THM]
+  \\ reverse CASE_TAC >- (
+    qexists_tac`0` \\ rw[FUNPOW_SUC] \\
+    Induct_on`j` \\ rw[FUNPOW])
+  \\ rw[] \\ gvs[]
+  \\ qexists_tac`SUC k`
+  \\ conj_tac >- ( Induct \\ gvs[FUNPOW] )
+  \\ Cases \\ gvs[FUNPOW]
+QED
+
+Theorem run_rel_sequence_EVM_NEXT_REL:
+  ∃x r2 seq k.
+    run s1 = SOME (INR x, r2) ∧
+    rel_sequence EVM_NEXT_REL seq (step s1) ∧
+    (∀j. k ≤ j ⇒ seq j = (INR x, r2)) ∧
+    (∀j. j < k ⇒ ISL (FST (seq j)))
+Proof
+  rw[run_eq_tr]
+  \\ Cases_on`step s1`
+  \\ CASE_TAC
+  \\ irule run_tr_rel_sequence_EVM_NEXT_REL
+  \\ rw[]
+QED
+
+Theorem run_from_SPEC:
+  SPEC EVM_MODEL P {} Q ∧ P (evm2set (INL (), s1)) ∧
+  (Q = evm_Exception (INR x) * R)
+  ⇒ ∃rs2. run s1 = SOME rs2 ∧ Q (evm2set rs2)
+Proof
+  simp[EVM_SPEC_SEMANTICS, rel_sequence_EVM_NEXT_REL_FUNPOW, evm2set_def]
+  \\ strip_tac
+  \\ first_x_assum drule
+  \\ simp[GSYM FUN_EQ_THM]
+  \\ strip_tac
+  \\ goal_assum $ drule_at Any
+  \\ strip_assume_tac run_rel_sequence_EVM_NEXT_REL
+  \\ gvs[rel_sequence_EVM_NEXT_REL_FUNPOW]
+  \\ Cases_on`k` \\ gvs[]
+  >- gvs[STAR_evm2set]
+  \\ gvs[FUNPOW]
+  \\ qmatch_asmsub_rename_tac `k ≤ _`
+  \\ Cases_on `k ≤ n` \\ gvs[NOT_LESS_EQUAL]
+  \\ first_x_assum drule
+  \\ gvs[STAR_evm2set]
+  \\ qpat_x_assum`INR _ = _`(mp_tac o SYM) \\ rw[]
+QED
+
+(*-------------------------------------------------------------------------------*
    Hoare triples for specific opcodes
  *-------------------------------------------------------------------------------*)
 
