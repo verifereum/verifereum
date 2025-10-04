@@ -1,7 +1,7 @@
 Theory merklePatriciaTrie
 Ancestors
   arithmetic combin list rich_list pair
-  sorting while words
+  sorting While words
   finite_map sptree
   longestCommonPrefix recursiveLengthPrefix
   vfmTypes

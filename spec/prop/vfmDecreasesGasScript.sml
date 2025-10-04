@@ -1956,7 +1956,7 @@ Theorem run_eq_tr:
   run s = case run_tr (step s) of (x, y) => SOME (INR x, y)
 Proof
   rw[run_def]
-  \\ rw[Once whileTheory.OWHILE_THM]
+  \\ rw[Once WhileTheory.OWHILE_THM]
   \\ qspec_tac(`step s`,`x`)
   \\ Cases
   \\ map_every qid_spec_tac [`r`,`q`]
@@ -1964,7 +1964,7 @@ Proof
   \\ rw[]
   \\ rw[Once run_tr_def]
   \\ CASE_TAC \\ gs[]
-  \\ rw[Once whileTheory.OWHILE_THM]
+  \\ rw[Once WhileTheory.OWHILE_THM]
 QED
 
 Theorem step_preserves_wf_state:

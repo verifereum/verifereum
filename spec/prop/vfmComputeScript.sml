@@ -1,7 +1,7 @@
 Theory vfmCompute
 Ancestors
   arithmetic combin pair option list rich_list
-  finite_set sptree words while
+  finite_set sptree words While
   cv cv_type cv_std
   blake2f
   vfmState vfmContext vfmExecution vfmDecreasesGas
