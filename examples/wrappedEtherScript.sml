@@ -322,6 +322,11 @@ Definition WETH_EVM_def:
        (a ∈ ws.touched ∨ balance_slot_key a ∉ IMAGE balance_slot_key ws.touched) ⇒
        lookup_storage (balance_slot_key a) s.storage = n2w (ws.balances a)) ∧
   (* TODO: same for allowances *)
+  lookup_storage 0w s.storage =
+    0x577261707065642045746865720000000000000000000000000000000000001Aw ∧
+  lookup_storage 1w s.storage =
+    0x5745544800000000000000000000000000000000000000000000000000000008w ∧
+  lookup_storage 2w s.storage = 18w ∧
   s.balance = ws.locked ∧
   s.code = contract_code ∧
   s.nonce = 1
@@ -346,6 +351,9 @@ Proof
   >- (
     qunabbrev_tac`s`
     \\ rewrite_tac[account_state_accessors]
+    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
     \\ CONV_TAC (RAND_CONV cv_eval)
     \\ CONV_TAC (listLib.list_EQ_CONV EVAL))
   \\ rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
