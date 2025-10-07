@@ -637,6 +637,61 @@ val th10x = th10w
        [AND_IMP_INTRO, GSYM SPEC_MOVE_COND,
         AC CONJ_ASSOC CONJ_COMM, conj_repeat]
 
+(* --- *)
+
+(*
+val th = spec14
+*)
+
+fun prepare prefix th = let
+  val th1 = th |> REWRITE_RULE [SPEC_MOVE_COND] |> UNDISCH_ALL
+  val (_,pre,_,post) = th1 |> concl |> dest_spec
+  fun add_prime v = variant [v] v (* TODO improve? *)
+  val part_names = list_dest dest_star pre
+                     |> map (fn tm => dest_comb tm)
+  val parts = list_dest dest_star post
+  (*
+  val p = hd parts
+  *)
+  fun update_one p = let
+    val (a,e) = dest_comb p
+    val v = snd (first (aconv a o fst) part_names)
+    in if aconv e v then (p,[]) else let
+      val v' = add_prime v
+      val new_eq = mk_eq(v',e)
+      in (mk_comb(a,v'), [new_eq]) end
+    end
+  fun update_all [] = ([],[])
+    | update_all (p::ps) = let
+        val (p,aux1) = update_one p
+        val (ps,aux2) = update_all ps
+        in (p::ps, aux1 @ aux2) end
+  val (ps,aux) = update_all parts
+  val new_post = list_mk_star ps evm_domain_ty
+  val new_assums = list_mk_conj aux
+  val goal = mk_imp(new_assums, mk_eq(post,new_post))
+  val lemma = prove(goal,rpt strip_tac \\ asm_rewrite_tac [])
+  fun D th = if is_imp (concl th) then th else DISCH T th
+  val th2 = th1 |> CONV_RULE (RAND_CONV (REWR_CONV (UNDISCH lemma)))
+  val th3 = th2 |> DISCH new_assums |> DISCH_ALL
+                |> REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC]
+  val vs = free_vars (concl th3)
+  (* val prefix = "_0_" *)
+  fun add_prefix prefix v = mk_var(prefix ^ fst (dest_var v), type_of v)
+  val s = map (fn v => v |-> add_prefix prefix v) vs
+  val th4 = INST s th3
+  in UNDISCH_ALL th4 end
+
+fun prepare_list thms = let
+  val xs = mapi (fn i => fn th => ("v" ^ Int.toString i ^ "_", (th:thm))) thms
+  in map (fn (prefix,th) => prepare prefix th) xs end
+
+val res =
+  [spec10,spec11,spec12,spec13,spec14,spec15,spec16,spec17]
+  |> prepare_list |> SPEC_COMPOSE_RULE;
+
+(* --- *)
+
 val th18 = SPEC_COMPOSE_RULE [th10x,
   spec10,spec11,spec12,spec13,spec14,spec15,spec16,spec17]
   |> CONV_RULE(DEPTH_CONV word_of_bytes_conv)
