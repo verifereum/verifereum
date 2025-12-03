@@ -1242,6 +1242,7 @@ Proof
   \\ `(FST (HD r2.contexts)).msgParams.parsed =
       parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
+  \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
   \\ gvs[CaseEq"prod",CaseEq"sum",CaseEq"return_destination",
          handle_exception_def,get_num_contexts_def,inc_pc_def,
          pop_and_incorporate_context_def,push_stack_def,

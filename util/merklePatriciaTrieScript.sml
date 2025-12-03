@@ -154,8 +154,6 @@ Termination
   \\ irule SUM_MAP_same_LESS
   \\ simp[Abbr`f1`,Abbr`f2`,EVERY_MEM,MEM_FILTER,Abbr`P`,EXISTS_MEM]
   \\ simp[FORALL_PROD, EXISTS_PROD]
-  \\ conj_tac
-  >- ( Cases \\ simp[] \\ CASE_TAC \\ rw[] )
   \\ gvs[EVERY_MEM, FORALL_PROD, NULL_EQ]
   \\ gvs[MEM_MAP, EXISTS_PROD]
   \\ first_assum $ irule_at Any
@@ -585,8 +583,6 @@ Termination
 	\\ irule SUM_MAP_same_LESS
 	\\ simp[Abbr`f1`,Abbr`f2`,EVERY_MEM,MEM_FILTER,Abbr`P`,EXISTS_MEM]
 	\\ simp[FORALL_PROD, EXISTS_PROD]
-	\\ conj_tac
-	>- ( Cases \\ simp[] \\ CASE_TAC \\ rw[] )
 	\\ gvs[EVERY_MEM, FORALL_PROD, NULL_EQ]
 	\\ gvs[MEM_MAP, EXISTS_PROD]
 	\\ first_assum $ irule_at Any
