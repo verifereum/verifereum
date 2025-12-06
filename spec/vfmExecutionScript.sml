@@ -71,14 +71,15 @@ Definition ecpairing_def:
     qx1 = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
     qyi = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
     qy1 = num_of_be_bytes $ TAKE 32 data; data = DROP 32 data;
-    q = ((qx1,qxi),(qy1,qyi));
+    qx = (qx1, qxi);
+    qy = (qy1, qyi);
   in
-    if ¬bn254$validAffineF2 q then NONE else
+    if ¬bn254$validAffineF2 (qx, qy) then NONE else
     if bn254$mulAffine p bn254n ≠ (0,0) then NONE else
-    if bn254$mulAffineF2 q bn254n ≠ ((0,0),(0,0)) then NONE else
-      ecpairing (DROP 192 data)
-        (if p ≠ (0, 0) ∧ q ≠ ((0,0),(0,0))
-         then bn254$mulFQ12 res (bn254$pairing q p)
+    if bn254$mulAffineF2 (qx, qy) bn254n ≠ (bn254$f2zero, bn254$f2zero) then NONE else
+      ecpairing data
+        (if (px ≠ 0 ∨ py ≠ 0) ∧ (qx ≠ bn254$f2zero ∨ qy ≠ bn254$f2zero)
+         then bn254$mulFQ12 res (bn254$miller_loop qx qy p)
          else res)
 Termination
   WF_REL_TAC ‘measure (LENGTH o FST)’ \\ rw[]
@@ -1305,7 +1306,8 @@ Definition precompile_ecpairing_def:
     consume_gas $ 34000 * (len DIV 192) + 45000;
     if len MOD 192 ≠ 0 then fail OutOfGas else
     case ecpairing input fq12one of NONE => fail OutOfGas | SOME res => do
-      set_return_data $ PAD_LEFT 0w 32 [if res = fq12one then 1w else 0w];
+      set_return_data $ PAD_LEFT 0w 32
+        [if bn254$final_exponentiation res = fq12one then 1w else 0w];
       finish
     od
   od
