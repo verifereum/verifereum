@@ -991,6 +991,137 @@ End
 
 val () = cv_trans poly13_mod_def;
 
+(* Helper: poly13_deg is at most 12 *)
+Theorem poly13_deg_bound:
+  !p. poly13_deg p ≤ 12
+Proof
+  Cases_on `p` \\ rename [`(c0,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12)`]
+  \\ rw [poly13_deg_def]
+QED
+
+(* Field operation lemmas *)
+Theorem fsub_self:
+  !x. fsub x x = 0
+Proof
+  rw [fsub_def]
+QED
+
+(* Cheated: requires proving extended GCD correctness *)
+Theorem fdiv_mul_cancel:
+  !x y. x < bn254p ==> y > 0 ==> y < bn254p ==> fmul (fdiv x y) y = x
+Proof
+  cheat
+QED
+
+(* poly13_get/set lemmas *)
+Theorem poly13_get_set_same:
+  !p i v. i <= 12 ==> poly13_get (poly13_set p i v) i = v
+Proof
+  Cases_on `p` \\ rename [`(c0,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12)`]
+  \\ rw [poly13_get_def, poly13_set_def]
+QED
+
+Theorem poly13_get_set_diff:
+  !p i j v. i <= 12 ==> j <= 12 ==> i <> j ==> poly13_get (poly13_set p i v) j = poly13_get p j
+Proof
+  Cases_on `p` \\ rename [`(c0,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,r)`]
+  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12)`]
+  \\ rw [poly13_get_def, poly13_set_def]
+QED
+
+(* poly_div_inner get lemmas *)
+Theorem poly_div_inner_get_above:
+  !temp o_i b degb i c j.
+    degb + i <= 12 ==> j > degb + i ==> j <= 12 ==>
+    poly13_get (poly_div_inner temp o_i b degb i c) j = poly13_get temp j
+Proof
+  ho_match_mp_tac poly_div_inner_ind \\ rw []
+  \\ once_rewrite_tac [poly_div_inner_def] \\ rw []
+  \\ sg `poly13_get (poly13_set temp (c + i) _) j = poly13_get temp j`
+  >- (irule poly13_get_set_diff \\ fs [])
+  \\ fs [poly13_get_set_diff]
+QED
+
+Theorem poly_div_inner_get_below:
+  !temp o_i b degb i c j.
+    degb + i <= 12 ==> j < c + i ==> j <= 12 ==>
+    poly13_get (poly_div_inner temp o_i b degb i c) j = poly13_get temp j
+Proof
+  ho_match_mp_tac poly_div_inner_ind \\ rw []
+  \\ once_rewrite_tac [poly_div_inner_def] \\ rw []
+  \\ sg `c + i <= 12` >- fs []
+  \\ irule poly13_get_set_diff \\ fs []
+QED
+
+Theorem poly_div_inner_get_range:
+  !temp o_i b degb i c j.
+    c <= degb ==> degb + i <= 12 ==> c + i <= j ==> j <= degb + i ==> j <= 12 ==>
+    poly13_get (poly_div_inner temp o_i b degb i c) j =
+    fsub (poly13_get temp j) (fmul o_i (poly13_get b (j - i)))
+Proof
+  ho_match_mp_tac poly_div_inner_ind \\ rw []
+  \\ once_rewrite_tac [poly_div_inner_def] \\ rw []
+  \\ Cases_on `j = c + i`
+  >- (fs [] \\ sg `j < (c + 1) + i` >- fs []
+      \\ `(c + 1) + i = c + i + 1` by fs []
+      \\ fs [poly_div_inner_get_below, poly13_get_set_same])
+  \\ sg `c + 1 <= degb` >- fs []
+  \\ `c + (i + 1) = (c + 1) + i` by fs []
+  \\ fs []
+  \\ pop_assum kall_tac
+  \\ fs [poly13_get_set_diff]
+QED
+
+Theorem poly_div_inner_zeros_leading:
+  !temp b degb i.
+    degb <= 12 ==> degb + i <= 12 ==>
+    poly13_get b degb > 0 ==> poly13_get b degb < bn254p ==>
+    poly13_get temp (degb + i) < bn254p ==>
+    poly13_get (poly_div_inner temp (fdiv (poly13_get temp (degb + i)) (poly13_get b degb)) b degb i 0) (degb + i) = 0
+Proof
+  rw [poly_div_inner_get_range, fdiv_mul_cancel, fsub_self]
+QED
+
+(* Helper: poly_div_outer produces result with degree < degb *)
+Theorem poly_div_outer_deg:
+  !temp o_out b degb i.
+    degb ≤ 12 ∧ degb + i ≤ 12 ∧ poly13_deg b = degb ∧ degb ≠ 0 ⇒
+    poly13_deg (FST (poly_div_outer temp o_out b degb i)) < degb
+Proof
+  cheat
+QED
+
+(* Key property: polynomial remainder has strictly smaller degree than divisor *)
+Theorem poly13_mod_deg:
+  !a b. poly13_deg b ≠ 0 ⇒ poly13_deg (poly13_mod a b) < poly13_deg b
+Proof
+  rw [poly13_mod_def, poly13_divmod_def]
+  \\ irule poly_div_outer_deg
+  \\ fs [poly13_deg_bound]
+QED
+
+(* inv_inner_i computes high - low * quotient = remainder *)
+Theorem inv_inner_i_snd_eq_mod:
+  !hm high lm low.
+    SND (inv_inner_i hm high lm low (poly13_div high low) (0:num)) = poly13_mod high low
+Proof
+  cheat
+QED
+
 (* Inner loop for inverse: update nm and new *)
 Definition inv_inner_j_def:
   inv_inner_j nm new lm low r i j =
@@ -1028,7 +1159,13 @@ Definition poly12_inv_loop_def:
     in poly12_inv_loop nm lm new low
 Termination
   WF_REL_TAC `measure (λ(lm,hm,low,high). poly13_deg low)`
-  \\ rw [] \\ cheat
+  \\ rw []
+  \\ qpat_x_assum `(_,_) = _` (assume_tac o SYM)
+  \\ pop_assum (assume_tac o Q.AP_TERM `SND`)
+  \\ gvs [inv_inner_i_snd_eq_mod, poly13_mod_deg]
+  \\ first_assum (fn th => rewrite_tac [GSYM th])
+  \\ irule poly13_mod_deg
+  \\ first_assum ACCEPT_TAC
 End
 
 val () = cv_trans poly12_inv_loop_def;
