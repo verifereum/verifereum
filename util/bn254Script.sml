@@ -119,6 +119,12 @@ End
 
 val () = cv_trans finv_def;
 
+Definition fdiv_def:
+  fdiv x y = fmul x (finv y)
+End
+
+val () = cv_trans fdiv_def;
+
 Definition dbl_def:
   dbl (x1, y1, z1) = let
   b3 = fmul bn254b 3;
