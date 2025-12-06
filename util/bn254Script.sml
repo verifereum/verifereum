@@ -247,7 +247,7 @@ Definition f2mul_def:
     t1 = fmul x1 y1;
     t2 = fmul xi yi;
     o1 = fsub t1 t2;
-    oi = fsub (fmul (fadd x1 y1) (fadd xi yi)) (fadd t1 t2);
+    oi = fsub (fmul (fadd x1 xi) (fadd y1 yi)) (fadd t1 t2);
   in (o1, oi)
 End
 
