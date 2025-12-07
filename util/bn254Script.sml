@@ -1,9 +1,16 @@
 Theory bn254 (* aka alt_bn128 *)
 Ancestors
   vfmTypes
+  arithmetic
+  list
+  rich_list
 Libs
   cv_transLib
   wordsLib
+
+(* ============================================================ *)
+(* Base field Fq: integers mod bn254p                           *)
+(* ============================================================ *)
 
 Definition bn254p_def:
   bn254p = 21888242871839275222246405745257275088696311157297823662689037894645226208583n
@@ -48,6 +55,53 @@ End
 
 val () = cv_trans fsub_def;
 
+Definition fneg_def:
+  fneg x = if x = 0 then 0 else bn254p - x
+End
+
+val () = cv_trans fneg_def;
+
+(* Extended Euclidean algorithm for modular inverse *)
+Definition finv_loop_def:
+  finv_loop a b x y u v =
+  if a = 0 then x else let
+    q = b DIV a;
+    r = b MOD a;
+    m = fsub x (fmul u q);
+    n = fsub y (fmul v q);
+    b = a; a = r; x = u; y = v; u = m; v = n in
+      finv_loop a b x y u v
+Termination
+  WF_REL_TAC `measure FST`
+End
+
+val finv_loop_pre_def = cv_trans_pre "finv_loop_pre" finv_loop_def;
+
+Theorem finv_loop_pre[cv_pre]:
+  ∀a b x y u v. finv_loop_pre a b x y u v
+Proof
+  ho_match_mp_tac finv_loop_ind
+  \\ rw[]
+  \\ rw[Once finv_loop_pre_def]
+  \\ gvs[]
+QED
+
+Definition finv_def:
+  finv n = finv_loop n bn254p 0 1 1 0
+End
+
+val () = cv_trans finv_def;
+
+Definition fdiv_def:
+  fdiv x y = fmul x (finv y)
+End
+
+val () = cv_trans fdiv_def;
+
+(* ============================================================ *)
+(* G1: Elliptic curve over Fq (projective coordinates)          *)
+(* ============================================================ *)
+
 Definition add_def:
   add (x1, y1, z1) (x2, y2, z2) = let
   b3 = fmul bn254b 3;
@@ -88,42 +142,6 @@ Definition add_def:
 End
 
 val () = cv_trans add_def;
-
-Definition finv_loop_def:
-  finv_loop a b x y u v =
-  if a = 0 then x else let
-    q = b DIV a;
-    r = b MOD a;
-    m = fsub x (fmul u q);
-    n = fsub y (fmul v q);
-    b = a; a = r; x = u; y = v; u = m; v = n in
-      finv_loop a b x y u v
-Termination
-  WF_REL_TAC ‘measure FST’
-End
-
-val finv_loop_pre_def = cv_trans_pre "finv_loop_pre" finv_loop_def;
-
-Theorem finv_loop_pre[cv_pre]:
-  ∀a b x y u v. finv_loop_pre a b x y u v
-Proof
-  ho_match_mp_tac finv_loop_ind
-  \\ rw[]
-  \\ rw[Once finv_loop_pre_def]
-  \\ gvs[]
-QED
-
-Definition finv_def:
-  finv n = finv_loop n bn254p 0 1 1 0
-End
-
-val () = cv_trans finv_def;
-
-Definition fdiv_def:
-  fdiv x y = fmul x (finv y)
-End
-
-val () = cv_trans fdiv_def;
 
 Definition dbl_def:
   dbl (x1, y1, z1) = let
@@ -227,13 +245,22 @@ End
 
 val () = cv_trans mulAffine_def;
 
-Definition bn254bF2_def:
-  bn254bF2 =
-  (19485874751759354771024239261021720505790618469301721065564631296452457478373n,
-   266929791119991161246907387137283842545076965332900288569378510910307636690n)
+(* ============================================================ *)
+(* Fq2: Quadratic extension Fq[i] / (i^2 + 1)                   *)
+(* Elements are pairs (a, b) representing a + b*i               *)
+(* ============================================================ *)
+
+Definition f2zero_def:
+  f2zero = (0n, 0n)
 End
 
-val () = cv_trans_deep_embedding EVAL bn254bF2_def;
+val () = cv_trans_deep_embedding EVAL f2zero_def;
+
+Definition f2one_def:
+  f2one = (1n, 0n)
+End
+
+val () = cv_trans_deep_embedding EVAL f2one_def;
 
 Definition f2add_def:
   f2add (x1,xi) (y1,yi) =
@@ -242,12 +269,29 @@ End
 
 val () = cv_trans f2add_def;
 
+Definition f2sub_def:
+  f2sub (x1,xi) (y1,yi) =
+    (fsub x1 y1, fsub xi yi)
+End
+
+val () = cv_trans f2sub_def;
+
+Definition f2neg_def:
+  f2neg (x1,xi) =
+    (fneg x1, fneg xi)
+End
+
+val () = cv_trans f2neg_def;
+
+(* Multiplication using Karatsuba:
+   (a + bi)(c + di) = (ac - bd) + (ad + bc)i
+                    = (ac - bd) + ((a+b)(c+d) - ac - bd)i *)
 Definition f2mul_def:
   f2mul (x1,xi) (y1,yi) = let
     t1 = fmul x1 y1;
     t2 = fmul xi yi;
     o1 = fsub t1 t2;
-    oi = fsub (fmul (fadd x1 xi) (fadd y1 yi)) (fadd t1 t2);
+    oi = fsub (fmul (fadd x1 xi) (fadd y1 yi)) (fadd t1 t2)
   in (o1, oi)
 End
 
@@ -264,41 +308,15 @@ Definition f2sqr_def:
   f2sqr (x1,xi) = let
     a = fadd x1 xi;
     b = fsub x1 xi;
-    c = fadd x1 x1;
+    c = fadd x1 x1
   in (fmul a b, fmul c xi)
 End
 
 val () = cv_trans f2sqr_def;
 
-Definition f2sub_def:
-  f2sub (x1,xi) (y1,yi) =
-    (fsub x1 y1, fsub xi yi)
-End
-
-val () = cv_trans f2sub_def;
-
-Definition fneg_def:
-  fneg x = bn254p - x
-End
-
-val () = cv_trans fneg_def;
-
-Definition f2neg_def:
-  f2neg (x1,xi) =
-    (fneg x1, fneg xi)
-End
-
-val () = cv_trans f2neg_def;
-
-Definition f2one_def:
-  f2one = (1n, 0n)
-End
-
-val () = cv_trans_deep_embedding EVAL f2one_def;
-
 Definition f2inv_def:
   f2inv (x1, xi) = let
-    fr = finv (fadd (fmul x1 x1) (fmul xi xi));
+    fr = finv (fadd (fmul x1 x1) (fmul xi xi))
   in (fmul fr x1, fmul fr (fneg xi))
 End
 
@@ -310,6 +328,18 @@ Definition f2div_def:
 End
 
 val () = cv_trans f2div_def;
+
+(* ============================================================ *)
+(* G2: Elliptic curve over Fq2                                  *)
+(* ============================================================ *)
+
+Definition bn254bF2_def:
+  bn254bF2 =
+  (19485874751759354771024239261021720505790618469301721065564631296452457478373n,
+   266929791119991161246907387137283842545076965332900288569378510910307636690n)
+End
+
+val () = cv_trans_deep_embedding EVAL bn254bF2_def;
 
 Definition f2div2_def:
   f2div2 = f2div f2one (f2muls f2one 2)
@@ -324,9 +354,6 @@ Definition dbl6_def:
     t2 = f2mul (f2muls t1 3) bn254bF2;
     t3 = f2muls t2 3;
     t4 = f2sub (f2sub (f2sqr (f2add y z)) t1) t0;
-    c0 = f2sub t2 t0;
-    c1 = f2muls (f2sqr x) 3;
-    c2 = f2neg t4;
     rx = f2mul (f2mul (f2mul (f2sub t0 t3) x) y) f2div2;
     ry = f2sub (f2sqr (f2mul (f2add t0 t3) f2div2)) (f2muls (f2sqr t2) 3);
     rz = f2mul t0 t4
@@ -335,31 +362,10 @@ End
 
 val () = cv_trans dbl6_def;
 
-Definition dbl6_line_def:
-  dbl6_line (x, (y, z)) = let
-    t0 = f2sqr y;
-    t1 = f2sqr z;
-    t2 = f2mul (f2muls t1 3) bn254bF2;
-    t3 = f2muls t2 3;
-    t4 = f2sub (f2sub (f2sqr (f2add y z)) t1) t0;
-    c0 = f2sub t2 t0;
-    c1 = f2muls (f2sqr x) 3;
-    c2 = f2neg t4;
-    rx = f2mul (f2mul (f2mul (f2sub t0 t3) x) y) f2div2;
-    ry = f2sub (f2sqr (f2mul (f2add t0 t3) f2div2)) (f2muls (f2sqr t2) 3);
-    rz = f2mul t0 t4
-  in ((rx, (ry, rz)), (c0, (c1, c2)))
-End
-
-val () = cv_trans dbl6_line_def;
-
 Definition add6_def:
   add6 (rx, (ry, rz)) (qx,qy) = let
     t0 = f2sub ry (f2mul qy rz);
     t1 = f2sub rx (f2mul qx rz);
-    c0 = f2sub (f2mul t0 qx) (f2mul t1 qy);
-    c1 = f2neg t0;
-    c2 = t1;
     t2 = f2sqr t1;
     t3 = f2mul t2 t1;
     t4 = f2mul t2 rx;
@@ -368,50 +374,93 @@ Definition add6_def:
     rx = f2mul t1 t5;
     ry = f2sub (f2mul (f2sub t4 t5) t0)
                (f2mul t3 ry);
-    rz = f2mul rz t3;
+    rz = f2mul rz t3
   in (rx, (ry, rz))
 End
 
 val () = cv_trans add6_def;
 
-Definition add6_line_def:
-  add6_line (rx, (ry, rz)) (qx,qy) = let
-    t0 = f2sub ry (f2mul qy rz);
-    t1 = f2sub rx (f2mul qx rz);
-    c0 = f2sub (f2mul t0 qx) (f2mul t1 qy);
-    c1 = f2neg t0;
-    c2 = t1;
-    t2 = f2sqr t1;
-    t3 = f2mul t2 t1;
-    t4 = f2mul t2 rx;
-    t5 = f2add (f2sub t3 (f2muls t4 2))
-               (f2mul (f2sqr t0) rz);
-    rx' = f2mul t1 t5;
-    ry' = f2sub (f2mul (f2sub t4 t5) t0)
-               (f2mul t3 ry);
-    rz' = f2mul rz t3;
-  in ((rx', (ry', rz')), (c0, (c1, c2)))
+Definition mulF2_loop_def:
+  mulF2_loop a p n =
+  if n = 0 then a
+  else let
+    a = if ODD n then add6 a (FST p, FST (SND p)) else a;
+    p = dbl6 p;
+    n = n DIV 2
+  in mulF2_loop a p n
 End
 
-val () = cv_trans add6_line_def;
+val () = cv_trans mulF2_loop_def;
 
-Definition f2_nonresidue_def:
-  f2_nonresidue = (9n, 1n)
+Definition zeroF2_def:
+  zeroF2 = (f2zero, (f2one, f2zero))
 End
 
-val () = cv_trans_deep_embedding EVAL f2_nonresidue_def;
+val () = cv_trans_deep_embedding EVAL zeroF2_def;
 
-(* Polynomial FQ12 - direct 12-coefficient representation matching py_ecc *)
-(* Modulus: w^12 = 18*w^6 - 82 *)
+Definition mulF2_def:
+  mulF2 p n =
+  if n = 0 then zeroF2
+  else mulF2_loop zeroF2 p (n MOD bn254n)
+End
+
+val () = cv_trans mulF2_def;
+
+Definition toAffineF2_def:
+  toAffineF2 (x, (y, z)) =
+  if z = f2one then (x, y)
+  else if z = f2zero then (f2zero, f2zero)
+  else let iz = f2inv z in (f2mul x iz, f2mul y iz)
+End
+
+val () = cv_trans toAffineF2_def;
+
+Definition fromAffineF2_def:
+  fromAffineF2 (x, y) =
+  if (x, y) = (f2zero, f2zero) then zeroF2 else (x, (y, f2one))
+End
+
+val () = cv_trans fromAffineF2_def;
+
+Definition mulAffineF2_def:
+  mulAffineF2 p n = toAffineF2 (mulF2 (fromAffineF2 p) n)
+End
+
+val () = cv_trans mulAffineF2_def;
+
+Definition weierstrassEquationF2_def:
+  weierstrassEquationF2 x = let
+    x2 = f2mul x x;
+    x3 = f2mul x2 x
+  in f2add x3 bn254bF2
+End
+
+val () = cv_trans weierstrassEquationF2_def;
+
+Definition validAffineF2_def:
+  validAffineF2 (x, y) =
+  (FST x < bn254p ∧ SND x < bn254p ∧
+   FST y < bn254p ∧ SND y < bn254p ∧
+   ((x, y) = (f2zero, f2zero) ∨
+    f2mul y y = weierstrassEquationF2 x))
+End
+
+val () = cv_trans validAffineF2_def;
+
+(* ============================================================ *)
+(* FQ12: Polynomial representation as 12-tuples                 *)
+(* Polynomial ring Fq[w] / (w^12 - 18*w^6 + 82)                 *)
+(* Tuple (c0,...,c11) represents c0 + c1*w + ... + c11*w^11     *)
+(* ============================================================ *)
 
 Definition poly12_zero_def:
-  poly12_zero = (0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n)
+  poly12_zero = (0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n)
 End
 
 val () = cv_trans_deep_embedding EVAL poly12_zero_def;
 
 Definition poly12_one_def:
-  poly12_one = (1n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n)
+  poly12_one = (1n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n)
 End
 
 val () = cv_trans_deep_embedding EVAL poly12_one_def;
@@ -436,92 +485,6 @@ End
 
 val () = cv_trans poly12_sub_def;
 
-Definition poly12_neg_def:
-  poly12_neg (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) =
-    (fneg a0, fneg a1, fneg a2, fneg a3,
-     fneg a4, fneg a5, fneg a6, fneg a7,
-     fneg a8, fneg a9, fneg a10, fneg a11)
-End
-
-val () = cv_trans poly12_neg_def;
-
-(* Multiply and reduce by w^12 = 18*w^6 - 82 *)
-(* After convolution we have 23 coefficients (indices 0-22) *)
-(* Reduce from top: c[i+12] contributes -82*c[i+12] to c[i] and 18*c[i+12] to c[i+6] *)
-Definition poly12_mul_def:
-  poly12_mul (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11)
-             (b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11) = let
-    (* Convolution: c[k] = sum_{i+j=k} a[i]*b[j] *)
-    c0 = fmul a0 b0;
-    c1 = fadd (fmul a0 b1) (fmul a1 b0);
-    c2 = fadd (fadd (fmul a0 b2) (fmul a1 b1)) (fmul a2 b0);
-    c3 = fadd (fadd (fadd (fmul a0 b3) (fmul a1 b2)) (fmul a2 b1)) (fmul a3 b0);
-    c4 = fadd (fadd (fadd (fadd (fmul a0 b4) (fmul a1 b3)) (fmul a2 b2)) (fmul a3 b1)) (fmul a4 b0);
-    c5 = fadd (fadd (fadd (fadd (fadd (fmul a0 b5) (fmul a1 b4)) (fmul a2 b3)) (fmul a3 b2)) (fmul a4 b1)) (fmul a5 b0);
-    c6 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b6) (fmul a1 b5)) (fmul a2 b4)) (fmul a3 b3)) (fmul a4 b2)) (fmul a5 b1)) (fmul a6 b0);
-    c7 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b7) (fmul a1 b6)) (fmul a2 b5)) (fmul a3 b4)) (fmul a4 b3)) (fmul a5 b2)) (fadd (fmul a6 b1) (fmul a7 b0));
-    c8 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b8) (fmul a1 b7)) (fmul a2 b6)) (fmul a3 b5)) (fmul a4 b4)) (fmul a5 b3)) (fadd (fadd (fmul a6 b2) (fmul a7 b1)) (fmul a8 b0));
-    c9 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b9) (fmul a1 b8)) (fmul a2 b7)) (fmul a3 b6)) (fmul a4 b5)) (fmul a5 b4)) (fadd (fadd (fadd (fmul a6 b3) (fmul a7 b2)) (fmul a8 b1)) (fmul a9 b0));
-    c10 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b10) (fmul a1 b9)) (fmul a2 b8)) (fmul a3 b7)) (fmul a4 b6)) (fmul a5 b5)) (fadd (fadd (fadd (fadd (fmul a6 b4) (fmul a7 b3)) (fmul a8 b2)) (fmul a9 b1)) (fmul a10 b0));
-    c11 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b11) (fmul a1 b10)) (fmul a2 b9)) (fmul a3 b8)) (fmul a4 b7)) (fmul a5 b6)) (fadd (fadd (fadd (fadd (fadd (fmul a6 b5) (fmul a7 b4)) (fmul a8 b3)) (fmul a9 b2)) (fmul a10 b1)) (fmul a11 b0));
-    c12 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a1 b11) (fmul a2 b10)) (fmul a3 b9)) (fmul a4 b8)) (fmul a5 b7)) (fmul a6 b6)) (fadd (fadd (fadd (fadd (fmul a7 b5) (fmul a8 b4)) (fmul a9 b3)) (fmul a10 b2)) (fmul a11 b1));
-    c13 = fadd (fadd (fadd (fadd (fadd (fmul a2 b11) (fmul a3 b10)) (fmul a4 b9)) (fmul a5 b8)) (fmul a6 b7)) (fadd (fadd (fadd (fadd (fmul a7 b6) (fmul a8 b5)) (fmul a9 b4)) (fmul a10 b3)) (fmul a11 b2));
-    c14 = fadd (fadd (fadd (fadd (fmul a3 b11) (fmul a4 b10)) (fmul a5 b9)) (fmul a6 b8)) (fadd (fadd (fadd (fadd (fmul a7 b7) (fmul a8 b6)) (fmul a9 b5)) (fmul a10 b4)) (fmul a11 b3));
-    c15 = fadd (fadd (fadd (fmul a4 b11) (fmul a5 b10)) (fmul a6 b9)) (fadd (fadd (fadd (fadd (fmul a7 b8) (fmul a8 b7)) (fmul a9 b6)) (fmul a10 b5)) (fmul a11 b4));
-    c16 = fadd (fadd (fmul a5 b11) (fmul a6 b10)) (fadd (fadd (fadd (fadd (fmul a7 b9) (fmul a8 b8)) (fmul a9 b7)) (fmul a10 b6)) (fmul a11 b5));
-    c17 = fadd (fmul a6 b11) (fadd (fadd (fadd (fadd (fmul a7 b10) (fmul a8 b9)) (fmul a9 b8)) (fmul a10 b7)) (fmul a11 b6));
-    c18 = fadd (fadd (fadd (fadd (fmul a7 b11) (fmul a8 b10)) (fmul a9 b9)) (fmul a10 b8)) (fmul a11 b7);
-    c19 = fadd (fadd (fadd (fmul a8 b11) (fmul a9 b10)) (fmul a10 b9)) (fmul a11 b8);
-    c20 = fadd (fadd (fmul a9 b11) (fmul a10 b10)) (fmul a11 b9);
-    c21 = fadd (fmul a10 b11) (fmul a11 b10);
-    c22 = fmul a11 b11;
-    (* Reduce: w^12 = 18*w^6 - 82 *)
-    (* Process from c22 down to c12 *)
-    (* c22 at position 22: subtract 82*c22 from c10, add 18*c22 to c16 *)
-    c10 = fsub c10 (fmul 82n c22);
-    c16 = fadd c16 (fmul 18n c22);
-    (* c21 -> c9, c15 *)
-    c9 = fsub c9 (fmul 82n c21);
-    c15 = fadd c15 (fmul 18n c21);
-    (* c20 -> c8, c14 *)
-    c8 = fsub c8 (fmul 82n c20);
-    c14 = fadd c14 (fmul 18n c20);
-    (* c19 -> c7, c13 *)
-    c7 = fsub c7 (fmul 82n c19);
-    c13 = fadd c13 (fmul 18n c19);
-    (* c18 -> c6, c12 *)
-    c6 = fsub c6 (fmul 82n c18);
-    c12 = fadd c12 (fmul 18n c18);
-    (* c17 -> c5, c11 *)
-    c5 = fsub c5 (fmul 82n c17);
-    c11 = fadd c11 (fmul 18n c17);
-    (* c16 -> c4, c10 *)
-    c4 = fsub c4 (fmul 82n c16);
-    c10 = fadd c10 (fmul 18n c16);
-    (* c15 -> c3, c9 *)
-    c3 = fsub c3 (fmul 82n c15);
-    c9 = fadd c9 (fmul 18n c15);
-    (* c14 -> c2, c8 *)
-    c2 = fsub c2 (fmul 82n c14);
-    c8 = fadd c8 (fmul 18n c14);
-    (* c13 -> c1, c7 *)
-    c1 = fsub c1 (fmul 82n c13);
-    c7 = fadd c7 (fmul 18n c13);
-    (* c12 -> c0, c6 *)
-    c0 = fsub c0 (fmul 82n c12);
-    c6 = fadd c6 (fmul 18n c12)
-  in (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11)
-End
-
-val () = cv_trans poly12_mul_def;
-
-Definition poly12_sqr_def:
-  poly12_sqr a = poly12_mul a a
-End
-
-val () = cv_trans poly12_sqr_def;
-
-(* Scalar multiplication *)
 Definition poly12_scale_def:
   poly12_scale s (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) =
     (fmul s a0, fmul s a1, fmul s a2, fmul s a3,
@@ -531,695 +494,336 @@ End
 
 val () = cv_trans poly12_scale_def;
 
-(* Conjugation: negate coefficients 1,3,5,7,9,11 (the odd positions) *)
-(* This corresponds to w -> -w *)
-Definition poly12_conj_def:
-  poly12_conj (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) =
-    (a0, fneg a1, a2, fneg a3, a4, fneg a5,
-     a6, fneg a7, a8, fneg a9, a10, fneg a11)
+(* Reduce degree-12+ polynomial using w^12 = 18*w^6 - 82 *)
+Definition poly12_reduce_def:
+  poly12_reduce (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,
+                 c13,c14,c15,c16,c17,c18,c19,c20,c21,c22) = let
+    (* c22*w^22 = c22*w^10*(18*w^6 - 82) = 18*c22*w^16 - 82*c22*w^10 *)
+    c16 = fadd c16 (fmul 18n c22); c10 = fsub c10 (fmul 82n c22);
+    c15 = fadd c15 (fmul 18n c21); c9 = fsub c9 (fmul 82n c21);
+    c14 = fadd c14 (fmul 18n c20); c8 = fsub c8 (fmul 82n c20);
+    c13 = fadd c13 (fmul 18n c19); c7 = fsub c7 (fmul 82n c19);
+    c12 = fadd c12 (fmul 18n c18); c6 = fsub c6 (fmul 82n c18);
+    c11 = fadd c11 (fmul 18n c17); c5 = fsub c5 (fmul 82n c17);
+    c10 = fadd c10 (fmul 18n c16); c4 = fsub c4 (fmul 82n c16);
+    c9 = fadd c9 (fmul 18n c15); c3 = fsub c3 (fmul 82n c15);
+    c8 = fadd c8 (fmul 18n c14); c2 = fsub c2 (fmul 82n c14);
+    c7 = fadd c7 (fmul 18n c13); c1 = fsub c1 (fmul 82n c13);
+    c6 = fadd c6 (fmul 18n c12); c0 = fsub c0 (fmul 82n c12)
+  in (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11)
 End
 
-val () = cv_trans poly12_conj_def;
+val () = cv_trans poly12_reduce_def;
 
-(* Conversion between poly12 and tower representation *)
-(* Tower: ((a0,(a1,a2)),(b0,(b1,b2))) where each ai,bi is FQ2 = (real,imag) *)
-(* Poly12: (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) *)
-(* Mapping: a0 -> (c0,c6), a1 -> (c2,c8), a2 -> (c4,c10) *)
-(*          b0 -> (c1,c7), b1 -> (c3,c9), b2 -> (c5,c11) *)
-
-Definition poly12_to_tower_def:
-  poly12_to_tower (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
-    ((((c0,c6), ((c2,c8), (c4,c10))),
-      ((c1,c7), ((c3,c9), (c5,c11)))))
-      : (((num # num) # (num # num) # num # num) #
-         (num # num) # (num # num) # num # num)
+(* Polynomial multiplication with reduction *)
+Definition poly12_mul_def:
+  poly12_mul (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11)
+             (b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11) = let
+    c0 = fmul a0 b0;
+    c1 = fadd (fmul a0 b1) (fmul a1 b0);
+    c2 = fadd (fadd (fmul a0 b2) (fmul a1 b1)) (fmul a2 b0);
+    c3 = fadd (fadd (fadd (fmul a0 b3) (fmul a1 b2)) (fmul a2 b1)) (fmul a3 b0);
+    c4 = fadd (fadd (fadd (fadd (fmul a0 b4) (fmul a1 b3)) (fmul a2 b2)) (fmul a3 b1)) (fmul a4 b0);
+    c5 = fadd (fadd (fadd (fadd (fadd (fmul a0 b5) (fmul a1 b4)) (fmul a2 b3)) (fmul a3 b2)) (fmul a4 b1)) (fmul a5 b0);
+    c6 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b6) (fmul a1 b5)) (fmul a2 b4)) (fmul a3 b3)) (fmul a4 b2)) (fmul a5 b1)) (fmul a6 b0);
+    c7 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b7) (fmul a1 b6)) (fmul a2 b5)) (fmul a3 b4)) (fmul a4 b3)) (fmul a5 b2)) (fmul a6 b1)) (fmul a7 b0);
+    c8 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b8) (fmul a1 b7)) (fmul a2 b6)) (fmul a3 b5)) (fmul a4 b4)) (fmul a5 b3)) (fmul a6 b2)) (fmul a7 b1)) (fmul a8 b0);
+    c9 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b9) (fmul a1 b8)) (fmul a2 b7)) (fmul a3 b6)) (fmul a4 b5)) (fmul a5 b4)) (fmul a6 b3)) (fmul a7 b2)) (fmul a8 b1)) (fmul a9 b0);
+    c10 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b10) (fmul a1 b9)) (fmul a2 b8)) (fmul a3 b7)) (fmul a4 b6)) (fmul a5 b5)) (fmul a6 b4)) (fmul a7 b3)) (fmul a8 b2)) (fmul a9 b1)) (fmul a10 b0);
+    c11 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a0 b11) (fmul a1 b10)) (fmul a2 b9)) (fmul a3 b8)) (fmul a4 b7)) (fmul a5 b6)) (fmul a6 b5)) (fmul a7 b4)) (fmul a8 b3)) (fmul a9 b2)) (fmul a10 b1)) (fmul a11 b0);
+    c12 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a1 b11) (fmul a2 b10)) (fmul a3 b9)) (fmul a4 b8)) (fmul a5 b7)) (fmul a6 b6)) (fmul a7 b5)) (fmul a8 b4)) (fmul a9 b3)) (fmul a10 b2)) (fmul a11 b1);
+    c13 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a2 b11) (fmul a3 b10)) (fmul a4 b9)) (fmul a5 b8)) (fmul a6 b7)) (fmul a7 b6)) (fmul a8 b5)) (fmul a9 b4)) (fmul a10 b3)) (fmul a11 b2);
+    c14 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a3 b11) (fmul a4 b10)) (fmul a5 b9)) (fmul a6 b8)) (fmul a7 b7)) (fmul a8 b6)) (fmul a9 b5)) (fmul a10 b4)) (fmul a11 b3);
+    c15 = fadd (fadd (fadd (fadd (fadd (fadd (fadd (fmul a4 b11) (fmul a5 b10)) (fmul a6 b9)) (fmul a7 b8)) (fmul a8 b7)) (fmul a9 b6)) (fmul a10 b5)) (fmul a11 b4);
+    c16 = fadd (fadd (fadd (fadd (fadd (fadd (fmul a5 b11) (fmul a6 b10)) (fmul a7 b9)) (fmul a8 b8)) (fmul a9 b7)) (fmul a10 b6)) (fmul a11 b5);
+    c17 = fadd (fadd (fadd (fadd (fadd (fmul a6 b11) (fmul a7 b10)) (fmul a8 b9)) (fmul a9 b8)) (fmul a10 b7)) (fmul a11 b6);
+    c18 = fadd (fadd (fadd (fadd (fmul a7 b11) (fmul a8 b10)) (fmul a9 b9)) (fmul a10 b8)) (fmul a11 b7);
+    c19 = fadd (fadd (fadd (fmul a8 b11) (fmul a9 b10)) (fmul a10 b9)) (fmul a11 b8);
+    c20 = fadd (fadd (fmul a9 b11) (fmul a10 b10)) (fmul a11 b9);
+    c21 = fadd (fmul a10 b11) (fmul a11 b10);
+    c22 = fmul a11 b11
+  in poly12_reduce (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,
+                    c13,c14,c15,c16,c17,c18,c19,c20,c21,c22)
 End
 
-val () = cv_trans poly12_to_tower_def;
+val () = cv_trans poly12_mul_def;
 
-Definition tower_to_poly12_def:
-  tower_to_poly12 (((a0r,a0i), ((a1r,a1i), (a2r,a2i))),
-                   ((b0r,b0i), ((b1r,b1i), (b2r,b2i)))) =
-    (a0r, b0r, a1r, b1r, a2r, b2r,
-     a0i, b0i, a1i, b1i, a2i, b2i)
+Definition poly12_sqr_def:
+  poly12_sqr x = poly12_mul x x
 End
 
-val () = cv_trans tower_to_poly12_def;
+val () = cv_trans poly12_sqr_def;
 
-Definition f6mul01_def:
-  f6mul01 (c0, (c1, c2)) b0 b1 = let
-    t0 = f2mul c0 b0;
-    t1 = f2mul c1 b1;
-  in (
-    f2add (f2mul (f2sub (f2mul (f2add c1 c2) b1) t1) f2_nonresidue) t0,
-    (f2sub (f2sub (f2mul (f2add b0 b1) (f2add c0 c1)) t0) t1,
-     f2add (f2sub (f2mul (f2add c0 c2) b0) t0) t1)
-  )
+(* ============================================================ *)
+(* List-based polynomial operations for FQ12 inverse            *)
+(* Polynomials represented as coefficient lists, highest first  *)
+(* e.g., [a; b; c] represents a*x^2 + b*x + c                   *)
+(* ============================================================ *)
+
+(* Strip leading zeros from polynomial *)
+Definition poly_normalize_def:
+  poly_normalize [] = [] /\
+  poly_normalize (x::xs) = if x = 0n then poly_normalize xs else x::xs
 End
 
-val () = cv_trans f6mul01_def;
+val () = cv_trans poly_normalize_def;
 
-Definition f6add_def:
-  f6add (c0, (c1, c2)) (r0, (r1, r2)) =
-    (f2add c0 r0,
-     (f2add c1 r1,
-      f2add c2 r2))
+(* Negate a polynomial (0 - each coeff) *)
+Definition poly_neg_def:
+  poly_neg [] = [] /\
+  poly_neg (x::xs) = fsub 0n x :: poly_neg xs
 End
 
-val () = cv_trans f6add_def;
+val () = cv_trans poly_neg_def;
 
-Definition f6sub_def:
-  f6sub (c0, (c1, c2)) (r0, (r1, r2)) =
-    (f2sub c0 r0,
-     (f2sub c1 r1,
-      f2sub c2 r2))
+(* Polynomial subtraction *)
+Definition poly_sub_def:
+  poly_sub [] [] = [] /\
+  poly_sub [] ys = poly_neg ys /\
+  poly_sub xs [] = xs /\
+  poly_sub (x::xs) (y::ys) = fsub x y :: poly_sub xs ys
 End
 
-val () = cv_trans f6sub_def;
+val () = cv_trans poly_sub_def;
 
-Definition f6mul_def:
-  f6mul (c0, (c1, c2)) (r0, (r1, r2)) = let
-    t0 = f2mul c0 r0;
-    t1 = f2mul c1 r1;
-    t2 = f2mul c2 r2;
-  in (
-    f2add t0 (f2mul (f2sub (f2mul (f2add c1 c2) (f2add r1 r2)) (f2add t1 t2))
-              f2_nonresidue),
-    (f2add (f2sub (f2mul (f2add c0 c1) (f2add r0 r1)) (f2add t0 t1))
-          (f2mul t2 f2_nonresidue),
-     f2sub (f2add t1 (f2mul (f2add c0 c2) (f2add r0 r2)))
-          (f2add t0 t2))
-    )
+(* Polynomial addition *)
+Definition poly_add_def:
+  poly_add [] [] = [] /\
+  poly_add [] ys = ys /\
+  poly_add xs [] = xs /\
+  poly_add (x::xs) (y::ys) = fadd x y :: poly_add xs ys
 End
 
-val () = cv_trans f6mul_def;
+val () = cv_trans poly_add_def;
 
-Definition f6sqr_def:
-  f6sqr (c0, (c1, c2)) = let
-    s0 = f2sqr c0;
-    ab = f2mul c0 c1;
-    s1 = f2add ab ab;
-    s2 = f2sqr (f2sub (f2add c0 c2) c1);
-    bc = f2mul c1 c2;
-    s3 = f2add bc bc;
-    s4 = f2sqr c2;
-  in (
-    f2add s0 (f2mul s3 f2_nonresidue),
-    (f2add s1 (f2mul s4 f2_nonresidue),
-     f2sub (f2add (f2add s1 s2) s3) (f2add s0 s4))
-  )
+(* Scale polynomial by a scalar *)
+Definition poly_scale_def:
+  poly_scale s [] = [] /\
+  poly_scale s (x::xs) = fmul s x :: poly_scale s xs
 End
 
-val () = cv_trans f6sqr_def;
+val () = cv_trans poly_scale_def;
 
-Definition f6neg_def:
-  f6neg (c0, (c1, c2)) = (f2neg c0, (f2neg c1, f2neg c2))
-End
+(* Length lemmas for termination *)
+Theorem poly_normalize_length_le:
+  !xs. LENGTH (poly_normalize xs) <= LENGTH xs
+Proof
+  Induct \\ rw [poly_normalize_def]
+QED
 
-val () = cv_trans f6neg_def;
+Theorem poly_sub_length_eq:
+  !xs ys. LENGTH xs = LENGTH ys ==> LENGTH (poly_sub xs ys) = LENGTH xs
+Proof
+  Induct \\ Cases_on `ys` \\ rw [poly_sub_def]
+QED
 
-Definition f6mul_nonresidue_def:
-  f6mul_nonresidue (c0, (c1, c2)) =
-    (f2mul c2 f2_nonresidue, (c0, c1))
-End
+Theorem poly_scale_length:
+  !s xs. LENGTH (poly_scale s xs) = LENGTH xs
+Proof
+  Induct_on `xs` \\ rw [poly_scale_def]
+QED
 
-val () = cv_trans f6mul_nonresidue_def;
-
-Definition f12mul034_def:
-  f12mul034 (c0,c1) o0 o3 o4 = let
-    a = (f2mul (FST c0) o0,
-         (f2mul (FST (SND c0)) o0,
-          f2mul (SND (SND c0)) o0));
-    b = f6mul01 c1 o3 o4;
-    e = f6mul01 (f6add c0 c1) (f2add o0 o3) o4;
-  in (f6add (f6mul_nonresidue b) a,
-      f6sub e (f6add a b))
-End
-
-val () = cv_trans f12mul034_def;
-
-Definition lineFunction_def:
-  lineFunction c0 c1 c2 f px py =
-  f12mul034 f (f2muls c2 py) (f2muls c1 px) c0
-End
-
-val () = cv_trans lineFunction_def;
-
-Definition weierstrassEquationF2_def:
-  weierstrassEquationF2 x = let
-    x2 = f2mul x x;
-    x3 = f2mul x2 x
-  in f2add x3 bn254bF2
-End
-
-val () = cv_trans weierstrassEquationF2_def;
-
-Definition validAffineF2_def:
-  validAffineF2 ((x1,xi),(y1,yi)) =
-    (x1 < bn254p ∧ xi < bn254p ∧
-     y1 < bn254p ∧ yi < bn254p ∧
-     (((x1,xi) = (0,0) ∧ (y1,yi) = (0,0)) ∨
-      f2mul (y1,yi) (y1,yi) =
-      weierstrassEquationF2 (x1,xi)))
-End
-
-val () = cv_trans validAffineF2_def;
-
-Definition f2zero_def:
-  f2zero = (0n, 0n)
-End
-
-val () = cv_trans_deep_embedding EVAL f2zero_def;
-
-Definition zeroF2_def:
-  zeroF2 = (f2zero, (f2one, f2zero))
-End
-
-val () = cv_trans_deep_embedding EVAL zeroF2_def;
-
-Definition fromAffineF2_def:
-  fromAffineF2 (x, y) =
-  if (x, y) = (f2zero, f2zero) then zeroF2 else (x, (y, f2one))
-End
-
-val () = cv_trans fromAffineF2_def;
-
-Definition toAffineF2_def:
-  toAffineF2 (x, (y, z)) =
-  if z = f2one then (x, y) else
-  if z = f2zero then (f2zero, f2zero) else
-  let iz = f2inv z in
-    (f2mul x iz, f2mul y iz)
-End
-
-val () = cv_trans toAffineF2_def;
-
-Definition dblF2_def:
-  dblF2 (x, (y, z)) = let
-    a = f2sqr x;
-    b = f2sqr y;
-    c = f2sqr b;
-    d = f2sub (f2sqr (f2add x b)) (f2add a c);
-    d = f2add d d;
-    e = f2add (f2add a a) a;
-    f = f2sqr e;
-    rx = f2sub f (f2add d d);
-    ry = f2sub (f2mul e (f2sub d rx)) (f2add (f2add (f2add c c) c) (f2add (f2add c c) c));
-    rz = f2mul (f2add y y) z
-  in (rx, (ry, rz))
-End
-
-val () = cv_trans dblF2_def;
-
-Definition addF2_def:
-  addF2 (x1, (y1, z1)) (x2,y2) = let
-    z1z1 = f2sqr z1;
-    u2 = f2mul x2 z1z1;
-    s2 = f2mul (f2mul y2 z1) z1z1;
-    h = f2sub u2 x1;
-    hh = f2sqr h;
-    i = f2add hh hh; i = f2add i i;
-    j = f2mul h i;
-    r = f2sub s2 y1; r = f2add r r;
-    v = f2mul x1 i;
-    rx = f2sub (f2sub (f2sqr r) j) (f2add v v);
-    ry = f2sub (f2mul r (f2sub v rx)) (f2mul (f2add y1 y1) j);
-    rz = f2sub (f2sqr (f2add z1 h)) (f2add z1z1 hh)
-  in (rx, (ry, rz))
-End
-
-val () = cv_trans addF2_def;
-
-Definition mulF2_loop_def:
-  mulF2_loop a p n =
-  if n = 0 then a
-  else let
-    a = if ODD n then addF2 a (FST p, FST (SND p)) else a;
-    p = dblF2 p;
-    n = n DIV 2
-  in mulF2_loop a p n
-End
-
-val () = cv_trans mulF2_loop_def;
-
-Definition mulF2_def:
-  mulF2 p n =
-  if n = 0 then zeroF2 else
-  if SND(SND p) = f2zero ∨ n = 1 then p else
-    mulF2_loop zeroF2 p (n MOD bn254n)
-End
-
-val () = cv_trans mulF2_def;
-
-Definition mulAffineF2_def:
-  mulAffineF2 p n =
-  toAffineF2 (mulF2 (fromAffineF2 p) n)
-End
-
-val () = cv_trans mulAffineF2_def;
-
-Definition mulFQ12_def:
-  mulFQ12 (a0, a1) (b0, b1) = let
-    t0 = f6mul a0 b0;
-    t1 = f6mul a1 b1;
-    c0 = f6add t0 (f6mul_nonresidue t1);
-    c1 = f6sub (f6mul (f6add a0 a1) (f6add b0 b1)) (f6add t0 t1)
-  in (c0, c1)
-End
-
-val () = cv_trans mulFQ12_def;
-
-Definition f12sqr_def:
-  f12sqr (c0, c1) = let
-    ab = f6mul c0 c1;
-    c0' = f6mul (f6add c0 c1)
-                (f6add c0 (f6mul_nonresidue c1));
-    c0' = f6sub (f6sub c0' ab) (f6mul_nonresidue ab);
-    c1' = f6add ab ab
-  in (c0', c1')
-End
-
-val () = cv_trans f12sqr_def;
-
-Definition f12conj_def:
-  f12conj (c0, c1) = (c0, f6neg c1)
-End
-
-val () = cv_trans f12conj_def;
-
-Definition f6inv_def:
-  f6inv (c0, (c1, c2)) = let
-    t0 = f2sqr c0;
-    t1 = f2sqr c1;
-    t2 = f2sqr c2;
-    t3 = f2mul c0 c1;
-    t4 = f2mul c0 c2;
-    t5 = f2mul c1 c2;
-    c0' = f2sub t0 (f2mul t5 f2_nonresidue);
-    c1' = f2sub (f2mul t2 f2_nonresidue) t3;
-    c2' = f2sub t1 t4;
-    t6 = f2mul c0 c0';
-    t6 = f2add t6 (f2mul c1 (f2mul c2' f2_nonresidue));
-    t6 = f2add t6 (f2mul c2 (f2mul c1' f2_nonresidue));
-    t6 = f2inv t6
-  in (f2mul c0' t6, (f2mul c1' t6, f2mul c2' t6))
-End
-
-val () = cv_trans f6inv_def;
-
-Definition f12inv_def:
-  f12inv (c0, c1) = let
-    t0 = f6sqr c0;
-    t1 = f6sqr c1;
-    t0 = f6sub t0 (f6mul_nonresidue t1);
-    t1 = f6inv t0
-  in (f6mul c0 t1, f6neg (f6mul c1 t1))
-End
-
-val () = cv_trans f12inv_def;
-
-(* Polynomial FQ12 inverse using extended Euclidean algorithm *)
-(* Uses 13-tuples (degree 12 polynomials with indices 0-12) *)
-
-(* Find degree of polynomial (index of highest non-zero coeff) *)
-Definition poly13_deg_def:
-  poly13_deg (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12) : num =
-    if c12 ≠ 0n then 12n else
-    if c11 ≠ 0n then 11n else
-    if c10 ≠ 0n then 10n else
-    if c9 ≠ 0n then 9n else
-    if c8 ≠ 0n then 8n else
-    if c7 ≠ 0n then 7n else
-    if c6 ≠ 0n then 6n else
-    if c5 ≠ 0n then 5n else
-    if c4 ≠ 0n then 4n else
-    if c3 ≠ 0n then 3n else
-    if c2 ≠ 0n then 2n else
-    if c1 ≠ 0n then 1n else 0n
-End
-
-val () = cv_trans poly13_deg_def;
-
-(* Get coefficient at index *)
-Definition poly13_get_def:
-  poly13_get (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12) (i:num) =
-    if i = 0n then c0 else
-    if i = 1n then c1 else
-    if i = 2n then c2 else
-    if i = 3n then c3 else
-    if i = 4n then c4 else
-    if i = 5n then c5 else
-    if i = 6n then c6 else
-    if i = 7n then c7 else
-    if i = 8n then c8 else
-    if i = 9n then c9 else
-    if i = 10n then c10 else
-    if i = 11n then c11 else c12
-End
-
-val () = cv_trans poly13_get_def;
-
-(* Set coefficient at index *)
-Definition poly13_set_def:
-  poly13_set (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12) (i:num) v =
-    (if i = 0n then v else c0,
-     if i = 1n then v else c1,
-     if i = 2n then v else c2,
-     if i = 3n then v else c3,
-     if i = 4n then v else c4,
-     if i = 5n then v else c5,
-     if i = 6n then v else c6,
-     if i = 7n then v else c7,
-     if i = 8n then v else c8,
-     if i = 9n then v else c9,
-     if i = 10n then v else c10,
-     if i = 11n then v else c11,
-     if i = 12n then v else c12)
-End
-
-val () = cv_trans poly13_set_def;
-
-Definition poly13_zero_def:
-  poly13_zero = (0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n)
-End
-
-val () = cv_trans_deep_embedding EVAL poly13_zero_def;
-
-(* Add two 13-tuples *)
-Definition poly13_add_def:
-  poly13_add (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12)
-             (b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12) =
-    (fadd a0 b0, fadd a1 b1, fadd a2 b2, fadd a3 b3,
-     fadd a4 b4, fadd a5 b5, fadd a6 b6, fadd a7 b7,
-     fadd a8 b8, fadd a9 b9, fadd a10 b10, fadd a11 b11, fadd a12 b12)
-End
-
-val () = cv_trans poly13_add_def;
-
-(* Subtract two 13-tuples *)
-Definition poly13_sub_def:
-  poly13_sub (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12)
-             (b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12) =
-    (fsub a0 b0, fsub a1 b1, fsub a2 b2, fsub a3 b3,
-     fsub a4 b4, fsub a5 b5, fsub a6 b6, fsub a7 b7,
-     fsub a8 b8, fsub a9 b9, fsub a10 b10, fsub a11 b11, fsub a12 b12)
-End
-
-val () = cv_trans poly13_sub_def;
-
-(* Scale a 13-tuple by a scalar *)
-Definition poly13_scale_def:
-  poly13_scale s (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12) =
-    (fmul s a0, fmul s a1, fmul s a2, fmul s a3,
-     fmul s a4, fmul s a5, fmul s a6, fmul s a7,
-     fmul s a8, fmul s a9, fmul s a10, fmul s a11, fmul s a12)
-End
-
-val () = cv_trans poly13_scale_def;
-
-(* Inner loop of poly_rounded_div: subtract o[i]*b shifted by i from temp *)
-Definition poly_div_inner_def:
-  poly_div_inner temp o_i b degb i c =
-    if c > degb then temp
-    else let
-      idx = c + i;
-      temp' = poly13_set temp idx (fsub (poly13_get temp idx) (fmul o_i (poly13_get b c)))
-    in poly_div_inner temp' o_i b degb i (c + 1)
+(* Tail-recursive polynomial divmod helper *)
+Definition poly_divmod_aux_def:
+  poly_divmod_aux xs ys acc =
+    case xs of
+    | [] => ([], acc)
+    | (x::xs') =>
+        case ys of
+        | [] => ([], x::xs')
+        | (y::ys') =>
+            if LENGTH xs' < LENGTH ys'
+            then (x::xs', acc)
+            else let
+              c = fdiv x y;
+              zeroes = REPLICATE (LENGTH xs' - LENGTH ys') 0n;
+              cys = poly_scale c (ys' ++ zeroes);
+              xs'' = poly_normalize (poly_sub xs' cys)
+            in poly_divmod_aux xs'' ys (acc ++ [c] ++ zeroes)
 Termination
-  WF_REL_TAC `measure (λ(temp,o_i,b,degb,i,c). degb + 1 - c)`
+  WF_REL_TAC `measure (λ(xs,ys,acc). LENGTH xs)`
+  \\ rpt strip_tac
+  \\ irule LESS_EQ_LESS_TRANS
+  \\ irule_at Any poly_normalize_length_le
+  \\ simp [poly_sub_length_eq, poly_scale_length, LENGTH_APPEND, LENGTH_REPLICATE]
 End
 
-val () = cv_trans poly_div_inner_def;
-
-(* Outer loop of poly_rounded_div - counts down from start to 0 *)
-Definition poly_div_outer_def:
-  poly_div_outer temp o_out b degb i =
-    let
-      q = fdiv (poly13_get temp (degb + i)) (poly13_get b degb);
-      o_out' = poly13_set o_out i (fadd (poly13_get o_out i) q);
-      temp' = poly_div_inner temp q b degb i 0n
-    in if i = 0n then (temp', o_out')
-       else poly_div_outer temp' o_out' b degb (i - 1n)
-Termination
-  WF_REL_TAC `measure (λ(temp,o_out,b,degb,i). i)`
-End
-
-val () = cv_trans poly_div_outer_def;
+val () = cv_trans poly_divmod_aux_def;
 
 (* Polynomial divmod: returns (remainder, quotient) *)
-Definition poly13_divmod_def:
-  poly13_divmod a b = let
-    dega = poly13_deg a;
-    degb = poly13_deg b
-  in if dega < degb then (a, poly13_zero)
-     else poly_div_outer a poly13_zero b degb (dega - degb)
+Definition poly_divmod_def:
+  poly_divmod xs ys = poly_divmod_aux xs ys []
 End
 
-val () = cv_trans poly13_divmod_def;
+val () = cv_trans poly_divmod_def;
 
-(* Polynomial rounded division: a / b *)
-Definition poly13_div_def:
-  poly13_div a b = SND (poly13_divmod a b)
+(* Polynomial remainder *)
+Definition poly_mod_def:
+  poly_mod xs ys = FST (poly_divmod xs ys)
 End
 
-val () = cv_trans poly13_div_def;
+val () = cv_trans poly_mod_def;
 
-(* Polynomial remainder: a mod b *)
-Definition poly13_mod_def:
-  poly13_mod a b = FST (poly13_divmod a b)
+(* Polynomial quotient *)
+Definition poly_div_def:
+  poly_div xs ys = SND (poly_divmod xs ys)
 End
 
-val () = cv_trans poly13_mod_def;
+val () = cv_trans poly_div_def;
 
-(* Helper: poly13_deg is at most 12 *)
-Theorem poly13_deg_bound:
-  !p. poly13_deg p ≤ 12
+(* Simple polynomial multiplication *)
+Definition poly_mul_simple_def:
+  poly_mul_simple [] _ = [] /\
+  poly_mul_simple _ [] = [] /\
+  poly_mul_simple (x::xs) ys =
+    poly_add (poly_scale x ys ++ REPLICATE (LENGTH xs) 0n)
+             (poly_mul_simple xs ys)
+End
+
+val () = cv_trans poly_mul_simple_def;
+
+(* Key lemma: poly_normalize reduces length when head is zero *)
+Theorem poly_normalize_length:
+  !xs. LENGTH (poly_normalize xs) <= LENGTH xs
 Proof
-  Cases_on `p` \\ rename [`(c0,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12)`]
-  \\ rw [poly13_deg_def]
+  Induct \\ rw [poly_normalize_def]
 QED
 
-(* Field operation lemmas *)
-Theorem fsub_self:
-  !x. fsub x x = 0
+Theorem poly_neg_length:
+  !xs. LENGTH (poly_neg xs) = LENGTH xs
 Proof
-  rw [fsub_def]
+  Induct \\ rw [poly_neg_def]
 QED
 
-(* Cheated: requires proving extended GCD correctness *)
-Theorem fdiv_mul_cancel:
-  !x y. x < bn254p ==> y > 0 ==> y < bn254p ==> fmul (fdiv x y) y = x
+Theorem poly_sub_length:
+  !xs ys. LENGTH (poly_sub xs ys) = MAX (LENGTH xs) (LENGTH ys)
 Proof
-  cheat
+  Induct \\ Cases_on `ys` \\ rw [poly_sub_def, MAX_DEF, poly_neg_length]
 QED
 
-(* poly13_get/set lemmas *)
-Theorem poly13_get_set_same:
-  !p i v. i <= 12 ==> poly13_get (poly13_set p i v) i = v
+Theorem poly_divmod_aux_length:
+  ∀xs ys acc. ys ≠ [] ⇒ LENGTH (FST (poly_divmod_aux xs ys acc)) < LENGTH ys
 Proof
-  Cases_on `p` \\ rename [`(c0,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12)`]
-  \\ rw [poly13_get_def, poly13_set_def]
+  ho_match_mp_tac poly_divmod_aux_ind \\ rw []
+  \\ once_rewrite_tac [poly_divmod_aux_def]
+  \\ Cases_on `xs` \\ Cases_on `ys` \\ simp []
+  \\ gvs [] \\ gvs []
+  \\ IF_CASES_TAC \\ simp []
 QED
 
-Theorem poly13_get_set_diff:
-  !p i j v. i <= 12 ==> j <= 12 ==> i <> j ==> poly13_get (poly13_set p i v) j = poly13_get p j
+(* Key lemma for termination: remainder is strictly shorter than divisor *)
+Theorem poly_mod_length:
+  !xs ys. ys <> [] ==> LENGTH (poly_mod xs ys) < LENGTH ys
 Proof
-  Cases_on `p` \\ rename [`(c0,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,r)`]
-  \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,r)`] \\ Cases_on `r` \\ rename [`(c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12)`]
-  \\ rw [poly13_get_def, poly13_set_def]
+  rw [poly_mod_def, poly_divmod_def, poly_divmod_aux_length]
 QED
 
-(* poly_div_inner get lemmas *)
-Theorem poly_div_inner_get_above:
-  !temp o_i b degb i c j.
-    degb + i <= 12 ==> j > degb + i ==> j <= 12 ==>
-    poly13_get (poly_div_inner temp o_i b degb i c) j = poly13_get temp j
-Proof
-  ho_match_mp_tac poly_div_inner_ind \\ rw []
-  \\ once_rewrite_tac [poly_div_inner_def] \\ rw []
-  \\ sg `poly13_get (poly13_set temp (c + i) _) j = poly13_get temp j`
-  >- (irule poly13_get_set_diff \\ fs [])
-  \\ fs [poly13_get_set_diff]
-QED
-
-Theorem poly_div_inner_get_below:
-  !temp o_i b degb i c j.
-    degb + i <= 12 ==> j < c + i ==> j <= 12 ==>
-    poly13_get (poly_div_inner temp o_i b degb i c) j = poly13_get temp j
-Proof
-  ho_match_mp_tac poly_div_inner_ind \\ rw []
-  \\ once_rewrite_tac [poly_div_inner_def] \\ rw []
-  \\ sg `c + i <= 12` >- fs []
-  \\ irule poly13_get_set_diff \\ fs []
-QED
-
-Theorem poly_div_inner_get_range:
-  !temp o_i b degb i c j.
-    c <= degb ==> degb + i <= 12 ==> c + i <= j ==> j <= degb + i ==> j <= 12 ==>
-    poly13_get (poly_div_inner temp o_i b degb i c) j =
-    fsub (poly13_get temp j) (fmul o_i (poly13_get b (j - i)))
-Proof
-  ho_match_mp_tac poly_div_inner_ind \\ rw []
-  \\ once_rewrite_tac [poly_div_inner_def] \\ rw []
-  \\ Cases_on `j = c + i`
-  >- (fs [] \\ sg `j < (c + 1) + i` >- fs []
-      \\ `(c + 1) + i = c + i + 1` by fs []
-      \\ fs [poly_div_inner_get_below, poly13_get_set_same])
-  \\ sg `c + 1 <= degb` >- fs []
-  \\ `c + (i + 1) = (c + 1) + i` by fs []
-  \\ fs []
-  \\ pop_assum kall_tac
-  \\ fs [poly13_get_set_diff]
-QED
-
-Theorem poly_div_inner_zeros_leading:
-  !temp b degb i.
-    degb <= 12 ==> degb + i <= 12 ==>
-    poly13_get b degb > 0 ==> poly13_get b degb < bn254p ==>
-    poly13_get temp (degb + i) < bn254p ==>
-    poly13_get (poly_div_inner temp (fdiv (poly13_get temp (degb + i)) (poly13_get b degb)) b degb i 0) (degb + i) = 0
-Proof
-  rw [poly_div_inner_get_range, fdiv_mul_cancel, fsub_self]
-QED
-
-(* Helper: poly_div_outer produces result with degree < degb *)
-Theorem poly_div_outer_deg:
-  !temp o_out b degb i.
-    degb ≤ 12 ∧ degb + i ≤ 12 ∧ poly13_deg b = degb ∧ degb ≠ 0 ⇒
-    poly13_deg (FST (poly_div_outer temp o_out b degb i)) < degb
-Proof
-  cheat
-QED
-
-(* Key property: polynomial remainder has strictly smaller degree than divisor *)
-Theorem poly13_mod_deg:
-  !a b. poly13_deg b ≠ 0 ⇒ poly13_deg (poly13_mod a b) < poly13_deg b
-Proof
-  rw [poly13_mod_def, poly13_divmod_def]
-  \\ irule poly_div_outer_deg
-  \\ fs [poly13_deg_bound]
-QED
-
-(* inv_inner_i computes high - low * quotient = remainder *)
-Theorem inv_inner_i_snd_eq_mod:
-  !hm high lm low.
-    SND (inv_inner_i hm high lm low (poly13_div high low) (0:num)) = poly13_mod high low
-Proof
-  cheat
-QED
-
-(* Inner loop for inverse: update nm and new *)
-Definition inv_inner_j_def:
-  inv_inner_j nm new lm low r i j =
-    if j + i > 12 then (nm, new)
-    else let
-      r_j = poly13_get r j;
-      nm' = poly13_set nm (i + j) (fsub (poly13_get nm (i + j)) (fmul (poly13_get lm i) r_j));
-      new' = poly13_set new (i + j) (fsub (poly13_get new (i + j)) (fmul (poly13_get low i) r_j))
-    in inv_inner_j nm' new' lm low r i (j + 1)
+(* Extended Euclidean algorithm for polynomial inverse *)
+Definition poly_inv_loop_def:
+  poly_inv_loop lm hm low high =
+    case low of
+    | [] => (hm, high)
+    | [c] => (lm, low)
+    | _ =>
+        let
+          r = poly_div high low;
+          nm = poly_sub hm (poly_mul_simple lm r);
+          new = poly_mod high low
+        in poly_inv_loop nm lm new low
 Termination
-  WF_REL_TAC `measure (λ(nm,new,lm,low,r,i,j). 13 - j)`
+  WF_REL_TAC `measure (\(lm,hm,low,high). LENGTH low)`
+  \\ rw [poly_mod_length]
 End
 
-val () = cv_trans inv_inner_j_def;
+val poly_inv_loop_pre_def = cv_trans_pre "poly_inv_loop_pre" poly_inv_loop_def;
 
-Definition inv_inner_i_def:
-  inv_inner_i nm new lm low r i =
-    if i > 12 then (nm, new)
-    else let
-      (nm', new') = inv_inner_j nm new lm low r i 0
-    in inv_inner_i nm' new' lm low r (i + 1)
-Termination
-  WF_REL_TAC `measure (λ(nm,new,lm,low,r,i). 13 - i)`
-End
-
-val () = cv_trans inv_inner_i_def;
-
-(* Main inverse loop *)
-Definition poly12_inv_loop_def:
-  poly12_inv_loop lm hm low high =
-    if poly13_deg low = 0 then (lm, low)
-    else let
-      r = poly13_div high low;
-      (nm, new) = inv_inner_i hm high lm low r 0
-    in poly12_inv_loop nm lm new low
-Termination
-  WF_REL_TAC `measure (λ(lm,hm,low,high). poly13_deg low)`
+Theorem poly_inv_loop_pre[cv_pre]:
+  ∀lm hm low high. poly_inv_loop_pre lm hm low high
+Proof
+  ho_match_mp_tac poly_inv_loop_ind
   \\ rw []
-  \\ qpat_x_assum `(_,_) = _` (assume_tac o SYM)
-  \\ pop_assum (assume_tac o Q.AP_TERM `SND`)
-  \\ gvs [inv_inner_i_snd_eq_mod, poly13_mod_deg]
-  \\ first_assum (fn th => rewrite_tac [GSYM th])
-  \\ irule poly13_mod_deg
-  \\ first_assum ACCEPT_TAC
+  \\ rw [Once poly_inv_loop_pre_def]
+QED
+
+(* Conversion: 12-tuple to list (highest degree first) *)
+Definition poly12_to_list_def:
+  poly12_to_list (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
+    poly_normalize [c11; c10; c9; c8; c7; c6; c5; c4; c3; c2; c1; c0]
 End
 
-val () = cv_trans poly12_inv_loop_def;
+val () = cv_trans poly12_to_list_def;
 
-(* The FQ12 modulus coefficients: w^12 - 18*w^6 + 82 = 0 *)
-(* So modulus_coeffs = (82, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0, 1) *)
-(* But we use positive field elements, so -18 = p - 18 *)
-Definition poly12_modulus_def:
-  poly12_modulus = (82n, 0n, 0n, 0n, 0n, 0n,
-                    21888242871839275222246405745257275088696311157297823662689037894645226208565n,
-                    0n, 0n, 0n, 0n, 0n, 1n)
+(* Conversion: list to 12-tuple (pad with zeros if needed) *)
+Definition list_to_poly12_def:
+  list_to_poly12 xs = let
+    rs = REVERSE xs;
+    c0 = if LENGTH rs > 0 then EL 0 rs else 0n;
+    c1 = if LENGTH rs > 1 then EL 1 rs else 0n;
+    c2 = if LENGTH rs > 2 then EL 2 rs else 0n;
+    c3 = if LENGTH rs > 3 then EL 3 rs else 0n;
+    c4 = if LENGTH rs > 4 then EL 4 rs else 0n;
+    c5 = if LENGTH rs > 5 then EL 5 rs else 0n;
+    c6 = if LENGTH rs > 6 then EL 6 rs else 0n;
+    c7 = if LENGTH rs > 7 then EL 7 rs else 0n;
+    c8 = if LENGTH rs > 8 then EL 8 rs else 0n;
+    c9 = if LENGTH rs > 9 then EL 9 rs else 0n;
+    c10 = if LENGTH rs > 10 then EL 10 rs else 0n;
+    c11 = if LENGTH rs > 11 then EL 11 rs else 0n
+  in (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11)
 End
 
-val () = cv_trans_deep_embedding EVAL poly12_modulus_def;
+val list_to_poly12_pre_def = cv_trans_pre "list_to_poly12_pre" list_to_poly12_def;
 
-(* Convert poly12 to poly13 by appending 0 *)
-Definition poly12_to_poly13_def:
-  poly12_to_poly13 (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
-    (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,0n)
+Theorem list_to_poly12_pre[cv_pre]:
+  ∀xs. list_to_poly12_pre xs
+Proof
+  rw [list_to_poly12_pre_def]
+  \\ Cases_on `xs` \\ gvs []
+QED
+
+(* The FQ12 modulus as a list: w^12 - 18*w^6 + 82 *)
+Definition poly12_modulus_list_def:
+  poly12_modulus_list = [1n; 0n; 0n; 0n; 0n; 0n;
+    21888242871839275222246405745257275088696311157297823662689037894645226208565n;
+    0n; 0n; 0n; 0n; 0n; 82n]
 End
 
-val () = cv_trans poly12_to_poly13_def;
+val () = cv_trans_deep_embedding EVAL poly12_modulus_list_def;
 
-(* Convert poly13 to poly12 by dropping last *)
-Definition poly13_to_poly12_def:
-  poly13_to_poly12 (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12) =
-    (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11)
+(* Get leading coefficient of list polynomial *)
+Definition poly_lead_def:
+  poly_lead [] = 0n /\
+  poly_lead (x::xs) = x
 End
 
-val () = cv_trans poly13_to_poly12_def;
+val () = cv_trans poly_lead_def;
 
-(* Complete poly12 inverse *)
+(* Complete poly12 inverse using list operations *)
 Definition poly12_inv_def:
   poly12_inv p = let
-    lm = (1n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n);
-    hm = poly13_zero;
-    low = poly12_to_poly13 p;
-    high = poly12_modulus;
-    (result_lm, result_low) = poly12_inv_loop lm hm low high;
-    inv_coeff = finv (poly13_get result_low 0)
-  in poly13_to_poly12 (poly13_scale inv_coeff result_lm)
+    lm = [1n];
+    hm = [];
+    low = poly12_to_list p;
+    high = poly12_modulus_list;
+    (result_lm, result_low) = poly_inv_loop lm hm low high;
+    inv_coeff = finv (poly_lead (REVERSE result_low))
+  in list_to_poly12 (poly_scale inv_coeff result_lm)
 End
 
 val () = cv_trans poly12_inv_def;
 
+(* Polynomial division in FQ12 *)
 Definition poly12_div_def:
-  poly12_div a b = poly12_mul a (poly12_inv b)
+  poly12_div x y = poly12_mul x (poly12_inv y)
 End
 
 val () = cv_trans poly12_div_def;
 
-(* Poly12 twist: place FQ2 element at appropriate position *)
-(* For x: positions (2, 8) - corresponds to w^2 coefficient *)
-(* For y: positions (3, 9) - corresponds to w^3 coefficient *)
+(* ============================================================ *)
+(* Twist functions: embed G2 points (over Fq2) into FQ12        *)
+(* ============================================================ *)
+
+(* Twist isomorphism: (a, b) -> (a - 9*b, b) *)
 Definition poly12_twist_x_def:
   poly12_twist_x (a, b) = let
     c0 = fsub a (fmul 9n b);
@@ -1238,14 +842,17 @@ End
 
 val () = cv_trans poly12_twist_y_def;
 
-(* Embed FQ element at position 0 *)
+(* Embed Fq element at position 0 *)
 Definition poly12_embed_fq_def:
   poly12_embed_fq x = (x, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n)
 End
 
 val () = cv_trans poly12_embed_fq_def;
 
-(* Poly12 point doubling *)
+(* ============================================================ *)
+(* Poly12 point operations (affine coordinates)                 *)
+(* ============================================================ *)
+
 Definition poly12_double_def:
   poly12_double (x1, y1) = let
     m = poly12_div (poly12_mul (poly12_embed_fq 3n) (poly12_sqr x1))
@@ -1257,7 +864,6 @@ End
 
 val () = cv_trans poly12_double_def;
 
-(* Poly12 point addition *)
 Definition poly12_point_add_def:
   poly12_point_add (x1, y1) (x2, y2) =
   if x1 = x2 then
@@ -1288,249 +894,11 @@ End
 
 val () = cv_trans poly12_linefunc_def;
 
-Definition f12add_def:
-  f12add (a0, a1) (b0, b1) = (f6add a0 b0, f6add a1 b1)
-End
+(* ============================================================ *)
+(* Frobenius endomorphism                                       *)
+(* ============================================================ *)
 
-val () = cv_trans f12add_def;
-
-Definition f12sub_def:
-  f12sub (a0, a1) (b0, b1) = (f6sub a0 b0, f6sub a1 b1)
-End
-
-val () = cv_trans f12sub_def;
-
-Definition f12div_def:
-  f12div a b = mulFQ12 a (f12inv b)
-End
-
-val () = cv_trans f12div_def;
-
-Definition fq12zero_def:
-  fq12zero =
-  (((0n,0n), ((0n,0n), (0n,0n))),
-   ((0n,0n), ((0n,0n), (0n,0n))))
-End
-
-val () = cv_trans_deep_embedding EVAL fq12zero_def;
-
-Definition fq12one_def:
-  fq12one =
-  (((1n,0n), ((0n,0n), (0n,0n))),
-   ((0n,0n), ((0n,0n), (0n,0n))))
-End
-
-val () = cv_trans_deep_embedding EVAL fq12one_def;
-
-(* Embed FQ2 element into FQ12 at specific positions for twist *)
-(* py_ecc twist: (a,b) -> (a-9b, b) then multiply by w^2 or w^3 *)
-(* For x: embed at position w^2 = V (a1 in fq6_low) *)
-(* For y: embed at position w^3 = W*V (b1 in fq6_high) *)
-Definition twist_x_def:
-  twist_x (a, b) = let
-    (* Isomorphism: (a, b) -> (a - 9*b, b) *)
-    c0 = fsub a (fmul 9n b);
-    c1 = b
-  in
-    (* Place at position a1 in fq6_low *)
-    (((0n,0n), ((c0, c1), (0n,0n))),
-     ((0n,0n), ((0n,0n), (0n,0n))))
-End
-
-val () = cv_trans twist_x_def;
-
-Definition twist_y_def:
-  twist_y (a, b) = let
-    c0 = fsub a (fmul 9n b);
-    c1 = b
-  in
-    (* Place at position b1 in fq6_high *)
-    (((0n,0n), ((0n,0n), (0n,0n))),
-     ((0n,0n), ((c0, c1), (0n,0n))))
-End
-
-val () = cv_trans twist_y_def;
-
-(* Embed FQ element into FQ12 at position 0 (for P coordinates) *)
-Definition embed_fq_def:
-  embed_fq x =
-    (((x, 0n), ((0n,0n), (0n,0n))),
-     ((0n,0n), ((0n,0n), (0n,0n))))
-End
-
-val () = cv_trans embed_fq_def;
-
-(* FQ12 point doubling (affine coordinates) *)
-Definition f12_double_def:
-  f12_double (x1, y1) = let
-    m = f12div (mulFQ12 (embed_fq 3n) (f12sqr x1))
-               (f12add y1 y1);
-    x3 = f12sub (f12sqr m) (f12add x1 x1);
-    y3 = f12sub (mulFQ12 m (f12sub x1 x3)) y1
-  in (x3, y3)
-End
-
-val () = cv_trans f12_double_def;
-
-(* FQ12 point addition (affine coordinates) *)
-Definition f12_add_def:
-  f12_add (x1, y1) (x2, y2) =
-  if x1 = x2 then
-    if y1 = y2 then f12_double (x1, y1)
-    else (fq12zero, fq12zero)  (* Point at infinity - shouldn't happen in miller loop *)
-  else let
-    m = f12div (f12sub y2 y1) (f12sub x2 x1);
-    x3 = f12sub (f12sub (f12sqr m) x1) x2;
-    y3 = f12sub (mulFQ12 m (f12sub x1 x3)) y1
-  in (x3, y3)
-End
-
-val () = cv_trans f12_add_def;
-
-(* Line function: evaluate line through P1, P2 at point T *)
-(* linefunc(P1, P2, T) = m * (xt - x1) - (yt - y1) where m is slope *)
-Definition f12_linefunc_def:
-  f12_linefunc (x1, y1) (x2, y2) (xt, yt) =
-  if x1 = x2 then
-    if y1 = y2 then
-      (* Tangent line: m = 3*x1^2 / (2*y1) *)
-      let m = f12div (mulFQ12 (embed_fq 3n) (f12sqr x1))
-                     (f12add y1 y1)
-      in f12sub (mulFQ12 m (f12sub xt x1)) (f12sub yt y1)
-    else
-      (* Vertical line *)
-      f12sub xt x1
-  else
-    (* Chord line: m = (y2 - y1) / (x2 - x1) *)
-    let m = f12div (f12sub y2 y1) (f12sub x2 x1)
-    in f12sub (mulFQ12 m (f12sub xt x1)) (f12sub yt y1)
-End
-
-val () = cv_trans f12_linefunc_def;
-
-Definition f2frobenius_def:
-  f2frobenius (c0, c1) = (c0, fneg c1)
-End
-
-val () = cv_trans f2frobenius_def;
-
-(* Frobenius p^1 coefficients for Fq6 and Fq12 *)
-Definition frob1_c1_def:
-  frob1_c1 =
-    (8376118865763821496583973867626364092589906065868298776909617916018768340080n,
-     16469823323077808223889137241176536799009286646108169935659301613961712198316n)
-End
-
-val () = cv_trans_deep_embedding EVAL frob1_c1_def;
-
-Definition frob1_c2_def:
-  frob1_c2 = (21888242871839275220042445260109153167277707414472061641714758635765020556616n, 0n)
-End
-
-val () = cv_trans_deep_embedding EVAL frob1_c2_def;
-
-(* Frobenius p^2 coefficients *)
-Definition frob2_c1_def:
-  frob2_c1 = (21888242871839275220042445260109153167277707414472061641714758635765020556617n, 0n)
-End
-
-val () = cv_trans_deep_embedding EVAL frob2_c1_def;
-
-Definition frob2_c2_def:
-  frob2_c2 = (21888242871839275220042445260109153167277707414472061641714758635765020556616n, 0n)
-End
-
-val () = cv_trans_deep_embedding EVAL frob2_c2_def;
-
-(* Twist Frobenius coefficients for optimal ate pairing *)
-(* These are used for Q1 and Q2 in the miller loop final additions *)
-(* twist_frob1_x = xi^((p-1)/3) for Q1 x-coordinate *)
-Definition twist_frob1_x_def:
-  twist_frob1_x =
-    (21575463638280843010398324269430826099269044274347216827212613867836435027261n,
-     10307601595873709700152284273816112264069230130616436755625194854815875713954n)
-End
-
-val () = cv_trans_deep_embedding EVAL twist_frob1_x_def;
-
-(* twist_frob1_y = xi^((p-1)/2) for Q1 y-coordinate *)
-Definition twist_frob1_y_def:
-  twist_frob1_y =
-    (2821565182194536844548159561693502659359617185244120367078079554186484126554n,
-     3505843767911556378687030309984248845540243509899259641013678093033130930403n)
-End
-
-val () = cv_trans_deep_embedding EVAL twist_frob1_y_def;
-
-(* Frobenius p^3 coefficients *)
-Definition frob3_c1_def:
-  frob3_c1 =
-    (2581911344467009335267311115468803099551665605076196740867805258568234346338n,
-     19937756971775647987995932169929341994314640652964949448313374472400716661030n)
-End
-
-val () = cv_trans_deep_embedding EVAL frob3_c1_def;
-
-Definition frob3_c2_def:
-  frob3_c2 = (2203960485148121921418603742825762020974279258880205651966n, 0n)
-End
-
-val () = cv_trans_deep_embedding EVAL frob3_c2_def;
-
-Definition f6frobenius_p1_def:
-  f6frobenius_p1 (c0, (c1, c2)) =
-    (f2frobenius c0,
-     (f2mul (f2frobenius c1) frob1_c1,
-      f2mul (f2frobenius c2) frob1_c2))
-End
-
-val () = cv_trans f6frobenius_p1_def;
-
-Definition f6frobenius_p2_def:
-  f6frobenius_p2 (c0, (c1, c2)) =
-    (f2frobenius c0,
-     (f2mul (f2frobenius c1) frob2_c1,
-      f2mul (f2frobenius c2) frob2_c2))
-End
-
-val () = cv_trans f6frobenius_p2_def;
-
-Definition f6frobenius_p3_def:
-  f6frobenius_p3 (c0, (c1, c2)) =
-    (f2frobenius c0,
-     (f2mul (f2frobenius c1) frob3_c1,
-      f2mul (f2frobenius c2) frob3_c2))
-End
-
-val () = cv_trans f6frobenius_p3_def;
-
-Definition f12frobenius_p1_def:
-  f12frobenius_p1 (c0, c1) =
-    (f6frobenius_p1 c0,
-     f6mul (f6frobenius_p1 c1) (frob1_c1, ((0n,0n), (0n,0n))))
-End
-
-val () = cv_trans f12frobenius_p1_def;
-
-Definition f12frobenius_p2_def:
-  f12frobenius_p2 (c0, c1) =
-    (f6frobenius_p2 c0,
-     f6mul (f6frobenius_p2 c1) (frob2_c1, ((0n,0n), (0n,0n))))
-End
-
-val () = cv_trans f12frobenius_p2_def;
-
-Definition f12frobenius_p3_def:
-  f12frobenius_p3 (c0, c1) =
-    (f6frobenius_p3 c0,
-     f6mul (f6frobenius_p3 c1) (frob3_c1, ((0n,0n), (0n,0n))))
-End
-
-val () = cv_trans f12frobenius_p3_def;
-
-(* Poly12 Frobenius coefficients: w^i maps to frob_a_i * w^i + frob_b_i * w^((i+6) mod 12) *)
-(* These are the precomputed values of (w^q)^i mod (w^12 - 18*w^6 + 82) *)
-(* From py_ecc: w^i -> (coeff at w^i) * w^i + (coeff at w^((i+6) mod 12)) * w^((i+6) mod 12) *)
+(* Precomputed Frobenius coefficients for w^i -> frob1_a(i)*w^i + frob1_b(i)*w^((i+6) mod 12) *)
 Definition frob1_a_def:
   frob1_a (i:num) =
     if i = 0n then 1n else
@@ -1566,9 +934,7 @@ End
 val () = cv_trans frob1_a_def;
 val () = cv_trans frob1_b_def;
 
-(* Frobenius p^1: f(w) -> f(w^q) using precomputed constants *)
-(* Each c_i * w^i becomes c_i * (frob1_a(i) * w^i + frob1_b(i) * w^((i+6) mod 12)) *)
-(* So r_j = c_j * frob1_a(j) + c_{(j+6) mod 12} * frob1_b((j+6) mod 12) *)
+(* Frobenius p^1: f(w) -> f(w^q) *)
 Definition poly12_frobenius_p1_def:
   poly12_frobenius_p1 (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) = let
     r0 = fadd (fmul c0 (frob1_a 0n)) (fmul c6 (frob1_b 6n));
@@ -1588,36 +954,29 @@ End
 
 val () = cv_trans poly12_frobenius_p1_def;
 
-(* Frobenius p^2: apply Frobenius twice *)
 Definition poly12_frobenius_p2_def:
   poly12_frobenius_p2 p = poly12_frobenius_p1 (poly12_frobenius_p1 p)
 End
 
 val () = cv_trans poly12_frobenius_p2_def;
 
-(* Frobenius p^3: apply Frobenius three times *)
 Definition poly12_frobenius_p3_def:
   poly12_frobenius_p3 p = poly12_frobenius_p1 (poly12_frobenius_p2 p)
 End
 
 val () = cv_trans poly12_frobenius_p3_def;
 
-(* Poly12 conjugation: negate odd coefficients (for FQ12, conjugation is raising to p^6) *)
-(* In poly basis, p^6 negates w^(odd) terms since w^6 has order 2 in the quotient *)
-Definition poly12_f12conj_def:
-  poly12_f12conj (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
+(* Conjugation: negate odd coefficients (= raising to p^6) *)
+Definition poly12_conj_def:
+  poly12_conj (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
     (c0, fneg c1, c2, fneg c3, c4, fneg c5, c6, fneg c7, c8, fneg c9, c10, fneg c11)
 End
 
-val () = cv_trans poly12_f12conj_def;
+val () = cv_trans poly12_conj_def;
 
-(* Miller loop for optimal Ate pairing on bn254 *)
-(* The loop parameter is 6x + 2 where x = 4965661367192848881 *)
-(* This equals 29793968203157093288 *)
-(* We iterate using NAF (non-adjacent form) for efficiency *)
-(* The NAF of 6x+2 has the following non-zero positions: *)
-(* Bits set to 1: positions 0,1,3,4,5,7,9,10,12,17,20,23,29,34,37,42,45,49,51,53,56,58,61,63 *)
-(* Bits set to -1: positions 62 *)
+(* ============================================================ *)
+(* Miller loop (MSB-first, following py_ecc)                    *)
+(* ============================================================ *)
 
 Definition ate_loop_count_def:
   ate_loop_count = 29793968203157093288n
@@ -1625,157 +984,13 @@ End
 
 val () = cv_trans_deep_embedding EVAL ate_loop_count_def;
 
-(* Miller loop iteration - py_ecc style working entirely in FQ12 *)
-Definition miller_loop_iter_def:
-  miller_loop_iter r q f p n =
-  if n = 0 then (r, f)
-  else let
-    (* Double step: f = f^2 * line(R, R, P); R = 2R *)
-    line_dbl = f12_linefunc r r p;
-    f' = mulFQ12 (f12sqr f) line_dbl;
-    r' = f12_double r;
-    (* Add step if bit is set *)
-    (r'', f'') = if ODD n then
-      let line_add = f12_linefunc r' q p;
-          f'' = mulFQ12 f' line_add;
-          r'' = f12_add r' q
-      in (r'', f'')
-    else (r', f');
-    n' = n DIV 2
-  in miller_loop_iter r'' q f'' p n'
-Termination
-  WF_REL_TAC `measure (λ(_,_,_,_,n). n)`
+Definition log_ate_loop_count_def:
+  log_ate_loop_count = 63n
 End
 
-val () = cv_trans miller_loop_iter_def;
+val () = cv_trans log_ate_loop_count_def;
 
-(* Complete Miller loop for bn254 - py_ecc style *)
-(* Everything works in FQ12 after twisting Q *)
-Definition miller_loop_def:
-  miller_loop qx qy (px, py) =
-  if (qx = f2zero ∧ qy = f2zero) ∨ (px = 0 ∧ py = 0) then fq12one
-  else let
-    (* Twist Q into FQ12 *)
-    q = (twist_x qx, twist_y qy);
-    (* Embed P into FQ12 *)
-    p = (embed_fq px, embed_fq py);
-    (* Main loop *)
-    rf = miller_loop_iter q q fq12one p ate_loop_count;
-    r = FST rf;
-    f = SND rf;
-    (* Frobenius corrections: Q1 = pi(Q), -Q2 = -pi^2(Q) *)
-    (* In FQ12: pi(x, y) = (x^p, y^p) *)
-    q1 = (f12frobenius_p1 (FST q), f12frobenius_p1 (SND q));
-    (* -Q2: apply Frobenius again and negate y *)
-    q2x = f12frobenius_p1 (FST q1);
-    q2y = f12sub fq12zero (f12frobenius_p1 (SND q1));
-    nq2 = (q2x, q2y);
-    (* Final line evaluations *)
-    f' = mulFQ12 f (f12_linefunc r q1 p);
-    r' = f12_add r q1;
-    f'' = mulFQ12 f' (f12_linefunc r' nq2 p)
-  in f''
-End
-
-val () = cv_trans miller_loop_def;
-
-(* Final exponentiation for bn254 pairing *)
-(* Raises f to the power (p^12 - 1) / n *)
-(* Split into: easy part (p^6 - 1)(p^2 + 1) and hard part (p^4 - p^2 + 1)/n *)
-
-(* Easy part of final exponentiation *)
-Definition final_exp_easy_def:
-  final_exp_easy f = let
-    (* f^(p^6 - 1) = conj(f) * inv(f) *)
-    t0 = f12conj f;
-    t1 = f12inv f;
-    t2 = mulFQ12 t0 t1;
-    (* f^((p^6-1)(p^2+1)) = t2^(p^2) * t2 *)
-    t3 = f12frobenius_p2 t2
-  in mulFQ12 t3 t2
-End
-
-val () = cv_trans final_exp_easy_def;
-
-(* Exponentiation by x = 4965661367192848881 using square-and-multiply *)
-Definition f12_exp_x_loop_def:
-  f12_exp_x_loop f acc n =
-  if n = 0 then acc
-  else let
-    acc' = if ODD n then mulFQ12 acc f else acc;
-    f' = f12sqr f;
-    n' = n DIV 2
-  in f12_exp_x_loop f' acc' n'
-Termination
-  WF_REL_TAC `measure (λ(_,_,n). n)`
-End
-
-val () = cv_trans f12_exp_x_loop_def;
-
-Definition bn254_x_def:
-  bn254_x = 4965661367192848881n
-End
-
-val () = cv_trans_deep_embedding EVAL bn254_x_def;
-
-Definition f12_exp_x_def:
-  f12_exp_x f = f12_exp_x_loop f fq12one bn254_x
-End
-
-val () = cv_trans f12_exp_x_def;
-
-(* Hard part of final exponentiation using the BN-specific formula *)
-(* Uses the fact that for BN curves, we can compute this efficiently *)
-Definition final_exp_hard_def:
-  final_exp_hard f = let
-    (* Various powers of f needed *)
-    y0 = f12sqr f;
-    y1 = f12_exp_x y0;
-    y2 = f12_exp_x (f12sqr y1);
-    y3 = f12conj f;
-    y1 = mulFQ12 y1 y3;
-    y1 = f12conj y1;
-    y1 = mulFQ12 y1 y2;
-    y2 = f12_exp_x y1;
-    y3 = f12_exp_x y2;
-    y1 = f12conj y1;
-    y3 = mulFQ12 y1 y3;
-    y1 = f12conj y1;
-    y1 = f12frobenius_p3 y1;
-    y2 = f12frobenius_p2 y2;
-    y1 = mulFQ12 y1 y2;
-    y2 = f12_exp_x y3;
-    y2 = mulFQ12 y2 y0;
-    y2 = mulFQ12 y2 f;
-    y1 = mulFQ12 y1 y2;
-    y2 = f12frobenius_p1 y3;
-    y1 = mulFQ12 y1 y2
-  in y1
-End
-
-val () = cv_trans final_exp_hard_def;
-
-(* Complete final exponentiation *)
-Definition final_exponentiation_def:
-  final_exponentiation f = final_exp_hard (final_exp_easy f)
-End
-
-val () = cv_trans final_exponentiation_def;
-
-(* Complete optimal Ate pairing on bn254 *)
-Definition pairing_def:
-  pairing qx qy p = final_exponentiation (miller_loop qx qy p)
-End
-
-val () = cv_trans pairing_def;
-
-(* ======== Poly12-based pairing (matching py_ecc) ======== *)
-
-(* Poly12 miller loop iteration - MSB-first version *)
-(* Processes bits from position i down to 0 *)
-(* ate_loop_count has 65 bits, we start at position 63 (log_ate_loop_count) *)
-(* i is num, uses i+1 iterations, terminates when i = 0 after processing bit 0 *)
-(* Uses ODD(n DIV 2**i) instead of BIT i n for cv_trans compatibility *)
+(* Miller loop iteration - MSB-first *)
 Definition poly12_miller_iter_def:
   poly12_miller_iter r q f p n (i:num) =
   let
@@ -1796,16 +1011,9 @@ End
 
 val () = cv_trans poly12_miller_iter_def;
 
-(* log_ate_loop_count = 63 (floor of log2(ate_loop_count)) *)
-Definition log_ate_loop_count_def:
-  log_ate_loop_count = 63n
-End
-
-val () = cv_trans log_ate_loop_count_def;
-
-(* Complete poly12 miller loop *)
-Definition poly12_miller_loop_def:
-  poly12_miller_loop qx qy (px, py) =
+(* Complete Miller loop *)
+Definition miller_loop_def:
+  miller_loop qx qy (px, py) =
   if (qx = f2zero ∧ qy = f2zero) ∨ (px = 0 ∧ py = 0) then poly12_one
   else let
     q = (poly12_twist_x qx, poly12_twist_y qy);
@@ -1823,87 +1031,47 @@ Definition poly12_miller_loop_def:
   in f''
 End
 
-val () = cv_trans poly12_miller_loop_def;
+val () = cv_trans miller_loop_def;
 
-(* Poly12 final exponentiation - easy part *)
-Definition poly12_final_exp_easy_def:
-  poly12_final_exp_easy f = let
-    t0 = poly12_f12conj f;
-    t1 = poly12_inv f;
-    t2 = poly12_mul t0 t1;
-    t3 = poly12_frobenius_p2 t2
-  in poly12_mul t3 t2
-End
+(* ============================================================ *)
+(* Final exponentiation                                         *)
+(* ============================================================ *)
 
-val () = cv_trans poly12_final_exp_easy_def;
-
-(* Poly12 exponentiation by x *)
-Definition poly12_exp_x_loop_def:
-  poly12_exp_x_loop f acc n =
-  if n = 0 then acc
-  else let
-    acc' = if ODD n then poly12_mul acc f else acc;
-    f' = poly12_sqr f;
-    n' = n DIV 2
-  in poly12_exp_x_loop f' acc' n'
-Termination
-  WF_REL_TAC `measure (λ(_,_,n). n)`
-End
-
-val () = cv_trans poly12_exp_x_loop_def;
-
-Definition poly12_exp_x_def:
-  poly12_exp_x f = poly12_exp_x_loop f poly12_one bn254_x
-End
-
-val () = cv_trans poly12_exp_x_def;
-
-(* Poly12 final exponentiation - hard part *)
-Definition poly12_final_exp_hard_def:
-  poly12_final_exp_hard f = let
-    y0 = poly12_sqr f;
-    y1 = poly12_exp_x y0;
-    y2 = poly12_exp_x (poly12_sqr y1);
-    y3 = poly12_f12conj f;
-    y1 = poly12_mul y1 y3;
-    y1 = poly12_f12conj y1;
-    y1 = poly12_mul y1 y2;
-    y2 = poly12_exp_x y1;
-    y3 = poly12_exp_x y2;
-    y1 = poly12_f12conj y1;
-    y3 = poly12_mul y1 y3;
-    y1 = poly12_f12conj y1;
-    y1 = poly12_frobenius_p3 y1;
-    y2 = poly12_frobenius_p2 y2;
-    y1 = poly12_mul y1 y2;
-    y2 = poly12_exp_x y3;
-    y2 = poly12_mul y2 y0;
-    y2 = poly12_mul y2 f;
-    y1 = poly12_mul y1 y2;
-    y2 = poly12_frobenius_p1 y3;
-    y1 = poly12_mul y1 y2
-  in y1
-End
-
-val () = cv_trans poly12_final_exp_hard_def;
-
-(* Final exponentiation exponent: (p^12 - 1) / r *)
+(* Exponent: (p^12 - 1) / r *)
 Definition final_exp_exp_def:
   final_exp_exp = 552484233613224096312617126783173147097382103762957654188882734314196910839907541213974502761540629817009608548654680343627701153829446747810907373256841551006201639677726139946029199968412598804882391702273019083653272047566316584365559776493027495458238373902875937659943504873220554161550525926302303331747463515644711876653177129578303191095900909191624817826566688241804408081892785725967931714097716709526092261278071952560171111444072049229123565057483750161460024353346284167282452756217662335528813519139808291170539072125381230815729071544861602750936964829313608137325426383735122175229541155376346436093930287402089517426973178917569713384748081827255472576937471496195752727188261435633271238710131736096299798168852925540549342330775279877006784354801422249722573783561685179618816480037695005515426162362431072245638324744480n
 End
 
 val () = cv_trans final_exp_exp_def;
 
-(* Complete poly12 final exponentiation - simple approach like py_ecc *)
-Definition poly12_final_exp_def:
-  poly12_final_exp f = poly12_exp_x_loop f poly12_one final_exp_exp
+(* Simple exponentiation loop *)
+Definition poly12_exp_loop_def:
+  poly12_exp_loop f acc n =
+  if n = 0 then acc
+  else let
+    acc' = if ODD n then poly12_mul acc f else acc;
+    f' = poly12_sqr f;
+    n' = n DIV 2
+  in poly12_exp_loop f' acc' n'
+Termination
+  WF_REL_TAC `measure (λ(_,_,n). n)`
 End
 
-val () = cv_trans poly12_final_exp_def;
+val () = cv_trans poly12_exp_loop_def;
 
-(* Complete poly12 pairing *)
-Definition poly12_pairing_def:
-  poly12_pairing qx qy p = poly12_final_exp (poly12_miller_loop qx qy p)
+(* Final exponentiation: f^((p^12-1)/r) *)
+Definition final_exponentiation_def:
+  final_exponentiation f = poly12_exp_loop f poly12_one final_exp_exp
 End
 
-val () = cv_trans poly12_pairing_def;
+val () = cv_trans final_exponentiation_def;
+
+(* ============================================================ *)
+(* Complete pairing                                             *)
+(* ============================================================ *)
+
+Definition pairing_def:
+  pairing qx qy p = final_exponentiation (miller_loop qx qy p)
+End
+
+val () = cv_trans pairing_def;

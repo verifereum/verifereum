@@ -79,7 +79,7 @@ Definition ecpairing_def:
     if bn254$mulAffineF2 (qx, qy) bn254n ≠ (bn254$f2zero, bn254$f2zero) then NONE else
       ecpairing data
         (if (px ≠ 0 ∨ py ≠ 0) ∧ (qx ≠ bn254$f2zero ∨ qy ≠ bn254$f2zero)
-         then bn254$mulFQ12 res (bn254$miller_loop qx qy p)
+         then bn254$poly12_mul res (bn254$miller_loop qx qy p)
          else res)
 Termination
   WF_REL_TAC ‘measure (LENGTH o FST)’ \\ rw[]
@@ -1305,9 +1305,9 @@ Definition precompile_ecpairing_def:
     len <<- LENGTH input;
     consume_gas $ 34000 * (len DIV 192) + 45000;
     if len MOD 192 ≠ 0 then fail OutOfGas else
-    case ecpairing input fq12one of NONE => fail OutOfGas | SOME res => do
+    case ecpairing input bn254$poly12_one of NONE => fail OutOfGas | SOME res => do
       set_return_data $ PAD_LEFT 0w 32
-        [if bn254$final_exponentiation res = fq12one then 1w else 0w];
+        [if bn254$final_exponentiation res = bn254$poly12_one then 1w else 0w];
       finish
     od
   od
