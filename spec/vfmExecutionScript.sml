@@ -1,7 +1,7 @@
 Theory vfmExecution
 Ancestors
   arithmetic
-  blake2f bn254 sha2 ripemd160[ignore_grammar] secp256k1
+  blake2f bn254 bls12381 sha2 ripemd160[ignore_grammar] secp256k1
   vfmTypes vfmRoot vfmContext
 Libs
   monadsyntax
@@ -1346,15 +1346,23 @@ Definition precompile_point_eval_def:
       versionedHash <<- TAKE 32 input; input <<- DROP 32 input;
       z <<- num_of_be_bytes $ TAKE 32 input; input <<- DROP 32 input;
       y <<- num_of_be_bytes $ TAKE 32 input; input <<- DROP 32 input;
-      commitment <<- TAKE 48 input; input <<- DROP 48 input;
-      proof <<- TAKE 48 input;
+      commitment_bytes <<- TAKE 48 input; input <<- DROP 48 input;
+      proof_bytes <<- TAKE 48 input;
       consume_gas 50000;
-      computedHash <<- word_to_bytes (SHA_256_bytes commitment) T;
+      computedHash <<- word_to_bytes (SHA_256_bytes commitment_bytes) T;
       computedVersionedHash <<- versioned_hash_version_kzg :: DROP 1 computedHash;
       assert (versionedHash = computedVersionedHash) KZGProofError;
-      (* TODO: fail KZGProofError if the proof is wrong *)
-      set_return_data point_eval_output;
-      finish
+      (* Decompress G1 points *)
+      commitment_opt <<- bls12381$g1_decompress commitment_bytes;
+      proof_opt <<- bls12381$g1_decompress proof_bytes;
+      case (commitment_opt, proof_opt) of
+      | (SOME commitment, SOME proof) => do
+          (* Verify KZG proof *)
+          assert (bls12381$verify_kzg_proof commitment z y proof) KZGProofError;
+          set_return_data point_eval_output;
+          finish
+        od
+      | _ => fail KZGProofError
     od
   od
 End
