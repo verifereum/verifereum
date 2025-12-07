@@ -543,7 +543,7 @@ val () = cv_trans_deep_embedding EVAL point_eval_output_eq;
 val () = “precompile_point_eval s” |>
    SIMP_CONV std_ss [
        precompile_point_eval_def, bind_def, ignore_bind_def, LET_RATOR,
-       COND_RATOR
+       option_CASE_rator, prod_CASE_rator, COND_RATOR
      ] |> cv_auto_trans;
 
 val precompile_blake2f_pre_def = “precompile_blake2f s” |>

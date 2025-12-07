@@ -939,6 +939,8 @@ Theorem preserves_wf_accounts_precompile_point_eval[simp]:
   preserves_wf_accounts precompile_point_eval
 Proof
   rw[precompile_point_eval_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
 QED
 
 Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
@@ -1927,6 +1929,8 @@ Theorem limits_num_contexts_precompile_point_eval[simp]:
   limits_num_contexts n n precompile_point_eval
 Proof
   rw[precompile_point_eval_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
 QED
 
 Theorem limits_num_contexts_dispatch_precompiles[simp]:
