@@ -99,6 +99,24 @@ End
 
 val () = cv_trans fdiv_def;
 
+(* Field exponentiation by squaring *)
+Definition fexp_loop_def:
+  fexp_loop b e acc =
+  if e = 0n then acc
+  else if ODD e then fexp_loop (fmul b b) (e DIV 2) (fmul acc b)
+  else fexp_loop (fmul b b) (e DIV 2) acc
+Termination
+  WF_REL_TAC `measure (FST o SND)`
+End
+
+val () = cv_trans fexp_loop_def;
+
+Definition fexp_def:
+  fexp b e = fexp_loop b e 1n
+End
+
+val () = cv_trans fexp_def;
+
 (* ============================================================ *)
 (* G1: Elliptic curve over Fq (projective coordinates)          *)
 (* Curve: y^2 = x^3 + 4                                         *)
@@ -1153,3 +1171,59 @@ Definition verify_kzg_proof_def:
 End
 
 val () = cv_trans verify_kzg_proof_def;
+
+(* ============================================================ *)
+(* G1 Point Compression/Decompression                          *)
+(* ============================================================ *)
+
+(* Square root in Fq using Tonelli-Shanks *)
+(* For BLS12-381, p ≡ 3 (mod 4), so sqrt(x) = x^((p+1)/4) *)
+Definition fsqrt_def:
+  fsqrt x = fexp x ((bls12381p + 1) DIV 4)
+End
+
+val () = cv_trans fsqrt_def;
+
+(* Decompress a 48-byte G1 point *)
+(* Returns NONE if invalid, SOME (x, y, 1) in Jacobian coords *)
+Definition g1_decompress_def:
+  g1_decompress (bytes: byte list) =
+  if LENGTH bytes ≠ 48 then NONE else let
+    (* First byte contains flags in top 3 bits *)
+    first_byte = w2n (HD bytes);
+    c_flag = (first_byte DIV 128) MOD 2;  (* bit 7: compression flag *)
+    b_flag = (first_byte DIV 64) MOD 2;   (* bit 6: infinity flag *)
+    a_flag = (first_byte DIV 32) MOD 2;   (* bit 5: y sign flag *)
+    (* Extract x coordinate (mask off top 3 bits of first byte) *)
+    masked_first = n2w (first_byte MOD 32) : byte;
+    x_bytes = masked_first :: TL bytes;
+    x = num_of_be_bytes x_bytes;
+    (* Compute y² = x³ + b *)
+    x3 = fmul x (fmul x x);
+    y_squared = fadd x3 bls12381b;
+    (* Compute y = sqrt(y²) *)
+    y = fsqrt y_squared;
+    (* Select correct y based on sign bit *)
+    y_sign = y MOD 2;
+    y_final = if y_sign = a_flag then y else fsub 0 y
+  in
+    (* Must be compressed format *)
+    if c_flag ≠ 1 then NONE
+    (* Check for point at infinity *)
+    else if b_flag = 1 then
+      if a_flag = 0 ∧ x = 0 then SOME g1_zero else NONE
+    (* Check x is valid field element *)
+    else if x >= bls12381p then NONE
+    (* Verify y² = y_squared (i.e., y_squared is a quadratic residue) *)
+    else if fmul y y ≠ y_squared then NONE
+    else SOME (x, y_final, 1n)
+End
+
+val g1_decompress_pre_def = cv_trans_pre "g1_decompress_pre" g1_decompress_def;
+
+Theorem g1_decompress_pre[cv_pre]:
+  ∀bytes. g1_decompress_pre bytes
+Proof
+  rw [g1_decompress_pre_def]
+  \\ Cases_on `bytes` \\ gvs []
+QED
