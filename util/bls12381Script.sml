@@ -577,12 +577,200 @@ End
 val () = cv_trans poly12_sqr_def;
 
 (* ============================================================ *)
-(* Polynomial inverse via extended Euclidean algorithm          *)
+(* List-based polynomial operations for FQ12 inverse            *)
+(* Polynomials represented as coefficient lists, highest first  *)
+(* e.g., [a; b; c] represents a*x^2 + b*x + c                   *)
 (* ============================================================ *)
 
+(* Strip leading zeros from polynomial *)
+Definition poly_normalize_def:
+  poly_normalize [] = [] /\
+  poly_normalize (x::xs) = if x = 0n then poly_normalize xs else x::xs
+End
+
+val () = cv_trans poly_normalize_def;
+
+(* Negate a polynomial (0 - each coeff) *)
+Definition poly_neg_def:
+  poly_neg [] = [] /\
+  poly_neg (x::xs) = fsub 0n x :: poly_neg xs
+End
+
+val () = cv_trans poly_neg_def;
+
+(* Polynomial subtraction *)
+Definition poly_sub_def:
+  poly_sub [] [] = [] /\
+  poly_sub [] ys = poly_neg ys /\
+  poly_sub xs [] = xs /\
+  poly_sub (x::xs) (y::ys) = fsub x y :: poly_sub xs ys
+End
+
+val () = cv_trans poly_sub_def;
+
+(* Polynomial addition *)
+Definition poly_add_def:
+  poly_add [] [] = [] /\
+  poly_add [] ys = ys /\
+  poly_add xs [] = xs /\
+  poly_add (x::xs) (y::ys) = fadd x y :: poly_add xs ys
+End
+
+val () = cv_trans poly_add_def;
+
+(* Scale polynomial by a scalar *)
+Definition poly_scale_def:
+  poly_scale s [] = [] /\
+  poly_scale s (x::xs) = fmul s x :: poly_scale s xs
+End
+
+val () = cv_trans poly_scale_def;
+
+(* Length lemmas for termination *)
+Theorem poly_normalize_length_le:
+  !xs. LENGTH (poly_normalize xs) <= LENGTH xs
+Proof
+  Induct \\ rw [poly_normalize_def]
+QED
+
+Theorem poly_sub_length_eq:
+  !xs ys. LENGTH xs = LENGTH ys ==> LENGTH (poly_sub xs ys) = LENGTH xs
+Proof
+  Induct \\ Cases_on `ys` \\ rw [poly_sub_def]
+QED
+
+Theorem poly_scale_length:
+  !s xs. LENGTH (poly_scale s xs) = LENGTH xs
+Proof
+  Induct_on `xs` \\ rw [poly_scale_def]
+QED
+
+(* Polynomial divmod aux with accumulator - tail recursive for cv_trans *)
+Definition poly_divmod_aux_def:
+  poly_divmod_aux xs ys acc =
+    case xs of
+    | [] => (acc, [])
+    | (x::xs') =>
+        case ys of
+        | [] => (acc, x::xs')
+        | (y::ys') =>
+            if LENGTH xs' < LENGTH ys'
+            then (acc, x::xs')
+            else let
+              c = fdiv x y;
+              zeroes = REPLICATE (LENGTH xs' - LENGTH ys') 0n;
+              cys = poly_scale c (ys' ++ zeroes);
+              xs'' = poly_normalize (poly_sub xs' cys);
+              (* Append quotient term to accumulator *)
+              acc' = acc ++ [c] ++ zeroes
+            in poly_divmod_aux xs'' ys acc'
+Termination
+  WF_REL_TAC `measure (λ(xs,ys,acc). LENGTH xs)`
+  \\ rpt strip_tac
+  \\ irule LESS_EQ_LESS_TRANS
+  \\ irule_at Any poly_normalize_length_le
+  \\ simp [poly_sub_length_eq, poly_scale_length, LENGTH_APPEND, LENGTH_REPLICATE]
+End
+
+val () = cv_trans poly_divmod_aux_def;
+
+(* Polynomial divmod: returns (quotient, remainder) *)
+Definition poly_divmod_def:
+  poly_divmod xs ys = poly_divmod_aux xs ys []
+End
+
+val () = cv_trans poly_divmod_def;
+
+(* Polynomial quotient *)
+Definition poly_div_def:
+  poly_div xs ys = FST (poly_divmod xs ys)
+End
+
+val () = cv_trans poly_div_def;
+
+(* Polynomial remainder *)
+Definition poly_mod_def:
+  poly_mod xs ys = SND (poly_divmod xs ys)
+End
+
+val () = cv_trans poly_mod_def;
+
+(* Simple polynomial multiplication *)
+Definition poly_mul_simple_def:
+  poly_mul_simple [] _ = [] /\
+  poly_mul_simple _ [] = [] /\
+  poly_mul_simple (x::xs) ys =
+    poly_add (poly_scale x ys ++ REPLICATE (LENGTH xs) 0n)
+             (poly_mul_simple xs ys)
+End
+
+val () = cv_trans poly_mul_simple_def;
+
+(* Key lemma: poly_normalize reduces length when head is zero *)
+Theorem poly_normalize_length:
+  !xs. LENGTH (poly_normalize xs) <= LENGTH xs
+Proof
+  Induct \\ rw [poly_normalize_def]
+QED
+
+Theorem poly_neg_length:
+  !xs. LENGTH (poly_neg xs) = LENGTH xs
+Proof
+  Induct \\ rw [poly_neg_def]
+QED
+
+Theorem poly_sub_length:
+  !xs ys. LENGTH (poly_sub xs ys) = MAX (LENGTH xs) (LENGTH ys)
+Proof
+  Induct \\ Cases_on `ys` \\ rw [poly_sub_def, MAX_DEF, poly_neg_length]
+QED
+
+(* Key lemma for termination: remainder is strictly shorter than divisor *)
+Theorem poly_divmod_aux_length:
+  !xs ys acc. ys <> [] ==> LENGTH (SND (poly_divmod_aux xs ys acc)) < LENGTH ys
+Proof
+  ho_match_mp_tac poly_divmod_aux_ind \\ rw []
+  \\ once_rewrite_tac [poly_divmod_aux_def]
+  \\ BasicProvers.every_case_tac \\ gvs []
+QED
+
+Theorem poly_mod_length:
+  !xs ys. ys <> [] ==> LENGTH (poly_mod xs ys) < LENGTH ys
+Proof
+  rw [poly_mod_def, poly_divmod_def, poly_divmod_aux_length]
+QED
+
+(* Extended Euclidean algorithm for polynomial inverse *)
+Definition poly_inv_loop_def:
+  poly_inv_loop lm hm low high =
+    case low of
+    | [] => (hm, high)
+    | [c] => (lm, low)
+    | _ =>
+        let
+          r = poly_div high low;
+          nm = poly_sub hm (poly_mul_simple lm r);
+          new = poly_mod high low
+        in poly_inv_loop nm lm new low
+Termination
+  WF_REL_TAC `measure (\(lm,hm,low,high). LENGTH low)`
+  \\ rw [poly_mod_length]
+End
+
+val poly_inv_loop_pre_def = cv_trans_pre "poly_inv_loop_pre" poly_inv_loop_def;
+
+Theorem poly_inv_loop_pre[cv_pre]:
+  ∀lm hm low high. poly_inv_loop_pre lm hm low high
+Proof
+  ho_match_mp_tac poly_inv_loop_ind
+  \\ rw []
+  \\ rw [Once poly_inv_loop_pre_def]
+QED
+
+(* Conversion: 12-tuple to list (highest degree first) *)
 Definition poly12_to_list_def:
-  poly12_to_list (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) =
-  [a0;a1;a2;a3;a4;a5;a6;a7;a8;a9;a10;a11]
+  poly12_to_list (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
+    poly_normalize [c11; c10; c9; c8; c7; c6; c5; c4; c3; c2; c1; c0]
 End
 
 val () = cv_trans poly12_to_list_def;
@@ -596,114 +784,57 @@ End
 
 val () = cv_trans safe_el_def;
 
+(* Conversion: list to 12-tuple (pad with zeros if needed) *)
+(* List is highest-degree first, so we reverse to get lowest first *)
 Definition list_to_poly12_def:
-  list_to_poly12 xs =
-  (safe_el 0 xs, safe_el 1 xs, safe_el 2 xs, safe_el 3 xs,
-   safe_el 4 xs, safe_el 5 xs, safe_el 6 xs, safe_el 7 xs,
-   safe_el 8 xs, safe_el 9 xs, safe_el 10 xs, safe_el 11 xs)
+  list_to_poly12 xs = let
+    rs = REVERSE xs
+  in (safe_el 0 rs, safe_el 1 rs, safe_el 2 rs, safe_el 3 rs,
+      safe_el 4 rs, safe_el 5 rs, safe_el 6 rs, safe_el 7 rs,
+      safe_el 8 rs, safe_el 9 rs, safe_el 10 rs, safe_el 11 rs)
 End
 
 val () = cv_trans list_to_poly12_def;
 
-(* Modulus polynomial for Fq12: w^12 - 2*w^6 + 2 *)
-(* Represented as list [2, 0, 0, 0, 0, 0, -2, 0, 0, 0, 0, 0, 1] *)
-(* But we work with positive coefficients: [2, 0, 0, 0, 0, 0, p-2, 0, 0, 0, 0, 0, 1] *)
+(* The FQ12 modulus as a list: w^12 - 2*w^6 + 2 *)
+(* Highest degree first: [1; 0; 0; 0; 0; 0; p-2; 0; 0; 0; 0; 0; 2] *)
 Definition poly12_modulus_list_def:
-  poly12_modulus_list = [2n; 0; 0; 0; 0; 0;
+  poly12_modulus_list = [1n; 0; 0; 0; 0; 0;
     4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559785n;
-    0; 0; 0; 0; 0; 1]
+    0; 0; 0; 0; 0; 2]
 End
 
 val () = cv_trans_deep_embedding EVAL poly12_modulus_list_def;
 
-Definition poly_deg_def:
-  poly_deg [] = 0 /\
-  poly_deg (x::xs) = if EVERY (\c. c = 0) xs then (if x = 0 then 0 else 0)
-                     else SUC (poly_deg xs)
-End
-
+(* Get leading coefficient of list polynomial *)
 Definition poly_lead_def:
   poly_lead [] = 0n /\
-  poly_lead [x] = x /\
-  poly_lead (x::xs) = poly_lead xs
+  poly_lead (x::xs) = x
 End
 
 val () = cv_trans poly_lead_def;
 
-Definition poly_add_list_def:
-  poly_add_list [] ys = ys /\
-  poly_add_list xs [] = xs /\
-  poly_add_list (x::xs) (y::ys) = fadd x y :: poly_add_list xs ys
+(* Complete poly12 inverse using list operations *)
+Definition poly12_inv_def:
+  poly12_inv p = let
+    lm = [1n];
+    hm = [];
+    low = poly12_to_list p;
+    high = poly12_modulus_list;
+    result = poly_inv_loop lm hm low high;
+    result_lm = FST result;
+    result_low = SND result;
+    inv_coeff = finv (poly_lead (REVERSE result_low));
+    (* Reduce result_lm mod the modulus polynomial *)
+    reduced = poly_mod result_lm poly12_modulus_list
+  in list_to_poly12 (poly_scale inv_coeff reduced)
 End
 
-val () = cv_trans poly_add_list_def;
+val () = cv_trans poly12_inv_def;
 
-(* Negate a list of field elements *)
-Definition poly_neg_list_def:
-  poly_neg_list [] = [] /\
-  poly_neg_list (x::xs) = fneg x :: poly_neg_list xs
-End
-
-val () = cv_trans poly_neg_list_def;
-
-Definition poly_sub_list_def:
-  poly_sub_list [] ys = poly_neg_list ys /\
-  poly_sub_list xs [] = xs /\
-  poly_sub_list (x::xs) (y::ys) = fsub x y :: poly_sub_list xs ys
-End
-
-val () = cv_trans poly_sub_list_def;
-
-Definition poly_scale_list_def:
-  poly_scale_list s [] = [] /\
-  poly_scale_list s (x::xs) = fmul s x :: poly_scale_list s xs
-End
-
-val () = cv_trans poly_scale_list_def;
-
-(* Generate a list of n zeros *)
-Definition zeros_def:
-  zeros 0 = [] /\
-  zeros (SUC n) = 0n :: zeros n
-End
-
-val () = cv_trans zeros_def;
-
-Definition poly_shift_def:
-  poly_shift n xs = zeros n ++ xs
-End
-
-val () = cv_trans poly_shift_def;
-
-(* Drop leading zeros from a reversed list *)
-Definition drop_leading_zeros_def:
-  drop_leading_zeros [] = [] /\
-  drop_leading_zeros (x::xs) = if x = 0n then drop_leading_zeros xs else (x::xs)
-End
-
-val () = cv_trans drop_leading_zeros_def;
-
-Definition poly_trim_def:
-  poly_trim xs = REVERSE (drop_leading_zeros (REVERSE xs))
-End
-
-val () = cv_trans poly_trim_def;
-
-(* For FQ12 inverse, we use the fact that for a pairing target group element f,
-   f^(-1) = conj(f) / |f|^2 where conj is conjugation in the extension field.
-   However, for the miller loop we track numerator and denominator separately
-   and compute f = num/den at the end using the conjugation trick. *)
-
-(* Simpler Fq12 inverse using conjugation: f^(-1) = conj(f) * |f|^(-2)
-   But for now, we'll skip this and handle division differently in miller loop *)
-Definition poly12_inv_placeholder_def:
-  poly12_inv_placeholder p = p (* placeholder - real inverse needed later *)
-End
-
-val () = cv_trans poly12_inv_placeholder_def;
-
+(* Polynomial division in FQ12 *)
 Definition poly12_div_def:
-  poly12_div x y = poly12_mul x (poly12_inv_placeholder y)
+  poly12_div x y = poly12_mul x (poly12_inv y)
 End
 
 val () = cv_trans poly12_div_def;
