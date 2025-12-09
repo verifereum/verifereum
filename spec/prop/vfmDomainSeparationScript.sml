@@ -1788,6 +1788,9 @@ Theorem precompile_point_eval_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_point_eval
 Proof
   rw[precompile_point_eval_def] \\ tac
+  \\ CASE_TAC \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ tac
 QED
 
 Theorem precompile_blake2f_ignores_extra_domain[simp]:
@@ -3243,7 +3246,7 @@ Proof
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)
     \\ rw[])
-  \\ CASE_TAC \\ rw[] \\ TRY CASE_TAC
+  \\ CASE_TAC \\ rw[] \\ TRY CASE_TAC \\ rw[]
   \\ rpt (
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)

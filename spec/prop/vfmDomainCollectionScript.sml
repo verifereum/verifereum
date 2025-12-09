@@ -984,7 +984,7 @@ Proof
      precompile_ecrecover_def, precompile_point_eval_def]
   \\ tac
   \\ CASE_TAC \\ rw[]
-  \\ TRY CASE_TAC
+  \\ TRY CASE_TAC \\ rw[]
   \\ tac
 QED
 
