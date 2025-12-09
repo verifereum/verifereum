@@ -518,13 +518,23 @@ End
 val () = cv_trans poly12_neg_def;
 
 (* Reduce polynomial mod w^12 - 2*w^6 + 2 *)
-(* If we have coefficient c at position 12+k, it contributes:
-   c * w^(12+k) = c * (2*w^6 - 2) * w^k = 2*c*w^(6+k) - 2*c*w^k *)
+(* The modulus means w^12 = 2*w^6 - 2 *)
+(* For degree 12-17: c_i * w^i with i in [12,17], use w^12 = 2*w^6 - 2 *)
+(*   c_i * w^i = c_i * w^(i-12) * w^12 = c_i * w^(i-12) * (2*w^6 - 2) *)
+(*   = 2*c_i * w^(i-6) - 2*c_i * w^(i-12) *)
+(* For degree 18-22: need to reduce further since result still has deg >= 12 *)
+(*   w^18 = w^6 * w^12 = w^6 * (2*w^6 - 2) = 2*w^12 - 2*w^6 *)
+(*        = 2*(2*w^6 - 2) - 2*w^6 = 4*w^6 - 4 - 2*w^6 = 2*w^6 - 4 *)
+(*   w^19 = w * w^18 = w * (2*w^6 - 4) = 2*w^7 - 4*w *)
+(*   w^20 = w^2 * w^18 = w^2 * (2*w^6 - 4) = 2*w^8 - 4*w^2 *)
+(*   w^21 = w^3 * w^18 = w^3 * (2*w^6 - 4) = 2*w^9 - 4*w^3 *)
+(*   w^22 = w^4 * w^18 = w^4 * (2*w^6 - 4) = 2*w^10 - 4*w^4 *)
 Definition poly12_reduce_def:
   poly12_reduce (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,
                  c12,c13,c14,c15,c16,c17,c18,c19,c20,c21,c22) =
   let
-    (* w^12 = 2*w^6 - 2, so c12*w^12 -> 2*c12*w^6 - 2*c12 *)
+    (* First pass: reduce c12-c17 using w^12 = 2*w^6 - 2 *)
+    (* c12*w^12 -> 2*c12*w^6 - 2*c12 *)
     r0 = fsub c0 (fmul 2 c12);
     r6 = fadd c6 (fmul 2 c12);
     r1 = fsub c1 (fmul 2 c13);
@@ -537,17 +547,21 @@ Definition poly12_reduce_def:
     r10 = fadd c10 (fmul 2 c16);
     r5 = fsub c5 (fmul 2 c17);
     r11 = fadd c11 (fmul 2 c17);
-    (* w^18 = 2*w^12 - 2*w^6 = 2*(2*w^6-2) - 2*w^6 = 2*w^6 - 4 *)
-    (* Actually easier: c18*w^18 -> reduce c18*w^6 first, then the c12 terms *)
-    r0 = fsub r0 (fmul 2 c18);
+    (* Second pass: reduce c18-c22 using fully reduced formulas *)
+    (* w^18 = 2*w^6 - 4, so c18*w^18 -> 2*c18*w^6 - 4*c18 *)
+    r0 = fsub r0 (fmul 4 c18);
     r6 = fadd r6 (fmul 2 c18);
-    r1 = fsub r1 (fmul 2 c19);
+    (* w^19 = 2*w^7 - 4*w, so c19*w^19 -> 2*c19*w^7 - 4*c19*w *)
+    r1 = fsub r1 (fmul 4 c19);
     r7 = fadd r7 (fmul 2 c19);
-    r2 = fsub r2 (fmul 2 c20);
+    (* w^20 = 2*w^8 - 4*w^2, so c20*w^20 -> 2*c20*w^8 - 4*c20*w^2 *)
+    r2 = fsub r2 (fmul 4 c20);
     r8 = fadd r8 (fmul 2 c20);
-    r3 = fsub r3 (fmul 2 c21);
+    (* w^21 = 2*w^9 - 4*w^3, so c21*w^21 -> 2*c21*w^9 - 4*c21*w^3 *)
+    r3 = fsub r3 (fmul 4 c21);
     r9 = fadd r9 (fmul 2 c21);
-    r4 = fsub r4 (fmul 2 c22);
+    (* w^22 = 2*w^10 - 4*w^4, so c22*w^22 -> 2*c22*w^10 - 4*c22*w^4 *)
+    r4 = fsub r4 (fmul 4 c22);
     r10 = fadd r10 (fmul 2 c22)
   in (r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11)
 End
@@ -596,16 +610,30 @@ val () = cv_trans poly12_sqr_def;
 
 (* ============================================================ *)
 (* List-based polynomial operations for FQ12 inverse            *)
-(* Polynomials represented as coefficient lists, highest first  *)
-(* e.g., [a; b; c] represents a*x^2 + b*x + c                   *)
+(* Polynomials represented as coefficient lists, LOWEST first   *)
+(* (matching py_ecc convention)                                 *)
+(* e.g., [a; b; c] represents a + b*x + c*x^2                   *)
 (* ============================================================ *)
 
-(* Strip leading zeros from polynomial *)
-Definition poly_normalize_def:
-  poly_normalize [] = [] /\
-  poly_normalize (x::xs) = if x = 0n then poly_normalize xs else x::xs
+(* Degree of polynomial (highest index with non-zero coeff) *)
+Definition poly_deg_def:
+  poly_deg [] = 0n /\
+  poly_deg xs = let len = LENGTH xs in
+    if LAST xs <> 0n then len - 1
+    else poly_deg (FRONT xs)
+Termination
+  WF_REL_TAC `measure LENGTH` \\ rw [LENGTH_FRONT]
 End
 
+(* Strip trailing zeros from polynomial (lowest-first representation) *)
+Definition poly_normalize_def:
+  poly_normalize [] = [] /\
+  poly_normalize xs = if LAST xs = 0n then poly_normalize (FRONT xs) else xs
+Termination
+  WF_REL_TAC `measure LENGTH` \\ rw [LENGTH_FRONT]
+End
+
+val () = cv_trans poly_deg_def;
 val () = cv_trans poly_normalize_def;
 
 (* Negate a polynomial (0 - each coeff) *)
@@ -616,22 +644,54 @@ End
 
 val () = cv_trans poly_neg_def;
 
-(* Polynomial subtraction *)
+(* Helper: pairwise subtraction for same-length lists *)
+Definition poly_sub_same_def:
+  poly_sub_same [] [] = [] /\
+  poly_sub_same (x::xs) (y::ys) = fsub x y :: poly_sub_same xs ys /\
+  poly_sub_same _ _ = []  (* shouldn't happen if lists have same length *)
+End
+
+val () = cv_trans poly_sub_same_def;
+
+(* Polynomial subtraction - for lowest-degree-first lists, pad shorter with trailing zeros *)
 Definition poly_sub_def:
-  poly_sub [] [] = [] /\
-  poly_sub [] ys = poly_neg ys /\
-  poly_sub xs [] = xs /\
-  poly_sub (x::xs) (y::ys) = fsub x y :: poly_sub xs ys
+  poly_sub xs ys =
+    let lx = LENGTH xs; ly = LENGTH ys in
+    if lx < ly then
+      poly_sub (xs ++ REPLICATE (ly - lx) 0n) ys
+    else if ly < lx then
+      poly_sub xs (ys ++ REPLICATE (lx - ly) 0n)
+    else
+      poly_sub_same xs ys
+Termination
+  WF_REL_TAC `measure (\(xs,ys). if LENGTH xs = LENGTH ys then 0 else 1)`
+  \\ rw [LENGTH_APPEND, LENGTH_REPLICATE]
 End
 
 val () = cv_trans poly_sub_def;
 
-(* Polynomial addition *)
+(* Helper: pairwise addition for same-length lists *)
+Definition poly_add_same_def:
+  poly_add_same [] [] = [] /\
+  poly_add_same (x::xs) (y::ys) = fadd x y :: poly_add_same xs ys /\
+  poly_add_same _ _ = []  (* shouldn't happen if lists have same length *)
+End
+
+val () = cv_trans poly_add_same_def;
+
+(* Polynomial addition - for lowest-degree-first lists, pad shorter with trailing zeros *)
 Definition poly_add_def:
-  poly_add [] [] = [] /\
-  poly_add [] ys = ys /\
-  poly_add xs [] = xs /\
-  poly_add (x::xs) (y::ys) = fadd x y :: poly_add xs ys
+  poly_add xs ys =
+    let lx = LENGTH xs; ly = LENGTH ys in
+    if lx < ly then
+      poly_add (xs ++ REPLICATE (ly - lx) 0n) ys
+    else if ly < lx then
+      poly_add xs (ys ++ REPLICATE (lx - ly) 0n)
+    else
+      poly_add_same xs ys
+Termination
+  WF_REL_TAC `measure (\(xs,ys). if LENGTH xs = LENGTH ys then 0 else 1)`
+  \\ rw [LENGTH_APPEND, LENGTH_REPLICATE]
 End
 
 val () = cv_trans poly_add_def;
@@ -648,13 +708,21 @@ val () = cv_trans poly_scale_def;
 Theorem poly_normalize_length_le:
   !xs. LENGTH (poly_normalize xs) <= LENGTH xs
 Proof
-  Induct \\ rw [poly_normalize_def]
+  ho_match_mp_tac poly_normalize_ind \\ rw []
+  \\ once_rewrite_tac [poly_normalize_def]
+  \\ rw [] \\ gvs [LENGTH_FRONT]
+QED
+
+Theorem poly_sub_same_length:
+  !xs ys. LENGTH xs = LENGTH ys ==> LENGTH (poly_sub_same xs ys) = LENGTH xs
+Proof
+  Induct \\ Cases_on `ys` \\ rw [poly_sub_same_def]
 QED
 
 Theorem poly_sub_length_eq:
   !xs ys. LENGTH xs = LENGTH ys ==> LENGTH (poly_sub xs ys) = LENGTH xs
 Proof
-  Induct \\ Cases_on `ys` \\ rw [poly_sub_def]
+  rw [Once poly_sub_def, poly_sub_same_length]
 QED
 
 Theorem poly_scale_length:
@@ -663,38 +731,96 @@ Proof
   Induct_on `xs` \\ rw [poly_scale_def]
 QED
 
-(* Polynomial divmod aux with accumulator - tail recursive for cv_trans *)
-Definition poly_divmod_aux_def:
-  poly_divmod_aux xs ys acc =
-    case xs of
-    | [] => (acc, [])
-    | (x::xs') =>
-        case ys of
-        | [] => (acc, x::xs')
-        | (y::ys') =>
-            if LENGTH xs' < LENGTH ys'
-            then (acc, x::xs')
-            else let
-              c = fdiv x y;
-              zeroes = REPLICATE (LENGTH xs' - LENGTH ys') 0n;
-              cys = poly_scale c (ys' ++ zeroes);
-              xs'' = poly_normalize (poly_sub xs' cys);
-              (* Append quotient term to accumulator *)
-              acc' = acc ++ [c] ++ zeroes
-            in poly_divmod_aux xs'' ys acc'
-Termination
-  WF_REL_TAC `measure (λ(xs,ys,acc). LENGTH xs)`
-  \\ rpt strip_tac
-  \\ irule LESS_EQ_LESS_TRANS
-  \\ irule_at Any poly_normalize_length_le
-  \\ simp [poly_sub_length_eq, poly_scale_length, LENGTH_APPEND, LENGTH_REPLICATE]
+(* Update list element at index (for lowest-first polynomials) *)
+Definition list_update_def:
+  list_update [] _ _ = [] /\
+  list_update (x::xs) 0 v = v :: xs /\
+  list_update (x::xs) (SUC n) v = x :: list_update xs n v
 End
 
-val () = cv_trans poly_divmod_aux_def;
+val () = cv_trans list_update_def;
 
-(* Polynomial divmod: returns (quotient, remainder) *)
+(* Get list element at index, default 0 *)
+Definition list_get_def:
+  list_get [] _ = 0n /\
+  list_get (x::xs) 0 = x /\
+  list_get (x::xs) (SUC n) = list_get xs n
+End
+
+val () = cv_trans list_get_def;
+
+(* Inner loop: for c in range(degb + 1): temp[c + i] -= o[c + i] * b[c] *)
+Definition poly_div_inner_def:
+  poly_div_inner temp o_list b i c =
+    if c > poly_deg b then temp
+    else let
+      idx = c + i;
+      temp_val = list_get temp idx;
+      o_val = list_get o_list idx;
+      b_val = list_get b c;
+      new_val = fsub temp_val (fmul o_val b_val);
+      temp' = list_update temp idx new_val
+    in poly_div_inner temp' o_list b i (c + 1)
+Termination
+  WF_REL_TAC `measure (\(temp, o_list, b, i, c). (poly_deg b + 1) - c)`
+End
+
+val () = cv_trans poly_div_inner_def;
+
+(* Outer loop: for i in range(dega - degb, -1, -1) - counting DOWN *)
+Definition poly_div_outer_def:
+  poly_div_outer temp o_list b degb i =
+    if i = 0 then
+      (* Last iteration with i = 0 *)
+      let
+        temp_at_degb_i = list_get temp degb;
+        b_lead = list_get b degb;
+        q = fdiv temp_at_degb_i b_lead;
+        o_val = list_get o_list 0;
+        o_list' = list_update o_list 0 (fadd o_val q);
+        temp' = poly_div_inner temp o_list' b 0 0
+      in (o_list', temp')
+    else let
+      (* o[i] += temp[degb + i] / b[degb] *)
+      temp_at_degb_i = list_get temp (degb + i);
+      b_lead = list_get b degb;
+      q = fdiv temp_at_degb_i b_lead;
+      o_val = list_get o_list i;
+      o_list' = list_update o_list i (fadd o_val q);
+      (* Inner loop *)
+      temp' = poly_div_inner temp o_list' b i 0
+    in poly_div_outer temp' o_list' b degb (i - 1)
+Termination
+  WF_REL_TAC `measure (\(temp, o_list, b, degb, i). i + 1)`
+End
+
+val () = cv_trans poly_div_outer_def;
+
+(* Polynomial rounded division - matches py_ecc exactly *)
+(* poly_rounded_div(a, b) -> quotient *)
+Definition poly_rounded_div_def:
+  poly_rounded_div a b = let
+    dega = poly_deg a;
+    degb = poly_deg b;
+    temp = a;
+    o_list = REPLICATE (LENGTH a) 0n;
+    start_i = dega - degb;
+    (result_o, result_temp) = poly_div_outer temp o_list b degb start_i
+  in poly_normalize result_o
+End
+
+val () = cv_trans poly_rounded_div_def;
+
+(* Polynomial divmod using py_ecc style division - returns (quotient, remainder) *)
 Definition poly_divmod_def:
-  poly_divmod xs ys = poly_divmod_aux xs ys []
+  poly_divmod a b = let
+    dega = poly_deg a;
+    degb = poly_deg b;
+    temp = a;
+    o_list = REPLICATE (LENGTH a) 0n;
+    start_i = dega - degb;
+    (result_o, result_temp) = poly_div_outer temp o_list b degb start_i
+  in (poly_normalize result_o, poly_normalize result_temp)
 End
 
 val () = cv_trans poly_divmod_def;
@@ -724,55 +850,235 @@ End
 
 val () = cv_trans poly_mul_simple_def;
 
-(* Key lemma: poly_normalize reduces length when head is zero *)
-Theorem poly_normalize_length:
-  !xs. LENGTH (poly_normalize xs) <= LENGTH xs
-Proof
-  Induct \\ rw [poly_normalize_def]
-QED
-
 Theorem poly_neg_length:
   !xs. LENGTH (poly_neg xs) = LENGTH xs
 Proof
   Induct \\ rw [poly_neg_def]
 QED
 
-Theorem poly_sub_length:
-  !xs ys. LENGTH (poly_sub xs ys) = MAX (LENGTH xs) (LENGTH ys)
+(* list_update preserves length *)
+Theorem list_update_length:
+  !xs n v. LENGTH (list_update xs n v) = LENGTH xs
 Proof
-  Induct \\ Cases_on `ys` \\ rw [poly_sub_def, MAX_DEF, poly_neg_length]
+  Induct \\ rw [list_update_def] \\ Cases_on `n` \\ rw [list_update_def]
 QED
 
-(* Key lemma for termination: remainder is strictly shorter than divisor *)
-Theorem poly_divmod_aux_length:
-  !xs ys acc. ys <> [] ==> LENGTH (SND (poly_divmod_aux xs ys acc)) < LENGTH ys
+(* poly_deg is bounded by LENGTH *)
+Theorem poly_deg_le_length:
+  !xs. poly_deg xs <= LENGTH xs
 Proof
-  ho_match_mp_tac poly_divmod_aux_ind \\ rw []
-  \\ once_rewrite_tac [poly_divmod_aux_def]
-  \\ BasicProvers.every_case_tac \\ gvs []
+  ho_match_mp_tac poly_deg_ind \\ rw [poly_deg_def]
 QED
 
-Theorem poly_mod_length:
-  !xs ys. ys <> [] ==> LENGTH (poly_mod xs ys) < LENGTH ys
+(* poly_div_inner preserves list length *)
+Theorem poly_div_inner_length:
+  !temp o_list b i c. LENGTH (poly_div_inner temp o_list b i c) = LENGTH temp
 Proof
-  rw [poly_mod_def, poly_divmod_def, poly_divmod_aux_length]
+  ho_match_mp_tac poly_div_inner_ind \\ rw []
+  \\ once_rewrite_tac [poly_div_inner_def]
+  \\ IF_CASES_TAC \\ simp [list_update_length]
+QED
+
+(* poly_div_outer preserves list length in second component *)
+Theorem poly_div_outer_snd_length:
+  !temp o_list b degb i. LENGTH (SND (poly_div_outer temp o_list b degb i)) = LENGTH temp
+Proof
+  ho_match_mp_tac poly_div_outer_ind \\ rw []
+  \\ once_rewrite_tac [poly_div_outer_def]
+  \\ IF_CASES_TAC \\ simp [poly_div_inner_length, list_update_length]
+QED
+
+(* Descending-order normalization (strip leading zeros from head) *)
+Definition poly_normalize_desc_def:
+  poly_normalize_desc [] = [] /\
+  poly_normalize_desc (x::xs) = if x = 0n then poly_normalize_desc xs else x::xs
+End
+
+val () = cv_trans poly_normalize_desc_def;
+
+Theorem poly_normalize_desc_length_le:
+  !xs. LENGTH (poly_normalize_desc xs) <= LENGTH xs
+Proof
+  Induct \\ rw [poly_normalize_desc_def]
+QED
+
+(* Descending-order poly_sub - same as ascending since element-wise *)
+Definition poly_sub_desc_def:
+  poly_sub_desc [] [] = [] /\
+  poly_sub_desc [] ys = poly_neg ys /\
+  poly_sub_desc xs [] = xs /\
+  poly_sub_desc (x::xs) (y::ys) = fsub x y :: poly_sub_desc xs ys
+End
+
+val () = cv_trans poly_sub_desc_def;
+
+Theorem poly_sub_desc_length_eq:
+  !xs ys. LENGTH xs = LENGTH ys ==> LENGTH (poly_sub_desc xs ys) = LENGTH xs
+Proof
+  Induct \\ Cases_on `ys` \\ rw [poly_sub_desc_def]
+QED
+
+(* Tail-recursive polynomial divmod for descending order (like bn254) *)
+Definition poly_divmod_aux_desc_def:
+  poly_divmod_aux_desc xs ys acc =
+    case xs of
+    | [] => ([], acc)
+    | (x::xs') =>
+        case ys of
+        | [] => ([], x::xs')
+        | (y::ys') =>
+            if LENGTH xs' < LENGTH ys'
+            then (x::xs', acc)
+            else let
+              c = fdiv x y;
+              zeroes = REPLICATE (LENGTH xs' - LENGTH ys') 0n;
+              cys = poly_scale c (ys' ++ zeroes);
+              xs'' = poly_normalize_desc (poly_sub_desc xs' cys)
+            in poly_divmod_aux_desc xs'' ys (acc ++ [c])
+Termination
+  WF_REL_TAC `measure (λ(xs,ys,acc). LENGTH xs)`
+  \\ rpt strip_tac
+  \\ irule LESS_EQ_LESS_TRANS
+  \\ irule_at Any poly_normalize_desc_length_le
+  \\ simp [poly_sub_desc_length_eq, poly_scale_length, LENGTH_APPEND, LENGTH_REPLICATE]
+End
+
+val () = cv_trans poly_divmod_aux_desc_def;
+
+Definition poly_divmod_desc_def:
+  poly_divmod_desc xs ys = poly_divmod_aux_desc xs ys []
+End
+
+val () = cv_trans poly_divmod_desc_def;
+
+Definition poly_mod_desc_def:
+  poly_mod_desc xs ys = FST (poly_divmod_desc xs ys)
+End
+
+val () = cv_trans poly_mod_desc_def;
+
+Theorem poly_divmod_aux_desc_length:
+  ∀xs ys acc. ys ≠ [] ⇒ LENGTH (FST (poly_divmod_aux_desc xs ys acc)) < LENGTH ys
+Proof
+  ho_match_mp_tac poly_divmod_aux_desc_ind \\ rw []
+  \\ once_rewrite_tac [poly_divmod_aux_desc_def]
+  \\ Cases_on `xs` \\ Cases_on `ys` \\ simp []
+  \\ gvs [] \\ gvs []
+  \\ IF_CASES_TAC \\ simp []
+QED
+
+Theorem poly_mod_desc_length:
+  !xs ys. ys <> [] ==> LENGTH (poly_mod_desc xs ys) < LENGTH ys
+Proof
+  rw [poly_mod_desc_def, poly_divmod_desc_def, poly_divmod_aux_desc_length]
+QED
+
+(* poly_div using descending-order algorithm *)
+Definition poly_div_desc_def:
+  poly_div_desc xs ys = SND (poly_divmod_desc xs ys)
+End
+
+val () = cv_trans poly_div_desc_def;
+
+(* Ascending-order normalization (strip trailing zeros) *)
+Definition poly_normalize_asc_def:
+  poly_normalize_asc xs = REVERSE (poly_normalize_desc (REVERSE xs))
+End
+
+val () = cv_trans poly_normalize_asc_def;
+
+Theorem poly_normalize_asc_length_le:
+  !xs. LENGTH (poly_normalize_asc xs) <= LENGTH xs
+Proof
+  rw [poly_normalize_asc_def]
+  \\ irule LESS_EQ_TRANS
+  \\ qexists_tac `LENGTH (REVERSE xs)`
+  \\ simp [poly_normalize_desc_length_le]
+QED
+
+(* poly_mod using descending-order algorithm (for termination) *)
+(* Normalizes inputs first, converts ascending to descending, computes, converts back *)
+Definition poly_mod_via_desc_def:
+  poly_mod_via_desc xs ys = let
+    xs' = poly_normalize_asc xs;
+    ys' = poly_normalize_asc ys
+  in REVERSE (poly_mod_desc (REVERSE xs') (REVERSE ys'))
+End
+
+val () = cv_trans poly_mod_via_desc_def;
+
+(* poly_div using descending-order algorithm *)
+(* Normalizes inputs first, converts ascending to descending, computes, converts back *)
+Definition poly_div_via_desc_def:
+  poly_div_via_desc xs ys = let
+    xs' = poly_normalize_asc xs;
+    ys' = poly_normalize_asc ys
+  in REVERSE (poly_div_desc (REVERSE xs') (REVERSE ys'))
+End
+
+val () = cv_trans poly_div_via_desc_def;
+
+Theorem poly_mod_via_desc_length:
+  !xs ys. poly_normalize_asc ys <> [] ==>
+          LENGTH (poly_mod_via_desc xs ys) < LENGTH (poly_normalize_asc ys)
+Proof
+  rw [poly_mod_via_desc_def, poly_normalize_asc_def]
+  \\ `poly_normalize_desc (REVERSE ys) <> []` by simp []
+  \\ drule poly_mod_desc_length
+  \\ simp []
+QED
+
+(* Specialized version for already-normalized inputs *)
+Theorem poly_mod_via_desc_length_normalized:
+  !xs ys. ys <> [] /\ poly_normalize_asc ys = ys ==>
+          LENGTH (poly_mod_via_desc xs ys) < LENGTH ys
+Proof
+  rw []
+  \\ `poly_normalize_asc ys <> []` by metis_tac []
+  \\ drule poly_mod_via_desc_length \\ simp []
+QED
+
+(* poly_normalize_desc is idempotent *)
+Theorem poly_normalize_desc_idempotent:
+  !xs. poly_normalize_desc (poly_normalize_desc xs) = poly_normalize_desc xs
+Proof
+  Induct \\ rw [poly_normalize_desc_def]
+QED
+
+(* Key property: poly_mod_via_desc output is normalized (no trailing zeros) *)
+(* This is because REVERSE of a normalized descending poly is normalized ascending *)
+Theorem poly_normalize_desc_reverse_idempotent:
+  !xs. REVERSE (poly_normalize_desc (REVERSE (REVERSE (poly_normalize_desc xs)))) =
+       REVERSE (poly_normalize_desc xs)
+Proof
+  rw [poly_normalize_desc_idempotent]
 QED
 
 (* Extended Euclidean algorithm for polynomial inverse *)
+(* Uses poly_div_via_desc and poly_mod_via_desc for consistency and easy termination *)
+(* Termination: we use LENGTH (poly_normalize_asc low) as measure, which strictly decreases *)
 Definition poly_inv_loop_def:
   poly_inv_loop lm hm low high =
-    case low of
+    case poly_normalize_asc low of
     | [] => (hm, high)
     | [c] => (lm, low)
     | _ =>
         let
-          r = poly_div high low;
+          r = poly_div_via_desc high low;
           nm = poly_sub hm (poly_mul_simple lm r);
-          new = poly_mod high low
+          new = poly_mod_via_desc high low
         in poly_inv_loop nm lm new low
 Termination
-  WF_REL_TAC `measure (\(lm,hm,low,high). LENGTH low)`
-  \\ rw [poly_mod_length]
+  WF_REL_TAC `measure (\(lm, hm, low, high). LENGTH (poly_normalize_asc low))`
+  \\ rpt strip_tac
+  \\ irule arithmeticTheory.LESS_EQ_LESS_TRANS
+  \\ qexists_tac `LENGTH (poly_mod_via_desc high low)`
+  \\ conj_tac
+  >- (
+    mp_tac (Q.SPECL [`high`, `low`] poly_mod_via_desc_length)
+    \\ asm_simp_tac (srw_ss()) []
+  )
+  \\ simp_tac (srw_ss()) [poly_normalize_asc_length_le]
 End
 
 val poly_inv_loop_pre_def = cv_trans_pre "poly_inv_loop_pre" poly_inv_loop_def;
@@ -781,14 +1087,16 @@ Theorem poly_inv_loop_pre[cv_pre]:
   ∀lm hm low high. poly_inv_loop_pre lm hm low high
 Proof
   ho_match_mp_tac poly_inv_loop_ind
-  \\ rw []
-  \\ rw [Once poly_inv_loop_pre_def]
+  \\ rw[]
+  \\ rw[Once poly_inv_loop_pre_def]
+  \\ gvs[]
 QED
 
-(* Conversion: 12-tuple to list (highest degree first) *)
+(* Conversion: 12-tuple to list (lowest degree first, like py_ecc) *)
+(* Adds trailing 0 to match py_ecc's list(self.coeffs + (0,)) *)
 Definition poly12_to_list_def:
   poly12_to_list (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
-    poly_normalize [c11; c10; c9; c8; c7; c6; c5; c4; c3; c2; c1; c0]
+    [c0; c1; c2; c3; c4; c5; c6; c7; c8; c9; c10; c11; 0n]
 End
 
 val () = cv_trans poly12_to_list_def;
@@ -802,24 +1110,23 @@ End
 
 val () = cv_trans safe_el_def;
 
-(* Conversion: list to 12-tuple (pad with zeros if needed) *)
-(* List is highest-degree first, so we reverse to get lowest first *)
+(* Conversion: list to 12-tuple (lowest degree first, like py_ecc) *)
 Definition list_to_poly12_def:
-  list_to_poly12 xs = let
-    rs = REVERSE xs
-  in (safe_el 0 rs, safe_el 1 rs, safe_el 2 rs, safe_el 3 rs,
-      safe_el 4 rs, safe_el 5 rs, safe_el 6 rs, safe_el 7 rs,
-      safe_el 8 rs, safe_el 9 rs, safe_el 10 rs, safe_el 11 rs)
+  list_to_poly12 xs =
+    (safe_el 0 xs, safe_el 1 xs, safe_el 2 xs, safe_el 3 xs,
+     safe_el 4 xs, safe_el 5 xs, safe_el 6 xs, safe_el 7 xs,
+     safe_el 8 xs, safe_el 9 xs, safe_el 10 xs, safe_el 11 xs)
 End
 
 val () = cv_trans list_to_poly12_def;
 
 (* The FQ12 modulus as a list: w^12 - 2*w^6 + 2 *)
-(* Highest degree first: [1; 0; 0; 0; 0; 0; p-2; 0; 0; 0; 0; 0; 2] *)
+(* Lowest degree first (like py_ecc): [2; 0; 0; 0; 0; 0; p-2; 0; 0; 0; 0; 0; 1] *)
+(* py_ecc uses modulus_coeffs + (1,) which adds trailing 1 *)
 Definition poly12_modulus_list_def:
-  poly12_modulus_list = [1n; 0; 0; 0; 0; 0;
+  poly12_modulus_list = [2n; 0; 0; 0; 0; 0;
     4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559785n;
-    0; 0; 0; 0; 0; 2]
+    0; 0; 0; 0; 0; 1]
 End
 
 val () = cv_trans_deep_embedding EVAL poly12_modulus_list_def;
@@ -832,20 +1139,21 @@ End
 
 val () = cv_trans poly_lead_def;
 
-(* Complete poly12 inverse using list operations *)
+(* Complete poly12 inverse using list operations - matches py_ecc exactly *)
 Definition poly12_inv_def:
   poly12_inv p = let
-    lm = [1n];
-    hm = [];
+    (* lm = [1] + [0] * degree *)
+    lm = 1n :: REPLICATE 12 0n;
+    (* hm = [0] * (degree + 1) *)
+    hm = REPLICATE 13 0n;
+    (* low = list(self.coeffs + (0,)) *)
     low = poly12_to_list p;
+    (* high = list(self.modulus_coeffs + (1,)) *)
     high = poly12_modulus_list;
-    result = poly_inv_loop lm hm low high;
-    result_lm = FST result;
-    result_low = SND result;
-    inv_coeff = finv (poly_lead (REVERSE result_low));
-    (* Reduce result_lm mod the modulus polynomial *)
-    reduced = poly_mod result_lm poly12_modulus_list
-  in list_to_poly12 (poly_scale inv_coeff reduced)
+    (result_lm, result_low) = poly_inv_loop lm hm low high;
+    (* return type(self)(lm[:degree]) / int(low[0]) *)
+    inv_coeff = finv (list_get result_low 0)
+  in list_to_poly12 (poly_scale inv_coeff result_lm)
 End
 
 val () = cv_trans poly12_inv_def;
@@ -861,38 +1169,62 @@ val () = cv_trans poly12_div_def;
 (* Twist: Embedding G2 points into Fq12                         *)
 (* ============================================================ *)
 
-(* Field isomorphism from Fq2 to Fq12 subfield *)
-(* For BLS12-381: twist maps (x, y) in Fq2 to Fq12 *)
-(* x -> x0*w + x1*w^7 (coefficients 1 and 7) *)
-(* y -> y0 + y1*w^6 (coefficients 0 and 6) *)
-(* z -> z0*w^3 + z1*w^9 (coefficients 3 and 9) *)
+(* Twist: Embedding G2 points into Fq12 *)
+(* Following py_ecc: twist maps (x, y) in Fq2 to Fq12 *)
+(* py_ecc uses FQ2 with u^2 = -1, but FQ12 has w^6 satisfying v^2 - 2v + 2 = 0 *)
+(* The isomorphism is u = v - 1, so (a + b*u) maps to (a - b) + b*v *)
+(* After isomorphism: (x0 - x1) + x1*w^6, then divide by w^2 for x, w^3 for y, w for z *)
+(* Using -2*half_p ≡ 1 and 1 + 2*half_p ≡ 0 (mod p), where half_p = (p-1)/2 *)
+(* For x/w^2: position 4 = x0, position 10 = (x0 - x1) * half_p *)
+(* For y/w^3: position 3 = y0, position 9 = (y0 - y1) * half_p *)
+(* For z/w:   position 5 = z0, position 11 = (z0 - z1) * half_p *)
+Definition half_p_def:
+  half_p = 2001204777610833696708894912867952078278441409969503942666029068062015825245418932221343814564507832018947136279893n
+End
+
+val () = cv_trans_deep_embedding EVAL half_p_def;
+
+(* twist returns affine FQ12 point (x, y) matching py_ecc's twist *)
 Definition twist_def:
   twist ((x0, x1), (y0, y1), (z0, z1)) =
-  let
-    (* Field isomorphism: (a + b*u) -> (a - b) + b*w^6 in appropriate embedding *)
-    xc0 = fsub x0 x1;
-    xc1 = x1;
-    yc0 = fsub y0 y1;
-    yc1 = y1;
-    zc0 = fsub z0 z1;
-    zc1 = z1
+  if (z0, z1) = f2zero then
+    (* Point at infinity - use zeros to indicate this *)
+    (poly12_zero, poly12_zero)
+  else let
+    (* Convert to affine first: x' = x/z, y' = y/z *)
+    (* Then apply twist *)
+    z_inv = f2inv (z0, z1);
+    x_aff = f2mul (x0, x1) z_inv;
+    y_aff = f2mul (y0, y1) z_inv;
+    x0 = FST x_aff;
+    x1 = SND x_aff;
+    y0 = FST y_aff;
+    y1 = SND y_aff;
+    (* x/w^2: position 4 = x0, position 10 = (x0 - x1) * half_p *)
+    nx_4 = x0;
+    nx_10 = fmul (fsub x0 x1) half_p;
+    (* y/w^3: position 3 = y0, position 9 = (y0 - y1) * half_p *)
+    ny_3 = y0;
+    ny_9 = fmul (fsub y0 y1) half_p
   in
-  (* nx has coeffs at positions 1 and 7 *)
-  (* ny has coeffs at positions 0 and 6 *)
-  (* nz has coeffs at positions 3 and 9 *)
-  (( 0n, xc0, 0n, 0n, 0n, 0n, 0n, xc1, 0n, 0n, 0n, 0n),
-   (yc0, 0n, 0n, 0n, 0n, 0n, yc1, 0n, 0n, 0n, 0n, 0n),
-   ( 0n, 0n, 0n, zc0, 0n, 0n, 0n, 0n, 0n, zc1, 0n, 0n))
+  (* Return affine point (x, y) *)
+  (( 0n, 0n, 0n, 0n, nx_4, 0n, 0n, 0n, 0n, 0n, nx_10, 0n),
+   ( 0n, 0n, 0n, ny_3, 0n, 0n, 0n, 0n, 0n, ny_9, 0n, 0n))
 End
 
 val () = cv_trans twist_def;
 
-(* Cast G1 point to Fq12 *)
+(* Cast G1 point to affine Fq12 (x, y) - converts from Jacobian *)
 Definition cast_g1_to_fq12_def:
   cast_g1_to_fq12 (x, y, z) =
-  ((x, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n),
-   (y, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n),
-   (z, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n))
+  if z = 0 then (poly12_zero, poly12_zero)
+  else let
+    z_inv = finv z;
+    x_aff = fmul x z_inv;
+    y_aff = fmul y z_inv
+  in
+  ((x_aff, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n),
+   (y_aff, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n))
 End
 
 val () = cv_trans cast_g1_to_fq12_def;
@@ -901,31 +1233,31 @@ val () = cv_trans cast_g1_to_fq12_def;
 (* Line function for pairing                                    *)
 (* ============================================================ *)
 
+(* Affine line function matching py_ecc exactly:
+   linefunc(P1, P2, T):
+     if x1 != x2:
+       m = (y2 - y1) / (x2 - x1)
+       return m * (xt - x1) - (yt - y1)
+     elif y1 == y2:  # doubling case
+       m = 3 * x1^2 / (2 * y1)
+       return m * (xt - x1) - (yt - y1)
+     else:  # vertical line
+       return xt - x1
+*)
 Definition poly12_linefunc_def:
-  poly12_linefunc (x1, y1, z1) (x2, y2, z2) (xt, yt, zt) =
-  let
-    m_num = poly12_sub (poly12_mul y2 z1) (poly12_mul y1 z2);
-    m_den = poly12_sub (poly12_mul x2 z1) (poly12_mul x1 z2)
-  in
-    if m_den = poly12_zero then
-      if m_num = poly12_zero then
-        (* Tangent line: m = 3x^2 / 2y *)
-        let
-          m_num = poly12_scale 3 (poly12_sqr x1);
-          m_den = poly12_scale 2 (poly12_mul y1 z1)
-        in
-          (poly12_sub (poly12_mul m_num (poly12_sub (poly12_mul xt z1) (poly12_mul x1 zt)))
-                      (poly12_mul m_den (poly12_sub (poly12_mul yt z1) (poly12_mul y1 zt))),
-           poly12_mul m_den (poly12_mul zt z1))
-      else
-        (* Vertical line *)
-        (poly12_sub (poly12_mul xt z1) (poly12_mul x1 zt),
-         poly12_mul z1 zt)
+  poly12_linefunc (x1, y1) (x2, y2) (xt, yt) =
+    if x1 <> x2 then
+      (* Secant line: m = (y2 - y1) / (x2 - x1) *)
+      let m = poly12_div (poly12_sub y2 y1) (poly12_sub x2 x1) in
+        poly12_sub (poly12_mul m (poly12_sub xt x1)) (poly12_sub yt y1)
+    else if y1 = y2 then
+      (* Tangent line: m = 3*x1^2 / (2*y1) *)
+      let m = poly12_div (poly12_scale 3 (poly12_sqr x1))
+                         (poly12_scale 2 y1) in
+        poly12_sub (poly12_mul m (poly12_sub xt x1)) (poly12_sub yt y1)
     else
-      (* Secant line *)
-      (poly12_sub (poly12_mul m_num (poly12_sub (poly12_mul xt z1) (poly12_mul x1 zt)))
-                  (poly12_mul m_den (poly12_sub (poly12_mul yt z1) (poly12_mul y1 zt))),
-       poly12_mul m_den (poly12_mul zt z1))
+      (* Vertical line *)
+      poly12_sub xt x1
 End
 
 val () = cv_trans poly12_linefunc_def;
@@ -947,84 +1279,81 @@ End
 
 val () = cv_trans log_ate_loop_count_def;
 
-(* Fq12 point doubling for twisted points *)
-Definition fq12_point_double_def:
-  fq12_point_double (x, y, z) =
-  if z = poly12_zero then (poly12_one, poly12_one, poly12_zero)
-  else if y = poly12_zero then (poly12_one, poly12_one, poly12_zero)
-  else let
-    w = poly12_scale 3 (poly12_sqr x);
-    s = poly12_mul y z;
-    b = poly12_mul x (poly12_mul y s);
-    h = poly12_sub (poly12_sqr w) (poly12_scale 8 b);
-    s_sq = poly12_sqr s;
-    x3 = poly12_scale 2 (poly12_mul h s);
-    y3 = poly12_sub (poly12_mul w (poly12_sub (poly12_scale 4 b) h))
-                    (poly12_scale 8 (poly12_mul (poly12_sqr y) s_sq));
-    z3 = poly12_scale 8 (poly12_mul s s_sq)
-  in (x3, y3, z3)
-End
-
-val () = cv_trans fq12_point_double_def;
-
-(* Fq12 point addition for twisted points *)
-Definition fq12_point_add_def:
-  fq12_point_add (x1, y1, z1) (x2, y2, z2) =
-  if z1 = poly12_zero then (x2, y2, z2)
-  else if z2 = poly12_zero then (x1, y1, z1)
-  else let
-    u1 = poly12_mul y2 z1;
-    u2 = poly12_mul y1 z2;
-    v1 = poly12_mul x2 z1;
-    v2 = poly12_mul x1 z2
-  in
-    if v1 = v2 then
-      if u1 = u2 then fq12_point_double (x1, y1, z1)
-      else (poly12_one, poly12_one, poly12_zero)
-    else let
-      u = poly12_sub u1 u2;
-      v = poly12_sub v1 v2;
-      v_sq = poly12_sqr v;
-      v_sq_v2 = poly12_mul v_sq v2;
-      v_cu = poly12_mul v v_sq;
-      w = poly12_mul z1 z2;
-      a = poly12_sub (poly12_sub (poly12_mul (poly12_sqr u) w) v_cu)
-                     (poly12_scale 2 v_sq_v2);
-      x3 = poly12_mul v a;
-      y3 = poly12_sub (poly12_mul u (poly12_sub v_sq_v2 a)) (poly12_mul v_cu u2);
-      z3 = poly12_mul v_cu w
-    in (x3, y3, z3)
-End
-
-val () = cv_trans fq12_point_add_def;
-
-(* Miller loop iteration *)
-Definition miller_iter_def:
-  miller_iter r q f_num f_den p n (i:num) =
+(* Affine point doubling for FQ12 points (matching py_ecc exactly):
+   def double(pt):
+     x, y = pt
+     m = 3 * x**2 / (2 * y)
+     newx = m**2 - 2 * x
+     newy = -m * newx + m * x - y
+     return (newx, newy)
+*)
+Definition fq12_double_affine_def:
+  fq12_double_affine (x, y) =
   let
-    (* Line function for doubling *)
+    m = poly12_div (poly12_scale 3 (poly12_sqr x)) (poly12_scale 2 y);
+    newx = poly12_sub (poly12_sqr m) (poly12_scale 2 x);
+    newy = poly12_sub (poly12_sub (poly12_mul m x) (poly12_mul m newx)) y
+  in (newx, newy)
+End
+
+val () = cv_trans fq12_double_affine_def;
+
+(* Affine point addition for FQ12 points (matching py_ecc exactly):
+   def add(p1, p2):
+     x1, y1 = p1
+     x2, y2 = p2
+     if x2 == x1 and y2 == y1:
+       return double(p1)
+     elif x2 == x1:
+       return None  # not handled - would need option type
+     else:
+       m = (y2 - y1) / (x2 - x1)
+     newx = m**2 - x1 - x2
+     newy = -m * newx + m * x1 - y1
+     return (newx, newy)
+*)
+Definition fq12_add_affine_def:
+  fq12_add_affine (x1, y1) (x2, y2) =
+  if x1 = x2 then
+    if y1 = y2 then fq12_double_affine (x1, y1)
+    else (poly12_zero, poly12_zero)  (* point at infinity *)
+  else let
+    m = poly12_div (poly12_sub y2 y1) (poly12_sub x2 x1);
+    newx = poly12_sub (poly12_sub (poly12_sqr m) x1) x2;
+    newy = poly12_sub (poly12_sub (poly12_mul m x1) (poly12_mul m newx)) y1
+  in (newx, newy)
+End
+
+val () = cv_trans fq12_add_affine_def;
+
+(* Miller loop iteration using affine coordinates (matching py_ecc):
+   for i in range(log_ate_loop_count, -1, -1):
+     f = f * f * linefunc(R, R, P)
+     R = double(R)
+     if ate_loop_count & (2**i):
+       f = f * linefunc(R, Q, P)
+       R = add(R, Q)
+*)
+Definition miller_iter_def:
+  miller_iter r q f p n (i:num) =
+  let
+    (* f = f * f * linefunc(R, R, P) *)
     line_dbl = poly12_linefunc r r p;
-    line_dbl_num = FST line_dbl;
-    line_dbl_den = SND line_dbl;
-    f_num = poly12_mul (poly12_sqr f_num) line_dbl_num;
-    f_den = poly12_mul (poly12_sqr f_den) line_dbl_den;
-    r = fq12_point_double r;
+    f = poly12_mul (poly12_mul (poly12_sqr f) line_dbl) poly12_one;
+    r = fq12_double_affine r;
     (* Check if bit is set *)
     bit = (n DIV (2 ** i)) MOD 2;
-    (r, f_num, f_den) =
+    (r, f) =
       if bit = 1 then let
         line_add = poly12_linefunc r q p;
-        line_add_num = FST line_add;
-        line_add_den = SND line_add;
-        f_num = poly12_mul f_num line_add_num;
-        f_den = poly12_mul f_den line_add_den;
-        r = fq12_point_add r q
-      in (r, f_num, f_den)
-      else (r, f_num, f_den)
-  in if i = 0 then (r, f_num, f_den)
-     else miller_iter r q f_num f_den p n (i - 1)
+        f = poly12_mul f line_add;
+        r = fq12_add_affine r q
+      in (r, f)
+      else (r, f)
+  in if i = 0 then (r, f)
+     else miller_iter r q f p n (i - 1)
 Termination
-  WF_REL_TAC `measure (λ(_,_,_,_,_,_,i). i)`
+  WF_REL_TAC `measure (λ(_,_,_,_,_,i). i)`
 End
 
 val () = cv_trans miller_iter_def;
@@ -1036,11 +1365,8 @@ Definition miller_loop_def:
   else let
     cast_p = cast_g1_to_fq12 p;
     twist_q = twist q_fq2;
-    result = miller_iter twist_q twist_q poly12_one poly12_one cast_p ate_loop_count 62;
-    r = FST result;
-    f_num = FST (SND result);
-    f_den = SND (SND result);
-    f = poly12_div f_num f_den
+    result = miller_iter twist_q twist_q poly12_one cast_p ate_loop_count 63;
+    f = SND result
   in f
 End
 
@@ -1107,20 +1433,17 @@ End
 
 val () = cv_trans poly12_exp_def;
 
-(* Hard part cofactor for final exponentiation *)
-(* cofactor = (p^4 - p^2 + 1) / n *)
-Definition final_exp_cofactor_def:
-  final_exp_cofactor =
-  3231341240655752096707584860803309478437141994360495287810090604918866498006918878659249295802437253802989038524276850003264865133760793251880240042428329968030428107361598743608900379391168613006314069481069143760609051456778663991635955024110850696193255199460910775773285930773384402756n
+(* Full final exponent = (p^12 - 1) / n *)
+(* Following py_ecc approach: just do f^((p^12-1)/n) directly *)
+Definition final_exp_def:
+  final_exp =
+  322277361516934140462891564586510139908379969514828494218366688025288661041104682794998680497580008899973249814104447692778988208376779573819485263026159588510513834876303014016798809919343532899164848730280942609956670917565618115867287399623286813270357901731510188149934363360381614501334086825442271920079363289954510565375378443704372994881406797882676971082200626541916413184642520269678897559532260949334760604962086348898118982248842634379637598665468817769075878555493752214492790122785850202957575200176084204422751485957336465472324810982833638490904279282696134323072515220044451592646885410572234451732790590013479358343841220074174848221722017083597872017638514103174122784843925578370430843522959600095676285723737049438346544753168912974976791528535276317256904336520179281145394686565050419250614107803233314658825463117900250701199181529205942363159325765991819433914303908860460720581408201373164047773794825411011922305820065611121544561808414055302212057471395719432072209245600258134364584636810093520285711072578721435517884103526483832733289802426157301542744476740008494780363354305116978805620671467071400711358839553375340724899735460480144599782014906586543813292157922220645089192130209334926661588737007768565838519456601560804957985667880395221049249803753582637708560n
 End
 
-val () = cv_trans_deep_embedding EVAL final_exp_cofactor_def;
+val () = cv_trans_deep_embedding EVAL final_exp_def;
 
 Definition final_exponentiation_def:
-  final_exponentiation f =
-  let
-    f_easy = final_exp_easy f
-  in poly12_exp f_easy final_exp_cofactor
+  final_exponentiation f = poly12_exp f final_exp
 End
 
 val () = cv_trans final_exponentiation_def;
