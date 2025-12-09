@@ -839,13 +839,14 @@ End
 
 val () = cv_trans poly_mod_def;
 
-(* Simple polynomial multiplication *)
+(* Simple polynomial multiplication - ascending order (constant first) *)
+(* For ascending: x*ys contributes to constant, xs*ys is shifted up by 1 *)
 Definition poly_mul_simple_def:
   poly_mul_simple [] _ = [] /\
   poly_mul_simple _ [] = [] /\
   poly_mul_simple (x::xs) ys =
-    poly_add (poly_scale x ys ++ REPLICATE (LENGTH xs) 0n)
-             (poly_mul_simple xs ys)
+    poly_add (poly_scale x ys)
+             (0n :: poly_mul_simple xs ys)
 End
 
 val () = cv_trans poly_mul_simple_def;
@@ -918,7 +919,8 @@ Proof
   Induct \\ Cases_on `ys` \\ rw [poly_sub_desc_def]
 QED
 
-(* Tail-recursive polynomial divmod for descending order (like bn254) *)
+(* Tail-recursive polynomial divmod for descending order *)
+(* Fixed: don't normalize during loop to preserve degree tracking *)
 Definition poly_divmod_aux_desc_def:
   poly_divmod_aux_desc xs ys acc =
     case xs of
@@ -933,14 +935,11 @@ Definition poly_divmod_aux_desc_def:
               c = fdiv x y;
               zeroes = REPLICATE (LENGTH xs' - LENGTH ys') 0n;
               cys = poly_scale c (ys' ++ zeroes);
-              xs'' = poly_normalize_desc (poly_sub_desc xs' cys)
+              xs'' = poly_sub_desc xs' cys
             in poly_divmod_aux_desc xs'' ys (acc ++ [c])
 Termination
   WF_REL_TAC `measure (λ(xs,ys,acc). LENGTH xs)`
-  \\ rpt strip_tac
-  \\ irule LESS_EQ_LESS_TRANS
-  \\ irule_at Any poly_normalize_desc_length_le
-  \\ simp [poly_sub_desc_length_eq, poly_scale_length, LENGTH_APPEND, LENGTH_REPLICATE]
+  \\ rw [poly_sub_desc_length_eq, poly_scale_length, LENGTH_APPEND, LENGTH_REPLICATE]
 End
 
 val () = cv_trans poly_divmod_aux_desc_def;
@@ -1170,61 +1169,43 @@ val () = cv_trans poly12_div_def;
 (* ============================================================ *)
 
 (* Twist: Embedding G2 points into Fq12 *)
-(* Following py_ecc: twist maps (x, y) in Fq2 to Fq12 *)
-(* py_ecc uses FQ2 with u^2 = -1, but FQ12 has w^6 satisfying v^2 - 2v + 2 = 0 *)
-(* The isomorphism is u = v - 1, so (a + b*u) maps to (a - b) + b*v *)
-(* After isomorphism: (x0 - x1) + x1*w^6, then divide by w^2 for x, w^3 for y, w for z *)
-(* Using -2*half_p ≡ 1 and 1 + 2*half_p ≡ 0 (mod p), where half_p = (p-1)/2 *)
-(* For x/w^2: position 4 = x0, position 10 = (x0 - x1) * half_p *)
-(* For y/w^3: position 3 = y0, position 9 = (y0 - y1) * half_p *)
-(* For z/w:   position 5 = z0, position 11 = (z0 - z1) * half_p *)
-Definition half_p_def:
-  half_p = 2001204777610833696708894912867952078278441409969503942666029068062015825245418932221343814564507832018947136279893n
-End
-
-val () = cv_trans_deep_embedding EVAL half_p_def;
-
-(* twist returns affine FQ12 point (x, y) matching py_ecc's twist *)
+(* Following py_ecc exactly:
+   - Field isomorphism from Z[p] / x**2 to Z[p] / x**2 - 2*x + 2
+   - xcoeffs = [_x.coeffs[0] - _x.coeffs[1], _x.coeffs[1]]
+   - nx = FQ12([0] + [xcoeffs[0]] + [0]*5 + [xcoeffs[1]] + [0]*4)  -- positions 1, 7
+   - ny = FQ12([ycoeffs[0]] + [0]*5 + [ycoeffs[1]] + [0]*5)        -- positions 0, 6
+   - nz = FQ12([0]*3 + [zcoeffs[0]] + [0]*5 + [zcoeffs[1]] + [0]*2) -- positions 3, 9
+   Returns PROJECTIVE FQ12 point (nx, ny, nz)
+*)
 Definition twist_def:
   twist ((x0, x1), (y0, y1), (z0, z1)) =
   if (z0, z1) = f2zero then
-    (* Point at infinity - use zeros to indicate this *)
-    (poly12_zero, poly12_zero)
+    (poly12_zero, poly12_zero, poly12_zero)
   else let
-    (* Convert to affine first: x' = x/z, y' = y/z *)
-    (* Then apply twist *)
-    z_inv = f2inv (z0, z1);
-    x_aff = f2mul (x0, x1) z_inv;
-    y_aff = f2mul (y0, y1) z_inv;
-    x0 = FST x_aff;
-    x1 = SND x_aff;
-    y0 = FST y_aff;
-    y1 = SND y_aff;
-    (* x/w^2: position 4 = x0, position 10 = (x0 - x1) * half_p *)
-    nx_4 = x0;
-    nx_10 = fmul (fsub x0 x1) half_p;
-    (* y/w^3: position 3 = y0, position 9 = (y0 - y1) * half_p *)
-    ny_3 = y0;
-    ny_9 = fmul (fsub y0 y1) half_p
-  in
-  (* Return affine point (x, y) *)
-  (( 0n, 0n, 0n, 0n, nx_4, 0n, 0n, 0n, 0n, 0n, nx_10, 0n),
-   ( 0n, 0n, 0n, ny_3, 0n, 0n, 0n, 0n, 0n, ny_9, 0n, 0n))
+    (* Field isomorphism: (a, b) -> (a - b, b) *)
+    xcoeff0 = fsub x0 x1;
+    xcoeff1 = x1;
+    ycoeff0 = fsub y0 y1;
+    ycoeff1 = y1;
+    zcoeff0 = fsub z0 z1;
+    zcoeff1 = z1;
+    (* nx at positions 1 and 7 *)
+    nx = (0n, xcoeff0, 0n, 0n, 0n, 0n, 0n, xcoeff1, 0n, 0n, 0n, 0n);
+    (* ny at positions 0 and 6 *)
+    ny = (ycoeff0, 0n, 0n, 0n, 0n, 0n, ycoeff1, 0n, 0n, 0n, 0n, 0n);
+    (* nz at positions 3 and 9 *)
+    nz = (0n, 0n, 0n, zcoeff0, 0n, 0n, 0n, 0n, 0n, zcoeff1, 0n, 0n)
+  in (nx, ny, nz)
 End
 
 val () = cv_trans twist_def;
 
-(* Cast G1 point to affine Fq12 (x, y) - converts from Jacobian *)
+(* Cast G1 point to PROJECTIVE Fq12 (x, y, z) - matches py_ecc cast_point_to_fq12 *)
 Definition cast_g1_to_fq12_def:
   cast_g1_to_fq12 (x, y, z) =
-  if z = 0 then (poly12_zero, poly12_zero)
-  else let
-    z_inv = finv z;
-    x_aff = fmul x z_inv;
-    y_aff = fmul y z_inv
-  in
-  ((x_aff, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n),
-   (y_aff, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n))
+  ((x, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n),
+   (y, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n),
+   (z, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n))
 End
 
 val () = cv_trans cast_g1_to_fq12_def;
@@ -1233,31 +1214,58 @@ val () = cv_trans cast_g1_to_fq12_def;
 (* Line function for pairing                                    *)
 (* ============================================================ *)
 
-(* Affine line function matching py_ecc exactly:
+(* PROJECTIVE line function matching py_ecc exactly.
+   Returns (numerator, denominator) to avoid divisions.
+   P1, P2, T are all projective FQ12 points (x, y, z).
+
    linefunc(P1, P2, T):
-     if x1 != x2:
-       m = (y2 - y1) / (x2 - x1)
-       return m * (xt - x1) - (yt - y1)
-     elif y1 == y2:  # doubling case
-       m = 3 * x1^2 / (2 * y1)
-       return m * (xt - x1) - (yt - y1)
-     else:  # vertical line
-       return xt - x1
+     m_numerator = y2 * z1 - y1 * z2
+     m_denominator = x2 * z1 - x1 * z2
+     if m_denominator != 0:  # secant
+       return (m_num * (xt * z1 - x1 * zt) - m_den * (yt * z1 - y1 * zt),
+               m_den * zt * z1)
+     elif m_numerator == 0:  # tangent (doubling)
+       m_num = 3 * x1 * x1
+       m_den = 2 * y1 * z1
+       return (m_num * (xt * z1 - x1 * zt) - m_den * (yt * z1 - y1 * zt),
+               m_den * zt * z1)
+     else:  # vertical
+       return (xt * z1 - x1 * zt, z1 * zt)
 *)
 Definition poly12_linefunc_def:
-  poly12_linefunc (x1, y1) (x2, y2) (xt, yt) =
-    if x1 <> x2 then
-      (* Secant line: m = (y2 - y1) / (x2 - x1) *)
-      let m = poly12_div (poly12_sub y2 y1) (poly12_sub x2 x1) in
-        poly12_sub (poly12_mul m (poly12_sub xt x1)) (poly12_sub yt y1)
-    else if y1 = y2 then
-      (* Tangent line: m = 3*x1^2 / (2*y1) *)
-      let m = poly12_div (poly12_scale 3 (poly12_sqr x1))
-                         (poly12_scale 2 y1) in
-        poly12_sub (poly12_mul m (poly12_sub xt x1)) (poly12_sub yt y1)
+  poly12_linefunc (x1, y1, z1) (x2, y2, z2) (xt, yt, zt) =
+    let
+      m_num = poly12_sub (poly12_mul y2 z1) (poly12_mul y1 z2);
+      m_den = poly12_sub (poly12_mul x2 z1) (poly12_mul x1 z2)
+    in
+    if m_den <> poly12_zero then
+      (* Secant line *)
+      let
+        xt_z1 = poly12_mul xt z1;
+        x1_zt = poly12_mul x1 zt;
+        yt_z1 = poly12_mul yt z1;
+        y1_zt = poly12_mul y1 zt;
+        num = poly12_sub (poly12_mul m_num (poly12_sub xt_z1 x1_zt))
+                         (poly12_mul m_den (poly12_sub yt_z1 y1_zt));
+        den = poly12_mul (poly12_mul m_den zt) z1
+      in (num, den)
+    else if m_num = poly12_zero then
+      (* Tangent line (doubling) *)
+      let
+        m_num' = poly12_scale 3 (poly12_sqr x1);
+        m_den' = poly12_scale 2 (poly12_mul y1 z1);
+        xt_z1 = poly12_mul xt z1;
+        x1_zt = poly12_mul x1 zt;
+        yt_z1 = poly12_mul yt z1;
+        y1_zt = poly12_mul y1 zt;
+        num = poly12_sub (poly12_mul m_num' (poly12_sub xt_z1 x1_zt))
+                         (poly12_mul m_den' (poly12_sub yt_z1 y1_zt));
+        den = poly12_mul (poly12_mul m_den' zt) z1
+      in (num, den)
     else
       (* Vertical line *)
-      poly12_sub xt x1
+      (poly12_sub (poly12_mul xt z1) (poly12_mul x1 zt),
+       poly12_mul z1 zt)
 End
 
 val () = cv_trans poly12_linefunc_def;
@@ -1273,101 +1281,98 @@ End
 
 val () = cv_trans_deep_embedding EVAL ate_loop_count_def;
 
-Definition log_ate_loop_count_def:
-  log_ate_loop_count = 63n
+(* Pseudo binary encoding of ate_loop_count, from py_ecc.
+   This is the NAF-ish representation used for the Miller loop.
+   pseudo_binary_encoding[62::-1] iterates from index 62 down to 0.
+   We store it as a list from index 0 to 62 (reversed from py_ecc order). *)
+Definition pseudo_binary_encoding_def:
+  pseudo_binary_encoding : num list =
+  [0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;
+   1; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;
+   0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;
+   1; 0; 0; 0; 0; 0; 0; 0; 0; 1; 0; 0; 1; 0; 1; 1]
 End
 
-val () = cv_trans log_ate_loop_count_def;
+val () = cv_trans pseudo_binary_encoding_def;
 
-(* Affine point doubling for FQ12 points (matching py_ecc exactly):
-   def double(pt):
-     x, y = pt
-     m = 3 * x**2 / (2 * y)
-     newx = m**2 - 2 * x
-     newy = -m * newx + m * x - y
-     return (newx, newy)
-*)
-Definition fq12_double_affine_def:
-  fq12_double_affine (x, y) =
-  let
-    m = poly12_div (poly12_scale 3 (poly12_sqr x)) (poly12_scale 2 y);
-    newx = poly12_sub (poly12_sqr m) (poly12_scale 2 x);
-    newy = poly12_sub (poly12_sub (poly12_mul m x) (poly12_mul m newx)) y
-  in (newx, newy)
-End
+(* Miller loop iteration matching py_ecc exactly.
+   R is a G2 point in Fq2 (projective), Q is the original G2 point.
+   twist_Q is twist(Q).
+   f_num, f_den are the accumulated numerator and denominator.
+   cast_P is the G1 point cast to FQ12.
+   bits is the remaining bits of pseudo_binary_encoding (reversed).
 
-val () = cv_trans fq12_double_affine_def;
-
-(* Affine point addition for FQ12 points (matching py_ecc exactly):
-   def add(p1, p2):
-     x1, y1 = p1
-     x2, y2 = p2
-     if x2 == x1 and y2 == y1:
-       return double(p1)
-     elif x2 == x1:
-       return None  # not handled - would need option type
-     else:
-       m = (y2 - y1) / (x2 - x1)
-     newx = m**2 - x1 - x2
-     newy = -m * newx + m * x1 - y1
-     return (newx, newy)
-*)
-Definition fq12_add_affine_def:
-  fq12_add_affine (x1, y1) (x2, y2) =
-  if x1 = x2 then
-    if y1 = y2 then fq12_double_affine (x1, y1)
-    else (poly12_zero, poly12_zero)  (* point at infinity *)
-  else let
-    m = poly12_div (poly12_sub y2 y1) (poly12_sub x2 x1);
-    newx = poly12_sub (poly12_sub (poly12_sqr m) x1) x2;
-    newy = poly12_sub (poly12_sub (poly12_mul m x1) (poly12_mul m newx)) y1
-  in (newx, newy)
-End
-
-val () = cv_trans fq12_add_affine_def;
-
-(* Miller loop iteration using affine coordinates (matching py_ecc):
-   for i in range(log_ate_loop_count, -1, -1):
-     f = f * f * linefunc(R, R, P)
+   for v in pseudo_binary_encoding[62::-1]:
+     _n, _d = linefunc(twist_R, twist_R, cast_P)
+     f_num = f_num * f_num * _n
+     f_den = f_den * f_den * _d
      R = double(R)
-     if ate_loop_count & (2**i):
-       f = f * linefunc(R, Q, P)
+     twist_R = twist(R)
+     if v == 1:
+       _n, _d = linefunc(twist_R, twist_Q, cast_P)
+       f_num = f_num * _n
+       f_den = f_den * _d
        R = add(R, Q)
+       twist_R = twist(R)
 *)
 Definition miller_iter_def:
-  miller_iter r q f p n (i:num) =
-  let
-    (* f = f * f * linefunc(R, R, P) *)
-    line_dbl = poly12_linefunc r r p;
-    f = poly12_mul (poly12_mul (poly12_sqr f) line_dbl) poly12_one;
-    r = fq12_double_affine r;
-    (* Check if bit is set *)
-    bit = (n DIV (2 ** i)) MOD 2;
-    (r, f) =
-      if bit = 1 then let
-        line_add = poly12_linefunc r q p;
-        f = poly12_mul f line_add;
-        r = fq12_add_affine r q
-      in (r, f)
-      else (r, f)
-  in if i = 0 then (r, f)
-     else miller_iter r q f p n (i - 1)
-Termination
-  WF_REL_TAC `measure (λ(_,_,_,_,_,i). i)`
+  miller_iter r q twist_q f_num f_den cast_p (bits:num list) =
+  case bits of
+  | [] => (f_num, f_den)
+  | (v::rest) =>
+    let
+      twist_r = twist r;
+      (* linefunc for doubling *)
+      nd_dbl = poly12_linefunc twist_r twist_r cast_p;
+      n_dbl = FST nd_dbl;
+      d_dbl = SND nd_dbl;
+      (* f_num = f_num^2 * n_dbl, f_den = f_den^2 * d_dbl *)
+      f_num = poly12_mul (poly12_sqr f_num) n_dbl;
+      f_den = poly12_mul (poly12_sqr f_den) d_dbl;
+      (* R = double(R) in G2 *)
+      r = g2_double r;
+      (* If bit is 1, do addition step *)
+      (r, f_num, f_den) =
+        if v = 1 then let
+          twist_r = twist r;
+          nd_add = poly12_linefunc twist_r twist_q cast_p;
+          n_add = FST nd_add;
+          d_add = SND nd_add;
+          f_num = poly12_mul f_num n_add;
+          f_den = poly12_mul f_den d_add;
+          r = g2_add r q
+        in (r, f_num, f_den)
+        else (r, f_num, f_den)
+    in miller_iter r q twist_q f_num f_den cast_p rest
 End
 
 val () = cv_trans miller_iter_def;
 
-(* Main Miller loop *)
+(* Reversed pseudo binary encoding for iteration from index 62 down to 0.
+   py_ecc does pseudo_binary_encoding[62::-1] which gives elements at
+   indices 62, 61, 60, ..., 1, 0 (63 elements total). *)
+Definition pseudo_binary_encoding_rev_def:
+  pseudo_binary_encoding_rev : num list =
+  [1; 0; 1; 0; 0; 1; 0; 0; 0; 0; 0; 0; 0; 0; 1; 0;
+   0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;
+   0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 1; 0;
+   0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0]
+End
+
+val () = cv_trans pseudo_binary_encoding_rev_def;
+
+(* Main Miller loop matching py_ecc *)
 Definition miller_loop_def:
   miller_loop q_fq2 p =
   if g2_is_inf q_fq2 \/ g1_is_inf p then poly12_one
   else let
     cast_p = cast_g1_to_fq12 p;
     twist_q = twist q_fq2;
-    result = miller_iter twist_q twist_q poly12_one cast_p ate_loop_count 63;
-    f = SND result
-  in f
+    result = miller_iter q_fq2 q_fq2 twist_q poly12_one poly12_one cast_p
+               pseudo_binary_encoding_rev;
+    f_num = FST result;
+    f_den = SND result
+  in poly12_div f_num f_den
 End
 
 val () = cv_trans miller_loop_def;
