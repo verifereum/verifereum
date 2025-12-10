@@ -938,21 +938,24 @@ Proof
   \\ rw [poly13_get_pre_def, poly13_to_list_length]
 QED
 
-(* poly_rounded_div matching py_ecc exactly (ascending order) *)
+(* poly_rounded_div matching py_ecc exactly (ascending order)
+   py_ecc iterates i from dega-degb down to 0, so we do the same *)
 Definition poly13_rounded_div_outer_def:
   poly13_rounded_div_outer temp o_acc b degb dega i =
-    if i + degb > dega then o_acc
+    if i > dega - degb then o_acc
     else let
-      (* o[i] += temp[degb + i] / b[degb] *)
-      temp_idx = degb + i;
-      cur_o = poly13_get o_acc i;
+      (* Compute index from high to low: actual_i = dega - degb - i *)
+      actual_i = dega - degb - i;
+      (* o[actual_i] += temp[degb + actual_i] / b[degb] *)
+      temp_idx = degb + actual_i;
+      cur_o = poly13_get o_acc actual_i;
       new_o = fadd cur_o (fdiv (poly13_get temp temp_idx) (poly13_get b degb));
-      o_acc' = poly13_set o_acc i new_o;
-      (* for c in 0..degb: temp[c+i] -= o[c] *)
-      temp' = poly13_div_sub_inner temp o_acc' degb i 0
+      o_acc' = poly13_set o_acc actual_i new_o;
+      (* for c in 0..degb: temp[c+actual_i] -= o[c] *)
+      temp' = poly13_div_sub_inner temp o_acc' degb actual_i 0
     in poly13_rounded_div_outer temp' o_acc' b degb dega (i + 1)
 Termination
-  WF_REL_TAC `measure (\(temp,o_acc,b,degb,dega,i). dega + 1 - degb - i)`
+  WF_REL_TAC `measure (\(temp,o_acc,b,degb,dega,i). (dega - degb + 1) - i)`
 End
 
 val poly13_rounded_div_outer_pre_def = cv_trans_pre "poly13_rounded_div_outer_pre" poly13_rounded_div_outer_def;
@@ -1008,131 +1011,91 @@ End
 
 val () = cv_trans poly13_to_poly12_def;
 
-(* List-based EEA loop for polynomial inverse - structural termination via LENGTH *)
-(* Uses existing poly_mod which has proven termination via poly_normalize_length_le *)
-Definition poly_inv_loop_def:
-  poly_inv_loop lm hm low high =
-    case low of
-    | [] => (lm, 1n)  (* shouldn't happen for valid input *)
-    | [c] => (lm, c)  (* degree 0: return coefficient *)
-    | _ =>
-        if LENGTH low > LENGTH high then
-          (* Easy case: swap *)
-          poly_inv_loop hm lm high low
-        else
-          (* Hard case: division step *)
-          let
-            r = poly_div high low;
-            nm = poly_normalize (poly_sub lm (poly_mul_simple r hm));
-            new = poly_mod high low
-          in poly_inv_loop nm lm new low
-Termination
-  WF_REL_TAC `measure (λ(lm,hm,low,high). LENGTH low)`
-  \\ rpt strip_tac
-  \\ irule poly_mod_length
-  \\ simp []
+(* ============================================================ *)
+(* Fresh 13-tuple EEA implementation following py_ecc exactly   *)
+(* All operations in ascending order, fuel-based termination    *)
+(* ============================================================ *)
+
+(* poly13 one: [1, 0, 0, ..., 0] *)
+Definition poly13_one_def:
+  poly13_one = (1n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n,0n)
 End
 
-val () = cv_trans poly_inv_loop_def;
+val () = cv_trans_deep_embedding EVAL poly13_one_def;
 
-(* Modulus polynomial as list: x^12 - 18*x^6 + 82 (descending order) *)
-Definition poly_modulus_def:
-  poly_modulus = [1n; 0n; 0n; 0n; 0n; 0n;
-    bn254p - 18n; 0n; 0n; 0n; 0n; 0n; 82n]
+(* Pad quotient r to 13 elements (py_ecc does: r += [0] * (degree + 1 - len(r))) *)
+(* Since we use fixed 13-tuples, this is already done *)
+
+(* EEA loop with fuel - follows py_ecc inv() exactly:
+   while deg(low):
+     r = poly_rounded_div(high, low)
+     nm = hm - lm * r  (truncated)
+     new = high - low * r (truncated)
+     lm, low, hm, high = nm, new, lm, low
+   return lm[:degree] / low[0]
+*)
+Definition poly13_inv_loop_def:
+  poly13_inv_loop fuel lm hm low high =
+    if fuel = 0n then (lm, poly13_get low 0)
+    else if poly13_deg low = 0 then (lm, poly13_get low 0)
+    else
+      let
+        r = poly13_rounded_div high low;
+        nm = poly13_mulsub hm lm r;
+        new = poly13_mulsub high low r
+      in poly13_inv_loop (fuel - 1) nm lm new low
 End
 
-val () = cv_trans poly_modulus_def;
+val poly13_inv_loop_pre_def = cv_trans_pre "poly13_inv_loop_pre" poly13_inv_loop_def;
 
-(* Complete poly12 inverse using list-based operations *)
-Definition poly12_inv_new_def:
-  poly12_inv_new (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) = let
-    lm = [1n];
-    hm = [];
-    (* Convert poly12 to list in descending order *)
-    low = poly_normalize [c11; c10; c9; c8; c7; c6; c5; c4; c3; c2; c1; c0];
-    high = poly_modulus;
-    (result_lm, c) = poly_inv_loop lm hm low high;
-    inv_c = finv c;
-    (* Pad result_lm to 12 coefficients and scale by inv_c *)
-    padded = result_lm ++ REPLICATE (12 - LENGTH result_lm) 0n
-  in (fmul inv_c (EL 11 padded),
-      fmul inv_c (EL 10 padded),
-      fmul inv_c (EL 9 padded),
-      fmul inv_c (EL 8 padded),
-      fmul inv_c (EL 7 padded),
-      fmul inv_c (EL 6 padded),
-      fmul inv_c (EL 5 padded),
-      fmul inv_c (EL 4 padded),
-      fmul inv_c (EL 3 padded),
-      fmul inv_c (EL 2 padded),
-      fmul inv_c (EL 1 padded),
-      fmul inv_c (EL 0 padded))
-End
-
-val poly12_inv_new_pre_def = cv_trans_pre "poly12_inv_new_pre" poly12_inv_new_def;
-
-Theorem poly12_inv_new_pre[cv_pre]:
-  ∀p. poly12_inv_new_pre p
+(* Prove the precondition for poly13_inv_loop *)
+Theorem poly13_inv_loop_pre[cv_pre]:
+  ∀fuel lm hm low high. poly13_inv_loop_pre fuel lm hm low high
 Proof
-  rw [poly12_inv_new_pre_def]
+  ho_match_mp_tac poly13_inv_loop_ind
+  \\ rw []
+  \\ simp [Once poly13_inv_loop_pre_def]
+  \\ rw [poly13_get_pre_def]
+  \\ PairCases_on `low` \\ gvs [poly13_to_list_def]
 QED
 
-(* Conversion: 12-tuple to list (highest degree first) *)
-Definition poly12_to_list_def:
-  poly12_to_list (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) =
-    poly_normalize [c11; c10; c9; c8; c7; c6; c5; c4; c3; c2; c1; c0]
+(* Scale poly13 by a field element *)
+Definition poly13_scale_def:
+  poly13_scale s (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12) =
+    (fmul s c0, fmul s c1, fmul s c2, fmul s c3,
+     fmul s c4, fmul s c5, fmul s c6, fmul s c7,
+     fmul s c8, fmul s c9, fmul s c10, fmul s c11, fmul s c12)
 End
 
-val () = cv_trans poly12_to_list_def;
+val () = cv_trans poly13_scale_def;
 
-(* Conversion: list to 12-tuple (pad with zeros if needed) *)
-Definition list_to_poly12_def:
-  list_to_poly12 xs = let
-    rs = REVERSE xs;
-    c0 = if LENGTH rs > 0 then EL 0 rs else 0n;
-    c1 = if LENGTH rs > 1 then EL 1 rs else 0n;
-    c2 = if LENGTH rs > 2 then EL 2 rs else 0n;
-    c3 = if LENGTH rs > 3 then EL 3 rs else 0n;
-    c4 = if LENGTH rs > 4 then EL 4 rs else 0n;
-    c5 = if LENGTH rs > 5 then EL 5 rs else 0n;
-    c6 = if LENGTH rs > 6 then EL 6 rs else 0n;
-    c7 = if LENGTH rs > 7 then EL 7 rs else 0n;
-    c8 = if LENGTH rs > 8 then EL 8 rs else 0n;
-    c9 = if LENGTH rs > 9 then EL 9 rs else 0n;
-    c10 = if LENGTH rs > 10 then EL 10 rs else 0n;
-    c11 = if LENGTH rs > 11 then EL 11 rs else 0n
-  in (c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11)
+(* Complete poly13 inverse following py_ecc *)
+Definition poly13_inv_def:
+  poly13_inv coeffs =
+    let
+      lm = poly13_one;
+      hm = poly13_zero;
+      low = coeffs;
+      high = poly13_modulus;
+      (* 30 iterations is more than enough for degree 12 *)
+      (result_lm, c) = poly13_inv_loop 30 lm hm low high;
+      inv_c = finv c
+    in poly13_scale inv_c result_lm
 End
 
-val list_to_poly12_pre_def = cv_trans_pre "list_to_poly12_pre" list_to_poly12_def;
+val () = cv_trans poly13_inv_def;
 
-Theorem list_to_poly12_pre[cv_pre]:
-  ∀xs. list_to_poly12_pre xs
-Proof
-  rw [list_to_poly12_pre_def]
-  \\ Cases_on `xs` \\ gvs []
-QED
-
-(* The FQ12 modulus as a list: w^12 - 18*w^6 + 82 *)
-Definition poly12_modulus_list_def:
-  poly12_modulus_list = [1n; 0n; 0n; 0n; 0n; 0n;
-    21888242871839275222246405745257275088696311157297823662689037894645226208565n;
-    0n; 0n; 0n; 0n; 0n; 82n]
+(* poly12_inv using poly13 operations *)
+Definition poly12_inv_via_poly13_def:
+  poly12_inv_via_poly13 p =
+    poly13_to_poly12 (poly13_inv (poly12_to_poly13 p))
 End
 
-val () = cv_trans_deep_embedding EVAL poly12_modulus_list_def;
+val () = cv_trans poly12_inv_via_poly13_def;
 
-(* Get leading coefficient of list polynomial *)
-Definition poly_lead_def:
-  poly_lead [] = 0n /\
-  poly_lead (x::xs) = x
-End
-
-val () = cv_trans poly_lead_def;
-
-(* poly12_inv uses the poly13-based implementation *)
+(* poly12_inv uses the fresh poly13-based implementation *)
 Definition poly12_inv_def:
-  poly12_inv p = poly12_inv_new p
+  poly12_inv p = poly12_inv_via_poly13 p
 End
 
 val () = cv_trans poly12_inv_def;
