@@ -1,11 +1,12 @@
 Theory contractABI
 Ancestors
-  arithmetic bit list rich_list pair numposrep
+  arithmetic bit byte list rich_list pair numposrep
   integer words integer_word cv cv_std
   vfmTypes
 Libs
   cv_transLib
   wordsLib
+  dep_rewrite
 
 val () = numLib.prefer_num();
 
@@ -1096,13 +1097,245 @@ Proof
   \\ rewrite_tac[Once CONS_APPEND, APPEND_ASSOC] \\ rw[]
 QED
 
-(* TODO
+(* GitHub issue #84 - enc_valid
+   The theorem uses enc_ind's induction principle. Key insight for P1:
+   valid_enc_array uses (DROP hd_len result) for BOTH arguments because
+   enc_tuple computes offsets relative to the encoding without the rhds prefix.
+*)
+
+(* Helper lemma: TAKE extracts the prefix from enc_tuple result *)
+Theorem enc_tuple_TAKE_prefix:
+  ∀ts vs hl prefix.
+    has_types ts vs ⇒
+    TAKE (LENGTH prefix)
+      (enc_tuple hl 0 ts vs [prefix] []) = prefix
+Proof
+  rw[]
+  \\ DEP_ONCE_REWRITE_TAC[enc_tuple_append]
+  \\ simp[]  (* simplify let, FLAT, REVERSE *)
+  \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
+  \\ ONCE_REWRITE_TAC[TAKE_LENGTH_APPEND]
+  \\ rw[]
+QED
+
+(* Helper: word roundtrip for the length encoding *)
+Theorem word_roundtrip_LENGTH:
+  ∀hl ts vs.
+    has_types ts vs ∧ LENGTH vs < dimword (:256) ⇒
+    w2n (word_of_bytes T (0w:256 word)
+           (TAKE 32 (enc_tuple hl 0 ts vs [word_to_bytes (n2w (LENGTH vs):256 word) T] []))) =
+    LENGTH vs
+Proof
+  rw[]
+  \\ `32 = LENGTH (word_to_bytes (n2w (LENGTH vs):256 word) T)` by simp[LENGTH_word_to_bytes]
+  \\ pop_assum SUBST1_TAC
+  \\ simp[enc_tuple_TAKE_prefix, word_to_bytes_word_of_bytes_256]
+QED
+
+(* Helper theorems for enc_valid proof *)
+Theorem TAKE_word_to_bytes_256:
+  TAKE 32 (word_to_bytes (w:256 word) be ++ rest) = word_to_bytes w be
+Proof
+  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
+  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[TAKE_LENGTH_APPEND]
+QED
+
+Theorem DROP_word_to_bytes_256:
+  DROP 32 (word_to_bytes (w:256 word) be ++ rest) = rest
+Proof
+  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
+  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[DROP_LENGTH_APPEND]
+QED
+
+(* Helper lemma: valid_enc is prefix-stable - extra bytes at the end don't affect validity.
+   This holds because valid_enc only inspects a bounded prefix using TAKE operations. *)
+Theorem valid_enc_APPEND:
+  (∀t bs suffix. valid_enc t bs ⇒ valid_enc t (bs ++ suffix)) ∧
+  (∀n lt t bs hds suffix1 suffix2.
+     valid_enc_array n lt t bs hds ⇒
+     valid_enc_array n lt t (bs ++ suffix1) (hds ++ suffix2)) ∧
+  (∀ts bs hds suffix1 suffix2.
+     valid_enc_tuple ts bs hds ⇒
+     valid_enc_tuple ts (bs ++ suffix1) (hds ++ suffix2))
+Proof
+  cheat
+QED
+
+(* Helper lemma: For enc_tuple with dynamic first element, the first 32 bytes after
+   dropping the rhds prefix contain the encoded offset pointer, and this offset
+   points to where enc t v is located in the result. *)
+Theorem enc_tuple_dynamic_structure:
+  ∀t v ts vs hl tl rhds rtls.
+    is_dynamic t ∧ has_type t v ∧ has_types ts vs ∧
+    hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds)) + 32) ∧
+    tl = SUM (MAP LENGTH rtls)
+  ⇒
+    let head = word_to_bytes (n2w (tl + hl):256 word) T;
+        tail = enc t v;
+        result = enc_tuple hl (tl + LENGTH tail) ts vs (head::rhds) (tail::rtls);
+        hd_len = SUM (MAP LENGTH rhds);
+        offset_bytes = TAKE 32 (DROP hd_len result);
+        decoded_offset = w2n (word_of_bytes T (0w:256 word) offset_bytes)
+    in
+      decoded_offset = tl + hl ∧
+      (∃suffix. DROP decoded_offset result = enc t v ++ suffix)
+Proof
+  cheat
+QED
+
+(* Helper lemma: For enc_tuple with static first element, the first static_length t
+   bytes after dropping the rhds prefix are exactly enc t v. *)
+Theorem enc_tuple_static_structure:
+  ∀t v ts vs hl tl rhds rtls.
+    is_static t ∧ has_type t v ∧ has_types ts vs ∧
+    hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds)) + static_length t) ∧
+    tl = SUM (MAP LENGTH rtls)
+  ⇒
+    let head = enc t v;
+        result = enc_tuple hl tl ts vs (head::rhds) ([]::rtls);
+        hd_len = SUM (MAP LENGTH rhds)
+    in
+      TAKE (static_length t) (DROP hd_len result) = enc t v
+Proof
+  cheat
+QED
+
+(* Helper lemma: The IH structure matches the goal after one step of enc_tuple.
+   This connects the recursive IH to the valid_enc_tuple ts subgoal. *)
+Theorem enc_tuple_IH_match:
+  ∀ts vs hl tl head tail rhds rtls.
+    has_types ts vs ∧
+    hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH (tail::rtls)) (head::rhds)))) ∧
+    tl + LENGTH tail = SUM (MAP LENGTH (tail::rtls))
+  ⇒
+    let result = enc_tuple hl (tl + LENGTH tail) ts vs (head::rhds) (tail::rtls);
+        hd_len = SUM (MAP LENGTH (head::rhds))
+    in valid_enc_tuple ts result (DROP hd_len result) ∧
+       (∀n t. ts = REPLICATE n t ⇒
+        valid_enc_array n (if is_dynamic t then NONE else SOME (static_length t)) t
+          (DROP hd_len result) (DROP hd_len result))
+Proof
+  cheat
+QED
+
 Theorem enc_valid:
   (∀t v. has_type t v ⇒ valid_enc t (enc t v)) ∧
-  (∀hl tl ts vs hds tls.
-   has_types ts vs ⇒
-   valid_enc_array
-*)
+  (∀hl tl ts vs rhds rtls.
+     has_types ts vs ∧
+     hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds))) ∧
+     tl = SUM (MAP LENGTH rtls) ⇒
+   let result = enc_tuple hl tl ts vs rhds rtls;
+       hd_len = SUM (MAP LENGTH rhds)
+   in valid_enc_tuple ts result (DROP hd_len result) ∧
+      (∀n t. ts = REPLICATE n t ⇒
+       valid_enc_array n (if is_dynamic t then NONE else SOME (static_length t)) t
+         (DROP hd_len result) (DROP hd_len result)))
+Proof
+  ho_match_mp_tac enc_ind
+  \\ rpt conj_tac
+  (* Tuple case *)
+  >~ [`Tuple`]
+  >- (rw[] \\ gvs[has_types_LIST_REL] \\ drule LIST_REL_LENGTH \\ gvs[])
+  (* Array (SOME n) case *)
+  >~ [`Array (SOME _)`]
+  >- (rw[] \\ rpt strip_tac \\ gvs[]
+      \\ first_x_assum (qspecl_then
+           [`REPLICATE (LENGTH vs) t'`, `head_lengths (REPLICATE (LENGTH vs) t') 0`] mp_tac)
+      \\ simp[have_type_has_types_REPLICATE])
+  (* Array NONE case *)
+  >~ [`Array NONE`]
+  >- (rw[]
+      \\ assume_tac (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt) \\ gvs[]
+      \\ `LENGTH vs < dimword (:256)` by gvs[wordsTheory.dimword_def]
+      \\ qspecl_then [`head_lengths (REPLICATE (LENGTH vs) t) 0`,
+           `REPLICATE (LENGTH vs) t`, `vs`] mp_tac word_roundtrip_LENGTH
+      \\ simp[] \\ strip_tac
+      \\ first_x_assum (qspecl_then [`LENGTH vs`, `t`] mp_tac) \\ simp[])
+  (* Bytes NONE case *)
+  >~ [`Bytes NONE`]
+  >- (rw[valid_enc_def, has_type_def, valid_bytes_bound_def, valid_length_def, ceil32_def, enc_def]
+      \\ rpt strip_tac
+      >- (ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
+          \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
+          \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes])
+      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
+      \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
+      \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes]
+      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
+      \\ ONCE_REWRITE_TAC[DROP_word_to_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[rich_listTheory.TAKE_APPEND2]
+      \\ ONCE_REWRITE_TAC[GSYM ceil32_def]
+      \\ simp[le_ceil32, rich_listTheory.DROP_LENGTH_APPEND]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_LENGTH_ID_rwt]
+      \\ simp[rich_listTheory.LENGTH_REPLICATE, rich_listTheory.EVERY_REPLICATE])
+  (* String case *)
+  >~ [`String`]
+  >- (rw[valid_enc_def, has_type_def, valid_length_def, ceil32_def, enc_def]
+      \\ rpt strip_tac
+      >- (ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
+          \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
+          \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes])
+      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
+      \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
+      \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes]
+      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
+      \\ ONCE_REWRITE_TAC[DROP_word_to_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[rich_listTheory.TAKE_APPEND2]
+      \\ ONCE_REWRITE_TAC[GSYM ceil32_def]
+      \\ simp[le_ceil32, rich_listTheory.DROP_LENGTH_APPEND]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_LENGTH_ID_rwt]
+      \\ simp[rich_listTheory.LENGTH_REPLICATE, rich_listTheory.EVERY_REPLICATE])
+  (* Bytes SOME case *)
+  >~ [`Bytes (SOME _)`]
+  >- (rw[valid_enc_def, has_type_def, valid_bytes_bound_def, enc_def]
+      \\ simp[TAKE_LENGTH_TOO_LONG, rich_listTheory.LENGTH_REPLICATE,
+              rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.EVERY_REPLICATE])
+  (* NumV case *)
+  >~ [`NumV`]
+  >- (rw[valid_enc_def, has_type_def]
+      \\ Cases_on `t`
+      \\ gvs[has_type_def, valid_enc_def, enc_number_def, is_num_value_def,
+             byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+             vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      >- (gvs[valid_int_bound_def]
+          \\ `v9 < 2 ** 256`
+             by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
+                 \\ qexists_tac `2 ** n` \\ simp[])
+          \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
+          \\ simp[arithmeticTheory.LESS_MOD])
+      \\ gvs[valid_fixed_bounds_def]
+      \\ `v9 < 2 ** 256`
+         by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
+             \\ qexists_tac `2 ** n0` \\ simp[])
+      \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
+      \\ simp[arithmeticTheory.LESS_MOD])
+  (* IntV case - incomplete, use cheat *)
+  >~ [`IntV`]
+  >- (rw[valid_enc_def, has_type_def]
+      \\ Cases_on `t`
+      \\ gvs[has_type_def, valid_enc_def, enc_number_def, is_num_value_def,
+             byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+             vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w]
+      \\ simp[int_bits_bound_def, valid_int_bound_def, valid_fixed_bounds_def]
+      \\ rpt strip_tac
+      \\ gvs[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def]
+      \\ cheat)
+  (* Vacuous type/value mismatch cases - proven by has_type_def contradiction *)
+  (* Note: Don't use rpt with rw[] - it loops forever! *)
+  \\ TRY (rw[has_type_def] \\ NO_TAC)
+  (* enc_tuple base case: has_types ts [] => ts = [] via LIST_REL *)
+  >~ [`has_types _ []`]
+  >- (rpt gen_tac \\ strip_tac \\ gvs[has_types_LIST_REL])
+  (* enc_tuple recursive case (has_types (t::ts) (v::vs)):
+     TODO: This case needs a proper proof using the helper lemmas.
+     The induction hypothesis provides valid_enc_tuple ts ... for the tail.
+     We need to show valid_enc_tuple (t::ts) ... by:
+     - For dynamic t: showing the offset decodes correctly and valid_enc t (DROP offset result)
+     - For static t: showing TAKE (static_length t) gets the encoded value
+     Currently cheated - remove when helper lemmas are proved. *)
+  \\ cheat
+QED
 
 (*
   val ty = “String”;
