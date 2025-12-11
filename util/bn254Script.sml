@@ -191,7 +191,9 @@ Definition mul_def:
   mul p n =
   if n = 0 then zero else
   if SND(SND p) = 0 ∨ n = 1 then p else
-    mul_loop zero p (n MOD bn254n)
+    let m = n MOD bn254n in
+    if m = 0 then mul_loop zero p n
+    else mul_loop zero p m
 End
 
 val () = cv_trans mul_def;
@@ -380,11 +382,24 @@ End
 
 val () = cv_trans add6_def;
 
+Definition toAffineF2_def:
+  toAffineF2 (x, (y, z)) =
+  if z = f2one then (x, y)
+  else if z = f2zero then (f2zero, f2zero)
+  else let iz = f2inv z in (f2mul x iz, f2mul y iz)
+End
+
+val () = cv_trans toAffineF2_def;
+
 Definition mulF2_loop_def:
   mulF2_loop a p n =
   if n = 0 then a
   else let
-    a = if ODD n then add6 a (FST p, FST (SND p)) else a;
+    q = toAffineF2 p;
+    a = if ODD n then
+          (if SND (SND a) = f2zero then (FST q, (SND q, f2one))
+           else add6 a q)
+        else a;
     p = dbl6 p;
     n = n DIV 2
   in mulF2_loop a p n
@@ -401,19 +416,12 @@ val () = cv_trans_deep_embedding EVAL zeroF2_def;
 Definition mulF2_def:
   mulF2 p n =
   if n = 0 then zeroF2
-  else mulF2_loop zeroF2 p (n MOD bn254n)
+  else let m = n MOD bn254n in
+    if m = 0 then mulF2_loop zeroF2 p n
+    else mulF2_loop zeroF2 p m
 End
 
 val () = cv_trans mulF2_def;
-
-Definition toAffineF2_def:
-  toAffineF2 (x, (y, z)) =
-  if z = f2one then (x, y)
-  else if z = f2zero then (f2zero, f2zero)
-  else let iz = f2inv z in (f2mul x iz, f2mul y iz)
-End
-
-val () = cv_trans toAffineF2_def;
 
 Definition fromAffineF2_def:
   fromAffineF2 (x, y) =
