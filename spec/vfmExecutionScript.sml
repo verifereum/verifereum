@@ -1352,7 +1352,7 @@ Definition precompile_point_eval_def:
       computedHash <<- word_to_bytes (SHA_256_bytes commitment_bytes) T;
       computedVersionedHash <<- versioned_hash_version_kzg :: DROP 1 computedHash;
       assert (versionedHash = computedVersionedHash) KZGProofError;
-      assert (z < bls12381$bls12381p ∧ y < bls12381$bls12381p) KZGProofError;
+      assert (z < bls12381$bls12381n ∧ y < bls12381$bls12381n) KZGProofError;
       commitment_opt <<- bls12381$g1_decompress commitment_bytes;
       proof_opt <<- bls12381$g1_decompress proof_bytes;
       case (commitment_opt, proof_opt) of
