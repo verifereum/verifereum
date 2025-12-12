@@ -1147,76 +1147,56 @@ Proof
   \\ pop_assum (SUBST1_TAC o SYM) \\ rw[DROP_LENGTH_APPEND]
 QED
 
-(* Helper lemma: valid_enc is prefix-stable - extra bytes at the end don't affect validity.
-   This holds because valid_enc only inspects a bounded prefix using TAKE operations. *)
-Theorem valid_enc_APPEND:
-  (∀t bs suffix. valid_enc t bs ⇒ valid_enc t (bs ++ suffix)) ∧
-  (∀n lt t bs hds suffix1 suffix2.
-     valid_enc_array n lt t bs hds ⇒
-     valid_enc_array n lt t (bs ++ suffix1) (hds ++ suffix2)) ∧
-  (∀ts bs hds suffix1 suffix2.
-     valid_enc_tuple ts bs hds ⇒
-     valid_enc_tuple ts (bs ++ suffix1) (hds ++ suffix2))
-Proof
-  cheat
-QED
+(*
+  PROOF SKETCH FOR enc_valid:
 
-(* Helper lemma: For enc_tuple with dynamic first element, the first 32 bytes after
-   dropping the rhds prefix contain the encoded offset pointer, and this offset
-   points to where enc t v is located in the result. *)
-Theorem enc_tuple_dynamic_structure:
-  ∀t v ts vs hl tl rhds rtls.
-    is_dynamic t ∧ has_type t v ∧ has_types ts vs ∧
-    hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds)) + 32) ∧
-    tl = SUM (MAP LENGTH rtls)
-  ⇒
-    let head = word_to_bytes (n2w (tl + hl):256 word) T;
-        tail = enc t v;
-        result = enc_tuple hl (tl + LENGTH tail) ts vs (head::rhds) (tail::rtls);
-        hd_len = SUM (MAP LENGTH rhds);
-        offset_bytes = TAKE 32 (DROP hd_len result);
-        decoded_offset = w2n (word_of_bytes T (0w:256 word) offset_bytes)
-    in
-      decoded_offset = tl + hl ∧
-      (∃suffix. DROP decoded_offset result = enc t v ++ suffix)
-Proof
-  cheat
-QED
+  The main theorem has two conjuncts:
+  1. ∀t v. has_type t v ⇒ valid_enc t (enc t v)
+  2. A helper for enc_tuple with carefully formulated invariants
 
-(* Helper lemma: For enc_tuple with static first element, the first static_length t
-   bytes after dropping the rhds prefix are exactly enc t v. *)
-Theorem enc_tuple_static_structure:
-  ∀t v ts vs hl tl rhds rtls.
-    is_static t ∧ has_type t v ∧ has_types ts vs ∧
-    hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds)) + static_length t) ∧
-    tl = SUM (MAP LENGTH rtls)
-  ⇒
-    let head = enc t v;
-        result = enc_tuple hl tl ts vs (head::rhds) ([]::rtls);
-        hd_len = SUM (MAP LENGTH rhds)
-    in
-      TAKE (static_length t) (DROP hd_len result) = enc t v
-Proof
-  cheat
-QED
+  KEY INSIGHT: In valid_enc_tuple ts bs hds:
+  - bs = the fixed content area for offset-based access (stays constant through recursion)
+  - hds = current position in heads (advances as we process elements)
 
-(* Helper lemma: The IH structure matches the goal after one step of enc_tuple.
-   This connects the recursive IH to the valid_enc_tuple ts subgoal. *)
-Theorem enc_tuple_IH_match:
-  ∀ts vs hl tl head tail rhds rtls.
-    has_types ts vs ∧
-    hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH (tail::rtls)) (head::rhds)))) ∧
-    tl + LENGTH tail = SUM (MAP LENGTH (tail::rtls))
-  ⇒
-    let result = enc_tuple hl (tl + LENGTH tail) ts vs (head::rhds) (tail::rtls);
-        hd_len = SUM (MAP LENGTH (head::rhds))
-    in valid_enc_tuple ts result (DROP hd_len result) ∧
-       (∀n t. ts = REPLICATE n t ⇒
-        valid_enc_array n (if is_dynamic t then NONE else SOME (static_length t)) t
-          (DROP hd_len result) (DROP hd_len result))
-Proof
-  cheat
-QED
+  The encoding result has structure: prefix ++ heads ++ tails
+  - prefix: empty for Tuple/Array SOME, length-encoding for Array NONE
+  - heads: for each element, either offset (dynamic) or encoded value (static)
+  - tails: concatenation of encoded dynamic elements
+
+  INVARIANTS:
+  - prefix_len = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds)) is INVARIANT
+    (the prefix portion of rhds doesn't change as we accumulate heads/tails)
+  - bs = DROP prefix_len result stays fixed
+  - hds = DROP hd_len result advances by head length each step
+
+  VERIFICATION OF INVARIANT:
+  After processing element: rhds becomes head::rhds, rtls becomes tail::rtls
+  New prefix_len = SUM (MAP LENGTH (DROP (LENGTH (tail::rtls)) (head::rhds)))
+                 = SUM (MAP LENGTH (DROP (1 + LENGTH rtls) (head::rhds)))
+                 = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds))  [by DROP property]
+                 = Old prefix_len ✓
+
+  BASE CASES:
+  - Tuple: rhds=[], rtls=[], prefix_len=0, bs=hds=result
+  - Array SOME: same as Tuple
+  - Array NONE: rhds=[pre], rtls=[], prefix_len=32, bs=hds=DROP 32 result
+
+  RECURSIVE CASE (enc_tuple):
+  - IH gives: valid_enc_tuple ts bs (DROP new_hd_len result)
+  - We need: valid_enc_tuple (t::ts) bs (DROP hd_len result)
+
+  Unfolding valid_enc_tuple (t::ts) bs hds:
+  - Dynamic t: need valid_enc t (DROP offset bs) ∧ valid_enc_tuple ts bs (DROP 32 hds)
+    * DROP 32 hds = DROP (hd_len + 32) result = DROP new_hd_len result ✓ (matches IH)
+    * offset = hl + tl, decoded from head
+    * DROP offset bs = DROP (prefix_len + hl + tl) result = start of tail for this element
+    * First conjunct (has_type t v ⇒ valid_enc t (enc t v)) gives valid_enc t (enc t v)
+
+  - Static t: need valid_enc t (TAKE n hds) ∧ valid_enc_tuple ts bs (DROP n hds)
+    * DROP n hds = DROP (hd_len + n) result = DROP new_hd_len result ✓ (matches IH)
+    * TAKE n hds = the encoded static value = enc t v
+    * First conjunct gives valid_enc t (enc t v)
+*)
 
 Theorem enc_valid:
   (∀t v. has_type t v ⇒ valid_enc t (enc t v)) ∧
@@ -1225,11 +1205,13 @@ Theorem enc_valid:
      hl = head_lengths ts (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds))) ∧
      tl = SUM (MAP LENGTH rtls) ⇒
    let result = enc_tuple hl tl ts vs rhds rtls;
-       hd_len = SUM (MAP LENGTH rhds)
-   in valid_enc_tuple ts result (DROP hd_len result) ∧
+       hd_len = SUM (MAP LENGTH rhds);
+       prefix_len = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds));
+       bs = DROP prefix_len result
+   in valid_enc_tuple ts bs (DROP hd_len result) ∧
       (∀n t. ts = REPLICATE n t ⇒
        valid_enc_array n (if is_dynamic t then NONE else SOME (static_length t)) t
-         (DROP hd_len result) (DROP hd_len result)))
+         bs (DROP hd_len result)))
 Proof
   ho_match_mp_tac enc_ind
   \\ rpt conj_tac
@@ -1328,12 +1310,89 @@ Proof
   >~ [`has_types _ []`]
   >- (rpt gen_tac \\ strip_tac \\ gvs[has_types_LIST_REL])
   (* enc_tuple recursive case (has_types (t::ts) (v::vs)):
-     TODO: This case needs a proper proof using the helper lemmas.
-     The induction hypothesis provides valid_enc_tuple ts ... for the tail.
-     We need to show valid_enc_tuple (t::ts) ... by:
-     - For dynamic t: showing the offset decodes correctly and valid_enc t (DROP offset result)
-     - For static t: showing TAKE (static_length t) gets the encoded value
-     Currently cheated - remove when helper lemmas are proved. *)
+     Apply IH by instantiating with is_dynamic t, tail, and head.
+     Then prove IH preconditions and use conclusion. *)
+  \\ rpt gen_tac \\ rpt strip_tac
+  \\ first_x_assum (qspecl_then
+       [`is_dynamic t`,
+        `if is_dynamic t then enc t v else []`,
+        `if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl)) else enc t v`] mp_tac)
+  \\ impl_tac >- simp[]
+  \\ impl_tac
+  >- (rpt conj_tac
+      (* has_types ts vs *)
+      >- gvs[has_types_LIST_REL]
+      (* head_lengths equality *)
+      >- (gvs[head_lengths_def]
+          \\ Cases_on `is_dynamic t`
+          \\ gvs[enc_number_def, LENGTH_word_to_bytes, enc_has_static_length])
+      (* tl + LENGTH tail = SUM ... *)
+      >- gvs[])
+  \\ strip_tac
+  \\ qmatch_asmsub_abbrev_tac`head::rhds`
+  \\ qmatch_asmsub_abbrev_tac`tail::rtls`
+  \\ `DROP (LENGTH (tail::rtls)) (head::rhds) = DROP (LENGTH rtls) rhds`
+  by simp[]
+  \\ pop_assum SUBST_ALL_TAC
+  \\ rewrite_tac[Once enc_def]
+  \\ rewrite_tac[LET_THM]
+  \\ CONV_TAC(RAND_CONV BETA_CONV)
+  \\ qunabbrev_tac`tail` \\ qmatch_abbrev_tac`_ (_ tail)`
+  \\ CONV_TAC(RAND_CONV BETA_CONV)
+  \\ qunabbrev_tac`head` \\ qmatch_abbrev_tac`_ (_ head)`
+  \\ CONV_TAC(RAND_CONV BETA_CONV)
+  \\ CONV_TAC(BETA_CONV)
+  \\ qpat_x_assum`hl = _`SUBST_ALL_TAC
+  \\ qmatch_goalsub_abbrev_tac`enc_tuple hl`
+  \\ qpat_x_assum`tl = _`SUBST_ALL_TAC
+  \\ qmatch_goalsub_abbrev_tac`tl + LENGTH tail`
+  \\ full_simp_tac std_ss [LET_THM, has_types_LIST_REL, LIST_REL_def]
+  \\ qmatch_goalsub_abbrev_tac`valid_enc_tuple _ xrhds result`
+  \\ qmatch_asmsub_abbrev_tac`valid_enc_tuple _ _ (DROP shrhds res)`
+  \\ simp[Once valid_enc_def]
+  \\ conj_tac
+  >- (
+    IF_CASES_TAC
+    >- (
+      gvs[Abbr`result`, DROP_DROP_T]
+      \\ `LENGTH head = 32` by simp[Abbr`head`, LENGTH_word_to_bytes]
+      \\ gvs[]
+      \\ gvs[Abbr`xrhds`, DROP_DROP_T]
+      \\ gvs[GSYM has_types_LIST_REL]
+      \\ drule enc_tuple_append
+      \\ disch_then(qspecl_then[`hl`,`tl + LENGTH tail`,
+                                `head::rhds`,`tail::rtls`]mp_tac)
+      \\ simp[]
+      \\ disch_then SUBST_ALL_TAC
+      \\ rewrite_tac[GSYM APPEND_ASSOC]
+      \\ qmatch_goalsub_abbrev_tac`DROP _ (FLAT (REVERSE rhds) ++ lll)`
+      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, LENGTH_FLAT,
+              SUM_REVERSE, MAP_REVERSE]
+      \\ `TAKE 32 lll = head` by simp[Abbr`lll`, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+      \\ pop_assum SUBST_ALL_TAC
+      \\ `word_of_bytes T (0w:bytes32) head = n2w (hl + tl)`
+      by simp[Abbr`head`, word_to_bytes_word_of_bytes_256]
+      \\ pop_assum SUBST_ALL_TAC
+      \\ qmatch_goalsub_abbrev_tac`valid_enc t tll`
+      \\ `tll = tail` suffices_by rw[]
+      \\ simp[Abbr`tll`]
+      \\ cheat)
+    \\ gvs[Abbr`tail`]
+    \\ drule_then drule (cj 1 enc_has_static_length)
+    \\ disch_then(assume_tac o SYM) \\ gvs[]
+    \\ gvs[Abbr`result`, Abbr`shrhds`, DROP_DROP_T]
+    \\ gvs[GSYM has_types_LIST_REL]
+    \\ drule enc_tuple_append
+    \\ disch_then(qspecl_then[`hl`,`tl`,`head::rhds`,`[]::rtls`]mp_tac)
+    \\ simp[]
+    \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, LENGTH_FLAT,
+            SUM_REVERSE, MAP_REVERSE, TAKE_APPEND]
+    \\ rewrite_tac[GSYM APPEND_ASSOC]
+    \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`head ++ rst`
+    \\ `rst = []` suffices_by gvs[]
+    \\ simp[Abbr`rst`])
+  \\ Cases >- gvs[]
   \\ cheat
 QED
 
