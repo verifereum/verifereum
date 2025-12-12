@@ -1232,7 +1232,87 @@ QED
 Theorem valid_enc_append:
   ∀t v ys. has_type t v ⇒ valid_enc t (enc t v ++ ys)
 Proof
-  cheat
+  Induct_on `t`
+  (* Uint case *)
+  >- (rw[has_type_def, valid_enc_def, enc_def, enc_number_def]
+      \\ Cases_on `v`
+      \\ gvs[has_type_def, enc_def, enc_number_def, byteTheory.LENGTH_word_to_bytes,
+             TAKE_LENGTH_TOO_LONG, vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
+      \\ simp[byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+              vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ gvs[valid_int_bound_def]
+      \\ `n' < 2 ** 256`
+         by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
+             \\ qexists_tac `2 ** n` \\ simp[])
+      \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
+      \\ simp[arithmeticTheory.LESS_MOD])
+  (* Int case *)
+  >- (rw[has_type_def, valid_enc_def, enc_def, enc_number_def]
+      \\ Cases_on `v`
+      \\ gvs[has_type_def, enc_def, enc_number_def, byteTheory.LENGTH_word_to_bytes,
+             TAKE_LENGTH_TOO_LONG, vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
+      \\ simp[byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+              vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ qmatch_goalsub_abbrev_tac `w2i (i2w ii)`
+      \\ sg `INT_MIN (:256) ≤ ii ∧ ii ≤ INT_MAX (:256)`
+      >- (irule int_bits_bound_256 \\ qexists_tac `n` \\ gvs[valid_int_bound_def])
+      \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w] \\ simp[])
+  (* Address case *)
+  >- (rw[has_type_def, valid_enc_def, enc_def, enc_number_def]
+      \\ Cases_on `v`
+      \\ gvs[has_type_def, enc_def, enc_number_def, byteTheory.LENGTH_word_to_bytes,
+             TAKE_LENGTH_TOO_LONG, vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
+      \\ simp[byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+              vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ `n < 2 ** 256`
+         by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
+             \\ qexists_tac `2 ** 160` \\ simp[])
+      \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
+      \\ simp[arithmeticTheory.LESS_MOD])
+  (* Bool case *)
+  >- (rw[has_type_def, valid_enc_def, enc_def, enc_number_def]
+      \\ Cases_on `v`
+      \\ gvs[has_type_def, enc_def, enc_number_def, byteTheory.LENGTH_word_to_bytes,
+             TAKE_LENGTH_TOO_LONG, vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
+      \\ simp[byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+              vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ `n < 2 ** 256`
+         by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
+             \\ qexists_tac `2` \\ simp[])
+      \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
+      \\ simp[arithmeticTheory.LESS_MOD])
+  (* Fixed case *)
+  >- (rw[has_type_def, valid_enc_def, enc_def, enc_number_def]
+      \\ Cases_on `v`
+      \\ gvs[has_type_def, enc_def, enc_number_def, byteTheory.LENGTH_word_to_bytes,
+             TAKE_LENGTH_TOO_LONG, vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
+      \\ simp[byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+              vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ qmatch_goalsub_abbrev_tac `w2i (i2w ii)`
+      \\ sg `INT_MIN (:256) ≤ ii ∧ ii ≤ INT_MAX (:256)`
+      >- (irule int_bits_bound_256 \\ qexists_tac `n0` \\ gvs[valid_fixed_bounds_def])
+      \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w] \\ simp[])
+  (* Ufixed case *)
+  >- (rw[has_type_def, valid_enc_def, enc_def, enc_number_def]
+      \\ Cases_on `v`
+      \\ gvs[has_type_def, enc_def, enc_number_def, byteTheory.LENGTH_word_to_bytes,
+             TAKE_LENGTH_TOO_LONG, vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
+      \\ simp[byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
+              vfmTypesTheory.word_to_bytes_word_of_bytes_256]
+      \\ gvs[valid_fixed_bounds_def]
+      \\ `n' < 2 ** 256`
+         by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
+             \\ qexists_tac `2 ** n0` \\ simp[])
+      \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
+      \\ simp[arithmeticTheory.LESS_MOD])
+  (* Bytes, String, Array, Tuple - complex dynamic types, cheat for now *)
+  \\ cheat
 QED
 
 Theorem enc_valid:
@@ -1328,18 +1408,23 @@ Proof
              \\ qexists_tac `2 ** n0` \\ simp[])
       \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
       \\ simp[arithmeticTheory.LESS_MOD])
-  (* IntV case - incomplete, use cheat *)
+  (* IntV case - uses int_bits_bound_256 to establish w2i (i2w i) = i *)
   >~ [`IntV`]
   >- (rw[valid_enc_def, has_type_def]
       \\ Cases_on `t`
       \\ gvs[has_type_def, valid_enc_def, enc_number_def, is_num_value_def,
              byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
              vfmTypesTheory.word_to_bytes_word_of_bytes_256]
-      \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w]
-      \\ simp[int_bits_bound_def, valid_int_bound_def, valid_fixed_bounds_def]
-      \\ rpt strip_tac
-      \\ gvs[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def]
-      \\ cheat)
+      (* Int n case: need n ≤ 256 from valid_int_bound n *)
+      >- (qmatch_goalsub_abbrev_tac `w2i (i2w ii)`
+          \\ sg `INT_MIN (:256) ≤ ii ∧ ii ≤ INT_MAX (:256)`
+          >- (irule int_bits_bound_256 \\ qexists_tac `n` \\ gvs[valid_int_bound_def])
+          \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w] \\ simp[])
+      (* Fixed n m case: need m ≤ 256 from valid_fixed_bounds n m *)
+      \\ qmatch_goalsub_abbrev_tac `w2i (i2w ii)`
+      \\ sg `INT_MIN (:256) ≤ ii ∧ ii ≤ INT_MAX (:256)`
+      >- (irule int_bits_bound_256 \\ qexists_tac `n0` \\ gvs[valid_fixed_bounds_def])
+      \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w] \\ simp[])
   (* Vacuous type/value mismatch cases - proven by has_type_def contradiction *)
   (* Note: Don't use rpt with rw[] - it loops forever! *)
   \\ TRY (rw[has_type_def] \\ NO_TAC)
