@@ -1352,12 +1352,11 @@ Definition precompile_point_eval_def:
       computedHash <<- word_to_bytes (SHA_256_bytes commitment_bytes) T;
       computedVersionedHash <<- versioned_hash_version_kzg :: DROP 1 computedHash;
       assert (versionedHash = computedVersionedHash) KZGProofError;
-      (* Decompress G1 points *)
+      assert (z < bls12381$bls12381p ∧ y < bls12381$bls12381p) KZGProofError;
       commitment_opt <<- bls12381$g1_decompress commitment_bytes;
       proof_opt <<- bls12381$g1_decompress proof_bytes;
       case (commitment_opt, proof_opt) of
       | (SOME commitment, SOME proof) => do
-          (* Verify KZG proof *)
           assert (bls12381$verify_kzg_proof commitment z y proof) KZGProofError;
           set_return_data point_eval_output;
           finish

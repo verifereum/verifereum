@@ -890,7 +890,10 @@ Proof
   \\ irule_at Any decreases_gas_consume_gas
   \\ qexists_tac`F` \\ rw[]
   \\ irule_at Any decreases_gas_ignore_bind_false
-  \\ irule_at Any decreases_gas_assert
+  \\ irule_at Any decreases_gas_assert (* versioned hash *)
+  \\ qexists_tac`F` \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_assert (* z and y bounds *)
   \\ qexists_tac`F` \\ rw[]
   \\ CASE_TAC \\ rw[]
   \\ CASE_TAC \\ rw[]
