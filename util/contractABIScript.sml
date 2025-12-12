@@ -5,7 +5,7 @@ Ancestors
   vfmTypes
 Libs
   cv_transLib
-  wordsLib
+  intLib wordsLib
   dep_rewrite
 
 val () = numLib.prefer_num();
@@ -1198,6 +1198,43 @@ QED
     * First conjunct gives valid_enc t (enc t v)
 *)
 
+(* Lemma: valid_enc tolerates trailing bytes when applied to a proper encoding.
+   This is needed for the enc_tuple recursive case where the encoded value
+   has additional bytes after it (the encodings of subsequent elements).
+
+   The cheats here relate to:
+   - Int/Fixed bounds: same as cheat 1 in enc_valid
+   - Bytes NONE/String: need length/padding verification for dynamic bytes
+   - Array/Tuple: require complex reasoning about enc_tuple structure *)
+
+Theorem int_bits_bound_256:
+  ∀i n. int_bits_bound i n ∧ n ≤ 256 ⇒
+        INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)
+Proof
+  simp[int_bits_bound_def]
+  \\ rpt gen_tac \\ strip_tac
+  \\ Cases_on`i` \\ gvs[int_calculate]
+  \\ qmatch_goalsub_rename_tac`i ≤ _`
+  \\ CCONTR_TAC \\ gvs[NOT_LESS_EQUAL]
+  \\ qmatch_asmsub_abbrev_tac`b < i`
+  \\ qmatch_asmsub_abbrev_tac`i < m`
+  \\ `b < m - 1` by simp[]
+  \\ pop_assum mp_tac
+  \\ simp_tac(srw_ss())[Abbr`m`, NOT_LESS, Abbr`b`]
+  >- gvs[PRE_SUB1]
+  \\ qmatch_goalsub_abbrev_tac`t + 1 ≤ m`
+  \\ `0 < t` by simp[Abbr`t`]
+  \\ `t ≤ m - 1` suffices_by rw[]
+  \\ simp_tac(srw_ss())[Abbr`m`,Abbr`t`]
+  \\ gvs[PRE_SUB1]
+QED
+
+Theorem valid_enc_append:
+  ∀t v ys. has_type t v ⇒ valid_enc t (enc t v ++ ys)
+Proof
+  cheat
+QED
+
 Theorem enc_valid:
   (∀t v. has_type t v ⇒ valid_enc t (enc t v)) ∧
   (∀hl tl ts vs rhds rtls.
@@ -1373,10 +1410,15 @@ Proof
       \\ `word_of_bytes T (0w:bytes32) head = n2w (hl + tl)`
       by simp[Abbr`head`, word_to_bytes_word_of_bytes_256]
       \\ pop_assum SUBST_ALL_TAC
-      \\ qmatch_goalsub_abbrev_tac`valid_enc t tll`
-      \\ `tll = tail` suffices_by rw[]
-      \\ simp[Abbr`tll`]
-      \\ cheat)
+      (* Use valid_enc_append: need to show goal is valid_enc t (tail ++ extra)
+         where tail = enc t v. The DROP should simplify to tail ++ trailing bytes.
+         Remaining cheat: arithmetic showing DROP lands at start of tail *)
+      \\ qmatch_goalsub_abbrev_tac`valid_enc t dropexpr`
+      \\ `∃extra. dropexpr = tail ++ extra` by cheat
+      \\ pop_assum SUBST_ALL_TAC
+      \\ gvs[Abbr`tail`]
+      \\ irule valid_enc_append
+      \\ gvs[GSYM has_types_LIST_REL])
     \\ gvs[Abbr`tail`]
     \\ drule_then drule (cj 1 enc_has_static_length)
     \\ disch_then(assume_tac o SYM) \\ gvs[]
