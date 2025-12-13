@@ -1479,7 +1479,7 @@ Definition step_inst_def:
   ∧ step_inst Or = step_binop Or word_or
   ∧ step_inst XOr = step_binop XOr word_xor
   ∧ step_inst Not = step_monop Not word_1comp
-  ∧ step_inst Byte = step_binop Byte (λi w. w2w $ get_byte i w T)
+  ∧ step_inst Byte = step_binop Byte (λi w. if w2n i < 32 then w2w $ get_byte i w T else 0w)
   ∧ step_inst ShL = step_binop ShL (λn w. word_lsl w (w2n n))
   ∧ step_inst ShR = step_binop ShR (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = step_binop SAR (λn w. word_asr w (w2n n))
