@@ -2845,6 +2845,8 @@ Proof
   \\ `is_call call_inst` by (
        qpat_x_assum`call_has_value _`mp_tac \\
        Cases_on`call_inst` \\ simp[call_has_value_def, is_call_def])
+  \\ `call_inst ≠ Call ⇒ cCost < value` by gvs[Abbr`cCost`]
+  \\ Cases_on`call_inst = Call`
   \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
@@ -2852,10 +2854,10 @@ Proof
          access_address_split, get_gas_left_def, HD_TAKE,
          assert_not_static_def, get_static_def, abort_call_value_def, push_stack_def,
          set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def]
-  \\ conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]
-  \\ conj_tac >-
-       (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
-        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+  \\ (conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def])
+  \\ (conj_tac >-
+        (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
   \\ end_tac
 QED
 
