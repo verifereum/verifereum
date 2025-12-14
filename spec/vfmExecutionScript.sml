@@ -1439,7 +1439,7 @@ Definition step_call_def:
     (dynamicGas, stipend) <<- call_gas value gas gasLeft mx.cost $
                                 accessCost + positiveValueCost + createCost;
     consume_gas $ static_gas op + dynamicGas + mx.cost;
-    if 0 < value then assert_not_static else return ();
+    if op = Call ∧ 0 < value then assert_not_static else return ();
     expand_memory mx.expand_by;
     sender <- get_callee;
     if (lookup_account sender accounts).balance < value
