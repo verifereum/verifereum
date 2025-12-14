@@ -1577,7 +1577,10 @@ Theorem SPEC_Byte:
      cond (2 ≤ LENGTH ss ∧ j = NONE ∧
            ISL e ∧ g + static_gas Byte ≤ p.gasLimit))
     {(pc,Byte)}
-    (evm_Stack (w2w (get_byte (EL 0 ss) (EL 1 ss) T) :: DROP 2 ss) *
+    (evm_Stack ((if w2n (EL 0 ss) < 32
+                 then w2w (get_byte (EL 0 ss) (EL 1 ss) T)
+                 else 0w)
+                :: DROP 2 ss) *
      evm_JumpDest j * evm_Exception e *
      evm_PC (pc + LENGTH (opcode Byte)) *
      evm_GasUsed (g + static_gas Byte) * evm_MsgParams p)
