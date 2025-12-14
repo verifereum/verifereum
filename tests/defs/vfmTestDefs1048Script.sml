@@ -1,5 +1,5 @@
 open HolKernel vfmTestAuxLib vfmTestDefLib;
 val () = new_theory "vfmTestDefs1048";
-val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stMemoryStressTest/JUMPI_Bounds.json";
+val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stInitCodeTest/OutOfGasContractCreation.json";
 val defs = mapi (define_test "1048") tests;
 val () = export_theory_no_docs ();

@@ -5,7 +5,7 @@ structure vfmTestLib :> vfmTestLib = struct
   val fixtures_url_prefix = String.concat [
     "https://github.com/ethereum/execution-spec-tests/releases/download/v",
     fixtures_version, "/" ]
-  val static_tarball = "fixtures_static.tar.gz"
+  val stable_tarball = "fixtures_stable.tar.gz"
   val develop_tarball = "fixtures_develop.tar.gz"
   val version_file = OS.Path.concat("fixtures", "version.txt")
 
@@ -23,13 +23,13 @@ structure vfmTestLib :> vfmTestLib = struct
        end handle Io _ => false
     then ()
     else let
-      val () = system_or_fail "curl_static" $
-        String.concat["curl -LO ", fixtures_url_prefix ^ static_tarball]
+      val () = system_or_fail "curl_stable" $
+        String.concat["curl -LO ", fixtures_url_prefix ^ stable_tarball]
       val () = system_or_fail "curl_develop" $
         String.concat["curl -LO ", fixtures_url_prefix ^ develop_tarball]
       val () = system_or_fail "rm" "rm -fr fixtures"
-      val () = system_or_fail "tar_static" $
-        String.concat ["tar -xzf ", static_tarball]
+      val () = system_or_fail "tar_stable" $
+        String.concat ["tar -xzf ", stable_tarball]
       val () = system_or_fail "tar_develop" $
         String.concat ["tar -xzf", develop_tarball]
       val out = TextIO.openOut version_file
