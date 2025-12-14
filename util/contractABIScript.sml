@@ -514,6 +514,20 @@ Proof
   \\ pop_assum(fn th => simp[Once th] \\ simp[Once th, SimpRHS])
 QED
 
+Theorem head_lengths_REPLICATE:
+  ∀ts a n t.
+  ts = REPLICATE n t ⇒
+  head_lengths ts a =
+  a + n * (if is_dynamic t then 32 else static_length t)
+Proof
+  ho_match_mp_tac head_lengths_ind
+  \\ reverse $ rw[]
+  >- rw[head_lengths_def]
+  \\ Cases_on`n` \\ gvs[]
+  \\ rw[head_lengths_def]
+  \\ rw[MULT]
+QED
+
 Theorem head_lengths_leq_LENGTH_enc_tuple:
   ∀ts vs hl tl hds tls n.
     has_types ts vs ⇒
