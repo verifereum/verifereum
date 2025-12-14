@@ -1561,6 +1561,36 @@ Proof
   \\ `LENGTH head = 32` by simp[Abbr`head`, LENGTH_word_to_bytes]
   \\ gvs[]
   \\ simp[Abbr`xrhds`, DROP_DROP_T]
+  \\ qunabbrev_tac`res`
+  \\ gvs[GSYM has_types_LIST_REL]
+  \\ drule enc_tuple_append
+  \\ qmatch_goalsub_abbrev_tac`enc_tuple hl tll _ vs hrs trs`
+  \\ disch_then(qspecl_then[`hl`,`tll`,`hrs`,`trs`]SUBST_ALL_TAC)
+  \\ simp[Abbr`hrs`,Abbr`trs`]
+  \\ qpat_x_assum`Abbrev(hl = _)`mp_tac
+  \\ simp[head_lengths_def]
+  \\ simp[Once head_lengths_add]
+  \\ qmatch_goalsub_abbrev_tac`hlt + 32`
+  \\ gvs[] \\ strip_tac
+  \\ strip_tac
+  \\ qmatch_goalsub_abbrev_tac`TAKE 32 (DROP ln ls)`
+  \\ `TAKE 32 (DROP ln ls) = head`
+  by (
+    simp[Abbr`ln`,Abbr`ls`,DROP_APPEND,LENGTH_FLAT, SUM_REVERSE,MAP_REVERSE,
+         DROP_LENGTH_TOO_LONG]
+    \\ rewrite_tac[GSYM APPEND_ASSOC]
+    \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
+    \\ gvs[] )
+  \\ pop_assum (SUBST_ALL_TAC)
+  \\ qunabbrev_tac`head`
+  \\ rewrite_tac[word_to_bytes_word_of_bytes_256]
+  \\ qmatch_asmsub_rename_tac`REPLICATE m t`
+  \\ `hlt = m * 32`
+  by (
+    simp[Abbr`hlt`]
+    \\ simp[SIMP_RULE std_ss [] head_lengths_REPLICATE])
+  \\ gvs[Abbr`hlt`]
+  \\ gvs[LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE]
   \\ cheat
 QED
 
