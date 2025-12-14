@@ -1519,7 +1519,34 @@ Proof
     \\ qmatch_goalsub_abbrev_tac`head ++ rst`
     \\ `rst = []` suffices_by gvs[]
     \\ simp[Abbr`rst`])
+
   \\ Cases >- gvs[]
+  \\ simp[] \\ strip_tac
+  \\ first_x_assum drule
+  \\ pop_assum SUBST_ALL_TAC
+  \\ gvs[]
+  \\ simp[Abbr`result`, Abbr`shrhds`]
+  \\ reverse IF_CASES_TAC \\ simp[valid_enc_def]
+  >- (
+    gvs[Abbr`head`]
+    \\ drule_then drule (cj 1 enc_has_static_length)
+    \\ simp[DROP_DROP_T]
+    \\ gvs[GSYM has_types_LIST_REL]
+    \\ drule enc_tuple_append
+    \\ rpt strip_tac
+    \\ first_x_assum(qspecl_then[`hl`,`tl+ LENGTH tail`,`enc t v::rhds`]mp_tac)
+    \\ strip_tac \\ gvs[Abbr`res`]
+    \\ rewrite_tac[GSYM APPEND_ASSOC]
+    \\ once_rewrite_tac[DROP_APPEND]
+    \\ qmatch_goalsub_abbrev_tac`DROP (_ - _) ls`
+    \\ simp[LENGTH_FLAT, MAP_REVERSE, SUM_REVERSE, DROP_LENGTH_TOO_LONG]
+    \\ simp[Abbr`tail`]
+    \\ qunabbrev_tac`ls`
+    \\ simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG])
+  \\ simp[DROP_DROP_T]
+  \\ `LENGTH head = 32` by simp[Abbr`head`, LENGTH_word_to_bytes]
+  \\ gvs[]
+  \\ simp[Abbr`xrhds`, DROP_DROP_T]
   \\ cheat
 QED
 
