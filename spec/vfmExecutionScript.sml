@@ -1112,6 +1112,7 @@ Definition proceed_create_def:
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
       ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+      ; authorizationList := []
     |>;
     rollback <- get_rollback;
     original <- get_original;
@@ -1404,6 +1405,7 @@ Definition proceed_call_def:
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
       ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+      ; authorizationList := []
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
