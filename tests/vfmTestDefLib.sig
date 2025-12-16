@@ -68,7 +68,8 @@ signature vfmTestDefLib = sig
     withdrawalsRoot: string,
     blobGasUsed: string,
     excessBlobGas: string,
-    parentBeaconBlockRoot: string
+    parentBeaconBlockRoot: string,
+    requestsHash: string
   }
 
   type withdrawal = {

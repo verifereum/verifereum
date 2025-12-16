@@ -73,7 +73,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     withdrawalsRoot: string,
     blobGasUsed: string,
     excessBlobGas: string,
-    parentBeaconBlockRoot: string
+    parentBeaconBlockRoot: string,
+    requestsHash: string
   }
 
   type withdrawal = {
@@ -178,13 +179,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val blockHeaderDecoder : block_header decoder =
     JSONDecode.map (fn (((ph, uh, cb, sr), (tt, rt, bl, di),
                          (nu, gl, gu, ts), (ed, mh, no, ha)),
-                        (bf, wr, bg, eb), pr) =>
+                        (bf, wr, bg, eb), (pr, rh)) =>
               {parentHash=ph, uncleHash=uh, coinbase=cb, stateRoot=sr,
                transactionsTrie=tt, receiptTrie=rt, bloom=bl, difficulty=di,
                number=nu, gasLimit=gl, gasUsed=gu, timestamp=ts,
                extraData=ed, mixHash=mh, nonce=no, hash=ha,
                baseFeePerGas=bf, withdrawalsRoot=wr, blobGasUsed=bg,
-               excessBlobGas=eb, parentBeaconBlockRoot=pr}) $
+               excessBlobGas=eb, parentBeaconBlockRoot=pr, requestsHash=rh}) $
       tuple3 (
         tuple4 (tuple4 (field "parentHash" string,
                         field "uncleHash" string,
@@ -206,7 +207,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                 field "withdrawalsRoot" string,
                 field "blobGasUsed" string,
                 field "excessBlobGas" string),
-        field "parentBeaconBlockRoot" string)
+        tuple2 (field "parentBeaconBlockRoot" string,
+                field "requestsHash" string))
 
   val withdrawalDecoder : withdrawal decoder =
     JSONDecode.map (fn (i,v,a,m) => {
@@ -408,6 +410,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val hash_tm = bytes32_from_hex $ #hash header
     val stateRoot_tm = bytes32_from_hex $ #stateRoot header
     val parentBeaconBlockRoot_tm = bytes32_from_hex $ #parentBeaconBlockRoot header
+    val requestsHash_tm = bytes32_from_hex $ #requestsHash header
     val transactions_tm = mk_list(
       List.map (mk_transaction_tm baseFeePerGas_tm) $
         #transactions block, transaction_ty)
@@ -426,8 +429,9 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("gasLimit", gasLimit_tm),
       ("prevRandao", prevRandao_tm),
       ("hash", hash_tm),
-      ("stateRoot", stateRoot_tm),
       ("parentBeaconBlockRoot", parentBeaconBlockRoot_tm),
+      ("requestsHash", requestsHash_tm),
+      ("stateRoot", stateRoot_tm),
       ("transactions", transactions_tm),
       ("withdrawals", withdrawals_tm)
     ])

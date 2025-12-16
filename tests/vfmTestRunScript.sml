@@ -34,7 +34,7 @@ Definition block_header_from_rlp_def:
   block_header_from_rlp rlp =
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
-  if ¬(LENGTH ls = 20 ∧ EVERY is_RLPB ls) then NONE else
+  if ¬(LENGTH ls = 21 ∧ EVERY is_RLPB ls) then NONE else
   let coinbase   = dest_RLPB (EL  2 ls) in
   let stateRoot  = dest_RLPB (EL  3 ls) in
   let number     = dest_RLPB (EL  8 ls) in
@@ -46,6 +46,7 @@ Definition block_header_from_rlp_def:
   let blobGasUsed   = dest_RLPB (EL 17 ls) in
   let excessBlobGas = dest_RLPB (EL 18 ls) in
   let parentBeaconBlockRoot = dest_RLPB (EL 19 ls) in
+  let requestsHash = dest_RLPB (EL 20 ls) in
   (*
      parentHash;
      ommersHash;
@@ -66,7 +67,8 @@ Definition block_header_from_rlp_def:
      withdrawalsRoot;
      blobGasUsed;
      excessBlobGas;
-     parentBeaconBlockRoot
+     parentBeaconBlockRoot;
+     requestsHash
    *)
     SOME
     <| baseFeePerGas := num_of_be_bytes baseFeePerGas
@@ -79,6 +81,7 @@ Definition block_header_from_rlp_def:
      ; gasLimit      := num_of_be_bytes gasLimit
      ; prevRandao    := word_of_bytes T 0w prevRandao
      ; parentBeaconBlockRoot := word_of_bytes T 0w parentBeaconBlockRoot
+     ; requestsHash  := word_of_bytes T 0w requestsHash
      ; stateRoot     := word_of_bytes T 0w stateRoot
      (* not in header *)
      ; hash          := 0w
