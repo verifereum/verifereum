@@ -1254,6 +1254,37 @@ QED
     * First conjunct gives valid_enc t (enc t v)
 *)
 
+(* Helper lemmas for enc_valid - cheated for now *)
+
+(* valid_enc only examines a prefix of its input.
+
+   Why this should be provable:
+   valid_enc is defined by structural recursion on the type and the bytestring.
+   For each type, it reads a fixed amount of data (determined by the type structure)
+   and doesn't care about any trailing bytes. For example:
+   - Uint n reads 32 bytes
+   - Tuple ts reads head_lengths ts bytes of heads + accumulated tails
+   - Array NONE t reads 32 bytes for length + the array contents
+
+   The key insight is that valid_enc always terminates after reading a bounded
+   prefix, so appending arbitrary bytes at the end cannot affect validity.
+
+   Proof approach: By mutual induction on valid_enc/valid_enc_array/valid_enc_tuple.
+   Each case shows the recursive calls only examine prefixes, and appending
+   rest/rest1/rest2 doesn't affect the validity check.
+*)
+Theorem valid_enc_APPEND:
+  (∀t bs rest. valid_enc t bs ⇒ valid_enc t (bs ++ rest)) ∧
+  (∀n lt t bs hds rest1 rest2.
+     valid_enc_array n lt t bs hds ⇒
+     valid_enc_array n lt t (bs ++ rest1) (hds ++ rest2)) ∧
+  (∀ts bs hds rest1 rest2.
+     valid_enc_tuple ts bs hds ⇒
+     valid_enc_tuple ts (bs ++ rest1) (hds ++ rest2))
+Proof
+  cheat
+QED
+
 Theorem enc_valid:
   (∀t v. has_type t v ⇒
          valid_enc t (enc t v)) ∧
@@ -1436,7 +1467,27 @@ Proof
       \\ `word_of_bytes T (0w:bytes32) head = n2w (hl + tl)`
       by simp[Abbr`head`, word_to_bytes_word_of_bytes_256]
       \\ pop_assum SUBST_ALL_TAC
-      \\ cheat)
+      \\ qabbrev_tac`prefix_len = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds))`
+      \\ qabbrev_tac`prefix_acc = SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds))`
+      (* CHEAT 1: Dynamic type case - show DROP lands at tail
+         Goal: valid_enc t (DROP (prefix_len + w2n(n2w(hl+tl))) (FLAT (REVERSE rhds))
+                           ++ DROP (...) lll)
+         Strategy:
+         1. The sg subgoal proves: prefix_len + prefix_acc = SUM (MAP LENGTH rhds)
+            This follows from TAKE_DROP and SUM_APPEND/MAP_APPEND.
+            Tactic: simp[Abbr`prefix_len`, Abbr`prefix_acc`, GSYM SUM_APPEND,
+                         GSYM MAP_APPEND, TAKE_DROP]
+         2. Main goal: Show the DROP expression lands at (or has as prefix) tail
+            - hl + tl is the offset pointing to where tail appears in result
+            - Need: w2n(n2w(hl+tl)) = hl+tl (requires no overflow, i.e. hl+tl < 2^256)
+            - Then use valid_enc_APPEND with assumption valid_enc t tail
+         Key helper: valid_enc_APPEND (currently cheated in this file)
+      *)
+      \\ sg `prefix_len + prefix_acc = SUM (MAP LENGTH rhds)`
+      >- cheat (* Prove with: simp[Abbr`prefix_len`, Abbr`prefix_acc`,
+                                   GSYM SUM_APPEND, GSYM MAP_APPEND, TAKE_DROP] *)
+      \\ cheat (* Main goal: compute DROP position, apply valid_enc_APPEND *)
+      )
     \\ gvs[Abbr`tail`]
     \\ drule_then drule (cj 1 enc_has_static_length)
     \\ disch_then(assume_tac o SYM) \\ gvs[]
@@ -1509,6 +1560,21 @@ Proof
     \\ simp[SIMP_RULE std_ss [] head_lengths_REPLICATE])
   \\ gvs[Abbr`hlt`]
   \\ gvs[LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE]
+  (* CHEAT 2: REPLICATE case (Array with fixed-size element type)
+     Goal: valid_enc t (DROP (prefix_len + (hl + tl) MOD 2^256) ls)
+     Where:
+       - prefix_len = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds))
+       - hl = 32 * m + (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds)) + 32)
+       - ls = FLAT (REVERSE rhds) ++ offset_bytes ++ inner_heads
+              ++ FLAT (REVERSE rtls) ++ tail ++ inner_tails
+     Strategy:
+       1. Show (hl + tl) MOD 2^256 = hl + tl (no overflow)
+          This requires proving hl + tl < 2^256, which should follow from
+          has_type bounds on encoding lengths.
+       2. Compute the DROP position to show it lands at tail
+       3. Apply valid_enc_APPEND with valid_enc t tail
+     Key helper: valid_enc_APPEND (currently cheated)
+  *)
   \\ cheat
 QED
 
