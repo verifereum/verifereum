@@ -123,15 +123,15 @@ Definition min_base_fee_per_blob_gas_def:
 End
 
 Definition blob_base_fee_update_fraction_def:
-  blob_base_fee_update_fraction = 3338477n
+  blob_base_fee_update_fraction = 5007716n
 End
 
 Definition max_blob_gas_per_block_def:
-  max_blob_gas_per_block = 786432n
+  max_blob_gas_per_block = 1179648n
 End
 
 Definition target_blob_gas_per_block_def:
-  target_blob_gas_per_block = 393216n
+  target_blob_gas_per_block = 786432n
 End
 
 Definition versioned_hash_version_kzg_def:
