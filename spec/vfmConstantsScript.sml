@@ -22,6 +22,10 @@ Definition call_data_cost_def:
   if is_zero then 4n else 16
 End
 
+Definition floor_call_data_cost_def:
+  floor_call_data_cost = 10n
+End
+
 Definition init_code_word_cost_def:
   init_code_word_cost = 2n
 End

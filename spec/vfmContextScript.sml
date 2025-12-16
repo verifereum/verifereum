@@ -281,17 +281,27 @@ Definition initial_access_sets_def:
    |>
 End
 
+Definition call_data_tokens_def:
+  call_data_tokens data =
+  SUM (MAP (λb. if b = 0w then 1n else 4) data)
+End
+
 Definition intrinsic_cost_def:
   intrinsic_cost accessList p =
   let isCreate = is_code_dest p.outputTo in
   let data = if isCreate then p.code else p.data in
-  base_cost
-  + SUM (MAP (λb. call_data_cost (b = 0w)) data)
-  + (if isCreate
-     then create_cost + init_code_word_cost * (word_size $ LENGTH data)
-     else 0)
-  + access_list_address_cost * LENGTH accessList
-  + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
+  let tokens = call_data_tokens data in
+  let standard_cost =
+    base_cost
+    + SUM (MAP (λb. call_data_cost (b = 0w)) data)
+    + (if isCreate
+       then create_cost + init_code_word_cost * (word_size $ LENGTH data)
+       else 0)
+    + access_list_address_cost * LENGTH accessList
+    + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
+  in
+  let floor_cost = base_cost + floor_call_data_cost * tokens in
+  MAX standard_cost floor_cost
 End
 
 Definition apply_intrinsic_cost_def:
