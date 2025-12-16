@@ -145,6 +145,7 @@ Datatype:
    ; prevRandao            : bytes32
    ; hash                  : bytes32
    ; parentBeaconBlockRoot : bytes32
+   ; requestsHash          : bytes32
    ; stateRoot             : bytes32
    ; transactions          : transaction list
    ; withdrawals           : withdrawal list
