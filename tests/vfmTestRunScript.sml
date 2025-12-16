@@ -404,6 +404,143 @@ Proof
   rw[transaction3_from_rlp_pre_def]
 QED
 
+Definition authorization_from_rlp_def:
+  authorization_from_rlp rlp =
+  if ¬is_RLPL rlp then NONE else
+  let ls = dest_RLPL rlp in
+  if LENGTH ls ≠ 6 then NONE else
+  if ¬(EVERY is_RLPB ls) then NONE else
+  let chainIdRlp = EL 0 ls in
+  let chainId = num_of_be_bytes $ dest_RLPB chainIdRlp in
+  let addressRlp = EL 1 ls in
+  let address : address = word_of_bytes T 0w $ dest_RLPB addressRlp in
+  let nonceRlp = EL 2 ls in
+  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
+  let yParity = num_of_be_bytes $ dest_RLPB $ EL 3 ls in
+  let r = num_of_be_bytes $ dest_RLPB $ EL 4 ls in
+  let s = num_of_be_bytes $ dest_RLPB $ EL 5 ls in
+  let authLs = [chainIdRlp; addressRlp; nonceRlp] in
+  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
+    5w :: rlp_encode (RLPL authLs) in
+  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+  SOME authority =>
+  SOME (authority, address, chainId, nonce)
+End
+
+val authorization_from_rlp_pre_def =
+  cv_auto_trans_pre "authorization_from_rlp_pre" authorization_from_rlp_def;
+
+Theorem authorization_from_rlp_pre[cv_pre]:
+  authorization_from_rlp_pre x
+Proof
+  rw[authorization_from_rlp_pre_def]
+  \\ strip_tac \\ gvs[]
+QED
+
+Definition OPT_MMAP_authorization_from_rlp_def:
+  OPT_MMAP_authorization_from_rlp [] = SOME [] ∧
+  OPT_MMAP_authorization_from_rlp (x::xs) =
+  case authorization_from_rlp x of NONE => NONE
+     | SOME h =>
+         case OPT_MMAP_authorization_from_rlp xs of NONE => NONE
+            | SOME t => SOME (h::t)
+End
+
+val () = cv_auto_trans OPT_MMAP_authorization_from_rlp_def;
+
+Theorem OPT_MMAP_authorization_from_rlp_eq:
+  OPT_MMAP_authorization_from_rlp ls =
+  OPT_MMAP authorization_from_rlp ls
+Proof
+  Induct_on`ls` \\ rw[OPT_MMAP_authorization_from_rlp_def]
+  \\ CASE_TAC \\ gvs[]
+  \\ CASE_TAC \\ gvs[]
+QED
+
+Definition transaction4_from_rlp_def:
+  transaction4_from_rlp baseFee rlp =
+  if ¬is_RLPL rlp then NONE else
+  let ls = dest_RLPL rlp in
+  if LENGTH ls ≠ 13 then NONE else
+  (* chain_id: U64 *)
+  let nonceRlp = EL 1 ls in
+  if ¬is_RLPB nonceRlp then NONE else
+  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
+  let maxPrioRlp = EL 2 ls in
+  if ¬is_RLPB maxPrioRlp then NONE else
+  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
+  let maxFeeRlp = EL 3 ls in
+  if ¬is_RLPB maxFeeRlp then NONE else
+  let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
+  let gasRlp = EL 4 ls in
+  if ¬is_RLPB gasRlp then NONE else
+  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
+  let toRlp = EL 5 ls in
+  if ¬is_RLPB toRlp then NONE else
+  let to = dest_RLPB toRlp in
+  (* destination cannot be null in type 4 *)
+  if LENGTH to = 0 then NONE else
+  let to = SOME $ word_of_bytes T 0w to in
+  let valueRlp = EL 6 ls in
+  if ¬is_RLPB valueRlp then NONE else
+  let value = num_of_be_bytes $ dest_RLPB valueRlp in
+  let dataRlp = EL 7 ls in
+  if ¬is_RLPB dataRlp then NONE else
+  let data = dest_RLPB dataRlp in
+  let accessListRlp = EL 8 ls in
+  if ¬is_RLPL accessListRlp then NONE else
+  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
+  of NONE => NONE |
+  SOME accessList =>
+  let authListRlp = EL 9 ls in
+  if ¬is_RLPL authListRlp then NONE else
+  (* authorization_list cannot be empty *)
+  if NULL (dest_RLPL authListRlp) then NONE else
+  case OPT_MMAP authorization_from_rlp (dest_RLPL authListRlp)
+  of NONE => NONE |
+  SOME authList =>
+  let yParity = EL 10 ls in
+  if ¬is_RLPB yParity then NONE else
+  let yParity = num_of_be_bytes $ dest_RLPB yParity in
+  let r = EL 11 ls in
+  if ¬is_RLPB r then NONE else
+  let r = num_of_be_bytes $ dest_RLPB r in
+  let s = EL 12 ls in
+  if ¬is_RLPB s then NONE else
+  let s = num_of_be_bytes $ dest_RLPB s in
+  let txLs = [
+    rlp_number 1; nonceRlp; maxPrioRlp; maxFeeRlp; gasRlp;
+    toRlp; valueRlp; dataRlp; accessListRlp; authListRlp ] in
+  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
+    4w :: rlp_encode (RLPL txLs) in
+  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+  SOME addr =>
+  SOME <|
+      from := addr
+    ; to := to
+    ; data := data
+    ; nonce := nonce
+    ; value := value
+    ; gasLimit := gas
+    ; gasPrice := effective_gas_price baseFee maxFee maxPrio
+    ; accessList := accessList
+    ; blobVersionedHashes := []
+    ; maxFeePerBlobGas := NONE
+    ; maxFeePerGas := SOME maxFee
+  |>
+End
+
+val transaction4_from_rlp_pre_def = transaction4_from_rlp_def
+  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
+            GSYM OPT_MMAP_authorization_from_rlp_eq]
+  |> cv_auto_trans_pre "transaction4_from_rlp_pre";
+
+Theorem transaction4_from_rlp_pre[cv_pre]:
+  transaction4_from_rlp_pre bf x
+Proof
+  rw[transaction4_from_rlp_pre_def]
+QED
+
 Definition transaction_from_rlp_def:
   transaction_from_rlp baseFee rlp =
   if is_RLPL rlp then
@@ -450,6 +587,9 @@ Definition transaction_from_rlp_def:
   else if HD bs = 3w then
     case rlp_decode (TL bs) of NONE => NONE |
     SOME rlp => transaction3_from_rlp baseFee rlp
+  else if HD bs = 4w then
+    case rlp_decode (TL bs) of NONE => NONE |
+    SOME rlp => transaction4_from_rlp baseFee rlp
   else NONE
 End
 
