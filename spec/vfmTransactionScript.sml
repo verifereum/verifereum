@@ -16,6 +16,17 @@ End
 val from_to_access_list_entry = from_to_thm_for “:access_list_entry”;
 
 Datatype:
+  authorization =
+  <| authority : address
+   ; delegate  : address
+   ; authChainId : num
+   ; authNonce : num
+   |>
+End
+
+val from_to_authorization = from_to_thm_for “:authorization”;
+
+Datatype:
   transaction =
   <| from       : address
    ; to         : address option
@@ -28,6 +39,7 @@ Datatype:
    ; blobVersionedHashes : bytes32 list
    ; maxFeePerBlobGas : num option
    ; maxFeePerGas : num option
+   ; authorizationList : authorization list
    |>
 End
 

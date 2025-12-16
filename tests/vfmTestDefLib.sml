@@ -8,6 +8,14 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   type access_list_entry = {address: string, storageKeys: string list}
   type access_list = access_list_entry list
 
+  type authorization_entry = {
+    chainId: string,
+    address: string,
+    nonce: string,
+    signer: string
+  }
+  type authorization_list = authorization_entry list
+
   type slot = {key: string, value: string}
   type storage = slot list
 
@@ -32,6 +40,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     value: string,
     data: string,
     accessList: access_list option,
+    authorizationList: authorization_list option,
     maxFeePerBlobGas: string option,
     blobVersionedHashes: string list option,
     v: string,
@@ -145,11 +154,21 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val accessListDecoder : access_list decoder = array accessListEntryDecoder
 
+  val authorizationEntryDecoder : authorization_entry decoder =
+    JSONDecode.map (fn (c,a,n,s) => {chainId=c, address=a, nonce=n, signer=s})
+      (tuple4 (field "chainId" string,
+               field "address" string,
+               field "nonce" string,
+               field "signer" string))
+
+  val authorizationListDecoder : authorization_list decoder =
+    array authorizationEntryDecoder
+
   val transactionDecoder : transaction decoder =
-    JSONDecode.map (fn ((n,p,i,f),(l,t,v,d),(a,b,h,(sv,sr,ss,sa)),(ty,ci,k)) =>
+    JSONDecode.map (fn ((n,p,i,f),(l,t,v,d),((a,al),(b,h),(sv,sr,ss,sa)),(ty,ci,k)) =>
       {nonce=n, gasPrice=p, maxPriorityFeePerGas=i, maxFeePerGas=f,
-       gasLimit=l, to=t, value=v, data=d, accessList=a, maxFeePerBlobGas=b,
-       r=sr, s=ss, v=sv,
+       gasLimit=l, to=t, value=v, data=d, accessList=a, authorizationList=al,
+       maxFeePerBlobGas=b, r=sr, s=ss, v=sv,
        blobVersionedHashes=h, sender=sa, secretKey=k, txtype=ty, chainId=ci})
     (tuple4 (tuple4 (field "nonce" string,
                      try (field "gasPrice" string),
@@ -159,9 +178,10 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                      field "to" string,
                      field "value" string,
                      field "data" string),
-             tuple4 (try (field "accessList" accessListDecoder),
-                     try (field "maxFeePerBlobGas" string),
-                     try (field "blobVersionedHashes" (array string)),
+             tuple3 (tuple2 (try (field "accessList" accessListDecoder),
+                             try (field "authorizationList" authorizationListDecoder)),
+                     tuple2 (try (field "maxFeePerBlobGas" string),
+                             try (field "blobVersionedHashes" (array string))),
                      tuple4 (field "v" string,
                              field "r" string,
                              field "s" string,
@@ -329,6 +349,22 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   fun mk_access_list_tm ls = mk_list(List.map mk_access_list_entry_tm ls,
                                      access_list_entry_ty)
 
+  val authorization_ty =
+    mk_thy_type{Thy="vfmTransaction",Tyop="authorization",Args=[]}
+
+  val empty_authorization_list_tm = mk_nil authorization_ty
+
+  fun mk_authorization_entry_tm ({chainId, address, nonce, signer}: authorization_entry) =
+    TypeBase.mk_record(authorization_ty, [
+      ("authority", address_from_hex signer),
+      ("delegate", address_from_hex address),
+      ("authChainId", num_from_hex chainId),
+      ("authNonce", num_from_hex nonce)
+    ])
+
+  fun mk_authorization_list_tm ls = mk_list(List.map mk_authorization_entry_tm ls,
+                                            authorization_ty)
+
 
 
   fun mk_transaction_tm baseFee_tm (tx: transaction) = let
@@ -361,6 +397,9 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                                         List.map bytes32_from_hex ls,
                                         bytes32_ty
                                       )
+    val authorizationList_tm = case #authorizationList tx of
+                                    NONE => empty_authorization_list_tm
+                                  | SOME ls => mk_authorization_list_tm ls
   in
     TypeBase.mk_record(transaction_ty, [
       ("to", to_tm),
@@ -373,7 +412,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("accessList", accessList_tm),
       ("blobVersionedHashes", blobVersionedHashes_tm),
       ("maxFeePerGas", maxFeePerGas_tm),
-      ("maxFeePerBlobGas", maxFeePerBlobGas_tm)
+      ("maxFeePerBlobGas", maxFeePerBlobGas_tm),
+      ("authorizationList", authorizationList_tm)
     ])
   end
 

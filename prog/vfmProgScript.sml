@@ -2677,7 +2677,8 @@ Theorem SPEC_Create:
          tx = <|from := p.callee; to := SOME addr; value := value;
                 gasLimit := cappedGas; data := []; nonce := 0; gasPrice := 0;
                 accessList := []; blobVersionedHashes := [];
-                maxFeePerGas := NONE; maxFeePerBlobGas := NONE|> ∧
+                maxFeePerGas := NONE; maxFeePerBlobGas := NONE;
+                authorizationList := []|> ∧
          (orig_rb = if NULL cs then cb else SND (LAST cs)) ∧
          orig = update_account addr empty_account_state orig_rb.accounts ∧
          caller = <|stack := DROP (if inst = Create2 then 4 else 3) ss;
@@ -2996,7 +2997,8 @@ Theorem SPEC_Call:
                 value := if call_inst = DelegateCall then p.value else value;
                 gasLimit := stipend; data := data; nonce := 0; gasPrice := 0;
                 accessList := []; blobVersionedHashes := [];
-                maxFeePerGas := NONE; maxFeePerBlobGas := NONE|> ∧
+                maxFeePerGas := NONE; maxFeePerBlobGas := NONE;
+                authorizationList := []|> ∧
          ¬fIN addr precompile_addresses ∧
          new_parsed = parse_code 0 FEMPTY toAccount.code ∧
          all_pcs = FDOM p.parsed ∪ FDOM new_parsed ∧

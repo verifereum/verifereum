@@ -232,6 +232,7 @@ Definition transaction1_from_rlp_def:
     ; blobVersionedHashes := []
     ; maxFeePerBlobGas := NONE
     ; maxFeePerGas := NONE
+    ; authorizationList := []
   |>
 End
 
@@ -307,6 +308,7 @@ Definition transaction2_from_rlp_def:
     ; blobVersionedHashes := []
     ; maxFeePerBlobGas := NONE
     ; maxFeePerGas := SOME maxFee
+    ; authorizationList := []
   |>
 End
 
@@ -391,6 +393,7 @@ Definition transaction3_from_rlp_def:
     ; blobVersionedHashes := blobHashes
     ; maxFeePerBlobGas := SOME maxBlobFee
     ; maxFeePerGas := SOME maxFee
+    ; authorizationList := []
   |>
 End
 
@@ -424,7 +427,11 @@ Definition authorization_from_rlp_def:
     5w :: rlp_encode (RLPL authLs) in
   case ecrecover hash (yParity + 27) r s of NONE => NONE |
   SOME authority =>
-  SOME (authority, address, chainId, nonce)
+  SOME <| authority := authority
+        ; delegate := address
+        ; authChainId := chainId
+        ; authNonce := nonce
+        |>
 End
 
 val authorization_from_rlp_pre_def =
@@ -527,6 +534,7 @@ Definition transaction4_from_rlp_def:
     ; blobVersionedHashes := []
     ; maxFeePerBlobGas := NONE
     ; maxFeePerGas := SOME maxFee
+    ; authorizationList := authList
   |>
 End
 
@@ -575,6 +583,7 @@ Definition transaction_from_rlp_def:
       ; blobVersionedHashes := []
       ; maxFeePerBlobGas := NONE
       ; maxFeePerGas := NONE
+      ; authorizationList := []
       |>
   else let bs = dest_RLPB rlp in
   if NULL bs then NONE else

@@ -1531,6 +1531,7 @@ Theorem step_create_lemma:
         ; nonce := 0; gasPrice := 0; accessList := []
         ; blobVersionedHashes := []
         ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+        ; authorizationList := []
       |>;
       rollback <- get_rollback;
       original <- get_original;

@@ -256,6 +256,7 @@ Definition deploy_tx_def:
   ; blobVersionedHashes := []
   ; maxFeePerBlobGas := NONE
   ; maxFeePerGas := NONE
+  ; authorizationList := []
   |>
 End
 
