@@ -124,10 +124,10 @@ Proof
 QED
 
 Theorem wf_context_apply_intrinsic_cost:
-  apply_intrinsic_cost a c = SOME c' ⇒
+  apply_intrinsic_cost a n c = SOME c' ⇒
   wf_context c' =
   (wf_context c ∧
-   c.gasUsed ≤ c.msgParams.gasLimit - intrinsic_cost a c.msgParams)
+   c.gasUsed ≤ c.msgParams.gasLimit - intrinsic_cost a n c.msgParams)
 Proof
   rw[apply_intrinsic_cost_def, wf_context_def] \\ rw[EQ_IMP_THM]
 QED

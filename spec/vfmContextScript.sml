@@ -287,7 +287,7 @@ Definition call_data_tokens_def:
 End
 
 Definition intrinsic_cost_def:
-  intrinsic_cost accessList p =
+  intrinsic_cost accessList authListLen p =
   let isCreate = is_code_dest p.outputTo in
   let data = if isCreate then p.code else p.data in
   let tokens = call_data_tokens data in
@@ -299,15 +299,16 @@ Definition intrinsic_cost_def:
        else 0)
     + access_list_address_cost * LENGTH accessList
     + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
+    + new_account_cost * authListLen
   in
   let floor_cost = base_cost + floor_call_data_cost * tokens in
   MAX standard_cost floor_cost
 End
 
 Definition apply_intrinsic_cost_def:
-  apply_intrinsic_cost accessList c =
+  apply_intrinsic_cost accessList authListLen c =
   let p = c.msgParams in
-  let k = intrinsic_cost accessList p in
+  let k = intrinsic_cost accessList authListLen p in
   let l = p.gasLimit in
   if l < k then NONE else SOME $
   c with msgParams updated_by (λp.
@@ -365,7 +366,8 @@ Definition initial_state_def:
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback accounts accesses in
     let ctxt = initial_context callee code static rd tx in
-    case apply_intrinsic_cost tx.accessList ctxt of NONE => NONE | SOME ctxt =>
+    let authListLen = LENGTH tx.authorizationList in
+    case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
     SOME $
     <| contexts := [(ctxt, rb)]
      ; txParams := initial_tx_params chainId prevHashes blk tx
