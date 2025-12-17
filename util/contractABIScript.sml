@@ -1257,6 +1257,43 @@ Proof
   \\ gvs[]
 QED
 
+(* Helper theorems for word_to_bytes operations *)
+Theorem TAKE_word_to_bytes_256:
+  TAKE 32 (word_to_bytes (w:256 word) be ++ rest) = word_to_bytes w be
+Proof
+  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
+  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[TAKE_LENGTH_APPEND]
+QED
+
+Theorem DROP_word_to_bytes_256:
+  DROP 32 (word_to_bytes (w:256 word) be ++ rest) = rest
+Proof
+  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
+  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[DROP_LENGTH_APPEND]
+QED
+
+Theorem int_bits_bound_256:
+  ∀i n. int_bits_bound i n ∧ n ≤ 256 ⇒
+        INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)
+Proof
+  simp[int_bits_bound_def]
+  \\ rpt gen_tac \\ strip_tac
+  \\ Cases_on`i` \\ gvs[int_calculate]
+  \\ qmatch_goalsub_rename_tac`i ≤ _`
+  \\ CCONTR_TAC \\ gvs[NOT_LESS_EQUAL]
+  \\ qmatch_asmsub_abbrev_tac`b < i`
+  \\ qmatch_asmsub_abbrev_tac`i < m`
+  \\ `b < m - 1` by simp[]
+  \\ pop_assum mp_tac
+  \\ simp_tac(srw_ss())[Abbr`m`, NOT_LESS, Abbr`b`]
+  >- gvs[PRE_SUB1]
+  \\ qmatch_goalsub_abbrev_tac`t + 1 ≤ m`
+  \\ `0 < t` by simp[Abbr`t`]
+  \\ `t ≤ m - 1` suffices_by rw[]
+  \\ simp_tac(srw_ss())[Abbr`m`,Abbr`t`]
+  \\ gvs[PRE_SUB1]
+QED
+
 (* Offset correctness: dynamic element's offset points to its tail *)
 Theorem offset_points_to_tail:
   ∀ts vs i.
@@ -1284,10 +1321,16 @@ Proof
     \\ `LENGTH (enc_heads ts t hl 0) = hl`
       by metis_tac[LENGTH_enc_heads]
     \\ simp[]
+    \\ simp[enc_tails_def]
+    \\ `MAP SUC (COUNT_LIST (LENGTH ts)) = DROP 1 (COUNT_LIST (SUC (LENGTH ts)))`
+      by rw[COUNT_LIST_def]
+    \\ pop_assum SUBST1_TAC
+    \\ AP_TERM_TAC
+    \\ rw[LIST_EQ_REWRITE, EL_MAP]
   )
   \\ (* Inductive case: i = SUC n *)
   first_x_assum $ qspecl_then[`t`, `n`] mp_tac
-  \\ impl_tac >- gvs[]
+  \\ impl_tac >- simp[has_type_def]
   \\ strip_tac
   \\ `COUNT_LIST (SUC n) = 0::MAP SUC (COUNT_LIST n)` by rw[COUNT_LIST_def]
   \\ simp[MAP_MAP_o, o_DEF, MAP, SUM]
@@ -1356,44 +1399,7 @@ Proof
       (λj. if is_dynamic (EL j ts) then enc (EL j ts) (EL j t) else [])`
     by rw[FUN_EQ_THM]
   \\ pop_assum SUBST_ALL_TAC
-  \\ simp[]
-QED
-
-(* Helper theorems for enc_valid proof *)
-Theorem TAKE_word_to_bytes_256:
-  TAKE 32 (word_to_bytes (w:256 word) be ++ rest) = word_to_bytes w be
-Proof
-  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
-  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[TAKE_LENGTH_APPEND]
-QED
-
-Theorem DROP_word_to_bytes_256:
-  DROP 32 (word_to_bytes (w:256 word) be ++ rest) = rest
-Proof
-  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
-  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[DROP_LENGTH_APPEND]
-QED
-
-Theorem int_bits_bound_256:
-  ∀i n. int_bits_bound i n ∧ n ≤ 256 ⇒
-        INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)
-Proof
-  simp[int_bits_bound_def]
-  \\ rpt gen_tac \\ strip_tac
-  \\ Cases_on`i` \\ gvs[int_calculate]
-  \\ qmatch_goalsub_rename_tac`i ≤ _`
-  \\ CCONTR_TAC \\ gvs[NOT_LESS_EQUAL]
-  \\ qmatch_asmsub_abbrev_tac`b < i`
-  \\ qmatch_asmsub_abbrev_tac`i < m`
-  \\ `b < m - 1` by simp[]
-  \\ pop_assum mp_tac
-  \\ simp_tac(srw_ss())[Abbr`m`, NOT_LESS, Abbr`b`]
-  >- gvs[PRE_SUB1]
-  \\ qmatch_goalsub_abbrev_tac`t + 1 ≤ m`
-  \\ `0 < t` by simp[Abbr`t`]
-  \\ `t ≤ m - 1` suffices_by rw[]
-  \\ simp_tac(srw_ss())[Abbr`m`,Abbr`t`]
-  \\ gvs[PRE_SUB1]
+  \\ fs[]
 QED
 
 (*
@@ -1663,8 +1669,8 @@ Proof
          Key helper: valid_enc_APPEND (currently cheated in this file)
       *)
       \\ sg `prefix_len + prefix_acc = SUM (MAP LENGTH rhds)`
-      >- cheat (* Prove with: simp[Abbr`prefix_len`, Abbr`prefix_acc`,
-                                   GSYM SUM_APPEND, GSYM MAP_APPEND, TAKE_DROP] *)
+      >- simp[Abbr`prefix_len`, Abbr`prefix_acc`, GSYM SUM_APPEND,
+              GSYM MAP_APPEND, TAKE_DROP]
       \\ cheat (* Main goal: compute DROP position, apply valid_enc_APPEND *)
       )
     \\ gvs[Abbr`tail`]
