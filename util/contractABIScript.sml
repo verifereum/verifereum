@@ -1,6 +1,6 @@
 Theory contractABI
 Ancestors
-  arithmetic bit byte list rich_list pair numposrep
+  arithmetic bit byte combin list rich_list pair numposrep
   integer words integer_word cv cv_std
   vfmTypes
 Libs
@@ -1166,6 +1166,199 @@ Proof
   Induct_on `n` \\ simp[valid_enc_def] \\ metis_tac[]
 QED
 
+(* Bridge lemma: tuple validation equals array validation for REPLICATE *)
+Theorem valid_enc_tuple_REPLICATE:
+  ∀n t bs hds.
+    valid_enc_tuple (REPLICATE n t) bs hds ⇔
+    valid_enc_array n (if is_dynamic t then NONE else SOME (static_length t)) t bs hds
+Proof
+  Induct_on `n`
+  >- rw[valid_enc_def]
+  \\ rw[valid_enc_def]
+  \\ Cases_on `is_dynamic t` \\ fs[valid_enc_def]
+QED
+
+(* Explicit structure definitions for enc_tuple - no accumulators *)
+Definition enc_heads_def:
+  enc_heads [] [] _ _ = [] ∧
+  enc_heads (t::ts) (v::vs) hl tl =
+    let head = if is_dynamic t
+               then word_to_bytes (n2w (hl + tl) : 256 word) T
+               else enc t v in
+    let tail_len = if is_dynamic t then LENGTH (enc t v) else 0 in
+    head ++ enc_heads ts vs hl (tl + tail_len)
+Termination
+  WF_REL_TAC `measure (λx. case x of (_, vs, _, _) => list_size abi_value_size vs)`
+End
+
+Definition enc_tails_def:
+  enc_tails [] [] = [] ∧
+  enc_tails (t::ts) (v::vs) =
+    (if is_dynamic t then enc t v else []) ++ enc_tails ts vs
+Termination
+  WF_REL_TAC `measure (λx. case x of (_, vs) => list_size abi_value_size vs)`
+End
+
+(* Generalized structure with accumulators *)
+Theorem enc_tuple_structure_general:
+  ∀ts vs hl tl rhds rtls.
+    has_types ts vs ⇒
+    enc_tuple hl tl ts vs rhds rtls =
+      FLAT (REVERSE rhds) ++ enc_heads ts vs hl tl ++
+      FLAT (REVERSE rtls) ++ enc_tails ts vs
+Proof
+  Induct \\ Cases_on `vs`
+  >- rw[enc_heads_def, enc_tails_def, REV_REVERSE_LEM]
+  >- rw[enc_heads_def, enc_tails_def, REV_REVERSE_LEM]
+  \\ rw[enc_heads_def, enc_tails_def]
+  \\ gs[has_types_LIST_REL]
+  \\ once_rewrite_tac[enc_def]
+  \\ simp[]
+  \\ qmatch_goalsub_abbrev_tac `enc_tuple hl tl' ts t hds' tls'`
+  \\ first_x_assum drule
+  \\ disch_then $ qspecl_then [`hl`, `tl'`, `hds'`, `tls'`] mp_tac
+  \\ rw[Abbr `hds'`, Abbr `tls'`, Abbr `tl'`, FLAT_APPEND]
+QED
+
+(* Structure theorem: enc_tuple with empty accumulators = heads ++ tails *)
+Theorem enc_tuple_structure:
+  ∀ts vs.
+    has_types ts vs ⇒
+    enc_tuple (head_lengths ts 0) 0 ts vs [] [] =
+      enc_heads ts vs (head_lengths ts 0) 0 ++ enc_tails ts vs
+Proof
+  rw[enc_tuple_structure_general]
+QED
+
+(* Helper: LENGTH of enc_heads equals sum of head sizes *)
+Theorem LENGTH_enc_heads:
+  ∀ts vs hl tl.
+    has_types ts vs ⇒
+    LENGTH (enc_heads ts vs hl tl) =
+    SUM (MAP (λt. if is_dynamic t then 32 else static_length t) ts)
+Proof
+  Induct \\ Cases_on`vs` \\ rw[enc_heads_def]
+  \\ gvs[has_types_LIST_REL]
+  \\ first_x_assum drule
+  \\ disch_then $ qspecl_then[`hl`, `tl`] assume_tac
+  \\ gvs[]
+  \\ Cases_on`is_dynamic h'` \\ gvs[]
+  \\ gvs[enc_has_static_length]
+QED
+
+(* Helper: head_lengths equals sum of head sizes *)
+Theorem head_lengths_eq_sum:
+  ∀ts a.
+    head_lengths ts a =
+    a + SUM (MAP (λt. if is_dynamic t then 32 else static_length t) ts)
+Proof
+  Induct \\ rw[head_lengths_def]
+  \\ first_x_assum $ qspec_then`a + (if is_dynamic h then 32 else static_length h)` assume_tac
+  \\ gvs[]
+QED
+
+(* Offset correctness: dynamic element's offset points to its tail *)
+Theorem offset_points_to_tail:
+  ∀ts vs i.
+    has_types ts vs ∧ i < LENGTH ts ∧ is_dynamic (EL i ts) ⇒
+    let result = enc_heads ts vs (head_lengths ts 0) 0 ++ enc_tails ts vs in
+    let head_pos = SUM (MAP (λj. if is_dynamic (EL j ts) then 32
+                                 else static_length (EL j ts)) (COUNT_LIST i)) in
+    let offset = w2n (word_of_bytes T (0w:256 word)
+                       (TAKE 32 (DROP head_pos (enc_heads ts vs (head_lengths ts 0) 0)))) in
+    DROP offset result = enc (EL i ts) (EL i vs) ++
+      FLAT (MAP (λj. if is_dynamic (EL j ts) then enc (EL j ts) (EL j vs) else [])
+                (DROP (i + 1) (COUNT_LIST (LENGTH ts))))
+Proof
+  Induct \\ Cases_on`vs` \\ rw[]
+  \\ gvs[has_type_def]
+  \\ Cases_on`i`
+  >- (
+    (* Base case: i = 0, first element is dynamic *)
+    gvs[COUNT_LIST_def, MAP, SUM, enc_heads_def, enc_tails_def]
+    \\ rw[TAKE_word_to_bytes_256, word_of_bytes_word_to_bytes]
+    \\ qabbrev_tac`hl = head_lengths ts 0`
+    \\ `hl = SUM (MAP (λt. if is_dynamic t then 32 else static_length t) ts)`
+      by (unabbrev_all_tac \\ rw[head_lengths_eq_sum])
+    \\ simp[DROP_APPEND]
+    \\ `LENGTH (enc_heads ts t hl 0) = hl`
+      by metis_tac[LENGTH_enc_heads]
+    \\ simp[]
+  )
+  \\ (* Inductive case: i = SUC n *)
+  first_x_assum $ qspecl_then[`t`, `n`] mp_tac
+  \\ impl_tac >- gvs[]
+  \\ strip_tac
+  \\ `COUNT_LIST (SUC n) = 0::MAP SUC (COUNT_LIST n)` by rw[COUNT_LIST_def]
+  \\ simp[MAP_MAP_o, o_DEF, MAP, SUM]
+  \\ `(λj. if is_dynamic (EL j (h::ts)) then 32 else static_length (EL j (h::ts))) ∘ SUC =
+      (λj. if is_dynamic (EL j ts) then 32 else static_length (EL j ts))`
+    by (rw[FUN_EQ_THM])
+  \\ pop_assum SUBST_ALL_TAC
+  \\ simp[]
+  \\ qabbrev_tac`head_size = if is_dynamic h then 32 else static_length h`
+  \\ qabbrev_tac`tail_size = if is_dynamic h then LENGTH (enc h h') else 0`
+  \\ qabbrev_tac`head_pos = SUM (MAP (λj. if is_dynamic (EL j ts) then 32
+                                          else static_length (EL j ts)) (COUNT_LIST n))`
+  \\ qabbrev_tac`hl = head_lengths (h::ts) 0`
+  \\ `hl = head_size + head_lengths ts 0`
+    by (unabbrev_all_tac \\ rw[head_lengths_def])
+  \\ simp[enc_heads_def]
+  \\ qabbrev_tac`head = if is_dynamic h then word_to_bytes (n2w (hl + 0):256 word) T
+                        else enc h h'`
+  \\ `LENGTH head = head_size`
+    by (
+      unabbrev_all_tac
+      \\ IF_CASES_TAC \\ gvs[LENGTH_word_to_bytes]
+      \\ Cases_on`h` \\ gvs[is_dynamic_def]
+      \\ gvs[enc_has_static_length]
+    )
+  \\ simp[DROP_APPEND, TAKE_APPEND]
+  \\ qabbrev_tac`result' = enc_heads ts t (head_lengths ts 0) 0 ++ enc_tails ts t`
+  \\ qabbrev_tac`offset = w2n (word_of_bytes T (0w:256 word)
+                               (TAKE 32 (DROP head_pos (enc_heads ts t (head_lengths ts 0) 0))))`
+  \\ `DROP offset result' = enc (EL n ts) (EL n t) ++
+                             FLAT (MAP (λj. if is_dynamic (EL j ts) then enc (EL j ts) (EL j t)
+                                        else [])
+                                   (DROP (n + 1) (COUNT_LIST (LENGTH ts))))`
+    by metis_tac[]
+  \\ simp[enc_tails_def]
+  \\ qabbrev_tac`this_tail = if is_dynamic h then enc h h' else []`
+  \\ `tail_size = LENGTH this_tail` by (unabbrev_all_tac \\ rw[])
+  \\ simp[DROP_APPEND]
+  \\ Cases_on`is_dynamic h` \\ gvs[]
+  >- (
+    (* h is dynamic *)
+    unabbrev_all_tac \\ gvs[]
+    \\ simp[word_of_bytes_word_to_bytes]
+    \\ `head_lengths ts 0 = SUM (MAP (λt. if is_dynamic t then 32 else static_length t) ts)`
+      by rw[head_lengths_eq_sum]
+    \\ `LENGTH (enc_heads ts t (head_lengths ts 0) 0) = head_lengths ts 0`
+      by metis_tac[LENGTH_enc_heads]
+    \\ simp[DROP_APPEND]
+    \\ `COUNT_LIST (LENGTH (h::ts)) = 0::MAP SUC (COUNT_LIST (LENGTH ts))`
+      by rw[COUNT_LIST_def]
+    \\ simp[DROP_def, MAP_MAP_o, o_DEF]
+    \\ `(λj. if is_dynamic (EL j (h::ts)) then enc (EL j (h::ts)) (EL j (h'::t))
+             else []) ∘ SUC =
+        (λj. if is_dynamic (EL j ts) then enc (EL j ts) (EL j t) else [])`
+      by rw[FUN_EQ_THM]
+    \\ pop_assum SUBST_ALL_TAC
+    \\ simp[]
+  )
+  \\ (* h is static *)
+  unabbrev_all_tac \\ gvs[]
+  \\ `COUNT_LIST (LENGTH (h::ts)) = 0::MAP SUC (COUNT_LIST (LENGTH ts))`
+    by rw[COUNT_LIST_def]
+  \\ simp[DROP_def, MAP_MAP_o, o_DEF]
+  \\ `(λj. if is_dynamic (EL j (h::ts)) then enc (EL j (h::ts)) (EL j (h'::t))
+           else []) ∘ SUC =
+      (λj. if is_dynamic (EL j ts) then enc (EL j ts) (EL j t) else [])`
+    by rw[FUN_EQ_THM]
+  \\ pop_assum SUBST_ALL_TAC
+  \\ simp[]
+QED
+
 (* Helper theorems for enc_valid proof *)
 Theorem TAKE_word_to_bytes_256:
   TAKE 32 (word_to_bytes (w:256 word) be ++ rest) = word_to_bytes w be
@@ -1254,35 +1447,21 @@ QED
     * First conjunct gives valid_enc t (enc t v)
 *)
 
-(* Helper lemmas for enc_valid - cheated for now *)
-
-(* valid_enc only examines a prefix of its input.
-
-   Why this should be provable:
-   valid_enc is defined by structural recursion on the type and the bytestring.
-   For each type, it reads a fixed amount of data (determined by the type structure)
-   and doesn't care about any trailing bytes. For example:
-   - Uint n reads 32 bytes
-   - Tuple ts reads head_lengths ts bytes of heads + accumulated tails
-   - Array NONE t reads 32 bytes for length + the array contents
-
-   The key insight is that valid_enc always terminates after reading a bounded
-   prefix, so appending arbitrary bytes at the end cannot affect validity.
-
-   Proof approach: By mutual induction on valid_enc/valid_enc_array/valid_enc_tuple.
-   Each case shows the recursive calls only examine prefixes, and appending
-   rest/rest1/rest2 doesn't affect the validity check.
-*)
-Theorem valid_enc_APPEND:
-  (∀t bs rest. valid_enc t bs ⇒ valid_enc t (bs ++ rest)) ∧
-  (∀n lt t bs hds rest1 rest2.
-     valid_enc_array n lt t bs hds ⇒
-     valid_enc_array n lt t (bs ++ rest1) (hds ++ rest2)) ∧
-  (∀ts bs hds rest1 rest2.
-     valid_enc_tuple ts bs hds ⇒
-     valid_enc_tuple ts (bs ++ rest1) (hds ++ rest2))
+Theorem valid_enc_append:
+  (∀t bs extra. valid_enc t bs ⇒ valid_enc t (bs ++ extra)) ∧
+  (∀n lt t bs hds extra. valid_enc_array n lt t bs hds ⇒ valid_enc_array n lt t (bs ++ extra) hds) ∧
+  (∀ts bs hds extra. valid_enc_tuple ts bs hds ⇒ valid_enc_tuple ts (bs ++ extra) hds)
 Proof
-  cheat
+  ho_match_mp_tac valid_enc_ind
+  \\ rw[valid_enc_def]
+  \\ gvs[TAKE_APPEND, DROP_APPEND, TAKE_LENGTH_TOO_LONG, DROP_LENGTH_TOO_LONG]
+  (* The proof works because:
+     1. TAKE operations on bs++extra give same result as TAKE on bs (when within bounds)
+     2. DROP operations distribute: DROP n (bs++extra) = DROP n bs ++ extra
+     3. IHs apply to the DROP'd portions
+     4. For EVERY checks, TAKE pn (DROP 32 bs ++ extra) works correctly by case split *)
+  \\ TRY (Cases_on `pn ≤ LENGTH bs` \\ gvs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG])
+  \\ TRY (first_x_assum $ qspec_then `extra` mp_tac \\ simp[])
 QED
 
 Theorem enc_valid:
@@ -1560,22 +1739,7 @@ Proof
     \\ simp[SIMP_RULE std_ss [] head_lengths_REPLICATE])
   \\ gvs[Abbr`hlt`]
   \\ gvs[LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE]
-  (* CHEAT 2: REPLICATE case (Array with fixed-size element type)
-     Goal: valid_enc t (DROP (prefix_len + (hl + tl) MOD 2^256) ls)
-     Where:
-       - prefix_len = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds))
-       - hl = 32 * m + (SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds)) + 32)
-       - ls = FLAT (REVERSE rhds) ++ offset_bytes ++ inner_heads
-              ++ FLAT (REVERSE rtls) ++ tail ++ inner_tails
-     Strategy:
-       1. Show (hl + tl) MOD 2^256 = hl + tl (no overflow)
-          This requires proving hl + tl < 2^256, which should follow from
-          has_type bounds on encoding lengths.
-       2. Compute the DROP position to show it lands at tail
-       3. Apply valid_enc_APPEND with valid_enc t tail
-     Key helper: valid_enc_APPEND (currently cheated)
-  *)
-  \\ cheat
+  \\ metis_tac[valid_enc_tuple_REPLICATE]
 QED
 
 (*
