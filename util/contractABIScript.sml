@@ -1294,6 +1294,26 @@ Proof
   \\ gvs[PRE_SUB1]
 QED
 
+(* Helper: enc_tails equals FLAT MAP *)
+Theorem enc_tails_FLAT:
+  ∀ts vs.
+    has_types ts vs ⇒
+    enc_tails ts vs =
+    FLAT (MAP (λj. if is_dynamic (EL j ts) then enc (EL j ts) (EL j vs) else [])
+              (COUNT_LIST (LENGTH ts)))
+Proof
+  Induct \\ Cases_on`vs` \\ rw[enc_tails_def, COUNT_LIST_def, MAP, FLAT]
+  \\ gvs[has_type_def]
+  \\ `COUNT_LIST (SUC (LENGTH ts)) = 0::MAP SUC (COUNT_LIST (LENGTH ts))`
+    by rw[COUNT_LIST_def]
+  \\ simp[MAP_MAP_o, o_DEF, FLAT]
+  \\ `(λj. if is_dynamic (EL j (h::ts)) then enc (EL j (h::ts)) (EL j (h'::t))
+           else []) ∘ SUC =
+      (λj. if is_dynamic (EL j ts) then enc (EL j ts) (EL j t) else [])`
+    by rw[FUN_EQ_THM]
+  \\ simp[]
+QED
+
 (* Offset correctness: dynamic element's offset points to its tail *)
 Theorem offset_points_to_tail:
   ∀ts vs i.
