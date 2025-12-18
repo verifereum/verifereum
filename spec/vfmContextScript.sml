@@ -301,13 +301,13 @@ Definition process_authorization_def:
     let authNonce = auth.authNonce in
     if authChainId ≠ 0 ∧ authChainId ≠ chainId then (accs, accesses, refund) else
     if authNonce ≥ 2 ** 64 - 1 then (accs, accesses, refund) else
+    let newAccesses = accesses with addresses updated_by (λa. fINSERT authority a) in
     let acc = lookup_account authority accs in
-    if ¬NULL acc.code ∧ ¬is_delegation acc.code then (accs, accesses, refund) else
-    if acc.nonce ≠ authNonce then (accs, accesses, refund) else
+    if ¬NULL acc.code ∧ ¬is_delegation acc.code then (accs, newAccesses, refund) else
+    if acc.nonce ≠ authNonce then (accs, newAccesses, refund) else
     let newCode = if delegate = 0w then [] else make_delegation delegate in
     let newAcc = acc with <| code := newCode; nonce := SUC acc.nonce |> in
     let newAccs = update_account authority newAcc accs in
-    let newAccesses = accesses with addresses updated_by (λa. fINSERT authority a) in
     let newRefund = if account_empty acc then refund
                     else refund + (new_account_cost - per_auth_base_cost) in
     (newAccs, newAccesses, newRefund)
