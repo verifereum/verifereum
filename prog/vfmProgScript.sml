@@ -3046,9 +3046,14 @@ Theorem SPEC_Call:
          vCost = (if 0 < value then call_value_cost else 0) ∧
          cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
                   then new_account_cost else 0) ∧
+         delegate_check toAccount.code
+           (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
+         calleeCode = (case get_delegate toAccount.code of
+                         NONE => toAccount.code
+                       | SOME del => (lookup_account del rb.accounts).code) ∧
          mCost = memory_cost m offset sz ∧
          call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost) = (dynamicGas, stipend) ∧
+           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, stipend) ∧
          gasCost = static_gas call_inst + dynamicGas + mCost ∧
          g + gasCost ≤ p.gasLimit ∧
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
@@ -3067,14 +3072,14 @@ Theorem SPEC_Call:
                 maxFeePerGas := NONE; maxFeePerBlobGas := NONE;
                 authorizationList := []|> ∧
          ¬fIN addr precompile_addresses ∧
-         new_parsed = parse_code 0 FEMPTY toAccount.code ∧
+         new_parsed = parse_code 0 FEMPTY calleeCode ∧
          all_pcs = FDOM p.parsed ∪ FDOM new_parsed ∧
          caller = <|stack := DROP (6 + vOff) ss; memory := em; pc := pc; jumpDest := j;
                     returnData := []; gasUsed := g + gasCost; addRefund := ar;
                     subRefund := sr; logs := l; msgParams := p|>))
   {}
   (evm_Stack [] * evm_PC 0 * evm_GasUsed 0 *
-   evm_MsgParams (initial_msg_params callee toAccount.code
+   evm_MsgParams (initial_msg_params callee calleeCode
                   (call_inst = StaticCall ∨ p.static)
                   (Memory <|offset := retOffset; size := retSize|>) tx) *
    evm_Memory [] *
@@ -3083,12 +3088,12 @@ Theorem SPEC_Call:
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
    evm_hide_Parsed (all_pcs DIFF FDOM new_parsed) *
    evm_Contexts ((caller,cb) :: cs) *
-   evm_CachedRB (accesses_add addr rb) *
-   evm_Rollback (accesses_add addr rb with accounts updated_by
+   evm_CachedRB newRb *
+   evm_Rollback (newRb with accounts updated_by
                  (if call_inst ≠ CallCode ∧ 0 < value
                   then transfer_value p.callee addr value
                   else I)) *
-   evm_Msdomain (msdomain_add addr d) *
+   evm_Msdomain newDom *
    evm_Exception (INL ()) *
    evm_ReturnData [])
 Proof
@@ -3119,13 +3124,35 @@ Proof
        qpat_x_assum`is_call __`mp_tac \\
        Cases_on`call_inst` \\ simp[step_inst_def, is_call_def]
        \\ fs[])
-  \\ `g + dynamicGas + mCost + static_gas call_inst ≤ p.gasLimit` by gvs[Abbr`gasCost`]
+  \\ `g + dynamicGas + mCost + static_gas call_inst ≤ p.gasLimit`
+     by gvs[Abbr`gasCost`]
   \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, HD_TAKE, get_gas_left_def]
+         access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
+         CaseEq"prod", sum_CASE_rator, prod_CASE_rator]
   \\ qpat_x_assum`step_inst _ = _`kall_tac
+  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (gdr,gds)`
+  \\ reverse $ Cases_on`gdr` \\ gvs[]
+  >- gvs[CaseEq"prod",CaseEq"sum",CaseEq"option",delegate_check_def,
+         access_address_split]
+  \\ qmatch_asmsub_abbrev_tac`access_address _ s4`
+  \\ sg `gds.contexts = s4.contexts`
+  >- (
+    qpat_x_assum`_ gds = _`kall_tac
+    \\ gvs[CaseEq"option"]
+    \\ qpat_x_assum`_ (access_address _ _) _ = _`mp_tac
+    \\ CASE_TAC \\ CASE_TAC
+    \\ drule access_address_contexts_unchanged
+    \\ rw[] \\ rw[] )
+  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (INL gdr,_)`
+  \\ PairCases_on`gdr`
+  \\ gvs[get_current_context_def,bind_def,Abbr`s4`,return_def]
+  \\ sg `dCost = gdr1`
+  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
+  \\ gvs[get_current_context_def,return_def,bind_def,assert_def,
+         set_current_context_def]
   \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
   \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
   >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
@@ -3149,6 +3176,9 @@ Proof
          get_caller_def,bind_def,ignore_bind_def,get_current_context_def,
          get_value_def,get_static_def,push_context_def]
   \\ pop_assum kall_tac
+  \\ sg `gdr0 = calleeCode`
+  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
+  \\ gvs[]
   \\ conj_tac >- gvs[Abbr`em`, expanded_memory_def, memory_expand_by_def]
   \\ gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,initial_msg_params_def,
          TO_FLOOKUP]
@@ -3158,6 +3188,8 @@ Proof
        simp[Abbr`caller`,Abbr`em`, expanded_memory_def, memory_expand_by_def,
             context_component_equality,Abbr`gasCost`]
   \\ gvs[EMPTY_evm2set]
+  \\ conj_tac >- gvs[CaseEq"option",access_address_split,delegate_check_def]
+  \\ conj_tac >- gvs[CaseEq"option",access_address_split,delegate_check_def]
   \\ conj_tac >-
       (qpat_x_assum ‘_ = {}’ mp_tac
        \\ fs [EXTENSION]
@@ -3171,6 +3203,7 @@ Proof
   \\ simp[]
   \\ gvs[TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
   \\ simp[initial_msg_params_def]
+  \\ gvs[CaseEq"option",access_address_split,delegate_check_def]
   \\ metis_tac[]
 QED
 
