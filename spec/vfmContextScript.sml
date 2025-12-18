@@ -403,7 +403,11 @@ End
 Definition code_from_tx_def:
   code_from_tx a t =
   case t.to of
-    SOME addr => (lookup_account addr a).code
+    SOME addr =>
+      let code = (lookup_account addr a).code in
+      (case get_delegate code of
+         NONE => code
+       | SOME delegate => (lookup_account delegate a).code)
   | NONE => t.data
 End
 
