@@ -1772,16 +1772,23 @@ Definition run_transaction_def:
 End
 
 Definition update_beacon_block_def:
-  update_beacon_block b (accounts: evm_accounts) =
-  let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
+  update_beacon_block prevHashes b (accounts: evm_accounts) =
+  let beacon_addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
   let buffer_length = 8191n in
   let timestamp_idx = b.timeStamp MOD buffer_length in
   let root_idx = timestamp_idx + buffer_length in
-  let a = lookup_account addr accounts in
+  let a = lookup_account beacon_addr accounts in
   let s0 = a.storage in
   let s1 = update_storage (n2w timestamp_idx) (n2w b.timeStamp) s0 in
   let s2 = update_storage (n2w root_idx) (b.parentBeaconBlockRoot) s1 in
-  update_account addr (a with storage := s2) accounts
+  let accounts1 = update_account beacon_addr (a with storage := s2) accounts in
+  if b.number = 0 ∨ prevHashes = [] then accounts1 else
+  let blockhash_addr = 0x0000F90827F1C53a10cb7A02335B175320002935w in
+  let slot = (b.number - 1) MOD buffer_length in
+  let parent_hash = HD prevHashes in
+  let a2 = lookup_account blockhash_addr accounts1 in
+  let s3 = update_storage (n2w slot) parent_hash a2.storage in
+  update_account blockhash_addr (a2 with storage := s3) accounts1
 End
 
 Definition process_withdrawal_def:
@@ -1827,7 +1834,7 @@ Definition run_block_def:
          OPTION_BIND x (λ(ls, a, dom).
            OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
            run_transaction dom F chainId prevHashes b a tx))
-      (SOME ([], update_beacon_block b accounts, dom))
+      (SOME ([], update_beacon_block prevHashes b accounts, dom))
       b.transactions )
   (λ(r, a, d).
     if block_invalid parent r b then NONE
