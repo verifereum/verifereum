@@ -1005,6 +1005,7 @@ Theorem step_call_computes_minimal_domain[simp]:
   computes_minimal_domain (step_call x)
 Proof
   rw[step_call_def, UNCURRY] \\ tac
+  \\ TRY CASE_TAC \\ rw[UNCURRY] \\ tac
 QED
 
 Theorem step_return_computes_minimal_domain[simp]:

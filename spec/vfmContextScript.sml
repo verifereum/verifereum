@@ -268,6 +268,58 @@ Definition precompile_addresses_def:
   fset_ABS (GENLIST (n2w o SUC) 10)
 End
 
+Definition delegation_prefix_def:
+  delegation_prefix : byte list = [0xEFw; 0x01w; 0x00w]
+End
+
+Definition is_delegation_def:
+  is_delegation (code : byte list) ⇔
+    LENGTH code = 23 ∧ TAKE 3 code = delegation_prefix
+End
+
+Definition make_delegation_def:
+  make_delegation (addr : address) : byte list =
+    delegation_prefix ++ word_to_bytes addr T
+End
+
+Definition get_delegate_def:
+  get_delegate (code : byte list) : address option =
+    if is_delegation code
+    then SOME (word_of_bytes T 0w (DROP 3 code))
+    else NONE
+End
+
+Definition per_auth_base_cost_def:
+  per_auth_base_cost = 12500n
+End
+
+Definition process_authorization_def:
+  process_authorization chainId (auth: authorization) (accs, accesses: access_sets, refund) =
+    let authority = auth.authority in
+    let delegate = auth.delegate in
+    let authChainId = auth.authChainId in
+    let authNonce = auth.authNonce in
+    if authChainId ≠ 0 ∧ authChainId ≠ chainId then (accs, accesses, refund) else
+    if authNonce ≥ 2 ** 64 - 1 then (accs, accesses, refund) else
+    let acc = lookup_account authority accs in
+    if ¬NULL acc.code ∧ ¬is_delegation acc.code then (accs, accesses, refund) else
+    if acc.nonce ≠ authNonce then (accs, accesses, refund) else
+    let newCode = if delegate = 0w then [] else make_delegation delegate in
+    let newAcc = acc with <| code := newCode; nonce := SUC acc.nonce |> in
+    let newAccs = update_account authority newAcc accs in
+    let newAccesses = accesses with addresses updated_by (λa. fINSERT authority a) in
+    let newRefund = if account_empty acc then refund
+                    else refund + (new_account_cost - per_auth_base_cost) in
+    (newAccs, newAccesses, newRefund)
+End
+
+Definition process_authorizations_def:
+  process_authorizations chainId [] accs accesses refund = (accs, accesses, refund) ∧
+  process_authorizations chainId (auth::auths) accs accesses refund =
+    let (accs', accesses', refund') = process_authorization chainId auth (accs, accesses, refund) in
+    process_authorizations chainId auths accs' accesses' refund'
+End
+
 Definition initial_access_sets_def:
   initial_access_sets coinBase callee t : access_sets =
   <| addresses   :=
@@ -361,13 +413,16 @@ Definition initial_state_def:
          accs (base_fee_per_blob_gas blk.excessBlobGas) tx
   of NONE => NONE | SOME accounts =>
     let callee = callee_from_tx_to tx.from tx.nonce tx.to in
-    let accesses = initial_access_sets blk.coinBase callee tx in
-    let code = code_from_tx accs tx in
+    let baseAccesses = initial_access_sets blk.coinBase callee tx in
+    let (postAuthAccounts, accesses, authRefund) =
+          process_authorizations chainId tx.authorizationList accounts baseAccesses 0 in
+    let code = code_from_tx postAuthAccounts tx in
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
-    let rb = initial_rollback accounts accesses in
+    let rb = initial_rollback postAuthAccounts accesses in
     let ctxt = initial_context callee code static rd tx in
     let authListLen = LENGTH tx.authorizationList in
     case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
+    let ctxt = ctxt with addRefund updated_by (λr. r + authRefund) in
     SOME $
     <| contexts := [(ctxt, rb)]
      ; txParams := initial_tx_params chainId prevHashes blk tx

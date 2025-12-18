@@ -3,7 +3,7 @@ Ancestors
   combin pair list finite_map
   vfmConstants vfmOperation vfmState vfmContext vfmExecution
 Libs
-  BasicProvers
+  BasicProvers wordsLib
 
 Theorem FLOOKUP_parse_code_SOME_less_LENGTH:
   ∀pc fm code x i.
@@ -132,21 +132,66 @@ Proof
   rw[apply_intrinsic_cost_def, wf_context_def] \\ rw[EQ_IMP_THM]
 QED
 
+Theorem wf_context_with_addRefund[simp]:
+  wf_context (ctxt with addRefund updated_by f) = wf_context ctxt
+Proof
+  rw[wf_context_def]
+QED
+
+Theorem LENGTH_make_delegation[simp]:
+  LENGTH (make_delegation x) = 23
+Proof
+  rw[make_delegation_def, delegation_prefix_def]
+QED
+
+Theorem wf_accounts_process_authorizations:
+  ∀chainId authList a accesses r x y z.
+    wf_accounts a ∧ process_authorizations chainId authList a accesses r = (x,y,z) ⇒
+    wf_accounts x
+Proof
+  Induct_on `authList` \\ rw[process_authorizations_def] \\ simp[]
+  \\ pop_assum mp_tac
+  \\ CONV_TAC(PATH_CONV"lrlr"(ONCE_REWRITE_CONV[GSYM LET_THM]))
+  \\ LET_ELIM_TAC
+  \\ first_x_assum irule
+  \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
+  \\ gvs[process_authorization_def]
+  \\ gvs[wf_accounts_def, wf_account_state_def, CaseEq"bool",
+         update_account_def, APPLY_UPDATE_THM, lookup_account_def]
+  \\ rw[]
+QED
+
+Theorem wf_accounts_pre_transaction_updates:
+  wf_accounts a ∧ pre_transaction_updates a b c = SOME e ⇒
+  wf_accounts e
+Proof
+  rw[pre_transaction_updates_def, update_account_def,
+     lookup_account_def, APPLY_UPDATE_THM, wf_accounts_def,
+     wf_account_state_def]
+  \\ gvs[APPLY_UPDATE_THM] \\ rw[]
+QED
+
 Theorem wf_initial_state:
   wf_accounts a ∧ initial_state d st c h b a t = SOME s
   ⇒
   wf_state s
 Proof
-  rw[wf_accounts_def, wf_state_def, initial_state_def,
-     pre_transaction_updates_def, update_account_def,
-     initial_rollback_def, code_from_tx_def, lookup_account_def,
-     wf_context_apply_intrinsic_cost, all_accounts_def] \\ rw[]
-  \\ gs[wf_account_state_def, combinTheory.APPLY_UPDATE_THM, CaseEq"option"]
-  \\ rw[wf_context_apply_intrinsic_cost]
-  \\ rw[apply_intrinsic_cost_def]
-  \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
-  \\ gs[wf_account_state_def]
-  \\ drule wf_context_apply_intrinsic_cost \\ rw[]
+  strip_tac
+  \\ gvs[initial_state_def, CaseEq"option"]
+  \\ pop_assum mp_tac
+  \\ CONV_TAC(PATH_CONV"lrlr"(ONCE_REWRITE_CONV[GSYM LET_THM]))
+  \\ LET_ELIM_TAC
+  \\ gvs[CaseEq"option"]
+  \\ simp[wf_state_def]
+  \\ simp[all_accounts_def]
+  \\ conj_tac
+  >- ( drule wf_context_apply_intrinsic_cost \\ simp[] )
+  \\ simp[initial_rollback_def]
+  \\ irule wf_accounts_process_authorizations
+  \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
+  \\ irule wf_accounts_pre_transaction_updates
+  \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
+  \\ rw[]
 QED
 
 Theorem SND_return[simp]:
@@ -952,8 +997,8 @@ QED
 Theorem preserves_wf_accounts_step_call[simp]:
   preserves_wf_accounts (step_call x)
 Proof
-  rw[step_call_def, UNCURRY] >> tac
-  \\ rw[proceed_call_def] >> tac
+  rw[step_call_def, UNCURRY, get_delegate_def, is_delegation_def] >> tac
+  >> rw[proceed_call_def] >> tac
 QED
 
 Definition preserves_wf_accounts_pred_def:
@@ -1972,9 +2017,8 @@ Theorem limits_num_contexts_step_call:
   limits_num_contexts n (MIN (SUC n) (context_limit + 2)) (step_call x)
 Proof
   strip_tac
-  \\ gs[step_call_def, UNCURRY]
+  \\ gs[step_call_def, UNCURRY, get_delegate_def, is_delegation_def]
   \\ qpat_abbrev_tac`b1 = COND _ _ _`
-  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
@@ -1983,12 +2027,23 @@ Proof
   \\ qpat_abbrev_tac`b3 = COND _ _ _`
   \\ qpat_abbrev_tac`b4 = COND _ _ _`
   \\ qpat_abbrev_tac`b5 = COND _ _ _`
-  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ qpat_abbrev_tac`b6 = COND _ _ _`
-  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[Abbr`b5`]
-  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n`
+  \\ reverse conj_tac
+  >- (
+    rw[]
+    \\ CASE_TAC \\ simp[]
+    \\ irule limits_num_contexts_bind
+    \\ qexists_tac`n` \\ simp[] )
+  \\ Cases \\ simp[]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[Abbr`b6`]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ reverse conj_tac >- rw[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ rw[]
+  >- ( irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[] )
   >- ( irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[] )
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[]
   \\ irule limits_num_contexts_check \\ simp[]

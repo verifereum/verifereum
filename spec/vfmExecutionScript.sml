@@ -116,10 +116,6 @@ Definition account_already_created_def:
     ¬(a.nonce = 0 ∧ NULL a.code ∧ storage_empty a.storage)
 End
 
-Definition account_empty_def:
-  account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
-End
-
 Definition memory_cost_def:
   memory_cost byteSize =
   let wordSize = word_size byteSize in
@@ -1435,11 +1431,17 @@ Definition step_call_def:
     positiveValueCost <<- if 0 < value then call_value_cost else 0;
     accounts <- get_accounts;
     toAccount <<- lookup_account address accounts;
+    (code, delegateCost) <- case get_delegate toAccount.code of
+               NONE => return (toAccount.code, 0)
+             | SOME delegate => do
+                 cost <- access_address delegate;
+                 return ((lookup_account delegate accounts).code, cost)
+               od;
     createCost <<- if op = Call ∧ 0 < value ∧ account_empty toAccount
                    then new_account_cost else 0;
     gasLeft <- get_gas_left;
     (dynamicGas, stipend) <<- call_gas value gas gasLeft mx.cost $
-                                accessCost + positiveValueCost + createCost;
+                                accessCost + positiveValueCost + createCost + delegateCost;
     consume_gas $ static_gas op + dynamicGas + mx.cost;
     if op = Call ∧ 0 < value then assert_not_static else return ();
     expand_memory mx.expand_by;
@@ -1452,7 +1454,7 @@ Definition step_call_def:
       if sucDepth > 1024
       then abort_unuse stipend
       else proceed_call op sender address value
-             argsOffset argsSize toAccount.code stipend
+             argsOffset argsSize code stipend
              (Memory <| offset := retOffset; size := retSize |>)
     od
   od
