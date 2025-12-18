@@ -952,7 +952,14 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-val () = update_beacon_block_def |> cv_auto_trans;
+val update_beacon_block_pre_def =
+  cv_auto_trans_pre "update_beacon_block_pre" update_beacon_block_def;
+
+Theorem update_beacon_block_pre[cv_pre]:
+  update_beacon_block_pre prevHashes b accounts
+Proof
+  rw[update_beacon_block_pre_def]
+QED
 
 val () = cv_auto_trans empty_return_destination_def;
 
@@ -985,7 +992,7 @@ Theorem run_block_eq:
   run_block d chainId h p a b =
   case
     run_transactions d F chainId h b
-      (update_beacon_block b a) [] b.transactions
+      (update_beacon_block h b a) [] b.transactions
   of NONE => NONE
    | SOME (r, a, d) =>
      (if block_invalid p r b then NONE else
@@ -996,7 +1003,7 @@ Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
   \\ qspec_tac(`b.withdrawals`,`ws`)
-  \\ qspec_tac(`update_beacon_block b a`,`blk`)
+  \\ qspec_tac(`update_beacon_block h b a`,`blk`)
   \\ qid_spec_tac`d`
   \\ simp_tac std_ss
        [Once (Q.prove(`[]:transaction_result list = REVERSE []`, simp[])), SimpRHS]
