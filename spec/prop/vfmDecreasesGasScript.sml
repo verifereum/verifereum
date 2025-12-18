@@ -1052,6 +1052,16 @@ Proof
   \\ qpat_abbrev_tac `v5 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_right
   \\ irule_at Any decreases_gas_imp
+  \\ simp[FORALL_PROD]
+  \\ qexists_tac`F`
+  \\ conj_tac
+  >- (
+    rw[get_delegate_def]
+    \\ irule_at Any decreases_gas_bind_false
+    \\ rw[] )
+  \\ rpt gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_right
+  \\ irule_at Any decreases_gas_imp
   \\ irule_at Any decreases_gas_get_gas_left \\ rw []
   \\ qmatch_goalsub_abbrev_tac `call_gas v3 g l m e`
   \\ Cases_on `call_gas v3 g l m e` \\ rw []

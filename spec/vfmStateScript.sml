@@ -219,6 +219,10 @@ Definition empty_account_state_def:
      |>
 End
 
+Definition account_empty_def:
+  account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
+End
+
 Type evm_accounts = “:address -> account_state”
 
 Definition lookup_account_def:

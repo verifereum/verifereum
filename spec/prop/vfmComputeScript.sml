@@ -694,7 +694,8 @@ fun mconv def =
     LET_RATOR,
     LET_PROD_RATOR,
     option_CASE_rator,
-    LET_UNCURRY
+    prod_CASE_rator,
+    LET_UNCURRY, UNCURRY
 ];
 
 fun trans_step_x need_pre def = let
@@ -965,7 +966,7 @@ Proof
   rw[run_create_pre_def, initial_state_def,
      pre_transaction_updates_def, execution_state_component_equality,
      initial_rollback_def, code_from_tx_def, set_last_accounts_pre_def]
-  \\ strip_tac \\ gvs[CaseEq"option"]
+  \\ strip_tac \\ gvs[CaseEq"option", UNCURRY]
 QED
 
 val () = run_transaction_def |> cv_auto_trans;
