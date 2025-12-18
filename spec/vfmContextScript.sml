@@ -388,7 +388,7 @@ Definition pre_transaction_updates_def:
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
-  if ¬NULL sender.code then NONE else
+  if ¬NULL sender.code ∧ ¬is_delegation sender.code then NONE else
   let fee = t.gasLimit * t.gasPrice +
             total_blob_gas t * blobBaseFee in
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
