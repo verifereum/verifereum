@@ -137,3 +137,31 @@ End
 Definition versioned_hash_version_kzg_def:
   versioned_hash_version_kzg: byte = 1w
 End
+
+Definition deposit_contract_address_def:
+  deposit_contract_address : address =
+    0x00000000219ab540356cBB839Cbe05303d7705Faw
+End
+
+Definition deposit_event_topic_def:
+  deposit_event_topic : bytes32 =
+    0x649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5w
+End
+
+Definition withdrawal_request_contract_def:
+  withdrawal_request_contract : address =
+    0x00000961Ef480Eb55e80D19ad83579A64c007002w
+End
+
+Definition consolidation_request_contract_def:
+  consolidation_request_contract : address =
+    0x0000BBdDc7CE488642fb579F8B00f3a590007251w
+End
+
+Definition max_withdrawal_requests_per_block_def:
+  max_withdrawal_requests_per_block = 16n
+End
+
+Definition max_consolidation_requests_per_block_def:
+  max_consolidation_requests_per_block = 2n
+End

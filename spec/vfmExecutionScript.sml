@@ -1814,16 +1814,134 @@ Definition process_withdrawals_def:
     (process_withdrawals ws)
 End
 
+Definition is_deposit_event_def:
+  is_deposit_event (e: event) ⇔
+    e.logger = deposit_contract_address ∧
+    ¬NULL e.topics ∧
+    HD e.topics = deposit_event_topic
+End
+
+Definition parse_deposit_request_def:
+  parse_deposit_request (data: byte list) =
+  if LENGTH data < 576 then NONE else
+  let pubkey_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 data)) in
+  let withdrawal_creds_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 32 data))) in
+  let amount_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 64 data))) in
+  let signature_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 96 data))) in
+  let index_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 128 data))) in
+  let pubkey = TAKE 48 (DROP (pubkey_offset + 32) data) in
+  let withdrawal_creds = TAKE 32 (DROP (withdrawal_creds_offset + 32) data) in
+  let amount = TAKE 8 (DROP (amount_offset + 32) data) in
+  let signature = TAKE 96 (DROP (signature_offset + 32) data) in
+  let index = TAKE 8 (DROP (index_offset + 32) data) in
+  SOME (pubkey ++ withdrawal_creds ++ amount ++ signature ++ index)
+End
+
+Definition parse_deposit_events_def:
+  parse_deposit_events ([] : event list) = [] ∧
+  parse_deposit_events (e::es) =
+    case parse_deposit_request e.data of
+      NONE => parse_deposit_events es
+    | SOME req => req :: parse_deposit_events es
+End
+
+Definition extract_deposit_requests_def:
+  extract_deposit_requests logs =
+  parse_deposit_events (FILTER is_deposit_event logs)
+End
+
+Definition read_withdrawal_request_def:
+  read_withdrawal_request storage idx =
+  let base = 4 + idx * 3 in
+  let slot0 = lookup_storage (n2w base) storage in
+  let slot1 = lookup_storage (n2w (base + 1)) storage in
+  let slot2 = lookup_storage (n2w (base + 2)) storage in
+  let source_addr = DROP 12 (word_to_bytes slot0 T) in
+  let pubkey_part1 = word_to_bytes slot1 T in
+  let slot2_bytes = word_to_bytes slot2 T in
+  let pubkey_part2 = TAKE 16 slot2_bytes in
+  let amount = DROP 16 slot2_bytes in
+  source_addr ++ pubkey_part1 ++ pubkey_part2 ++ amount
+End
+
+Definition dequeue_withdrawal_requests_def:
+  dequeue_withdrawal_requests accounts =
+  let contract = lookup_account withdrawal_request_contract accounts in
+  let storage = contract.storage in
+  let head = w2n (lookup_storage 2w storage) in
+  let tail = w2n (lookup_storage 3w storage) in
+  let count = MIN (tail - head) max_withdrawal_requests_per_block in
+  let requests = GENLIST (λi. read_withdrawal_request storage (head + i)) count in
+  let new_head = head + count in
+  let storage1 = update_storage 1w 0w storage in
+  let storage2 = update_storage 2w (n2w new_head) storage1 in
+  let updated_contract = contract with storage := storage2 in
+  let updated_accounts = update_account withdrawal_request_contract updated_contract accounts in
+  (requests, updated_accounts)
+End
+
+Definition read_consolidation_request_def:
+  read_consolidation_request storage idx =
+  let base = 4 + idx * 4 in
+  let slot0 = lookup_storage (n2w base) storage in
+  let slot1 = lookup_storage (n2w (base + 1)) storage in
+  let slot2 = lookup_storage (n2w (base + 2)) storage in
+  let slot3 = lookup_storage (n2w (base + 3)) storage in
+  let source_addr = DROP 12 (word_to_bytes slot0 T) in
+  let source_pubkey_part1 = word_to_bytes slot1 T in
+  let slot2_bytes = word_to_bytes slot2 T in
+  let source_pubkey_part2 = TAKE 16 slot2_bytes in
+  let target_pubkey_part1 = DROP 16 slot2_bytes in
+  let target_pubkey_part2 = word_to_bytes slot3 T in
+  source_addr ++ source_pubkey_part1 ++ source_pubkey_part2 ++
+  target_pubkey_part1 ++ target_pubkey_part2
+End
+
+Definition dequeue_consolidation_requests_def:
+  dequeue_consolidation_requests accounts =
+  let contract = lookup_account consolidation_request_contract accounts in
+  let storage = contract.storage in
+  let head = w2n (lookup_storage 2w storage) in
+  let tail = w2n (lookup_storage 3w storage) in
+  let count = MIN (tail - head) max_consolidation_requests_per_block in
+  let requests = GENLIST (λi. read_consolidation_request storage (head + i)) count in
+  let new_head = head + count in
+  let storage1 = update_storage 1w 0w storage in
+  let storage2 = update_storage 2w (n2w new_head) storage1 in
+  let updated_contract = contract with storage := storage2 in
+  let updated_accounts = update_account consolidation_request_contract updated_contract accounts in
+  (requests, updated_accounts)
+End
+
+Definition compute_requests_hash_def:
+  compute_requests_hash (deposits: byte list list)
+                        (withdrawals: byte list list)
+                        (consolidations: byte list list) =
+  let deposit_data = FLAT deposits in
+  let deposit_hash = if NULL deposit_data then []
+                     else word_to_bytes (SHA_256_bytes (0x00w :: deposit_data)) T in
+  let withdrawal_data = FLAT withdrawals in
+  let withdrawal_hash = if NULL withdrawal_data then []
+                        else word_to_bytes (SHA_256_bytes (0x01w :: withdrawal_data)) T in
+  let consolidation_data = FLAT consolidations in
+  let consolidation_hash = if NULL consolidation_data then []
+                           else word_to_bytes (SHA_256_bytes (0x02w :: consolidation_data)) T in
+  let all_hashes = deposit_hash ++ withdrawal_hash ++ consolidation_hash in
+  SHA_256_bytes all_hashes
+End
+
 Definition block_invalid_def:
-  block_invalid p rs b ⇔
+  block_invalid p rs deposits withdrawals consolidations b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
     let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
     let excessBlobGas = (p.excessBlobGas + p.blobGasUsed)
                         - target_blob_gas_per_block in
+    let requests_hash = compute_requests_hash deposits withdrawals consolidations in
     ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
       gasUsed = b.gasUsed ∧
-      excessBlobGas = b.excessBlobGas)
+      excessBlobGas = b.excessBlobGas ∧
+      requests_hash = b.requestsHash)
 End
 
 Definition run_block_def:
@@ -1836,11 +1954,15 @@ Definition run_block_def:
            run_transaction dom F chainId prevHashes b a tx))
       (SOME ([], update_beacon_block prevHashes b accounts, dom))
       b.transactions )
-  (λ(r, a, d).
-    if block_invalid parent r b then NONE
+  (λ(rs, a, d).
+    let all_logs = FLAT (MAP (λr. r.logs) rs) in
+    let deposits = extract_deposit_requests all_logs in
+    let (withdrawals, a1) = dequeue_withdrawal_requests a in
+    let (consolidations, a2) = dequeue_consolidation_requests a1 in
+    if block_invalid parent rs deposits withdrawals consolidations b then NONE
     else
-      OPTION_BIND (process_withdrawals b.withdrawals (a, d))
-        (λ(a, d). SOME (r, a, d)))
+      OPTION_BIND (process_withdrawals b.withdrawals (a2, d))
+        (λ(a, d). SOME (rs, a, d)))
 End
 
 Definition run_blocks_def:
