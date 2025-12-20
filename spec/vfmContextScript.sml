@@ -342,8 +342,6 @@ Definition intrinsic_cost_def:
   intrinsic_cost accessList authListLen p =
   let isCreate = is_code_dest p.outputTo in
   let data = if isCreate then p.code else p.data in
-  let tokens = call_data_tokens data in
-  let standard_cost =
     base_cost
     + SUM (MAP (λb. call_data_cost (b = 0w)) data)
     + (if isCreate
@@ -352,9 +350,6 @@ Definition intrinsic_cost_def:
     + access_list_address_cost * LENGTH accessList
     + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
     + new_account_cost * authListLen
-  in
-  let floor_cost = base_cost + floor_call_data_cost * tokens in
-  MAX standard_cost floor_cost
 End
 
 Definition apply_intrinsic_cost_def:
