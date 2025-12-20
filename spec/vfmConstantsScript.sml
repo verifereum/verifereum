@@ -162,6 +162,14 @@ Definition max_withdrawal_requests_per_block_def:
   max_withdrawal_requests_per_block = 16n
 End
 
+Definition target_withdrawal_requests_per_block_def:
+  target_withdrawal_requests_per_block = 2n
+End
+
 Definition max_consolidation_requests_per_block_def:
   max_consolidation_requests_per_block = 2n
+End
+
+Definition target_consolidation_requests_per_block_def:
+  target_consolidation_requests_per_block = 1n
 End
