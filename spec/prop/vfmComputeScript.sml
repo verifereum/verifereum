@@ -988,21 +988,38 @@ End
 
 val () = cv_auto_trans run_transactions_def;
 
+Theorem is_deposit_event_alt:
+  is_deposit_event e ⇔
+  case e.topics of [] => F
+     | t::_ => (e.logger = deposit_contract_address ∧
+                t = deposit_event_topic)
+Proof
+  rw[is_deposit_event_def]
+  \\ CASE_TAC \\ gvs[]
+QED
+
+val () = cv_auto_trans is_deposit_event_alt;
+
+val () = cv_auto_trans block_invalid_def;
+
 Theorem run_block_eq:
   run_block d chainId h p a b =
   case
     run_transactions d F chainId h b
       (update_beacon_block h b a) [] b.transactions
   of NONE => NONE
-   | SOME (r, a, d) =>
-     (if block_invalid p r b then NONE else
-      case process_withdrawals b.withdrawals (a, d) of
+   | SOME (rs, a, d) =>
+     let all_logs = FLAT (MAP (λr. r.logs) rs) in
+     let deposits = extract_deposit_requests all_logs in
+     let (withdrawals, a1) = dequeue_withdrawal_requests a in
+     let (consolidations, a2) = dequeue_consolidation_requests a1 in
+     (if block_invalid p rs deposits withdrawals consolidations b then NONE else
+      case process_withdrawals b.withdrawals (a2, d) of
            NONE => NONE
-         | SOME (a, d) => SOME (r, a, d))
+         | SOME (a, d) => SOME (rs, a, d))
 Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
-  \\ qspec_tac(`b.withdrawals`,`ws`)
   \\ qspec_tac(`update_beacon_block h b a`,`blk`)
   \\ qid_spec_tac`d`
   \\ simp_tac std_ss
@@ -1010,7 +1027,8 @@ Proof
   \\ qspec_tac(`[]:transaction_result list`,`rs`)
   \\ Induct_on`ts`
   \\ rw[run_transactions_def]
-  >- ( CASE_TAC \\ gs[UNCURRY, CaseEq"prod"] \\ metis_tac[PAIR])
+  >- ( gs[OPTION_BIND_eq_case, UNCURRY, CaseEq"prod"]
+       \\ CASE_TAC \\ gs[] \\ Cases_on`x` \\ gs[] )
   \\ qmatch_goalsub_abbrev_tac`FOLDL f`
   \\ qmatch_goalsub_abbrev_tac`OPTION_MAP _ rt`
   \\ Cases_on`rt`
@@ -1021,8 +1039,9 @@ Proof
     \\ rpt (pop_assum kall_tac)
     \\ Induct_on`ts` \\ rw[] )
   \\ qmatch_goalsub_rename_tac`SOME q`
-  \\ PairCases_on`q` \\ gvs[]
+  \\ PairCases_on`q` \\ gvs[OPTION_BIND_eq_case]
   \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
+  \\ Cases_on`x` \\ gs[]
 QED
 
 val () = cv_auto_trans process_withdrawal_def;
