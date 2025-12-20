@@ -1697,7 +1697,9 @@ Definition post_transaction_accounting_def:
                   else MIN (txGasUsed DIV 5) (addRefund - subRefund) in
   let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
-  let totalGasUsed = txGasUsed - gasRefund in
+  let tokens = call_data_tokens tx.data in
+  let floor_cost = base_cost + floor_call_data_cost * tokens in
+  let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
   let transactionFee = totalGasUsed * priorityFeePerGas in
   let accounts = if result = NONE
                  then process_deletions t.rollback.toDelete t.rollback.accounts
