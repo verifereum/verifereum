@@ -1876,7 +1876,9 @@ Definition dequeue_withdrawal_requests_def:
   let requests = GENLIST (λi. read_withdrawal_request storage (head + i)) count in
   let new_head = head + count in
   let storage1 = update_storage 1w 0w storage in
-  let storage2 = update_storage 2w (n2w new_head) storage1 in
+  let storage2 = if new_head = tail
+                 then update_storage 3w 0w (update_storage 2w 0w storage1)
+                 else update_storage 2w (n2w new_head) storage1 in
   let updated_contract = contract with storage := storage2 in
   let updated_accounts = update_account withdrawal_request_contract updated_contract accounts in
   (requests, updated_accounts)
@@ -1909,7 +1911,9 @@ Definition dequeue_consolidation_requests_def:
   let requests = GENLIST (λi. read_consolidation_request storage (head + i)) count in
   let new_head = head + count in
   let storage1 = update_storage 1w 0w storage in
-  let storage2 = update_storage 2w (n2w new_head) storage1 in
+  let storage2 = if new_head = tail
+                 then update_storage 3w 0w (update_storage 2w 0w storage1)
+                 else update_storage 2w (n2w new_head) storage1 in
   let updated_contract = contract with storage := storage2 in
   let updated_accounts = update_account consolidation_request_contract updated_contract accounts in
   (requests, updated_accounts)
