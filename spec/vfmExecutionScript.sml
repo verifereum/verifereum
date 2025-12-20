@@ -1872,14 +1872,20 @@ Definition dequeue_withdrawal_requests_def:
   let storage = contract.storage in
   let head = w2n (lookup_storage 2w storage) in
   let tail = w2n (lookup_storage 3w storage) in
-  let count = MIN (tail - head) max_withdrawal_requests_per_block in
-  let requests = GENLIST (λi. read_withdrawal_request storage (head + i)) count in
-  let new_head = head + count in
-  let storage1 = update_storage 1w 0w storage in
-  let storage2 = if new_head = tail
-                 then update_storage 3w 0w (update_storage 2w 0w storage1)
-                 else update_storage 2w (n2w new_head) storage1 in
-  let updated_contract = contract with storage := storage2 in
+  let dequeue_count = MIN (tail - head) max_withdrawal_requests_per_block in
+  let requests = GENLIST (λi. read_withdrawal_request storage (head + i)) dequeue_count in
+  let new_head = head + dequeue_count in
+  let old_excess = w2n (lookup_storage 0w storage) in
+  let add_count = w2n (lookup_storage 1w storage) in
+  let new_excess = if old_excess + add_count > target_withdrawal_requests_per_block
+                   then old_excess + add_count - target_withdrawal_requests_per_block
+                   else 0 in
+  let storage1 = update_storage 0w (n2w new_excess) storage in
+  let storage2 = update_storage 1w 0w storage1 in
+  let storage3 = if new_head = tail
+                 then update_storage 3w 0w (update_storage 2w 0w storage2)
+                 else update_storage 2w (n2w new_head) storage2 in
+  let updated_contract = contract with storage := storage3 in
   let updated_accounts = update_account withdrawal_request_contract updated_contract accounts in
   (requests, updated_accounts)
 End
@@ -1907,14 +1913,20 @@ Definition dequeue_consolidation_requests_def:
   let storage = contract.storage in
   let head = w2n (lookup_storage 2w storage) in
   let tail = w2n (lookup_storage 3w storage) in
-  let count = MIN (tail - head) max_consolidation_requests_per_block in
-  let requests = GENLIST (λi. read_consolidation_request storage (head + i)) count in
-  let new_head = head + count in
-  let storage1 = update_storage 1w 0w storage in
-  let storage2 = if new_head = tail
-                 then update_storage 3w 0w (update_storage 2w 0w storage1)
-                 else update_storage 2w (n2w new_head) storage1 in
-  let updated_contract = contract with storage := storage2 in
+  let dequeue_count = MIN (tail - head) max_consolidation_requests_per_block in
+  let requests = GENLIST (λi. read_consolidation_request storage (head + i)) dequeue_count in
+  let new_head = head + dequeue_count in
+  let old_excess = w2n (lookup_storage 0w storage) in
+  let add_count = w2n (lookup_storage 1w storage) in
+  let new_excess = if old_excess + add_count > target_consolidation_requests_per_block
+                   then old_excess + add_count - target_consolidation_requests_per_block
+                   else 0 in
+  let storage1 = update_storage 0w (n2w new_excess) storage in
+  let storage2 = update_storage 1w 0w storage1 in
+  let storage3 = if new_head = tail
+                 then update_storage 3w 0w (update_storage 2w 0w storage2)
+                 else update_storage 2w (n2w new_head) storage2 in
+  let updated_contract = contract with storage := storage3 in
   let updated_accounts = update_account consolidation_request_contract updated_contract accounts in
   (requests, updated_accounts)
 End
