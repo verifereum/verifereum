@@ -563,6 +563,48 @@ Proof
   \\ EVAL_TAC \\ rw[bool_to_bit_def]
 QED
 
+val () = “precompile_bls_g1add s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g1add_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_g1msm s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g1msm_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_g2add s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g2add_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_g2msm s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g2msm_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_pairing s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_pairing_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_map_fp_to_g1 s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_map_fp_to_g1_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_map_fp2_to_g2 s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_map_fp2_to_g2_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
 val () = “precompile_sha2_256 s” |>
    SIMP_CONV std_ss [
        precompile_sha2_256_def, bind_def, ignore_bind_def, LET_RATOR

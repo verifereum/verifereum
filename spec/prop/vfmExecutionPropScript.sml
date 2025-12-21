@@ -988,6 +988,55 @@ Proof
   \\ CASE_TAC \\ rw[] \\ tac
 QED
 
+Theorem preserves_wf_accounts_precompile_bls_g1add[simp]:
+  preserves_wf_accounts precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem preserves_wf_accounts_precompile_bls_g1msm[simp]:
+  preserves_wf_accounts precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem preserves_wf_accounts_precompile_bls_g2add[simp]:
+  preserves_wf_accounts precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem preserves_wf_accounts_precompile_bls_g2msm[simp]:
+  preserves_wf_accounts precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem preserves_wf_accounts_precompile_bls_pairing[simp]:
+  preserves_wf_accounts precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem preserves_wf_accounts_precompile_bls_map_fp_to_g1[simp]:
+  preserves_wf_accounts precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem preserves_wf_accounts_precompile_bls_map_fp2_to_g2[simp]:
+  preserves_wf_accounts precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
 Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
   preserves_wf_accounts (dispatch_precompiles x)
 Proof
@@ -1975,6 +2024,55 @@ Theorem limits_num_contexts_precompile_point_eval[simp]:
 Proof
   rw[precompile_point_eval_def] \\ tac
   \\ CASE_TAC \\ rw[] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_bls_g1add[simp]:
+  limits_num_contexts n n precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_bls_g1msm[simp]:
+  limits_num_contexts n n precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_bls_g2add[simp]:
+  limits_num_contexts n n precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_bls_g2msm[simp]:
+  limits_num_contexts n n precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_bls_pairing[simp]:
+  limits_num_contexts n n precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_bls_map_fp_to_g1[simp]:
+  limits_num_contexts n n precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_bls_map_fp2_to_g2[simp]:
+  limits_num_contexts n n precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def] \\ tac
   \\ CASE_TAC \\ rw[] \\ tac
 QED
 
