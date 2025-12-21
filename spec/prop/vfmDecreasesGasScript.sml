@@ -904,6 +904,104 @@ Proof
   \\ irule_at Any decreases_gas_finish
 QED
 
+Theorem decreases_gas_precompile_bls_g1add[simp]:
+  decreases_gas F precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_bls_g1msm[simp]:
+  decreases_gas F precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_bls_g2add[simp]:
+  decreases_gas F precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_bls_g2msm[simp]:
+  decreases_gas F precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_bls_pairing[simp]:
+  decreases_gas F precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_bls_map_fp_to_g1[simp]:
+  decreases_gas F precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
+Theorem decreases_gas_precompile_bls_map_fp2_to_g2[simp]:
+  decreases_gas F precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ CASE_TAC \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
 Theorem decreases_gas_dispatch_precompiles[simp]:
   decreases_gas F (dispatch_precompiles address)
 Proof
