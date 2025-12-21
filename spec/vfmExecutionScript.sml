@@ -1862,7 +1862,7 @@ Definition read_withdrawal_request_def:
   let pubkey_part1 = word_to_bytes slot1 T in
   let slot2_bytes = word_to_bytes slot2 T in
   let pubkey_part2 = TAKE 16 slot2_bytes in
-  let amount = TAKE 8 (DROP 16 slot2_bytes) in
+  let amount = REVERSE (TAKE 8 (DROP 16 slot2_bytes)) in
   source_addr ++ pubkey_part1 ++ pubkey_part2 ++ amount
 End
 
