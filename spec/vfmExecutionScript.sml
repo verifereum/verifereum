@@ -1363,6 +1363,82 @@ Definition precompile_point_eval_def:
   od
 End
 
+Definition precompile_bls_g1add_def:
+  precompile_bls_g1add = do
+    input <- get_call_data;
+    consume_gas 375;
+    case bls12381$bls_g1add input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_g1msm_def:
+  precompile_bls_g1msm = do
+    input <- get_call_data;
+    k <<- LENGTH input DIV 160;
+    gas <<- k * 12000 * bls12381$msm_discount k DIV 1000;
+    consume_gas gas;
+    case bls12381$bls_g1msm input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_g2add_def:
+  precompile_bls_g2add = do
+    input <- get_call_data;
+    consume_gas 600;
+    case bls12381$bls_g2add input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_g2msm_def:
+  precompile_bls_g2msm = do
+    input <- get_call_data;
+    k <<- LENGTH input DIV 288;
+    gas <<- k * 22500 * bls12381$msm_discount k DIV 1000;
+    consume_gas gas;
+    case bls12381$bls_g2msm input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_pairing_def:
+  precompile_bls_pairing = do
+    input <- get_call_data;
+    k <<- LENGTH input DIV 384;
+    gas <<- 32600 * k + 37700;
+    consume_gas gas;
+    case bls12381$bls_pairing input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_map_fp_to_g1_def:
+  precompile_bls_map_fp_to_g1 = do
+    input <- get_call_data;
+    consume_gas 5500;
+    case bls12381$bls_map_fp_to_g1 input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_map_fp2_to_g2_def:
+  precompile_bls_map_fp2_to_g2 = do
+    input <- get_call_data;
+    consume_gas 23800;
+    case bls12381$bls_map_fp2_to_g2 input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
 Definition dispatch_precompiles_def:
   dispatch_precompiles (a: address) =
     if a = 0x1w then precompile_ecrecover
@@ -1375,6 +1451,13 @@ Definition dispatch_precompiles_def:
     else if a = 0x8w then precompile_ecpairing
     else if a = 0x9w then precompile_blake2f
     else if a = 0xaw then precompile_point_eval
+    else if a = 0xbw then precompile_bls_g1add
+    else if a = 0xcw then precompile_bls_g1msm
+    else if a = 0xdw then precompile_bls_g2add
+    else if a = 0xew then precompile_bls_g2msm
+    else if a = 0xfw then precompile_bls_pairing
+    else if a = 0x10w then precompile_bls_map_fp_to_g1
+    else if a = 0x11w then precompile_bls_map_fp2_to_g2
     else fail Impossible
 End
 
