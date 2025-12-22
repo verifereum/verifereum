@@ -326,6 +326,43 @@ End
 
 val () = cv_trans f2muls_def;
 
+(* Fq2 exponentiation by squaring *)
+Definition f2exp_loop_def:
+  f2exp_loop b e acc =
+  if e = 0n then acc
+  else if ODD e then f2exp_loop (f2mul b b) (e DIV 2) (f2mul acc b)
+  else f2exp_loop (f2mul b b) (e DIV 2) acc
+Termination
+  WF_REL_TAC `measure (FST o SND)`
+End
+
+val () = cv_trans f2exp_loop_def;
+
+Definition f2exp_def:
+  f2exp b e = f2exp_loop b e f2one
+End
+
+val () = cv_trans f2exp_def;
+
+(* Sign function for Fq2 (sgn0 from RFC 9380) *)
+(* Returns 1 if the element is "negative" (first nonzero limb has odd value) *)
+Definition f2sgn0_def:
+  f2sgn0 (c0, c1) =
+    let sign_0 = c0 MOD 2 in
+    let zero_0 = if c0 = 0 then 1n else 0n in
+    let sign_1 = c1 MOD 2 in
+    sign_0 + (zero_0 * sign_1) - (sign_0 * zero_0 * sign_1)
+End
+
+val () = cv_trans f2sgn0_def;
+
+(* Check if two Fq2 elements are equal *)
+Definition f2eq_def:
+  f2eq (a0, a1) (b0, b1) = ((a0 = b0) /\ (a1 = b1))
+End
+
+val () = cv_trans f2eq_def;
+
 (* ============================================================ *)
 (* G2: Elliptic curve over Fq2 (projective coordinates)         *)
 (* Twisted curve: y^2 = x^3 + 4(1+u)                            *)
@@ -430,7 +467,7 @@ val () = cv_trans g2_mul_loop_def;
 Definition g2_mul_def:
   g2_mul p n =
   if n = 0 then g2_zero
-  else g2_mul_loop g2_zero p (n MOD bls12381n)
+  else g2_mul_loop g2_zero p n
 End
 
 val () = cv_trans g2_mul_def;
@@ -1711,9 +1748,146 @@ End
 
 val () = cv_trans g2_msm_def;
 
-(* MSM discount table per EIP-2537 *)
-Definition msm_discount_def:
-  msm_discount (k:num) =
+(* G1 MSM discount table per EIP-2537 *)
+Definition g1_msm_discount_def:
+  g1_msm_discount (k:num) =
+    if k = 0 then 0n
+    else if k = 1 then 1000n
+    else if k = 2 then 949n
+    else if k = 3 then 848n
+    else if k = 4 then 797n
+    else if k = 5 then 764n
+    else if k = 6 then 750n
+    else if k = 7 then 738n
+    else if k = 8 then 728n
+    else if k = 9 then 719n
+    else if k = 10 then 712n
+    else if k = 11 then 705n
+    else if k = 12 then 698n
+    else if k = 13 then 692n
+    else if k = 14 then 687n
+    else if k = 15 then 682n
+    else if k = 16 then 677n
+    else if k = 17 then 673n
+    else if k = 18 then 669n
+    else if k = 19 then 665n
+    else if k = 20 then 661n
+    else if k = 21 then 658n
+    else if k = 22 then 654n
+    else if k = 23 then 651n
+    else if k = 24 then 648n
+    else if k = 25 then 645n
+    else if k = 26 then 642n
+    else if k = 27 then 640n
+    else if k = 28 then 637n
+    else if k = 29 then 635n
+    else if k = 30 then 632n
+    else if k = 31 then 630n
+    else if k = 32 then 627n
+    else if k = 33 then 625n
+    else if k = 34 then 623n
+    else if k = 35 then 621n
+    else if k = 36 then 619n
+    else if k = 37 then 617n
+    else if k = 38 then 615n
+    else if k = 39 then 613n
+    else if k = 40 then 611n
+    else if k = 41 then 609n
+    else if k = 42 then 608n
+    else if k = 43 then 606n
+    else if k = 44 then 604n
+    else if k = 45 then 603n
+    else if k = 46 then 601n
+    else if k = 47 then 599n
+    else if k = 48 then 598n
+    else if k = 49 then 596n
+    else if k = 50 then 595n
+    else if k = 51 then 593n
+    else if k = 52 then 592n
+    else if k = 53 then 591n
+    else if k = 54 then 589n
+    else if k = 55 then 588n
+    else if k = 56 then 586n
+    else if k = 57 then 585n
+    else if k = 58 then 584n
+    else if k = 59 then 582n
+    else if k = 60 then 581n
+    else if k = 61 then 580n
+    else if k = 62 then 579n
+    else if k = 63 then 577n
+    else if k = 64 then 576n
+    else if k = 65 then 575n
+    else if k = 66 then 574n
+    else if k = 67 then 573n
+    else if k = 68 then 572n
+    else if k = 69 then 570n
+    else if k = 70 then 569n
+    else if k = 71 then 568n
+    else if k = 72 then 567n
+    else if k = 73 then 566n
+    else if k = 74 then 565n
+    else if k = 75 then 564n
+    else if k = 76 then 563n
+    else if k = 77 then 562n
+    else if k = 78 then 561n
+    else if k = 79 then 560n
+    else if k = 80 then 559n
+    else if k = 81 then 558n
+    else if k = 82 then 557n
+    else if k = 83 then 556n
+    else if k = 84 then 555n
+    else if k = 85 then 554n
+    else if k = 86 then 553n
+    else if k = 87 then 552n
+    else if k = 88 then 551n
+    else if k = 89 then 550n
+    else if k = 90 then 549n
+    else if k = 91 then 548n
+    else if k = 92 then 547n
+    else if k = 93 then 547n
+    else if k = 94 then 546n
+    else if k = 95 then 545n
+    else if k = 96 then 544n
+    else if k = 97 then 543n
+    else if k = 98 then 542n
+    else if k = 99 then 541n
+    else if k = 100 then 540n
+    else if k = 101 then 540n
+    else if k = 102 then 539n
+    else if k = 103 then 538n
+    else if k = 104 then 537n
+    else if k = 105 then 536n
+    else if k = 106 then 536n
+    else if k = 107 then 535n
+    else if k = 108 then 534n
+    else if k = 109 then 533n
+    else if k = 110 then 532n
+    else if k = 111 then 532n
+    else if k = 112 then 531n
+    else if k = 113 then 530n
+    else if k = 114 then 529n
+    else if k = 115 then 528n
+    else if k = 116 then 528n
+    else if k = 117 then 527n
+    else if k = 118 then 526n
+    else if k = 119 then 525n
+    else if k = 120 then 525n
+    else if k = 121 then 524n
+    else if k = 122 then 523n
+    else if k = 123 then 522n
+    else if k = 124 then 522n
+    else if k = 125 then 521n
+    else if k = 126 then 520n
+    else if k = 127 then 520n
+    else if k = 128 then 519n
+    else 519n
+End
+
+val () = cv_trans g1_msm_discount_def;
+
+(* G2 MSM discount table per EIP-2537 *)
+Definition g2_msm_discount_def:
+  g2_msm_discount (k:num) =
     if k = 0 then 0n
     else if k = 1 then 1000n
     else if k = 2 then 1000n
@@ -1725,14 +1899,127 @@ Definition msm_discount_def:
     else if k = 8 then 796n
     else if k = 9 then 782n
     else if k = 10 then 770n
-    else if k ≤ 16 then 744n
-    else if k ≤ 32 then 672n
-    else if k ≤ 64 then 598n
-    else if k ≤ 128 then 524n
-    else 519n
+    else if k = 11 then 759n
+    else if k = 12 then 749n
+    else if k = 13 then 740n
+    else if k = 14 then 732n
+    else if k = 15 then 724n
+    else if k = 16 then 717n
+    else if k = 17 then 711n
+    else if k = 18 then 704n
+    else if k = 19 then 699n
+    else if k = 20 then 693n
+    else if k = 21 then 688n
+    else if k = 22 then 683n
+    else if k = 23 then 679n
+    else if k = 24 then 674n
+    else if k = 25 then 670n
+    else if k = 26 then 666n
+    else if k = 27 then 663n
+    else if k = 28 then 659n
+    else if k = 29 then 655n
+    else if k = 30 then 652n
+    else if k = 31 then 649n
+    else if k = 32 then 646n
+    else if k = 33 then 643n
+    else if k = 34 then 640n
+    else if k = 35 then 637n
+    else if k = 36 then 634n
+    else if k = 37 then 632n
+    else if k = 38 then 629n
+    else if k = 39 then 627n
+    else if k = 40 then 624n
+    else if k = 41 then 622n
+    else if k = 42 then 620n
+    else if k = 43 then 618n
+    else if k = 44 then 615n
+    else if k = 45 then 613n
+    else if k = 46 then 611n
+    else if k = 47 then 609n
+    else if k = 48 then 607n
+    else if k = 49 then 606n
+    else if k = 50 then 604n
+    else if k = 51 then 602n
+    else if k = 52 then 600n
+    else if k = 53 then 598n
+    else if k = 54 then 597n
+    else if k = 55 then 595n
+    else if k = 56 then 593n
+    else if k = 57 then 592n
+    else if k = 58 then 590n
+    else if k = 59 then 589n
+    else if k = 60 then 587n
+    else if k = 61 then 586n
+    else if k = 62 then 584n
+    else if k = 63 then 583n
+    else if k = 64 then 582n
+    else if k = 65 then 580n
+    else if k = 66 then 579n
+    else if k = 67 then 578n
+    else if k = 68 then 576n
+    else if k = 69 then 575n
+    else if k = 70 then 574n
+    else if k = 71 then 573n
+    else if k = 72 then 571n
+    else if k = 73 then 570n
+    else if k = 74 then 569n
+    else if k = 75 then 568n
+    else if k = 76 then 567n
+    else if k = 77 then 566n
+    else if k = 78 then 565n
+    else if k = 79 then 563n
+    else if k = 80 then 562n
+    else if k = 81 then 561n
+    else if k = 82 then 560n
+    else if k = 83 then 559n
+    else if k = 84 then 558n
+    else if k = 85 then 557n
+    else if k = 86 then 556n
+    else if k = 87 then 555n
+    else if k = 88 then 554n
+    else if k = 89 then 553n
+    else if k = 90 then 552n
+    else if k = 91 then 552n
+    else if k = 92 then 551n
+    else if k = 93 then 550n
+    else if k = 94 then 549n
+    else if k = 95 then 548n
+    else if k = 96 then 547n
+    else if k = 97 then 546n
+    else if k = 98 then 545n
+    else if k = 99 then 545n
+    else if k = 100 then 544n
+    else if k = 101 then 543n
+    else if k = 102 then 542n
+    else if k = 103 then 541n
+    else if k = 104 then 541n
+    else if k = 105 then 540n
+    else if k = 106 then 539n
+    else if k = 107 then 538n
+    else if k = 108 then 537n
+    else if k = 109 then 537n
+    else if k = 110 then 536n
+    else if k = 111 then 535n
+    else if k = 112 then 535n
+    else if k = 113 then 534n
+    else if k = 114 then 533n
+    else if k = 115 then 532n
+    else if k = 116 then 532n
+    else if k = 117 then 531n
+    else if k = 118 then 530n
+    else if k = 119 then 530n
+    else if k = 120 then 529n
+    else if k = 121 then 528n
+    else if k = 122 then 528n
+    else if k = 123 then 527n
+    else if k = 124 then 526n
+    else if k = 125 then 526n
+    else if k = 126 then 525n
+    else if k = 127 then 524n
+    else 524n
 End
 
-val () = cv_trans msm_discount_def;
+val () = cv_trans g2_msm_discount_def;
 
 (* Decode G1 + scalar pair (160 bytes) *)
 Definition decode_g1_scalar_def:
@@ -1952,41 +2239,244 @@ val () = cv_trans bls_pairing_def;
 (* Map to Curve (SWU Algorithm)                                 *)
 (* ============================================================ *)
 
-(* Constants for SWU map to G1 (using isogeny) *)
-(* These are the 11-isogeny parameters for BLS12-381 G1 *)
+(* 11-isogeny constants for BLS12-381 G1 *)
+(* A' and B' define the isogenous curve E': y² = x³ + A'x + B' *)
+Definition iso_11_a_def:
+  iso_11_a = 0x144698a3b8e9433d693a02c96d4982b0ea985383ee66a8d8e8981aefd881ac98936f8da0e0f97f5cf428082d584c1dn
+End
+
+Definition iso_11_b_def:
+  iso_11_b = 0x12e2908d11688030018b12e8753eee3b2016c1f0f24f4070a0b9c14fcef35ef55a23215a316ceaa5d1cc48e98e172be0n
+End
+
+val () = cv_trans_deep_embedding EVAL iso_11_a_def;
+val () = cv_trans_deep_embedding EVAL iso_11_b_def;
+
+(* Z parameter for G1 SWU *)
 Definition sswu_z_g1_def:
-  sswu_z_g1 = 11n  (* Z parameter for G1 SWU *)
+  sswu_z_g1 = 11n
 End
 
 val () = cv_trans_deep_embedding EVAL sswu_z_g1_def;
 
-(* Simplified SWU map for Fq to G1 *)
-(* This maps a field element u to a point on the isogenous curve E' *)
-(* fsqrt computes candidate sqrt as x^((p+1)/4), we verify by checking y^2 = gx *)
+(* (p - 3) / 4 for square root computation *)
+Definition p_minus_3_div_4_def:
+  p_minus_3_div_4 = 0x680447a8e5ff9a692c6e9ed90d2eb35d91dd2e13ce144afd9cc34a83dac3d8907aaffffac54ffffee7fbfffffffeaaan
+End
+
+val () = cv_trans_deep_embedding EVAL p_minus_3_div_4_def;
+
+(* sqrt(-11³) for handling non-square case in SWU *)
+Definition sqrt_minus_11_cubed_def:
+  sqrt_minus_11_cubed = 0x3d689d1e0e762cef9f2bec6130316806b4c80eda6fc10ce77ae83eab1ea8b8b8a407c9c6db195e06f2dbeabc2baeff5n
+End
+
+val () = cv_trans_deep_embedding EVAL sqrt_minus_11_cubed_def;
+
+(* Compute sqrt(u/v) if it exists, otherwise return a candidate *)
+(* Returns (is_valid_root, result) *)
+Definition sqrt_div_fq_def:
+  sqrt_div_fq u v =
+    let temp = fmul u v in
+    let v2 = fmul v v in
+    let temp_v2 = fmul temp v2 in
+    let result = fmul temp (fexp temp_v2 p_minus_3_div_4) in
+    let check = fsub (fmul (fmul result result) v) u in
+    (check = 0, result)
+End
+
+val () = cv_trans sqrt_div_fq_def;
+
+(* Sign of a field element (sgn0 from RFC 9380) *)
+(* Returns the least significant bit *)
+Definition fsgn0_def:
+  fsgn0 x = x MOD 2
+End
+
+val () = cv_trans fsgn0_def;
+
+(* 11-isogeny map coefficients for x coordinate *)
+Definition iso_11_x_num_def:
+  iso_11_x_num : num list = [
+    0x11a05f2b1e833340b809101dd99815856b303e88a2d7005ff2627b56cdb4e2c85610c2d5f2e62d6eaeac1662734649b7n;
+    0x17294ed3e943ab2f0588bab22147a81c7c17e75b2f6a8417f565e33c70d1e86b4838f2a6f318c356e834eef1b3cb83bbn;
+    0xd54005db97678ec1d1048c5d10a9a1bce032473295983e56878e501ec68e25c958c3e3d2a09729fe0179f9dac9edcb0n;
+    0x1778e7166fcc6db74e0609d307e55412d7f5e4656a8dbf25f1b33289f1b330835336e25ce3107193c5b388641d9b6861n;
+    0xe99726a3199f4436642b4b3e4118e5499db995a1257fb3f086eeb65982fac18985a286f301e77c451154ce9ac8895d9n;
+    0x1630c3250d7313ff01d1201bf7a74ab5db3cb17dd952799b9ed3ab9097e68f90a0870d2dcae73d19cd13c1c66f652983n;
+    0xd6ed6553fe44d296a3726c38ae652bfb11586264f0f8ce19008e218f9c86b2a8da25128c1052ecaddd7f225a139ed84n;
+    0x17b81e7701abdbe2e8743884d1117e53356de5ab275b4db1a682c62ef0f2753339b7c8f8c8f475af9ccb5618e3f0c88en;
+    0x80d3cf1f9a78fc47b90b33563be990dc43b756ce79f5574a2c596c928c5d1de4fa295f296b74e956d71986a8497e317n;
+    0x169b1f8e1bcfa7c42e0c37515d138f22dd2ecb803a0c5c99676314baf4bb1b7fa3190b2edc0327797f241067be390c9en;
+    0x10321da079ce07e272d8ec09d2565b0dfa7dccdde6787f96d50af36003b14866f69b771f8c285decca67df3f1605fb7bn;
+    0x6e08c248e260e70bd1e962381edee3d31d79d7e22c837bc23c0bf1bc24c6b68c24b1b80b64d391fa9c8ba2e8ba2d229n
+  ]
+End
+
+Definition iso_11_x_den_def:
+  iso_11_x_den : num list = [
+    0x8ca8d548cff19ae18b2e62f4bd3fa6f01d5ef4ba35b48ba9c9588617fc8ac62b558d681be343df8993cf9fa40d21b1cn;
+    0x12561a5deb559c4348b4711298e536367041e8ca0cf0800c0126c2588c48bf5713daa8846cb026e9e5c8276ec82b3bffn;
+    0xb2962fe57a3225e8137e629bff2991f6f89416f5a718cd1fca64e00b11aceacd6a3d0967c94fedcfcc239ba5cb83e19n;
+    0x3425581a58ae2fec83aafef7c40eb545b08243f16b1655154cca8abc28d6fd04976d5243eecf5c4130de8938dc62cd8n;
+    0x13a8e162022914a80a6f1d5f43e7a07dffdfc759a12062bb8d6b44e833b306da9bd29ba81f35781d539d395b3532a21en;
+    0xe7355f8e4e667b955390f7f0506c6e9395735e9ce9cad4d0a43bcef24b8982f7400d24bc4228f11c02df9a29f6304a5n;
+    0x772caacf16936190f3e0c63e0596721570f5799af53a1894e2e073062aede9cea73b3538f0de06cec2574496ee84a3an;
+    0x14a7ac2a9d64a8b230b3f5b074cf01996e7f63c21bca68a81996e1cdf9822c580fa5b9489d11e2d311f7d99bbdcc5a5en;
+    0xa10ecf6ada54f825e920b3dafc7a3cce07f8d1d7161366b74100da67f39883503826692abba43704776ec3a79a1d641n;
+    0x95fc13ab9e92ad4476d6e3eb3a56680f682b4ee96f7d03776df533978f31c1593174e4b4b7865002d6384d168ecdd0an;
+    1n
+  ]
+End
+
+Definition iso_11_y_num_def:
+  iso_11_y_num : num list = [
+    0x90d97c81ba24ee0259d1f094980dcfa11ad138e48a869522b52af6c956543d3cd0c7aee9b3ba3c2be9845719707bb33n;
+    0x134996a104ee5811d51036d776fb46831223e96c254f383d0f906343eb67ad34d6c56711962fa8bfe097e75a2e41c696n;
+    0xcc786baa966e66f4a384c86a3b49942552e2d658a31ce2c344be4b91400da7d26d521628b00523b8dfe240c72de1f6n;
+    0x1f86376e8981c217898751ad8746757d42aa7b90eeb791c09e4a3ec03251cf9de405aba9ec61deca6355c77b0e5f4cbn;
+    0x8cc03fdefe0ff135caf4fe2a21529c4195536fbe3ce50b879833fd221351adc2ee7f8dc099040a841b6daecf2e8fedbn;
+    0x16603fca40634b6a2211e11db8f0a6a074a7d0d4afadb7bd76505c3d3ad5544e203f6326c95a807299b23ab13633a5f0n;
+    0x4ab0b9bcfac1bbcb2c977d027796b3ce75bb8ca2be184cb5231413c4d634f3747a87ac2460f415ec961f8855fe9d6f2n;
+    0x987c8d5333ab86fde9926bd2ca6c674170a05bfe3bdd81ffd038da6c26c842642f64550fedfe935a15e4ca31870fb29n;
+    0x9fc4018bd96684be88c9e221e4da1bb8f3abd16679dc26c1e8b6e6a1f20cabe69d65201c78607a360370e577bdba587n;
+    0xe1bba7a1186bdb5223abde7ada14a23c42a0ca7915af6fe06985e7ed1e4d43b9b3f7055dd4eba6f2bafaaebca731c30n;
+    0x19713e47937cd1be0dfd0b8f1d43fb93cd2fcbcb6caf493fd1183e416389e61031bf3a5cce3fbafce813711ad011c132n;
+    0x18b46a908f36f6deb918c143fed2edcc523559b8aaf0c2462e6bfe7f911f643249d9cdf41b44d606ce07c8a4d0074d8en;
+    0xb182cac101b9399d155096004f53f447aa7b12a3426b08ec02710e807b4633f06c851c1919211f20d4c04f00b971ef8n;
+    0x245a394ad1eca9b72fc00ae7be315dc757b3b080d4c158013e6632d3c40659cc6cf90ad1c232a6442d9d3f5db980133n;
+    0x5c129645e44cf1102a159f748c4a3fc5e673d81d7e86568d9ab0f5d396a7ce46ba1049b6579afb7866b1e715475224bn;
+    0x15e6be4e990f03ce4ea50b3b42df2eb5cb181d8f84965a3957add4fa95af01b2b665027efec01c7704b456be69c8b604n
+  ]
+End
+
+Definition iso_11_y_den_def:
+  iso_11_y_den : num list = [
+    0x16112c4c3a9c98b252181140fad0eae9601a6de578980be6eec3232b5be72e7a07f3688ef60c206d01479253b03663c1n;
+    0x1962d75c2381201e1a0cbd6c43c348b885c84ff731c4d59ca4a10356f453e01f78a4260763529e3532f6102c2e49a03dn;
+    0x58df3306640da276faaae7d6e8eb15778c4855551ae7f310c35a5dd279cd2eca6757cd636f96f891e2538b53dbf67f2n;
+    0x16b7d288798e5395f20d23bf89edb4d1d115c5dbddbcd30e123da489e726af41727364f2c28297ada8d26d98445f5416n;
+    0xbe0e079545f43e4b00cc912f8228ddcc6d19c9f0f69bbb0542eda0fc9dec916a20b15dc0fd2ededda39142311a5001dn;
+    0x8d9e5297186db2d9fb266eaac783182b70152c65550d881c5ecd87b6f0f5a6449f38db9dfa9cce202c6477faaf9b7acn;
+    0x166007c08a99db2fc3ba8734ace9824b5eecfdfa8d0cf8ef5dd365bc400a0051d5fa9c01a58b1fb93d1a1399126a775cn;
+    0x16a3ef08be3ea7ea03bcddfabba6ff6ee5a4375efa1f4fd7feb34fd206357132b920f5b00801dee460ee415a15812ed9n;
+    0x1866c8ed336c61231a1be54fd1d74cc4f9fb0ce4c6af5920abc5750c4bf39b4852cfe2f7bb9248836b233d9d55535d4an;
+    0x167a55cda70a6e1cea820597d94a84903216f763e13d87bb5308592e7ea7d4fbc7385ea3d529b35e346ef48bb8913f55n;
+    0x4d2f259eea405bd48f010a01ad2911d9c6dd039bb61a6290e591b36e636a5c871a5c29f4f83060400f8b49cba8f6aa8n;
+    0xaccbb67481d033ff5852c1e48c50c477f94ff8aefce42d28c0f9a88cea7913516f968986f7ebbea9684b529e2561092n;
+    0xad6b9514c767fe3c3613144b45f1496543346d98adf02267d5ceef9a00d9b8693000763e3b90ac11e99b138573345ccn;
+    0x2660400eb2e4f3b628bdd0d53cd76f2bf565b94e72927c1cb748df27942480e420517bd8714cc80d1fadc1326ed06f7n;
+    0xe0fa1d816ddc03e6b24255e0d7819c171c40f65e273b853324efcd6356caa205ca2f570f13497804415473a1d634b8fn;
+    1n
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL iso_11_x_num_def;
+val () = cv_trans_deep_embedding EVAL iso_11_x_den_def;
+val () = cv_trans_deep_embedding EVAL iso_11_y_num_def;
+val () = cv_trans_deep_embedding EVAL iso_11_y_den_def;
+
+(* Evaluate polynomial using Horner's method with z-scaling *)
+(* For coeffs [c0, c1, ..., cn] and z_powers [z, z^2, ..., z^15], computes: *)
+(* c_n * x^n + c_{n-1} * z * x^{n-1} + ... + c_0 * z^n *)
+(* Result is z^n * P(x/z) for polynomial P *)
+Definition eval_iso_poly_def:
+  eval_iso_poly acc [] z_powers x = acc ∧
+  eval_iso_poly acc (c::cs) [] x = eval_iso_poly (fadd (fmul acc x) c) cs [] x ∧
+  eval_iso_poly acc (c::cs) (z::zs) x =
+    eval_iso_poly (fadd (fmul acc x) (fmul z c)) cs zs x
+End
+
+val () = cv_trans eval_iso_poly_def;
+
+(* 11-isogeny map from E' to E for G1 *)
+(* Maps (x', y', z') on isogenous curve to (x, y, z) on BLS12-381 *)
+(* Algorithm from Section 4 of https://eprint.iacr.org/2019/403 *)
+Definition iso_map_g1_def:
+  iso_map_g1 (x', y', z') =
+    (* Compute powers of z' *)
+    let z2 = fmul z' z' in
+    let z3 = fmul z2 z' in
+    let z4 = fmul z2 z2 in
+    let z5 = fmul z4 z' in
+    let z6 = fmul z3 z3 in
+    let z7 = fmul z6 z' in
+    let z8 = fmul z4 z4 in
+    let z9 = fmul z8 z' in
+    let z10 = fmul z5 z5 in
+    let z11 = fmul z10 z' in
+    let z12 = fmul z6 z6 in
+    let z13 = fmul z12 z' in
+    let z14 = fmul z7 z7 in
+    let z15 = fmul z14 z' in
+    let z_powers = [z'; z2; z3; z4; z5; z6; z7; z8; z9; z10; z11; z12; z13; z14; z15] in
+    (* Evaluate polynomials using Horner with z-scaling *)
+    (* x_num has 12 coeffs, x_den has 11, y_num/y_den have 16 *)
+    (* Start with last coeff (EL 11/10/15), iterate through rest *)
+    let x_num = eval_iso_poly (EL 11 iso_11_x_num) (REVERSE (TAKE 11 iso_11_x_num)) z_powers x' in
+    let x_den = eval_iso_poly (EL 10 iso_11_x_den) (REVERSE (TAKE 10 iso_11_x_den)) z_powers x' in
+    let y_num = eval_iso_poly (EL 15 iso_11_y_num) (REVERSE (TAKE 15 iso_11_y_num)) z_powers x' in
+    let y_den = eval_iso_poly (EL 15 iso_11_y_den) (REVERSE (TAKE 15 iso_11_y_den)) z_powers x' in
+    (* Apply corrections: x_den * z (degree is 1 less than x_num) *)
+    let x_den = fmul x_den z' in
+    (* y_num * y', y_den * z *)
+    let y_num = fmul y_num y' in
+    let y_den = fmul y_den z' in
+    (* Result in projective coordinates *)
+    let z_out = fmul x_den y_den in
+    let x_out = fmul x_num y_den in
+    let y_out = fmul y_num x_den in
+    (x_out, y_out, z_out)
+End
+
+val iso_map_g1_pre_def = cv_trans_pre "iso_map_g1_pre" iso_map_g1_def;
+
+Theorem iso_map_g1_pre[cv_pre]:
+  ∀v. iso_map_g1_pre v
+Proof
+  Cases \\ Cases_on `r`
+  \\ rw[iso_map_g1_pre_def]
+  \\ EVAL_TAC
+QED
+
+(* Optimized SWU map for Fq to G1' (isogenous curve) *)
+(* Based on Section 4 of https://eprint.iacr.org/2019/403 *)
+(* Returns projective point (x, y, z) on the isogenous curve E' *)
 Definition sswu_g1_def:
-  sswu_g1 u =
+  sswu_g1 t =
     let z = sswu_z_g1 in
-    let b = 4n in  (* E' has b = 4 *)
-    let u2 = fmul u u in
-    let u4 = fmul u2 u2 in
-    let zu2 = fmul z u2 in
-    let z2u4 = fmul (fmul z z) u4 in
-    let tv1 = fadd z2u4 zu2 in
-    let tv1_nz = if tv1 = 0 then z else tv1 in
-    let x1 = fdiv (fmul b z) tv1_nz in
-    let x1_3 = fmul x1 (fmul x1 x1) in
-    let gx1 = fadd x1_3 b in
-    let y1_cand = fsqrt gx1 in
-    if fmul y1_cand y1_cand = gx1 then
-      let y = if (u MOD 2 = y1_cand MOD 2) then y1_cand else fsub 0 y1_cand in
-      (x1, y, 1n)
-    else
-      let x2 = fmul zu2 x1 in
-      let x2_3 = fmul x2 (fmul x2 x2) in
-      let gx2 = fadd x2_3 b in
-      let y2_cand = fsqrt gx2 in
-      let y = if (u MOD 2 = y2_cand MOD 2) then y2_cand else fsub 0 y2_cand in
-      (x2, y, 1n)
+    let a = iso_11_a in
+    let b = iso_11_b in
+    (* t2 = t² *)
+    let t2 = fmul t t in
+    (* iso_11_z_t2 = Z * t² *)
+    let z_t2 = fmul z t2 in
+    (* temp = Z*t² + Z²*t⁴ *)
+    let temp = fadd z_t2 (fmul z_t2 z_t2) in
+    (* denominator = -A * temp *)
+    let denom = fneg (fmul a temp) in
+    (* numerator = B * (temp + 1) *)
+    let numer = fmul b (fadd temp 1) in
+    (* Handle exceptional case: if denom = 0, denom = Z * A *)
+    let denom = if denom = 0 then fmul z a else denom in
+    (* v = denom³ *)
+    let denom2 = fmul denom denom in
+    let v = fmul denom2 denom in
+    (* u = numer³ + A * numer * denom² + B * v *)
+    let numer2 = fmul numer numer in
+    let numer3 = fmul numer2 numer in
+    let u = fadd numer3 (fadd (fmul a (fmul numer denom2)) (fmul b v)) in
+    (* Attempt y = sqrt(u / v) *)
+    let (is_root, y_cand) = sqrt_div_fq u v in
+    (* If not a valid root, adjust y and numer *)
+    let (y, numer) = if is_root then (y_cand, numer)
+                     else (fmul (fmul y_cand (fmul t2 t)) sqrt_minus_11_cubed,
+                           fmul numer z_t2) in
+    (* Adjust sign of y based on sgn0 *)
+    let y = if fsgn0 t ≠ fsgn0 y then fneg y else y in
+    (* Final y = y * denom *)
+    let y = fmul y denom in
+    (numer, y, denom)
 End
 
 val () = cv_trans sswu_g1_def;
@@ -1999,43 +2489,276 @@ Definition bls_map_fp_to_g1_def:
            NONE => NONE
          | SOME u =>
              let p = sswu_g1 u in
+             (* Apply 11-isogeny map to get point on BLS12-381 curve *)
+             let p_mapped = iso_map_g1 p in
              (* Clear cofactor to get point in correct subgroup *)
-             let cofactor = 76329603384216526031706109802092473003n in
-             SOME (encode_g1 (g1_mul p cofactor))
+             let h_eff = 15132376222941642753n in
+             SOME (encode_g1 (g1_mul p_mapped h_eff))
 End
 
 val () = cv_trans bls_map_fp_to_g1_def;
 
-(* SWU map for Fq2 to G2 - similar but over extension field *)
+(* ============================================================ *)
+(* Map to G2 Curve (SWU Algorithm + 3-Isogeny)                  *)
+(* ============================================================ *)
+
+(* 3-isogeny constants for BLS12-381 G2 *)
+(* Isogenous curve E': y^2 = x^3 + A'x + B' over Fq2 *)
+Definition iso_3_a_def:
+  iso_3_a : num # num = (0n, 240n)
+End
+
+Definition iso_3_b_def:
+  iso_3_b : num # num = (1012n, 1012n)
+End
+
+(* Z = -2 - i = (p-2, p-1) *)
+Definition iso_3_z_def:
+  iso_3_z : num # num = (fsub 0 2n, fsub 0 1n)
+End
+
+val () = cv_trans_deep_embedding EVAL iso_3_a_def;
+val () = cv_trans_deep_embedding EVAL iso_3_b_def;
+val () = cv_trans_deep_embedding EVAL iso_3_z_def;
+
+(* (p^2 - 9) / 16 for Fq2 square root *)
+Definition p2_minus_9_div_16_def:
+  p2_minus_9_div_16 = 1001205140483106588246484290269935788605945006208159541241399033561623546780709821462541004956387089373434649096260670658193992783731681621012512651314777238193313314641988297376025498093520728838658813979860931248214124593092835n
+End
+
+val () = cv_trans_deep_embedding EVAL p2_minus_9_div_16_def;
+
+(* 8th roots of unity for Fq2 square root *)
+Definition roots_of_unity_8_def:
+  roots_of_unity_8 : (num # num) list = [
+    (1n, 0n);
+    (0n, 1n);
+    (1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257n,
+     1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257n);
+    (1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257n,
+     2973677408986561043442465346520108879172042883009249989176415018091420807192182638567116318576472649347015917690530n)
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL roots_of_unity_8_def;
+
+(* ETAS for handling non-square case in Fq2 SWU *)
+Definition etas_g2_def:
+  etas_g2 : (num # num) list = [
+    (1015919005498129635886032702454337503112659152043614931979881174103627376789972962005013361970813319613593700736144n,
+     1244231661155348484223428017511856347821538750986231559855759541903146219579071812422210818684355842447591283616181n);
+    (2758177894066318909194361808224047808735344068952776325476298594220885430911766052020476810444659821590302988943606n,
+     1015919005498129635886032702454337503112659152043614931979881174103627376789972962005013361970813319613593700736144n);
+    (1646015993121829755895883253076789309308090876275172350194834453434199515639474951814226234213676147507404483718679n,
+     1637752706019426886789797193293828301565549384974986623510918743054325021588194075665960171838131772227885159387073n);
+    (2364656849202240506627992632442075854991333434964021261821139393069706628902643788776727457290883891810009113172714n,
+     1646015993121829755895883253076789309308090876275172350194834453434199515639474951814226234213676147507404483718679n)
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL etas_g2_def;
+
+(* h_eff for G2 cofactor clearing *)
+Definition h_eff_g2_def:
+  h_eff_g2 = 209869847837335686905080341498658477663839067235703451875306851526599783796572738804459333109033834234622528588876978987822447936461846631641690358257586228683615991308971558879306463436166481n
+End
+
+val () = cv_trans_deep_embedding EVAL h_eff_g2_def;
+
+(* 3-isogeny map coefficients for x numerator *)
+Definition iso_3_x_num_def:
+  iso_3_x_num : (num # num) list = [
+    (889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542n,
+     889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542n);
+    (0n, 2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706522n);
+    (2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706526n,
+     1334136518407222464472596608578634718852294273313002628444019378708010550163612621480895876376338554679298090853261n);
+    (3557697382419259905260257622876359250272784728834673675850718343221361467102966990615722337003569479144794908942033n, 0n)
+  ]
+End
+
+(* 3-isogeny map coefficients for x denominator *)
+Definition iso_3_x_den_def:
+  iso_3_x_den : (num # num) list = [
+    (0n, 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559715n);
+    (12n, 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559775n);
+    (1n, 0n)
+  ]
+End
+
+(* 3-isogeny map coefficients for y numerator *)
+Definition iso_3_y_num_def:
+  iso_3_y_num : (num # num) list = [
+    (3261222600550988246488569487636662646083386001431784202863158481286248011511053074731078808919938689216061999863558n,
+     3261222600550988246488569487636662646083386001431784202863158481286248011511053074731078808919938689216061999863558n);
+    (0n, 889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235518n);
+    (2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706524n,
+     1334136518407222464472596608578634718852294273313002628444019378708010550163612621480895876376338554679298090853263n);
+    (2816510427748580758331037284777117739799287910327449993381818688383577828123182200904113516794492504322962636245776n, 0n)
+  ]
+End
+
+(* 3-isogeny map coefficients for y denominator *)
+Definition iso_3_y_den_def:
+  iso_3_y_den : (num # num) list = [
+    (4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559355n,
+     4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559355n);
+    (0n, 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559571n);
+    (18n, 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559769n);
+    (1n, 0n)
+  ]
+End
+
+val () = cv_trans_deep_embedding EVAL iso_3_x_num_def;
+val () = cv_trans_deep_embedding EVAL iso_3_x_den_def;
+val () = cv_trans_deep_embedding EVAL iso_3_y_num_def;
+val () = cv_trans_deep_embedding EVAL iso_3_y_den_def;
+
+(* Find valid square root in Fq2 by trying 8th roots of unity *)
+Definition find_sqrt_fq2_def:
+  find_sqrt_fq2 gamma u v [] = (F, gamma) /\
+  find_sqrt_fq2 gamma u v (root::roots) =
+    let candidate = f2mul root gamma in
+    let check = f2sub (f2mul (f2mul candidate candidate) v) u in
+    if f2eq check f2zero then (T, candidate)
+    else find_sqrt_fq2 gamma u v roots
+End
+
+val () = cv_trans find_sqrt_fq2_def;
+
+(* Square root division in Fq2: compute sqrt(u/v) if it exists *)
+(* Returns (is_valid, result) where result * result * v = u if valid *)
+Definition sqrt_div_fq2_def:
+  sqrt_div_fq2 u v =
+    (* gamma = uv^7 * (uv^15)^((p^2-9)/16) *)
+    let v2 = f2mul v v in
+    let v3 = f2mul v2 v in
+    let v4 = f2mul v2 v2 in
+    let v7 = f2mul v4 v3 in
+    let v8 = f2mul v4 v4 in
+    let v15 = f2mul v8 v7 in
+    let temp1 = f2mul u v7 in
+    let temp2 = f2mul temp1 v8 in
+    let gamma = f2mul (f2exp temp2 p2_minus_9_div_16) temp1 in
+    find_sqrt_fq2 gamma u v roots_of_unity_8
+End
+
+val () = cv_trans sqrt_div_fq2_def;
+
+(* Find valid eta for non-square case in Fq2 SWU *)
+Definition find_eta_fq2_def:
+  find_eta_fq2 sqrt_cand u v [] = sqrt_cand /\
+  find_eta_fq2 sqrt_cand u v (eta::etas) =
+    let candidate = f2mul eta sqrt_cand in
+    let check = f2sub (f2mul (f2mul candidate candidate) v) u in
+    if f2eq check f2zero then candidate
+    else find_eta_fq2 sqrt_cand u v etas
+End
+
+val () = cv_trans find_eta_fq2_def;
+
+(* Evaluate polynomial over Fq2 using Horner's method with z-scaling *)
+Definition eval_iso_poly_fq2_def:
+  eval_iso_poly_fq2 acc [] z_powers x = acc /\
+  eval_iso_poly_fq2 acc (c::cs) [] x = eval_iso_poly_fq2 (f2add (f2mul acc x) c) cs [] x /\
+  eval_iso_poly_fq2 acc (c::cs) (z::zs) x =
+    eval_iso_poly_fq2 (f2add (f2mul acc x) (f2mul z c)) cs zs x
+End
+
+val () = cv_trans eval_iso_poly_fq2_def;
+
+(* 3-isogeny map from E' to E for G2 *)
+(* Maps (x', y', z') on isogenous curve to (x, y, z) on BLS12-381 G2 *)
+Definition iso_map_g2_def:
+  iso_map_g2 (x', y', z') =
+    (* Compute powers of z' *)
+    let z2 = f2mul z' z' in
+    let z3 = f2mul z2 z' in
+    let z_powers = [z'; z2; z3] in
+    (* Evaluate polynomials using Horner with z-scaling *)
+    (* x_num has degree 3, x_den has degree 2, y_num has degree 3, y_den has degree 3 *)
+    let x_num = eval_iso_poly_fq2 (EL 3 iso_3_x_num) (REVERSE (TAKE 3 iso_3_x_num)) z_powers x' in
+    let x_den = eval_iso_poly_fq2 (EL 2 iso_3_x_den) (REVERSE (TAKE 2 iso_3_x_den)) z_powers x' in
+    let y_num = eval_iso_poly_fq2 (EL 3 iso_3_y_num) (REVERSE (TAKE 3 iso_3_y_num)) z_powers x' in
+    let y_den = eval_iso_poly_fq2 (EL 3 iso_3_y_den) (REVERSE (TAKE 3 iso_3_y_den)) z_powers x' in
+    (* Correct for x_den being 1 degree less than x_num *)
+    let x_den = f2mul x_den z' in
+    (* y_num * y', y_den * z *)
+    let y_num = f2mul y_num y' in
+    let y_den = f2mul y_den z' in
+    (* Result in projective coordinates *)
+    let z_out = f2mul x_den y_den in
+    let x_out = f2mul x_num y_den in
+    let y_out = f2mul y_num x_den in
+    (x_out, y_out, z_out)
+End
+
+val iso_map_g2_pre_def = cv_trans_pre "iso_map_g2_pre" iso_map_g2_def;
+
+Theorem iso_map_g2_pre[cv_pre]:
+  !v. iso_map_g2_pre v
+Proof
+  Cases \\ Cases_on `r`
+  \\ rw[iso_map_g2_pre_def]
+  \\ EVAL_TAC
+QED
+
+(* Optimized SWU map for Fq2 to G2' (3-isogenous curve) *)
+(* Returns projective point (x, y, z) on the isogenous curve E' *)
 Definition sswu_g2_def:
-  sswu_g2 (u0, u1) =
-    let z = (fsub 0 2n, fsub 0 1n) in  (* Z = -2 - i for G2 *)
-    let b = g2_b in  (* (4, 4) *)
-    let u = (u0, u1) in
-    let u2 = f2mul u u in
-    let zu2 = f2mul z u2 in
-    let z2 = f2mul z z in
-    let u4 = f2mul u2 u2 in
-    let z2u4 = f2mul z2 u4 in
-    let tv1 = f2add z2u4 zu2 in
-    (* Simplified: use generator for now - full SWU is complex *)
-    (* TODO: Implement full SWU for G2 *)
-    g2_gen
+  sswu_g2 u =
+    let z = iso_3_z in
+    let a = iso_3_a in
+    let b = iso_3_b in
+    (* t2 = u^2 *)
+    let t2 = f2mul u u in
+    (* z_t2 = Z * u^2 *)
+    let z_t2 = f2mul z t2 in
+    (* temp = Z*u^2 + Z^2*u^4 *)
+    let temp = f2add z_t2 (f2mul z_t2 z_t2) in
+    (* denominator = -A * temp *)
+    let denom = f2neg (f2mul a temp) in
+    (* numerator = B * (temp + 1) *)
+    let numer = f2mul b (f2add temp f2one) in
+    (* Handle exceptional case: if denom = 0, denom = Z * A *)
+    let denom = if f2eq denom f2zero then f2mul z a else denom in
+    (* v = denom^3 *)
+    let denom2 = f2mul denom denom in
+    let v = f2mul denom2 denom in
+    (* curve_u = numer^3 + A * numer * denom^2 + B * v *)
+    let numer2 = f2mul numer numer in
+    let numer3 = f2mul numer2 numer in
+    let curve_u = f2add numer3 (f2add (f2mul a (f2mul numer denom2)) (f2mul b v)) in
+    (* Attempt y = sqrt(curve_u / v) *)
+    let (is_root, y_cand) = sqrt_div_fq2 curve_u v in
+    (* If not a valid root, handle non-square case *)
+    let sqrt_cand = f2mul y_cand (f2mul t2 u) in  (* sqrt_cand * t^3 *)
+    let u_new = f2mul (f2mul z_t2 (f2mul z_t2 z_t2)) curve_u in  (* Z^3 * t^6 * u *)
+    let y_eta = find_eta_fq2 sqrt_cand u_new v etas_g2 in
+    let (y, numer) = if is_root then (y_cand, numer)
+                     else (y_eta, f2mul numer z_t2) in
+    (* Adjust sign of y based on sgn0 *)
+    let y = if f2sgn0 u <> f2sgn0 y then f2neg y else y in
+    (* Final y = y * denom *)
+    let y = f2mul y denom in
+    (numer, y, denom)
 End
 
 val () = cv_trans sswu_g2_def;
 
 (* 0x11: Map Fp2 to G2 *)
+(* Includes cofactor clearing per EELS reference implementation *)
 Definition bls_map_fp2_to_g2_def:
   bls_map_fp2_to_g2 input =
-    if LENGTH input ≠ 128 then NONE
+    if LENGTH input <> 128 then NONE
     else case decode_fq2 input of
            NONE => NONE
          | SOME u =>
              let p = sswu_g2 u in
-             (* Clear cofactor for G2 *)
-             (* G2 cofactor is large, multiply by curve order clears it *)
-             SOME (encode_g2 (g2_mul p bls12381n))
+             (* Apply 3-isogeny map to get point on BLS12-381 G2 curve *)
+             let p_mapped = iso_map_g2 p in
+             (* Clear cofactor to get point in correct subgroup *)
+             SOME (encode_g2 (g2_mul p_mapped h_eff_g2))
 End
 
 val () = cv_trans bls_map_fp2_to_g2_def;
