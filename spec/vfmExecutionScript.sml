@@ -1377,7 +1377,7 @@ Definition precompile_bls_g1msm_def:
   precompile_bls_g1msm = do
     input <- get_call_data;
     k <<- LENGTH input DIV 160;
-    gas <<- k * 12000 * bls12381$msm_discount k DIV 1000;
+    gas <<- k * 12000 * bls12381$g1_msm_discount k DIV 1000;
     consume_gas gas;
     case bls12381$bls_g1msm input of
       NONE => fail OutOfGas
@@ -1399,7 +1399,7 @@ Definition precompile_bls_g2msm_def:
   precompile_bls_g2msm = do
     input <- get_call_data;
     k <<- LENGTH input DIV 288;
-    gas <<- k * 22500 * bls12381$msm_discount k DIV 1000;
+    gas <<- k * 22500 * bls12381$g2_msm_discount k DIV 1000;
     consume_gas gas;
     case bls12381$bls_g2msm input of
       NONE => fail OutOfGas
