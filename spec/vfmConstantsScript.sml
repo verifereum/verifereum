@@ -173,3 +173,15 @@ End
 Definition target_consolidation_requests_per_block_def:
   target_consolidation_requests_per_block = 1n
 End
+
+Definition min_gas_limit_def:
+  min_gas_limit = 5000n
+End
+
+Definition base_fee_max_change_denominator_def:
+  base_fee_max_change_denominator = 8n
+End
+
+Definition elasticity_multiplier_def:
+  elasticity_multiplier = 2n
+End

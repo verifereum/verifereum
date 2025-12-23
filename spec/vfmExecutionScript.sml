@@ -2031,6 +2031,25 @@ Definition compute_requests_hash_def:
   SHA_256_bytes all_hashes
 End
 
+Definition expected_base_fee_def:
+  expected_base_fee parent_base_fee parent_gas_limit parent_gas_used =
+    let parent_gas_target = parent_gas_limit DIV elasticity_multiplier in
+    if parent_gas_used = parent_gas_target then parent_base_fee
+    else if parent_gas_used > parent_gas_target then
+      let gas_used_delta = parent_gas_used - parent_gas_target in
+      let base_fee_delta = parent_base_fee * gas_used_delta
+                           DIV parent_gas_target
+                           DIV base_fee_max_change_denominator in
+      let base_fee_delta = MAX base_fee_delta 1 in
+      parent_base_fee + base_fee_delta
+    else
+      let gas_used_delta = parent_gas_target - parent_gas_used in
+      let base_fee_delta = parent_base_fee * gas_used_delta
+                           DIV parent_gas_target
+                           DIV base_fee_max_change_denominator in
+      parent_base_fee - base_fee_delta
+End
+
 Definition block_invalid_def:
   block_invalid p rs deposits withdrawals consolidations b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
@@ -2038,7 +2057,10 @@ Definition block_invalid_def:
     let excessBlobGas = (p.excessBlobGas + p.blobGasUsed)
                         - target_blob_gas_per_block in
     let requests_hash = compute_requests_hash deposits withdrawals consolidations in
-    ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
+    let expectedBaseFee = expected_base_fee p.baseFeePerGas p.gasLimit p.gasUsed in
+    ¬(min_gas_limit ≤ b.gasLimit ∧
+      b.baseFeePerGas = expectedBaseFee ∧
+      blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
       gasUsed = b.gasUsed ∧
       excessBlobGas = b.excessBlobGas ∧
