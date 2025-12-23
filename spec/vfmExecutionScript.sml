@@ -1923,11 +1923,14 @@ Definition parse_deposit_request_def:
 End
 
 Definition parse_deposit_events_def:
-  parse_deposit_events ([] : event list) = [] ∧
+  parse_deposit_events ([] : event list) = SOME [] ∧
   parse_deposit_events (e::es) =
     case parse_deposit_request e.data of
-      NONE => parse_deposit_events es
-    | SOME req => req :: parse_deposit_events es
+      NONE => NONE
+    | SOME req =>
+        case parse_deposit_events es of
+          NONE => NONE
+        | SOME reqs => SOME (req :: reqs)
 End
 
 Definition extract_deposit_requests_def:
@@ -2079,13 +2082,13 @@ Definition run_block_def:
       b.transactions )
   (λ(rs, a, d).
     let all_logs = FLAT (MAP (λr. r.logs) rs) in
-    let deposits = extract_deposit_requests all_logs in
-    let (withdrawals, a1) = dequeue_withdrawal_requests a in
-    let (consolidations, a2) = dequeue_consolidation_requests a1 in
-    if block_invalid parent rs deposits withdrawals consolidations b then NONE
-    else
-      OPTION_BIND (process_withdrawals b.withdrawals (a2, d))
-        (λ(a, d). SOME (rs, a, d)))
+    OPTION_BIND (extract_deposit_requests all_logs) (λdeposits.
+      let (withdrawals, a1) = dequeue_withdrawal_requests a in
+      let (consolidations, a2) = dequeue_consolidation_requests a1 in
+      if block_invalid parent rs deposits withdrawals consolidations b then NONE
+      else
+        OPTION_BIND (process_withdrawals b.withdrawals (a2, d))
+          (λ(a, d). SOME (rs, a, d))))
 End
 
 Definition run_blocks_def:
