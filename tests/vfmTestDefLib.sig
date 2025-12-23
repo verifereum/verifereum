@@ -7,7 +7,8 @@ signature vfmTestDefLib = sig
     chainId: string,
     address: string,
     nonce: string,
-    signer: string
+    signer: string,
+    s: string
   }
   type authorization_list = authorization_entry list
 
