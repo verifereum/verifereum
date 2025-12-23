@@ -21,6 +21,7 @@ Datatype:
    ; delegate  : address
    ; authChainId : num
    ; authNonce : num
+   ; authS : num
    |>
 End
 

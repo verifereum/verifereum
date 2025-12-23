@@ -425,12 +425,13 @@ Definition authorization_from_rlp_def:
   let authLs = [chainIdRlp; addressRlp; nonceRlp] in
   let hash = word_of_bytes T 0w $ Keccak_256_w64 $
     5w :: rlp_encode (RLPL authLs) in
-  case ecrecover hash (yParity + 27) r s of NONE => NONE |
-  SOME authority =>
+  let authority = case ecrecover hash (yParity + 27) r s of
+                    NONE => 0w | SOME a => a in
   SOME <| authority := authority
         ; delegate := address
         ; authChainId := chainId
         ; authNonce := nonce
+        ; authS := s
         |>
 End
 

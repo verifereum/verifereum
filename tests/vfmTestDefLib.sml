@@ -12,7 +12,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     chainId: string,
     address: string,
     nonce: string,
-    signer: string
+    signer: string,
+    s: string
   }
   type authorization_list = authorization_entry list
 
@@ -155,11 +156,12 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val accessListDecoder : access_list decoder = array accessListEntryDecoder
 
   val authorizationEntryDecoder : authorization_entry decoder =
-    JSONDecode.map (fn (c,a,n,s) => {chainId=c, address=a, nonce=n, signer=s})
-      (tuple4 (field "chainId" string,
-               field "address" string,
-               field "nonce" string,
-               field "signer" string))
+    JSONDecode.map (fn ((c,a,n,si),sv) => {chainId=c, address=a, nonce=n, signer=si, s=sv})
+      (tuple2 (tuple4 (field "chainId" string,
+                       field "address" string,
+                       field "nonce" string,
+                       field "signer" string),
+               field "s" string))
 
   val authorizationListDecoder : authorization_list decoder =
     array authorizationEntryDecoder
@@ -354,12 +356,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val empty_authorization_list_tm = mk_nil authorization_ty
 
-  fun mk_authorization_entry_tm ({chainId, address, nonce, signer}: authorization_entry) =
+  fun mk_authorization_entry_tm ({chainId, address, nonce, signer, s}: authorization_entry) =
     TypeBase.mk_record(authorization_ty, [
       ("authority", address_from_hex signer),
       ("delegate", address_from_hex address),
       ("authChainId", num_from_hex chainId),
-      ("authNonce", num_from_hex nonce)
+      ("authNonce", num_from_hex nonce),
+      ("authS", num_from_hex s)
     ])
 
   fun mk_authorization_list_tm ls = mk_list(List.map mk_authorization_entry_tm ls,

@@ -1,6 +1,7 @@
 Theory vfmContext
 Ancestors
   list rich_list
+  secp256k1
   vfmTypes vfmConstants vfmOperation vfmState vfmTransaction
 
 Datatype:
@@ -299,6 +300,9 @@ Definition process_authorization_def:
     let delegate = auth.delegate in
     let authChainId = auth.authChainId in
     let authNonce = auth.authNonce in
+    let authS = auth.authS in
+    if 2 * authS > secp256k1N then (accs, accesses, refund) else
+    if authority = 0w then (accs, accesses, refund) else
     if authChainId ≠ 0 ∧ authChainId ≠ chainId then (accs, accesses, refund) else
     if authNonce ≥ 2 ** 64 - 1 then (accs, accesses, refund) else
     let newAccesses = accesses with addresses updated_by (λa. fINSERT authority a) in
