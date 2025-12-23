@@ -1052,13 +1052,15 @@ Theorem run_block_eq:
   of NONE => NONE
    | SOME (rs, a, d) =>
      let all_logs = FLAT (MAP (λr. r.logs) rs) in
-     let deposits = extract_deposit_requests all_logs in
-     let (withdrawals, a1) = dequeue_withdrawal_requests a in
-     let (consolidations, a2) = dequeue_consolidation_requests a1 in
-     (if block_invalid p rs deposits withdrawals consolidations b then NONE else
-      case process_withdrawals b.withdrawals (a2, d) of
-           NONE => NONE
-         | SOME (a, d) => SOME (rs, a, d))
+     case extract_deposit_requests all_logs of
+       NONE => NONE
+     | SOME deposits =>
+         let (withdrawals, a1) = dequeue_withdrawal_requests a in
+         let (consolidations, a2) = dequeue_consolidation_requests a1 in
+         (if block_invalid p rs deposits withdrawals consolidations b then NONE else
+          case process_withdrawals b.withdrawals (a2, d) of
+               NONE => NONE
+             | SOME (a, d) => SOME (rs, a, d))
 Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
