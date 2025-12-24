@@ -1799,6 +1799,55 @@ Proof
   rw[precompile_blake2f_def] \\ tac
 QED
 
+Theorem precompile_bls_g1add_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_g1msm_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_g2add_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_g2msm_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_pairing_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_map_fp_to_g1_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_map_fp2_to_g2_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
 Theorem dispatch_precompiles_ignores_extra_domain[simp]:
   ignores_extra_domain (dispatch_precompiles x)
 Proof
@@ -3281,6 +3330,13 @@ Theorem preserves_domain_has_callee_precompiles[simp]:
   ∧ preserves_domain_has_callee (K T) precompile_ecpairing
   ∧ preserves_domain_has_callee (K T) precompile_blake2f
   ∧ preserves_domain_has_callee (K T) precompile_point_eval
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g1add
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g1msm
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g2add
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g2msm
+  ∧ preserves_domain_has_callee (K T) precompile_bls_pairing
+  ∧ preserves_domain_has_callee (K T) precompile_bls_map_fp_to_g1
+  ∧ preserves_domain_has_callee (K T) precompile_bls_map_fp2_to_g2
 Proof
   rw[precompile_ecrecover_def,
      precompile_sha2_256_def,
@@ -3291,7 +3347,14 @@ Proof
      precompile_ecmul_def,
      precompile_ecpairing_def,
      precompile_blake2f_def,
-     precompile_point_eval_def]
+     precompile_point_eval_def,
+     precompile_bls_g1add_def,
+     precompile_bls_g1msm_def,
+     precompile_bls_g2add_def,
+     precompile_bls_g2msm_def,
+     precompile_bls_pairing_def,
+     precompile_bls_map_fp_to_g1_def,
+     precompile_bls_map_fp2_to_g2_def]
   \\ rpt (
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)
