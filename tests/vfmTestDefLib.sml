@@ -160,7 +160,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       (tuple2 (tuple4 (field "chainId" string,
                        field "address" string,
                        field "nonce" string,
-                       field "signer" string),
+                       orElse (field "signer" string, succeed "0")),
                field "s" string))
 
   val authorizationListDecoder : authorization_list decoder =
