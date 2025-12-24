@@ -975,13 +975,24 @@ Theorem precompiles_compute_minimal_domain[simp]:
   computes_minimal_domain precompile_ecpairing ∧
   computes_minimal_domain precompile_blake2f ∧
   computes_minimal_domain precompile_ecrecover ∧
-  computes_minimal_domain precompile_point_eval
+  computes_minimal_domain precompile_point_eval ∧
+  computes_minimal_domain precompile_bls_g1add ∧
+  computes_minimal_domain precompile_bls_g1msm ∧
+  computes_minimal_domain precompile_bls_g2add ∧
+  computes_minimal_domain precompile_bls_g2msm ∧
+  computes_minimal_domain precompile_bls_pairing ∧
+  computes_minimal_domain precompile_bls_map_fp_to_g1 ∧
+  computes_minimal_domain precompile_bls_map_fp2_to_g2
 Proof
   rw[precompile_sha2_256_def, precompile_ripemd_160_def,
      precompile_identity_def, precompile_modexp_def,
      precompile_ecadd_def, precompile_ecmul_def,
      precompile_ecpairing_def, precompile_blake2f_def,
-     precompile_ecrecover_def, precompile_point_eval_def]
+     precompile_ecrecover_def, precompile_point_eval_def,
+     precompile_bls_g1add_def, precompile_bls_g1msm_def,
+     precompile_bls_g2add_def, precompile_bls_g2msm_def,
+     precompile_bls_pairing_def, precompile_bls_map_fp_to_g1_def,
+     precompile_bls_map_fp2_to_g2_def]
   \\ tac
   \\ CASE_TAC \\ rw[]
   \\ TRY CASE_TAC \\ rw[]
