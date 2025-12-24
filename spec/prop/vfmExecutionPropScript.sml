@@ -178,9 +178,8 @@ Theorem wf_initial_state:
 Proof
   strip_tac
   \\ gvs[initial_state_def, CaseEq"option"]
-  \\ pop_assum mp_tac
-  \\ CONV_TAC(PATH_CONV"lrlr"(ONCE_REWRITE_CONV[GSYM LET_THM]))
-  \\ LET_ELIM_TAC
+  \\ pairarg_tac \\ gvs[]
+  \\ pairarg_tac
   \\ gvs[CaseEq"option"]
   \\ simp[wf_state_def]
   \\ simp[all_accounts_def]

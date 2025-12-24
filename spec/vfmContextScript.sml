@@ -400,14 +400,16 @@ Definition pre_transaction_updates_def:
 End
 
 Definition code_from_tx_def:
-  code_from_tx a t =
+  code_from_tx a (c: access_sets) t =
   case t.to of
     SOME addr =>
       let code = (lookup_account addr a).code in
       (case get_delegate code of
-         NONE => code
-       | SOME delegate => (lookup_account delegate a).code)
-  | NONE => t.data
+         NONE => (code, c)
+       | SOME delegate =>
+           ((lookup_account delegate a).code,
+            c with addresses updated_by (λa. fINSERT delegate a)))
+  | NONE => (t.data, c)
 End
 
 Definition initial_state_def:
@@ -417,9 +419,9 @@ Definition initial_state_def:
   of NONE => NONE | SOME accounts =>
     let callee = callee_from_tx_to tx.from tx.nonce tx.to in
     let baseAccesses = initial_access_sets blk.coinBase callee tx in
-    let (postAuthAccounts, accesses, authRefund) =
+    let (postAuthAccounts, postAuthAccesses, authRefund) =
           process_authorizations chainId tx.authorizationList accounts baseAccesses 0 in
-    let code = code_from_tx postAuthAccounts tx in
+    let (code, accesses) = code_from_tx postAuthAccounts postAuthAccesses tx in
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback postAuthAccounts accesses in
     let ctxt = initial_context callee code static rd tx in
