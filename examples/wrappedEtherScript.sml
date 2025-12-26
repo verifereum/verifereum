@@ -279,6 +279,7 @@ Definition deploy_block_def:
   ; transactions := [deploy_tx] (* not true, many others *)
   ; withdrawals := []
   ; requestsHash := 0w (* fake *)
+  ; withdrawalsRoot := word_of_bytes T 0w (withdrawals_root [])
   |>
 End
 
