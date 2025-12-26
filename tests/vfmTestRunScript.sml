@@ -43,6 +43,7 @@ Definition block_header_from_rlp_def:
   let timestamp  = dest_RLPB (EL 11 ls) in
   let prevRandao = dest_RLPB (EL 13 ls) in
   let baseFeePerGas = dest_RLPB (EL 15 ls) in
+  let withdrawalsRoot = dest_RLPB (EL 16 ls) in
   let blobGasUsed   = dest_RLPB (EL 17 ls) in
   let excessBlobGas = dest_RLPB (EL 18 ls) in
   let parentBeaconBlockRoot = dest_RLPB (EL 19 ls) in
@@ -83,6 +84,7 @@ Definition block_header_from_rlp_def:
      ; parentBeaconBlockRoot := word_of_bytes T 0w parentBeaconBlockRoot
      ; requestsHash  := word_of_bytes T 0w requestsHash
      ; stateRoot     := word_of_bytes T 0w stateRoot
+     ; withdrawalsRoot := word_of_bytes T 0w withdrawalsRoot
      (* not in header *)
      ; hash          := 0w
      ; transactions  := []

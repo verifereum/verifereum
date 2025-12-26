@@ -2059,15 +2059,18 @@ Definition block_invalid_def:
     let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
     let excessBlobGas = (p.excessBlobGas + p.blobGasUsed)
                         - target_blob_gas_per_block in
-    let requests_hash = compute_requests_hash deposits withdrawals consolidations in
+    let requestsHash = compute_requests_hash deposits withdrawals consolidations in
     let expectedBaseFee = expected_base_fee p.baseFeePerGas p.gasLimit p.gasUsed in
+    let expectedWithdrawalsRoot =
+          word_of_bytes T 0w (withdrawals_root b.withdrawals) in
     ¬(min_gas_limit ≤ b.gasLimit ∧
       b.baseFeePerGas = expectedBaseFee ∧
       blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
       gasUsed = b.gasUsed ∧
       excessBlobGas = b.excessBlobGas ∧
-      requests_hash = b.requestsHash)
+      requestsHash = b.requestsHash ∧
+      expectedWithdrawalsRoot = b.withdrawalsRoot)
 End
 
 Definition run_block_def:
