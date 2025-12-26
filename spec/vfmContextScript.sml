@@ -1,6 +1,7 @@
 Theory vfmContext
 Ancestors
   list rich_list
+  secp256k1
   vfmTypes vfmConstants vfmOperation vfmState vfmTransaction
 
 Datatype:
@@ -145,7 +146,9 @@ Datatype:
    ; prevRandao            : bytes32
    ; hash                  : bytes32
    ; parentBeaconBlockRoot : bytes32
+   ; requestsHash          : bytes32
    ; stateRoot             : bytes32
+   ; withdrawalsRoot       : bytes32
    ; transactions          : transaction list
    ; withdrawals           : withdrawal list
    |>
@@ -264,7 +267,62 @@ QED
 
 Definition precompile_addresses_def:
   precompile_addresses : address fset =
-  fset_ABS (GENLIST (n2w o SUC) 10)
+  fset_ABS (GENLIST (n2w o SUC) 17)
+End
+
+Definition delegation_prefix_def:
+  delegation_prefix : byte list = [0xEFw; 0x01w; 0x00w]
+End
+
+Definition is_delegation_def:
+  is_delegation (code : byte list) ⇔
+    LENGTH code = 23 ∧ TAKE 3 code = delegation_prefix
+End
+
+Definition make_delegation_def:
+  make_delegation (addr : address) : byte list =
+    delegation_prefix ++ word_to_bytes addr T
+End
+
+Definition get_delegate_def:
+  get_delegate (code : byte list) : address option =
+    if is_delegation code
+    then SOME (word_of_bytes T 0w (DROP 3 code))
+    else NONE
+End
+
+Definition per_auth_base_cost_def:
+  per_auth_base_cost = 12500n
+End
+
+Definition process_authorization_def:
+  process_authorization chainId (auth: authorization) (accs, accesses: access_sets, refund) =
+    let authority = auth.authority in
+    let delegate = auth.delegate in
+    let authChainId = auth.authChainId in
+    let authNonce = auth.authNonce in
+    let authS = auth.authS in
+    if 2 * authS > secp256k1N then (accs, accesses, refund) else
+    if authority = 0w then (accs, accesses, refund) else
+    if authChainId ≠ 0 ∧ authChainId ≠ chainId then (accs, accesses, refund) else
+    if authNonce ≥ 2 ** 64 - 1 then (accs, accesses, refund) else
+    let newAccesses = accesses with addresses updated_by (λa. fINSERT authority a) in
+    let acc = lookup_account authority accs in
+    if ¬NULL acc.code ∧ ¬is_delegation acc.code then (accs, newAccesses, refund) else
+    if acc.nonce ≠ authNonce then (accs, newAccesses, refund) else
+    let newCode = if delegate = 0w then [] else make_delegation delegate in
+    let newAcc = acc with <| code := newCode; nonce := SUC acc.nonce |> in
+    let newAccs = update_account authority newAcc accs in
+    let newRefund = if account_empty acc then refund
+                    else refund + (new_account_cost - per_auth_base_cost) in
+    (newAccs, newAccesses, newRefund)
+End
+
+Definition process_authorizations_def:
+  process_authorizations chainId [] accs accesses refund = (accs, accesses, refund) ∧
+  process_authorizations chainId (auth::auths) accs accesses refund =
+    let (accs', accesses', refund') = process_authorization chainId auth (accs, accesses, refund) in
+    process_authorizations chainId auths accs' accesses' refund'
 End
 
 Definition initial_access_sets_def:
@@ -280,23 +338,29 @@ Definition initial_access_sets_def:
    |>
 End
 
+Definition call_data_tokens_def:
+  call_data_tokens data =
+  SUM (MAP (λb. if b = 0w then 1n else 4) data)
+End
+
 Definition intrinsic_cost_def:
-  intrinsic_cost accessList p =
+  intrinsic_cost accessList authListLen p =
   let isCreate = is_code_dest p.outputTo in
   let data = if isCreate then p.code else p.data in
-  base_cost
-  + SUM (MAP (λb. call_data_cost (b = 0w)) data)
-  + (if isCreate
-     then create_cost + init_code_word_cost * (word_size $ LENGTH data)
-     else 0)
-  + access_list_address_cost * LENGTH accessList
-  + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
+    base_cost
+    + SUM (MAP (λb. call_data_cost (b = 0w)) data)
+    + (if isCreate
+       then create_cost + init_code_word_cost * (word_size $ LENGTH data)
+       else 0)
+    + access_list_address_cost * LENGTH accessList
+    + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
+    + new_account_cost * authListLen
 End
 
 Definition apply_intrinsic_cost_def:
-  apply_intrinsic_cost accessList c =
+  apply_intrinsic_cost accessList authListLen c =
   let p = c.msgParams in
-  let k = intrinsic_cost accessList p in
+  let k = intrinsic_cost accessList authListLen p in
   let l = p.gasLimit in
   if l < k then NONE else SOME $
   c with msgParams updated_by (λp.
@@ -324,7 +388,7 @@ Definition pre_transaction_updates_def:
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
-  if ¬NULL sender.code then NONE else
+  if ¬NULL sender.code ∧ ¬is_delegation sender.code then NONE else
   let fee = t.gasLimit * t.gasPrice +
             total_blob_gas t * blobBaseFee in
   if sender.nonce ≠ t.nonce ∨ t.nonce ≥ 2 ** 64 - 1 then NONE else
@@ -337,10 +401,16 @@ Definition pre_transaction_updates_def:
 End
 
 Definition code_from_tx_def:
-  code_from_tx a t =
+  code_from_tx a (c: access_sets) t =
   case t.to of
-    SOME addr => (lookup_account addr a).code
-  | NONE => t.data
+    SOME addr =>
+      let code = (lookup_account addr a).code in
+      (case get_delegate code of
+         NONE => (code, c)
+       | SOME delegate =>
+           ((lookup_account delegate a).code,
+            c with addresses updated_by (λa. fINSERT delegate a)))
+  | NONE => (t.data, c)
 End
 
 Definition initial_state_def:
@@ -349,12 +419,16 @@ Definition initial_state_def:
          accs (base_fee_per_blob_gas blk.excessBlobGas) tx
   of NONE => NONE | SOME accounts =>
     let callee = callee_from_tx_to tx.from tx.nonce tx.to in
-    let accesses = initial_access_sets blk.coinBase callee tx in
-    let code = code_from_tx accs tx in
+    let baseAccesses = initial_access_sets blk.coinBase callee tx in
+    let (postAuthAccounts, postAuthAccesses, authRefund) =
+          process_authorizations chainId tx.authorizationList accounts baseAccesses 0 in
+    let (code, accesses) = code_from_tx postAuthAccounts postAuthAccesses tx in
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
-    let rb = initial_rollback accounts accesses in
+    let rb = initial_rollback postAuthAccounts accesses in
     let ctxt = initial_context callee code static rd tx in
-    case apply_intrinsic_cost tx.accessList ctxt of NONE => NONE | SOME ctxt =>
+    let authListLen = LENGTH tx.authorizationList in
+    case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
+    let ctxt = ctxt with addRefund updated_by (λr. r + authRefund) in
     SOME $
     <| contexts := [(ctxt, rb)]
      ; txParams := initial_tx_params chainId prevHashes blk tx

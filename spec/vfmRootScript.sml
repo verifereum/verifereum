@@ -1,7 +1,7 @@
 Theory vfmRoot
 Ancestors
   alist list pair combin sorting finite_map sptree words
-  cv_std cv_type merklePatriciaTrie vfmState
+  cv_std cv_type merklePatriciaTrie vfmState vfmContext
 Libs
   cv_transLib cv_typeLib
   wordsLib
@@ -298,3 +298,37 @@ Proof
   \\ simp[cv_state_kvs_thm |> GSYM |> Q.GEN`acc` |> Q.SPEC`[]` |>
           SIMP_RULE std_ss [from_list_def]]
 QED
+
+Definition encode_withdrawal_def:
+  encode_withdrawal (w: withdrawal) =
+  rlp_encode $ RLPL [
+    rlp_number w.withdrawalIndex;
+    rlp_number w.validatorIndex;
+    RLPB $ word_to_bytes w.withdrawalAddress T;
+    rlp_number w.withdrawalAmount
+  ]
+End
+
+val () = cv_auto_trans encode_withdrawal_def;
+
+Definition withdrawal_key_def:
+  withdrawal_key (idx: num) =
+  bytes_to_nibble_list $ rlp_encode $ rlp_number idx
+End
+
+val () = cv_auto_trans withdrawal_key_def;
+
+Definition withdrawals_kvs_def:
+  withdrawals_kvs [] (idx: num) acc = REVERSE acc ∧
+  withdrawals_kvs (w::ws) idx acc =
+  withdrawals_kvs ws (idx + 1) ((withdrawal_key idx, encode_withdrawal w) :: acc)
+End
+
+val () = cv_trans withdrawals_kvs_def;
+
+Definition withdrawals_root_def:
+  withdrawals_root (ws: withdrawal list) =
+  trie_root_from_kvs (withdrawals_kvs ws 0 [])
+End
+
+val () = cv_auto_trans withdrawals_root_def;

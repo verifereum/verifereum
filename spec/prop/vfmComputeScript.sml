@@ -563,6 +563,48 @@ Proof
   \\ EVAL_TAC \\ rw[bool_to_bit_def]
 QED
 
+val () = “precompile_bls_g1add s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g1add_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_g1msm s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g1msm_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_g2add s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g2add_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_g2msm s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_g2msm_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_pairing s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_pairing_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_map_fp_to_g1 s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_map_fp_to_g1_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
+val () = “precompile_bls_map_fp2_to_g2 s” |>
+  SIMP_CONV std_ss [
+    precompile_bls_map_fp2_to_g2_def, bind_def, ignore_bind_def,
+    LET_RATOR, option_CASE_rator
+  ] |> cv_auto_trans;
+
 val () = “precompile_sha2_256 s” |>
    SIMP_CONV std_ss [
        precompile_sha2_256_def, bind_def, ignore_bind_def, LET_RATOR
@@ -694,7 +736,8 @@ fun mconv def =
     LET_RATOR,
     LET_PROD_RATOR,
     option_CASE_rator,
-    LET_UNCURRY
+    prod_CASE_rator,
+    LET_UNCURRY, UNCURRY
 ];
 
 fun trans_step_x need_pre def = let
@@ -951,7 +994,14 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-val () = update_beacon_block_def |> cv_auto_trans;
+val update_beacon_block_pre_def =
+  cv_auto_trans_pre "update_beacon_block_pre" update_beacon_block_def;
+
+Theorem update_beacon_block_pre[cv_pre]:
+  update_beacon_block_pre prevHashes b accounts
+Proof
+  rw[update_beacon_block_pre_def]
+QED
 
 val () = cv_auto_trans empty_return_destination_def;
 
@@ -965,7 +1015,7 @@ Proof
   rw[run_create_pre_def, initial_state_def,
      pre_transaction_updates_def, execution_state_component_equality,
      initial_rollback_def, code_from_tx_def, set_last_accounts_pre_def]
-  \\ strip_tac \\ gvs[CaseEq"option"]
+  \\ strip_tac \\ gvs[CaseEq"option", UNCURRY]
 QED
 
 val () = run_transaction_def |> cv_auto_trans;
@@ -980,29 +1030,49 @@ End
 
 val () = cv_auto_trans run_transactions_def;
 
+Theorem is_deposit_event_alt:
+  is_deposit_event e ⇔
+  case e.topics of [] => F
+     | t::_ => (e.logger = deposit_contract_address ∧
+                t = deposit_event_topic)
+Proof
+  rw[is_deposit_event_def]
+  \\ CASE_TAC \\ gvs[]
+QED
+
+val () = cv_auto_trans is_deposit_event_alt;
+
+val () = cv_auto_trans block_invalid_def;
+
 Theorem run_block_eq:
   run_block d chainId h p a b =
   case
     run_transactions d F chainId h b
-      (update_beacon_block b a) [] b.transactions
+      (update_beacon_block h b a) [] b.transactions
   of NONE => NONE
-   | SOME (r, a, d) =>
-     (if block_invalid p r b then NONE else
-      case process_withdrawals b.withdrawals (a, d) of
-           NONE => NONE
-         | SOME (a, d) => SOME (r, a, d))
+   | SOME (rs, a, d) =>
+     let all_logs = FLAT (MAP (λr. r.logs) rs) in
+     case extract_deposit_requests all_logs of
+       NONE => NONE
+     | SOME deposits =>
+         let (withdrawals, a1) = dequeue_withdrawal_requests a in
+         let (consolidations, a2) = dequeue_consolidation_requests a1 in
+         (if block_invalid p rs deposits withdrawals consolidations b then NONE else
+          case process_withdrawals b.withdrawals (a2, d) of
+               NONE => NONE
+             | SOME (a, d) => SOME (rs, a, d))
 Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
-  \\ qspec_tac(`b.withdrawals`,`ws`)
-  \\ qspec_tac(`update_beacon_block b a`,`blk`)
+  \\ qspec_tac(`update_beacon_block h b a`,`blk`)
   \\ qid_spec_tac`d`
   \\ simp_tac std_ss
        [Once (Q.prove(`[]:transaction_result list = REVERSE []`, simp[])), SimpRHS]
   \\ qspec_tac(`[]:transaction_result list`,`rs`)
   \\ Induct_on`ts`
   \\ rw[run_transactions_def]
-  >- ( CASE_TAC \\ gs[UNCURRY, CaseEq"prod"] \\ metis_tac[PAIR])
+  >- ( gs[OPTION_BIND_eq_case, UNCURRY, CaseEq"prod"]
+       \\ CASE_TAC \\ gs[] \\ Cases_on`x` \\ gs[] )
   \\ qmatch_goalsub_abbrev_tac`FOLDL f`
   \\ qmatch_goalsub_abbrev_tac`OPTION_MAP _ rt`
   \\ Cases_on`rt`
@@ -1013,8 +1083,9 @@ Proof
     \\ rpt (pop_assum kall_tac)
     \\ Induct_on`ts` \\ rw[] )
   \\ qmatch_goalsub_rename_tac`SOME q`
-  \\ PairCases_on`q` \\ gvs[]
+  \\ PairCases_on`q` \\ gvs[OPTION_BIND_eq_case]
   \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
+  \\ Cases_on`x` \\ gs[]
 QED
 
 val () = cv_auto_trans process_withdrawal_def;

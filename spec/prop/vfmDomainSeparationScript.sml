@@ -1799,6 +1799,55 @@ Proof
   rw[precompile_blake2f_def] \\ tac
 QED
 
+Theorem precompile_bls_g1add_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_g1msm_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_g2add_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_g2msm_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_pairing_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_map_fp_to_g1_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem precompile_bls_map_fp2_to_g2_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def] \\ tac
+  \\ CASE_TAC \\ rw[] \\ tac
+QED
+
 Theorem dispatch_precompiles_ignores_extra_domain[simp]:
   ignores_extra_domain (dispatch_precompiles x)
 Proof
@@ -2160,8 +2209,25 @@ Proof
   >- (
     rpt gen_tac
     \\ strip_tac
-    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
-    \\ simp[ignore_bind_def]
+    \\ qmatch_goalsub_abbrev_tac`monad_bind f1 g1 s = monad_bind f2 g2 s`
+    \\ sg `monad_bind f2 g2 s = monad_bind f1 g2 s`
+    >- (
+      `f1 s = f2 s` suffices_by rw[bind_def]
+      \\ unabbrev_all_tac
+      \\ gvs[lookup_account_def, accounts_agree_modulo_storage_def]
+      \\ gvs[account_state_component_equality, fIN_IN]
+      \\ gvs[get_delegate_def]
+      \\ rw[bind_def]
+      \\ CASE_TAC
+      \\ CASE_TAC \\ gvs[]
+      \\ rw[return_def]
+      \\ fsrw_tac[DNF_ss][]
+      \\ first_x_assum irule
+      \\ gvs[access_address_def, domain_check_def, fIN_IN]
+      \\ CCONTR_TAC \\ gvs[fail_def] )
+    \\ simp[]
+    \\ irule bind_eq \\ simp[] \\ Cases \\ gen_tac \\ strip_tac
+    \\ simp[ignore_bind_def, Abbr`g1`, Abbr`g2`]
     \\ qmatch_goalsub_abbrev_tac`account_empty la`
     \\ qmatch_abbrev_tac`lhs = _`
     \\ qmatch_goalsub_abbrev_tac`account_empty lb`
@@ -2172,6 +2238,7 @@ Proof
       \\ gvs[accounts_agree_modulo_storage_def, fIN_IN]
       \\ gvs[account_state_component_equality] )
     \\ gvs[]
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
     \\ qmatch_goalsub_abbrev_tac`FST pp`
     \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
     \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
@@ -2184,9 +2251,16 @@ Proof
     \\ `n1 = n2`
     by (
       gvs[Abbr`n1`,Abbr`n2`,lookup_account_def,accounts_agree_modulo_storage_def]
+      \\ qpat_x_assum`_ s = _ s`kall_tac
       \\ gvs[fIN_IN, account_state_component_equality]
-      \\ fsrw_tac[DNF_ss][]
+      \\ fsrw_tac[DNF_ss][Abbr`f1`,Abbr`f2`]
       \\ first_x_assum irule
+      \\ sg `s'.contexts = s.contexts`
+      >- (
+        Cases_on`get_delegate la.code` \\ gvs[return_def,bind_def]
+        \\ gvs[CaseEq"prod",CaseEq"sum"]
+        \\ gvs[access_address_def, domain_check_def]
+        \\ gvs[COND_RATOR,CaseEq"bool",return_def,fail_def] )
       \\ gvs[get_callee_def, bind_def, get_current_context_def, CaseEq"prod",
              CaseEq"sum", return_def, CaseEq"bool", fail_def]
       \\ gvs[expand_memory_def, bind_def, get_current_context_def, CaseEq"prod",
@@ -2208,8 +2282,33 @@ Proof
     by (
       gs[Abbr`la`,Abbr`lb`,lookup_account_def, accounts_agree_modulo_storage_def]
       \\ gvs[account_state_component_equality, fIN_IN] )
-    \\ simp[])
+    \\ simp[]
+    \\ simp[get_delegate_def]
+    \\ IF_CASES_TAC \\ simp[]
+    \\ ntac 4 (AP_TERM_TAC ORELSE AP_THM_TAC)
+    \\ gvs[lookup_account_def, accounts_agree_modulo_storage_def]
+    \\ gvs[account_state_component_equality, fIN_IN])
   \\ gen_tac
+  \\ simp[]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- (
+    simp[]
+    \\ reverse conj_tac
+    >- (
+      CASE_TAC \\ simp[]
+      \\ irule bind_ignores_extra_domain
+      \\ simp[] )
+    \\ rw[]
+    \\ ntac 2 $ pop_assum mp_tac \\ CASE_TAC
+    \\ gvs[return_def, bind_def]
+    \\ CASE_TAC \\ gvs[]
+    \\ CASE_TAC \\ gvs[]
+    \\ pop_assum mp_tac
+    \\ simp[access_address_def, domain_check_def]
+    \\ TOP_CASE_TAC \\ rw[return_def, fail_def] \\ gvs[]
+    \\ gvs[bind_def, ignore_bind_def, set_domain_def, return_def] )
+  \\ Cases
   \\ simp[ignore_bind_def]
   \\ irule ignores_extra_domain_imp_pred_bind
   \\ simp[]
@@ -3231,6 +3330,13 @@ Theorem preserves_domain_has_callee_precompiles[simp]:
   ∧ preserves_domain_has_callee (K T) precompile_ecpairing
   ∧ preserves_domain_has_callee (K T) precompile_blake2f
   ∧ preserves_domain_has_callee (K T) precompile_point_eval
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g1add
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g1msm
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g2add
+  ∧ preserves_domain_has_callee (K T) precompile_bls_g2msm
+  ∧ preserves_domain_has_callee (K T) precompile_bls_pairing
+  ∧ preserves_domain_has_callee (K T) precompile_bls_map_fp_to_g1
+  ∧ preserves_domain_has_callee (K T) precompile_bls_map_fp2_to_g2
 Proof
   rw[precompile_ecrecover_def,
      precompile_sha2_256_def,
@@ -3241,7 +3347,14 @@ Proof
      precompile_ecmul_def,
      precompile_ecpairing_def,
      precompile_blake2f_def,
-     precompile_point_eval_def]
+     precompile_point_eval_def,
+     precompile_bls_g1add_def,
+     precompile_bls_g1msm_def,
+     precompile_bls_g2add_def,
+     precompile_bls_g2msm_def,
+     precompile_bls_pairing_def,
+     precompile_bls_map_fp_to_g1_def,
+     precompile_bls_map_fp2_to_g2_def]
   \\ rpt (
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)
@@ -3383,6 +3496,21 @@ Proof
   \\ irule preserves_domain_has_callee_access_address_bind
   \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    CASE_TAC \\ reverse(rw[]) \\ gvs[bind_def]
+    >- (
+      irule preserves_domain_has_callee_access_address_bind
+      \\ rw[] )
+    \\ pop_assum mp_tac \\ CASE_TAC
+    \\ CASE_TAC \\ rw[return_def]
+    \\ first_x_assum irule
+    \\ rpt $ pop_assum mp_tac
+    \\ simp[access_address_def, domain_check_def]
+    \\ TOP_CASE_TAC \\ rw[] \\ gvs[fail_def, return_def,
+         bind_def, ignore_bind_def, set_domain_def])
+  \\ Cases \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]

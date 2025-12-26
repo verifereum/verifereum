@@ -116,10 +116,6 @@ Definition account_already_created_def:
     ¬(a.nonce = 0 ∧ NULL a.code ∧ storage_empty a.storage)
 End
 
-Definition account_empty_def:
-  account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
-End
-
 Definition memory_cost_def:
   memory_cost byteSize =
   let wordSize = word_size byteSize in
@@ -1112,6 +1108,7 @@ Definition proceed_create_def:
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
       ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+      ; authorizationList := []
     |>;
     rollback <- get_rollback;
     original <- get_original;
@@ -1366,6 +1363,82 @@ Definition precompile_point_eval_def:
   od
 End
 
+Definition precompile_bls_g1add_def:
+  precompile_bls_g1add = do
+    input <- get_call_data;
+    consume_gas 375;
+    case bls12381$bls_g1add input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_g1msm_def:
+  precompile_bls_g1msm = do
+    input <- get_call_data;
+    k <<- LENGTH input DIV 160;
+    gas <<- k * 12000 * bls12381$g1_msm_discount k DIV 1000;
+    consume_gas gas;
+    case bls12381$bls_g1msm input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_g2add_def:
+  precompile_bls_g2add = do
+    input <- get_call_data;
+    consume_gas 600;
+    case bls12381$bls_g2add input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_g2msm_def:
+  precompile_bls_g2msm = do
+    input <- get_call_data;
+    k <<- LENGTH input DIV 288;
+    gas <<- k * 22500 * bls12381$g2_msm_discount k DIV 1000;
+    consume_gas gas;
+    case bls12381$bls_g2msm input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_pairing_def:
+  precompile_bls_pairing = do
+    input <- get_call_data;
+    k <<- LENGTH input DIV 384;
+    gas <<- 32600 * k + 37700;
+    consume_gas gas;
+    case bls12381$bls_pairing input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_map_fp_to_g1_def:
+  precompile_bls_map_fp_to_g1 = do
+    input <- get_call_data;
+    consume_gas 5500;
+    case bls12381$bls_map_fp_to_g1 input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
+Definition precompile_bls_map_fp2_to_g2_def:
+  precompile_bls_map_fp2_to_g2 = do
+    input <- get_call_data;
+    consume_gas 23800;
+    case bls12381$bls_map_fp2_to_g2 input of
+      NONE => fail OutOfGas
+    | SOME result => do set_return_data result; finish od
+  od
+End
+
 Definition dispatch_precompiles_def:
   dispatch_precompiles (a: address) =
     if a = 0x1w then precompile_ecrecover
@@ -1378,6 +1451,13 @@ Definition dispatch_precompiles_def:
     else if a = 0x8w then precompile_ecpairing
     else if a = 0x9w then precompile_blake2f
     else if a = 0xaw then precompile_point_eval
+    else if a = 0xbw then precompile_bls_g1add
+    else if a = 0xcw then precompile_bls_g1msm
+    else if a = 0xdw then precompile_bls_g2add
+    else if a = 0xew then precompile_bls_g2msm
+    else if a = 0xfw then precompile_bls_pairing
+    else if a = 0x10w then precompile_bls_map_fp_to_g1
+    else if a = 0x11w then precompile_bls_map_fp2_to_g2
     else fail Impossible
 End
 
@@ -1404,6 +1484,7 @@ Definition proceed_call_def:
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
       ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+      ; authorizationList := []
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
@@ -1433,11 +1514,17 @@ Definition step_call_def:
     positiveValueCost <<- if 0 < value then call_value_cost else 0;
     accounts <- get_accounts;
     toAccount <<- lookup_account address accounts;
+    (code, delegateCost) <- case get_delegate toAccount.code of
+               NONE => return (toAccount.code, 0)
+             | SOME delegate => do
+                 cost <- access_address delegate;
+                 return ((lookup_account delegate accounts).code, cost)
+               od;
     createCost <<- if op = Call ∧ 0 < value ∧ account_empty toAccount
                    then new_account_cost else 0;
     gasLeft <- get_gas_left;
     (dynamicGas, stipend) <<- call_gas value gas gasLeft mx.cost $
-                                accessCost + positiveValueCost + createCost;
+                                accessCost + positiveValueCost + createCost + delegateCost;
     consume_gas $ static_gas op + dynamicGas + mx.cost;
     if op = Call ∧ 0 < value then assert_not_static else return ();
     expand_memory mx.expand_by;
@@ -1450,7 +1537,7 @@ Definition step_call_def:
       if sucDepth > 1024
       then abort_unuse stipend
       else proceed_call op sender address value
-             argsOffset argsSize toAccount.code stipend
+             argsOffset argsSize code stipend
              (Memory <| offset := retOffset; size := retSize |>)
     od
   od
@@ -1691,9 +1778,11 @@ Definition post_transaction_accounting_def:
   let txGasUsed = tx.gasLimit - gasLeft in
   let gasRefund = if result ≠ NONE then 0
                   else MIN (txGasUsed DIV 5) (addRefund - subRefund) in
-  let refundEther = (gasLeft + gasRefund) * tx.gasPrice in
+  let tokens = call_data_tokens tx.data in
+  let floor_cost = base_cost + floor_call_data_cost * tokens in
+  let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
+  let refundEther = (tx.gasLimit - totalGasUsed) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
-  let totalGasUsed = txGasUsed - gasRefund in
   let transactionFee = totalGasUsed * priorityFeePerGas in
   let accounts = if result = NONE
                  then process_deletions t.rollback.toDelete t.rollback.accounts
@@ -1768,16 +1857,23 @@ Definition run_transaction_def:
 End
 
 Definition update_beacon_block_def:
-  update_beacon_block b (accounts: evm_accounts) =
-  let addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
+  update_beacon_block prevHashes b (accounts: evm_accounts) =
+  let beacon_addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
   let buffer_length = 8191n in
   let timestamp_idx = b.timeStamp MOD buffer_length in
   let root_idx = timestamp_idx + buffer_length in
-  let a = lookup_account addr accounts in
+  let a = lookup_account beacon_addr accounts in
   let s0 = a.storage in
   let s1 = update_storage (n2w timestamp_idx) (n2w b.timeStamp) s0 in
   let s2 = update_storage (n2w root_idx) (b.parentBeaconBlockRoot) s1 in
-  update_account addr (a with storage := s2) accounts
+  let accounts1 = update_account beacon_addr (a with storage := s2) accounts in
+  if b.number = 0 ∨ prevHashes = [] then accounts1 else
+  let blockhash_addr = 0x0000F90827F1C53a10cb7A02335B175320002935w in
+  let slot = (b.number - 1) MOD buffer_length in
+  let parent_hash = HD prevHashes in
+  let a2 = lookup_account blockhash_addr accounts1 in
+  let s3 = update_storage (n2w slot) parent_hash a2.storage in
+  update_account blockhash_addr (a2 with storage := s3) accounts1
 End
 
 Definition process_withdrawal_def:
@@ -1803,16 +1899,178 @@ Definition process_withdrawals_def:
     (process_withdrawals ws)
 End
 
+Definition is_deposit_event_def:
+  is_deposit_event (e: event) ⇔
+    e.logger = deposit_contract_address ∧
+    ¬NULL e.topics ∧
+    HD e.topics = deposit_event_topic
+End
+
+Definition parse_deposit_request_def:
+  parse_deposit_request (data: byte list) =
+  if LENGTH data < 576 then NONE else
+  let pubkey_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 data)) in
+  let withdrawal_creds_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 32 data))) in
+  let amount_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 64 data))) in
+  let signature_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 96 data))) in
+  let index_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 128 data))) in
+  let pubkey = TAKE 48 (DROP (pubkey_offset + 32) data) in
+  let withdrawal_creds = TAKE 32 (DROP (withdrawal_creds_offset + 32) data) in
+  let amount = TAKE 8 (DROP (amount_offset + 32) data) in
+  let signature = TAKE 96 (DROP (signature_offset + 32) data) in
+  let index = TAKE 8 (DROP (index_offset + 32) data) in
+  SOME (pubkey ++ withdrawal_creds ++ amount ++ signature ++ index)
+End
+
+Definition parse_deposit_events_def:
+  parse_deposit_events ([] : event list) = SOME [] ∧
+  parse_deposit_events (e::es) =
+    case parse_deposit_request e.data of
+      NONE => NONE
+    | SOME req =>
+        case parse_deposit_events es of
+          NONE => NONE
+        | SOME reqs => SOME (req :: reqs)
+End
+
+Definition extract_deposit_requests_def:
+  extract_deposit_requests logs =
+  parse_deposit_events (FILTER is_deposit_event logs)
+End
+
+Definition read_withdrawal_request_def:
+  read_withdrawal_request storage idx =
+  let base = 4 + idx * 3 in
+  let slot0 = lookup_storage (n2w base) storage in
+  let slot1 = lookup_storage (n2w (base + 1)) storage in
+  let slot2 = lookup_storage (n2w (base + 2)) storage in
+  let source_addr = DROP 12 (word_to_bytes slot0 T) in
+  let pubkey_part1 = word_to_bytes slot1 T in
+  let slot2_bytes = word_to_bytes slot2 T in
+  let pubkey_part2 = TAKE 16 slot2_bytes in
+  let amount = REVERSE (TAKE 8 (DROP 16 slot2_bytes)) in
+  source_addr ++ pubkey_part1 ++ pubkey_part2 ++ amount
+End
+
+Definition dequeue_withdrawal_requests_def:
+  dequeue_withdrawal_requests accounts =
+  let contract = lookup_account withdrawal_request_contract accounts in
+  let storage = contract.storage in
+  let head = w2n (lookup_storage 2w storage) in
+  let tail = w2n (lookup_storage 3w storage) in
+  let dequeue_count = MIN (tail - head) max_withdrawal_requests_per_block in
+  let requests = GENLIST (λi. read_withdrawal_request storage (head + i)) dequeue_count in
+  let new_head = head + dequeue_count in
+  let old_excess = w2n (lookup_storage 0w storage) in
+  let add_count = w2n (lookup_storage 1w storage) in
+  let new_excess = if old_excess + add_count > target_withdrawal_requests_per_block
+                   then old_excess + add_count - target_withdrawal_requests_per_block
+                   else 0 in
+  let storage1 = update_storage 0w (n2w new_excess) storage in
+  let storage2 = update_storage 1w 0w storage1 in
+  let storage3 = if new_head = tail
+                 then update_storage 3w 0w (update_storage 2w 0w storage2)
+                 else update_storage 2w (n2w new_head) storage2 in
+  let updated_contract = contract with storage := storage3 in
+  let updated_accounts = update_account withdrawal_request_contract updated_contract accounts in
+  (requests, updated_accounts)
+End
+
+Definition read_consolidation_request_def:
+  read_consolidation_request storage idx =
+  let base = 4 + idx * 4 in
+  let slot0 = lookup_storage (n2w base) storage in
+  let slot1 = lookup_storage (n2w (base + 1)) storage in
+  let slot2 = lookup_storage (n2w (base + 2)) storage in
+  let slot3 = lookup_storage (n2w (base + 3)) storage in
+  let source_addr = DROP 12 (word_to_bytes slot0 T) in
+  let source_pubkey_part1 = word_to_bytes slot1 T in
+  let slot2_bytes = word_to_bytes slot2 T in
+  let source_pubkey_part2 = TAKE 16 slot2_bytes in
+  let target_pubkey_part1 = DROP 16 slot2_bytes in
+  let target_pubkey_part2 = word_to_bytes slot3 T in
+  source_addr ++ source_pubkey_part1 ++ source_pubkey_part2 ++
+  target_pubkey_part1 ++ target_pubkey_part2
+End
+
+Definition dequeue_consolidation_requests_def:
+  dequeue_consolidation_requests accounts =
+  let contract = lookup_account consolidation_request_contract accounts in
+  let storage = contract.storage in
+  let head = w2n (lookup_storage 2w storage) in
+  let tail = w2n (lookup_storage 3w storage) in
+  let dequeue_count = MIN (tail - head) max_consolidation_requests_per_block in
+  let requests = GENLIST (λi. read_consolidation_request storage (head + i)) dequeue_count in
+  let new_head = head + dequeue_count in
+  let old_excess = w2n (lookup_storage 0w storage) in
+  let add_count = w2n (lookup_storage 1w storage) in
+  let new_excess = if old_excess + add_count > target_consolidation_requests_per_block
+                   then old_excess + add_count - target_consolidation_requests_per_block
+                   else 0 in
+  let storage1 = update_storage 0w (n2w new_excess) storage in
+  let storage2 = update_storage 1w 0w storage1 in
+  let storage3 = if new_head = tail
+                 then update_storage 3w 0w (update_storage 2w 0w storage2)
+                 else update_storage 2w (n2w new_head) storage2 in
+  let updated_contract = contract with storage := storage3 in
+  let updated_accounts = update_account consolidation_request_contract updated_contract accounts in
+  (requests, updated_accounts)
+End
+
+Definition compute_requests_hash_def:
+  compute_requests_hash (deposits: byte list list)
+                        (withdrawals: byte list list)
+                        (consolidations: byte list list) =
+  let deposit_data = FLAT deposits in
+  let deposit_hash = if NULL deposit_data then []
+                     else word_to_bytes (SHA_256_bytes (0x00w :: deposit_data)) T in
+  let withdrawal_data = FLAT withdrawals in
+  let withdrawal_hash = if NULL withdrawal_data then []
+                        else word_to_bytes (SHA_256_bytes (0x01w :: withdrawal_data)) T in
+  let consolidation_data = FLAT consolidations in
+  let consolidation_hash = if NULL consolidation_data then []
+                           else word_to_bytes (SHA_256_bytes (0x02w :: consolidation_data)) T in
+  let all_hashes = deposit_hash ++ withdrawal_hash ++ consolidation_hash in
+  SHA_256_bytes all_hashes
+End
+
+Definition expected_base_fee_def:
+  expected_base_fee parent_base_fee parent_gas_limit parent_gas_used =
+    let parent_gas_target = parent_gas_limit DIV elasticity_multiplier in
+    if parent_gas_used = parent_gas_target then parent_base_fee
+    else if parent_gas_used > parent_gas_target then
+      let gas_used_delta = parent_gas_used - parent_gas_target in
+      let base_fee_delta = parent_base_fee * gas_used_delta
+                           DIV parent_gas_target
+                           DIV base_fee_max_change_denominator in
+      let base_fee_delta = MAX base_fee_delta 1 in
+      parent_base_fee + base_fee_delta
+    else
+      let gas_used_delta = parent_gas_target - parent_gas_used in
+      let base_fee_delta = parent_base_fee * gas_used_delta
+                           DIV parent_gas_target
+                           DIV base_fee_max_change_denominator in
+      parent_base_fee - base_fee_delta
+End
+
 Definition block_invalid_def:
-  block_invalid p rs b ⇔
+  block_invalid p rs deposits withdrawals consolidations b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
     let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
     let excessBlobGas = (p.excessBlobGas + p.blobGasUsed)
                         - target_blob_gas_per_block in
-    ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
+    let requestsHash = compute_requests_hash deposits withdrawals consolidations in
+    let expectedBaseFee = expected_base_fee p.baseFeePerGas p.gasLimit p.gasUsed in
+    let expectedWithdrawalsRoot =
+          word_of_bytes T 0w (withdrawals_root b.withdrawals) in
+    ¬(min_gas_limit ≤ b.gasLimit ∧
+      b.baseFeePerGas = expectedBaseFee ∧
+      blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
       gasUsed = b.gasUsed ∧
-      excessBlobGas = b.excessBlobGas)
+      excessBlobGas = b.excessBlobGas ∧
+      requestsHash = b.requestsHash ∧
+      expectedWithdrawalsRoot = b.withdrawalsRoot)
 End
 
 Definition run_block_def:
@@ -1823,13 +2081,17 @@ Definition run_block_def:
          OPTION_BIND x (λ(ls, a, dom).
            OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
            run_transaction dom F chainId prevHashes b a tx))
-      (SOME ([], update_beacon_block b accounts, dom))
+      (SOME ([], update_beacon_block prevHashes b accounts, dom))
       b.transactions )
-  (λ(r, a, d).
-    if block_invalid parent r b then NONE
-    else
-      OPTION_BIND (process_withdrawals b.withdrawals (a, d))
-        (λ(a, d). SOME (r, a, d)))
+  (λ(rs, a, d).
+    let all_logs = FLAT (MAP (λr. r.logs) rs) in
+    OPTION_BIND (extract_deposit_requests all_logs) (λdeposits.
+      let (withdrawals, a1) = dequeue_withdrawal_requests a in
+      let (consolidations, a2) = dequeue_consolidation_requests a1 in
+      if block_invalid parent rs deposits withdrawals consolidations b then NONE
+      else
+        OPTION_BIND (process_withdrawals b.withdrawals (a2, d))
+          (λ(a, d). SOME (rs, a, d))))
 End
 
 Definition run_blocks_def:

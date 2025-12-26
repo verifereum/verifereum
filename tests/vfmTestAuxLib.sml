@@ -21,7 +21,7 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
     before export_theory ()
 
   val fixtures_version = "5.4.0"
-  val fork_name = "Cancun"
+  val fork_name = "Prague"
   val chain_id = 1
 
   val time_limit = Option.getOpt

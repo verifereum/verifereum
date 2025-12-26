@@ -256,6 +256,7 @@ Definition deploy_tx_def:
   ; blobVersionedHashes := []
   ; maxFeePerBlobGas := NONE
   ; maxFeePerGas := NONE
+  ; authorizationList := []
   |>
 End
 
@@ -277,6 +278,8 @@ Definition deploy_block_def:
   ; stateRoot := 0xb94a65da26a6c94c90376eb814d4f6f3c87d5b4ca515b1293b74a172be755245w
   ; transactions := [deploy_tx] (* not true, many others *)
   ; withdrawals := []
+  ; requestsHash := 0w (* fake *)
+  ; withdrawalsRoot := word_of_bytes T 0w (withdrawals_root [])
   |>
 End
 

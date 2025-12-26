@@ -3,6 +3,15 @@ signature vfmTestDefLib = sig
   type access_list_entry = {address: string, storageKeys: string list}
   type access_list = access_list_entry list
 
+  type authorization_entry = {
+    chainId: string,
+    address: string,
+    nonce: string,
+    signer: string,
+    s: string
+  }
+  type authorization_list = authorization_entry list
+
   type slot = {key: string, value: string}
   type storage = slot list
 
@@ -27,6 +36,7 @@ signature vfmTestDefLib = sig
     value: string,
     data: string,
     accessList: access_list option,
+    authorizationList: authorization_list option,
     maxFeePerBlobGas: string option,
     blobVersionedHashes: string list option,
     v: string,
@@ -68,7 +78,8 @@ signature vfmTestDefLib = sig
     withdrawalsRoot: string,
     blobGasUsed: string,
     excessBlobGas: string,
-    parentBeaconBlockRoot: string
+    parentBeaconBlockRoot: string,
+    requestsHash: string
   }
 
   type withdrawal = {
