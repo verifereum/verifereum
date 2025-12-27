@@ -1266,6 +1266,25 @@ QED
     * First conjunct gives valid_enc t (enc t v)
 *)
 
+(* TODO: move if true
+
+Theorem IS_SUBLIST_sublist:
+  ∀y x. IS_SUBLIST x y = sublist y x
+Proof
+  ho_match_mp_tac sublist_ind
+  \\ rw[IS_SUBLIST, sublist_def]
+  \\ Cases_on`h1 = h2` \\ rw[]
+  \\ simp[IS_PREFIX_APPEND]
+  \\ rw[EQ_IMP_THM]
+  >- rw[sublist_append_suffix]
+  >- (irule sublist_cons_remove \\ goal_assum drule)
+  \\ gvs[]
+  \\ gvs[IS_SUBLIST_APPEND]
+  \\ Cases_on`l=[]` \\ gvs[]
+  \\ gvs[sublist_def]
+  DB.match[]``IS_SUBLIST``
+*)
+
 Theorem enc_valid:
   (∀t v extra.
      has_type t v ∧ LENGTH (enc t v) < dimword(:256) ⇒
@@ -1421,7 +1440,148 @@ Proof
       \\ gvs[] )
     \\ simp[] )
   \\ gvs[Abbr`hl`, Abbr`hlih`]
-  \\ cheat
+  \\ sg `LENGTH head = if is_dynamic t then 32 else static_length t`
+  >- ( rw[Abbr`head`] \\ irule $ cj 1 enc_has_static_length \\ gvs[] )
+  \\ drule enc_tuple_append
+  \\ qmatch_asmsub_abbrev_tac`result = enc_tuple hll tll ts vs hhs tts`
+  \\ disch_then(qspecl_then[`hll`,`tll`,`hhs`,`tts`]mp_tac)
+  \\ rewrite_tac[LET_THM]
+  \\ qmatch_goalsub_abbrev_tac`(_  = _ bs0) ⇒ _`
+  \\ CONV_TAC (ONCE_DEPTH_CONV BETA_CONV)
+  \\ qmatch_goalsub_abbrev_tac`(_  = _ n0) ⇒ _`
+  \\ CONV_TAC (ONCE_DEPTH_CONV BETA_CONV)
+  \\ strip_tac
+  \\ sg `TAKE (LENGTH head) hds = head`
+  >- (
+    gvs[Abbr`result`]
+    \\ gvs[Abbr`hds`, Abbr`hhs`, Abbr`hd_len`]
+    \\ qpat_x_assum`LENGTH head = _`(SUBST_ALL_TAC o SYM)
+    \\ simp[DROP_APPEND, LENGTH_FLAT, MAP_REVERSE,
+            SUM_REVERSE, DROP_LENGTH_TOO_LONG, TAKE_APPEND,
+            iffLR SUB_EQ_0] )
+  \\ sg `DROP (LENGTH head) hds = DROP (hd_len + LENGTH head) result`
+  >- (
+    gvs[Abbr`result`,Abbr`hds`,Abbr`hhs`,Abbr`hd_len`]
+    \\ qpat_x_assum`LENGTH head = _`(SUBST_ALL_TAC o SYM)
+    \\ simp[DROP_DROP_T] )
+  \\ sg `prefix_len ≤ hd_len`
+  >- (
+    simp[Abbr`prefix_len`,Abbr`hd_len`]
+    \\ irule SUM_SUBLIST
+    \\ simp[MAP_DROP, sublist_drop] )
+  \\ sg `hds = DROP (hd_len - prefix_len) bs`
+  >- (
+    qunabbrev_tac`hds`
+    \\ pop_assum mp_tac \\ simp[LESS_EQ_EXISTS]
+    \\ strip_tac \\ pop_assum SUBST_ALL_TAC
+    \\ simp[Abbr`bs`, DROP_DROP_T] )
+  \\ sg `LENGTH head ≤ LENGTH hds`
+  >- (
+    CCONTR_TAC
+    \\ `LENGTH (TAKE (LENGTH head) hds) = LENGTH head` by simp[]
+    \\ pop_assum mp_tac
+    \\ rewrite_tac[LENGTH_TAKE_EQ]
+    \\ IF_CASES_TAC >- simp[]
+    \\ strip_tac \\ pop_assum SUBST_ALL_TAC
+    \\ pop_assum mp_tac
+    \\ simp_tac (srw_ss()) [] )
+  \\ IF_CASES_TAC
+  >- (
+    `TAKE 32 hds = head` by gvs[]
+    \\ sg `TAKE 32 (hds ++ extra) = head` >- (
+      rewrite_tac[TAKE_APPEND] \\ gvs[iffRL SUB_EQ_0])
+    \\ first_assum SUBST1_TAC
+    \\ `word_of_bytes T (0w:bytes32) head = n2w (tl + hll)`
+    by rw[Abbr`head`, word_to_bytes_word_of_bytes_256]
+    \\ first_assum SUBST1_TAC
+    \\ qmatch_goalsub_abbrev_tac`DROP 32 hdsx`
+    \\ sg `tl + hll < dimword(:256)`
+    >- (
+      (*
+
+  Establishing ptr_val < 2^256
+
+  Chain of reasoning:
+
+  1. ptr_val is the position where tail starts within bs
+  2. Since tail is contained in bs, we have:
+  ptr_val ≤ LENGTH bs
+  2. (The offset to where something starts is at most the length of the container)
+  3. Since bs = DROP prefix_len result:
+  LENGTH bs = LENGTH result - prefix_len ≤ LENGTH result
+  4. From assumption 5:
+  LENGTH result < 2^256
+  5. Chaining these:
+  ptr_val ≤ LENGTH bs ≤ LENGTH result < 2^256
+  6. Therefore ptr_val < dimword(:256), so:
+  w2n (n2w ptr_val) = ptr_val
+
+  In practice: The key lemma needed is that ptr_val ≤ LENGTH bs. This follows from the structure of bs:
+  bs = H_old' ++ head ++ H_new ++ T_old ++ tail ++ T_new
+       |<-------- ptr_val -------->|
+
+  So ptr_val = LENGTH H_old' + LENGTH head + LENGTH H_new + LENGTH T_old, and LENGTH bs = ptr_val + LENGTH tail + LENGTH T_new ≥ ptr_val.
+
+  This might require using head_lengths_leq_LENGTH_enc_tuple or similar structural lemmas about enc_tuple to formally establish the bound.
+
+      *)
+      drule head_lengths_leq_LENGTH_enc_tuple
+      \\ qmatch_asmsub_abbrev_tac`hll = head_lengths ts nn`
+      \\ disch_then(qspecl_then[`hll`,`tll`,`hhs`,`tts`,`nn`]mp_tac)
+      \\ gs[]
+      \\ cheat )
+    \\ pop_assum mp_tac
+    \\ simp_tac(srw_ss())[]
+    \\ strip_tac
+    \\ cheat (*
+  1. head = word_to_bytes (n2w ptr_val) T where ptr_val = tl + head_lengths ts (...)
+  2. From fact 2: TAKE 32 hds = head
+  3. Reading the pointer: word_of_bytes T 0w (TAKE 32 hds) = n2w ptr_val
+  4. Key arithmetic: ptr_val equals the position of tail in bs, so DROP ptr_val bs = tail ++ rest = enc t v ++ rest
+  5. Apply IH 2 (assumption 2) to get valid_enc t (enc t v ++ rest ++ extra) ✓
+  6. For valid_enc_tuple ts: Since LENGTH head = 32, fact 3 gives DROP 32 hds = DROP (hd_len + LENGTH head) result, matching IH 0 ✓
+    *))
+  \\ sg `TAKE (static_length t) (hds ++ extra) = head`
+  >- ( rewrite_tac[TAKE_APPEND] \\ gvs[iffLR SUB_EQ_0] )
+  \\ first_assum SUBST_ALL_TAC
+  \\ `valid_enc t head` by (
+    gvs[]
+    \\ first_x_assum (qspec_then`[]`mp_tac)
+    \\ simp[]
+    \\ disch_then irule
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ goal_assum drule
+    \\ qpat_x_assum`_ = enc_tuple _ _ _ _ _ _`(assume_tac o SYM)
+    \\ gvs[]
+    \\ gvs[Abbr`tail`,Abbr`tts`,Abbr`hhs`] )
+  \\ first_x_assum(qspec_then`extra`mp_tac)
+  \\ gvs[] \\ strip_tac
+  \\ conj_asm1_tac
+  >- (
+    qmatch_goalsub_abbrev_tac`valid_enc_tuple _ _ l1`
+    \\ qmatch_assum_abbrev_tac`valid_enc_tuple _ _ l2`
+    \\ `l1 = l2` suffices_by rw[]
+    \\ simp[Abbr`l1`,Abbr`l2`]
+    \\ simp[DROP_APPEND]
+    \\ simp[iffRL SUB_EQ_0] )
+  \\ Cases \\ simp[]
+  \\ strip_tac
+  \\ conj_tac
+  >- (
+      first_x_assum (qspec_then`tail`mp_tac)
+      \\ simp[TAKE_APPEND, iffRL SUB_EQ_0]
+      \\ disch_then irule
+      \\ irule LESS_EQ_LESS_TRANS
+      \\ goal_assum drule
+      \\ qpat_x_assum`_ = enc_tuple _ _ _ _ _ _`(assume_tac o SYM)
+      \\ gvs[]
+      \\ gvs[Abbr`tail`,Abbr`tts`,Abbr`hhs`] )
+  \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`valid_enc_array m`
+  \\ first_x_assum(qspecl_then[`m`,`t`]mp_tac)
+  \\ simp[]
+  \\ simp[DROP_DROP_T, DROP_APPEND]
+  \\ simp[iffRL SUB_EQ_0]
 QED
 
 (*
