@@ -1111,13 +1111,6 @@ Proof
   \\ rewrite_tac[Once CONS_APPEND, APPEND_ASSOC] \\ rw[]
 QED
 
-(* GitHub issue #84 - enc_valid
-   The theorem uses enc_ind's induction principle. Key insight for P1:
-   valid_enc_array uses (DROP hd_len result) for BOTH arguments because
-   enc_tuple computes offsets relative to the encoding without the rhds prefix.
-*)
-
-(* Helper lemma: TAKE extracts the prefix from enc_tuple result *)
 Theorem enc_tuple_TAKE_prefix:
   ∀ts vs hl prefix.
     has_types ts vs ⇒
@@ -1132,7 +1125,6 @@ Proof
   \\ rw[]
 QED
 
-(* Helper: word roundtrip for the length encoding *)
 Theorem word_roundtrip_LENGTH:
   ∀hl ts vs.
     has_types ts vs ∧ LENGTH vs < dimword (:256) ⇒
@@ -1146,27 +1138,6 @@ Proof
   \\ simp[enc_tuple_TAKE_prefix, word_to_bytes_word_of_bytes_256]
 QED
 
-(* For static types, the hl parameter doesn't affect enc_tuple output *)
-Theorem enc_tuple_static_hl_indep:
-  ∀ts vs hl1 hl2 tl hds tls.
-    EVERY is_static ts ∧ has_types ts vs ⇒
-    enc_tuple hl1 tl ts vs hds tls = enc_tuple hl2 tl ts vs hds tls
-Proof
-  Induct_on `ts` \\ gvs[enc_def, is_dynamic_def]
-  \\ rw[enc_def]
-  \\ Cases_on `vs` \\ gvs[enc_def]
-QED
-
-(* For valid_enc_array with SOME (static), the bs argument is irrelevant *)
-Theorem valid_enc_array_bs_irrel:
-  ∀n l t bs1 bs2 hds.
-    valid_enc_array n (SOME l) t bs1 hds ⇔
-    valid_enc_array n (SOME l) t bs2 hds
-Proof
-  Induct_on `n` \\ simp[valid_enc_def] \\ metis_tac[]
-QED
-
-(* Bridge lemma: tuple validation equals array validation for REPLICATE *)
 Theorem valid_enc_tuple_REPLICATE:
   ∀n t bs hds.
     valid_enc_tuple (REPLICATE n t) bs hds ⇔
@@ -1176,21 +1147,6 @@ Proof
   >- rw[valid_enc_def]
   \\ rw[valid_enc_def]
   \\ Cases_on `is_dynamic t` \\ fs[valid_enc_def]
-QED
-
-(* Helper theorems for word_to_bytes operations *)
-Theorem TAKE_word_to_bytes_256:
-  TAKE 32 (word_to_bytes (w:256 word) be ++ rest) = word_to_bytes w be
-Proof
-  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
-  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[TAKE_LENGTH_APPEND]
-QED
-
-Theorem DROP_word_to_bytes_256:
-  DROP 32 (word_to_bytes (w:256 word) be ++ rest) = rest
-Proof
-  `LENGTH (word_to_bytes (w:256 word) be) = 32` by rw[LENGTH_word_to_bytes]
-  \\ pop_assum (SUBST1_TAC o SYM) \\ rw[DROP_LENGTH_APPEND]
 QED
 
 Theorem int_bits_bound_256:
