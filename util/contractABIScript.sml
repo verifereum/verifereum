@@ -1215,76 +1215,6 @@ Proof
   \\ gvs[PRE_SUB1]
 QED
 
-(*
-  PROOF SKETCH FOR enc_valid:
-
-  The main theorem has two conjuncts:
-  1. ∀t v. has_type t v ⇒ valid_enc t (enc t v)
-  2. A helper for enc_tuple with carefully formulated invariants
-
-  KEY INSIGHT: In valid_enc_tuple ts bs hds:
-  - bs = the fixed content area for offset-based access (stays constant through recursion)
-  - hds = current position in heads (advances as we process elements)
-
-  The encoding result has structure: prefix ++ heads ++ tails
-  - prefix: empty for Tuple/Array SOME, length-encoding for Array NONE
-  - heads: for each element, either offset (dynamic) or encoded value (static)
-  - tails: concatenation of encoded dynamic elements
-
-  INVARIANTS:
-  - prefix_len = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds)) is INVARIANT
-    (the prefix portion of rhds doesn't change as we accumulate heads/tails)
-  - bs = DROP prefix_len result stays fixed
-  - hds = DROP hd_len result advances by head length each step
-
-  VERIFICATION OF INVARIANT:
-  After processing element: rhds becomes head::rhds, rtls becomes tail::rtls
-  New prefix_len = SUM (MAP LENGTH (DROP (LENGTH (tail::rtls)) (head::rhds)))
-                 = SUM (MAP LENGTH (DROP (1 + LENGTH rtls) (head::rhds)))
-                 = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds))  [by DROP property]
-                 = Old prefix_len ✓
-
-  BASE CASES:
-  - Tuple: rhds=[], rtls=[], prefix_len=0, bs=hds=result
-  - Array SOME: same as Tuple
-  - Array NONE: rhds=[pre], rtls=[], prefix_len=32, bs=hds=DROP 32 result
-
-  RECURSIVE CASE (enc_tuple):
-  - IH gives: valid_enc_tuple ts bs (DROP new_hd_len result)
-  - We need: valid_enc_tuple (t::ts) bs (DROP hd_len result)
-
-  Unfolding valid_enc_tuple (t::ts) bs hds:
-  - Dynamic t: need valid_enc t (DROP offset bs) ∧ valid_enc_tuple ts bs (DROP 32 hds)
-    * DROP 32 hds = DROP (hd_len + 32) result = DROP new_hd_len result ✓ (matches IH)
-    * offset = hl + tl, decoded from head
-    * DROP offset bs = DROP (prefix_len + hl + tl) result = start of tail for this element
-    * First conjunct gives valid_enc t (enc t v)
-
-  - Static t: need valid_enc t (TAKE n hds) ∧ valid_enc_tuple ts bs (DROP n hds)
-    * DROP n hds = DROP (hd_len + n) result = DROP new_hd_len result ✓ (matches IH)
-    * TAKE n hds = the encoded static value = enc t v
-    * First conjunct gives valid_enc t (enc t v)
-*)
-
-(* TODO: move if true
-
-Theorem IS_SUBLIST_sublist:
-  ∀y x. IS_SUBLIST x y = sublist y x
-Proof
-  ho_match_mp_tac sublist_ind
-  \\ rw[IS_SUBLIST, sublist_def]
-  \\ Cases_on`h1 = h2` \\ rw[]
-  \\ simp[IS_PREFIX_APPEND]
-  \\ rw[EQ_IMP_THM]
-  >- rw[sublist_append_suffix]
-  >- (irule sublist_cons_remove \\ goal_assum drule)
-  \\ gvs[]
-  \\ gvs[IS_SUBLIST_APPEND]
-  \\ Cases_on`l=[]` \\ gvs[]
-  \\ gvs[sublist_def]
-  DB.match[]``IS_SUBLIST``
-*)
-
 Theorem enc_valid:
   (∀t v extra.
      has_type t v ∧ LENGTH (enc t v) < dimword(:256) ⇒
@@ -1529,14 +1459,75 @@ Proof
     \\ pop_assum mp_tac
     \\ simp_tac(srw_ss())[]
     \\ strip_tac
-    \\ cheat (*
-  1. head = word_to_bytes (n2w ptr_val) T where ptr_val = tl + head_lengths ts (...)
-  2. From fact 2: TAKE 32 hds = head
-  3. Reading the pointer: word_of_bytes T 0w (TAKE 32 hds) = n2w ptr_val
-  4. Key arithmetic: ptr_val equals the position of tail in bs, so DROP ptr_val bs = tail ++ rest = enc t v ++ rest
-  5. Apply IH 2 (assumption 2) to get valid_enc t (enc t v ++ rest ++ extra) ✓
-  6. For valid_enc_tuple ts: Since LENGTH head = 32, fact 3 gives DROP 32 hds = DROP (hd_len + LENGTH head) result, matching IH 0 ✓
-    *))
+    \\ sg `DROP 32 hdsx = DROP (hd_len + 32) result ++ extra`
+    >- (
+      qunabbrev_tac`hdsx`
+      \\ qunabbrev_tac`hds`
+      \\ rewrite_tac[DROP_APPEND,DROP_DROP_T,LENGTH_DROP]
+      \\ simp[]
+      \\ `32 ≤ LENGTH result - hd_len` suffices_by rw[iffRL SUB_EQ_0]
+      \\ simp[Abbr`result`,Abbr`hhs`,LENGTH_FLAT,Abbr`hd_len`,
+              MAP_REVERSE,SUM_REVERSE] )
+    \\ first_assum SUBST_ALL_TAC
+    \\ first_x_assum(qspec_then`extra`mp_tac)
+    \\ simp[]
+    \\ strip_tac
+    \\ reverse conj_asm1_tac
+    >- (
+      Cases \\ simp[] \\ strip_tac
+      \\ first_x_assum drule
+      \\ simp[] \\ gs[]
+      \\ gs[Abbr`hdsx`]
+      \\ simp[Abbr`result`, DROP_APPEND, LENGTH_FLAT, Abbr`hd_len`,
+              MAP_REVERSE, SUM_REVERSE, DROP_LENGTH_TOO_LONG, Abbr`hhs`,
+              SUM_APPEND]
+      \\ simp[iffRL SUB_EQ_0] )
+    \\ pop_assum kall_tac
+    \\ sg `hll = n0 + SUM (MAP LENGTH hhs) - prefix_len`
+    >- (
+      simp[Abbr`hll`]
+      \\ simp[Once head_lengths_add]
+      \\ simp[Abbr`hhs`]
+      \\ simp[Abbr`hd_len`, Abbr`prefix_len`]
+      \\ qspecl_then[`LENGTH rtls`,`rhds`]mp_tac TAKE_DROP
+      \\ disch_then(mp_tac o Q.AP_TERM`SUM o MAP LENGTH`)
+      \\ rewrite_tac[o_DEF]
+      \\ CONV_TAC (DEPTH_CONV BETA_CONV)
+      \\ rewrite_tac[MAP_APPEND, SUM_APPEND]
+      \\ disch_then(SUBST1_TAC o SYM)
+      \\ simp[] )
+    \\ simp[Once DROP_APPEND]
+    \\ qmatch_goalsub_abbrev_tac`_ ++ xx`
+    \\ qunabbrev_tac`bs`
+    \\ simp[DROP_DROP_T]
+    \\ simp[Abbr`result`]
+    \\ simp[Abbr`tts`]
+    \\ qmatch_goalsub_abbrev_tac`DROP nt (a1 ++ a2 ++ a3 ++ tail ++ _)`
+    \\ sg `n0 ≤ LENGTH bs0`
+    >- (
+        drule head_lengths_leq_LENGTH_enc_tuple
+        \\ qmatch_asmsub_abbrev_tac`bs0 = enc_tuple n00 tl0 _ _ _ _`
+        \\ disch_then(qspecl_then[`n00`,`tl0`,`[]`,`[]`,`0`]mp_tac)
+        \\ simp[] )
+    \\ sg `LENGTH (a1 ++ a2 ++ a3) = nt`
+    >- (
+      rw[Abbr`a1`,Abbr`a2`,Abbr`a3`,LENGTH_FLAT,Abbr`nt`,
+         MAP_REVERSE, SUM_REVERSE, LENGTH_TAKE_EQ]
+      \\ qpat_x_assum`prefix_len ≤ _`mp_tac
+      \\ qunabbrev_tac`prefix_len` \\ qunabbrev_tac`hd_len`
+      \\ qunabbrev_tac`hhs`
+      \\ simp[] )
+    \\ once_rewrite_tac[DROP_APPEND]
+    \\ once_rewrite_tac[DROP_APPEND]
+    \\ simp[DROP_LENGTH_TOO_LONG]
+    \\ once_rewrite_tac[GSYM APPEND_ASSOC]
+    \\ qunabbrev_tac`tail`
+    \\ asm_rewrite_tac[]
+    \\ first_x_assum irule
+    \\ simp[]
+    \\ qpat_x_assum`_ < _`mp_tac
+    \\ qpat_x_assum`_ < _`mp_tac
+    \\ simp[])
   \\ sg `TAKE (static_length t) (hds ++ extra) = head`
   >- ( rewrite_tac[TAKE_APPEND] \\ gvs[iffLR SUB_EQ_0] )
   \\ first_assum SUBST_ALL_TAC
