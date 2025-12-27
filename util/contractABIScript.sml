@@ -1497,39 +1497,35 @@ Proof
     \\ qmatch_goalsub_abbrev_tac`DROP 32 hdsx`
     \\ sg `tl + hll < dimword(:256)`
     >- (
-      (*
-
-  Establishing ptr_val < 2^256
-
-  Chain of reasoning:
-
-  1. ptr_val is the position where tail starts within bs
-  2. Since tail is contained in bs, we have:
-  ptr_val ≤ LENGTH bs
-  2. (The offset to where something starts is at most the length of the container)
-  3. Since bs = DROP prefix_len result:
-  LENGTH bs = LENGTH result - prefix_len ≤ LENGTH result
-  4. From assumption 5:
-  LENGTH result < 2^256
-  5. Chaining these:
-  ptr_val ≤ LENGTH bs ≤ LENGTH result < 2^256
-  6. Therefore ptr_val < dimword(:256), so:
-  w2n (n2w ptr_val) = ptr_val
-
-  In practice: The key lemma needed is that ptr_val ≤ LENGTH bs. This follows from the structure of bs:
-  bs = H_old' ++ head ++ H_new ++ T_old ++ tail ++ T_new
-       |<-------- ptr_val -------->|
-
-  So ptr_val = LENGTH H_old' + LENGTH head + LENGTH H_new + LENGTH T_old, and LENGTH bs = ptr_val + LENGTH tail + LENGTH T_new ≥ ptr_val.
-
-  This might require using head_lengths_leq_LENGTH_enc_tuple or similar structural lemmas about enc_tuple to formally establish the bound.
-
-      *)
       drule head_lengths_leq_LENGTH_enc_tuple
       \\ qmatch_asmsub_abbrev_tac`hll = head_lengths ts nn`
       \\ disch_then(qspecl_then[`hll`,`tll`,`hhs`,`tts`,`nn`]mp_tac)
       \\ gs[]
-      \\ cheat )
+      \\ `hll = n0 + nn` by simp[Abbr`hll`, Once head_lengths_add]
+      \\ sg `nn = SUM (MAP LENGTH hhs) - prefix_len`
+      >- (
+        simp[Abbr`hhs`, Abbr`nn`, Abbr`hd_len`, Abbr`prefix_len`]
+        \\ qspecl_then[`LENGTH rtls`,`rhds`]mp_tac TAKE_DROP
+        \\ disch_then(mp_tac o Q.AP_TERM`SUM o MAP LENGTH`)
+        \\ rewrite_tac[o_DEF]
+        \\ CONV_TAC (DEPTH_CONV BETA_CONV)
+        \\ rewrite_tac[MAP_APPEND, SUM_APPEND]
+        \\ disch_then(SUBST1_TAC o SYM)
+        \\ simp[] )
+      \\ sg `SUM (MAP LENGTH hhs) + n0 + tl ≤ LENGTH result`
+      >- (
+        qunabbrev_tac`result`
+        \\ rewrite_tac[LENGTH_APPEND,LENGTH_FLAT,MAP_REVERSE,SUM_REVERSE,
+                       LENGTH_TAKE_EQ]
+        \\ qunabbrev_tac`tts`
+        \\ rewrite_tac[MAP,SUM]
+        \\ simp[Abbr`tll`]
+        \\ rw[]
+        \\ drule head_lengths_leq_LENGTH_enc_tuple
+        \\ qmatch_asmsub_abbrev_tac`bs0 = enc_tuple n00 tl0 _ _ _ _`
+        \\ disch_then(qspecl_then[`n00`,`tl0`,`[]`,`[]`,`0`]mp_tac)
+        \\ simp[] )
+      \\ decide_tac)
     \\ pop_assum mp_tac
     \\ simp_tac(srw_ss())[]
     \\ strip_tac
