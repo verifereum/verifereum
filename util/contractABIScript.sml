@@ -1392,240 +1392,35 @@ Proof
      Apply IH by instantiating with is_dynamic t, tail, and head.
      Then prove IH preconditions and use conclusion. *)
   \\ rpt gen_tac \\ rpt strip_tac
-(*
-  \\ qpat_x_assum
-       `∀dyn tail head.
-          dyn = is_dynamic t ∧
-          tail = (if dyn then enc t v else []) ∧
-          head = (if dyn then enc_number (Uint 256) (NumV (hl + tl)) else enc t v) ⇒ _`
-       (qspecl_then
-       [`is_dynamic t`,
-        `if is_dynamic t then enc t v else []`,
-        `if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl)) else enc t v`] mp_tac)
-  \\ impl_tac >- simp[]
-  \\ impl_tac
-  >- (conj_tac
-      \\ (fn g => (print "enc_valid: enc_tuple rec IH preconds conj1\n"; ALL_TAC g))
-      (* has_types ts vs *)
-      >- gvs[has_types_LIST_REL]
-      \\ conj_tac
-      \\ (fn g => (print "enc_valid: enc_tuple rec IH preconds conj2\n"; ALL_TAC g))
-      (* head_lengths equality *)
-      >- (gvs[head_lengths_def]
-          \\ Cases_on `is_dynamic t`
-          \\ gvs[enc_number_def, LENGTH_word_to_bytes, enc_has_static_length])
-      \\ conj_tac
-      \\ (fn g => (print "enc_valid: enc_tuple rec IH preconds conj3\n"; ALL_TAC g))
-      (* tl + LENGTH tail = SUM ... *)
-      >- gvs[has_type_def]
-      (* length bound: recursive call has same result *)
-      \\ qpat_x_assum `LENGTH (enc_tuple _ _ (_::_) (_::_) _ _) < _` mp_tac
-      \\ simp[Once enc_def, LET_THM])
-  \\ strip_tac
+  \\ qpat_x_assum`hl = _`SUBST_ALL_TAC
+  \\ qpat_x_assum`tl = _`SUBST_ALL_TAC
+  \\ qmatch_asmsub_abbrev_tac`enc_tuple hl tl`
+  \\ rewrite_tac[LET_THM]
+  \\ qmatch_goalsub_abbrev_tac`_ result` \\ CONV_TAC BETA_CONV
+  \\ qmatch_goalsub_abbrev_tac`_ hd_len` \\ CONV_TAC BETA_CONV
+  \\ qmatch_goalsub_abbrev_tac`_ prefix_len` \\ CONV_TAC BETA_CONV
+  \\ qmatch_goalsub_abbrev_tac`_ bs` \\ CONV_TAC BETA_CONV
+  \\ qmatch_goalsub_abbrev_tac`_ hds` \\ CONV_TAC BETA_CONV
+  \\ gvs[]
   \\ qmatch_asmsub_abbrev_tac`head::rhds`
   \\ qmatch_asmsub_abbrev_tac`tail::rtls`
-  \\ `DROP (LENGTH (tail::rtls)) (head::rhds) = DROP (LENGTH rtls) rhds`
-  by simp[]
-  \\ pop_assum SUBST_ALL_TAC
-  \\ rewrite_tac[Once enc_def]
-  \\ rewrite_tac[LET_THM]
-  \\ CONV_TAC(RAND_CONV BETA_CONV)
-  \\ qunabbrev_tac`tail` \\ qmatch_abbrev_tac`_ (_ tail)`
-  \\ CONV_TAC(RAND_CONV BETA_CONV)
-  \\ qunabbrev_tac`head` \\ qmatch_abbrev_tac`_ (_ head)`
-  \\ CONV_TAC(RAND_CONV BETA_CONV)
-  \\ CONV_TAC(BETA_CONV)
-  \\ qpat_x_assum`hl = _`SUBST_ALL_TAC
-  \\ qmatch_goalsub_abbrev_tac`enc_tuple hl`
-  \\ qpat_x_assum`tl = _`SUBST_ALL_TAC
-  \\ qmatch_goalsub_abbrev_tac`tl + LENGTH tail`
-  \\ full_simp_tac std_ss [LET_THM, has_types_LIST_REL, LIST_REL_def]
-  \\ qmatch_goalsub_abbrev_tac`valid_enc_tuple _ xrhds result`
-  \\ qmatch_asmsub_abbrev_tac`valid_enc_tuple _ _ (DROP shrhds res)`
-  \\ simp[Once valid_enc_def]
-  \\ conj_tac
-  \\ (fn g => (print "enc_valid: enc_tuple rec split conjuncts\n"; ALL_TAC g))
+  \\ gvs[head_lengths_def]
+  \\ qmatch_asmsub_abbrev_tac`hl = hlih ⇒ _`
+  \\ sg `hl = hlih`
   >- (
-    IF_CASES_TAC
+    qunabbrev_tac`hl` \\ qunabbrev_tac`hlih`
+    \\ simp[Once head_lengths_add, SimpLHS]
+    \\ simp[Once head_lengths_add, SimpRHS]
+    \\ qmatch_goalsub_abbrev_tac`a + (c + b1) = b2 + (a + c)`
+    \\ `b1 = b2` suffices_by rw[]
+    \\ unabbrev_all_tac
+    \\ reverse IF_CASES_TAC
     >- (
-      gvs[Abbr`result`, DROP_DROP_T]
-      \\ `LENGTH head = 32` by simp[Abbr`head`, LENGTH_word_to_bytes]
-      \\ gvs[]
-      \\ gvs[Abbr`xrhds`, DROP_DROP_T]
-      \\ gvs[GSYM has_types_LIST_REL]
-      \\ drule enc_tuple_append
-      \\ disch_then(qspecl_then[`hl`,`tl + LENGTH tail`,
-                                `head::rhds`,`tail::rtls`]mp_tac)
-      \\ simp[]
-      \\ disch_then SUBST_ALL_TAC
-      \\ rewrite_tac[GSYM APPEND_ASSOC]
-      \\ qmatch_goalsub_abbrev_tac`DROP _ (FLAT (REVERSE rhds) ++ lll)`
-      \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, LENGTH_FLAT,
-              SUM_REVERSE, MAP_REVERSE]
-      \\ `TAKE 32 lll = head` by simp[Abbr`lll`, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
-      \\ pop_assum SUBST_ALL_TAC
-      \\ `word_of_bytes T (0w:bytes32) head = n2w (hl + tl)`
-      by simp[Abbr`head`, word_to_bytes_word_of_bytes_256]
-      \\ pop_assum SUBST_ALL_TAC
-      \\ qabbrev_tac`prefix_len = SUM (MAP LENGTH (DROP (LENGTH rtls) rhds))`
-      \\ qabbrev_tac`prefix_acc = SUM (MAP LENGTH (TAKE (LENGTH rtls) rhds))`
-      (* CHEAT 1: Dynamic type case - show DROP lands at tail
-         Goal: valid_enc t (DROP (prefix_len + w2n(n2w(hl+tl))) (FLAT (REVERSE rhds))
-                           ++ DROP (...) lll)
-         Strategy:
-         1. The sg subgoal proves: prefix_len + prefix_acc = SUM (MAP LENGTH rhds)
-            This follows from TAKE_DROP and SUM_APPEND/MAP_APPEND.
-            Tactic: simp[Abbr`prefix_len`, Abbr`prefix_acc`, GSYM SUM_APPEND,
-                         GSYM MAP_APPEND, TAKE_DROP]
-         2. Main goal: Show the DROP expression lands at (or has as prefix) tail
-            - hl + tl is the offset pointing to where tail appears in result
-            - Need: w2n(n2w(hl+tl)) = hl+tl (requires no overflow, i.e. hl+tl < 2^256)
-            - Then use valid_enc_APPEND with assumption valid_enc t tail
-         Key helper: valid_enc_APPEND (currently cheated in this file)
-      *)
-	      \\ sg `prefix_len + prefix_acc = SUM (MAP LENGTH rhds)`
-	      >- simp[Abbr`prefix_len`, Abbr`prefix_acc`, GSYM SUM_APPEND,
-	              GSYM MAP_APPEND, TAKE_DROP]
-	      \\ qabbrev_tac`et = enc_tuple hl (tl + LENGTH tail) ts vs [] []`
-	      \\ qabbrev_tac`hn = head_lengths ts 0`
-	      \\ `hn ≤ LENGTH et`
-	      by (
-	        drule head_lengths_leq_LENGTH_enc_tuple
-	        \\ disch_then(qspecl_then[`hl`,`tl + LENGTH tail`,`[]`,`[]`,`0`] mp_tac)
-	        \\ simp[Abbr`hn`, Abbr`et`])
-		      \\ `hl = hn + prefix_acc + 32`
-		      by (
-		        simp[Abbr`hl`, Abbr`hn`, Abbr`prefix_acc`, head_lengths_def]
-		        \\ simp[head_lengths_add, Abbr`hn`, ADD_ASSOC])
-      \\ qmatch_goalsub_abbrev_tac`valid_enc t (DROP dd (FLAT (REVERSE rhds) ++ lll))`
-      \\ `hl + tl < dimword(:256)`
-      by (
-        (* show hl+tl ≤ LENGTH (FLAT (REVERSE rhds) ++ lll) < dimword(:256) *)
-	        qpat_x_assum `LENGTH (FLAT (REVERSE rhds) ++ lll) < dimword(:256)` assume_tac
-	        \\ irule arithmeticTheory.LESS_LESS_EQ_TRANS
-	        \\ qexists_tac `LENGTH (FLAT (REVERSE rhds) ++ lll)`
-	        \\ reverse conj_tac >- simp[]
-	        \\ simp[LENGTH_APPEND]
-	        \\ qmatch_goalsub_abbrev_tac`LENGTH lll`
-	        \\ `prefix_acc ≤ SUM (MAP LENGTH rhds)`
-	        by (
-	          `0 ≤ prefix_len` by simp[Abbr`prefix_len`]
-	          \\ gvs[ADD_ASSOC] )
-		      \\ `hl + tl ≤ SUM (MAP LENGTH rhds) + LENGTH lll`
-		      by (
-		          gvs[ADD_ASSOC]
-		          \\ irule arithmeticTheory.LESS_EQ_TRANS
-		          \\ qexists_tac `hn + 32 + SUM (MAP LENGTH rhds) + tl`
-		          \\ simp[]
-		          \\ gvs[ADD_ASSOC] )
-	        \\ pop_assum mp_tac
-	        \\ simp[Abbr`lll`, Abbr`hn`, Abbr`et`, LENGTH_APPEND, LENGTH_FLAT,
-	                MAP_REVERSE, SUM_REVERSE]
-	        \\ strip_tac
-	        \\ gvs[] )
-	      \\ `dd = prefix_len + (hl + tl)`
-	      by (
-	        simp[Abbr`dd`]
-	        \\ DEP_ONCE_REWRITE_TAC[wordsTheory.w2n_n2w]
-	        \\ simp[])
-	      \\ pop_assum SUBST_ALL_TAC
-	      \\ `DROP (prefix_len + (hl + tl)) (FLAT (REVERSE rhds) ++ lll) =
-	          tail ++ DROP hn et`
-	      by (
-	        simp[DROP_APPEND, Abbr`prefix_len`, Abbr`prefix_acc`, Abbr`lll`, Abbr`hn`,
-	             Abbr`et`, DROP_DROP_T]
-	        \\ simp[TAKE_DROP, GSYM APPEND_ASSOC, DROP_APPEND, DROP_LENGTH_APPEND,
-	                LENGTH_FLAT, MAP_REVERSE, SUM_REVERSE]
-	        \\ simp[Abbr`hn`] )
-		      \\ pop_assum SUBST_ALL_TAC
-      \\ gvs[Abbr`tail`]
-      \\ qpat_x_assum
-           `has_type t v ∧ LENGTH (enc t v) < dimword(:256) ⇒
-            valid_enc t (enc t v ++ extra)` irule
-      \\ (fn g => (print "enc_valid: enc_tuple rec dynamic branch conj_tac\n"; ALL_TAC g))
-      \\ conj_tac
-      >- gvs[has_types_LIST_REL]
-      \\ qpat_x_assum `LENGTH (FLAT (REVERSE rhds) ++ lll) < dimword(:256)` assume_tac
-      \\ irule arithmeticTheory.LESS_LESS_EQ_TRANS
-      \\ qexists_tac `LENGTH (FLAT (REVERSE rhds) ++ lll)`
-      \\ (fn g => (print "enc_valid: enc_tuple rec dynamic branch reverse conj_tac\n"; ALL_TAC g))
-      \\ reverse conj_tac >- simp[]
-      \\ simp[LENGTH_APPEND, Abbr`lll`, LENGTH_APPEND, LENGTH_FLAT,
-              MAP_REVERSE, SUM_REVERSE]
-      )
-	    \\ gvs[Abbr`tail`]
-	    \\ drule_then drule (cj 1 enc_has_static_length)
-	    \\ disch_then(assume_tac o SYM) \\ gvs[]
-    \\ gvs[Abbr`result`, Abbr`shrhds`, DROP_DROP_T]
-    \\ gvs[GSYM has_types_LIST_REL]
-    \\ drule enc_tuple_append
-    \\ disch_then(qspecl_then[`hl`,`tl`,`head::rhds`,`[]::rtls`]mp_tac)
-    \\ simp[]
-    \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, LENGTH_FLAT,
-            SUM_REVERSE, MAP_REVERSE, TAKE_APPEND]
-    \\ rewrite_tac[GSYM APPEND_ASSOC]
-    \\ strip_tac
-    \\ qmatch_goalsub_abbrev_tac`head ++ rst`
-    \\ `rst = []` suffices_by gvs[]
-    \\ simp[Abbr`rst`])
-  \\ Cases >- gvs[]
-  \\ simp[] \\ strip_tac
-  \\ first_x_assum drule
-  \\ pop_assum SUBST_ALL_TAC
-  \\ gvs[]
-  \\ simp[Abbr`result`, Abbr`shrhds`]
-  \\ reverse IF_CASES_TAC \\ simp[valid_enc_def]
-  >- (
-    gvs[Abbr`head`]
-    \\ drule_then drule (cj 1 enc_has_static_length)
-    \\ simp[DROP_DROP_T]
-    \\ gvs[GSYM has_types_LIST_REL]
-    \\ drule enc_tuple_append
-    \\ rpt strip_tac
-    \\ first_x_assum(qspecl_then[`hl`,`tl+ LENGTH tail`,`enc t v::rhds`]mp_tac)
-    \\ strip_tac \\ gvs[Abbr`res`]
-    \\ rewrite_tac[GSYM APPEND_ASSOC]
-    \\ once_rewrite_tac[DROP_APPEND]
-    \\ qmatch_goalsub_abbrev_tac`DROP (_ - _) ls`
-    \\ simp[LENGTH_FLAT, MAP_REVERSE, SUM_REVERSE, DROP_LENGTH_TOO_LONG]
-    \\ simp[Abbr`tail`]
-    \\ qunabbrev_tac`ls`
-    \\ simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG])
-  \\ simp[DROP_DROP_T]
-  \\ `LENGTH head = 32` by simp[Abbr`head`, LENGTH_word_to_bytes]
-  \\ gvs[]
-  \\ simp[Abbr`xrhds`, DROP_DROP_T]
-  \\ qunabbrev_tac`res`
-  \\ gvs[GSYM has_types_LIST_REL]
-  \\ drule enc_tuple_append
-  \\ qmatch_goalsub_abbrev_tac`enc_tuple hl tll _ vs hrs trs`
-  \\ disch_then(qspecl_then[`hl`,`tll`,`hrs`,`trs`]SUBST_ALL_TAC)
-  \\ simp[Abbr`hrs`,Abbr`trs`]
-  \\ qpat_x_assum`Abbrev(hl = _)`mp_tac
-  \\ simp[head_lengths_def]
-  \\ simp[Once head_lengths_add]
-  \\ qmatch_goalsub_abbrev_tac`hlt + 32`
-  \\ gvs[] \\ strip_tac
-  \\ strip_tac
-  \\ qmatch_goalsub_abbrev_tac`TAKE 32 (DROP ln ls)`
-  \\ `TAKE 32 (DROP ln ls) = head`
-  by (
-    simp[Abbr`ln`,Abbr`ls`,DROP_APPEND,LENGTH_FLAT, SUM_REVERSE,MAP_REVERSE,
-         DROP_LENGTH_TOO_LONG]
-    \\ rewrite_tac[GSYM APPEND_ASSOC]
-    \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
-    \\ gvs[] )
-  \\ pop_assum (SUBST_ALL_TAC)
-  \\ qunabbrev_tac`head`
-  \\ rewrite_tac[word_to_bytes_word_of_bytes_256]
-  \\ qmatch_asmsub_rename_tac`REPLICATE m t`
-  \\ `hlt = m * 32`
-  by (
-    simp[Abbr`hlt`]
-    \\ simp[SIMP_RULE std_ss [] head_lengths_REPLICATE])
-  \\ gvs[Abbr`hlt`]
-  \\ gvs[LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE]
-  *)
+      simp[]
+      \\ irule $ GSYM $ cj 1 enc_has_static_length
+      \\ gvs[] )
+    \\ simp[] )
+  \\ gvs[Abbr`hl`, Abbr`hlih`]
   \\ cheat
 QED
 
