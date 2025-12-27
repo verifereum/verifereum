@@ -1286,21 +1286,19 @@ Theorem enc_valid:
          (bs ++ extra) (hds ++ extra)))
 Proof
   ho_match_mp_tac enc_ind
-  \\ rpt conj_tac
+  \\ conj_tac
   (* Tuple case *)
-  >~ [`Tuple`]
   >- (rw[] \\ gvs[has_types_LIST_REL] \\ drule LIST_REL_LENGTH \\ gvs[])
+  \\ conj_tac
   (* Array (SOME n) case *)
-  >~ [`Array (SOME _)`]
   >- rw[]
+  \\ conj_tac
   (* Array NONE case *)
-  >~ [`Array NONE`]
   >- (
     rw[]
     \\ assume_tac (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt) \\ gvs[]
     \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
-    \\ (fn g => (print "enc_valid: Array NONE after TAKE_APPEND1 (L1301)\n"; ALL_TAC g))
-    \\ conj_tac
+    \\ (conj_tac
     >- (
       CCONTR_TAC
       \\ gvs[arithmeticTheory.NOT_LESS_EQUAL]
@@ -1318,10 +1316,9 @@ Proof
             (REPLICATE (LENGTH vs) t) vs
             [word_to_bytes (n2w (LENGTH vs):256 word) T] []`
       by simp[TAKE_LENGTH_TOO_LONG]
-      \\ gvs[LENGTH_word_to_bytes])
+      \\ gvs[LENGTH_word_to_bytes]))
     \\ DEP_ONCE_REWRITE_TAC[DROP_APPEND1]
-    \\ (fn g => (print "enc_valid: Array NONE after DROP_APPEND1 (L1322)\n"; ALL_TAC g))
-    \\ conj_tac
+    \\ (conj_tac
     >- (
       CCONTR_TAC
       \\ gvs[arithmeticTheory.NOT_LESS_EQUAL]
@@ -1339,7 +1336,7 @@ Proof
             (REPLICATE (LENGTH vs) t) vs
             [word_to_bytes (n2w (LENGTH vs):256 word) T] []`
       by simp[TAKE_LENGTH_TOO_LONG]
-      \\ gvs[LENGTH_word_to_bytes])
+      \\ gvs[LENGTH_word_to_bytes]))
     \\ qspecl_then [`head_lengths (REPLICATE (LENGTH vs) t) 0`,
                    `REPLICATE (LENGTH vs) t`, `vs`] mp_tac word_roundtrip_LENGTH
     \\ simp[] \\ strip_tac
@@ -1350,98 +1347,61 @@ Proof
          (qspecl_then [`LENGTH vs`, `t`] mp_tac)
     \\ simp[])
   (* Bytes NONE case *)
-  >~ [`Bytes NONE`]
-  >- (rw[valid_enc_def, has_type_def, valid_bytes_bound_def, valid_length_def, ceil32_def, enc_def]
-      \\ rpt strip_tac
-      >- (ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
-          \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
-          \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes])
-      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
-      \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
-      \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes]
-      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
-      \\ ONCE_REWRITE_TAC[DROP_word_to_bytes_256]
-      \\ DEP_ONCE_REWRITE_TAC[rich_listTheory.TAKE_APPEND2]
-      \\ ONCE_REWRITE_TAC[GSYM ceil32_def]
-      \\ simp[le_ceil32, rich_listTheory.DROP_LENGTH_APPEND]
-      \\ DEP_ONCE_REWRITE_TAC[TAKE_LENGTH_ID_rwt]
-      \\ simp[rich_listTheory.LENGTH_REPLICATE, rich_listTheory.EVERY_REPLICATE])
+  \\ conj_tac
+  >- rw[valid_enc_def, LENGTH_word_to_bytes, TAKE_APPEND, iffRL SUB_EQ_0,
+        TAKE_LENGTH_TOO_LONG, LENGTH_REPLICATE, ceil32_def, DROP_APPEND,
+        DROP_LENGTH_TOO_LONG, LENGTH_TAKE_EQ]
   (* String case *)
-  >~ [`String`]
-  >- (rw[valid_enc_def, has_type_def, valid_length_def, ceil32_def, enc_def]
-      \\ rpt strip_tac
-      >- (ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
-          \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
-          \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes])
-      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
-      \\ ONCE_REWRITE_TAC[TAKE_word_to_bytes_256]
-      \\ simp[INST_TYPE [alpha |-> ``:256``] byteTheory.word_of_bytes_word_to_bytes]
-      \\ ONCE_REWRITE_TAC[GSYM APPEND_ASSOC]
-      \\ ONCE_REWRITE_TAC[DROP_word_to_bytes_256]
-      \\ DEP_ONCE_REWRITE_TAC[rich_listTheory.TAKE_APPEND2]
-      \\ ONCE_REWRITE_TAC[GSYM ceil32_def]
-      \\ simp[le_ceil32, rich_listTheory.DROP_LENGTH_APPEND]
-      \\ DEP_ONCE_REWRITE_TAC[TAKE_LENGTH_ID_rwt]
-      \\ simp[rich_listTheory.LENGTH_REPLICATE, rich_listTheory.EVERY_REPLICATE])
+  \\ conj_tac
+  >- rw[valid_enc_def, LENGTH_word_to_bytes, TAKE_APPEND, iffRL SUB_EQ_0,
+        TAKE_LENGTH_TOO_LONG, LENGTH_REPLICATE, ceil32_def, DROP_APPEND,
+        DROP_LENGTH_TOO_LONG, LENGTH_TAKE_EQ]
   (* Bytes SOME case *)
-  >~ [`Bytes (SOME _)`]
-  >- (rw[valid_enc_def, has_type_def, valid_bytes_bound_def, enc_def]
-      \\ simp[TAKE_LENGTH_TOO_LONG, rich_listTheory.LENGTH_REPLICATE,
-              rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.EVERY_REPLICATE])
+  \\ conj_tac
+  >- rw[valid_enc_def, LENGTH_word_to_bytes, TAKE_APPEND, iffRL SUB_EQ_0,
+        TAKE_LENGTH_TOO_LONG, LENGTH_REPLICATE, ceil32_def, DROP_APPEND,
+        DROP_LENGTH_TOO_LONG, LENGTH_TAKE_EQ]
   (* NumV case *)
-  >~ [`NumV`]
-  >- (rw[valid_enc_def, has_type_def]
-      \\ Cases_on `t`
-      \\ gvs[has_type_def, valid_enc_def, enc_number_def, is_num_value_def,
-             byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
-             vfmTypesTheory.word_to_bytes_word_of_bytes_256]
-      >- (gvs[valid_int_bound_def]
-          \\ `v9 < 2 ** 256`
-             by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
-                 \\ qexists_tac `2 ** n` \\ simp[])
-          \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
-          \\ simp[arithmeticTheory.LESS_MOD])
-      \\ gvs[valid_fixed_bounds_def]
-      \\ `v9 < 2 ** 256`
-         by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
-             \\ qexists_tac `2 ** n0` \\ simp[])
-      \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
-      \\ simp[arithmeticTheory.LESS_MOD])
-  (* IntV case - uses int_bits_bound_256 to establish w2i (i2w i) = i *)
-  >~ [`IntV`]
-  >- (rw[valid_enc_def, has_type_def]
-      \\ Cases_on `t`
-      \\ gvs[has_type_def, valid_enc_def, enc_number_def, is_num_value_def,
-             byteTheory.LENGTH_word_to_bytes, TAKE_LENGTH_TOO_LONG,
-             vfmTypesTheory.word_to_bytes_word_of_bytes_256]
-      (* Int n case: need n ≤ 256 from valid_int_bound n *)
-      >- (qmatch_goalsub_abbrev_tac `w2i (i2w ii)`
-          \\ sg `INT_MIN (:256) ≤ ii ∧ ii ≤ INT_MAX (:256)`
-          >- (irule int_bits_bound_256 \\ qexists_tac `n` \\ gvs[valid_int_bound_def])
-          \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w] \\ simp[])
-      (* Fixed n m case: need m ≤ 256 from valid_fixed_bounds n m *)
-      \\ qmatch_goalsub_abbrev_tac `w2i (i2w ii)`
-      \\ sg `INT_MIN (:256) ≤ ii ∧ ii ≤ INT_MAX (:256)`
-      >- (irule int_bits_bound_256 \\ qexists_tac `n0` \\ gvs[valid_fixed_bounds_def])
-      \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w] \\ simp[])
+  \\ conj_tac
+  >- (
+    Cases \\ gvs[LENGTH_word_to_bytes, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+    \\ rw[valid_int_bound_def, valid_fixed_bounds_def]
+    \\ qmatch_asmsub_rename_tac`v9 < 2 ** m`
+    \\ `v9 < 2 ** 256`
+       by (irule arithmeticTheory.LESS_LESS_EQ_TRANS
+           \\ qexists_tac `2 ** m` \\ simp[])
+    \\ REWRITE_TAC[GSYM(EVAL ``2n ** 256``)]
+    \\ simp[arithmeticTheory.LESS_MOD])
+  (* IntV case *)
+  \\ conj_tac
+  >- (
+    Cases \\ gvs[LENGTH_word_to_bytes, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+    \\ rw[valid_int_bound_def, valid_fixed_bounds_def]
+    \\ qmatch_goalsub_abbrev_tac `w2i (i2w ii)`
+    \\ qmatch_asmsub_rename_tac`m ≤ 256`
+    \\ (sg `INT_MIN (:256) ≤ ii ∧ ii ≤ INT_MAX (:256)`
+        >- (irule int_bits_bound_256 \\ qexists_tac `m`
+            \\ gvs[valid_int_bound_def]))
+    \\ DEP_ONCE_REWRITE_TAC[integer_wordTheory.w2i_i2w] \\ simp[])
   (* Vacuous type/value mismatch cases - proven by has_type_def contradiction *)
-  \\ TRY (rw[has_type_def] \\ NO_TAC)
+  \\ rpt (conj_tac >- rw[has_type_def])
   (* enc_tuple base case: has_types ts [] => ts = [] via LIST_REL *)
-  >~ [`has_types _ []`]
+  \\ reverse conj_tac
   >- (rpt gen_tac \\ strip_tac \\ gvs[has_types_LIST_REL])
-	  (* enc_tuple recursive case (has_types (t::ts) (v::vs)):
-	     Apply IH by instantiating with is_dynamic t, tail, and head.
-	     Then prove IH preconditions and use conclusion. *)
-	  \\ rpt gen_tac \\ rpt strip_tac
-	  \\ qpat_x_assum
-	       `∀dyn tail head.
-	          dyn = is_dynamic t ∧
-	          tail = (if dyn then enc t v else []) ∧
-	          head = (if dyn then enc_number (Uint 256) (NumV (hl + tl)) else enc t v) ⇒ _`
-	       (qspecl_then
-	       [`is_dynamic t`,
-	        `if is_dynamic t then enc t v else []`,
-	        `if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl)) else enc t v`] mp_tac)
+  (* enc_tuple recursive case (has_types (t::ts) (v::vs)):
+     Apply IH by instantiating with is_dynamic t, tail, and head.
+     Then prove IH preconditions and use conclusion. *)
+  \\ rpt gen_tac \\ rpt strip_tac
+(*
+  \\ qpat_x_assum
+       `∀dyn tail head.
+          dyn = is_dynamic t ∧
+          tail = (if dyn then enc t v else []) ∧
+          head = (if dyn then enc_number (Uint 256) (NumV (hl + tl)) else enc t v) ⇒ _`
+       (qspecl_then
+       [`is_dynamic t`,
+        `if is_dynamic t then enc t v else []`,
+        `if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl)) else enc t v`] mp_tac)
   \\ impl_tac >- simp[]
   \\ impl_tac
   >- (conj_tac
@@ -1483,7 +1443,6 @@ Proof
   \\ qmatch_goalsub_abbrev_tac`valid_enc_tuple _ xrhds result`
   \\ qmatch_asmsub_abbrev_tac`valid_enc_tuple _ _ (DROP shrhds res)`
   \\ simp[Once valid_enc_def]
-
   \\ conj_tac
   \\ (fn g => (print "enc_valid: enc_tuple rec split conjuncts\n"; ALL_TAC g))
   >- (
@@ -1666,6 +1625,7 @@ Proof
     \\ simp[SIMP_RULE std_ss [] head_lengths_REPLICATE])
   \\ gvs[Abbr`hlt`]
   \\ gvs[LENGTH_FLAT, SUM_REVERSE, MAP_REVERSE]
+  *)
   \\ cheat
 QED
 
