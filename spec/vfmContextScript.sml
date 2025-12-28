@@ -18,6 +18,7 @@ Datatype:
    ; prevHashes     : bytes32 list
    ; blobHashes     : bytes32 list
    ; chainId        : num
+   ; authRefund     : num
    |>
 End
 
@@ -219,7 +220,7 @@ Definition base_fee_per_blob_gas_def:
 End
 
 Definition initial_tx_params_def:
-  initial_tx_params c h b t =
+  initial_tx_params c h b t ar =
   <| origin         := t.from
    ; gasPrice       := t.gasPrice
    ; baseFeePerGas  := b.baseFeePerGas
@@ -232,6 +233,7 @@ Definition initial_tx_params_def:
    ; prevHashes     := h
    ; blobHashes     := t.blobVersionedHashes
    ; chainId        := c
+   ; authRefund     := ar
    |>
 End
 
@@ -428,10 +430,9 @@ Definition initial_state_def:
     let ctxt = initial_context callee code static rd tx in
     let authListLen = LENGTH tx.authorizationList in
     case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
-    let ctxt = ctxt with addRefund updated_by (λr. r + authRefund) in
     SOME $
     <| contexts := [(ctxt, rb)]
-     ; txParams := initial_tx_params chainId prevHashes blk tx
+     ; txParams := initial_tx_params chainId prevHashes blk tx authRefund
      ; rollback := rb
      ; msdomain := dom
      |>

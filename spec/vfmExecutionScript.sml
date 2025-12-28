@@ -1776,8 +1776,8 @@ Definition post_transaction_accounting_def:
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
   let txGasUsed = tx.gasLimit - gasLeft in
-  let gasRefund = if result ≠ NONE then 0
-                  else MIN (txGasUsed DIV 5) (addRefund - subRefund) in
+  let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
+  let gasRefund = MIN (txGasUsed DIV 5) (t.txParams.authRefund + storageRefund) in
   let tokens = call_data_tokens tx.data in
   let floor_cost = base_cost + floor_call_data_cost * tokens in
   let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
