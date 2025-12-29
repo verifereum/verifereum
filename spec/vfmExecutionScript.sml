@@ -2056,16 +2056,26 @@ Definition expected_base_fee_def:
       parent_base_fee - base_fee_delta
 End
 
+Definition excess_blob_gas_def:
+  excess_blob_gas parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas =
+    if parentExcessBlobGas + parentBlobGasUsed < target_blob_gas_per_block then 0
+    else
+      let parentBlobFee = base_fee_per_blob_gas parentExcessBlobGas in
+      if blob_base_cost * parentBaseFeePerGas > gas_per_blob * parentBlobFee then
+        parentExcessBlobGas +
+        ((parentBlobGasUsed * (max_blob_gas_per_block - target_blob_gas_per_block))
+           DIV max_blob_gas_per_block)
+      else (parentExcessBlobGas + parentBlobGasUsed) - target_blob_gas_per_block
+End
+
 Definition block_invalid_def:
   block_invalid p rs deposits withdrawals consolidations b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
     let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
-    let excessBlobGas = (p.excessBlobGas + p.blobGasUsed)
-                        - target_blob_gas_per_block in
+    let excessBlobGas = excess_blob_gas p.excessBlobGas p.blobGasUsed p.baseFeePerGas in
     let requestsHash = compute_requests_hash deposits withdrawals consolidations in
     let expectedBaseFee = expected_base_fee p.baseFeePerGas p.gasLimit p.gasUsed in
-    let expectedWithdrawalsRoot =
-          word_of_bytes T 0w (withdrawals_root b.withdrawals) in
+    let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
     ¬(min_gas_limit ≤ b.gasLimit ∧
       b.baseFeePerGas = expectedBaseFee ∧
       blobGasUsed ≤ max_blob_gas_per_block ∧
