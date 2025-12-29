@@ -1570,6 +1570,8 @@ Definition step_inst_def:
   ∧ step_inst ShL = step_binop ShL (λn w. word_lsl w (w2n n))
   ∧ step_inst ShR = step_binop ShR (λn w. word_lsr w (w2n n))
   ∧ step_inst SAR = step_binop SAR (λn w. word_asr w (w2n n))
+  ∧ step_inst CLZ = step_monop CLZ
+      (λx. n2w (if x = 0w then 256 else 255 - LOG2 (w2n x)))
   ∧ step_inst Keccak256 = step_keccak256
   ∧ step_inst Address = step_msgParams Address (λc. w2w c.callee)
   ∧ step_inst Balance = step_balance
