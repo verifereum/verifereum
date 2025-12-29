@@ -387,6 +387,7 @@ Definition pre_transaction_updates_def:
            NULL t.blobVersionedHashes
          | _ => F) then NONE else
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
+  if t.gasLimit > 2 ** 24 then NONE else
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
