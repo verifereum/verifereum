@@ -768,15 +768,14 @@ Proof
   rw[precompile_modexp_def]
   \\ irule decreases_gas_bind_false \\ simp[]
   \\ gen_tac
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_assert
   \\ qpat_abbrev_tac `v1 = COND a b c`
   \\ qpat_abbrev_tac `v2 = COND a b c`
   \\ rw[ignore_bind_def]
-  \\ irule decreases_gas_bind_false \\ simp[]
-  \\ conj_tac
-  >- ( irule decreases_gas_bind_false \\ rw[] )
-  \\ irule decreases_gas_mono
+  \\ irule_at Any decreases_gas_bind_false \\ simp[]
+  \\ irule_at Any decreases_gas_bind_false \\ simp[]
   \\ irule_at Any decreases_gas_consume_gas
-  \\ rw[]
 QED
 
 Theorem decreases_gas_precompile_sha2_256[simp]:
