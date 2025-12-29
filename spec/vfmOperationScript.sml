@@ -34,6 +34,7 @@ Datatype:
   | ShL
   | ShR
   | SAR
+  | CLZ
   | Keccak256
   | Address
   | Balance
@@ -128,6 +129,7 @@ Definition opcode_def:
   ∧ opcode ShL            = [n2w 0x1b]
   ∧ opcode ShR            = [n2w 0x1c]
   ∧ opcode SAR            = [n2w 0x1d]
+  ∧ opcode CLZ            = [n2w 0x1e]
   ∧ opcode Keccak256      = [n2w 0x20]
   ∧ opcode Address        = [n2w 0x30]
   ∧ opcode Balance        = [n2w 0x31]
@@ -220,6 +222,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas ShL            = 3
   ∧ static_gas ShR            = 3
   ∧ static_gas SAR            = 3
+  ∧ static_gas CLZ            = 5
   ∧ static_gas Keccak256      = 30
   ∧ static_gas Address        = 2
   ∧ static_gas Balance        = 0
@@ -310,6 +313,7 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0x1b then SOME ShL else
       if opc = n2w 0x1c then SOME ShR else
       if opc = n2w 0x1d then SOME SAR else
+      if opc = n2w 0x1e then SOME CLZ else
       if opc = n2w 0x20 then SOME Keccak256 else
       if opc = n2w 0x30 then SOME Address else
       if opc = n2w 0x31 then SOME Balance else
