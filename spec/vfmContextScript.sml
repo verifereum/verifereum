@@ -269,7 +269,7 @@ QED
 
 Definition precompile_addresses_def:
   precompile_addresses : address fset =
-  fset_ABS (GENLIST (n2w o SUC) 17)
+  fset_ABS (0x100w :: GENLIST (n2w o SUC) 17)
 End
 
 Definition delegation_prefix_def:

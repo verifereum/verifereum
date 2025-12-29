@@ -605,6 +605,12 @@ val () = “precompile_bls_map_fp2_to_g2 s” |>
     LET_RATOR, option_CASE_rator
   ] |> cv_auto_trans;
 
+val () = “precompile_p256verify s” |>
+  SIMP_CONV std_ss [
+    precompile_p256verify_def, bind_def, ignore_bind_def, LET_RATOR,
+    COND_RATOR
+  ] |> cv_auto_trans;
+
 val () = “precompile_sha2_256 s” |>
    SIMP_CONV std_ss [
        precompile_sha2_256_def, bind_def, ignore_bind_def, LET_RATOR

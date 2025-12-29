@@ -1848,6 +1848,12 @@ Proof
   \\ CASE_TAC \\ rw[] \\ tac
 QED
 
+Theorem precompile_p256verify_ignores_extra_domain[simp]:
+  ignores_extra_domain precompile_p256verify
+Proof
+  rw[precompile_p256verify_def] \\ tac
+QED
+
 Theorem dispatch_precompiles_ignores_extra_domain[simp]:
   ignores_extra_domain (dispatch_precompiles x)
 Proof
@@ -3337,6 +3343,7 @@ Theorem preserves_domain_has_callee_precompiles[simp]:
   ∧ preserves_domain_has_callee (K T) precompile_bls_pairing
   ∧ preserves_domain_has_callee (K T) precompile_bls_map_fp_to_g1
   ∧ preserves_domain_has_callee (K T) precompile_bls_map_fp2_to_g2
+  ∧ preserves_domain_has_callee (K T) precompile_p256verify
 Proof
   rw[precompile_ecrecover_def,
      precompile_sha2_256_def,
@@ -3354,7 +3361,8 @@ Proof
      precompile_bls_g2msm_def,
      precompile_bls_pairing_def,
      precompile_bls_map_fp_to_g1_def,
-     precompile_bls_map_fp2_to_g2_def]
+     precompile_bls_map_fp2_to_g2_def,
+     precompile_p256verify_def]
   \\ rpt (
     (irule preserves_domain_has_callee_bind ORELSE
      irule preserves_domain_has_callee_ignore_bind)

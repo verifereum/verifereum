@@ -1,7 +1,7 @@
 Theory vfmExecution
 Ancestors
   arithmetic
-  blake2f bn254 bls12381 sha2 ripemd160[ignore_grammar] secp256k1
+  blake2f bn254 bls12381 sha2 ripemd160[ignore_grammar] secp256k1 secp256r1
   vfmTypes vfmRoot vfmContext
 Libs
   monadsyntax
@@ -1440,6 +1440,25 @@ Definition precompile_bls_map_fp2_to_g2_def:
   od
 End
 
+Definition precompile_p256verify_def:
+  precompile_p256verify = do
+    input <- get_call_data;
+    consume_gas 6900;
+    if LENGTH input ≠ 160 then finish else do
+      hash <<- word_of_bytes T (0w:bytes32) $ TAKE 32 input;
+      r <<- num_of_be_bytes $ TAKE 32 (DROP 32 input);
+      s <<- num_of_be_bytes $ TAKE 32 (DROP 64 input);
+      qx <<- num_of_be_bytes $ TAKE 32 (DROP 96 input);
+      qy <<- num_of_be_bytes $ TAKE 32 (DROP 128 input);
+      if p256verify hash r s qx qy then do
+        set_return_data $ PAD_LEFT 0w 32 [1w: byte];
+        finish
+      od
+      else finish
+    od
+  od
+End
+
 Definition dispatch_precompiles_def:
   dispatch_precompiles (a: address) =
     if a = 0x1w then precompile_ecrecover
@@ -1459,6 +1478,7 @@ Definition dispatch_precompiles_def:
     else if a = 0xfw then precompile_bls_pairing
     else if a = 0x10w then precompile_bls_map_fp_to_g1
     else if a = 0x11w then precompile_bls_map_fp2_to_g2
+    else if a = 0x100w then precompile_p256verify
     else fail Impossible
 End
 
