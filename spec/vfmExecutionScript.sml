@@ -1208,18 +1208,19 @@ Definition precompile_modexp_def:
     bSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 inputs;
     eSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 (DROP 32 inputs);
     mSize <<- w2n $ word_of_bytes T (0w:bytes32) $ take_pad_0 32 (DROP 64 inputs);
+    assert (bSize ≤ 1024 ∧ eSize ≤ 1024 ∧ mSize ≤ 1024) OutOfGas;
     maxLength <<- MAX bSize mSize;
     words <<- (maxLength + 7) DIV 8;
-    multiplicationComplexity <<- words * words;
+    multiplicationComplexity <<- if maxLength ≤ 32 then 16 else 2 * words * words;
     restInputs <<- DROP 96 inputs;
     eHead <<- num_from_input_words (MIN 32 eSize) $ DROP bSize restInputs;
     iterationCount <<-
       if eSize ≤ 32 then
         if eHead = 0 then 0n else bitlength eHead - 1
-      else 8 * (eSize - 32) + (bitlength (w2n (n2w eHead: bytes32)) - 1);
+      else 16 * (eSize - 32) + (bitlength (w2n (n2w eHead: bytes32)) - 1);
     calculatedIterationCount <<- MAX iterationCount 1;
     cost <<- multiplicationComplexity * calculatedIterationCount;
-    dynamicGas <<- MAX 200 (cost DIV 3);
+    dynamicGas <<- MAX 500 cost;
     consume_gas dynamicGas;
     m <<- num_from_input_words mSize $ DROP (bSize + eSize) restInputs;
     set_return_data $
