@@ -1001,6 +1001,19 @@ Proof
   \\ irule_at Any decreases_gas_finish
 QED
 
+Theorem decreases_gas_precompile_p256verify[simp]:
+  decreases_gas F precompile_p256verify
+Proof
+  rw[precompile_p256verify_def]
+  \\ irule decreases_gas_bind_false \\ rw []
+  \\ irule decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac`F` \\ rw[]
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_set_return_data
+  \\ irule_at Any decreases_gas_finish
+QED
+
 Theorem decreases_gas_dispatch_precompiles[simp]:
   decreases_gas F (dispatch_precompiles address)
 Proof

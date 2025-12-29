@@ -1036,6 +1036,12 @@ Proof
   \\ CASE_TAC \\ rw[] \\ tac
 QED
 
+Theorem preserves_wf_accounts_precompile_p256verify[simp]:
+  preserves_wf_accounts precompile_p256verify
+Proof
+  rw[precompile_p256verify_def] \\ tac
+QED
+
 Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
   preserves_wf_accounts (dispatch_precompiles x)
 Proof
@@ -2073,6 +2079,12 @@ Theorem limits_num_contexts_precompile_bls_map_fp2_to_g2[simp]:
 Proof
   rw[precompile_bls_map_fp2_to_g2_def] \\ tac
   \\ CASE_TAC \\ rw[] \\ tac
+QED
+
+Theorem limits_num_contexts_precompile_p256verify[simp]:
+  limits_num_contexts n n precompile_p256verify
+Proof
+  rw[precompile_p256verify_def] \\ tac
 QED
 
 Theorem limits_num_contexts_dispatch_precompiles[simp]:
