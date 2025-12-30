@@ -1,5 +1,4 @@
-open HolKernel vfmTestAuxLib vfmTestDefLib;
-val () = new_theory "vfmTestDefs2420";
+Theory vfmTestDefs2420[no_sig_docs]
+Libs vfmTestDefLib
 val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stSystemOperationsTest/callcodeToNameRegistratorAddresTooBigRight.json";
 val defs = mapi (define_test "2420") tests;
-val () = export_theory_no_docs ();

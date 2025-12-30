@@ -1,5 +1,4 @@
-open HolKernel vfmTestAuxLib vfmTestDefLib;
-val () = new_theory "vfmTestDefs0854";
+Theory vfmTestDefs0854[no_sig_docs]
+Libs vfmTestDefLib
 val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stCreateTest/CreateAddressWarmAfterFail.json";
 val defs = mapi (define_test "0854") tests;
-val () = export_theory_no_docs ();

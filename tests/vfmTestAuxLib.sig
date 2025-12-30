@@ -7,8 +7,6 @@ signature vfmTestAuxLib = sig
   val padl : int -> char -> string -> string
   val string_less : string -> string -> bool
 
-  val export_theory_no_docs: unit -> unit
-
   val time_limit : Time.time
 
   val fixtures_version : string

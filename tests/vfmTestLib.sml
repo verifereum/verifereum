@@ -81,11 +81,9 @@ structure vfmTestLib :> vfmTestLib = struct
     val thyn = String.concat [test_defs_prefix, sidx]
     val rpth = OS.Path.concat(OS.Path.parentArc, json_path)
     val text = String.concat [
-      "open HolKernel vfmTestAuxLib vfmTestDefLib;\n",
-      "val () = new_theory \"", thyn, "\";\n",
+      "Theory ", thyn, "[no_sig_docs]\nLibs vfmTestDefLib\n",
       "val tests = json_path_to_tests \"", rpth, "\";\n",
-      "val defs = mapi (define_test \"", sidx, "\") tests;\n",
-      "val () = export_theory_no_docs ();\n"
+      "val defs = mapi (define_test \"", sidx, "\") tests;\n"
     ]
   in
     (thyn, text)
@@ -98,13 +96,12 @@ structure vfmTestLib :> vfmTestLib = struct
                   Substring.substring(thyn, z-padding, padding)
                ]
     val text = String.concat [
-      "open HolKernel wordsLib vfmTestResultLib ", thyn, "Theory;\n",
-      "val () = new_theory \"", rthy, "\";\n",
+      "Theory ", rthy, "[no_sig_docs]\nAncestors ",
+      thyn, "\nLibs wordsLib vfmTestResultLib\n",
       "val thyn = \"", thyn, "\";\n",
       "val defs = get_result_defs thyn;\n",
       "val () = vfmTestLib.remove_nsv_files thyn;\n",
-      "val () = List.app (ignore o save_result_thm thyn) defs;\n",
-      "val () = vfmTestAuxLib.export_theory_no_docs ();\n"
+      "val () = List.app (ignore o save_result_thm thyn) defs;\n"
     ]
   in
     (rthy, text)

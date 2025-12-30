@@ -16,10 +16,6 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
     else s
   end
 
-  val export_theory_no_docs = fn () =>
-    Feedback.set_trace "TheoryPP.include_docs" 0
-    before export_theory ()
-
   val fixtures_version = "5.4.0"
   val fork_name = "Prague"
   val chain_id = 1

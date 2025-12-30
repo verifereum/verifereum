@@ -1,5 +1,4 @@
-open HolKernel vfmTestAuxLib vfmTestDefLib;
-val () = new_theory "vfmTestDefs0328";
+Theory vfmTestDefs0328[no_sig_docs]
+Libs vfmTestDefLib
 val tests = json_path_to_tests "../fixtures/blockchain_tests/prague/eip7702_set_code_tx/test_intrinsic_gas_cost.json";
 val defs = mapi (define_test "0328") tests;
-val () = export_theory_no_docs ();

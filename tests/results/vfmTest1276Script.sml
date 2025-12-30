@@ -1,7 +1,7 @@
-open HolKernel wordsLib vfmTestResultLib vfmTestDefs1276Theory;
-val () = new_theory "vfmTest1276";
+Theory vfmTest1276[no_sig_docs]
+Ancestors vfmTestDefs1276
+Libs wordsLib vfmTestResultLib
 val thyn = "vfmTestDefs1276";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
 val () = List.app (ignore o save_result_thm thyn) defs;
-val () = vfmTestAuxLib.export_theory_no_docs ();

@@ -1,5 +1,4 @@
-open HolKernel vfmTestAuxLib vfmTestDefLib;
-val () = new_theory "vfmTestDefs0532";
+Theory vfmTestDefs0532[no_sig_docs]
+Libs vfmTestDefLib
 val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stBadOpcode/undefinedOpcodeFirstByte.json";
 val defs = mapi (define_test "0532") tests;
-val () = export_theory_no_docs ();
