@@ -80,9 +80,8 @@ Verifereum is developed in the [HOL4](https://hol-theorem-prover.org) theorem pr
 
     ```bash
     git clone https://github.com/verifereum/verifereum
-    cd verifereum/tests
+    cd verifereum
     Holmake
-    ./runtests.exe
     ```
 
 ### Option 2: Use Docker
