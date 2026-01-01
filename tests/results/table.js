@@ -26,7 +26,7 @@ const mk_label = (hidecls) => {
 const div = document.createElement('div')
 div.append(mk_label('passed'),
            mk_label('timeout'),
-           mk_label('precompile'))
+           mk_label('modified-system'))
 
 document.addEventListener('DOMContentLoaded', () =>
   document.querySelector('body').insertBefore(

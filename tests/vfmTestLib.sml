@@ -175,14 +175,13 @@ structure vfmTestLib :> vfmTestLib = struct
     {name=name, result=result, seconds=seconds, index=index}
   end
 
-  fun is_precompile name = let
+  fun is_modified_system name = let
     val name = String.translate (String.str o Char.toLower) name
     fun cnts s = String.isSubstring s name
   in
     List.exists cnts [
-      "precomp",
-      "ecmul", "ecadd", "ecpair", "pairing", "ecrec",
-      "pointadd", "pointmul", "ripemd", "blake"
+      "modified_withdrawal_contract",
+      "modified_consolidation_contract"
     ]
   end
 
@@ -195,8 +194,8 @@ structure vfmTestLib :> vfmTestLib = struct
     val cls = if success then "passed"
               else if result = "Timeout" then "timeout"
               else "fail"
-    val nametd = if is_precompile name
-                 then "<td class=precompile>"
+    val nametd = if is_modified_system name
+                 then "<td class=modified-system>"
                  else "<td>"
   in
     String.concat [
