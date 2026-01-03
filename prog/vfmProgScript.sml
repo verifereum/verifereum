@@ -1,7 +1,7 @@
 Theory vfmProg
 Ancestors
-  vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas
-  prog words set_sep pred_set pair list arithmetic option finite_map
+  vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas vfmState
+  prog words set_sep pred_set pair list arithmetic option finite_map combin
 Libs
   wordsLib intLib
 
@@ -745,6 +745,106 @@ Proof
   \\ pairarg_tac \\ gvs[CaseEq"option"]
 QED
 
+(* Lemma: lookup_account is preserved by update_account for other addresses *)
+Theorem lookup_account_update_account_other:
+  addr ≠ addr' ⇒
+  lookup_account addr (update_account addr' v acc) = lookup_account addr acc
+Proof
+  rw[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+(* Lemma: lookup_account returns the updated value for the same address *)
+Theorem lookup_account_update_account_same:
+  lookup_account addr (update_account addr v acc) = v
+Proof
+  rw[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+(* Lemma: lookup_account is preserved by process_deletions for non-deleted addresses *)
+Theorem lookup_account_process_deletions_other:
+  ¬MEM addr toDelete ⇒
+  lookup_account addr (process_deletions toDelete acc) = lookup_account addr acc
+Proof
+  qid_spec_tac `acc`
+  \\ Induct_on `toDelete`
+  >- rw[process_deletions_def]
+  >- (rw[process_deletions_def] \\ simp[lookup_account_update_account_other])
+QED
+
+(* Lemma: deleted addresses become empty_account_state *)
+Theorem lookup_account_process_deletions_deleted:
+  MEM addr toDelete ⇒
+  lookup_account addr (process_deletions toDelete acc) = empty_account_state
+Proof
+  qid_spec_tac `acc`
+  \\ Induct_on `toDelete`
+  >- rw[]
+  >- (rw[process_deletions_def]
+      >- (Cases_on `MEM addr toDelete`
+          >- (first_x_assum irule \\ first_x_assum ACCEPT_TAC)
+          >- simp[lookup_account_process_deletions_other,
+                  lookup_account_update_account_same])
+      >- (first_x_assum irule \\ first_x_assum ACCEPT_TAC))
+QED
+
+(* Lemma: post_transaction_accounting preserves accounts for addresses
+   not involved in gas accounting *)
+Theorem post_transaction_accounting_accounts:
+  ¬NULL t.contexts ∧
+  NULL (TL t.contexts) ∧
+  addr ≠ tx.from ∧
+  addr ≠ blk.coinBase ∧
+  ¬MEM addr t.rollback.toDelete
+  ⇒
+  lookup_account addr (SND (post_transaction_accounting blk tx NONE acc t)) =
+  lookup_account addr t.rollback.accounts
+Proof
+  rewrite_tac[post_transaction_accounting_def]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ gvs[]
+  \\ simp[Abbr`newAccounts`, lookup_account_update_account_other]
+  \\ simp[Abbr`accounts`, lookup_account_process_deletions_other]
+QED
+
+(* Helper definitions for gas accounting in bridging theorem *)
+Definition compute_gas_left_def:
+  compute_gas_left (ctxtGasLimit:num) ctxtGasUsed = ctxtGasLimit - ctxtGasUsed
+End
+
+Definition compute_tx_gas_used_def:
+  compute_tx_gas_used (txGasLimit:num) ctxtGasLimit ctxtGasUsed =
+    txGasLimit - compute_gas_left ctxtGasLimit ctxtGasUsed
+End
+
+Definition compute_total_gas_used_def:
+  compute_total_gas_used (txGasLimit:num) txData ctxtGasLimit ctxtGasUsed
+                         ctxtAddRefund ctxtSubRefund authRefund =
+    let txGasUsed = compute_tx_gas_used txGasLimit ctxtGasLimit ctxtGasUsed in
+    let storageRefund = ctxtAddRefund - ctxtSubRefund in
+    let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
+    let tokens = call_data_tokens txData in
+    let floor_cost = base_cost + floor_call_data_cost * tokens in
+      MAX (txGasUsed - gasRefund) floor_cost
+End
+
+Definition compute_refund_ether_def:
+  compute_refund_ether (txGasLimit:num) txGasPrice txData ctxtGasLimit ctxtGasUsed
+                       ctxtAddRefund ctxtSubRefund authRefund =
+    let totalGasUsed = compute_total_gas_used txGasLimit txData ctxtGasLimit
+                         ctxtGasUsed ctxtAddRefund ctxtSubRefund authRefund in
+      (txGasLimit - totalGasUsed) * txGasPrice
+End
+
+Definition compute_transaction_fee_def:
+  compute_transaction_fee (txGasLimit:num) txGasPrice baseFeePerGas txData
+                          ctxtGasLimit ctxtGasUsed ctxtAddRefund ctxtSubRefund
+                          authRefund =
+    let totalGasUsed = compute_total_gas_used txGasLimit txData ctxtGasLimit
+                         ctxtGasUsed ctxtAddRefund ctxtSubRefund authRefund in
+    let priorityFeePerGas = txGasPrice - baseFeePerGas in
+      totalGasUsed * priorityFeePerGas
+End
+
 (* Main bridging theorem: connects SPEC to run_transaction for message calls *)
 Theorem SPEC_to_run_transaction:
   (* SPEC preconditions *)
@@ -762,56 +862,92 @@ Theorem SPEC_to_run_transaction:
   P (evm2set (INL (), s')) ∧
   (* Postcondition has the required form for successful execution *)
   Q = evm_Exception (INR NONE) * evm_ReturnData returnData *
-      evm_Logs logs * evm_Contexts [] * R
+      evm_Logs logs * evm_Rollback rb * evm_Contexts [] *
+      evm_GasUsed gasUsed * evm_MsgParams msgParams *
+      evm_AddRefund addRefund * evm_SubRefund subRefund *
+      evm_TxParams txParams * R
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =
       SOME (result, accounts') ∧
     result.result = NONE ∧
     result.output = returnData ∧
-    result.logs = logs
+    result.logs = logs ∧
+    (* Full account specification *)
+    (let acc_del = process_deletions rb.toDelete rb.accounts;
+         sender = lookup_account tx.from acc_del;
+         coinbase = lookup_account blk.coinBase acc_del;
+         refundEther = compute_refund_ether tx.gasLimit tx.gasPrice tx.data
+                         msgParams.gasLimit gasUsed addRefund subRefund
+                         txParams.authRefund;
+         transactionFee = compute_transaction_fee tx.gasLimit tx.gasPrice
+                            blk.baseFeePerGas tx.data msgParams.gasLimit gasUsed
+                            addRefund subRefund txParams.authRefund
+     in
+       (* tx.from gets refund added to balance *)
+       lookup_account tx.from accounts' =
+         sender with balance := sender.balance + refundEther ∧
+       (* blk.coinBase gets fee added (when different from tx.from) *)
+       (tx.from ≠ blk.coinBase ⇒
+         lookup_account blk.coinBase accounts' =
+           coinbase with balance := coinbase.balance + transactionFee) ∧
+       (* All other addresses: same as after deletions *)
+       (∀addr. addr ≠ tx.from ∧ addr ≠ blk.coinBase ⇒
+         lookup_account addr accounts' = lookup_account addr acc_del))
 Proof
   strip_tac
   \\ simp[run_transaction_def]
   \\ `run_create dom F chainId prevHashes blk accounts tx =
       SOME (INR (s.rollback.accounts, s', NONE))`
-        by (imp_res_tac run_create_call >> gvs[])
+       by (imp_res_tac run_create_call >> gvs[])
   \\ simp[]
   \\ sg `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
   >- (irule run_from_SPEC
       \\ conj_tac
       >- (qexists_tac `evm_ReturnData returnData * evm_Logs logs *
-                       evm_Contexts [] * R`
+            evm_Rollback rb * evm_Contexts [] * evm_GasUsed gasUsed *
+            evm_MsgParams msgParams * evm_AddRefund addRefund *
+            evm_SubRefund subRefund * evm_TxParams txParams * R`
           \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
       >- (qexists_tac `P` \\ simp[]))
   >- (gvs[]
       \\ sg `FST rs2 = INR NONE`
-      >- (qpat_x_assum `(_ * _ * _ * _ * _) _` mp_tac
+      >- (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
           \\ simp[evm2set_def]
-          \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set] \\ simp[])
-      >- (Cases_on `rs2` \\ gvs[]
-          \\ qpat_x_assum `(_ * _ * _ * _ * _) _` mp_tac
-          \\ simp[evm2set_def, STAR_evm2set]
           \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
-          \\ simp[]
-          \\ strip_tac
+          \\ simp[])
+      >- (Cases_on `rs2` \\ gvs[]
           \\ sg `r.contexts <> []`
           >- (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
               \\ `(s with rollback updated_by _).contexts = s.contexts` by simp[]
               \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
-          >- (simp[NULL_EQ]
+          >- (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+              \\ simp[evm2set_def, STAR_evm2set]
+              \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+              \\ simp[]
+              \\ strip_tac
               \\ Cases_on `post_transaction_accounting blk tx NONE
                            s.rollback.accounts r`
-              \\ qexists_tac `q` \\ qexists_tac `r''`
+              \\ qexistsl_tac [`q`, `r''`]
               \\ simp[]
-              \\ `(FST (post_transaction_accounting blk tx NONE
-                        s.rollback.accounts r)).result = NONE ∧
-                  (FST (post_transaction_accounting blk tx NONE
-                        s.rollback.accounts r)).output = (FST (HD r.contexts)).returnData ∧
-                  (FST (post_transaction_accounting blk tx NONE
-                        s.rollback.accounts r)).logs = (FST (HD r.contexts)).logs`
-                    by (irule post_transaction_accounting_success >> simp[NULL_EQ])
-              \\ gvs[])))
+              \\ `~(NULL r.contexts \/ ~NULL (TL r.contexts))` by gvs[NULL_EQ]
+              \\ qabbrev_tac `ctxt = FST (HD r.contexts)`
+              \\ qabbrev_tac `acc_del = process_deletions
+                              r.rollback.toDelete r.rollback.accounts`
+              \\ qpat_x_assum `post_transaction_accounting _ _ _ _ _ = _`
+                   (strip_assume_tac o
+                    ONCE_REWRITE_RULE[post_transaction_accounting_def])
+              \\ gvs[compute_refund_ether_def, compute_transaction_fee_def,
+                     compute_total_gas_used_def, compute_tx_gas_used_def,
+                     compute_gas_left_def]
+              \\ simp[lookup_account_update_account_same,
+                      lookup_account_update_account_other]
+              \\ Cases_on `lookup_account tx.from acc_del`
+              \\ simp[]
+              \\ rw[]
+              >- simp[vfmStateTheory.recordtype_account_state_seldef_balance_fupd_def]
+              >- (Cases_on `lookup_account blk.coinBase acc_del`
+                  \\ simp[vfmStateTheory.recordtype_account_state_seldef_balance_fupd_def]))))
 QED
 
 (*-------------------------------------------------------------------------------*
