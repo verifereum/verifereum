@@ -714,14 +714,16 @@ Proof
   \\ gvs[]
 QED
 
-(* Lemma: post_transaction_accounting extracts output correctly on success *)
+(* Lemma: post_transaction_accounting extracts output and logs correctly on success *)
 Theorem post_transaction_accounting_success:
   ¬NULL t.contexts ∧
   NULL (TL t.contexts)
   ⇒
   (FST (post_transaction_accounting blk tx NONE acc t)).result = NONE ∧
   (FST (post_transaction_accounting blk tx NONE acc t)).output =
-    (FST (HD t.contexts)).returnData
+    (FST (HD t.contexts)).returnData ∧
+  (FST (post_transaction_accounting blk tx NONE acc t)).logs =
+    (FST (HD t.contexts)).logs
 Proof
   qmatch_goalsub_abbrev_tac`FST pta`
   \\ pop_assum mp_tac
@@ -759,13 +761,15 @@ Theorem SPEC_to_run_transaction:
        (λr. r with accounts updated_by transfer_value tx.from callee tx.value) ∧
   P (evm2set (INL (), s')) ∧
   (* Postcondition has the required form for successful execution *)
-  Q = evm_Exception (INR NONE) * evm_ReturnData returnData * evm_Contexts [] * R
+  Q = evm_Exception (INR NONE) * evm_ReturnData returnData *
+      evm_Logs logs * evm_Contexts [] * R
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =
       SOME (result, accounts') ∧
     result.result = NONE ∧
-    result.output = returnData
+    result.output = returnData ∧
+    result.logs = logs
 Proof
   strip_tac
   \\ simp[run_transaction_def]
@@ -776,16 +780,17 @@ Proof
   \\ sg `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
   >- (irule run_from_SPEC
       \\ conj_tac
-      >- (qexists_tac `evm_ReturnData returnData * evm_Contexts [] * R`
+      >- (qexists_tac `evm_ReturnData returnData * evm_Logs logs *
+                       evm_Contexts [] * R`
           \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
       >- (qexists_tac `P` \\ simp[]))
   >- (gvs[]
       \\ sg `FST rs2 = INR NONE`
-      >- (qpat_x_assum `(_ * _ * _ * _) _` mp_tac
+      >- (qpat_x_assum `(_ * _ * _ * _ * _) _` mp_tac
           \\ simp[evm2set_def]
           \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set] \\ simp[])
       >- (Cases_on `rs2` \\ gvs[]
-          \\ qpat_x_assum `(_ * _ * _ * _) _` mp_tac
+          \\ qpat_x_assum `(_ * _ * _ * _ * _) _` mp_tac
           \\ simp[evm2set_def, STAR_evm2set]
           \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
           \\ simp[]
@@ -802,7 +807,9 @@ Proof
               \\ `(FST (post_transaction_accounting blk tx NONE
                         s.rollback.accounts r)).result = NONE ∧
                   (FST (post_transaction_accounting blk tx NONE
-                        s.rollback.accounts r)).output = (FST (HD r.contexts)).returnData`
+                        s.rollback.accounts r)).output = (FST (HD r.contexts)).returnData ∧
+                  (FST (post_transaction_accounting blk tx NONE
+                        s.rollback.accounts r)).logs = (FST (HD r.contexts)).logs`
                     by (irule post_transaction_accounting_success >> simp[NULL_EQ])
               \\ gvs[])))
 QED
