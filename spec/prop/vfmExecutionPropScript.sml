@@ -1,6 +1,6 @@
 Theory vfmExecutionProp
 Ancestors
-  combin pair list finite_map
+  combin pair list finite_map While
   vfmConstants vfmOperation vfmState vfmContext vfmExecution
 Libs
   BasicProvers wordsLib
@@ -191,6 +191,1004 @@ Proof
   \\ irule wf_accounts_pre_transaction_updates
   \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
   \\ rw[]
+QED
+
+Theorem pop_and_incorporate_context_preserves:
+  LENGTH st.contexts > 1 ⇒
+  (SND (pop_and_incorporate_context b st)).contexts ≠ []
+Proof
+  strip_tac \\ rw[pop_and_incorporate_context_def]
+  \\ rw[bind_def, get_gas_left_def, pop_context_def]
+  \\ rw[get_current_context_def]
+  >- gvs[]
+  >- (
+    simp[return_def]
+    \\ simp[ignore_bind_def, bind_def, unuse_gas_def,
+            set_current_context_def, push_logs_def, update_gas_refund_def,
+            set_rollback_def, return_def]
+    \\ simp[get_current_context_def]
+    \\ `TL st.contexts ≠ []` by (
+      strip_tac \\ pop_assum(strip_assume_tac o Q.AP_TERM`LENGTH`) \\ gvs[])
+    \\ simp[]
+    \\ simp[return_def]
+    \\ simp[assert_def, fail_def]
+    \\ CASE_TAC
+    >- (CASE_TAC \\ simp[set_rollback_def, bind_def,
+            get_current_context_def, set_current_context_def, fail_def,
+            return_def])
+    >- simp[])
+QED
+
+(* --------------------------------------------------------------------------
+   Preservation of non-empty contexts
+   -------------------------------------------------------------------------- *)
+
+(* Layer 1: Primitives *)
+
+Theorem return_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (return x s)).contexts ≠ []
+Proof
+  rw[return_def]
+QED
+
+Theorem fail_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (fail e s)).contexts ≠ []
+Proof
+  rw[fail_def]
+QED
+
+Theorem assert_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (assert b e s)).contexts ≠ []
+Proof
+  rw[assert_def]
+QED
+
+(* Layer 2: Core state operations *)
+
+Theorem get_current_context_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_current_context s)).contexts ≠ []
+Proof
+  rw[get_current_context_def, return_def, fail_def]
+QED
+
+Theorem set_current_context_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (set_current_context c s)).contexts ≠ []
+Proof
+  rw[set_current_context_def, return_def, fail_def]
+QED
+
+(* Layer 3: Monad composition *)
+
+Theorem bind_preserves_nonempty_contexts:
+  (∀s. s.contexts ≠ [] ⇒ (SND (g s)).contexts ≠ []) ∧
+  (∀x s. s.contexts ≠ [] ⇒ (SND (f x s)).contexts ≠ [])
+  ⇒
+  s.contexts ≠ [] ⇒ (SND (bind g f s)).contexts ≠ []
+Proof
+  strip_tac \\ strip_tac \\ simp[bind_def] \\ CASE_TAC \\ Cases_on `q`
+  >- (
+    simp[]
+    \\ `r.contexts ≠ []` by (first_x_assum (qspec_then `s` mp_tac) \\ simp[])
+    \\ first_x_assum drule \\ simp[])
+  >- (simp[] \\ first_x_assum (qspec_then `s` mp_tac) \\ simp[])
+QED
+
+Theorem this_bind_preserves_nonempty_contexts:
+  ((SND (g s)).contexts ≠ []) ∧
+  (∀x s. s.contexts ≠ [] ⇒ (SND (f x s)).contexts ≠ [])
+  ⇒
+  (SND (bind g f s)).contexts ≠ []
+Proof
+  strip_tac \\ simp[bind_def] \\ CASE_TAC \\ CASE_TAC \\ gvs[]
+QED
+
+Theorem ignore_bind_preserves_nonempty_contexts:
+  (∀s. s.contexts ≠ [] ⇒ (SND (g s)).contexts ≠ []) ∧
+  (∀s. s.contexts ≠ [] ⇒ (SND (f s)).contexts ≠ [])
+  ⇒
+  s.contexts ≠ [] ⇒ (SND (ignore_bind g f s)).contexts ≠ []
+Proof
+  rw[ignore_bind_def]
+  \\ irule bind_preserves_nonempty_contexts \\ rw[]
+QED
+
+(* Tactic for proving preservation through monadic composition *)
+val preserves_nonempty_tac = rpt (
+  (irule bind_preserves_nonempty_contexts \\ rw[]) ORELSE
+  (irule ignore_bind_preserves_nonempty_contexts \\ rw[])
+)
+
+(* Extended tactic for step_call: also handles option case and uncurry *)
+val option_case_preserves = prove(
+  ``(s.contexts <> [] ==> (SND (f1 s)).contexts <> []) /\
+    (!x. s.contexts <> [] ==> (SND (f2 x s)).contexts <> [])
+    ==>
+    s.contexts <> [] ==>
+    (SND ((case opt of NONE => f1 | SOME x => f2 x) s)).contexts <> []``,
+  Cases_on `opt` \\ rw[])
+
+val extended_preserves_tac = rpt (
+  (irule bind_preserves_nonempty_contexts \\ rw[]) ORELSE
+  (irule ignore_bind_preserves_nonempty_contexts \\ rw[]) ORELSE
+  (irule option_case_preserves \\ rw[])
+)
+
+(* Layer 4: Higher-level operations *)
+
+Theorem get_gas_left_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_gas_left s)).contexts ≠ []
+Proof
+  rw[get_gas_left_def] \\ preserves_nonempty_tac
+QED
+
+Theorem consume_gas_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (consume_gas n s)).contexts ≠ []
+Proof
+  rw[consume_gas_def] \\ preserves_nonempty_tac
+QED
+
+Theorem set_return_data_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (set_return_data rd s)).contexts ≠ []
+Proof
+  rw[set_return_data_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_num_contexts_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_num_contexts s)).contexts ≠ []
+Proof
+  rw[get_num_contexts_def, return_def]
+QED
+
+Theorem reraise_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (reraise e s)).contexts ≠ []
+Proof
+  rw[reraise_def]
+QED
+
+Theorem get_return_data_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_return_data s)).contexts ≠ []
+Proof
+  rw[get_return_data_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_output_to_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_output_to s)).contexts ≠ []
+Proof
+  rw[get_output_to_def] \\ preserves_nonempty_tac
+QED
+
+Theorem inc_pc_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (inc_pc s)).contexts ≠ []
+Proof
+  rw[inc_pc_def] \\ preserves_nonempty_tac
+QED
+
+Theorem push_stack_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (push_stack w s)).contexts ≠ []
+Proof
+  rw[push_stack_def] \\ preserves_nonempty_tac
+QED
+
+Theorem write_memory_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (write_memory off data s)).contexts ≠ []
+Proof
+  rw[write_memory_def] \\ preserves_nonempty_tac
+QED
+
+Theorem update_accounts_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (update_accounts f s)).contexts ≠ []
+Proof
+  rw[update_accounts_def, return_def]
+QED
+
+Theorem finish_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (finish s)).contexts ≠ []
+Proof
+  rw[finish_def]
+QED
+
+Theorem revert_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (revert s)).contexts ≠ []
+Proof
+  rw[revert_def]
+QED
+
+Theorem handle_create_preserves_nonempty_contexts[simp]:
+  st.contexts ≠ [] ⇒ (SND (handle_create e st)).contexts ≠ []
+Proof
+  rw[handle_create_def]
+  \\ simp[Once bind_def, get_return_data_def, get_current_context_def,
+          return_def, fail_def]
+  \\ simp[bind_def, get_current_context_def, return_def, fail_def]
+  \\ simp[get_output_to_def, bind_def, get_current_context_def,
+          return_def, fail_def]
+  \\ Cases_on `(FST (HD st.contexts)).msgParams.outputTo`
+  >- simp[reraise_def]
+  \\ simp[]
+  \\ Cases_on `e`
+  >- (
+    simp[]
+    \\ simp[ignore_bind_def, bind_def, assert_def, consume_gas_def,
+            update_accounts_def, reraise_def, get_current_context_def,
+            set_current_context_def, return_def, fail_def]
+    \\ rpt CASE_TAC \\ simp[] )
+  \\ simp[reraise_def]
+QED
+
+Theorem push_context_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (push_context cr s)).contexts ≠ []
+Proof
+  rw[push_context_def, return_def]
+QED
+
+Theorem inc_pc_or_jump_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (inc_pc_or_jump op s)).contexts ≠ []
+Proof
+  rw[inc_pc_or_jump_def, bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def, assert_def]
+  \\ rpt CASE_TAC
+  \\ simp[set_current_context_def, return_def, bind_def, ignore_bind_def,
+          assert_def, fail_def]
+  \\ rpt CASE_TAC \\ simp[]
+QED
+
+Theorem pop_stack_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (pop_stack n s)).contexts ≠ []
+Proof
+  rw[pop_stack_def] \\ preserves_nonempty_tac
+QED
+
+(* Helper functions for step_* operations *)
+
+Theorem get_tx_params_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_tx_params s)).contexts ≠ []
+Proof
+  rw[get_tx_params_def, return_def]
+QED
+
+Theorem get_accounts_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_accounts s)).contexts ≠ []
+Proof
+  rw[get_accounts_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_tStorage_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_tStorage s)).contexts ≠ []
+Proof
+  rw[get_tStorage_def] \\ preserves_nonempty_tac
+QED
+
+Theorem set_tStorage_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (set_tStorage x s)).contexts ≠ []
+Proof
+  rw[set_tStorage_def, return_def]
+QED
+
+Theorem get_rollback_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_rollback s)).contexts ≠ []
+Proof
+  rw[get_rollback_def, return_def]
+QED
+
+Theorem get_original_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_original s)).contexts ≠ []
+Proof
+  rw[get_original_def, return_def]
+QED
+
+Theorem set_original_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (set_original a s)).contexts ≠ []
+Proof
+  rw[set_original_def, return_def, set_last_accounts_def]
+QED
+
+Theorem get_callee_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_callee s)).contexts ≠ []
+Proof
+  rw[get_callee_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_caller_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_caller s)).contexts ≠ []
+Proof
+  rw[get_caller_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_value_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_value s)).contexts ≠ []
+Proof
+  rw[get_value_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_static_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_static s)).contexts ≠ []
+Proof
+  rw[get_static_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_code_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_code addr s)).contexts ≠ []
+Proof
+  rw[get_code_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_call_data_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_call_data s)).contexts ≠ []
+Proof
+  rw[get_call_data_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_current_code_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_current_code s)).contexts ≠ []
+Proof
+  rw[get_current_code_def] \\ preserves_nonempty_tac
+QED
+
+Theorem get_return_data_check_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (get_return_data_check off sz s)).contexts ≠ []
+Proof
+  rw[get_return_data_check_def] \\ preserves_nonempty_tac
+QED
+
+Theorem set_jump_dest_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (set_jump_dest d s)).contexts ≠ []
+Proof
+  rw[set_jump_dest_def] \\ preserves_nonempty_tac
+QED
+
+Theorem push_logs_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (push_logs ls s)).contexts ≠ []
+Proof
+  rw[push_logs_def] \\ preserves_nonempty_tac
+QED
+
+Theorem update_gas_refund_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (update_gas_refund r s)).contexts ≠ []
+Proof
+  Cases_on `r` \\ rw[update_gas_refund_def] \\ preserves_nonempty_tac
+QED
+
+Theorem unuse_gas_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (unuse_gas n s)).contexts ≠ []
+Proof
+  rw[unuse_gas_def] \\ preserves_nonempty_tac
+QED
+
+Theorem abort_unuse_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (abort_unuse n s)).contexts ≠ []
+Proof
+  rw[abort_unuse_def] \\ preserves_nonempty_tac
+QED
+
+Theorem abort_create_exists_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (abort_create_exists a s)).contexts ≠ []
+Proof
+  rw[abort_create_exists_def] \\ preserves_nonempty_tac
+QED
+
+Theorem proceed_create_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (proceed_create a b c d e s)).contexts ≠ []
+Proof
+  rw[proceed_create_def] \\ preserves_nonempty_tac
+QED
+
+Theorem abort_call_value_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (abort_call_value n s)).contexts ≠ []
+Proof
+  rw[abort_call_value_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_ecrecover_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_ecrecover s)).contexts ≠ []
+Proof
+  rw[precompile_ecrecover_def]
+  \\ preserves_nonempty_tac
+  \\ Cases_on `ecrecover (word_of_bytes T 0w (take_pad_0 32 x))
+               (num_of_be_bytes (take_pad_0 32 (DROP 32 x)))
+               (num_of_be_bytes (take_pad_0 32 (DROP 64 x)))
+               (num_of_be_bytes (take_pad_0 32 (DROP 96 x)))`
+  \\ rw[] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_sha2_256_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_sha2_256 s)).contexts ≠ []
+Proof
+  rw[precompile_sha2_256_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_ripemd_160_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_ripemd_160 s)).contexts ≠ []
+Proof
+  rw[precompile_ripemd_160_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_identity_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_identity s)).contexts ≠ []
+Proof
+  rw[precompile_identity_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_modexp_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_modexp s)).contexts ≠ []
+Proof
+  rw[precompile_modexp_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_ecadd_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_ecadd s)).contexts ≠ []
+Proof
+  rw[precompile_ecadd_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def]
+  \\ Cases_on `x'` \\ rw[] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_ecmul_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_ecmul s)).contexts ≠ []
+Proof
+  rw[precompile_ecmul_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def]
+  \\ Cases_on `x'` \\ rw[] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_ecpairing_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_ecpairing s)).contexts ≠ []
+Proof
+  rw[precompile_ecpairing_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_blake2f_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_blake2f s)).contexts ≠ []
+Proof
+  rw[precompile_blake2f_def]
+  \\ preserves_nonempty_tac
+  \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_point_eval_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_point_eval s)).contexts ≠ []
+Proof
+  rw[precompile_point_eval_def]
+  \\ preserves_nonempty_tac
+  \\ rpt CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_bls_g1add_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_bls_g1add s)).contexts ≠ []
+Proof
+  rw[precompile_bls_g1add_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_bls_g1msm_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_bls_g1msm s)).contexts ≠ []
+Proof
+  rw[precompile_bls_g1msm_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_bls_g2add_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_bls_g2add s)).contexts ≠ []
+Proof
+  rw[precompile_bls_g2add_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_bls_g2msm_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_bls_g2msm s)).contexts ≠ []
+Proof
+  rw[precompile_bls_g2msm_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_bls_pairing_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_bls_pairing s)).contexts ≠ []
+Proof
+  rw[precompile_bls_pairing_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_bls_map_fp_to_g1_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_bls_map_fp_to_g1 s)).contexts ≠ []
+Proof
+  rw[precompile_bls_map_fp_to_g1_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem precompile_bls_map_fp2_to_g2_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_bls_map_fp2_to_g2 s)).contexts ≠ []
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
+Theorem dispatch_precompiles_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (dispatch_precompiles a s)).contexts ≠ []
+Proof
+  rw[dispatch_precompiles_def, fail_def]
+QED
+
+Theorem read_memory_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (read_memory off sz s)).contexts ≠ []
+Proof
+  rw[read_memory_def] \\ preserves_nonempty_tac
+QED
+
+Theorem proceed_call_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (proceed_call a b c d e f g h i s)).contexts ≠ []
+Proof
+  rw[proceed_call_def] \\ preserves_nonempty_tac
+QED
+
+Theorem add_to_delete_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (add_to_delete addr s)).contexts ≠ []
+Proof
+  rw[add_to_delete_def] \\ preserves_nonempty_tac
+QED
+
+Theorem set_domain_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (set_domain d s)).contexts ≠ []
+Proof
+  rw[set_domain_def, return_def]
+QED
+
+Theorem domain_check_preserves_nonempty_contexts[simp]:
+  (∀s. s.contexts ≠ [] ⇒ (SND (cont s)).contexts ≠ []) ⇒
+  s.contexts ≠ [] ⇒ (SND (domain_check err chk upd cont s)).contexts ≠ []
+Proof
+  rw[domain_check_def]
+  \\ Cases_on `s.msdomain` \\ rw[]
+  \\ rw[ignore_bind_def, bind_def, set_domain_def, return_def, fail_def]
+QED
+
+Theorem access_address_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (access_address addr s)).contexts ≠ []
+Proof
+  rw[access_address_def]
+  \\ irule domain_check_preserves_nonempty_contexts
+  \\ rw[return_def]
+QED
+
+Theorem access_slot_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (access_slot sk s)).contexts ≠ []
+Proof
+  rw[access_slot_def]
+  \\ irule domain_check_preserves_nonempty_contexts
+  \\ rw[return_def]
+QED
+
+Theorem ensure_storage_in_domain_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (ensure_storage_in_domain a s)).contexts ≠ []
+Proof
+  rw[ensure_storage_in_domain_def]
+  \\ irule domain_check_preserves_nonempty_contexts
+  \\ rw[return_def]
+QED
+
+Theorem memory_expansion_info_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (memory_expansion_info off sz s)).contexts ≠ []
+Proof
+  rw[memory_expansion_info_def] \\ preserves_nonempty_tac
+QED
+
+Theorem expand_memory_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (expand_memory n s)).contexts ≠ []
+Proof
+  rw[expand_memory_def] \\ preserves_nonempty_tac
+QED
+
+Theorem copy_to_memory_preserves_nonempty_contexts:
+  (∀s. s.contexts ≠ [] ⇒ (SND (f s)).contexts ≠ []) ⇒
+  s.contexts ≠ [] ⇒ (SND (copy_to_memory g off soff sz (SOME f) s)).contexts ≠ []
+Proof
+  rw[copy_to_memory_def] \\ preserves_nonempty_tac
+QED
+
+Theorem copy_to_memory_NONE_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (copy_to_memory g off soff sz NONE s)).contexts ≠ []
+Proof
+  rw[copy_to_memory_def]
+  \\ Cases_on `max_expansion_range (off,sz) (soff,sz)`
+  \\ rw[] \\ preserves_nonempty_tac
+QED
+
+Theorem write_storage_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (write_storage addr key val s)).contexts ≠ []
+Proof
+  rw[write_storage_def] \\ preserves_nonempty_tac
+QED
+
+Theorem write_transient_storage_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (write_transient_storage addr key val s)).contexts ≠ []
+Proof
+  rw[write_transient_storage_def] \\ preserves_nonempty_tac
+QED
+
+Theorem assert_not_static_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (assert_not_static s)).contexts ≠ []
+Proof
+  rw[assert_not_static_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_context_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_context op f s)).contexts ≠ []
+Proof
+  rw[step_context_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_msgParams_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_msgParams op f s)).contexts ≠ []
+Proof
+  rw[step_msgParams_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_txParams_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_txParams op f s)).contexts ≠ []
+Proof
+  rw[step_txParams_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_binop_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_binop op f s)).contexts ≠ []
+Proof
+  rw[step_binop_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_monop_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_monop op f s)).contexts ≠ []
+Proof
+  rw[step_monop_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_modop_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_modop op f s)).contexts ≠ []
+Proof
+  rw[step_modop_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_exp_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_exp s)).contexts ≠ []
+Proof
+  rw[step_exp_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_keccak256_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_keccak256 s)).contexts ≠ []
+Proof
+  rw[step_keccak256_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_sload_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_sload b s)).contexts ≠ []
+Proof
+  rw[step_sload_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_sstore_gas_consumption_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_sstore_gas_consumption a k v s)).contexts ≠ []
+Proof
+  rw[step_sstore_gas_consumption_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_sstore_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_sstore b s)).contexts ≠ []
+Proof
+  rw[step_sstore_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_balance_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_balance s)).contexts ≠ []
+Proof
+  rw[step_balance_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_call_data_load_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_call_data_load s)).contexts ≠ []
+Proof
+  rw[step_call_data_load_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_copy_to_memory_preserves_nonempty_contexts:
+  (∀s. s.contexts ≠ [] ⇒ (SND (f s)).contexts ≠ []) ⇒
+  s.contexts ≠ [] ⇒ (SND (step_copy_to_memory op (SOME f) s)).contexts ≠ []
+Proof
+  rw[step_copy_to_memory_def]
+  \\ irule bind_preserves_nonempty_contexts \\ rw[]
+  \\ irule copy_to_memory_preserves_nonempty_contexts \\ rw[]
+QED
+
+Theorem step_copy_to_memory_NONE_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_copy_to_memory op NONE s)).contexts ≠ []
+Proof
+  rw[step_copy_to_memory_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_copy_to_memory_get_call_data_preserves[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_copy_to_memory op (SOME get_call_data) s)).contexts ≠ []
+Proof
+  rw[] \\ irule step_copy_to_memory_preserves_nonempty_contexts \\ rw[]
+QED
+
+Theorem step_copy_to_memory_get_current_code_preserves[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_copy_to_memory op (SOME get_current_code) s)).contexts ≠ []
+Proof
+  rw[] \\ irule step_copy_to_memory_preserves_nonempty_contexts \\ rw[]
+QED
+
+Theorem step_return_data_copy_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_return_data_copy s)).contexts ≠ []
+Proof
+  rw[step_return_data_copy_def]
+  \\ irule bind_preserves_nonempty_contexts \\ rw[]
+  \\ irule copy_to_memory_preserves_nonempty_contexts \\ rw[]
+QED
+
+Theorem step_ext_code_size_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_ext_code_size s)).contexts ≠ []
+Proof
+  rw[step_ext_code_size_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_ext_code_copy_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_ext_code_copy s)).contexts ≠ []
+Proof
+  rw[step_ext_code_copy_def]
+  \\ irule bind_preserves_nonempty_contexts \\ rw[]
+  \\ irule bind_preserves_nonempty_contexts \\ rw[]
+  \\ irule copy_to_memory_preserves_nonempty_contexts \\ rw[]
+QED
+
+Theorem step_ext_code_hash_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_ext_code_hash s)).contexts ≠ []
+Proof
+  rw[step_ext_code_hash_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_block_hash_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_block_hash s)).contexts ≠ []
+Proof
+  rw[step_block_hash_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_blob_hash_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_blob_hash s)).contexts ≠ []
+Proof
+  rw[step_blob_hash_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_self_balance_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_self_balance s)).contexts ≠ []
+Proof
+  rw[step_self_balance_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_mload_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_mload s)).contexts ≠ []
+Proof
+  rw[step_mload_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_mstore_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_mstore op s)).contexts ≠ []
+Proof
+  rw[step_mstore_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_jump_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_jump s)).contexts ≠ []
+Proof
+  rw[step_jump_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_jumpi_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_jumpi s)).contexts ≠ []
+Proof
+  rw[step_jumpi_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_push_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_push n ws s)).contexts ≠ []
+Proof
+  rw[step_push_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_pop_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_pop s)).contexts ≠ []
+Proof
+  rw[step_pop_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_dup_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_dup n s)).contexts ≠ []
+Proof
+  rw[step_dup_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_swap_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_swap n s)).contexts ≠ []
+Proof
+  rw[step_swap_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_log_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_log n s)).contexts ≠ []
+Proof
+  rw[step_log_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_return_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_return b s)).contexts ≠ []
+Proof
+  rw[step_return_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_invalid_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_invalid s)).contexts ≠ []
+Proof
+  rw[step_invalid_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_self_destruct_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_self_destruct s)).contexts ≠ []
+Proof
+  rw[step_self_destruct_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_create_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_create b s)).contexts ≠ []
+Proof
+  rw[step_create_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_call_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_call op s)).contexts ≠ []
+Proof
+  rw[step_call_def, pairTheory.UNCURRY]
+  \\ rpt (
+    extended_preserves_tac
+    \\ TRY (rw[pairTheory.UNCURRY] \\ extended_preserves_tac)
+    \\ TRY (CASE_TAC \\ rw[return_def] \\ extended_preserves_tac)
+  )
+QED
+
+(* Helper: handle_exception preserves non-empty contexts.
+   Key insight: pop_and_incorporate_context is only called when n > 1,
+   so we always have at least 1 context after. *)
+Theorem handle_exception_preserves_nonempty_contexts:
+  st.contexts ≠ [] ⇒ (SND (handle_exception e st)).contexts ≠ []
+Proof
+  strip_tac
+  \\ simp[handle_exception_def, ignore_bind_def, bind_def,
+          get_num_contexts_def, return_def]
+  \\ TOP_CASE_TAC
+  \\ reverse TOP_CASE_TAC
+  >- ( pop_assum(SUBST1_TAC o SYM) \\ rw[] \\ preserves_nonempty_tac )
+  \\ sg `LENGTH r.contexts = LENGTH st.contexts`
+  >- (
+    gvs[bind_def,COND_RATOR,get_gas_left_def,CaseEq"bool",return_def,
+        get_current_context_def,consume_gas_def,ignore_bind_def,
+        assert_def,set_current_context_def,CaseEq"sum",CaseEq"prod",
+        set_return_data_def] \\ drule(CONTRAPOS(SPEC_ALL(iffLR LENGTH_NIL)))
+    \\ decide_tac)
+  \\ rw[reraise_def] >- ( strip_tac \\ gvs[] )
+  \\ rw[Once bind_def] \\ TOP_CASE_TAC
+  \\ gvs[get_return_data_def]
+  \\ pop_assum mp_tac
+  \\ simp[Once bind_def] \\ simp[get_current_context_def]
+  \\ IF_CASES_TAC >- gvs[] \\ simp[return_def]
+  \\ strip_tac \\ gvs[]
+  \\ rw[Once bind_def] \\ TOP_CASE_TAC
+  \\ gvs[get_output_to_def]
+  \\ pop_assum mp_tac
+  \\ simp[Once bind_def] \\ simp[get_current_context_def]
+  \\ simp[return_def]
+  \\ strip_tac \\ gvs[]
+  \\ irule this_bind_preserves_nonempty_contexts
+  \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule pop_and_incorporate_context_preserves \\ gvs[] )
+  \\ rw[]
+  \\ preserves_nonempty_tac
+  \\ TOP_CASE_TAC \\ preserves_nonempty_tac
+  \\ TOP_CASE_TAC \\ preserves_nonempty_tac
+QED
+
+(* Helper: handle_step preserves non-empty contexts *)
+Theorem handle_step_preserves_nonempty_contexts:
+  st.contexts ≠ [] ⇒ (SND (handle_step e st)).contexts ≠ []
+Proof
+  rw[handle_step_def, handle_def, reraise_def]
+  \\ rpt CASE_TAC
+  \\ gvs[handle_create_preserves_nonempty_contexts,
+         handle_exception_preserves_nonempty_contexts]
+  >- metis_tac[handle_create_preserves_nonempty_contexts, pairTheory.SND]
+  \\ metis_tac[handle_create_preserves_nonempty_contexts,
+               handle_exception_preserves_nonempty_contexts, pairTheory.SND]
+QED
+
+Theorem step_inst_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_inst op s)).contexts ≠ []
+Proof
+  Cases_on `op` \\ rw[step_inst_def]
+  \\ preserves_nonempty_tac
+QED
+
+Theorem step_preserves_nonempty_contexts:
+  s.contexts ≠ [] ⇒ (SND (step s)).contexts ≠ []
+Proof
+  strip_tac \\ simp[step_def, handle_def]
+  \\ Cases_on `(do context <- get_current_context;
+                  if LENGTH context.msgParams.code ≤ context.pc
+                  then step_inst Stop
+                  else case FLOOKUP context.msgParams.parsed context.pc of
+                         NONE => step_inst Invalid
+                       | SOME op => do step_inst op; inc_pc_or_jump op od
+                od) s`
+  \\ Cases_on `q` \\ simp[]
+  >- (
+    (* INL case: inner computation succeeded *)
+    pop_assum mp_tac
+    \\ simp[bind_def, ignore_bind_def, get_current_context_def,
+            return_def, fail_def]
+    \\ rpt TOP_CASE_TAC
+    >- (strip_tac \\ gvs[] \\ `r = SND (step_inst Stop s)` by gvs[PAIR] \\ gvs[])
+    >- (strip_tac \\ `r = SND (step_inst Invalid s)` by gvs[PAIR] \\ gvs[])
+    >- (strip_tac \\ pop_assum mp_tac \\ simp[bind_def, ignore_bind_def]
+        \\ rpt TOP_CASE_TAC \\ strip_tac \\ gvs[]
+        \\ `r' = SND (step_inst x s)` by gvs[PAIR]
+        \\ `r = SND (inc_pc_or_jump x r')` by gvs[PAIR] \\ gvs[])
+  )
+  >- (
+    (* INR case: inner computation raised exception *)
+    irule handle_step_preserves_nonempty_contexts
+    \\ pop_assum mp_tac
+    \\ simp[bind_def, ignore_bind_def, get_current_context_def,
+            return_def, fail_def]
+    \\ rpt TOP_CASE_TAC \\ strip_tac \\ gvs[]
+    >- (`r = SND (step_inst Stop s)` by gvs[PAIR] \\ gvs[])
+    >- (`r = SND (step_inst Invalid s)` by gvs[PAIR] \\ gvs[])
+    >- (pop_assum mp_tac \\ simp[bind_def, ignore_bind_def]
+        \\ rpt TOP_CASE_TAC \\ strip_tac \\ gvs[]
+        >- (`r' = SND (step_inst x s)` by gvs[PAIR]
+            \\ `r = SND (inc_pc_or_jump x r')` by gvs[PAIR] \\ gvs[])
+        >- (`r = SND (step_inst x s)` by gvs[PAIR] \\ gvs[]))
+  )
+QED
+
+val owhile_contexts = OWHILE_INV_IND
+  |> INST_TYPE [``:α`` |-> ``:(unit + exception option) # execution_state``]
+  |> INST [``P:(unit + exception option) # execution_state -> bool`` |->
+           ``λ(r:unit + exception option, s:execution_state). s.contexts ≠ []``];
+
+Theorem run_contexts_nonempty:
+  run s = SOME (INR NONE, s') ∧ s.contexts ≠ []
+  ⇒
+  s'.contexts ≠ []
+Proof
+  strip_tac
+  \\ fs[run_def]
+  \\ irule (SRULE [FORALL_PROD] owhile_contexts)
+  \\ CONV_TAC (DEPTH_CONV BETA_CONV)
+  \\ qexistsl_tac [`ISL o FST`, `step o SND`, `INL ()`, `INR NONE`, `s`]
+  \\ simp[o_THM]
+  \\ rpt strip_tac
+  \\ drule step_preserves_nonempty_contexts
+  \\ Cases_on `step p_2`
+  \\ gvs[]
 QED
 
 Theorem SND_return[simp]:
