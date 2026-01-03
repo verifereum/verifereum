@@ -1174,16 +1174,16 @@ val owhile_contexts = OWHILE_INV_IND
   |> INST [``P:(unit + exception option) # execution_state -> bool`` |->
            ``λ(r:unit + exception option, s:execution_state). s.contexts ≠ []``];
 
-Theorem run_contexts_nonempty:
-  run s = SOME (INR NONE, s') ∧ s.contexts ≠ []
+Theorem run_preserves_nonempty_contexts:
+  run s = SOME rs ∧ s.contexts ≠ []
   ⇒
-  s'.contexts ≠ []
+  (SND rs).contexts ≠ []
 Proof
   strip_tac
   \\ fs[run_def]
   \\ irule (SRULE [FORALL_PROD] owhile_contexts)
   \\ CONV_TAC (DEPTH_CONV BETA_CONV)
-  \\ qexistsl_tac [`ISL o FST`, `step o SND`, `INL ()`, `INR NONE`, `s`]
+  \\ qexistsl_tac [`ISL o FST`, `step o SND`, `INL ()`, `FST rs`, `s`]
   \\ simp[o_THM]
   \\ rpt strip_tac
   \\ drule step_preserves_nonempty_contexts
