@@ -663,6 +663,151 @@ Proof
 QED
 
 (*-------------------------------------------------------------------------------*
+   Bridging theorem: SPEC to run_transaction
+ *-------------------------------------------------------------------------------*)
+
+(* Helper: extract returnData from SPEC postcondition *)
+Theorem extract_returnData_from_SPEC_postcondition:
+  (evm_Exception (INR NONE) * evm_ReturnData rd * evm_Contexts [] * R)
+    (evm2set rs) ∧
+  (SND rs).contexts ≠ []
+  ⇒
+  FST rs = INR NONE ∧
+  TL (SND rs).contexts = [] ∧
+  (FST (HD (SND rs).contexts)).returnData = rd
+Proof
+  simp[evm2set_def]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+QED
+
+(* Lemma: initial_state sets callee correctly *)
+Theorem initial_state_callee:
+  initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
+  tx.to = SOME callee
+  ⇒
+  (FST (HD s.contexts)).msgParams.callee = callee
+Proof
+  rw[initial_state_def,CaseEq"option"]
+  \\ pairarg_tac \\ gvs[]
+  \\ pairarg_tac \\ gvs[CaseEq"option"]
+  \\ gvs[apply_intrinsic_cost_def]
+  \\ rw[initial_msg_params_def]
+  \\ rw[callee_from_tx_to_def]
+QED
+
+(* Lemma: run_create for message calls to non-precompiles *)
+Theorem run_create_call:
+  initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
+  tx.to = SOME callee ∧
+  ¬fIN callee precompile_addresses
+  ⇒
+  run_create dom static chainId prevHashes blk accounts tx =
+  SOME (INR (s.rollback.accounts,
+             s with rollback updated_by
+               (λr. r with accounts updated_by
+                  transfer_value tx.from callee tx.value),
+             NONE))
+Proof
+  rw[run_create_def]
+  \\ imp_res_tac initial_state_callee
+  \\ gvs[]
+QED
+
+(* Lemma: post_transaction_accounting extracts output correctly on success *)
+Theorem post_transaction_accounting_success:
+  ¬NULL t.contexts ∧
+  NULL (TL t.contexts)
+  ⇒
+  (FST (post_transaction_accounting blk tx NONE acc t)).result = NONE ∧
+  (FST (post_transaction_accounting blk tx NONE acc t)).output =
+    (FST (HD t.contexts)).returnData
+Proof
+  qmatch_goalsub_abbrev_tac`FST pta`
+  \\ pop_assum mp_tac
+  \\ rewrite_tac[post_transaction_accounting_def]
+  \\ qmatch_goalsub_abbrev_tac`_ ⇒ conc`
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ gvs[Abbr`conc`, NULL_EQ, Abbr`pta`,Abbr`tr`]
+  \\ strip_tac \\ gvs[]
+QED
+
+(* Lemma: initial_state produces a state with nonempty contexts *)
+Theorem initial_state_nonempty_contexts:
+  initial_state dom static chainId prevHashes blk accounts tx = SOME s
+  ⇒
+  s.contexts ≠ []
+Proof
+  rw[initial_state_def, CaseEq"option"]
+  \\ pairarg_tac \\ gvs[]
+  \\ pairarg_tac \\ gvs[CaseEq"option"]
+QED
+
+(* Main bridging theorem: connects SPEC to run_transaction for message calls *)
+Theorem SPEC_to_run_transaction:
+  (* SPEC preconditions *)
+  SPEC EVM_MODEL P {} Q ∧
+  (* Transaction is a message call to a non-precompile *)
+  tx.to = SOME callee ∧
+  ¬fIN callee precompile_addresses ∧
+  (* Well-formed accounts *)
+  wf_accounts accounts ∧
+  (* initial_state succeeds *)
+  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
+  (* The state after transfer_value modification satisfies precondition P *)
+  s' = s with rollback updated_by
+       (λr. r with accounts updated_by transfer_value tx.from callee tx.value) ∧
+  P (evm2set (INL (), s')) ∧
+  (* Postcondition has the required form for successful execution *)
+  Q = evm_Exception (INR NONE) * evm_ReturnData returnData * evm_Contexts [] * R
+  ⇒
+  ∃result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') ∧
+    result.result = NONE ∧
+    result.output = returnData
+Proof
+  strip_tac
+  \\ simp[run_transaction_def]
+  \\ `run_create dom F chainId prevHashes blk accounts tx =
+      SOME (INR (s.rollback.accounts, s', NONE))`
+        by (imp_res_tac run_create_call >> gvs[])
+  \\ simp[]
+  \\ sg `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
+  >- (irule run_from_SPEC
+      \\ conj_tac
+      >- (qexists_tac `evm_ReturnData returnData * evm_Contexts [] * R`
+          \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
+      >- (qexists_tac `P` \\ simp[]))
+  >- (gvs[]
+      \\ sg `FST rs2 = INR NONE`
+      >- (qpat_x_assum `(_ * _ * _ * _) _` mp_tac
+          \\ simp[evm2set_def]
+          \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set] \\ simp[])
+      >- (Cases_on `rs2` \\ gvs[]
+          \\ qpat_x_assum `(_ * _ * _ * _) _` mp_tac
+          \\ simp[evm2set_def, STAR_evm2set]
+          \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+          \\ simp[]
+          \\ strip_tac
+          \\ sg `r.contexts <> []`
+          >- (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+              \\ `(s with rollback updated_by _).contexts = s.contexts` by simp[]
+              \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+          >- (simp[NULL_EQ]
+              \\ Cases_on `post_transaction_accounting blk tx NONE
+                           s.rollback.accounts r`
+              \\ qexists_tac `q` \\ qexists_tac `r''`
+              \\ simp[]
+              \\ `(FST (post_transaction_accounting blk tx NONE
+                        s.rollback.accounts r)).result = NONE ∧
+                  (FST (post_transaction_accounting blk tx NONE
+                        s.rollback.accounts r)).output = (FST (HD r.contexts)).returnData`
+                    by (irule post_transaction_accounting_success >> simp[NULL_EQ])
+              \\ gvs[])))
+QED
+
+(*-------------------------------------------------------------------------------*
    Hoare triples for specific opcodes
  *-------------------------------------------------------------------------------*)
 
