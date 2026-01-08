@@ -3,7 +3,7 @@ Ancestors
   arithmetic combin list rich_list pair
   sorting While words
   finite_map sptree
-  longestCommonPrefix recursiveLengthPrefix
+  recursiveLengthPrefix
   vfmTypes
 Libs
   cv_transLib
@@ -23,6 +23,44 @@ Theorem list_size_sum_map_length:
   list_size f ls = SUM (MAP f ls) + LENGTH ls
 Proof
   Induct_on`ls` \\ rw[]
+QED
+
+Theorem ALL_DISTINCT_MAP_DROP_LESS:
+  !ls.
+    n <= m /\
+    ALL_DISTINCT (MAP (DROP m) ls) ==>
+    ALL_DISTINCT (MAP (DROP n) ls)
+Proof
+  Induct \\ rw[] \\ fs[MEM_MAP, PULL_EXISTS]
+  \\ rw[] \\ first_x_assum irule
+  \\ full_simp_tac(srw_ss() ++ numSimps.ARITH_ss)
+     [LIST_EQ_REWRITE, EL_DROP, LENGTH_DROP, LESS_EQ_EXISTS]
+QED
+
+Theorem ALL_DISTINCT_DROP_LENGTH_lcp:
+  ∀ls. ALL_DISTINCT ls ⇒
+       ALL_DISTINCT (MAP (DROP (LENGTH $ lcp ls)) ls)
+Proof
+  Induct \\ reverse(rw[])
+  \\ gs[lcp_CONS]
+  \\ rw[NULL_EQ] \\ gvs[MEM_MAP]
+  \\ qmatch_goalsub_abbrev_tac`lcp2 x y`
+  \\ `lcp2 x y <<= x ∧ lcp2 x y <<= y`
+       by simp[lcp2_prefix]
+  >- (
+    irule ALL_DISTINCT_MAP_DROP_LESS
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ simp[IS_PREFIX_LENGTH] )
+  \\ qx_gen_tac`z` \\ strip_tac
+  \\ strip_tac
+  \\ drule $ cj 1 lcp_thm
+  \\ simp[] \\ strip_tac
+  \\ `x = z` suffices_by (strip_tac \\ gs[])
+  \\ qmatch_asmsub_abbrev_tac`LENGTH lcp'`
+  \\ gvs[IS_PREFIX_APPEND, PULL_EXISTS, DROP_APPEND]
+  \\ qmatch_goalsub_abbrev_tac`DROP n`
+  \\ `n = 0` suffices_by simp[]
+  \\ simp[Abbr`n`]
 QED
 
 Datatype:
@@ -70,9 +108,9 @@ Definition patricialise_def:
   patricialise [] = NONE ∧
   patricialise [(k, v)] = SOME $ Leaf k v ∧
   patricialise kvs = let
-    lcp = longest_common_prefix_of_list (MAP FST kvs)
+    pfx = lcp (MAP FST kvs)
   in
-    if NULL lcp then
+    if NULL pfx then
       let
         branches = GENLIST (make_branch kvs o n2w) 16;
         values = MAP SND $ FILTER (NULL o FST) kvs;
@@ -81,26 +119,26 @@ Definition patricialise_def:
         SOME $ Branch (MAP patricialise branches) value
     else
       SOME $
-      Extension lcp (patricialise (MAP (DROP (LENGTH lcp) ## I) kvs))
+      Extension pfx (patricialise (MAP (DROP (LENGTH pfx) ## I) kvs))
 Termination
   WF_REL_TAC `measure (list_size (LENGTH o FST))`
   \\ qmatch_goalsub_abbrev_tac `GENLIST _ nb`
   \\ simp[MEM_GENLIST, NULL_EQ, PULL_EXISTS]
   \\ reverse conj_tac
-  \\ rpt gen_tac \\ qmatch_goalsub_abbrev_tac`longest_common_prefix_of_list ls`
+  \\ rpt gen_tac \\ qmatch_goalsub_abbrev_tac`lcp ls`
   >- (
     rw[]
-    \\ qspec_then`ls`mp_tac longest_common_prefix_of_list_thm
+    \\ qspec_then`ls`mp_tac lcp_thm
     \\ rw[NULL_EQ]
     \\ qmatch_goalsub_rename_tac`LENGTH h1`
     \\ `MEM h1 ls` by rw[Abbr`ls`]
-    \\ qmatch_goalsub_abbrev_tac`LENGTH h1 - LENGTH lcp`
-    \\ `IS_PREFIX h1 lcp` by metis_tac[]
-    \\ `LENGTH lcp ≤ LENGTH h1` by metis_tac[IS_PREFIX_LENGTH]
+    \\ qmatch_goalsub_abbrev_tac`LENGTH h1 - LENGTH pfx`
+    \\ `IS_PREFIX h1 pfx` by metis_tac[]
+    \\ `LENGTH pfx ≤ LENGTH h1` by metis_tac[IS_PREFIX_LENGTH]
     \\ qmatch_goalsub_rename_tac`LENGTH h2 + (_ + 2)`
     \\ `MEM h2 ls` by rw[Abbr`ls`]
-    \\ `IS_PREFIX h2 lcp` by metis_tac[]
-    \\ `LENGTH lcp ≤ LENGTH h2` by metis_tac[IS_PREFIX_LENGTH]
+    \\ `IS_PREFIX h2 pfx` by metis_tac[]
+    \\ `LENGTH pfx ≤ LENGTH h2` by metis_tac[IS_PREFIX_LENGTH]
     \\ simp[list_size_sum_map_length]
     \\ qmatch_goalsub_abbrev_tac`SUM l1`
     \\ qmatch_goalsub_abbrev_tac`lhs < _`
@@ -110,9 +148,9 @@ Termination
       rw[Abbr`l1`,Abbr`l2`]
       \\ irule SUM_MAP_same_LE
       \\ rw[EVERY_MEM] )
-    \\ `0 < LENGTH lcp` by ( CCONTR_TAC \\ gvs[] )
+    \\ `0 < LENGTH pfx` by ( CCONTR_TAC \\ gvs[] )
     \\ rw[Abbr`lhs`] )
-  \\ rw[longest_common_prefix_of_list_is_nil]
+  \\ rw[lcp_is_nil]
   \\ qmatch_goalsub_abbrev_tac`make_branch ps`
   \\ `ls = MAP FST ps` by rw[Abbr`ps`, Abbr`ls`]
   \\ qunabbrev_tac`ls`
@@ -274,7 +312,7 @@ Proof
   \\ qmatch_assum_abbrev_tac`PERM kvs1 kvs2`
   \\ `PERM (MAP FST kvs1) (MAP FST kvs2)`
   by metis_tac[PERM_MAP]
-  \\ drule longest_common_prefix_of_list_PERM
+  \\ drule lcp_PERM
   \\ strip_tac
   \\ BasicProvers.LET_ELIM_TAC
   \\ simp[]
@@ -493,43 +531,42 @@ Proof
 QED
 
 val () = make_branch_eta |> cv_auto_trans;
-val () = longest_common_prefix_of_list_def |> cv_auto_trans;
 
 Definition patricialise_fused_def:
   patricialise_fused kvs =
   (case kvs of
    | [] => encode_internal_node NONE
    | [(k,v)] => encode_internal_node $ SOME $ MTL k v
-   | _ => let lcp = longest_common_prefix_of_list (MAP FST kvs) in
-     if NULL lcp then let
+   | _ => let pfx = lcp (MAP FST kvs) in
+     if NULL pfx then let
        branches = GENLIST (make_branch kvs o n2w) 16;
        values = MAP SND (FILTER (NULL o FST) kvs);
        value = pointwise_sum values;
        subnodes = MAP patricialise_fused branches;
        in encode_internal_node $ SOME $ MTB subnodes value
      else let
-       dkvs = drop_from_keys (LENGTH lcp) kvs;
+       dkvs = drop_from_keys (LENGTH pfx) kvs;
        subnode = patricialise_fused dkvs
-       in encode_internal_node $ SOME $ MTE lcp subnode)
+       in encode_internal_node $ SOME $ MTE pfx subnode)
 Termination
   WF_REL_TAC `measure (list_size (LENGTH o FST))`
   \\ qmatch_goalsub_abbrev_tac `GENLIST _ nb`
   \\ simp[MEM_GENLIST, NULL_EQ, PULL_EXISTS]
   \\ reverse conj_tac
-  \\ rpt gen_tac \\ qmatch_goalsub_abbrev_tac`longest_common_prefix_of_list ls`
+  \\ rpt gen_tac \\ qmatch_goalsub_abbrev_tac`lcp ls`
   >- (
     rw[drop_from_keys_map]
-    \\ qspec_then`ls`mp_tac longest_common_prefix_of_list_thm
+    \\ qspec_then`ls`mp_tac lcp_thm
     \\ rw[NULL_EQ]
     \\ qmatch_goalsub_rename_tac`LENGTH h1`
     \\ `MEM h1 ls` by rw[Abbr`ls`]
-    \\ qmatch_goalsub_abbrev_tac`LENGTH h1 - LENGTH lcp`
-    \\ `IS_PREFIX h1 lcp` by metis_tac[]
-    \\ `LENGTH lcp ≤ LENGTH h1` by metis_tac[IS_PREFIX_LENGTH]
+    \\ qmatch_goalsub_abbrev_tac`LENGTH h1 - LENGTH pfx`
+    \\ `IS_PREFIX h1 pfx` by metis_tac[]
+    \\ `LENGTH pfx ≤ LENGTH h1` by metis_tac[IS_PREFIX_LENGTH]
     \\ qmatch_goalsub_rename_tac`LENGTH h2 - _ + list_size _ _`
     \\ `MEM h2 ls` by rw[Abbr`ls`]
-    \\ `IS_PREFIX h2 lcp` by metis_tac[]
-    \\ `LENGTH lcp ≤ LENGTH h2` by metis_tac[IS_PREFIX_LENGTH]
+    \\ `IS_PREFIX h2 pfx` by metis_tac[]
+    \\ `LENGTH pfx ≤ LENGTH h2` by metis_tac[IS_PREFIX_LENGTH]
     \\ simp[list_size_sum_map_length]
     \\ qmatch_goalsub_abbrev_tac`SUM l1`
     \\ qmatch_goalsub_abbrev_tac`lhs < _`
@@ -539,9 +576,9 @@ Termination
       rw[Abbr`l1`,Abbr`l2`]
       \\ irule SUM_MAP_same_LE
       \\ rw[EVERY_MEM] )
-    \\ `0 < LENGTH lcp` by ( CCONTR_TAC \\ gvs[] )
+    \\ `0 < LENGTH pfx` by ( CCONTR_TAC \\ gvs[] )
     \\ rw[Abbr`lhs`] )
-  \\ rw[longest_common_prefix_of_list_is_nil]
+  \\ rw[lcp_is_nil]
   \\ qmatch_goalsub_abbrev_tac`make_branch ps`
   \\ `ls = MAP FST ps` by rw[Abbr`ps`, Abbr`ls`]
   \\ qunabbrev_tac`ls`
@@ -612,7 +649,7 @@ Proof
   \\ rewrite_tac[Once patricialise_def]
   \\ qmatch_goalsub_abbrev_tac`MAP FST kvs`
   \\ BasicProvers.LET_ELIM_TAC
-  \\ simp[Abbr`lcp'`,Abbr`values'`]
+  \\ simp[Abbr`pfx'`,Abbr`values'`]
   \\ reverse IF_CASES_TAC
   \\ simp[encode_trie_node_def]
   \\ AP_TERM_TAC \\ simp[]
@@ -620,7 +657,7 @@ Proof
     gvs[ETA_AX, drop_from_keys_map]
     \\ first_x_assum irule
     \\ qunabbrev_tac`dkvs`
-    \\ qunabbrev_tac`lcp`
+    \\ qunabbrev_tac`pfx`
     \\ simp[MAP_MAP_o]
     \\ simp[GSYM MAP_MAP_o]
     \\ irule ALL_DISTINCT_DROP_LENGTH_lcp
@@ -671,14 +708,14 @@ Definition patricialise_fused_cps_def:
   patricialise_fused_cps kvs c =
   case kvs of [] => App1 (encode_internal_node NONE) c
   | [(k,v)] => App1 (encode_internal_node (SOME (MTL k v))) c
-  | _ => let lcp = longest_common_prefix_of_list (MAP FST kvs) in
-    if NULL lcp then let
+  | _ => let pfx = lcp (MAP FST kvs) in
+    if NULL pfx then let
       branches = GENLIST (make_branch kvs o n2w) 16;
       values = MAP SND (FILTER (NULL o FST) kvs);
       value = pointwise_sum values;
     in AccK [] branches (MTBK value c)
-    else let dkvs = drop_from_keys (LENGTH lcp) kvs
-    in Call1 dkvs (MTEK lcp c)
+    else let dkvs = drop_from_keys (LENGTH pfx) kvs
+    in Call1 dkvs (MTEK pfx c)
 End
 
 val () = cv_auto_trans patricialise_fused_cps_def;
@@ -693,8 +730,8 @@ End
 val () = cv_auto_trans patricialise_fused_list_cps_def;
 
 Definition patricialise_fused_step_def:
-  patricialise_fused_step (App1 subnode (MTEK lcp c)) =
-    App1 (encode_internal_node (SOME (MTE lcp subnode))) c ∧
+  patricialise_fused_step (App1 subnode (MTEK pfx c)) =
+    App1 (encode_internal_node (SOME (MTE pfx subnode))) c ∧
   patricialise_fused_step (App1 subnode (AccK acc xs c)) =
     patricialise_fused_list_cps (subnode::acc) xs c ∧
   patricialise_fused_step (Appn subnodes (MTBK value c)) =
@@ -755,7 +792,7 @@ Proof
     rw[patricialise_fused_def]
     \\ qexists_tac `0` \\ rw[] )
   \\ qmatch_goalsub_abbrev_tac `MAP FST kvs`
-  \\ qmatch_goalsub_abbrev_tac`LET _ lcp`
+  \\ qmatch_goalsub_abbrev_tac`LET _ pfx`
   \\ qmatch_asmsub_abbrev_tac`GENLIST _ nb`
   \\ gvs[]
   \\ IF_CASES_TAC
@@ -787,7 +824,7 @@ Proof
   \\ qmatch_goalsub_abbrev_tac`GENLIST _ nbb`
   \\ gvs[Abbr`kvs`]
   \\ qmatch_goalsub_abbrev_tac`drop_from_keys ln kvs`
-  \\ first_x_assum(qspec_then`MTEK lcp c`mp_tac)
+  \\ first_x_assum(qspec_then`MTEK pfx c`mp_tac)
   \\ disch_then(qx_choose_then`n`strip_assume_tac)
   \\ qexists_tac`1+n+1`
   \\ simp[Once FUNPOW_ADD]
