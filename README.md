@@ -64,7 +64,7 @@ Verifereum is developed in the [HOL4](https://hol-theorem-prover.org) theorem pr
 2. **Build HOL4**
 
     ```bash
-    git clone https://github.com/HOL-Theorem-Prover/HOL
+    git clone -b master https://github.com/HOL-Theorem-Prover/HOL
     cd HOL
     poly --script tools/smart-configure.sml
     bin/build
