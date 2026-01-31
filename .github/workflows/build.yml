@@ -17,14 +17,15 @@ jobs:
       - name: Get released Poly/ML commit hash
         id: polyml-version
         run: |
-          echo "POLYML_TAG=v5.9.2" >> "$GITHUB_ENV"
-          echo "hash=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/${POLYML_TAG} | cut -f1 )" >> $GITHUB_OUTPUT
+          POLYML_TAG=v5.9.2
+          echo "POLYML_TAG=$POLYML_TAG" >> "$GITHUB_ENV"
+          echo "hash=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/$POLYML_TAG | cut -f1 )" >> $GITHUB_OUTPUT
 
       - name: Cache Poly/ML
         uses: actions/cache@v3
         id: cache-polyml
         with:
-          path: $HOME/polyml-install
+          path: ~/polyml-install
           key: polyml-${{ runner.os }}-${{ steps.polyml-version.outputs.hash }}
 
       - name: Build and Install Poly/ML
@@ -52,7 +53,7 @@ jobs:
         uses: actions/cache@v3
         id: cache-hol4
         with:
-          path: $HOME/HOL
+          path: ~/HOL
           key: hol-${{ runner.os }}-${{ steps.hol4-version.outputs.hash }}
 
       - name: Setup and Build HOL4
