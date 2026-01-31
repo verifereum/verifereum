@@ -14,10 +14,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get latest Poly/ML commit hash
+      - name: Get released Poly/ML commit hash
         id: polyml-version
-        run:
-          echo "hash=$(git ls-remote https://github.com/polyml/polyml.git HEAD | cut -f1 )" >> $GITHUB_OUTPUT
+        run: |
+          echo "POLYML_TAG=v5.9.2" >> "$GITHUB_ENV"
+          echo "hash=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/${POLYML_TAG} | cut -f1 )" >> $GITHUB_OUTPUT
 
       - name: Cache Poly/ML
         uses: actions/cache@v3
@@ -29,7 +30,7 @@ jobs:
       - name: Build and Install Poly/ML
         if: steps.cache-polyml.outputs.cache-hit != 'true'
         run: |
-          git clone https://github.com/polyml/polyml.git
+          git clone -b "${POLYML_TAG}" --depth 1 https://github.com/polyml/polyml.git
           cd polyml
           ./configure --prefix=$HOME/polyml-install
           make
