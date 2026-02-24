@@ -208,7 +208,8 @@ Proof
   Cases_on`t` \\ Cases_on`v` \\ rw[]
 QED
 
-val () = cv_auto_trans enc_number_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM word_to_bytes_be_def] enc_number_def;
 
 Theorem abi_value1_size_map[simp]:
   abi_value1_size vs = list_size abi_value_size vs
@@ -392,7 +393,7 @@ Definition dec_number_def[simp]:
   dec_number _ _ = BytesV []
 End
 
-val () = cv_trans dec_number_def;
+val () = cv_trans $ REWRITE_RULE [GSYM word_of_bytes_be_def] dec_number_def;
 
 Definition is_num_value_def[simp]:
   is_num_value (NumV _) = T ∧

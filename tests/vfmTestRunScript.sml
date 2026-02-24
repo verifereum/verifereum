@@ -1,5 +1,5 @@
 open HolKernel boolLib bossLib Parse wordsLib dep_rewrite permLib
-     pairTheory sortingTheory sumTheory wordsTheory
+     byteTheory pairTheory sortingTheory sumTheory wordsTheory
      vfmTypesTheory vfmExecutionTheory
      vfmStateTheory vfmContextTheory
      vfmOperationTheory vfmComputeTheory
@@ -93,7 +93,8 @@ Definition block_header_from_rlp_def:
 End
 
 val block_header_from_rlp_pre_def =
-  cv_auto_trans_pre "block_header_from_rlp_pre" block_header_from_rlp_def;
+  cv_auto_trans_pre "block_header_from_rlp_pre"
+  $ REWRITE_RULE[GSYM word_of_bytes_be_def] block_header_from_rlp_def;
 
 Theorem block_header_from_rlp_pre[cv_pre]:
   block_header_from_rlp_pre x
@@ -120,7 +121,8 @@ Definition withdrawal_from_rlp_def:
   |>
 End
 
-val withdrawal_from_rlp_pre_def = cv_auto_trans_pre "withdrawal_from_rlp_pre" withdrawal_from_rlp_def;
+val withdrawal_from_rlp_pre_def = cv_auto_trans_pre "withdrawal_from_rlp_pre"
+  $ REWRITE_RULE[GSYM word_of_bytes_be_def] withdrawal_from_rlp_def;
 
 Theorem withdrawal_from_rlp_pre[cv_pre]:
   withdrawal_from_rlp_pre x
@@ -146,7 +148,8 @@ Definition access_list_entry_from_rlp_def:
 End
 
 val access_list_entry_from_rlp_pre_def =
-  cv_auto_trans_pre "access_list_entry_from_rlp_pre" access_list_entry_from_rlp_def;
+  cv_auto_trans_pre "access_list_entry_from_rlp_pre"
+  $ REWRITE_RULE[GSYM word_of_bytes_be_def] access_list_entry_from_rlp_def;
 
 Theorem access_list_entry_from_rlp_pre[cv_pre]:
   access_list_entry_from_rlp_pre x
@@ -239,7 +242,8 @@ Definition transaction1_from_rlp_def:
 End
 
 val transaction1_from_rlp_pre_def = transaction1_from_rlp_def
-  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq]
+  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
+            GSYM word_of_bytes_be_def]
   |> cv_auto_trans_pre "transaction1_from_rlp_pre";
 
 Theorem transaction1_from_rlp_pre[cv_pre]:
@@ -315,7 +319,8 @@ Definition transaction2_from_rlp_def:
 End
 
 val transaction2_from_rlp_pre_def = transaction2_from_rlp_def
-  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq]
+  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
+            GSYM word_of_bytes_be_def]
   |> cv_auto_trans_pre "transaction2_from_rlp_pre";
 
 Theorem transaction2_from_rlp_pre[cv_pre]:
@@ -400,7 +405,8 @@ Definition transaction3_from_rlp_def:
 End
 
 val transaction3_from_rlp_pre_def = transaction3_from_rlp_def
-  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq]
+  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
+            GSYM word_of_bytes_be_def]
   |> cv_auto_trans_pre "transaction3_from_rlp_pre";
 
 Theorem transaction3_from_rlp_pre[cv_pre]:
@@ -438,7 +444,8 @@ Definition authorization_from_rlp_def:
 End
 
 val authorization_from_rlp_pre_def =
-  cv_auto_trans_pre "authorization_from_rlp_pre" authorization_from_rlp_def;
+  cv_auto_trans_pre "authorization_from_rlp_pre"
+  $ REWRITE_RULE[GSYM word_of_bytes_be_def] authorization_from_rlp_def;
 
 Theorem authorization_from_rlp_pre[cv_pre]:
   authorization_from_rlp_pre x
@@ -543,7 +550,8 @@ End
 
 val transaction4_from_rlp_pre_def = transaction4_from_rlp_def
   |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
-            GSYM OPT_MMAP_authorization_from_rlp_eq]
+            GSYM OPT_MMAP_authorization_from_rlp_eq,
+            GSYM word_of_bytes_be_def]
   |> cv_auto_trans_pre "transaction4_from_rlp_pre";
 
 Theorem transaction4_from_rlp_pre[cv_pre]:
@@ -605,7 +613,8 @@ Definition transaction_from_rlp_def:
   else NONE
 End
 
-val transaction_from_rlp_pre_def = cv_auto_trans_pre "transaction_from_rlp_pre" transaction_from_rlp_def;
+val transaction_from_rlp_pre_def = cv_auto_trans_pre "transaction_from_rlp_pre"
+  $ REWRITE_RULE[GSYM word_of_bytes_be_def] transaction_from_rlp_def;
 
 Theorem transaction_from_rlp_pre[cv_pre]:
   transaction_from_rlp_pre bf x
@@ -768,6 +777,7 @@ Definition run_test_def:
         | SOME _ => ExpectedException msg
 End
 
-val () = cv_auto_trans run_test_def;
+val () = cv_auto_trans $
+  REWRITE_RULE[GSYM word_of_bytes_be_def] run_test_def;
 
 val () = export_theory();

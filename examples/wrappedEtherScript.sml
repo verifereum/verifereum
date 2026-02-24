@@ -118,14 +118,14 @@ QED
 
 Definition balance_slot_word_def:
   balance_slot_word (a:address) = (
-      REVERSE (word_to_bytes (w2w a : bytes32) F) ++
-      REVERSE (word_to_bytes (3w:bytes32) F))
+      REVERSE (word_to_bytes_le (w2w a : bytes32)) ++
+      REVERSE (word_to_bytes_le (3w:bytes32)))
 End
 
 Theorem LENGTH_balance_slot_word[simp]:
   LENGTH (balance_slot_word a) = 64
 Proof
-  rw[balance_slot_word_def]
+  rw[balance_slot_word_def, word_to_bytes_le_def]
 QED
 
 Theorem expanded_memory_leq:
@@ -135,7 +135,7 @@ Proof
 QED
 
 Definition balance_slot_key_def:
-  balance_slot_key (a:address) = word_of_bytes T (0w:bytes32) $
+  balance_slot_key (a:address): bytes32 = word_of_bytes_be $
     Keccak_256_w64 (balance_slot_word a)
 End
 
@@ -279,7 +279,7 @@ Definition deploy_block_def:
   ; transactions := [deploy_tx] (* not true, many others *)
   ; withdrawals := []
   ; requestsHash := 0w (* fake *)
-  ; withdrawalsRoot := word_of_bytes T 0w (withdrawals_root [])
+  ; withdrawalsRoot := word_of_bytes_be (withdrawals_root [])
   |>
 End
 
@@ -456,6 +456,8 @@ Theorem mask_and_w2w:
 Proof
   blastLib.BBLAST_TAC
 QED
+
+(* TODO: update for word_of_bytes_{be,le}
 
 val word_of_bytes_tm = prim_mk_const{Thy="byte",Name="word_of_bytes"};
 val word_to_bytes_tm = prim_mk_const{Thy="byte",Name="word_to_bytes"};
@@ -1004,4 +1006,5 @@ Proof
   \\ `valid_result_eq ((=) s) g ((=) (update_cc uu s)) ()`
   by (
     qunabbrev_tac`g`
+*)
 *)

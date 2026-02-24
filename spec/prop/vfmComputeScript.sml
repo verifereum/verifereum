@@ -1,6 +1,6 @@
 Theory vfmCompute
 Ancestors
-  arithmetic combin pair option list rich_list
+  arithmetic byte combin pair option list rich_list
   finite_set sptree words While
   cv cv_type cv_std
   blake2f
@@ -390,7 +390,9 @@ val from_to_execution_state = from_to_thm_for “:execution_state”;
 
 val () = cv_auto_trans empty_domain_def;
 
-val sign_extend_pre_def = cv_auto_trans_pre "sign_extend_pre" sign_extend_def;
+val sign_extend_pre_def = cv_auto_trans_pre "sign_extend_pre" $
+  REWRITE_RULE [GSYM word_of_bytes_be_def, GSYM word_to_bytes_be_def]
+    sign_extend_def;
 
 Theorem sign_extend_pre[cv_pre]:
   sign_extend_pre n w
@@ -400,9 +402,11 @@ QED
 
 val () = cv_auto_trans modexp_def;
 
-val () = cv_auto_trans address_for_create_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM word_of_bytes_be_def] address_for_create_def;
 
-val () = cv_auto_trans address_for_create2_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM word_of_bytes_be_def] address_for_create2_def;
 
 val () = “get_gas_left s” |>
   SIMP_CONV std_ss [get_gas_left_def, bind_def]
@@ -509,13 +513,16 @@ val () = “precompile_identity s” |>
 
 val () = “precompile_modexp s” |>
    SIMP_CONV std_ss [
-       precompile_modexp_def, bind_def, ignore_bind_def, LET_RATOR
+       precompile_modexp_def, bind_def, ignore_bind_def, LET_RATOR,
+       GSYM word_of_bytes_be_def
      ] |> cv_auto_trans;
+
+val () = cv_trans $ REWRITE_RULE[GSYM word_of_bytes_be_def] ecrecover_def;
 
 val () = “precompile_ecrecover s” |>
    SIMP_CONV std_ss [
        precompile_ecrecover_def, bind_def, ignore_bind_def, LET_RATOR,
-       option_CASE_rator
+       option_CASE_rator, GSYM word_of_bytes_be_def, GSYM word_to_bytes_be_def
      ] |> cv_auto_trans;
 
 val () = “precompile_ecadd s” |>
@@ -549,7 +556,7 @@ val () = “precompile_point_eval s” |>
 val precompile_blake2f_pre_def = “precompile_blake2f s” |>
    SIMP_CONV std_ss [
        precompile_blake2f_def, bind_def, ignore_bind_def,
-       LET_RATOR, COND_RATOR
+       LET_RATOR, COND_RATOR, GSYM word_of_bytes_le_def
      ] |> cv_auto_trans_pre "precompile_blake2f_pre";
 
 Theorem precompile_blake2f_pre[cv_pre]:
@@ -608,18 +615,19 @@ val () = “precompile_bls_map_fp2_to_g2 s” |>
 val () = “precompile_p256verify s” |>
   SIMP_CONV std_ss [
     precompile_p256verify_def, bind_def, ignore_bind_def, LET_RATOR,
-    COND_RATOR
+    COND_RATOR, GSYM word_of_bytes_be_def
   ] |> cv_auto_trans;
 
 val () = “precompile_sha2_256 s” |>
    SIMP_CONV std_ss [
-       precompile_sha2_256_def, bind_def, ignore_bind_def, LET_RATOR
+       precompile_sha2_256_def, bind_def, ignore_bind_def, LET_RATOR,
+       GSYM word_to_bytes_be_def
      ] |> cv_auto_trans;
 
 val () = “precompile_ripemd_160 s” |>
    SIMP_CONV std_ss [
        precompile_ripemd_160_def, bind_def, ignore_bind_def, LET_RATOR,
-       option_CASE_rator
+       option_CASE_rator, GSYM word_to_bytes_be_def
      ] |> cv_auto_trans;
 
 Theorem pop_stack_INL_LENGTH:
@@ -712,6 +720,9 @@ Proof
   \\ Cases_on `s` \\ gvs[]
 QED
 
+val () = cv_auto_trans $ REWRITE_RULE [GSYM word_of_bytes_be_def]
+  get_delegate_def;
+
 (*
   set_goal([], pre_a)
 *)
@@ -743,7 +754,9 @@ fun mconv def =
     LET_PROD_RATOR,
     option_CASE_rator,
     prod_CASE_rator,
-    LET_UNCURRY, UNCURRY
+    LET_UNCURRY, UNCURRY,
+    GSYM word_of_bytes_be_def,
+    GSYM word_of_bytes_le_def
 ];
 
 fun trans_step_x need_pre def = let
@@ -1048,7 +1061,8 @@ QED
 
 val () = cv_auto_trans is_deposit_event_alt;
 
-val () = cv_auto_trans block_invalid_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM word_of_bytes_be_def] block_invalid_def;
 
 Theorem run_block_eq:
   run_block d chainId h p a b =
@@ -1093,6 +1107,9 @@ Proof
   \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
   \\ Cases_on`x` \\ gs[]
 QED
+
+val () = cv_auto_trans $ REWRITE_RULE [GSYM word_of_bytes_be_def]
+  parse_deposit_request_def;
 
 val () = cv_auto_trans process_withdrawal_def;
 
