@@ -925,7 +925,8 @@ Definition valid_enc_def[simp]:
      n < dimword (:256) ∧
      valid_enc_array n lt t bs bs) ∧
   valid_enc (Array NONE t) bs =
-    (let
+    (32 ≤ LENGTH bs ∧
+     let
        lt = if is_dynamic t then NONE else SOME $ static_length t;
        dn = dec_number (Uint 256) (TAKE 32 bs)
      in is_num_value dn ∧ let
@@ -934,7 +935,8 @@ Definition valid_enc_def[simp]:
      in n < dimword (:256) ∧
         valid_enc_array n lt t bs bs) ∧
   valid_enc (Bytes NONE) bs =
-    (let
+    (32 ≤ LENGTH bs ∧
+     let
      ls = TAKE 32 bs; bs = DROP 32 bs;
      dn = dec_number (Uint 256) ls in
      is_num_value dn ∧ let
@@ -944,7 +946,8 @@ Definition valid_enc_def[simp]:
        n ≤ LENGTH bs ∧
        EVERY ((=) 0w) (DROP n (TAKE pn bs))) ∧
   valid_enc String bs =
-    (let
+    (32 ≤ LENGTH bs ∧
+     let
      ls = TAKE 32 bs; bs = DROP 32 bs;
      dn = dec_number (Uint 256) ls in
      is_num_value dn ∧ let
@@ -958,11 +961,13 @@ Definition valid_enc_def[simp]:
      m ≤ LENGTH bs ∧
      EVERY ((=) 0w) (DROP m (TAKE 32 bs))) ∧
   valid_enc t bs =
-    (let v = dec_number t (TAKE 32 bs) in
+    (32 ≤ LENGTH bs ∧
+     let v = dec_number t (TAKE 32 bs) in
      has_type t v) ∧
   valid_enc_array 0 _ _ _ _ = T ∧
   valid_enc_array (SUC n) NONE t bs hds =
-    (let
+    (32 ≤ LENGTH hds ∧
+     let
       dn = dec_number (Uint 256) (TAKE 32 hds)
      in is_num_value dn ∧ let
       j = dest_NumV dn
@@ -970,11 +975,13 @@ Definition valid_enc_def[simp]:
       valid_enc t (DROP j bs) ∧
       valid_enc_array n NONE t bs (DROP 32 hds)) ∧
   valid_enc_array (SUC n) (SOME l) t bs hds =
-    (valid_enc t (TAKE l hds) ∧
+    (l ≤ LENGTH hds ∧
+     valid_enc t (TAKE l hds) ∧
      valid_enc_array n (SOME l) t bs (DROP l hds)) ∧
   valid_enc_tuple [] _ _ = T ∧
   valid_enc_tuple (t::ts) bs hds =
     (if is_dynamic t then
+       32 ≤ LENGTH hds ∧
        let
          dn = dec_number (Uint 256) (TAKE 32 hds)
        in is_num_value dn ∧ let
@@ -983,7 +990,8 @@ Definition valid_enc_def[simp]:
           valid_enc_tuple ts bs (DROP 32 hds)
      else let
        n = static_length t
-     in valid_enc t (TAKE n hds) ∧
+     in n ≤ LENGTH hds ∧
+        valid_enc t (TAKE n hds) ∧
         valid_enc_tuple ts bs (DROP n hds))
 Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
@@ -1201,56 +1209,30 @@ Proof
   \\ conj_tac
   (* Array NONE case *)
   >- (
-    rw[]
-    \\ assume_tac (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt) \\ gvs[]
+    rpt gen_tac \\ strip_tac
+    \\ gen_tac \\ strip_tac
+    \\ gvs[]
+    \\ drule head_lengths_leq_LENGTH_enc_tuple
+    \\ qmatch_goalsub_abbrev_tac`enc_tuple hl _ _ _ hds`
+    \\ disch_then(qspecl_then[`hl`,`0`,`hds`,`[]`,`0`]mp_tac)
+    \\ simp[Abbr`hds`] \\ strip_tac
     \\ DEP_ONCE_REWRITE_TAC[TAKE_APPEND1]
-    \\ (conj_tac
-    >- (
-      CCONTR_TAC
-      \\ gvs[arithmeticTheory.NOT_LESS_EQUAL]
-      \\ qspecl_then [`REPLICATE (LENGTH vs) t`, `vs`,
-                     `head_lengths (REPLICATE (LENGTH vs) t) 0`,
-                     `word_to_bytes (n2w (LENGTH vs):256 word) T`] mp_tac
-                    enc_tuple_TAKE_prefix
-      \\ impl_tac >- simp[]
-      \\ strip_tac
-      \\ `TAKE 32
-            (enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
-               (REPLICATE (LENGTH vs) t) vs
-               [word_to_bytes (n2w (LENGTH vs):256 word) T] []) =
-          enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
-            (REPLICATE (LENGTH vs) t) vs
-            [word_to_bytes (n2w (LENGTH vs):256 word) T] []`
-      by simp[TAKE_LENGTH_TOO_LONG]
-      \\ gvs[LENGTH_word_to_bytes]))
-    \\ DEP_ONCE_REWRITE_TAC[DROP_APPEND1]
-    \\ (conj_tac
-    >- (
-      CCONTR_TAC
-      \\ gvs[arithmeticTheory.NOT_LESS_EQUAL]
-      \\ qspecl_then [`REPLICATE (LENGTH vs) t`, `vs`,
-                     `head_lengths (REPLICATE (LENGTH vs) t) 0`,
-                     `word_to_bytes (n2w (LENGTH vs):256 word) T`] mp_tac
-                    enc_tuple_TAKE_prefix
-      \\ impl_tac >- simp[]
-      \\ strip_tac
-      \\ `TAKE 32
-            (enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
-               (REPLICATE (LENGTH vs) t) vs
-               [word_to_bytes (n2w (LENGTH vs):256 word) T] []) =
-          enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
-            (REPLICATE (LENGTH vs) t) vs
-            [word_to_bytes (n2w (LENGTH vs):256 word) T] []`
-      by simp[TAKE_LENGTH_TOO_LONG]
-      \\ gvs[LENGTH_word_to_bytes]))
-    \\ qspecl_then [`head_lengths (REPLICATE (LENGTH vs) t) 0`,
-                   `REPLICATE (LENGTH vs) t`, `vs`] mp_tac word_roundtrip_LENGTH
-    \\ simp[] \\ strip_tac
+    \\ conj_tac >- simp[] \\ simp[]
+    \\ assume_tac (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt) \\ gvs[]
+    \\ drule enc_tuple_TAKE_prefix
+    \\ qmatch_goalsub_abbrev_tac `[wvs]`
+    \\ disch_then(qspecl_then[`hl`,`wvs`]mp_tac)
+    \\ `LENGTH wvs = 32` by simp[Abbr`wvs`]
     \\ pop_assum SUBST_ALL_TAC
-    \\ qpat_x_assum `∀extra. valid_enc_tuple _ _ _ ∧ _`
-         (qspec_then `extra` strip_assume_tac)
-    \\ qpat_x_assum `∀n tt. REPLICATE (LENGTH vs) t = REPLICATE n tt ⇒ _`
-         (qspecl_then [`LENGTH vs`, `t`] mp_tac)
+    \\ strip_tac \\ simp[]
+    \\ DEP_ONCE_REWRITE_TAC[DROP_APPEND1]
+    \\ conj_tac >- gvs[]
+    \\ drule word_roundtrip_LENGTH
+    \\ disch_then(qspec_then`hl`mp_tac)
+    \\ simp[]
+    \\ first_x_assum(qspec_then`extra`mp_tac)
+    \\ strip_tac
+    \\ first_x_assum(qspecl_then[`LENGTH vs`,`t`]mp_tac)
     \\ simp[])
   (* Bytes NONE case *)
   \\ conj_tac
@@ -1453,6 +1435,13 @@ Proof
       \\ rewrite_tac[MAP_APPEND, SUM_APPEND]
       \\ disch_then(SUBST1_TAC o SYM)
       \\ simp[] )
+    \\ conj_tac
+    >- (
+      sg `LENGTH hds = prefix_len + LENGTH bs − hd_len` >- simp[]
+      \\ `LENGTH head = 32` by simp[]
+      \\ `32 ≤ LENGTH hds` by simp[]
+      \\ ntac 3 (pop_assum mp_tac)
+      \\ simp_tac(srw_ss()++ARITH_ss)[] )
     \\ simp[Once DROP_APPEND]
     \\ qmatch_goalsub_abbrev_tac`_ ++ xx`
     \\ qunabbrev_tac`bs`
