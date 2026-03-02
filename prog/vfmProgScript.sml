@@ -3782,6 +3782,15 @@ Proof
   \\ metis_tac[]
 QED
 
+Theorem SPEC_Invalid: (* TODO: actually give a real spec here *)
+  SPEC EVM_MODEL
+  (evm_PC pc * cond F)
+  {(pc,Invalid)}
+  (evm_PC ARB)
+Proof
+  simp [SPEC_FALSE_PRE,SEP_CLAUSES]
+QED
+
 (*
   | Call precompile
   | Invalid

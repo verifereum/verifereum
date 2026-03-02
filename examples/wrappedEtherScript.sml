@@ -149,7 +149,7 @@ val () = cv_auto_trans Keccak_256_string_def;
 Datatype:
   WETH_state = <|
     balances : address -> num
-  ; allowances : address -> num
+  ; allowances : address -> num  (* type? *)
   ; locked : num
   ; touched : address set
   |>
@@ -421,6 +421,261 @@ Theorem parsed_contract_code_eq =
 fun evc tm = tm |> REWRITE_CONV[parsed_contract_code_eq]
                 |> CONV_RULE (RAND_CONV EVAL)
 
+val insts =
+  parsed_contract_code_eq
+  |> concl |> find_terms (finite_mapSyntax.is_fupdate)
+  |> map (fn tm => pairSyntax.dest_pair (rand tm))
+  |> map (fn (n,tm) => (numSyntax.int_of_term n, tm))
+  |> sort (fn (n,_) => fn (m,_) => n <= m)
+
+local
+  val SPEC_PushG = SPEC_Push |> Q.GENL[`n`,`bs`];
+  val SPEC_DupG = SPEC_Dup |> Q.GEN`n`
+  val SPEC_SwapG = SPEC_Swap |> Q.GEN`n`
+  val SPEC_LogG = SPEC_Log |> Q.GEN`n`
+in
+  fun mk_SPEC_Push n bs = SPECL[n,bs] SPEC_PushG
+  fun mk_SPEC_Dup n = SPEC n SPEC_DupG
+  fun mk_SPEC_Swap n = SPEC n SPEC_SwapG
+  fun mk_SPEC_Log n = SPEC n SPEC_LogG
+end
+
+fun print_code insts = let
+  fun term_to_line tm = let
+    val t = term_to_string tm
+            |> String.translate (fn c => if c = #"\n" then "" else implode [c])
+    in if String.size t < 40 then t else
+         String.substring(t,0,40) ^ ".." end
+  fun print_line (n,tm) =
+    print ("  " ^ Int.toString n ^ ": " ^ term_to_line tm ^ "\n")
+  val _ = print "\n\n"
+  val _ = List.app print_line insts
+  val _ = print "\n"
+  in () end
+
+(*
+print_code (List.take (insts, 60))
+*)
+
+val inst_tm = “Pop”
+val inst_tm = “JumpI”
+
+fun inst_to_SPEC inst_tm =
+  if is_comb inst_tm then let
+    val (f,xs) = strip_comb inst_tm
+    val f_str = f |> dest_const |> fst
+    in if f_str = "Push" then [mk_SPEC_Push (el 1 xs) (el 2 xs)] else
+       if f_str = "Dup" then [mk_SPEC_Dup (el 1 xs)] else
+       if f_str = "Swap" then [mk_SPEC_Swap (el 1 xs)] else
+       if f_str = "Log" then [mk_SPEC_Log (el 1 xs)] else
+         failwith ("inst_to_SPEC for " ^ f_str) end
+  else let
+    val i_str = inst_tm |> dest_const |> fst
+    in if i_str = "JumpI" then [SPEC_JumpI_skip, SPEC_JumpI_take]
+       else if i_str = "Stop" then [SPEC_Stop_inner, SPEC_Stop_outermost]
+       else if i_str = "Return" then
+         [SPEC_Return_inner |> Q.INST [‘inst’|->‘Return’] |> REWRITE_RULE [],
+          SPEC_Return_outermost |> Q.INST [‘inst’|->‘Return’] |> REWRITE_RULE []]
+       else if i_str = "Revert" then
+         [SPEC_Return_inner |> Q.INST [‘inst’|->‘Revert’] |> REWRITE_RULE [],
+          SPEC_Return_outermost |> Q.INST [‘inst’|->‘Revert’] |> REWRITE_RULE []]
+       else if i_str = "Invalid" then
+         [SPEC_Return_inner |> Q.INST [‘inst’|->‘Invalid’] |> REWRITE_RULE [],
+          SPEC_Return_outermost |> Q.INST [‘inst’|->‘Invalid’] |> REWRITE_RULE []]
+       else if i_str = "Call" then
+         [SPEC_Call |> Q.INST [‘call_inst’|->‘Call’] |> REWRITE_RULE []]
+       else if i_str = "StaticCall" then
+         [SPEC_Call |> Q.INST [‘call_inst’|->‘StaticCall’] |> REWRITE_RULE []]
+       else if i_str = "DelegateCall" then
+         [SPEC_Call |> Q.INST [‘call_inst’|->‘DelegateCall’] |> REWRITE_RULE []]
+       else [fetch "vfmProg" ("SPEC_" ^ i_str)] end;
+
+Definition evm_line_def:
+  evm_line (n:num) b = b:bool
+End
+
+Definition len_opcode_def:
+  len_opcode (Push n []) = 1:num ∧
+  len_opcode (Push n (x::xs)) = 1 + len_opcode (Push n xs) ∧
+  len_opcode _ = 1
+End
+
+Theorem LENGTH_opcode_eq_len_opcode:
+  ∀c. LENGTH (opcode c) = len_opcode c
+Proof
+  Cases \\ EVAL_TAC \\ rename [‘Push _ l’]
+  \\ Induct_on ‘l’ \\ gvs [len_opcode_def]
+QED
+
+Theorem to_evm_line:
+  ∀n. (b ⇒ c) ⇔ (evm_line n b ⇒ c)
+Proof
+  gvs [evm_line_def]
+QED
+
+val pc_var = mk_var("pc",numSyntax.num);
+val evm_PC_pat = “evm_PC _”;
+val evm_PC_tm = rator evm_PC_pat;
+val static_gas_pat = “static_gas _”;
+val word_of_bytes_pat = “word_of_bytes _ _ _”;
+val evm_domain_ty = “:evm_el set set”;
+
+fun compute_static_gas th = let
+  val tms = find_terms (can (match_term static_gas_pat)) (concl th)
+  val lems = map (QCONV (SCONV [static_gas_def])) tms
+  in ONCE_REWRITE_RULE lems th end
+
+fun compute_word_of_bytes th = let
+  val tms = find_terms (can (match_term word_of_bytes_pat)) (concl th)
+  fun f tm =
+    (REWRITE_CONV [GSYM word_of_bytes_le_def] THENC cv_eval) tm
+    handle HOL_ERR _ => QCONV ALL_CONV tm
+  val lems = map f tms
+  in ONCE_REWRITE_RULE lems th end
+
+(*
+  val n = 88
+val th = hd thms
+*)
+
+fun prepare n th = let
+  val prefix = "v" ^ int_to_string n ^ "_"
+  val th1 = th |> PURE_REWRITE_RULE [SPEC_MOVE_COND]
+               |> compute_static_gas
+               |> compute_word_of_bytes
+               |> UNDISCH_ALL
+  val (_,pre,_,post) = th1 |> concl |> dest_spec
+  fun add_prime v = let
+    val (v,ty) = dest_var v
+    in mk_var(v ^ "_new", ty) end
+  val part_names = list_dest dest_star pre
+                     |> map (fn tm => dest_comb tm)
+  val parts = list_dest dest_star post
+  (*
+  val p = hd parts
+  *)
+  fun update_one p = let
+    val (a,e) = dest_comb p
+    val v = snd (first (aconv a o fst) part_names)
+    in
+      if aconv a evm_PC_tm then (p,[]) else
+      if aconv e v then (p,[]) else let
+      val v' = add_prime v
+      val new_eq = mk_eq(v',e)
+      in (mk_comb(a,v'), [new_eq]) end
+    end handle HOL_ERR _ => (p,[])
+  fun update_all [] = ([],[])
+    | update_all (p::ps) = let
+        val (p,aux1) = update_one p
+        val (ps,aux2) = update_all ps
+        in (p::ps, aux1 @ aux2) end
+  val (ps,aux) = update_all parts
+  val new_post = list_mk_star ps evm_domain_ty
+  val new_assums = list_mk_conj aux
+  val goal = mk_imp(new_assums, mk_eq(post,new_post))
+  val lemma = prove(goal,rpt strip_tac \\ asm_rewrite_tac [])
+  fun D th = if is_imp (concl th) then th else DISCH T th
+  val th2 = th1 |> CONV_RULE (RAND_CONV (REWR_CONV (UNDISCH lemma)))
+  val th3 = th2 |> DISCH new_assums |> DISCH_ALL
+                |> REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC]
+  val vs = free_vars (concl th3)
+  (* val prefix = "_0_" *)
+  fun add_prefix prefix v = mk_var(prefix ^ fst (dest_var v), type_of v)
+  val s = map (fn v => v |-> add_prefix prefix v) vs
+  val th4 = INST s th3
+  val th5 = DISCH_ALL th4
+  val lem = SPEC (numSyntax.term_of_int n) to_evm_line
+  val res = CONV_RULE (REWR_CONV lem) th5 |> UNDISCH
+            handle HOL_ERR e => th5
+  in res end
+
+fun set_pc n spec_th = let
+  val lem = spec_th |> INST [pc_var |-> numSyntax.term_of_int n]
+                    |> REWRITE_RULE [LENGTH_opcode_eq_len_opcode,len_opcode_def]
+  val tms = find_terms (can (match_term evm_PC_pat)) (concl lem)
+  val lems = map (QCONV (RAND_CONV (SCONV []))) tms
+  in lem |> ONCE_REWRITE_RULE lems end
+
+fun final_pc th = let
+  val (_,pre,_,post) = th |> concl |> dest_spec
+  val parts = list_dest dest_star post
+  val tm = first (can (match_term evm_PC_pat)) parts
+  val n = tm |> rand |> numSyntax.int_of_term
+  in SOME n end handle HOL_ERR _ => NONE;
+
+(*
+val am = 179
+val atm = “Push 2 [4w; 64w]”;
+val m = 182
+val tm = “Jump”
+
+val th0 = set_pc 179 (hd (inst_to_SPEC “Push 2 [4w; 64w]”));
+val th1 = set_pc 182 (hd (inst_to_SPEC “Jump”));
+*)
+
+fun maybe_fuse (m,tm,thms) aux =
+  if aconv tm “Jump” orelse aconv tm “JumpI” then
+    (let
+       val (th1,_) = hd thms
+       val (am,atm,_) = hd aux
+       fun simp_pc_val th = let
+         val tms = find_terms (can (match_term evm_PC_pat)) (concl th)
+         val tms = map rand tms
+         val lems = map (QCONV (TRY_CONV cv_eval)) tms
+         in ONCE_REWRITE_RULE lems th end
+       val th0s = map (compute_word_of_bytes o set_pc am) (inst_to_SPEC atm)
+       val th1s = map (compute_word_of_bytes o set_pc m) (inst_to_SPEC tm)
+       fun f (th0,th1) = let
+         val th2 = SPEC_COMPOSE_RULE [th0, th1]
+                     |> REWRITE_RULE [GSYM STAR_ASSOC]
+                     |> REWRITE_RULE [HD,TL,NOT_CONS_NIL,SEP_CLAUSES]
+                     |> REWRITE_RULE [STAR_ASSOC,GSYM CONJ_ASSOC]
+                     |> simp_pc_val
+         val pc2 = final_pc th2
+         val _ = assert Option.isSome pc2
+         in (th2, pc2) end
+       val ys = flatten (map (fn th0 => map (fn th1 => f (th0,th1)) th1s) th0s)
+       val zs = map (fn (th,t) => (prepare am th, t)) ys
+     in (am, atm, zs) :: tl aux end
+       handle HOL_ERR _ => (m,tm,thms) :: aux
+            | Empty => (m,tm,thms) :: aux)
+  else (m,tm,thms) :: aux
+
+fun prepare_spec [] aux = rev aux
+  | prepare_spec ((m, tm) :: xs) aux = let
+      val thms = map (set_pc m) (inst_to_SPEC tm)
+      val thms = map (prepare m) thms
+      val thms = map (fn th => (th, final_pc th)) thms
+      in prepare_spec xs (maybe_fuse (m, tm, thms) aux) end
+      handle HOL_ERR e => failwith ("prepare_spec " ^ term_to_string tm);
+
+(*
+
+inst_to_SPEC “Dup 1”
+
+val (m,tm) = (179, “Push 2 [4w; 64w]”)
+val (m,tm) = (182, “Jump”)
+
+first (fn (n,_) => n = 179) xs
+
+val xs = prepare_spec insts []
+val ys = xs |> map (fn (m, _, thms) => (m, map snd thms))
+            |> filter (fn (m, ys) => length ys > 1 orelse ys = [NONE])
+
+evc“FLOOKUP parsed_contract_code 1401”
+
+show_assums := true
+
+print_code insts
+
+*)
+
+
+
+
+
+(* ---------------------------------------------------------------- *)
+
 val DROP_64_expanded_32_32 =
   cv_eval “32 * word_size (32 + 32) ≤ 64”
   |> EQT_ELIM
@@ -465,8 +720,7 @@ Proof
   blastLib.BBLAST_TAC
 QED
 
-(* TODO: update for word_of_bytes_{be,le}
-
+(* TODO: update for word_of_bytes_{be,le} *)
 val word_of_bytes_tm = prim_mk_const{Thy="byte",Name="word_of_bytes"};
 val word_to_bytes_tm = prim_mk_const{Thy="byte",Name="word_to_bytes"};
 
@@ -576,6 +830,8 @@ val spec52 = mk_SPEC_Swap `0`;
 val spec53 = mk_SPEC_Log `2`;
 val spec54 = SPEC_Jump;
 
+(*
+
 val th10 = SPEC_COMPOSE_RULE [
   spec00,spec01,spec02,spec03,spec04,spec05,spec06,spec07,spec08,spec09]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
@@ -591,7 +847,6 @@ val th10m =
        |> SRULE[sumTheory.FORALL_SUM]
        |> SIMP_RULE (srw_ss() ++ ARITH_ss) [GSYM SPEC_MOVE_COND, conj_repeat]
 
-val evm_domain_ty = “:evm_el set set”;
 fun extract_conds th = let
   val pre = th |> concl |> dest_spec |> #2
   val pres = list_dest dest_star pre
@@ -643,6 +898,7 @@ val th10x = th10w
 
 (*
 val th = spec14
+val prefix = "v0_"
 *)
 
 fun prepare prefix th = let
