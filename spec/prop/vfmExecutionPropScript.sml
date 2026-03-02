@@ -716,6 +716,14 @@ Proof
   \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
 QED
 
+Theorem precompile_p256verify_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (precompile_p256verify s)).contexts ≠ []
+Proof
+  rw[precompile_p256verify_def]
+  \\ preserves_nonempty_tac
+  \\ CASE_TAC \\ rw[fail_def] \\ preserves_nonempty_tac
+QED
+
 Theorem dispatch_precompiles_preserves_nonempty_contexts[simp]:
   s.contexts ≠ [] ⇒ (SND (dispatch_precompiles a s)).contexts ≠ []
 Proof
