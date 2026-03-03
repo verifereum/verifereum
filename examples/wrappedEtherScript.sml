@@ -649,7 +649,118 @@ fun prepare_spec [] aux = rev aux
       in prepare_spec xs (maybe_fuse (m, tm, thms) aux) end
       handle HOL_ERR e => failwith ("prepare_spec " ^ term_to_string tm);
 
+val JumpDest_tm = “vfmOperation$JumpDest”
+val jump_dests = insts |> filter (fn (n,d) => aconv d JumpDest_tm) |> map fst;
+
+val pc = 0
+
+Theorem SPEC_EVM_MODEL_empty:
+  SPEC EVM_MODEL emp {} emp
+Proof
+  gvs [SPEC_REFL]
+QED
+
+fun alookup3 a [] = NONE
+  | alookup3 a ((x,y,z)::xs) = if a = x then SOME (y,z) else alookup3 a xs;
+
 (*
+SPEC_EVM_MODEL_empty
+
+val th = SPEC_EVM_MODEL_empty
+val pc = 0
+*)
+
+fun compose_from pc th steps path =
+  case alookup3 pc steps of NONE => [(th,path,SOME pc)] | SOME (inst_tm,spec_thms) =>
+  if aconv inst_tm JumpDest_tm then [(th,path,SOME pc)] else let
+  fun comp (th_n,dest) = let
+    val th1 = SPEC_COMPOSE_RULE [th,th_n]
+    in case dest of
+         NONE => [(th1,pc::path,dest)]
+       | SOME new_pc => compose_from new_pc th1 steps (pc::path) end
+  in flatten (map comp spec_thms) end
+
+val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
+
+  val hs = hyp th
+  fun dest_evm_list tm = let
+    val (f,tms) = strip_comb tm
+    val (s,ty) = dest_const f
+    val _ = s = "evm_line" orelse failwith "not evm_line"
+    val _ = length tms = 2 orelse failwith "not evm_line"
+    in (numSyntax.int_of_term (hd tms), last tms) end
+  val hs2 = map (fn tm => (fst (dest_evm_list tm), tm)) hs
+  val hs3 = map (C assoc hs2) path
+  val th3 = foldl (fn (tm,th) => DISCH tm th) th hs3
+            |> PURE_REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC]
+  val cnjs_count = length hs3
+  (* tidy up assumptions *)
+  val fixed_vars = th3 |> concl |> dest_imp |> snd |> rand |> free_vars
+  (* inline stack updates *)
+  fun get_conj_at i th = let
+    val (assms,_) = dest_imp (concl th)
+    in el i (strip_conj assms) end
+
+(*
+val th = th3
+val i = 1
+
+inline_stack_at i th
+*)
+
+  val tidy_up_stack_conv = REWRITE_CONV [LENGTH,DROP_compute,
+                                         cj 1 EL_restricted,
+                                         EL_simp_restricted,HD,TL_DEF,
+                                         numeralTheory.numeral_suc,
+                                         numeralTheory.numeral_pre]
+                                      (* DROP_compute,HD,TL_DEF,
+                                         numeralTheory.numeral_suc,
+                                         numeralTheory.numeral_pre] *)
+  fun apply_conv_at_conj i c tm =
+    if not (is_conj tm) then
+      if i = 1 then c tm else ALL_CONV tm
+    else
+      if i = 1 then
+        (RATOR_CONV o RAND_CONV) c tm
+      else
+        RAND_CONV (apply_conv_at_conj (i-1) c) tm;
+(*
+  apply_conv_at_conj 5 (UNBETA_CONV “a”) “a ∧ b ∧ c ∧ d”
+*)
+  fun inline_stack_at i th = let
+    val cnjs = strip_conj (rand (get_conj_at i th))
+    fun is_stack_update tm =
+      String.isSuffix "_ss_new" (fst (dest_var (lhs tm)))
+      handle HOL_ERR _ => false
+    in case total (first is_stack_update) cnjs of
+         NONE => th
+       | SOME ss_update_tm => let
+           val (ss_var,ss_rhs) = dest_eq ss_update_tm
+           in if op_mem aconv ss_var fixed_vars then th
+              else let
+                val th1 = INST [ss_var |-> ss_rhs] th
+                val c1 = apply_conv_at_conj i     tidy_up_stack_conv THENC
+                         apply_conv_at_conj (i+1) tidy_up_stack_conv
+                in CONV_RULE (QCONV ((RATOR_CONV o RAND_CONV) c1)) th1 end end end
+  fun do_all i k th =
+    if i <= k then
+      do_all (i+1) k (inline_stack_at i th)
+    else th
+
+
+val res = do_all 1 2 th3;
+
+
+
+
+(*
+
+length (compose_from 0 SPEC_EVM_MODEL_empty xs [])
+
+val SOME (inst_tm,spec_thms) = alookup3 pc steps
+val (th_n,dest) = hd spec_thms
+
+val steps = List.take(xs,15)
 
 inst_to_SPEC “Dup 1”
 
@@ -668,7 +779,9 @@ show_assums := true
 
 print_code insts
 
+
 *)
+
 
 
 
