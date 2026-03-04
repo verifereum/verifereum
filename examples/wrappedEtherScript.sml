@@ -700,6 +700,14 @@ val xs = prepare_spec insts []
 val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
 *)
 
+Theorem IMP_EQ_T_lemma:
+  (b ⇒ c) ⇒ (b ⇒ c = T)
+Proof
+  fs []
+QED
+
+val leq_gas_limit_pat = “m ≤ (p:message_parameters).gasLimit”
+
 fun process_path (th,path,(dest : int option)) = let
   val hs = hyp th
   fun dest_evm_list tm = let
@@ -745,6 +753,7 @@ val i = 1
         (RATOR_CONV o RAND_CONV) c tm
       else
         RAND_CONV (apply_conv_at_conj (i-1) c) tm;
+  (* inlining *)
   fun is_inline_const tm =
     if is_const tm then true else
     if numSyntax.is_numeral tm then true else
@@ -777,7 +786,7 @@ val th = th3
                 |> filter (fn (l,r) => not (op_mem aconv l fixed_vars))
                 |> map (fn (l,r) => l |-> r)
       in if List.null ins then NONE else
-           SOME (INST ins th |> tidy_up_thm) end
+           SOME (INST [hd ins] th |> tidy_up_thm) end
     fun simplify_loop th =
       case simplify th of
         NONE => th
@@ -787,8 +796,31 @@ val th = th3
     if i <= k then
       do_all (i+1) k (inline_all_at i th)
     else th
+(*
+  val res = do_all 1 3 th3
+*)
   val res = do_all 1 cnjs_count th3
-  in res end
+  (* tidy up gas limits *)
+  val last_gas_limit_tms =
+        find_terms (can $ match_term leq_gas_limit_pat) (get_conj_at cnjs_count res)
+  fun decide_imp tm1 tm2 = DECIDE (mk_imp (tm1,tm2));
+  fun find_max max_so_far [] = max_so_far
+    | find_max max_so_far (tm::tms) =
+        if can (decide_imp max_so_far) tm then
+          find_max max_so_far tms
+        else find_max tm tms;
+  val max_gas_limit_tm = find_max (hd last_gas_limit_tms) (tl last_gas_limit_tms)
+  fun prove_gas_limits_conv tm =
+    if can (match_term leq_gas_limit_pat) tm then
+      (MATCH_MP IMP_EQ_T_lemma (decide_imp max_gas_limit_tm tm) |> UNDISCH
+       handle HOL_ERR _ => ALL_CONV tm)
+    else if is_comb tm then
+      (RATOR_CONV prove_gas_limits_conv THENC RAND_CONV prove_gas_limits_conv) tm
+    else if is_abs tm then
+      (ABS_CONV prove_gas_limits_conv) tm
+    else ALL_CONV tm
+  val th4 = CONV_RULE prove_gas_limits_conv res
+  in th4 end
 
 fun path_thms_for ps insts = let
   val xs = prepare_spec insts []
