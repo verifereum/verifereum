@@ -513,6 +513,33 @@ Proof
   gvs [evm_line_def]
 QED
 
+Theorem SPEC_EVM_MODEL_empty:
+  SPEC EVM_MODEL emp {} emp
+Proof
+  gvs [SPEC_REFL]
+QED
+
+(* general tooling *)
+
+val word_of_bytes_conv = REWR_CONV (GSYM word_of_bytes_le_def) THENC cv_eval;
+val word_to_bytes_conv = REWR_CONV (GSYM word_to_bytes_le_def) THENC cv_eval;
+
+val word_of_bytes_pat = “word_to_bytes (w : 'a word) F”;
+val word_of_bytes_ss = simpLib.conv_ss
+   { name = "word_of_bytes_ss",
+     trace = 3,
+     key = SOME ([],word_of_bytes_pat),
+     conv = K (K word_of_bytes_conv) };
+
+val word_to_bytes_pat = “word_to_bytes (w : 'a word) F”;
+val word_to_bytes_ss = simpLib.conv_ss
+   { name = "word_to_bytes_ss",
+     trace = 3,
+     key = SOME ([],word_to_bytes_pat),
+     conv = K (K word_to_bytes_conv) };
+
+(* -- *)
+
 val pc_var = mk_var("pc",numSyntax.num);
 val evm_PC_pat = “evm_PC _”;
 val evm_PC_tm = rator evm_PC_pat;
@@ -649,27 +676,15 @@ fun prepare_spec [] aux = rev aux
       in prepare_spec xs (maybe_fuse (m, tm, thms) aux) end
       handle HOL_ERR e => failwith ("prepare_spec " ^ term_to_string tm);
 
-val JumpDest_tm = “vfmOperation$JumpDest”
-val jump_dests = insts |> filter (fn (n,d) => aconv d JumpDest_tm) |> map fst;
-
-val pc = 0
-
-Theorem SPEC_EVM_MODEL_empty:
-  SPEC EVM_MODEL emp {} emp
-Proof
-  gvs [SPEC_REFL]
-QED
-
 fun alookup3 a [] = NONE
   | alookup3 a ((x,y,z)::xs) = if a = x then SOME (y,z) else alookup3 a xs;
 
-(*
-SPEC_EVM_MODEL_empty
+val JumpDest_tm = “vfmOperation$JumpDest”
 
+(*
 val th = SPEC_EVM_MODEL_empty
 val pc = 0
 *)
-
 fun compose_from pc th steps path =
   case alookup3 pc steps of NONE => [(th,path,SOME pc)] | SOME (inst_tm,spec_thms) =>
   if aconv inst_tm JumpDest_tm then [(th,path,SOME pc)] else let
@@ -680,8 +695,12 @@ fun compose_from pc th steps path =
        | SOME new_pc => compose_from new_pc th1 steps (pc::path) end
   in flatten (map comp spec_thms) end
 
+(*
+val xs = prepare_spec insts []
 val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
+*)
 
+fun process_path (th,path,(dest : int option)) = let
   val hs = hyp th
   fun dest_evm_list tm = let
     val (f,tms) = strip_comb tm
@@ -695,27 +714,29 @@ val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
             |> PURE_REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC]
   val cnjs_count = length hs3
   (* tidy up assumptions *)
-  val fixed_vars = th3 |> concl |> dest_imp |> snd |> rand |> free_vars
+  val fixed_vars = th3 |> concl |> dest_imp |> snd |> free_vars
   (* inline stack updates *)
   fun get_conj_at i th = let
     val (assms,_) = dest_imp (concl th)
     in el i (strip_conj assms) end
-
 (*
 val th = th3
 val i = 1
-
-inline_stack_at i th
 *)
-
-  val tidy_up_stack_conv = REWRITE_CONV [LENGTH,DROP_compute,
-                                         cj 1 EL_restricted,
-                                         EL_simp_restricted,HD,TL_DEF,
-                                         numeralTheory.numeral_suc,
-                                         numeralTheory.numeral_pre]
-                                      (* DROP_compute,HD,TL_DEF,
-                                         numeralTheory.numeral_suc,
-                                         numeralTheory.numeral_pre] *)
+  val tidy_up_conv = SIMP_CONV (std_ss++  (* TODO: remove redundant rewrites *)
+                                ARITH_ss++
+                                word_of_bytes_ss++
+                                word_to_bytes_ss++
+                                listSimps.LIST_ss)
+                               [LENGTH,DROP_compute,wordsTheory.w2n_n2w,
+                                EVAL “dimword(:256)”,EVAL “dimindex(:256)”,
+                                cj 1 EL_restricted,ADD1,
+                                EL_simp_restricted,HD,TL_DEF,
+                                numeralTheory.numeral_suc,
+                                numeralTheory.numeral_pre]
+(*
+  apply_conv_at_conj 5 (UNBETA_CONV “a”) “a ∧ b ∧ c ∧ d”
+*)
   fun apply_conv_at_conj i c tm =
     if not (is_conj tm) then
       if i = 1 then c tm else ALL_CONV tm
@@ -724,33 +745,56 @@ inline_stack_at i th
         (RATOR_CONV o RAND_CONV) c tm
       else
         RAND_CONV (apply_conv_at_conj (i-1) c) tm;
+  fun is_inline_const tm =
+    if is_const tm then true else
+    if numSyntax.is_numeral tm then true else
+    if optionSyntax.is_some tm then is_inline_const (rand tm) else
+    if sumSyntax.is_inl tm then is_inline_const (rand tm) else
+    if sumSyntax.is_inr tm then is_inline_const (rand tm) else
+    if wordsSyntax.is_word_literal tm then true else let
+      val (xs,ty) = listSyntax.dest_list tm
+      in List.all is_inline_const xs end
+    handle HOL_ERR _ => false;
+  fun is_eq_to_inline tm = let
+    val (l,r) = dest_eq tm
+    val l_s = fst (dest_var l)
+    in String.isSuffix "_ss_new" l_s orelse
+       String.isSuffix "_g_new" l_s orelse
+       String.isSuffix "_j_new" l_s orelse
+       is_inline_const r end
+    handle HOL_ERR _ => false;
 (*
-  apply_conv_at_conj 5 (UNBETA_CONV “a”) “a ∧ b ∧ c ∧ d”
+val th = th3
 *)
-  fun inline_stack_at i th = let
-    val cnjs = strip_conj (rand (get_conj_at i th))
-    fun is_stack_update tm =
-      String.isSuffix "_ss_new" (fst (dest_var (lhs tm)))
-      handle HOL_ERR _ => false
-    in case total (first is_stack_update) cnjs of
-         NONE => th
-       | SOME ss_update_tm => let
-           val (ss_var,ss_rhs) = dest_eq ss_update_tm
-           in if op_mem aconv ss_var fixed_vars then th
-              else let
-                val th1 = INST [ss_var |-> ss_rhs] th
-                val c1 = apply_conv_at_conj i     tidy_up_stack_conv THENC
-                         apply_conv_at_conj (i+1) tidy_up_stack_conv
-                in CONV_RULE (QCONV ((RATOR_CONV o RAND_CONV) c1)) th1 end end end
+  fun inline_all_at i th = let
+    val tidy_up_thm = let
+      val c1 = apply_conv_at_conj i tidy_up_conv
+      in CONV_RULE (QCONV ((RATOR_CONV o RAND_CONV) c1)) end
+    val th = tidy_up_thm th
+    fun simplify th = let
+      val cnjs = strip_conj (rand (get_conj_at i th))
+      val ins = filter is_eq_to_inline cnjs |> map dest_eq
+                |> filter (fn (l,r) => not (op_mem aconv l fixed_vars))
+                |> map (fn (l,r) => l |-> r)
+      in if List.null ins then NONE else
+           SOME (INST ins th |> tidy_up_thm) end
+    fun simplify_loop th =
+      case simplify th of
+        NONE => th
+      | SOME th1 => simplify_loop th1
+    in simplify_loop th end
   fun do_all i k th =
     if i <= k then
-      do_all (i+1) k (inline_stack_at i th)
+      do_all (i+1) k (inline_all_at i th)
     else th
+  val res = do_all 1 cnjs_count th3
+  in res end
 
+fun path_thms_for ps insts = let
+  val xs = prepare_spec insts []
+  in map (fn p => (p, map process_path (compose_from p SPEC_EVM_MODEL_empty xs []))) ps end
 
-val res = do_all 1 2 th3;
-
-
+val res = time (path_thms_for [0]) insts;
 
 
 (*
@@ -781,11 +825,6 @@ print_code insts
 
 
 *)
-
-
-
-
-
 
 (* ---------------------------------------------------------------- *)
 
@@ -832,27 +871,6 @@ Theorem mask_and_w2w:
 Proof
   blastLib.BBLAST_TAC
 QED
-
-(* TODO: update for word_of_bytes_{be,le} *)
-val word_of_bytes_tm = prim_mk_const{Thy="byte",Name="word_of_bytes"};
-val word_to_bytes_tm = prim_mk_const{Thy="byte",Name="word_to_bytes"};
-
-fun word_of_bytes_conv tm =
-  let val (c,args) = strip_comb tm in
-  if length args = 3 andalso
-     same_const word_of_bytes_tm c andalso
-     listSyntax.is_list (el 3 args)
-  then cv_eval tm
-  else raise UNCHANGED
-  end
-
-fun word_to_bytes_conv tm =
-  let val (c,args) = strip_comb tm in
-  if length args = 2 andalso
-     same_const word_to_bytes_tm (fst (strip_comb tm))
-  then cv_eval tm
-  else raise UNCHANGED
-  end
 
 val no_data = ASSUME “(p:message_parameters).data = []”
 
