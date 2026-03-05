@@ -974,26 +974,46 @@ val name_0_STOP = SPEC_COMPOSE_RULE
   |> DISCH_ALL
   |> SRULE []
 
+(* attempt with reverse *)
 
-(*
+local
+val (th,path,dest) = el 12 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+in
+val name_0_185 = th1
+  |> DISCH “v0_p.data = (REVERSE (HD abi_4bytes) ++ [])”
+  |> DISCH “v0_ss = ([]:bytes32 list) ∧ v0_e = (INL () : unit + exception option)”
+  |> SRULE [cv_eval “abi_4bytes”,div_trick]
+  |> SIMP_RULE (bool_ss ++ word_of_bytes_ss) []
+  |> SRULE [NOT_LESS,evm_line_T];
+end
 
+val (th,path,dest) = el 3 (compose_from 185 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+val name_185_196 = th1
+  |> SRULE [evm_line_T];
 
+val name_0_196 = SPEC_COMPOSE_RULE
+  [UNDISCH_ALL name_0_185,
+   UNDISCH_ALL name_185_196]
+  |> DISCH_ALL
+  |> SRULE []
 
+val (th,path,dest) = el 1 (compose_from 196 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+val name_196_1245 = th1
+  |> SRULE [evm_line_T];
 
-|> SRULE [GSYM word_of_bytes_le_def,cv_stdTheory.word_of_bytes_le_eq_num_of_bytes]
+val name_0_1245 = SPEC_COMPOSE_RULE
+  [UNDISCH_ALL name_0_196,
+   UNDISCH_ALL name_196_1245]
+  |> DISCH_ALL
+  |> SRULE []
 
-print_find "word_of_bytes_le_"
-
-
-
-take_pad_0 32 v0_p.data
-
-PAD_RIGHT_def
-
-
-
-(REWRITE_CONV [with_zero_def] THENC cv_eval)
-*)
+val (th,path,dest) = el 3 (compose_from 1245 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+val name_1245_1395 = th1
+  |> SRULE [evm_line_T];
 
 (*
 
