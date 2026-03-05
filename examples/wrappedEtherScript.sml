@@ -521,10 +521,10 @@ QED
 
 (* general tooling *)
 
-val word_of_bytes_conv = REWR_CONV (GSYM word_of_bytes_le_def) THENC cv_eval;
+val word_of_bytes_conv = REWR_CONV (SRULE [FUN_EQ_THM] (GSYM word_of_bytes_le_def)) THENC cv_eval;
 val word_to_bytes_conv = REWR_CONV (GSYM word_to_bytes_le_def) THENC cv_eval;
 
-val word_of_bytes_pat = “word_to_bytes (w : 'a word) F”;
+val word_of_bytes_pat = “word_of_bytes F (0w : 'a word) _”;
 val word_of_bytes_ss = simpLib.conv_ss
    { name = "word_of_bytes_ss",
      trace = 3,
@@ -681,18 +681,24 @@ fun alookup3 a [] = NONE
 
 val JumpDest_tm = “vfmOperation$JumpDest”
 
+
+
 (*
+val (pc,th,steps,path) = (175, SPEC_EVM_MODEL_empty, xs, [])
+val (pc,th,steps,path) = (184, SPEC_EVM_MODEL_empty, xs, [])
 val th = SPEC_EVM_MODEL_empty
 val pc = 0
 *)
 fun compose_from pc th steps path =
   case alookup3 pc steps of NONE => [(th,path,SOME pc)] | SOME (inst_tm,spec_thms) =>
-  if aconv inst_tm JumpDest_tm then [(th,path,SOME pc)] else let
+  if aconv inst_tm JumpDest_tm andalso path <> [] then [(th,path,SOME pc)] else let
   fun comp (th_n,dest) = let
     val th1 = SPEC_COMPOSE_RULE [th,th_n]
     in case dest of
          NONE => [(th1,pc::path,dest)]
-       | SOME new_pc => compose_from new_pc th1 steps (pc::path) end
+       | SOME new_pc =>
+           if new_pc = pc then [(th1,pc::path,dest)]
+           else compose_from new_pc th1 steps (pc::path) end
   in flatten (map comp spec_thms) end
 
 Theorem IMP_EQ_T_lemma:
@@ -709,7 +715,8 @@ Proof
 QED
 
 Theorem evm_line_T:
-  evm_line n T = T
+  evm_line n T = T ∧
+  evm_line n F = F
 Proof
   gvs [evm_line_def]
 QED
@@ -723,11 +730,6 @@ QED
 
 val leq_gas_limit_pat = “m ≤ (p:message_parameters).gasLimit”
 val lt_stack_limit_pat = “m < vfmConstants$stack_limit”
-
-(*
-val xs = prepare_spec insts []
-val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
-*)
 
 Definition insert_bytes_def:
   insert_bytes byteIndex bytes memory =
@@ -752,6 +754,11 @@ val message_parameters_var = rand evm_MsgParams_pat;
 val parsed_field = “^message_parameters_var.parsed”
 val code_field = “^message_parameters_var.code”
 
+(*
+val xs = prepare_spec insts []
+val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
+*)
+
 fun process_path (th,path,(dest : int option)) = let
   val hs = hyp th
   fun dest_evm_list tm = let
@@ -766,7 +773,7 @@ fun process_path (th,path,(dest : int option)) = let
             |> PURE_REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC,to_insert_bytes]
   val cnjs_count = length hs3
   (* tidy up assumptions *)
-  val fixed_vars = th3 |> concl |> dest_imp |> snd |> free_vars
+  val fixed_vars = th3 |> concl |> dest_imp |> snd |> rator |> free_vars
   (* inline stack updates *)
   fun get_conj_at i th = let
     val (assms,_) = dest_imp (concl th)
@@ -852,30 +859,33 @@ val th = th3
           find_max max_so_far tms
         else find_max tm tms;
   (* tidy up gas limits *)
-  val last_gas_limit_tms =
-        find_terms (can $ match_term leq_gas_limit_pat) (get_conj_at cnjs_count res)
-  val max_gas_limit_tm = find_max (hd last_gas_limit_tms) (tl last_gas_limit_tms)
-  fun prove_gas_limits_conv tm =
-    if can (match_term leq_gas_limit_pat) tm then
-      (MATCH_MP IMP_EQ_T_lemma (decide_imp max_gas_limit_tm tm) |> UNDISCH
-       handle HOL_ERR _ => ALL_CONV tm)
-    else if is_comb tm then
-      (RATOR_CONV prove_gas_limits_conv THENC RAND_CONV prove_gas_limits_conv) tm
-    else if is_abs tm then
-      (ABS_CONV prove_gas_limits_conv) tm
-    else ALL_CONV tm
-  val th4 = CONV_RULE prove_gas_limits_conv res
+  val th4 = let
+    val last_gas_limit_tms =
+          find_terms (can $ match_term leq_gas_limit_pat) (get_conj_at cnjs_count res)
+    val max_gas_limit_tm = find_max (hd last_gas_limit_tms) (tl last_gas_limit_tms)
+    fun prove_gas_limits_conv tm =
+      if can (match_term leq_gas_limit_pat) tm then
+        (MATCH_MP IMP_EQ_T_lemma (decide_imp max_gas_limit_tm tm) |> UNDISCH
+         handle HOL_ERR _ => ALL_CONV tm)
+      else if is_comb tm then
+        (RATOR_CONV prove_gas_limits_conv THENC RAND_CONV prove_gas_limits_conv) tm
+      else if is_abs tm then
+        (ABS_CONV prove_gas_limits_conv) tm
+      else ALL_CONV tm
+    in CONV_RULE prove_gas_limits_conv res end
+    handle Empty => res
   (* tidy up stack limits *)
-  val stack_limit_tms =
-        find_terms (can $ match_term lt_stack_limit_pat) (concl th4)
-  val max_stack_limit_tm = find_max (hd stack_limit_tms) (tl stack_limit_tms)
-  fun prove_stack_limits_conv tm =
-    if can (match_term lt_stack_limit_pat) tm then
-      (MATCH_MP IMP_EQ_T_lemma (decide_imp max_stack_limit_tm tm) |> UNDISCH
-       handle HOL_ERR _ => ALL_CONV tm)
-    else ALL_CONV tm
-  val th5 = CONV_RULE (DEPTH_CONV prove_stack_limits_conv) th4
-            |> REWRITE_RULE []
+  val th5 = let
+    val stack_limit_tms =
+          find_terms (can $ match_term lt_stack_limit_pat) (concl th4)
+    val max_stack_limit_tm = find_max (hd stack_limit_tms) (tl stack_limit_tms)
+    fun prove_stack_limits_conv tm =
+      if can (match_term lt_stack_limit_pat) tm then
+        (MATCH_MP IMP_EQ_T_lemma (decide_imp max_stack_limit_tm tm) |> UNDISCH
+         handle HOL_ERR _ => ALL_CONV tm)
+      else ALL_CONV tm
+    in CONV_RULE (DEPTH_CONV prove_stack_limits_conv) th4
+              |> REWRITE_RULE [] end handle Empty => th4
   (* assume contract_code and parsed_contract_code *)
   val (_,p,_,_) = th5 |> concl |> dest_imp |> snd |> dest_spec
   val param_var = find_term (can $ match_term evm_MsgParams_pat) p |> rand
@@ -901,6 +911,7 @@ val th = th3
   val pat2 = finite_mapSyntax.mk_flookup(parsed_abbrev_tm,n_tm)
   val tms1 = find_terms (can $ match_term pat1) (concl th7)
   val tms2 = find_terms (can $ match_term pat2) (concl th7)
+             |> filter (fn tm => List.null (free_vars tm))
   val c = REWRITE_CONV [parsed_contract_code_eq, contract_code_eq] THENC EVAL
   val lems = map c (tms1 @ tms2)
   val th8 = REWRITE_RULE lems th7
@@ -910,12 +921,79 @@ fun path_thms_for ps insts = let
   val xs = prepare_spec insts []
   in map (fn p => (p, map process_path (compose_from p SPEC_EVM_MODEL_empty xs []))) ps end
 
+(*
 val res = time (path_thms_for [0]) insts;
+*)
+
+Theorem div_trick:
+  with_zero $//
+    (word_of_bytes F 0w
+              (REVERSE (take_pad_0 32 (x1::x2::x3::x4::rest))) : 256 word)
+           0x100000000000000000000000000000000000000000000000000000000w =
+  word_of_bytes F 0w (x1::x2::x3::x4::[])
+Proof
+  cheat
+QED
+
+val (th,path,dest) = el 1 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+val name_0_175 = th1
+  |> DISCH “v0_p.data = (HD abi_4bytes ++ [])”
+  |> DISCH “v0_ss = ([]:bytes32 list) ∧ v0_e = (INL () : unit + exception option)”
+  |> SRULE [cv_eval “abi_4bytes”,div_trick]
+  |> SIMP_RULE (bool_ss ++ word_of_bytes_ss) []
+  |> SRULE [NOT_LESS,evm_line_T];
+
+val (th,path,dest) = el 1 (compose_from 175 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+val name_175_1088 = th1
+  |> SRULE [evm_line_T];
+
+val name_0_1088 = SPEC_COMPOSE_RULE
+  [UNDISCH_ALL name_0_175,
+   UNDISCH_ALL name_175_1088]
+
+val (th,path,dest) = el 1 (compose_from 1088 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+val name_1088_183 = th1
+  |> SRULE [evm_line_T];
+
+val name_0_183 = SPEC_COMPOSE_RULE
+  [UNDISCH_ALL name_0_1088,
+   UNDISCH_ALL name_1088_183]
+  |> SRULE []
+
+val (th,path,dest) = el 2 (compose_from 183 SPEC_EVM_MODEL_empty xs [])
+val th1 = process_path (th,path,dest)
+val name_183_STOP = th1
+  |> SRULE [evm_line_T];
+
+val name_0_STOP = SPEC_COMPOSE_RULE
+  [UNDISCH_ALL name_0_183,
+   UNDISCH_ALL name_183_STOP]
+  |> DISCH_ALL
+  |> SRULE []
+
+
+(*
 
 
 
 
+|> SRULE [GSYM word_of_bytes_le_def,cv_stdTheory.word_of_bytes_le_eq_num_of_bytes]
 
+print_find "word_of_bytes_le_"
+
+
+
+take_pad_0 32 v0_p.data
+
+PAD_RIGHT_def
+
+
+
+(REWRITE_CONV [with_zero_def] THENC cv_eval)
+*)
 
 (*
 
