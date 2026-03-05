@@ -695,18 +695,57 @@ fun compose_from pc th steps path =
        | SOME new_pc => compose_from new_pc th1 steps (pc::path) end
   in flatten (map comp spec_thms) end
 
-(*
-val xs = prepare_spec insts []
-val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
-*)
-
 Theorem IMP_EQ_T_lemma:
   (b ⇒ c) ⇒ (b ⇒ c = T)
 Proof
   fs []
 QED
 
+Theorem merge_with_evm_line:
+  (p ⇒ evm_line n q ⇒ r) ⇒
+  (evm_line n (p ∧ q) ⇒ r)
+Proof
+  gvs [evm_line_def]
+QED
+
+Theorem evm_line_T:
+  evm_line n T = T
+Proof
+  gvs [evm_line_def]
+QED
+
+Theorem b2w_eq_simp:
+  (b2w b = 0w ⇔ ~b) ∧
+  (b2w b = 1w ⇔ b)
+Proof
+  Cases_on ‘b’ \\ gvs []
+QED
+
 val leq_gas_limit_pat = “m ≤ (p:message_parameters).gasLimit”
+val lt_stack_limit_pat = “m < vfmConstants$stack_limit”
+
+(*
+val xs = prepare_spec insts []
+val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
+*)
+
+Definition insert_bytes_def:
+  insert_bytes byteIndex bytes memory =
+    TAKE byteIndex memory ⧺ bytes ⧺
+    DROP (byteIndex + LENGTH bytes) memory
+End
+
+Theorem to_insert_bytes:
+  ∀byteIndex memory bytes.
+    TAKE byteIndex memory ⧺ bytes ⧺
+    DROP (byteIndex + LENGTH bytes) memory =
+    insert_bytes byteIndex bytes memory ∧
+    TAKE byteIndex memory ⧺ bytes ⧺
+    DROP (LENGTH bytes + byteIndex) memory =
+    insert_bytes byteIndex bytes memory
+Proof
+  gvs [insert_bytes_def]
+QED
 
 fun process_path (th,path,(dest : int option)) = let
   val hs = hyp th
@@ -719,7 +758,7 @@ fun process_path (th,path,(dest : int option)) = let
   val hs2 = map (fn tm => (fst (dest_evm_list tm), tm)) hs
   val hs3 = map (C assoc hs2) path
   val th3 = foldl (fn (tm,th) => DISCH tm th) th hs3
-            |> PURE_REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC]
+            |> PURE_REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC,to_insert_bytes]
   val cnjs_count = length hs3
   (* tidy up assumptions *)
   val fixed_vars = th3 |> concl |> dest_imp |> snd |> free_vars
@@ -800,15 +839,16 @@ val th = th3
   val res = do_all 1 3 th3
 *)
   val res = do_all 1 cnjs_count th3
-  (* tidy up gas limits *)
-  val last_gas_limit_tms =
-        find_terms (can $ match_term leq_gas_limit_pat) (get_conj_at cnjs_count res)
+  (* local utils *)
   fun decide_imp tm1 tm2 = DECIDE (mk_imp (tm1,tm2));
   fun find_max max_so_far [] = max_so_far
     | find_max max_so_far (tm::tms) =
         if can (decide_imp max_so_far) tm then
           find_max max_so_far tms
         else find_max tm tms;
+  (* tidy up gas limits *)
+  val last_gas_limit_tms =
+        find_terms (can $ match_term leq_gas_limit_pat) (get_conj_at cnjs_count res)
   val max_gas_limit_tm = find_max (hd last_gas_limit_tms) (tl last_gas_limit_tms)
   fun prove_gas_limits_conv tm =
     if can (match_term leq_gas_limit_pat) tm then
@@ -820,7 +860,27 @@ val th = th3
       (ABS_CONV prove_gas_limits_conv) tm
     else ALL_CONV tm
   val th4 = CONV_RULE prove_gas_limits_conv res
-  in th4 end
+  (* tidy up stack limits *)
+  val stack_limit_tms =
+        find_terms (can $ match_term lt_stack_limit_pat) (concl th4)
+  val max_stack_limit_tm = find_max (hd stack_limit_tms) (tl stack_limit_tms)
+  fun prove_stack_limits_conv tm =
+    if can (match_term lt_stack_limit_pat) tm then
+      (MATCH_MP IMP_EQ_T_lemma (decide_imp max_stack_limit_tm tm) |> UNDISCH
+       handle HOL_ERR _ => ALL_CONV tm)
+    else ALL_CONV tm
+  val th5 = CONV_RULE (DEPTH_CONV prove_stack_limits_conv) th4
+            |> REWRITE_RULE []
+  (* tidy up conjuncts that are true from the start and throughout *)
+  val cnjs1 = get_conj_at 1 th5 |> rand |> strip_conj
+  val thms = map (fn tm => MATCH_MP IMP_EQ_T_lemma
+                                    (DISCH_ALL (ASSUME tm)) |> UNDISCH) cnjs1
+  val th6 = REWRITE_RULE thms th5
+            |> PURE_REWRITE_RULE [GSYM AND_IMP_INTRO]
+  fun insert_evm_line (p,th) = DISCH p th |> MATCH_MP merge_with_evm_line
+  val th7 = foldr insert_evm_line th6 (hyp th6)
+            |> REWRITE_RULE [AND_IMP_INTRO, GSYM CONJ_ASSOC, evm_line_T, b2w_eq_simp]
+  in th7 end
 
 fun path_thms_for ps insts = let
   val xs = prepare_spec insts []
