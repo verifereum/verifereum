@@ -747,6 +747,11 @@ Proof
   gvs [insert_bytes_def]
 QED
 
+val evm_MsgParams_pat = “evm_MsgParams p”;
+val message_parameters_var = rand evm_MsgParams_pat;
+val parsed_field = “^message_parameters_var.parsed”
+val code_field = “^message_parameters_var.code”
+
 fun process_path (th,path,(dest : int option)) = let
   val hs = hyp th
   fun dest_evm_list tm = let
@@ -871,6 +876,16 @@ val th = th3
     else ALL_CONV tm
   val th5 = CONV_RULE (DEPTH_CONV prove_stack_limits_conv) th4
             |> REWRITE_RULE []
+  (* assume contract_code and parsed_contract_code *)
+  val (_,p,_,_) = th5 |> concl |> dest_imp |> snd |> dest_spec
+  val param_var = find_term (can $ match_term evm_MsgParams_pat) p |> rand
+  val parsed_acc = parsed_field |> subst [message_parameters_var |-> param_var]
+  val code_acc = code_field |> subst [message_parameters_var |-> param_var]
+  val code_abbrev_tm = contract_code_eq |> concl |> dest_eq |> fst
+  val parsed_abbrev_tm = parsed_contract_code_eq |> concl |> dest_eq |> fst
+  val asm1 = mk_eq(code_acc, code_abbrev_tm)
+  val asm2 = mk_eq(parsed_acc, parsed_abbrev_tm)
+  val th5 = REWRITE_RULE [ASSUME asm1, ASSUME asm2] th5
   (* tidy up conjuncts that are true from the start and throughout *)
   val cnjs1 = get_conj_at 1 th5 |> rand |> strip_conj
   val thms = map (fn tm => MATCH_MP IMP_EQ_T_lemma
@@ -880,13 +895,26 @@ val th = th3
   fun insert_evm_line (p,th) = DISCH p th |> MATCH_MP merge_with_evm_line
   val th7 = foldr insert_evm_line th6 (hyp th6)
             |> REWRITE_RULE [AND_IMP_INTRO, GSYM CONJ_ASSOC, evm_line_T, b2w_eq_simp]
-  in th7 end
+  (* simplify LENGTH contract_code and FLOOKUP parsed_contract_code *)
+  val n_tm = mk_var("n",numSyntax.num)
+  val pat1 = numSyntax.mk_less(n_tm,listSyntax.mk_length code_abbrev_tm)
+  val pat2 = finite_mapSyntax.mk_flookup(parsed_abbrev_tm,n_tm)
+  val tms1 = find_terms (can $ match_term pat1) (concl th7)
+  val tms2 = find_terms (can $ match_term pat2) (concl th7)
+  val c = REWRITE_CONV [parsed_contract_code_eq, contract_code_eq] THENC EVAL
+  val lems = map c (tms1 @ tms2)
+  val th8 = REWRITE_RULE lems th7
+  in th8 end
 
 fun path_thms_for ps insts = let
   val xs = prepare_spec insts []
   in map (fn p => (p, map process_path (compose_from p SPEC_EVM_MODEL_empty xs []))) ps end
 
 val res = time (path_thms_for [0]) insts;
+
+
+
+
 
 
 (*
