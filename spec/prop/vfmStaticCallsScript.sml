@@ -17,20 +17,20 @@ Ancestors
 *)
 
 Definition static_inv_def:
-  static_inv a0 t0 d0 s ⇔
+  static_inv a0 t0 d0 l0 s ⇔
     s.rollback.accounts = a0 ∧
     s.rollback.tStorage = t0 ∧
     s.rollback.toDelete = d0 ∧
     s.contexts ≠ [] ∧
+    EVERY (λ(ctxt, rb). ctxt.msgParams.static) s.contexts ∧
     EVERY (λ(ctxt, rb).
-      ctxt.msgParams.static ∧
       ctxt.logs = [] ∧
-      (∀a. ctxt.msgParams.outputTo ≠ Code a)) s.contexts ∧
-    EVERY (λ(ctxt, rb).
+      (∀a. ctxt.msgParams.outputTo ≠ Code a) ∧
       rb.accounts = a0 ∧
       rb.tStorage = t0 ∧
       rb.toDelete = d0)
-      (FRONT s.contexts)
+      (FRONT s.contexts) ∧
+    (FST (LAST s.contexts)).logs = l0
 End
 
 Theorem handle_snd_split:
@@ -1033,14 +1033,12 @@ Theorem run_static_preserves:
   ∀es result final_state ctxt rb.
     run es = SOME (INR result, final_state) ∧
     es.contexts = [(ctxt, rb)] ∧
-    ctxt.msgParams.static ∧
-    ctxt.logs = [] ∧
-    (∀a. ctxt.msgParams.outputTo ≠ Code a) ⇒
+    ctxt.msgParams.static ⇒
     final_state.rollback.accounts = es.rollback.accounts ∧
     final_state.rollback.tStorage = es.rollback.tStorage ∧
     final_state.rollback.toDelete = es.rollback.toDelete ∧
     (case final_state.contexts of
-       [(ctxt', _)] => ctxt'.logs = []
+       [(ctxt', _)] => ctxt'.logs = ctxt.logs
      | _ => T)
 Proof
   rw[run_eq_tr]
