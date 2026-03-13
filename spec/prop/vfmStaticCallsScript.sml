@@ -992,3 +992,14 @@ Proof
   >> Cases_on `final_state.contexts` >> gvs[]
   >> Cases_on `h` >> Cases_on `t` >> gvs[listTheory.FRONT_DEF]
 QED
+
+Theorem static_not_code_preserved:
+  ∀es result fs.
+    run es = SOME (INR result, fs) ∧
+    EVERY (λ(c,r). c.msgParams.static ⇒
+      ∀a. c.msgParams.outputTo ≠ Code a) es.contexts ⇒
+    EVERY (λ(c,r). c.msgParams.static ⇒
+      ∀a. c.msgParams.outputTo ≠ Code a) fs.contexts
+Proof
+  cheat
+QED
