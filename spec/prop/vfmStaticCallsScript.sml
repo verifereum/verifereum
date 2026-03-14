@@ -962,6 +962,8 @@ Proof
   >> once_rewrite_tac[run_tr_def] >> simp[]
 QED
 
+(* TODO: the outputTo ≠ Code precondition should be removable by moving
+   outputTo ≠ Code from ALL to FRONT in static_inv (vacuous for singleton) *)
 Theorem run_static_preserves:
   ∀es result final_state ctxt rb.
     run es = SOME (INR result, final_state) ∧
