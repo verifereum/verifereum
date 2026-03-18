@@ -1703,6 +1703,7 @@ Definition handle_create_def:
     outputTo <- get_output_to;
     case (e, outputTo) of
     | (NONE, Code address) => do
+      assert_not_static;
       codeLen <<- LENGTH code;
       codeGas <<- code_deposit_cost * codeLen;
       assert (case code of h::_ => h ≠ n2w 0xef | _ => T) InvalidContractPrefix;

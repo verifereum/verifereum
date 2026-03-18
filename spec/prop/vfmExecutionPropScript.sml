@@ -1372,11 +1372,13 @@ Proof
   \\ irule preserves_wf_accounts_bind \\ rw[]
   \\ CASE_TAC \\ CASE_TAC \\ CASE_TAC \\ rw[]
   >- (
-    tac
+    irule preserves_wf_accounts_ignore_bind \\ rw[]
+    \\ tac
     \\ rw[preserves_wf_accounts_def, update_accounts_def, return_def]
     \\ gs[all_accounts_def, update_account_def]
     \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
     \\ gs[lookup_account_def, wf_account_state_def] )
+  \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ rw[preserves_wf_accounts_def, assert_def, bind_def, update_accounts_def,

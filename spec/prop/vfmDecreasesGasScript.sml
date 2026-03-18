@@ -2034,6 +2034,9 @@ Proof
     \\ irule_at Any decreases_gas_get_output_to \\ rw[]
     \\ BasicProvers.TOP_CASE_TAC \\ rw[]
     \\ BasicProvers.TOP_CASE_TAC \\ rw[]
+    \\ irule decreases_gas_ignore_bind_mono
+    \\ irule_at Any decreases_gas_assert_not_static
+    \\ simp[]
     \\ irule_at Any decreases_gas_ignore_bind_mono
     \\ qexistsl_tac[`T`,`F`] \\ simp[]
     \\ irule_at Any decreases_gas_ignore_bind_mono
