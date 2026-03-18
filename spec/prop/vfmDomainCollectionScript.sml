@@ -362,10 +362,9 @@ Proof
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ simp[assert_not_static_def, get_static_def]
+  \\ rpt (irule ignore_bind_computes_minimal_domain \\ rw[]
+          ORELSE irule bind_computes_minimal_domain \\ rw[])
 QED
 
 Theorem handle_step_computes_minimal_domain[simp]:
@@ -382,7 +381,8 @@ Proof
          return_destination_CASE_rator, reraise_def,
          option_CASE_rator, assert_def, ignore_bind_def,
          consume_gas_def, set_current_context_def,
-         update_accounts_def]
+         update_accounts_def,
+         assert_not_static_def, get_static_def]
 QED
 
 Theorem inc_pc_or_jump_computes_minimal_domain[simp]:

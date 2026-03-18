@@ -555,7 +555,7 @@ Proof
   \\ tac
   \\ BasicProvers.TOP_CASE_TAC \\ simp[]
   \\ BasicProvers.TOP_CASE_TAC \\ simp[]
-  \\ tac
+  \\ simp[assert_not_static_def, get_static_def] \\ tac
   \\ rw[ignores_extra_domain_def, update_accounts_def, return_def]
   \\ gvs[domain_compatible_def, all_accounts_def, update_account_def,
          lookup_account_def, APPLY_UPDATE_THM, states_agree_modulo_accounts_def,
@@ -573,14 +573,13 @@ Proof
   \\ irule handle_ignores_extra_domain
   \\ rw[]
   \\ rw[handle_create_def, bind_def, ignore_bind_def, get_return_data_def,
-        get_output_to_def, get_current_context_def, fail_def, return_def]
-  \\ BasicProvers.TOP_CASE_TAC \\ rw[reraise_def]
-  >- (strip_tac \\ gs[])
-  \\ BasicProvers.TOP_CASE_TAC \\ rw[reraise_def]
+        get_output_to_def, get_current_context_def, fail_def, return_def,
+        assert_not_static_def, get_static_def]
+  \\ rpt (BasicProvers.TOP_CASE_TAC \\ rw[reraise_def])
   \\ rw[assert_def, bind_def, reraise_def, consume_gas_def,
         get_current_context_def, return_def, ignore_bind_def,
-        set_current_context_def, update_accounts_def]
-  >- (strip_tac \\ gs[])
+        set_current_context_def, update_accounts_def, fail_def]
+  \\ strip_tac \\ gs[]
 QED
 
 Theorem inc_pc_or_jump_ignores_extra_domain[simp]:
