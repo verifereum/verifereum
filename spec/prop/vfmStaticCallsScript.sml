@@ -22,9 +22,9 @@ Definition static_inv_def:
     s.rollback.tStorage = t0 ∧
     s.rollback.toDelete = d0 ∧
     s.contexts ≠ [] ∧
-    EVERY (λ(ctxt, rb). ctxt.msgParams.static ∧
-      (∀a. ctxt.msgParams.outputTo ≠ Code a)) s.contexts ∧
+    EVERY (λ(ctxt, rb). ctxt.msgParams.static) s.contexts ∧
     EVERY (λ(ctxt, rb).
+      (∀a. ctxt.msgParams.outputTo ≠ Code a) ∧
       ctxt.logs = [] ∧
       rb.accounts = a0 ∧ rb.tStorage = t0 ∧ rb.toDelete = d0)
       (FRONT s.contexts) ∧
@@ -505,18 +505,28 @@ Proof
   rw[handle_def]
 QED
 
-(* When outputTo ≠ Code for current context, handle_create just reraises *)
-Theorem handle_create_reraises:
-  (∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a) ∧
-  s.contexts ≠ [] ⇒
-  handle_create e s = reraise e s
+(* When static_inv holds, handle_create preserves it
+   (assert_not_static blocks code deposit in the (NONE, Code) case;
+    all other cases just reraise) *)
+Theorem handle_create_preserves_static_inv:
+  static_inv a0 t0 d0 l0 s ⇒
+  static_inv a0 t0 d0 l0 (SND (handle_create e s))
 Proof
-  rw[handle_create_def, bind_def, get_return_data_def,
-     get_output_to_def, get_current_context_def, ok_state_def,
-     return_def]
+  strip_tac
+  >> `s.contexts ≠ []` by fs[static_inv_def]
+  >> `(FST (HD s.contexts)).msgParams.static` by
+    (fs[static_inv_def] >> Cases_on `s.contexts` >> gvs[]
+     >> PairCases_on `h` >> gvs[])
+  >> simp[handle_create_def, bind_def, get_return_data_def,
+          get_output_to_def, get_current_context_def, ok_state_def,
+          return_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
-  >> Cases_on `h0.msgParams.outputTo` >> gvs[]
+  >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def]
+  >> Cases_on `e` >> gvs[reraise_def]
+  >> gvs[ignore_bind_def, bind_def, assert_not_static_def,
+         get_static_def, get_current_context_def, ok_state_def,
+         return_def, assert_def, fail_def]
 QED
 
 (* push_logs [] is cp — callee had no logs under invariant *)
@@ -661,20 +671,14 @@ Theorem handle_step_static_inv:
 Proof
   strip_tac
   >> `s.contexts <> []` by fs[static_inv_def]
-  >> `(!a. (FST (HD s.contexts)).msgParams.outputTo <> Code a)` by
-    (fs[static_inv_def] >> Cases_on `s.contexts` >> gvs[]
-     >> PairCases_on `h` >> gvs[])
   >> simp[handle_step_def]
   >> IF_CASES_TAC
   >- (simp[reraise_def] >> gvs[static_inv_def])
   >> simp[]
-  >> `(handle_create e : unit execution) s = reraise e s` by
-    metis_tac[INST_TYPE [alpha |-> ``:unit``] handle_create_reraises]
-  >> `SND (handle (handle_create e) handle_exception s) =
-      SND (handle_exception e s)` by
-    simp[reraise_def, handle_def]
-  >> simp[]
-  >> metis_tac[handle_exception_static_inv]
+  >> irule handle_snd_split >> conj_tac >> rpt strip_tac
+  >> `static_inv a0 t0 d0 l0 s'` by
+    metis_tac[handle_create_preserves_static_inv, pairTheory.SND]
+  >> metis_tac[handle_exception_static_inv, pairTheory.SND]
 QED
 
 (* Lifting lemma: if inner preserves static_inv, then handle inner handle_step
@@ -962,14 +966,11 @@ Proof
   >> once_rewrite_tac[run_tr_def] >> simp[]
 QED
 
-(* TODO: the outputTo ≠ Code precondition should be removable by moving
-   outputTo ≠ Code from ALL to FRONT in static_inv (vacuous for singleton) *)
 Theorem run_static_preserves:
   ∀es result final_state ctxt rb.
     run es = SOME (INR result, final_state) ∧
     es.contexts = [(ctxt, rb)] ∧
-    ctxt.msgParams.static ∧
-    (∀a. ctxt.msgParams.outputTo ≠ Code a) ⇒
+    ctxt.msgParams.static ⇒
     final_state.rollback.accounts = es.rollback.accounts ∧
     final_state.rollback.tStorage = es.rollback.tStorage ∧
     final_state.rollback.toDelete = es.rollback.toDelete ∧
@@ -1220,7 +1221,8 @@ Proof
   >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def, snc_def]
   >> gvs[ignore_bind_def, bind_def, assert_def, return_def, fail_def,
          consume_gas_def, get_current_context_def, ok_state_def,
-         set_current_context_def, vfmExecutionTheory.update_accounts_def]
+         set_current_context_def, vfmExecutionTheory.update_accounts_def,
+         assert_not_static_def, get_static_def]
   >> rpt (IF_CASES_TAC >> gvs[return_def, reraise_def, snc_def, fail_def])
 QED
 
@@ -1239,7 +1241,8 @@ Proof
   >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def, snc_def]
   >> gvs[ignore_bind_def, bind_def, assert_def, return_def, fail_def,
          consume_gas_def, get_current_context_def, ok_state_def,
-         set_current_context_def, vfmExecutionTheory.update_accounts_def]
+         set_current_context_def, vfmExecutionTheory.update_accounts_def,
+         assert_not_static_def, get_static_def]
   >> rpt (IF_CASES_TAC >> gvs[return_def, reraise_def, snc_def, fail_def])
   >> rpt (BasicProvers.FULL_CASE_TAC
           >> gvs[return_def, reraise_def, snc_def, fail_def])
