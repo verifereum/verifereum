@@ -170,6 +170,7 @@ Datatype:
   | StackOverflow
   | StackUnderflow
   | InvalidJumpDest
+  | InvalidOpcode
   | WriteInStaticContext
   | OutOfBoundsRead
   | AddressCollision
@@ -1036,15 +1037,6 @@ Definition step_return_def:
   od
 End
 
-Definition step_invalid_def:
-  step_invalid = do
-    gasLeft <- get_gas_left;
-    consume_gas gasLeft;
-    set_return_data [];
-    revert
-  od
-End
-
 Definition step_self_destruct_def:
   step_self_destruct = do
     args <- pop_stack 1;
@@ -1651,7 +1643,7 @@ Definition step_inst_def:
   ∧ step_inst Create2 = step_create T
   ∧ step_inst StaticCall = step_call StaticCall
   ∧ step_inst Revert = step_return F
-  ∧ step_inst Invalid = step_invalid
+  ∧ step_inst Invalid = fail InvalidOpcode
   ∧ step_inst SelfDestruct = step_self_destruct
 End
 
