@@ -1250,12 +1250,6 @@ Proof
   rw[step_return_def] \\ tac
 QED
 
-Theorem step_invalid_ignores_extra_domain[simp]:
-  ignores_extra_domain step_invalid
-Proof
-  rw[step_invalid_def] \\ tac
-QED
-
 Theorem get_current_code_ignores_extra_domain[simp]:
   ignores_extra_domain get_current_code
 Proof
@@ -3151,15 +3145,6 @@ Proof
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
-QED
-
-Theorem preserves_domain_has_callee_step_invalid[simp]:
-  preserves_domain_has_callee (K T) step_invalid
-Proof
-  simp[step_invalid_def]
-  \\ irule preserves_domain_has_callee_bind \\ rw[]
-  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
 QED
 
