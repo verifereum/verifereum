@@ -817,14 +817,6 @@ Proof
        (irule preserves_wf_accounts_ignore_bind \\ rw[]))
 QED
 
-Theorem preserves_wf_accounts_step_invalid[simp]:
-  preserves_wf_accounts step_invalid
-Proof
-  rw[step_invalid_def] >>
-  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
-       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
-QED
-
 Theorem preserves_wf_accounts_add_to_delete[simp]:
   preserves_wf_accounts (add_to_delete x)
 Proof
@@ -1894,12 +1886,6 @@ Theorem limits_num_contexts_step_return[simp]:
   limits_num_contexts n n (step_return x)
 Proof
   rw[step_return_def] >> tac
-QED
-
-Theorem limits_num_contexts_step_invalid[simp]:
-  limits_num_contexts n n step_invalid
-Proof
-  rw[step_invalid_def] >> tac
 QED
 
 Theorem limits_num_contexts_add_to_delete[simp]:

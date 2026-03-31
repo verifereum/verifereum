@@ -727,7 +727,7 @@ Proof
 QED
 
 Theorem decreases_gas_fail[simp]:
-  decreases_gas F (fail e)
+  decreases_gas b (fail e)
 Proof
   rw[decreases_gas_def, fail_def]
   \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[]
@@ -1799,18 +1799,6 @@ Proof
   \\ irule_at Any decreases_gas_read_memory \\ rw []
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_set_return_data \\ rw [Abbr`y`]
-QED
-
-Theorem decreases_gas_step_invalid[simp]:
-  decreases_gas T step_invalid
-Proof
-  rw [step_invalid_def]
-  \\ irule_at Any decreases_gas_bind_right
-  \\ irule_at Any decreases_gas_get_gas_left \\ rw []
-  \\ irule_at Any decreases_gas_ignore_bind_right
-  \\ irule_at Any decreases_gas_consume_gas \\ rw []
-  \\ irule_at Any decreases_gas_ignore_bind_right
-  \\ irule_at Any decreases_gas_set_return_data \\ rw []
 QED
 
 Theorem decreases_gas_add_to_delete[simp]:

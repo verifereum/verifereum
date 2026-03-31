@@ -809,7 +809,6 @@ val th = tt step_dup_def;
 val th = tt step_swap_def;
 val th = tt step_log_def;
 val th = tt step_return_def;
-val th = tf step_invalid_def;
 val th = tt step_self_destruct_def;
 
 val () = “abort_unuse n s” |>

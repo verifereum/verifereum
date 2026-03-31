@@ -1026,12 +1026,6 @@ Proof
   rw[step_return_def] \\ tac
 QED
 
-Theorem step_invalid_computes_minimal_domain[simp]:
-  computes_minimal_domain step_invalid
-Proof
-  rw[step_invalid_def] \\ tac
-QED
-
 Theorem add_to_delete_computes_minimal_domain[simp]:
   computes_minimal_domain (add_to_delete x)
 Proof

@@ -483,7 +483,7 @@ Proof
     step_ext_code_size_def, step_ext_code_hash_def,
     step_block_hash_def, step_blob_hash_def, step_self_balance_def,
     step_mstore_def, step_jump_def, step_jumpi_def,
-    step_push_def, step_dup_def, step_pop_def, step_invalid_def])
+    step_push_def, step_dup_def, step_pop_def])
 QED
 
 (* When f returns INR, projections of handle f h s equal projections of h e s' *)
