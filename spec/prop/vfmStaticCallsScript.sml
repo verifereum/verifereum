@@ -2,7 +2,6 @@ Theory vfmStaticCalls
 Ancestors
   vfmExecution vfmDecreasesGas vfmExecutionProp
 
-
 (*
   Proof that static calls do not modify world state.
 
@@ -1216,12 +1215,12 @@ Proof
          get_current_context_def, ok_state_def, return_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
-  >> Cases_on `e` >> gvs[reraise_def, snc_def]
   >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def, snc_def]
-  >> gvs[ignore_bind_def, bind_def, assert_def, return_def, fail_def,
-         consume_gas_def, get_current_context_def, ok_state_def,
-         set_current_context_def, vfmExecutionTheory.update_accounts_def]
-  >> rpt (IF_CASES_TAC >> gvs[return_def, reraise_def, snc_def, fail_def])
+  >> Cases_on `e` >> gvs[reraise_def, snc_def]
+  >> gvs[ignore_bind_def, bind_def, CaseEq"prod", CaseEq"sum",
+         reraise_def, assert_def, consume_gas_def, return_def, fail_def,
+         set_current_context_def, CaseEq"bool",
+         update_accounts_def, get_current_context_def]
 QED
 
 (* Pair-aware version: avoids polymorphic type mismatch on SND *)
@@ -1632,8 +1631,8 @@ Theorem step_create_sne[local]:
   snc (SND (step_create two s)) ∧
   (SND (step_create two s)).contexts ≠ []
 Proof
-  strip_tac >> simp[step_create_def]
-  >> sne_step
+  strip_tac >> rewrite_tac[step_create_def]
+  >> CHANGED_TAC sne_step
   >> rpt conj_tac >> solve_term
 QED
 
@@ -1666,7 +1665,7 @@ Theorem step_call_sne[local]:
   snc (SND (step_call op s)) ∧
   (SND (step_call op s)).contexts ≠ []
 Proof
-  strip_tac >> simp[step_call_def]
+  strip_tac >> rewrite_tac[step_call_def]
   \\ sne_step
   \\ rpt conj_tac >> TRY solve_term
   \\ (irule (cj 1 step_call_inner_sne) ORELSE irule (cj 2 step_call_inner_sne))
@@ -1682,12 +1681,13 @@ Proof
   (* cp ops *)
   >> TRY (irule cp_sne >> simp[cp_step_inst_non_call] >> NO_TAC)
   (* ctx_pres guarded ops *)
-  >> TRY (simp[step_inst_def] >> irule ctx_pres_sne
+  >> TRY (rewrite_tac[step_inst_def] >> irule ctx_pres_sne
           >> simp[ctx_pres_step_inst_guarded] >> NO_TAC)
   (* Create/Create2 *)
-  >> TRY (simp[step_inst_def] >> irule step_create_sne >> simp[] >> NO_TAC)
+  >> TRY (rewrite_tac[step_inst_def] >> irule step_create_sne >>
+          simp[] >> NO_TAC)
   (* Call ops *)
-  >> simp[step_inst_def] >> irule step_call_sne >> simp[]
+  >> rewrite_tac[step_inst_def] >> irule step_call_sne >> simp[]
 QED
 
 (* handle_step preserves snc *)

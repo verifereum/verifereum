@@ -1044,12 +1044,6 @@ Proof
   rw[step_return_def] \\ preserves_nonempty_tac
 QED
 
-Theorem step_invalid_preserves_nonempty_contexts[simp]:
-  s.contexts ≠ [] ⇒ (SND (step_invalid s)).contexts ≠ []
-Proof
-  rw[step_invalid_def] \\ preserves_nonempty_tac
-QED
-
 Theorem step_self_destruct_preserves_nonempty_contexts[simp]:
   s.contexts ≠ [] ⇒ (SND (step_self_destruct s)).contexts ≠ []
 Proof
