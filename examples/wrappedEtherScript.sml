@@ -932,9 +932,21 @@ Theorem div_trick:
            0x100000000000000000000000000000000000000000000000000000000w =
   word_of_bytes F 0w (x1::x2::x3::x4::[])
 Proof
-  cheat
+  rw[with_zero_def] >>
+  rw[vfmTypesTheory.take_pad_0_def] >>
+  rw[vfmTypesTheory.PAD_RIGHT_CONS] >>
+  qmatch_goalsub_abbrev_tac`_ // n2w nn` >>
+  `nn = 2 ** (256 - 32)` by simp[Abbr`nn`] >>
+  qunabbrev_tac`nn` \\ pop_assum SUBST_ALL_TAC >>
+  qmatch_goalsub_abbrev_tac`m // n2w (2 ** n)` >>
+  qspecl_then[`m`,`n`]mp_tac (GSYM wordsTheory.WORD_DIV_LSR) >>
+  impl_tac >- simp[Abbr`n`] >>
+  disch_then SUBST_ALL_TAC >>
+  unabbrev_all_tac >>
+  cheat (* is this right? *)
 QED
 
+(*
 val (th,path,dest) = el 1 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
 val th1 = process_path (th,path,dest)
 val name_0_175 = th1
@@ -1014,8 +1026,6 @@ val (th,path,dest) = el 3 (compose_from 1245 SPEC_EVM_MODEL_empty xs [])
 val th1 = process_path (th,path,dest)
 val name_1245_1395 = th1
   |> SRULE [evm_line_T];
-
-(*
 
 length (compose_from 0 SPEC_EVM_MODEL_empty xs [])
 
