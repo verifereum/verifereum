@@ -1,7 +1,7 @@
 Theory vfmDomainCollection
 Ancestors
   pair pred_set finite_set
-  vfmContext vfmExecution vfmDomainSeparation
+  vfmTypes vfmContext vfmExecution vfmDomainSeparation
 Libs
   BasicProvers
 
@@ -184,14 +184,6 @@ Proof
   rw[reraise_def, computes_minimal_domain_def]
   \\ rw[execution_state_component_equality]
 QED
-
-val return_destination_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
-
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
 
 Theorem get_gas_left_computes_minimal_domain[simp]:
   computes_minimal_domain get_gas_left

@@ -8,6 +8,18 @@ Libs
 
 val _ = tight_equality();
 
+Theorem option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+Theorem prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
+Theorem sum_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
+
 val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:160”] |> SRULE[compute_divides]);
 val () = cv_trans (word_of_bytes_be_eq_num_of_bytes |> INST_TYPE [alpha |-> “:160”] |> SRULE[compute_divides]);
 val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:256”] |> SRULE[compute_divides]);

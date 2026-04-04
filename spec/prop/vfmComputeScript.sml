@@ -4,7 +4,7 @@ Ancestors
   finite_set sptree words While
   cv cv_type cv_std
   blake2f
-  vfmState vfmContext vfmExecution vfmDecreasesGas
+  vfmTypes vfmState vfmContext vfmExecution vfmDecreasesGas
 Libs
   cv_transLib cv_typeLib
   blastLib dep_rewrite
@@ -444,18 +444,6 @@ Proof
   rw[set_current_context_pre_def]
   \\ Cases_on`s` \\ rw[] \\ gs[]
 QED
-
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val return_destination_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
 
 val () = “set_return_data r s” |>
   SIMP_CONV std_ss [set_return_data_def, bind_def, LET_RATOR]
