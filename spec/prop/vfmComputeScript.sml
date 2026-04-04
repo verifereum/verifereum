@@ -337,30 +337,6 @@ Proof
   \\ blastLib.BBLAST_TAC
 QED
 
-(* TODO: does this already exist? *)
-Definition domain_list_def:
-  domain_list LN = [] ∧
-  domain_list (LS _) = [0n] ∧
-  domain_list (BN t1 t2) =
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2) ∧
-  domain_list (BS t1 v t2) =
-     0::
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2)
-End
-
-val () = cv_auto_trans domain_list_def;
-
-val cv_domain_list_thm = theorem"cv_domain_list_thm";
-
-Theorem set_domain_list:
-  set (domain_list t) = domain t
-Proof
-  Induct_on`t` \\ rw[domain_list_def, LIST_TO_SET_MAP]
-  \\ rw[pred_setTheory.EXTENSION] \\ metis_tac[]
-QED
-
 Definition MAP_word_join_num_def:
   MAP_word_join_num x ls =
   MAP (w2n : (256 + 160) word -> num o flip word_join x o n2w) ls
