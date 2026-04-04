@@ -158,3 +158,55 @@ Proof
   >- EVAL_TAC
   \\ gs[PAD_RIGHT_CONS, PRE_SUB1]
 QED
+
+Theorem EXISTS_NUM_ADD:
+  ∀P. (∃n:num. P n) ⇔ (∃a b. P (a + b))
+Proof
+  rw[EQ_IMP_THM]
+  \\ TRY(qexistsl_tac[`0`,`n`] \\ rw[])
+  \\ goal_assum drule
+QED
+
+Theorem list_size_sum_map_length:
+  list_size f ls = SUM (MAP f ls) + LENGTH ls
+Proof
+  Induct_on`ls` \\ rw[]
+QED
+
+Theorem ALL_DISTINCT_MAP_DROP_LESS:
+  !ls.
+    n <= m /\
+    ALL_DISTINCT (MAP (DROP m) ls) ==>
+    ALL_DISTINCT (MAP (DROP n) ls)
+Proof
+  Induct \\ rw[] \\ fs[MEM_MAP, PULL_EXISTS]
+  \\ rw[] \\ first_x_assum irule
+  \\ full_simp_tac(srw_ss() ++ numSimps.ARITH_ss)
+     [LIST_EQ_REWRITE, EL_DROP, LENGTH_DROP, LESS_EQ_EXISTS]
+QED
+
+Theorem ALL_DISTINCT_DROP_LENGTH_lcp:
+  ∀ls. ALL_DISTINCT ls ⇒
+       ALL_DISTINCT (MAP (DROP (LENGTH $ lcp ls)) ls)
+Proof
+  Induct \\ reverse(rw[])
+  \\ gs[lcp_CONS]
+  \\ rw[NULL_EQ] \\ gvs[MEM_MAP]
+  \\ qmatch_goalsub_abbrev_tac`lcp2 x y`
+  \\ `lcp2 x y <<= x ∧ lcp2 x y <<= y`
+       by simp[lcp2_prefix]
+  >- (
+    irule ALL_DISTINCT_MAP_DROP_LESS
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ simp[IS_PREFIX_LENGTH] )
+  \\ qx_gen_tac`z` \\ strip_tac
+  \\ strip_tac
+  \\ drule $ cj 1 lcp_thm
+  \\ simp[] \\ strip_tac
+  \\ `x = z` suffices_by (strip_tac \\ gs[])
+  \\ qmatch_asmsub_abbrev_tac`LENGTH lcp'`
+  \\ gvs[IS_PREFIX_APPEND, PULL_EXISTS, DROP_APPEND]
+  \\ qmatch_goalsub_abbrev_tac`DROP n`
+  \\ `n = 0` suffices_by simp[]
+  \\ simp[Abbr`n`]
+QED
