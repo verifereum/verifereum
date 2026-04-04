@@ -680,11 +680,6 @@ val () = transfer_value_def |>
   SIMP_RULE std_ss [combinTheory.C_DEF] |>
   cv_auto_trans;
 
-val () = “step_stop s” |>
-  SIMP_CONV std_ss [
-    step_stop_def, bind_def, ignore_bind_def
-  ] |> cv_auto_trans;
-
 val () = “access_slot x s” |>
   SIMP_CONV std_ss [
     access_slot_def, domain_check_def, bind_def, ignore_bind_def,

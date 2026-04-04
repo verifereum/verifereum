@@ -643,10 +643,6 @@ Definition increment_nonce_def:
     update_account address (account with nonce updated_by SUC) accounts
 End
 
-Definition step_stop_def:
-  step_stop = do set_return_data []; finish od
-End
-
 Definition step_binop_def:
   step_binop op f = do
     args <- pop_stack 2;
