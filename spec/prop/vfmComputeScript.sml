@@ -4,7 +4,7 @@ Ancestors
   finite_set sptree words While
   cv cv_type cv_std
   blake2f
-  vfmState vfmContext vfmExecution vfmDecreasesGas
+  vfmTypes vfmState vfmContext vfmExecution vfmDecreasesGas
 Libs
   cv_transLib cv_typeLib
   blastLib dep_rewrite
@@ -337,30 +337,6 @@ Proof
   \\ blastLib.BBLAST_TAC
 QED
 
-(* TODO: does this already exist? *)
-Definition domain_list_def:
-  domain_list LN = [] ∧
-  domain_list (LS _) = [0n] ∧
-  domain_list (BN t1 t2) =
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2) ∧
-  domain_list (BS t1 v t2) =
-     0::
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2)
-End
-
-val () = cv_auto_trans domain_list_def;
-
-val cv_domain_list_thm = theorem"cv_domain_list_thm";
-
-Theorem set_domain_list:
-  set (domain_list t) = domain t
-Proof
-  Induct_on`t` \\ rw[domain_list_def, LIST_TO_SET_MAP]
-  \\ rw[pred_setTheory.EXTENSION] \\ metis_tac[]
-QED
-
 Definition MAP_word_join_num_def:
   MAP_word_join_num x ls =
   MAP (w2n : (256 + 160) word -> num o flip word_join x o n2w) ls
@@ -444,18 +420,6 @@ Proof
   rw[set_current_context_pre_def]
   \\ Cases_on`s` \\ rw[] \\ gs[]
 QED
-
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val return_destination_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
 
 val () = “set_return_data r s” |>
   SIMP_CONV std_ss [set_return_data_def, bind_def, LET_RATOR]
@@ -679,11 +643,6 @@ val () = “assert_not_static s” |>
 val () = transfer_value_def |>
   SIMP_RULE std_ss [combinTheory.C_DEF] |>
   cv_auto_trans;
-
-val () = “step_stop s” |>
-  SIMP_CONV std_ss [
-    step_stop_def, bind_def, ignore_bind_def
-  ] |> cv_auto_trans;
 
 val () = “access_slot x s” |>
   SIMP_CONV std_ss [

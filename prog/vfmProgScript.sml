@@ -1,7 +1,7 @@
 Theory vfmProg
 Ancestors
   vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas vfmState
-  prog words set_sep pred_set pair list arithmetic option finite_map combin
+  vfmTypes prog words set_sep pred_set pair list arithmetic option finite_map combin
 Libs
   wordsLib intLib
 
@@ -955,18 +955,6 @@ QED
  *-------------------------------------------------------------------------------*)
 
 (* TODO: move? *)
-
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val sum_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
 
 Theorem access_address_contexts_unchanged:
   access_address a s = (r,t) ⇒

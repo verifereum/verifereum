@@ -68,14 +68,3 @@ Definition max_total_cost_def:
 End
 
 val () = cv_auto_trans max_total_cost_def;
-
-Definition rlp_event_def:
-  rlp_event ev = RLPL [
-    RLPB $ word_to_bytes ev.logger T;
-    RLPL $ MAP (λt. RLPB (word_to_bytes ((w2w t):word32) T))
-           ev.topics;
-    RLPB ev.data
-  ]
-End
-
-val () = cv_auto_trans rlp_event_def;

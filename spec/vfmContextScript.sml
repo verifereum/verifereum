@@ -46,6 +46,10 @@ Datatype:
   | Code address
 End
 
+Theorem return_destination_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vfmContext",Tyop="return_destination"}));
+
 Definition empty_return_destination_def:
   empty_return_destination = Memory <| offset := 0; size := 0 |>
 End

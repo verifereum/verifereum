@@ -1,12 +1,46 @@
 Theory vfmTypes
 Ancestors
-  arithmetic byte cv_std divides list rich_list combin numposrep words
+  arithmetic byte cv_std divides list rich_list sptree combin numposrep words
   keccak
 Libs
   blastLib
   cv_transLib
 
 val _ = tight_equality();
+
+Theorem option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+Theorem prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
+Theorem sum_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
+
+(* TODO: move to sptree? like MAP FST (toAList t) but ignores values *)
+Definition domain_list_def:
+  domain_list LN = [] ∧
+  domain_list (LS _) = [0n] ∧
+  domain_list (BN t1 t2) =
+     MAP (λn. 2 * n + 2) (domain_list t1) ++
+     MAP (λn. 2 * n + 1) (domain_list t2) ∧
+  domain_list (BS t1 v t2) =
+     0::
+     MAP (λn. 2 * n + 2) (domain_list t1) ++
+     MAP (λn. 2 * n + 1) (domain_list t2)
+End
+
+val () = cv_auto_trans domain_list_def;
+
+Theorem set_domain_list:
+  set (domain_list t) = domain t
+Proof
+  Induct_on`t` \\ rw[domain_list_def, LIST_TO_SET_MAP]
+  \\ rw[pred_setTheory.EXTENSION] \\ metis_tac[]
+QED
 
 val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:160”] |> SRULE[compute_divides]);
 val () = cv_trans (word_of_bytes_be_eq_num_of_bytes |> INST_TYPE [alpha |-> “:160”] |> SRULE[compute_divides]);
@@ -123,4 +157,56 @@ Proof
   \\ rw[Once TAKE_def]
   >- EVAL_TAC
   \\ gs[PAD_RIGHT_CONS, PRE_SUB1]
+QED
+
+Theorem EXISTS_NUM_ADD:
+  ∀P. (∃n:num. P n) ⇔ (∃a b. P (a + b))
+Proof
+  rw[EQ_IMP_THM]
+  \\ TRY(qexistsl_tac[`0`,`n`] \\ rw[])
+  \\ goal_assum drule
+QED
+
+Theorem list_size_sum_map_length:
+  list_size f ls = SUM (MAP f ls) + LENGTH ls
+Proof
+  Induct_on`ls` \\ rw[]
+QED
+
+Theorem ALL_DISTINCT_MAP_DROP_LESS:
+  !ls.
+    n <= m /\
+    ALL_DISTINCT (MAP (DROP m) ls) ==>
+    ALL_DISTINCT (MAP (DROP n) ls)
+Proof
+  Induct \\ rw[] \\ fs[MEM_MAP, PULL_EXISTS]
+  \\ rw[] \\ first_x_assum irule
+  \\ full_simp_tac(srw_ss() ++ numSimps.ARITH_ss)
+     [LIST_EQ_REWRITE, EL_DROP, LENGTH_DROP, LESS_EQ_EXISTS]
+QED
+
+Theorem ALL_DISTINCT_DROP_LENGTH_lcp:
+  ∀ls. ALL_DISTINCT ls ⇒
+       ALL_DISTINCT (MAP (DROP (LENGTH $ lcp ls)) ls)
+Proof
+  Induct \\ reverse(rw[])
+  \\ gs[lcp_CONS]
+  \\ rw[NULL_EQ] \\ gvs[MEM_MAP]
+  \\ qmatch_goalsub_abbrev_tac`lcp2 x y`
+  \\ `lcp2 x y <<= x ∧ lcp2 x y <<= y`
+       by simp[lcp2_prefix]
+  >- (
+    irule ALL_DISTINCT_MAP_DROP_LESS
+    \\ goal_assum(first_assum o mp_then Any mp_tac)
+    \\ simp[IS_PREFIX_LENGTH] )
+  \\ qx_gen_tac`z` \\ strip_tac
+  \\ strip_tac
+  \\ drule $ cj 1 lcp_thm
+  \\ simp[] \\ strip_tac
+  \\ `x = z` suffices_by (strip_tac \\ gs[])
+  \\ qmatch_asmsub_abbrev_tac`LENGTH lcp'`
+  \\ gvs[IS_PREFIX_APPEND, PULL_EXISTS, DROP_APPEND]
+  \\ qmatch_goalsub_abbrev_tac`DROP n`
+  \\ `n = 0` suffices_by simp[]
+  \\ simp[Abbr`n`]
 QED
