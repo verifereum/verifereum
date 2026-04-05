@@ -176,6 +176,67 @@ Proof
   \\ CASE_TAC \\ gvs[]
 QED
 
+Definition verify_tx_signature_def:
+  verify_tx_signature (prefix_byte:word8) txLs yParityRlp rRlp sRlp =
+  if ¬is_RLPB yParityRlp then NONE else
+  let yParity = num_of_be_bytes $ dest_RLPB yParityRlp in
+  if ¬is_RLPB rRlp then NONE else
+  let r = num_of_be_bytes $ dest_RLPB rRlp in
+  if ¬is_RLPB sRlp then NONE else
+  let s = num_of_be_bytes $ dest_RLPB sRlp in
+  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
+    prefix_byte :: rlp_encode (RLPL txLs) in
+  ecrecover hash (yParity + 27) r s
+End
+
+val verify_tx_signature_pre_def = cv_auto_trans
+  $ REWRITE_RULE[GSYM word_of_bytes_be_def] verify_tx_signature_def;
+
+Definition decode_eip1559_core_def:
+  decode_eip1559_core ls =
+  if LENGTH ls < 9 then NONE else
+  let nonceRlp = EL 1 ls in
+  if ¬is_RLPB nonceRlp then NONE else
+  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
+  let maxPrioRlp = EL 2 ls in
+  if ¬is_RLPB maxPrioRlp then NONE else
+  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
+  let maxFeeRlp = EL 3 ls in
+  if ¬is_RLPB maxFeeRlp then NONE else
+  let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
+  let gasRlp = EL 4 ls in
+  if ¬is_RLPB gasRlp then NONE else
+  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
+  let toRlp = EL 5 ls in
+  if ¬is_RLPB toRlp then NONE else
+  let to = dest_RLPB toRlp in
+  let to = if LENGTH to = 0 then NONE
+           else SOME $ word_of_bytes T (0w:address) to in
+  let valueRlp = EL 6 ls in
+  if ¬is_RLPB valueRlp then NONE else
+  let value = num_of_be_bytes $ dest_RLPB valueRlp in
+  let dataRlp = EL 7 ls in
+  if ¬is_RLPB dataRlp then NONE else
+  let data = dest_RLPB dataRlp in
+  let accessListRlp = EL 8 ls in
+  if ¬is_RLPL accessListRlp then NONE else
+  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
+  of NONE => NONE |
+  SOME accessList =>
+  SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList)
+End
+
+val decode_eip1559_core_pre_def = decode_eip1559_core_def
+  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
+            GSYM word_of_bytes_be_def]
+  |> cv_auto_trans_pre "decode_eip1559_core_pre";
+
+Theorem decode_eip1559_core_pre[cv_pre]:
+  decode_eip1559_core_pre ls
+Proof
+  rw[decode_eip1559_core_pre_def]
+QED
+
 Definition transaction1_from_rlp_def:
   transaction1_from_rlp rlp =
   if ¬is_RLPL rlp then NONE else
@@ -207,21 +268,11 @@ Definition transaction1_from_rlp_def:
   case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
   of NONE => NONE |
   SOME accessList =>
-  let yParity = EL 8 ls in
-  if ¬is_RLPB yParity then NONE else
-  let yParity = num_of_be_bytes $ dest_RLPB yParity in
-  let r = EL 9 ls in
-  if ¬is_RLPB r then NONE else
-  let r = num_of_be_bytes $ dest_RLPB r in
-  let s = EL 10 ls in
-  if ¬is_RLPB s then NONE else
-  let s = num_of_be_bytes $ dest_RLPB s in
   let txLs = [
     rlp_number 1; nonceRlp; gasPriceRlp; gasRlp; toRlp;
     valueRlp; dataRlp; accessListRlp ] in
-  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
-    1w :: rlp_encode (RLPL txLs) in
-  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+  case verify_tx_signature 1w txLs (EL 8 ls) (EL 9 ls) (EL 10 ls)
+  of NONE => NONE |
   SOME addr =>
   SOME <|
       from := addr
@@ -255,50 +306,13 @@ Definition transaction2_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 12 then NONE else
-  (* chain_id: U64 *)
-  let nonceRlp = EL 1 ls in
-  if ¬is_RLPB nonceRlp then NONE else
-  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
-  let maxPrioRlp = EL 2 ls in
-  if ¬is_RLPB maxPrioRlp then NONE else
-  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
-  let maxFeeRlp = EL 3 ls in
-  if ¬is_RLPB maxFeeRlp then NONE else
-  let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
-  let gasRlp = EL 4 ls in
-  if ¬is_RLPB gasRlp then NONE else
-  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
-  let toRlp = EL 5 ls in
-  if ¬is_RLPB toRlp then NONE else
-  let to = dest_RLPB toRlp in
-  let to = if LENGTH to = 0 then NONE
-           else SOME $ word_of_bytes T 0w to in
-  let valueRlp = EL 6 ls in
-  if ¬is_RLPB valueRlp then NONE else
-  let value = num_of_be_bytes $ dest_RLPB valueRlp in
-  let dataRlp = EL 7 ls in
-  if ¬is_RLPB dataRlp then NONE else
-  let data = dest_RLPB dataRlp in
-  let accessListRlp = EL 8 ls in
-  if ¬is_RLPL accessListRlp then NONE else
-  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
-  of NONE => NONE |
-  SOME accessList =>
-  let yParity = EL 9 ls in
-  if ¬is_RLPB yParity then NONE else
-  let yParity = num_of_be_bytes $ dest_RLPB yParity in
-  let r = EL 10 ls in
-  if ¬is_RLPB r then NONE else
-  let r = num_of_be_bytes $ dest_RLPB r in
-  let s = EL 11 ls in
-  if ¬is_RLPB s then NONE else
-  let s = num_of_be_bytes $ dest_RLPB s in
+  case decode_eip1559_core ls of NONE => NONE |
+  SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   let txLs = [
-    rlp_number 1; nonceRlp; maxPrioRlp; maxFeeRlp; gasRlp;
-    toRlp; valueRlp; dataRlp; accessListRlp ] in
-  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
-    2w :: rlp_encode (RLPL txLs) in
-  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+    rlp_number 1; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
+    EL 5 ls; EL 6 ls; EL 7 ls; EL 8 ls ] in
+  case verify_tx_signature 2w txLs (EL 9 ls) (EL 10 ls) (EL 11 ls)
+  of NONE => NONE |
   SOME addr =>
   SOME <|
       from := addr
@@ -316,10 +330,9 @@ Definition transaction2_from_rlp_def:
   |>
 End
 
-val transaction2_from_rlp_pre_def = transaction2_from_rlp_def
-  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
-            GSYM word_of_bytes_be_def]
-  |> cv_auto_trans_pre "transaction2_from_rlp_pre";
+val transaction2_from_rlp_pre_def =
+  cv_auto_trans_pre "transaction2_from_rlp_pre"
+  transaction2_from_rlp_def;
 
 Theorem transaction2_from_rlp_pre[cv_pre]:
   transaction2_from_rlp_pre bf x
@@ -332,35 +345,8 @@ Definition transaction3_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 14 then NONE else
-  (* chain_id: U64 *)
-  let nonceRlp = EL 1 ls in
-  if ¬is_RLPB nonceRlp then NONE else
-  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
-  let maxPrioRlp = EL 2 ls in
-  if ¬is_RLPB maxPrioRlp then NONE else
-  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
-  let maxFeeRlp = EL 3 ls in
-  if ¬is_RLPB maxFeeRlp then NONE else
-  let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
-  let gasRlp = EL 4 ls in
-  if ¬is_RLPB gasRlp then NONE else
-  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
-  let toRlp = EL 5 ls in
-  if ¬is_RLPB toRlp then NONE else
-  let to = dest_RLPB toRlp in
-  let to = if LENGTH to = 0 then NONE
-           else SOME $ word_of_bytes T 0w to in
-  let valueRlp = EL 6 ls in
-  if ¬is_RLPB valueRlp then NONE else
-  let value = num_of_be_bytes $ dest_RLPB valueRlp in
-  let dataRlp = EL 7 ls in
-  if ¬is_RLPB dataRlp then NONE else
-  let data = dest_RLPB dataRlp in
-  let accessListRlp = EL 8 ls in
-  if ¬is_RLPL accessListRlp then NONE else
-  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
-  of NONE => NONE |
-  SOME accessList =>
+  case decode_eip1559_core ls of NONE => NONE |
+  SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   let maxBlobFeeRlp = EL 9 ls in
   if ¬is_RLPB maxBlobFeeRlp then NONE else
   let maxBlobFee = num_of_be_bytes $ dest_RLPB maxBlobFeeRlp in
@@ -370,21 +356,12 @@ Definition transaction3_from_rlp_def:
   if IS_NONE to /\ ~(NULL blobHashes) then NONE else
   if ¬(EVERY is_RLPB blobHashes) then NONE else
   let blobHashes = MAP (word_of_bytes T 0w o dest_RLPB) blobHashes in
-  let yParity = EL 11 ls in
-  if ¬is_RLPB yParity then NONE else
-  let yParity = num_of_be_bytes $ dest_RLPB yParity in
-  let r = EL 12 ls in
-  if ¬is_RLPB r then NONE else
-  let r = num_of_be_bytes $ dest_RLPB r in
-  let s = EL 13 ls in
-  if ¬is_RLPB s then NONE else
-  let s = num_of_be_bytes $ dest_RLPB s in
   let txLs = [
-    rlp_number 1; nonceRlp; maxPrioRlp; maxFeeRlp; gasRlp;
-    toRlp; valueRlp; dataRlp; accessListRlp; maxBlobFeeRlp; blobHashesRlp ] in
-  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
-    3w :: rlp_encode (RLPL txLs) in
-  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+    rlp_number 1; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
+    EL 5 ls; EL 6 ls; EL 7 ls; EL 8 ls;
+    maxBlobFeeRlp; blobHashesRlp ] in
+  case verify_tx_signature 3w txLs (EL 11 ls) (EL 12 ls) (EL 13 ls)
+  of NONE => NONE |
   SOME addr =>
   SOME <|
       from := addr
@@ -403,8 +380,7 @@ Definition transaction3_from_rlp_def:
 End
 
 val transaction3_from_rlp_pre_def = transaction3_from_rlp_def
-  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
-            GSYM word_of_bytes_be_def]
+  |> SRULE [GSYM word_of_bytes_be_def]
   |> cv_auto_trans_pre "transaction3_from_rlp_pre";
 
 Theorem transaction3_from_rlp_pre[cv_pre]:
@@ -477,36 +453,10 @@ Definition transaction4_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 13 then NONE else
-  (* chain_id: U64 *)
-  let nonceRlp = EL 1 ls in
-  if ¬is_RLPB nonceRlp then NONE else
-  let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
-  let maxPrioRlp = EL 2 ls in
-  if ¬is_RLPB maxPrioRlp then NONE else
-  let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
-  let maxFeeRlp = EL 3 ls in
-  if ¬is_RLPB maxFeeRlp then NONE else
-  let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
-  let gasRlp = EL 4 ls in
-  if ¬is_RLPB gasRlp then NONE else
-  let gas = num_of_be_bytes $ dest_RLPB gasRlp in
-  let toRlp = EL 5 ls in
-  if ¬is_RLPB toRlp then NONE else
-  let to = dest_RLPB toRlp in
+  case decode_eip1559_core ls of NONE => NONE |
+  SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   (* destination cannot be null in type 4 *)
-  if LENGTH to = 0 then NONE else
-  let to = SOME $ word_of_bytes T 0w to in
-  let valueRlp = EL 6 ls in
-  if ¬is_RLPB valueRlp then NONE else
-  let value = num_of_be_bytes $ dest_RLPB valueRlp in
-  let dataRlp = EL 7 ls in
-  if ¬is_RLPB dataRlp then NONE else
-  let data = dest_RLPB dataRlp in
-  let accessListRlp = EL 8 ls in
-  if ¬is_RLPL accessListRlp then NONE else
-  case OPT_MMAP access_list_entry_from_rlp (dest_RLPL accessListRlp)
-  of NONE => NONE |
-  SOME accessList =>
+  if IS_NONE to then NONE else
   let authListRlp = EL 9 ls in
   if ¬is_RLPL authListRlp then NONE else
   (* authorization_list cannot be empty *)
@@ -514,21 +464,11 @@ Definition transaction4_from_rlp_def:
   case OPT_MMAP authorization_from_rlp (dest_RLPL authListRlp)
   of NONE => NONE |
   SOME authList =>
-  let yParity = EL 10 ls in
-  if ¬is_RLPB yParity then NONE else
-  let yParity = num_of_be_bytes $ dest_RLPB yParity in
-  let r = EL 11 ls in
-  if ¬is_RLPB r then NONE else
-  let r = num_of_be_bytes $ dest_RLPB r in
-  let s = EL 12 ls in
-  if ¬is_RLPB s then NONE else
-  let s = num_of_be_bytes $ dest_RLPB s in
   let txLs = [
-    rlp_number 1; nonceRlp; maxPrioRlp; maxFeeRlp; gasRlp;
-    toRlp; valueRlp; dataRlp; accessListRlp; authListRlp ] in
-  let hash = word_of_bytes T 0w $ Keccak_256_w64 $
-    4w :: rlp_encode (RLPL txLs) in
-  case ecrecover hash (yParity + 27) r s of NONE => NONE |
+    rlp_number 1; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
+    EL 5 ls; EL 6 ls; EL 7 ls; EL 8 ls; authListRlp ] in
+  case verify_tx_signature 4w txLs (EL 10 ls) (EL 11 ls) (EL 12 ls)
+  of NONE => NONE |
   SOME addr =>
   SOME <|
       from := addr
@@ -547,9 +487,7 @@ Definition transaction4_from_rlp_def:
 End
 
 val transaction4_from_rlp_pre_def = transaction4_from_rlp_def
-  |> SRULE [GSYM OPT_MMAP_access_list_entry_from_rlp_eq,
-            GSYM OPT_MMAP_authorization_from_rlp_eq,
-            GSYM word_of_bytes_be_def]
+  |> SRULE [GSYM OPT_MMAP_authorization_from_rlp_eq]
   |> cv_auto_trans_pre "transaction4_from_rlp_pre";
 
 Theorem transaction4_from_rlp_pre[cv_pre]:
