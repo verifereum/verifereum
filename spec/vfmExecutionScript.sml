@@ -1,10 +1,10 @@
 Theory vfmExecution
 Ancestors
-  arithmetic
+  arithmetic byte
   blake2f bn254 bls12381 sha2 ripemd160[ignore_grammar] secp256k1 secp256r1
   vfmTypes vfmRoot vfmContext
 Libs
-  monadsyntax
+  monadsyntax cv_transLib
 
 (* TODO: move *)
 Definition modexp_def:
@@ -45,6 +45,8 @@ Definition ecrecover_def:
     addrBytes = DROP 12 $ Keccak_256_w64 keyBytes
   in SOME $ word_of_bytes T 0w addrBytes
 End
+
+val () = cv_trans $ REWRITE_RULE[GSYM word_of_bytes_be_def] ecrecover_def;
 
 Definition ecadd_def:
   ecadd a b =
