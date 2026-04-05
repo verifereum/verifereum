@@ -1,11 +1,9 @@
-open HolKernel boolLib bossLib Parse wordsLib dep_rewrite permLib
-     byteTheory pairTheory sortingTheory sumTheory wordsTheory
-     vfmTypesTheory vfmExecutionTheory
-     vfmStateTheory vfmContextTheory
-     vfmOperationTheory vfmComputeTheory
-     cv_transLib cv_typeTheory
-
-val () = new_theory "vfmTestRun";
+Theory vfmTestRun
+Ancestors pair sorting byte sum words cv_type
+  vfmTypes vfmExecution vfmState vfmContext
+  vfmOperation vfmCompute
+Libs
+  wordsLib permLib cv_transLib dep_rewrite
 
 Datatype:
   test_result
@@ -779,5 +777,3 @@ End
 
 val () = cv_auto_trans $
   REWRITE_RULE[GSYM word_of_bytes_be_def] run_test_def;
-
-val () = export_theory();
