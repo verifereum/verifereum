@@ -5,6 +5,7 @@ Ancestors
   cv cv_type cv_std
   blake2f
   vfmTypes vfmState vfmContext vfmExecution vfmDecreasesGas
+  vfmBlockDecode
 Libs
   cv_transLib cv_typeLib
   blastLib dep_rewrite
@@ -480,8 +481,6 @@ val () = “precompile_modexp s” |>
        precompile_modexp_def, bind_def, ignore_bind_def, LET_RATOR,
        GSYM word_of_bytes_be_def
      ] |> cv_auto_trans;
-
-val () = cv_trans $ REWRITE_RULE[GSYM word_of_bytes_be_def] ecrecover_def;
 
 val () = “precompile_ecrecover s” |>
    SIMP_CONV std_ss [

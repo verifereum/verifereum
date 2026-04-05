@@ -44,20 +44,6 @@ TODO. Belongs in a math utility or precompiles theory.
 `execution` type alias, `return_bind`, `return_ignore_bind`, etc. at line 36.
 General monad infrastructure that could live closer to the monad definition.
 
-### Move RLP block decoders out of `vfmTestRunScript.sml`
-
-`block_header_from_rlp_def`, `transaction{1,2,3,4}_from_rlp_def`,
-`block_from_rlp_def`, and associated definitions at line 31. These are real
-spec definitions living in the test runner — they arguably belong in a
-`vfmBlockRLP` theory or similar.
-
-### Factor out duplicated transaction RLP parsing
-
-`transaction1_from_rlp_def` through `transaction4_from_rlp_def` in
-`vfmTestRunScript.sml` share ~80% of their structure. A common skeleton
-parameterized by tx type, expected field count, and field extraction logic
-would reduce duplication.
-
 ### Factor out duplicated dequeue logic
 
 `dequeue_withdrawal_requests_def` and `dequeue_consolidation_requests_def` in
@@ -85,12 +71,6 @@ Generic list lemma at line 10 with a TODO.
 ### Move `INDEX_OF_pre` out of `contractABIScript.sml`
 
 cv_pre theorem at line 1617 with a TODO.
-
-### `OPT_MMAP` pattern duplicated 4 times in `vfmTestRunScript.sml`
-
-For access list entries, authorizations, transactions, and withdrawals. Each
-manually re-implements `OPT_MMAP` then proves equivalence to the generic
-version. Could use the generic `OPT_MMAP` directly via cv translation.
 
 ### Add high-level documentation comments to spec files
 
