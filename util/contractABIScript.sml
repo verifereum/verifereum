@@ -601,6 +601,36 @@ Proof
   \\ `xx = 0` by simp[Abbr`xx`] \\ rw[]
 QED
 
+Theorem enc_tuple_static_hl_irrelevant:
+  ∀ ts vs hl1 hl2 tl hds tls.
+    has_types ts vs ∧ ¬any_dynamic ts ⇒
+    enc_tuple hl1 tl ts vs hds tls = enc_tuple hl2 tl ts vs hds tls
+Proof
+  Induct \\ rw[enc_def, has_types_LIST_REL] >>
+  rw[enc_def] >> first_x_assum irule >> rw[has_types_LIST_REL]
+QED
+
+Theorem enc_tuple_static:
+  ∀ts vs.
+    has_types ts vs ∧ ¬any_dynamic ts ⇒
+    enc (Tuple ts) (ListV vs) = FLAT (MAP2 enc ts vs)
+Proof
+  Induct \\ rw[has_types_LIST_REL, head_lengths_def]
+  >- EVAL_TAC >>
+  gvs[enc_def] >>
+  rw[Once head_lengths_add] >>
+  gvs[GSYM has_types_LIST_REL] >>
+  first_x_assum drule >>
+  drule enc_tuple_append >>
+  disch_then(qspecl_then
+    [`static_length h + head_lengths ts 0`,`0`,`[enc h y]`]mp_tac) >>
+  simp[] >> strip_tac >> strip_tac >>
+  drule_all enc_tuple_static_hl_irrelevant >>
+  qmatch_goalsub_abbrev_tac`s1 + h1` >>
+  disch_then(qspecl_then[`s1 + h1`,`h1`]mp_tac) >>
+  simp[]
+QED
+
 (*
 cv_eval “has_type (Array NONE (Array NONE Bool))
   (ListV [ListV [NumV 1; NumV 0]; ListV []])”
