@@ -1124,3 +1124,403 @@ Theorem preserves_same_frame_dispatch_precompiles[simp]:
 Proof
   rw[dispatch_precompiles_def]
 QED
+
+(* ================================================================ *)
+(* Pass A': State-indexed precondition framework (`psf`).            *)
+(*                                                                   *)
+(* `psf p m` says: whenever `m` runs from a state `s` satisfying     *)
+(* precondition `p` and having non-empty contexts, the result state  *)
+(* `s'` is related to `s` by `same_frame_rel`.                       *)
+(*                                                                   *)
+(* This is the state-indexed analogue of `preserves_same_frame`.     *)
+(* The precondition `p` lets specialised composition rules thread    *)
+(* facts about bound values (e.g. "x = head's callee") into the      *)
+(* continuation's proof context — enabling same-frame reasoning      *)
+(* for write operations that need `address = callee` as a side       *)
+(* condition.                                                        *)
+(*                                                                   *)
+(* Usage mirrors `ignores_extra_domain_pred` in vfmDomainSeparation: *)
+(*   - generic composition for most ops                              *)
+(*   - specialised getter-binds to strengthen the precondition       *)
+(*   - rollback-writer leaves with precondition-equations            *)
+(* ================================================================ *)
+
+Definition psf_def:
+  psf p (m: α execution) ⇔
+    ∀s r s'. m s = (r, s') ∧ p s ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'
+End
+
+(* ---------------- Monotonicity and bridges --------------------- *)
+
+Theorem psf_mono:
+  psf p m ∧ (∀s. q s ⇒ p s) ⇒ psf q m
+Proof
+  rw[psf_def] \\ first_x_assum irule \\ metis_tac[]
+QED
+
+Theorem preserves_same_frame_eq_psf_T:
+  preserves_same_frame m ⇔ psf (λs. T) m
+Proof
+  rw[preserves_same_frame_def, psf_def]
+QED
+
+Theorem preserves_same_frame_imp_psf:
+  preserves_same_frame m ⇒ psf p m
+Proof
+  rw[preserves_same_frame_def, psf_def]
+  \\ first_x_assum irule \\ metis_tac[]
+QED
+
+(* Simp rule: any preserves_same_frame fact auto-lifts to psf p. *)
+Theorem psf_of_preserves_same_frame[simp]:
+  preserves_same_frame m ⇒ psf p m
+Proof
+  metis_tac[preserves_same_frame_imp_psf]
+QED
+
+(* ---------------- Composition rules ---------------- *)
+
+(* Generic bind: requires a transfer function p_cont describing the
+   precondition the continuation runs under. *)
+Theorem psf_bind:
+  psf p g ∧
+  (∀x. psf (p_cont x) (f x)) ∧
+  (∀x s s'. g s = (INL x, s') ∧ p s ∧ s.contexts ≠ [] ⇒
+            p_cont x s') ⇒
+  psf p (bind g f)
+Proof
+  rw[psf_def, bind_def]
+  \\ gvs[AllCaseEqs()]
+  \\ rpt(first_x_assum drule)
+  \\ rw[] \\ gvs[]
+  \\ drule same_frame_rel_contexts_ne
+  \\ rw[] \\ gvs[]
+  \\ metis_tac[same_frame_rel_trans]
+QED
+
+Theorem psf_ignore_bind:
+  psf p g ∧ psf p_cont f ∧
+  (∀s s'. g s = (INL (), s') ∧ p s ∧ s.contexts ≠ [] ⇒ p_cont s') ⇒
+  psf p (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  \\ irule psf_bind \\ rw[]
+  \\ qexists_tac `λu s. p_cont s`
+  \\ simp[] \\ metis_tac[]
+QED
+
+Theorem psf_handle:
+  psf p f ∧
+  (∀e. psf (p_handler e) (h e)) ∧
+  (∀e s s'. f s = (INR e, s') ∧ p s ∧ s.contexts ≠ [] ⇒
+            p_handler e s') ⇒
+  psf p (handle f h)
+Proof
+  rw[psf_def, handle_def]
+  \\ gvs[AllCaseEqs()]
+  \\ rpt(first_x_assum drule) \\ rw[]
+  >> gvs[]
+  >> drule same_frame_rel_contexts_ne
+  \\ rw[] >> gvs[]
+  \\ metis_tac[same_frame_rel_trans]
+QED
+
+Theorem psf_cond:
+  psf p m1 ∧ psf p m2 ⇒ psf p (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem psf_case_option:
+  psf p m_none ∧ (∀x. psf p (m_some x)) ⇒
+  psf p (case opt of NONE => m_none | SOME x => m_some x)
+Proof
+  Cases_on `opt` \\ rw[]
+QED
+
+Theorem psf_case_sum:
+  (∀x. psf p (f x)) ∧ (∀y. psf p (g y)) ⇒
+  psf p (case sm of INL x => f x | INR y => g y)
+Proof
+  Cases_on `sm` \\ rw[]
+QED
+
+Theorem psf_case_pair:
+  (∀x y. psf p (f x y)) ⇒ psf p (case pr of (x, y) => f x y)
+Proof
+  Cases_on `pr` \\ rw[]
+QED
+
+Theorem psf_let:
+  (∀x. psf p (f x)) ⇒ psf p (let x = v in f x)
+Proof
+  rw[]
+QED
+
+Theorem psf_uncurry:
+  (∀x y. psf p (f x y)) ⇒ psf p (UNCURRY f pr)
+Proof
+  Cases_on `pr` \\ rw[]
+QED
+
+(* ---------------- `same_frame_rel` extractors ------------------- *)
+
+Theorem same_frame_rel_msgParams:
+  same_frame_rel s s' ⇒
+  (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams
+Proof
+  rw[same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_callee:
+  same_frame_rel s s' ⇒
+  (FST (HD s'.contexts)).msgParams.callee =
+  (FST (HD s.contexts)).msgParams.callee
+Proof
+  rw[same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_contexts_ne_src:
+  same_frame_rel s s' ⇒ s.contexts ≠ []
+Proof
+  rw[same_frame_rel_def]
+QED
+
+(* `psf p m` implies the continuation's state has the same head callee
+   as the original, provided p implied contexts ≠ []. *)
+Theorem psf_preserves_head_callee:
+  psf p m ∧ m s = (r, s') ∧ p s ∧ s.contexts ≠ [] ⇒
+  (FST (HD s'.contexts)).msgParams.callee =
+  (FST (HD s.contexts)).msgParams.callee
+Proof
+  rw[psf_def]
+  \\ `same_frame_rel s s'` by metis_tac[]
+  \\ metis_tac[same_frame_rel_callee]
+QED
+
+Theorem psf_preserves_head_msgParams:
+  psf p m ∧ m s = (r, s') ∧ p s ∧ s.contexts ≠ [] ⇒
+  (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams
+Proof
+  rw[psf_def]
+  \\ `same_frame_rel s s'` by metis_tac[]
+  \\ metis_tac[same_frame_rel_msgParams]
+QED
+
+Theorem psf_preserves_contexts_ne:
+  psf p m ∧ m s = (r, s') ∧ p s ∧ s.contexts ≠ [] ⇒
+  s'.contexts ≠ []
+Proof
+  rw[psf_def]
+  \\ `same_frame_rel s s'` by metis_tac[]
+  \\ metis_tac[same_frame_rel_contexts_ne]
+QED
+
+(* ---------------- Specialised getter-bind rules ----------------- *)
+
+(* For `bind get_callee f`, the continuation runs at the same state
+   with `x = head's callee` available as a fact. *)
+Theorem psf_bind_get_callee:
+  (∀x. psf (λs. p s ∧ x = (FST (HD s.contexts)).msgParams.callee)
+           (f x)) ⇒
+  psf p (bind get_callee f)
+Proof
+  rw[psf_def, bind_def, get_callee_def,
+     get_current_context_def, ok_state_def, return_def, fail_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ first_x_assum (qspec_then `(FST h).msgParams.callee` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule
+  \\ goal_assum (first_assum o mp_then Any mp_tac) \\ simp[]
+QED
+
+Theorem psf_bind_get_current_context:
+  (∀x. psf (λs. p s ∧ s.contexts ≠ [] ∧ x = FST (HD s.contexts)) (f x)) ⇒
+  psf p (bind get_current_context f)
+Proof
+  rw[psf_def, bind_def, get_current_context_def, ok_state_def,
+     return_def, fail_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ first_x_assum (qspec_then `FST h` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule
+  \\ goal_assum (first_assum o mp_then Any mp_tac) \\ simp[]
+QED
+
+Theorem psf_bind_get_caller:
+  (∀x. psf (λs. p s ∧ x = (FST (HD s.contexts)).msgParams.caller) (f x)) ⇒
+  psf p (bind get_caller f)
+Proof
+  rw[psf_def, bind_def, get_caller_def,
+     get_current_context_def, ok_state_def, return_def, fail_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ first_x_assum (qspec_then `(FST h).msgParams.caller` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule
+  \\ goal_assum (first_assum o mp_then Any mp_tac) \\ simp[]
+QED
+
+Theorem psf_bind_get_value:
+  (∀x. psf (λs. p s ∧ x = (FST (HD s.contexts)).msgParams.value) (f x)) ⇒
+  psf p (bind get_value f)
+Proof
+  rw[psf_def, bind_def, get_value_def,
+     get_current_context_def, ok_state_def, return_def, fail_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ first_x_assum (qspec_then `(FST h).msgParams.value` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule
+  \\ goal_assum (first_assum o mp_then Any mp_tac) \\ simp[]
+QED
+
+Theorem psf_bind_get_accounts:
+  (∀x. psf (λs. p s ∧ x = s.rollback.accounts) (f x)) ⇒
+  psf p (bind get_accounts f)
+Proof
+  rw[psf_def, bind_def, get_accounts_def, return_def]
+  \\ first_x_assum (qspec_then `s.rollback.accounts` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule \\ simp[]
+QED
+
+Theorem psf_bind_get_tStorage:
+  (∀x. psf (λs. p s ∧ x = s.rollback.tStorage) (f x)) ⇒
+  psf p (bind get_tStorage f)
+Proof
+  rw[psf_def, bind_def, get_tStorage_def, return_def]
+  \\ first_x_assum (qspec_then `s.rollback.tStorage` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule \\ simp[]
+QED
+
+Theorem psf_bind_get_rollback:
+  (∀x. psf (λs. p s ∧ x = s.rollback) (f x)) ⇒
+  psf p (bind get_rollback f)
+Proof
+  rw[psf_def, bind_def, get_rollback_def, return_def]
+  \\ first_x_assum (qspec_then `s.rollback` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule \\ simp[]
+QED
+
+Theorem psf_bind_get_tx_params:
+  (∀x. psf (λs. p s ∧ x = s.txParams) (f x)) ⇒
+  psf p (bind get_tx_params f)
+Proof
+  rw[psf_def, bind_def, get_tx_params_def, return_def]
+  \\ first_x_assum (qspec_then `s.txParams` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule \\ simp[]
+QED
+
+Theorem psf_bind_get_original:
+  (∀x. psf (λs. p s ∧ s.contexts ≠ [] ∧
+                 x = (SND (LAST s.contexts)).accounts) (f x)) ⇒
+  psf p (bind get_original f)
+Proof
+  rw[psf_def, bind_def, get_original_def, return_def, fail_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ first_x_assum
+       (qspec_then `(SND (LAST (h::t))).accounts` mp_tac)
+  \\ rw[psf_def]
+  \\ first_x_assum irule
+  \\ goal_assum (first_assum o mp_then Any mp_tac) \\ simp[]
+QED
+
+(* ---------------- Rollback-writer leaves ------------------------ *)
+
+Theorem psf_write_storage:
+  psf (λs. address = (FST (HD s.contexts)).msgParams.callee)
+      (write_storage address key value)
+Proof
+  rw[psf_def]
+  \\ drule write_storage_same_frame \\ gvs[]
+  \\ disch_then (qspecl_then [`value`, `key`] mp_tac)
+  \\ simp[]
+QED
+
+Theorem psf_write_transient_storage:
+  psf (λs. address = (FST (HD s.contexts)).msgParams.callee)
+      (write_transient_storage address key value)
+Proof
+  rw[psf_def]
+  \\ drule write_transient_storage_same_frame \\ gvs[]
+  \\ disch_then (qspecl_then [`value`, `key`] mp_tac)
+  \\ simp[]
+QED
+
+Theorem psf_update_accounts_increment_nonce:
+  psf (λs. address = (FST (HD s.contexts)).msgParams.callee)
+      (update_accounts (increment_nonce address))
+Proof
+  rw[psf_def]
+  \\ drule update_accounts_increment_nonce_same_frame
+  \\ simp[]
+  \\ Cases_on `update_accounts (increment_nonce address) s` \\ gvs[]
+QED
+
+(* ---------------- Validation: step_sstore ---------------------- *)
+
+Theorem psf_step_sstore:
+  psf (λs. T) (step_sstore transient)
+Proof
+  simp[step_sstore_def]
+  \\ irule psf_bind >> simp[]
+  \\ qexists_tac `λx s. T`
+  \\ simp[] \\ gen_tac
+  \\ irule psf_bind_get_callee
+  \\ rw[] >>
+    qmatch_goalsub_abbrev_tac`psf pcont` >>
+    irule psf_ignore_bind >> rw[] >>
+    qexists_tac`pcont` >> (rw[] >-
+    metis_tac[psf_preserves_head_callee, preserves_same_frame_imp_psf,
+              preserves_same_frame_consume_gas,
+              preserves_same_frame_step_sstore_gas_consumption]) >>
+    irule psf_ignore_bind >> rw[] >>
+    qexists_tac`pcont` >> (rw[] >- (
+            gvs[Abbr`pcont`]
+            >> drule_at (Pat`_ = (_,_)`) psf_preserves_head_callee
+            >> disch_then $ irule o GSYM
+            >> rw[]
+            \\ qexists_tac`K T` >> rw[] )) >>
+    rw[Abbr`pcont`] >>
+    (irule psf_write_transient_storage ORELSE
+     irule psf_write_storage)
+QED
+
+Theorem preserves_same_frame_step_sstore[simp]:
+  preserves_same_frame (step_sstore transient)
+Proof
+  rw[preserves_same_frame_eq_psf_T, psf_step_sstore]
+QED
+
+(* ---------------- Validation: abort_create_exists --------------- *)
+
+Theorem psf_abort_create_exists_callee:
+  psf (λs. senderAddress = (FST (HD s.contexts)).msgParams.callee)
+      (abort_create_exists senderAddress)
+Proof
+  rw[abort_create_exists_def]
+  \\ irule psf_ignore_bind
+  \\ reverse conj_tac
+  >- ( irule psf_mono
+       \\ qexists_tac
+            `λs. senderAddress = (FST (HD s.contexts)).msgParams.callee`
+       \\ conj_tac >- simp[]
+       \\ irule psf_update_accounts_increment_nonce)
+  \\ qexists_tac`K T`
+  \\ simp[]
+QED
+
+Theorem abort_create_exists_same_frame:
+  s.contexts ≠ [] ∧
+  senderAddress = (FST (HD s.contexts)).msgParams.callee ⇒
+  same_frame_rel s (SND (abort_create_exists senderAddress s))
+Proof
+  strip_tac
+  \\ mp_tac psf_abort_create_exists_callee
+  \\ rw[psf_def]
+  \\ first_x_assum irule \\ rw[]
+  \\ qmatch_goalsub_abbrev_tac`SND p`
+  \\ qexists_tac`FST p` \\ rw[]
+QED
