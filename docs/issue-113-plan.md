@@ -73,7 +73,10 @@ Contents:
 - Helper predicate `callee_local_changes callee r r'` capturing the
   permitted changes to a `rollback_state` within one frame: only the
   callee's account and tStorage slots may move, and even there balance
-  and code are fixed while nonce is monotone. **Status: complete.**
+  is fixed while nonce is monotone. (Callee's `code` and `storage` are
+  free: code may be installed by `handle_create` when the current
+  frame is a CREATE-deploy frame, storage may be written by SSTORE.)
+  **Status: complete.**
 - The omnibus relation `same_frame_rel` built on top of those helpers.
   **Status: complete.**
 - Reflexivity, transitivity (plus refl/trans for the two helpers).
@@ -133,8 +136,6 @@ Definition callee_local_changes_def:
     (∀a. a ≠ callee ⇒ r'.tStorage a = r.tStorage a) ∧
     (lookup_account callee r'.accounts).balance =
       (lookup_account callee r.accounts).balance ∧
-    (lookup_account callee r'.accounts).code =
-      (lookup_account callee r.accounts).code ∧
     (lookup_account callee r.accounts).nonce ≤
       (lookup_account callee r'.accounts).nonce
 End
@@ -174,9 +175,18 @@ Quantities that are **deliberately free** in this relation, because they
 do change during a frame:
 
 - The head context's `stack`, `memory`, `pc`, `jumpDest`, `returnData`.
-- The callee account's `storage` and `nonce`.
+- The callee account's `storage`, `code`, and `nonce`.
 - The callee slot's transient storage.
 - The head context's `gasUsed` (see note below).
+
+Code is listed as free because when a CREATE'd frame finishes
+successfully, `handle_create` installs the returned bytecode at the
+callee's address. This is the only way any account's `code` can change
+during a step. Non-callee accounts have their entire account record
+preserved, so in particular their code is unchanged — which is the
+property users typically need ("my deployed contract's code is stable
+").
+
 
 ### Why `gasUsed` is not in `same_frame_rel`
 
@@ -241,6 +251,12 @@ Summary of case analysis over `step`:
   `returnData` may be cleared. Both free in `same_frame_rel`. ✓
 - **`vfm_abort` error**: `handle_step` reraises immediately; state
   unchanged. Reflexivity of `same_frame_rel`. ✓
+- **`handle_create` install-code branch** (`e = NONE` and
+  `outputTo = Code address`): `update_accounts` writes
+  `address`'s `code` field. Here `address` is the callee of the
+  current (CREATE'd) head frame, so this is a change to the callee's
+  `code`. `same_frame_rel` leaves callee `code` free, so the conjunct
+  holds. Non-callee accounts are unaffected. ✓
 
 ### SELFDESTRUCT
 
@@ -277,7 +293,7 @@ Named exported corollaries:
 - `run_within_frame_preserves_nonhead_contexts`
 - `run_within_frame_preserves_head_msgParams`
 - `run_within_frame_preserves_saved_rollback`
-- `run_within_frame_preserves_callee_balance_and_code`
+- `run_within_frame_preserves_callee_balance`
 - `run_within_frame_callee_nonce_monotone`
 - `run_within_frame_logs_grow`
 - `run_within_frame_accesses_grow`
@@ -357,9 +373,12 @@ No existing file is deleted or rewritten.
 - **SELFDESTRUCT within `same_frame_rel`.** Deliberately not handled —
   it is structurally excluded by the length hypothesis. The pop-boundary
   lemma captures its effects.
-- **`code` mutation semantics.** Code can be installed at a newly-created
-  contract's address via `handle_create`; elsewhere code is immutable. A
-  tighter `run_call_preserves_code_outside_newly_created` theorem is a
+- **`code` mutation semantics.** Code can be installed at the callee's
+  address via `handle_create` during the frame where the CREATE'd
+  context is being deployed. `same_frame_rel` accepts this by leaving
+  callee `code` free. Non-callee code is preserved (it is part of the
+  full-account-equality conjunct for non-callees). A tighter
+  `run_call_preserves_code_outside_newly_created` theorem is a
   candidate follow-up.
 
 ## Ordered work plan

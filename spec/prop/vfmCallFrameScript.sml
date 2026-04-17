@@ -56,7 +56,11 @@ QED
 (*                                                                   *)
 (* Within one call frame, only the callee's account and its          *)
 (* transient storage slots may be written. Even at the callee,       *)
-(* balance and code stay fixed and nonce only grows.                 *)
+(* balance is fixed and nonce only grows; storage and code are free  *)
+(* (storage is written by SSTORE; code can be installed by           *)
+(* `handle_create` when the current frame is a CREATE-deploy frame). *)
+(* Non-callee accounts are required to be fully equal, so code of    *)
+(* non-callee accounts is in particular preserved.                   *)
 (* ================================================================ *)
 
 Definition callee_local_changes_def:
@@ -66,8 +70,6 @@ Definition callee_local_changes_def:
     (∀a. a ≠ callee ⇒ r'.tStorage a = r.tStorage a) ∧
     (lookup_account callee r'.accounts).balance =
       (lookup_account callee r.accounts).balance ∧
-    (lookup_account callee r'.accounts).code =
-      (lookup_account callee r.accounts).code ∧
     (lookup_account callee r.accounts).nonce ≤
       (lookup_account callee r'.accounts).nonce
 End
