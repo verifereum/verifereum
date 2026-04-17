@@ -36,10 +36,13 @@ no extra work.
 
 ## Files and artefacts
 
-### 1. Addition to `spec/vfmExecutionScript.sml`
+### 1. Additions to `spec/vfmExecutionScript.sml`
 
-Placed next to `run_def`. This declares `run_call` as a first-class semantic
-concept of the EVM.
+Placed next to `run_def`. These declare `run_call` and `run_within_frame`
+as first-class semantic concepts of the EVM: the former executes the
+current call and any children until control returns past the starting
+depth; the latter executes within the current frame only, stopping as
+soon as a child is pushed or the frame is popped.
 
 ```hol
 Definition run_call_def:
@@ -47,17 +50,34 @@ Definition run_call_def:
     OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts ≥ LENGTH es.contexts)
            (step o SND) (INL (), es)
 End
+
+Definition run_within_frame_def:
+  run_within_frame es =
+    OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts = LENGTH es.contexts)
+           (step o SND) (INL (), es)
+End
 ```
+
+**Status:** complete (merged).
 
 ### 2. New theory `spec/prop/vfmCallFrameScript.sml`
 
 Ancestors: `vfmExecution`, `vfmExecutionProp`, `vfmStaticCalls`,
-`vfmTxParams`, `vfmDomainSeparation`, `vfmDecreasesGas`.
+`vfmTxParams`, `vfmDomainSeparation` (and `rich_list` for `IS_PREFIX`).
 
 Contents:
 
-- The omnibus relation `same_frame_rel`.
-- Reflexivity, transitivity.
+- Helper predicate `msdomain_compatible` capturing the two allowed
+  transitions for `msdomain`: `Enforce d` stays equal, `Collect d`
+  grows under `subdomain`. **Status: complete.**
+- Helper predicate `callee_local_changes callee r r'` capturing the
+  permitted changes to a `rollback_state` within one frame: only the
+  callee's account and tStorage slots may move, and even there balance
+  and code are fixed while nonce is monotone. **Status: complete.**
+- The omnibus relation `same_frame_rel` built on top of those helpers.
+  **Status: complete.**
+- Reflexivity, transitivity (plus refl/trans for the two helpers).
+  **Status: complete.**
 - `cp m ⇒ ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'`
   — reuses every `cp` leaf lemma from `vfmStaticCalls`.
 - Primitive-level lemmas for the non-`cp` writers:
@@ -67,8 +87,9 @@ Contents:
   of `update_accounts` side-conditions we need for abort paths.
 - `step_same_frame`: the lift from primitives to the full `step`, by
   opcode case analysis.
-- `run_within_frame_def` and `run_within_frame_preserves`: an OWHILE
-  induction that closes the frame under transitivity.
+- `run_within_frame_preserves`: an OWHILE induction that closes the
+  frame under transitivity. (The definition of `run_within_frame` lives
+  in `vfmExecution`.)
 - Exported named corollaries (see below).
 
 ### 3. New theory `spec/prop/vfmRunCallScript.sml`
@@ -102,7 +123,30 @@ Decomposition / induction-principle theorems connecting `run_call` to
 
 ## The `same_frame_rel` relation
 
+As built in `vfmCallFrameScript`:
+
 ```hol
+Definition callee_local_changes_def:
+  callee_local_changes callee r r' ⇔
+    (∀a. a ≠ callee ⇒
+         lookup_account a r'.accounts = lookup_account a r.accounts) ∧
+    (∀a. a ≠ callee ⇒ r'.tStorage a = r.tStorage a) ∧
+    (lookup_account callee r'.accounts).balance =
+      (lookup_account callee r.accounts).balance ∧
+    (lookup_account callee r'.accounts).code =
+      (lookup_account callee r.accounts).code ∧
+    (lookup_account callee r.accounts).nonce ≤
+      (lookup_account callee r'.accounts).nonce
+End
+
+Definition msdomain_compatible_def:
+  msdomain_compatible m1 m2 ⇔
+    case (m1, m2) of
+    | (Enforce d1, Enforce d2) => d1 = d2
+    | (Collect d1, Collect d2) => subdomain d1 d2
+    | _ => F
+End
+
 Definition same_frame_rel_def:
   same_frame_rel s s' ⇔
     s.contexts ≠ [] ∧
@@ -112,23 +156,14 @@ Definition same_frame_rel_def:
     (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
     s'.txParams = s.txParams ∧
     s'.rollback.toDelete = s.rollback.toDelete ∧
-    (let callee = (FST (HD s.contexts)).msgParams.callee in
-       (∀a. a ≠ callee ⇒
-            lookup_account a s'.rollback.accounts =
-            lookup_account a s.rollback.accounts) ∧
-       (∀a. a ≠ callee ⇒
-            s'.rollback.tStorage a = s.rollback.tStorage a) ∧
-       (lookup_account callee s'.rollback.accounts).balance =
-         (lookup_account callee s.rollback.accounts).balance ∧
-       (lookup_account callee s'.rollback.accounts).code =
-         (lookup_account callee s.rollback.accounts).code ∧
-       (lookup_account callee s.rollback.accounts).nonce ≤
-         (lookup_account callee s'.rollback.accounts).nonce) ∧
-    fSUBSET s.rollback.accesses.addresses
-            s'.rollback.accesses.addresses ∧
-    fSUBSET s.rollback.accesses.storageKeys
-            s'.rollback.accesses.storageKeys ∧
-    domain_compatible s.msdomain s'.msdomain ∧
+    callee_local_changes
+      (FST (HD s.contexts)).msgParams.callee
+      s.rollback s'.rollback ∧
+    toSet s.rollback.accesses.addresses ⊆
+      toSet s'.rollback.accesses.addresses ∧
+    toSet s.rollback.accesses.storageKeys ⊆
+      toSet s'.rollback.accesses.storageKeys ∧
+    msdomain_compatible s.msdomain s'.msdomain ∧
     IS_PREFIX (FST (HD s'.contexts)).logs (FST (HD s.contexts)).logs ∧
     (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed ∧
     (FST (HD s.contexts)).addRefund ≤ (FST (HD s'.contexts)).addRefund ∧
@@ -207,8 +242,7 @@ final-accesses-based theorem statement remains valid.
 
 ```
 Theorem run_within_frame_preserves:
-  LENGTH es.contexts = d ∧ es.contexts ≠ [] ∧
-  run_within_frame d es = SOME (r, es') ⇒
+  es.contexts ≠ [] ∧ run_within_frame es = SOME (r, es') ⇒
   same_frame_rel es es'
 ```
 
@@ -307,9 +341,11 @@ No existing file is deleted or rewritten.
 
 ## Ordered work plan
 
-1. Add `run_call_def` to `vfmExecutionScript.sml`, rebuild `spec/`.
+1. [x] Add `run_call_def` and `run_within_frame_def` to
+   `vfmExecutionScript.sml`, rebuild `spec/`.
 2. Create `spec/prop/vfmCallFrameScript.sml`:
-   a. Define `same_frame_rel`, prove reflexivity and transitivity.
+   a. [x] Define helpers (`msdomain_compatible`, `callee_local_changes`)
+      and `same_frame_rel`; prove reflexivity and transitivity.
    b. Prove `cp m ⇒ same_frame_rel` bridge.
    c. Prove primitive-level `same_frame_rel` lemmas for non-`cp` writers
       (`write_storage`, `write_transient_storage`, `push_logs`,
@@ -318,7 +354,7 @@ No existing file is deleted or rewritten.
       `increment_nonce-on-callee`).
    d. Prove `step_same_frame` by case analysis over `step_inst`, and
       handle the outermost-reraise path.
-   e. Define `run_within_frame` and prove `run_within_frame_preserves`.
+   e. Prove `run_within_frame_preserves`.
    f. Export named corollaries.
 3. Create `spec/prop/vfmRunCallScript.sml`:
    a. Define `run_call_tr`, prove termination, prove `run_call_eq_tr`.
@@ -328,12 +364,14 @@ No existing file is deleted or rewritten.
 4. Update `spec/prop/Holmakefile` if needed (currently `INCLUDES=..`, so
    probably no change).
 
-## Open items to confirm before coding
+## Open items to confirm before coding further
 
-- Predicate used for fset monotonicity in `same_frame_rel` — pick one
-  (`fSUBSET`? `subdomain` analogue?) and be consistent.
 - The exact shape of `step_pops` needed to discharge the cross-boundary
   case at `run_call_tr` induction — may simplify on inspection.
 - Whether the `run_call_tr` equation requires a side condition
   `s.contexts ≠ []` (likely yes, as `run_tr` implicitly does via
   wellformedness).
+- Whether a global `IS_PREFIX` on head logs is still true across push/pop
+  at the `run_call` level (it should be: pop's `push_logs` on the parent
+  appends the callee's logs, preserving the prefix property). Verify
+  when we reach that lemma.
