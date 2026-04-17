@@ -165,7 +165,6 @@ Definition same_frame_rel_def:
       toSet s'.rollback.accesses.storageKeys ∧
     msdomain_compatible s.msdomain s'.msdomain ∧
     IS_PREFIX (FST (HD s'.contexts)).logs (FST (HD s.contexts)).logs ∧
-    (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed ∧
     (FST (HD s.contexts)).addRefund ≤ (FST (HD s'.contexts)).addRefund ∧
     (FST (HD s.contexts)).subRefund ≤ (FST (HD s'.contexts)).subRefund
 End
@@ -177,6 +176,29 @@ do change during a frame:
 - The head context's `stack`, `memory`, `pc`, `jumpDest`, `returnData`.
 - The callee account's `storage` and `nonce`.
 - The callee slot's transient storage.
+- The head context's `gasUsed` (see note below).
+
+### Why `gasUsed` is not in `same_frame_rel`
+
+At the full-`step` level, head `gasUsed` is monotone (in fact strictly
+increasing on success) — this is the content of
+`decreases_gas_cred T 0 0 step` in `vfmDecreasesGasScript`. However, at
+the sub-step level, the primitive `unuse_gas n` decreases `gasUsed`, and
+it is `cp`. To keep the `cp ⇒ same_frame_rel` bridge lemma clean (no
+"except when…" caveats), gas monotonicity is proved separately and
+lifted to `run_within_frame` as its own corollary:
+
+- `step_same_frame_gas_monotone`: if `step s = (r, s')` and
+  `same_frame_rel s s'` holds (so length and `TL` are preserved and
+  `gasLimit` of the head is unchanged), then
+  `head(s).gasUsed ≤ head(s').gasUsed`. Proved from
+  `decreases_gas_cred_step` by unfolding `contexts_weight` /
+  `unused_gas`, using that only the head's contribution can move.
+- `run_within_frame_gas_monotone`: iterated version by OWHILE induction.
+
+Refund counters `addRefund` and `subRefund` *are* monotone under every
+`cp` operation (no primitive decreases them), so they stay in
+`same_frame_rel`.
 
 ## Audit: why `same_frame_rel` holds at every step whose length is preserved
 
@@ -312,7 +334,8 @@ Companion theorems (for free from the same framework):
 - `vfmTxParamsScript`: `step_preserves_txParams` is used in the proof of
   `step_same_frame` (txParams conjunct) and at push/pop boundaries.
 - `vfmDecreasesGasScript`: `run_tr_def`, `run_tr_ind`, `run_eq_tr`, and
-  the gas-termination recipe — reused directly for `run_call_tr`.
+  the gas-termination recipe — reused directly for `run_call_tr`. Also
+  `decreases_gas_cred_step` is used in the gas-monotone corollary.
 - `vfmDomainSeparationScript`: `subdomain`, `domain_compatible`, with
   their reflexivity and transitivity lemmas.
 - `vfmExecutionPropScript`: the `_preserves_nonempty_contexts` family.
@@ -355,6 +378,9 @@ No existing file is deleted or rewritten.
    d. Prove `step_same_frame` by case analysis over `step_inst`, and
       handle the outermost-reraise path.
    e. Prove `run_within_frame_preserves`.
+   f. Prove `step_same_frame_gas_monotone` and
+      `run_within_frame_gas_monotone` (separate from `same_frame_rel`;
+      see note in the `same_frame_rel` section above).
    f. Export named corollaries.
 3. Create `spec/prop/vfmRunCallScript.sml`:
    a. Define `run_call_tr`, prove termination, prove `run_call_eq_tr`.

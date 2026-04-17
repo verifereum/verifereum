@@ -107,7 +107,6 @@ Definition same_frame_rel_def:
       toSet s'.rollback.accesses.storageKeys ∧
     msdomain_compatible s.msdomain s'.msdomain ∧
     IS_PREFIX (FST (HD s'.contexts)).logs (FST (HD s.contexts)).logs ∧
-    (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed ∧
     (FST (HD s.contexts)).addRefund ≤ (FST (HD s'.contexts)).addRefund ∧
     (FST (HD s.contexts)).subRefund ≤ (FST (HD s'.contexts)).subRefund
 End
