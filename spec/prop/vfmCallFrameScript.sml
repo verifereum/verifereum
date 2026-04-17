@@ -595,6 +595,52 @@ Proof
         lookup_account_def, update_account_def, APPLY_UPDATE_THM]
 QED
 
+(* ---------------- Pointwise rollback-writer lemmas -------------- *)
+
+(* These are non-monadic-closure facts: `same_frame_rel` at a specific
+   state when the given `address` is the head's callee. Used in
+   compound-helper proofs (e.g. `step_sstore`, `abort_create_exists`)
+   where the `address` is bound earlier in the monad chain and is
+   separated from the write by intervening operations, so the
+   bundled "get_callee then write" lemmas above do not apply
+   syntactically. *)
+
+Theorem write_storage_same_frame:
+  s.contexts ≠ [] ∧
+  address = (FST (HD s.contexts)).msgParams.callee ⇒
+  same_frame_rel s (SND (write_storage address key value s))
+Proof
+  rw[write_storage_def, update_accounts_def, return_def]
+  \\ rw[same_frame_rel_def, callee_local_changes_def,
+        lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+  \\ Cases_on `s.contexts` \\ gvs[]
+QED
+
+Theorem write_transient_storage_same_frame:
+  s.contexts ≠ [] ∧
+  address = (FST (HD s.contexts)).msgParams.callee ⇒
+  same_frame_rel s (SND (write_transient_storage address key value s))
+Proof
+  rw[write_transient_storage_def, bind_def,
+     get_tStorage_def, set_tStorage_def, return_def,
+     ignore_bind_def]
+  \\ rw[same_frame_rel_def, callee_local_changes_def,
+        update_transient_storage_def, APPLY_UPDATE_THM]
+  \\ Cases_on `s.contexts` \\ gvs[]
+QED
+
+Theorem update_accounts_increment_nonce_same_frame:
+  s.contexts ≠ [] ∧
+  address = (FST (HD s.contexts)).msgParams.callee ⇒
+  same_frame_rel s
+    (SND (update_accounts (increment_nonce address) s))
+Proof
+  rw[update_accounts_def, return_def, increment_nonce_def]
+  \\ rw[same_frame_rel_def, callee_local_changes_def, increment_nonce_def,
+        lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+  \\ Cases_on `s.contexts` \\ gvs[]
+QED
+
 (* ---------------- Group D: set_current_context (parameterised) -- *)
 
 (* Replacing the head context preserves the frame iff the new context
@@ -674,4 +720,407 @@ Proof
   \\ irule preserves_same_frame_domain_check
   \\ rw[preserves_same_frame_def, return_def]
   >- ( rw[subdomain_def, toSet_fINSERT, SUBSET_DEF] )
+QED
+
+(* ================================================================ *)
+(* Pass A: Compound-helper `preserves_same_frame` lemmas.            *)
+(*                                                                   *)
+(* Each unfolds the definition and relies on the primitive-level     *)
+(* `[simp]` lemmas above plus the monadic composition lemmas.        *)
+(* ================================================================ *)
+
+Theorem preserves_same_frame_step_binop[simp]:
+  preserves_same_frame (step_binop op f)
+Proof
+  rw[step_binop_def]
+QED
+
+Theorem preserves_same_frame_step_monop[simp]:
+  preserves_same_frame (step_monop op f)
+Proof
+  rw[step_monop_def]
+QED
+
+Theorem preserves_same_frame_step_modop[simp]:
+  preserves_same_frame (step_modop op f)
+Proof
+  rw[step_modop_def]
+QED
+
+Theorem preserves_same_frame_step_context[simp]:
+  preserves_same_frame (step_context op f)
+Proof
+  rw[step_context_def]
+QED
+
+Theorem preserves_same_frame_step_msgParams[simp]:
+  preserves_same_frame (step_msgParams op f)
+Proof
+  rw[step_msgParams_def]
+QED
+
+Theorem preserves_same_frame_step_txParams[simp]:
+  preserves_same_frame (step_txParams op f)
+Proof
+  rw[step_txParams_def]
+QED
+
+Theorem preserves_same_frame_step_exp[simp]:
+  preserves_same_frame step_exp
+Proof
+  rw[step_exp_def]
+QED
+
+Theorem preserves_same_frame_step_keccak256[simp]:
+  preserves_same_frame step_keccak256
+Proof
+  rw[step_keccak256_def] >>
+  irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_step_sload[simp]:
+  preserves_same_frame (step_sload t)
+Proof
+  rw[step_sload_def] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_step_sstore_gas_consumption[simp]:
+  preserves_same_frame (step_sstore_gas_consumption a k v)
+Proof
+  rw[step_sstore_gas_consumption_def] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_ignore_bind >> rw[]
+QED
+
+(* `preserves_same_frame (step_sstore transient)` and the SSTORE/TSTORE
+   cases of `step_inst` are handled directly inside `step_same_frame`
+   (see Pass D) via the pointwise lemmas `write_storage_same_frame`
+   and `write_transient_storage_same_frame` above. A standalone helper
+   lemma would require threading the `address = head's callee` invariant
+   through intervening monadic operations, which is more awkward than
+   reasoning about the whole chain in one place. *)
+
+Theorem preserves_same_frame_step_balance[simp]:
+  preserves_same_frame step_balance
+Proof
+  rw[step_balance_def]
+QED
+
+Theorem preserves_same_frame_step_call_data_load[simp]:
+  preserves_same_frame step_call_data_load
+Proof
+  rw[step_call_data_load_def]
+QED
+
+Theorem preserves_same_frame_copy_to_memory:
+  (∀f. src = SOME f ⇒ preserves_same_frame f) ⇒
+  preserves_same_frame (copy_to_memory gas off srcOff sz src)
+Proof
+  Cases_on `src` \\ rw[copy_to_memory_def]
+  \\ TRY pairarg_tac >> simp[]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+QED
+
+Theorem preserves_same_frame_step_copy_to_memory[simp]:
+  (∀f. src = SOME f ⇒ preserves_same_frame f) ⇒
+  preserves_same_frame (step_copy_to_memory op src)
+Proof
+  rw[step_copy_to_memory_def]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+  \\ irule preserves_same_frame_copy_to_memory \\ simp[]
+QED
+
+Theorem preserves_same_frame_step_return_data_copy[simp]:
+  preserves_same_frame step_return_data_copy
+Proof
+  rw[step_return_data_copy_def]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+  \\ irule preserves_same_frame_copy_to_memory \\ simp[]
+QED
+
+Theorem preserves_same_frame_step_ext_code_size[simp]:
+  preserves_same_frame step_ext_code_size
+Proof
+  rw[step_ext_code_size_def]
+QED
+
+Theorem preserves_same_frame_step_ext_code_copy[simp]:
+  preserves_same_frame step_ext_code_copy
+Proof
+  rw[step_ext_code_copy_def]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+  \\ irule preserves_same_frame_copy_to_memory \\ simp[]
+QED
+
+Theorem preserves_same_frame_step_ext_code_hash[simp]:
+  preserves_same_frame step_ext_code_hash
+Proof
+  rw[step_ext_code_hash_def]
+QED
+
+Theorem preserves_same_frame_step_block_hash[simp]:
+  preserves_same_frame step_block_hash
+Proof
+  rw[step_block_hash_def]
+QED
+
+Theorem preserves_same_frame_step_blob_hash[simp]:
+  preserves_same_frame step_blob_hash
+Proof
+  rw[step_blob_hash_def]
+QED
+
+Theorem preserves_same_frame_step_self_balance[simp]:
+  preserves_same_frame step_self_balance
+Proof
+  rw[step_self_balance_def]
+QED
+
+Theorem preserves_same_frame_step_mload[simp]:
+  preserves_same_frame step_mload
+Proof
+  rw[step_mload_def]
+  \\ irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_step_mstore[simp]:
+  preserves_same_frame (step_mstore op)
+Proof
+  rw[step_mstore_def]
+QED
+
+Theorem preserves_same_frame_step_jump[simp]:
+  preserves_same_frame step_jump
+Proof
+  rw[step_jump_def]
+QED
+
+Theorem preserves_same_frame_step_jumpi[simp]:
+  preserves_same_frame step_jumpi
+Proof
+  rw[step_jumpi_def]
+QED
+
+Theorem preserves_same_frame_step_push[simp]:
+  preserves_same_frame (step_push n ws)
+Proof
+  rw[step_push_def]
+QED
+
+Theorem preserves_same_frame_step_pop[simp]:
+  preserves_same_frame step_pop
+Proof
+  rw[step_pop_def]
+QED
+
+Theorem preserves_same_frame_step_dup[simp]:
+  preserves_same_frame (step_dup n)
+Proof
+  rw[step_dup_def]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+QED
+
+Theorem preserves_same_frame_step_swap[simp]:
+  preserves_same_frame (step_swap n)
+Proof
+  rw[step_swap_def]
+  \\ irule preserves_same_frame_ignore_bind >> rw[]
+  \\ rw[preserves_same_frame_def, set_current_context_def,
+        return_def, fail_def, bind_def, ignore_bind_def]
+  \\ gvs[AllCaseEqs(), assert_def, get_current_context_def, return_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem preserves_same_frame_step_log[simp]:
+  preserves_same_frame (step_log n)
+Proof
+  rw[step_log_def]
+  \\ irule preserves_same_frame_bind >> rw[]
+  \\ irule preserves_same_frame_bind >> rw[]
+  \\ irule preserves_same_frame_ignore_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_step_return[simp]:
+  preserves_same_frame (step_return b)
+Proof
+  rw[step_return_def]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+  \\ Cases_on `b` \\ rw[]
+QED
+
+Theorem preserves_same_frame_inc_pc_or_jump[simp]:
+  preserves_same_frame (inc_pc_or_jump op)
+Proof
+  rw[inc_pc_or_jump_def]
+  \\ rw[preserves_same_frame_def, set_current_context_def, return_def,
+        fail_def, bind_def] >>
+  gvs[AllCaseEqs(), get_current_context_def, return_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ gvs[vfmTypesTheory.option_CASE_rator, AllCaseEqs(),
+         set_current_context_def, return_def]
+  >- (rw[same_frame_rel_def, callee_local_changes_def])
+  \\ gvs[ignore_bind_def, bind_def, AllCaseEqs(), assert_def]
+  \\ gvs[set_current_context_def, return_def]
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem preserves_same_frame_abort_unuse[simp]:
+  preserves_same_frame (abort_unuse n)
+Proof
+  rw[abort_unuse_def]
+QED
+
+Theorem preserves_same_frame_abort_call_value[simp]:
+  preserves_same_frame (abort_call_value n)
+Proof
+  rw[abort_call_value_def]
+QED
+
+(* `abort_create_exists senderAddress` takes `senderAddress` as an
+   arbitrary parameter. A `preserves_same_frame` statement with no
+   side condition would be false: if `senderAddress` is not the head's
+   callee, the `update_accounts (increment_nonce senderAddress)` step
+   modifies a non-callee account's nonce, violating
+   `callee_local_changes`. In its sole call site (`step_create`),
+   `senderAddress` was bound from `get_callee`, so the invariant
+   holds — we prove this directly inside `step_same_frame`'s
+   CREATE-abort branch (see Pass D) via the pointwise
+   `update_accounts_increment_nonce_same_frame` lemma above. *)
+
+(* --- Precompiles --- *)
+
+Theorem preserves_same_frame_precompile_ecrecover[simp]:
+  preserves_same_frame precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+  \\ Cases_on `ecrecover hash v r s'` \\ rw[]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+QED
+
+Theorem preserves_same_frame_precompile_sha2_256[simp]:
+  preserves_same_frame precompile_sha2_256
+Proof
+  rw[precompile_sha2_256_def]
+QED
+
+Theorem preserves_same_frame_precompile_ripemd_160[simp]:
+  preserves_same_frame precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def]
+QED
+
+Theorem preserves_same_frame_precompile_identity[simp]:
+  preserves_same_frame precompile_identity
+Proof
+  rw[precompile_identity_def]
+QED
+
+Theorem preserves_same_frame_precompile_modexp[simp]:
+  preserves_same_frame precompile_modexp
+Proof
+  rw[precompile_modexp_def]
+QED
+
+Theorem preserves_same_frame_precompile_ecadd[simp]:
+  preserves_same_frame precompile_ecadd
+Proof
+  rw[precompile_ecadd_def]
+  \\ irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_precompile_ecmul[simp]:
+  preserves_same_frame precompile_ecmul
+Proof
+  rw[precompile_ecmul_def]
+  \\ irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_precompile_ecpairing[simp]:
+  preserves_same_frame precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def]
+  \\ irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_precompile_blake2f[simp]:
+  preserves_same_frame precompile_blake2f
+Proof
+  rw[precompile_blake2f_def]
+  \\ irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_precompile_point_eval[simp]:
+  preserves_same_frame precompile_point_eval
+Proof
+  rw[precompile_point_eval_def]
+  \\ irule preserves_same_frame_bind >> rw[]
+  \\ irule preserves_same_frame_ignore_bind >> rw[]
+  \\ irule preserves_same_frame_ignore_bind >> rw[]
+  \\ irule preserves_same_frame_ignore_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_precompile_bls_g1add[simp]:
+  preserves_same_frame precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def]
+QED
+
+Theorem preserves_same_frame_precompile_bls_g1msm[simp]:
+  preserves_same_frame precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def]
+QED
+
+Theorem preserves_same_frame_precompile_bls_g2add[simp]:
+  preserves_same_frame precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def]
+QED
+
+Theorem preserves_same_frame_precompile_bls_g2msm[simp]:
+  preserves_same_frame precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def]
+QED
+
+Theorem preserves_same_frame_precompile_bls_pairing[simp]:
+  preserves_same_frame precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def]
+QED
+
+Theorem preserves_same_frame_precompile_bls_map_fp_to_g1[simp]:
+  preserves_same_frame precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def]
+QED
+
+Theorem preserves_same_frame_precompile_bls_map_fp2_to_g2[simp]:
+  preserves_same_frame precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def]
+QED
+
+Theorem preserves_same_frame_precompile_p256verify[simp]:
+  preserves_same_frame precompile_p256verify
+Proof
+  rw[precompile_p256verify_def]
+  >> irule preserves_same_frame_bind >> rw[]
+QED
+
+Theorem preserves_same_frame_dispatch_precompiles[simp]:
+  preserves_same_frame (dispatch_precompiles a)
+Proof
+  rw[dispatch_precompiles_def]
 QED
