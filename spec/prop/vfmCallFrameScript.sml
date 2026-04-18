@@ -2495,34 +2495,189 @@ Proof
   >> gvs[listTheory.SNOC_APPEND]
 QED
 
-(* ---------------- step_call_same_frame ------------------------- *)
+(* ================================================================ *)
+(* same_frame_or_grow: a monadic property for computations whose     *)
+(* effect on the call stack is either "stay in the current frame"   *)
+(* or "push (grow by at least one)". Needed for step_call and       *)
+(* step_create, whose push branches violate preserves_same_frame    *)
+(* but can be ruled out by a length hypothesis.                     *)
+(* ================================================================ *)
 
-(* Helper: bind composition at a fixed starting state, with a
-   preserves_same_frame prefix and a continuation that preserves
-   same_frame_rel from the fixed start. This mirrors
-   `static_inv_bind_cp` from vfmStaticCalls, using
-   preserves_same_frame (the full same-frame monad property) where
-   static_inv uses `cp` (weaker). `preserves_same_frame` gives us the
-   txParams, accesses, msdomain, refund, logs conjuncts that cp alone
-   does not. *)
+Definition same_frame_or_grow_def:
+  same_frame_or_grow (m: α execution) ⇔
+    ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒
+      same_frame_rel s s' ∨
+      LENGTH s'.contexts ≥ LENGTH s.contexts + 1
+End
 
-Theorem same_frame_bind_preserves:
-  s.contexts ≠ [] ∧ preserves_same_frame g ∧
-  (∀x s1. g s = (INL x, s1) ⇒ same_frame_rel s (SND (f x s1))) ⇒
-  same_frame_rel s (SND (bind g f s))
+(* ---------------- Bridge from preserves_same_frame -------------- *)
+
+Theorem same_frame_or_grow_of_preserves[simp]:
+  preserves_same_frame m ⇒ same_frame_or_grow m
 Proof
-  rw[bind_def]
-  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
-  >- (
-    (* g returned INR — preserves_same_frame gives same_frame_rel s r *)
-    fs[preserves_same_frame_def]
-    >> first_x_assum drule >> simp[])
-  >> (* g returned INL — use the continuation hypothesis, compose via trans *)
-     `same_frame_rel s r` by (
-       fs[preserves_same_frame_def] >> first_x_assum drule >> simp[])
-  >> `same_frame_rel s (SND (f q r))` by metis_tac[]
-  >> metis_tac[same_frame_rel_trans]
+  rw[preserves_same_frame_def, same_frame_or_grow_def]
+  >> disj1_tac >> first_x_assum irule >> metis_tac[]
 QED
+
+(* ---------------- Composition rules ----------------------------- *)
+
+Theorem same_frame_or_grow_bind[simp]:
+  same_frame_or_grow g ∧ (∀x. same_frame_or_grow (f x)) ⇒
+  same_frame_or_grow (bind g f)
+Proof
+  rw[same_frame_or_grow_def, bind_def]
+  >> gvs[AllCaseEqs()]
+  >> first_x_assum drule
+  >> first_x_assum drule
+  >> simp[]
+  >> disch_then assume_tac
+  >> impl_keep_tac
+  >- (
+    gvs[] >> imp_res_tac same_frame_rel_contexts_ne >>
+    strip_tac >> gvs[] )
+  >> strip_tac >> gvs[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_def]
+QED
+
+Theorem same_frame_or_grow_ignore_bind[simp]:
+  same_frame_or_grow g ∧ same_frame_or_grow f ⇒
+  same_frame_or_grow (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  >> irule same_frame_or_grow_bind >> simp[]
+QED
+
+Theorem same_frame_or_grow_handle[simp]:
+  same_frame_or_grow f ∧ (∀e. same_frame_or_grow (h e)) ⇒
+  same_frame_or_grow (handle f h)
+Proof
+  rw[same_frame_or_grow_def, handle_def]
+  >> gvs[AllCaseEqs()]
+  >> first_x_assum drule
+  >> first_x_assum drule
+  >> simp[]
+  >> disch_then assume_tac
+  >> impl_keep_tac
+  >- (
+    gvs[] >> imp_res_tac same_frame_rel_contexts_ne >>
+    strip_tac >> gvs[] )
+  >> strip_tac >> gvs[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_def]
+QED
+
+Theorem same_frame_or_grow_cond[simp]:
+  same_frame_or_grow m1 ∧ same_frame_or_grow m2 ⇒
+  same_frame_or_grow (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem same_frame_or_grow_case_option[simp]:
+  same_frame_or_grow m_none ∧ (∀x. same_frame_or_grow (m_some x)) ⇒
+  same_frame_or_grow
+    (case opt of NONE => m_none | SOME x => m_some x)
+Proof
+  Cases_on `opt` >> rw[]
+QED
+
+Theorem same_frame_or_grow_case_sum[simp]:
+  (∀x. same_frame_or_grow (f x)) ∧ (∀y. same_frame_or_grow (g y)) ⇒
+  same_frame_or_grow
+    (case sm of INL x => f x | INR y => g y)
+Proof
+  Cases_on `sm` >> rw[]
+QED
+
+Theorem same_frame_or_grow_case_pair[simp]:
+  (∀x y. same_frame_or_grow (f x y)) ⇒
+  same_frame_or_grow (case pr of (x, y) => f x y)
+Proof
+  Cases_on `pr` >> rw[]
+QED
+
+Theorem same_frame_or_grow_let[simp]:
+  (∀x. same_frame_or_grow (f x)) ⇒
+  same_frame_or_grow (let x = v in f x)
+Proof
+  rw[]
+QED
+
+Theorem same_frame_or_grow_uncurry[simp]:
+  (∀x y. same_frame_or_grow (f x y)) ⇒
+  same_frame_or_grow (UNCURRY f pr)
+Proof
+  Cases_on `pr` >> rw[]
+QED
+
+(* ---------------- proceed_call / proceed_create grow ------------ *)
+
+Theorem same_frame_or_grow_proceed_call[simp]:
+  same_frame_or_grow
+    (proceed_call op sender addr value aOff aSz code stipend outTo)
+Proof
+  rw[same_frame_or_grow_def]
+  >> disj2_tac
+  >> drule_then drule proceed_call_length >> simp[]
+QED
+
+Theorem same_frame_or_grow_proceed_create[simp]:
+  same_frame_or_grow
+    (proceed_create senderAddr addr value code gas)
+Proof
+  rw[same_frame_or_grow_def]
+  >> disj2_tac
+  >> drule_then drule proceed_create_length >> simp[]
+QED
+
+(* ---------------- step_call and step_create -------------------- *)
+
+Theorem same_frame_or_grow_step_call[simp]:
+  same_frame_or_grow (step_call op)
+Proof
+  simp[step_call_def]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_cond >> simp[]
+QED
+
+Theorem same_frame_or_grow_step_create[simp]:
+  same_frame_or_grow (step_create two)
+Proof
+  simp[step_create_def]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_cond >> simp[]
+  >> irule same_frame_or_grow_cond >> simp[]
+  >> simp[abort_create_exists_def]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> cheat (* TODO: need psf_or_grow framework *)
+QED
+
+(* ---------------- Final same-frame theorems -------------------- *)
 
 Theorem step_call_same_frame:
   outputTo_consistent s ∧
@@ -2530,10 +2685,12 @@ Theorem step_call_same_frame:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   same_frame_rel s s'
 Proof
-  cheat
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+  >> `same_frame_or_grow (step_call op)` by simp[]
+  >> pop_assum mp_tac >> rewrite_tac[same_frame_or_grow_def]
+  >> disch_then drule >> rw[]
 QED
-
-(* ---------------- step_create_same_frame ----------------------- *)
 
 Theorem step_create_same_frame:
   outputTo_consistent s ∧
@@ -2541,5 +2698,9 @@ Theorem step_create_same_frame:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   same_frame_rel s s'
 Proof
-  cheat
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+  >> `same_frame_or_grow (step_create two)` by simp[]
+  >> pop_assum mp_tac >> rewrite_tac[same_frame_or_grow_def]
+  >> disch_then drule >> rw[]
 QED
