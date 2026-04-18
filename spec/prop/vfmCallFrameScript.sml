@@ -2455,3 +2455,91 @@ Theorem preserves_same_frame_step_inst_SelfDestruct[simp]:
 Proof
   rw[step_inst_def]
 QED
+
+(* ---------------- proceed_call / proceed_create length ---------- *)
+
+(* proceed_call ends with push_context; its successor may run a
+   precompile which is preserves_same_frame (length preserved at the
+   new depth). Either way the resulting length is at least
+   LENGTH s.contexts + 1. *)
+Theorem proceed_call_length:
+  s.contexts ≠ [] ∧
+  proceed_call op sender addr value aOff aSz code stipend outTo s
+    = (r, s') ⇒
+  LENGTH s'.contexts ≥ LENGTH s.contexts + 1
+Proof
+  strip_tac
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def, AllCaseEqs(),
+        get_rollback_def, read_memory_def, get_current_context_def,
+        get_caller_def, get_value_def, get_static_def,
+        update_accounts_def, push_context_def, return_def,
+        ok_state_def, fail_def, COND_RATOR]
+  >> qmatch_asmsub_abbrev_tac`dispatch_precompiles _ sp = _`
+  >> `LENGTH sp.contexts = LENGTH s.contexts + 1` by gvs[Abbr`sp`]
+  >> drule_at Any (GEN_ALL psf_imp_length_contexts_preserved)
+  >> gvs[Abbr`sp`]
+QED
+
+Theorem proceed_create_length:
+  s.contexts ≠ [] ∧
+  proceed_create senderAddr addr value code gas s = (r, s') ⇒
+  LENGTH s'.contexts = LENGTH s.contexts + 1
+Proof
+  strip_tac
+  >> gvs[proceed_create_def, bind_def, ignore_bind_def, AllCaseEqs(),
+         get_rollback_def, get_original_def, set_original_def,
+         update_accounts_def, push_context_def, return_def,
+         ok_state_def, fail_def,
+         set_last_accounts_def, LET_THM]
+  >> Cases_on`s.contexts` >> gvs[]
+  >> gvs[listTheory.SNOC_APPEND]
+QED
+
+(* ---------------- step_call_same_frame ------------------------- *)
+
+(* Helper: bind composition at a fixed starting state, with a
+   preserves_same_frame prefix and a continuation that preserves
+   same_frame_rel from the fixed start. This mirrors
+   `static_inv_bind_cp` from vfmStaticCalls, using
+   preserves_same_frame (the full same-frame monad property) where
+   static_inv uses `cp` (weaker). `preserves_same_frame` gives us the
+   txParams, accesses, msdomain, refund, logs conjuncts that cp alone
+   does not. *)
+
+Theorem same_frame_bind_preserves:
+  s.contexts ≠ [] ∧ preserves_same_frame g ∧
+  (∀x s1. g s = (INL x, s1) ⇒ same_frame_rel s (SND (f x s1))) ⇒
+  same_frame_rel s (SND (bind g f s))
+Proof
+  rw[bind_def]
+  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
+  >- (
+    (* g returned INR — preserves_same_frame gives same_frame_rel s r *)
+    fs[preserves_same_frame_def]
+    >> first_x_assum drule >> simp[])
+  >> (* g returned INL — use the continuation hypothesis, compose via trans *)
+     `same_frame_rel s r` by (
+       fs[preserves_same_frame_def] >> first_x_assum drule >> simp[])
+  >> `same_frame_rel s (SND (f q r))` by metis_tac[]
+  >> metis_tac[same_frame_rel_trans]
+QED
+
+Theorem step_call_same_frame:
+  outputTo_consistent s ∧
+  step_call op s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  same_frame_rel s s'
+Proof
+  cheat
+QED
+
+(* ---------------- step_create_same_frame ----------------------- *)
+
+Theorem step_create_same_frame:
+  outputTo_consistent s ∧
+  step_create two s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  same_frame_rel s s'
+Proof
+  cheat
+QED

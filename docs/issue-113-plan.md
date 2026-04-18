@@ -80,13 +80,31 @@ Contents:
   **Status: complete.**
 - Reflexivity, transitivity (plus refl/trans for the two helpers).
   **Status: complete.**
-- `cp m ⇒ ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'`
-  — reuses every `cp` leaf lemma from `vfmStaticCalls`.
-- Primitive-level lemmas for the non-`cp` writers:
-  `write_storage`, `write_transient_storage`, `push_logs`,
-  `update_gas_refund`, `access_slot`, `access_address`,
-  `ensure_storage_in_domain`, `consume_gas`, `unuse_gas`, and the handful
-  of `update_accounts` side-conditions we need for abort paths.
+- `preserves_same_frame m` — a monadic same-frame preservation
+  predicate with the standard composition lemmas (bind, ignore_bind,
+  handle, cond, case_*, let, uncurry). Replaces the originally
+  planned "`cp ⇒ same_frame_rel` bridge": `cp` is not strong enough
+  on its own (it does not preserve `txParams`, accesses, msdomain, or
+  refunds), so we build a purpose-built predicate. **Status: complete.**
+- Primitive-level `preserves_same_frame` lemmas for every monadic
+  primitive (getters, head-context writers, rollback writers,
+  access/domain writers, parameterised `set_current_context`), plus
+  pointwise companions (`write_storage_same_frame` etc.) for use in
+  larger opcode proofs. **Status: complete.**
+- Compound-helper `preserves_same_frame` lemmas for every `step_*`
+  intermediate and all 18 precompiles. **Status: complete.**
+- Per-opcode `preserves_same_frame (step_inst op)[simp]` for every
+  Group-1 opcode (77 theorems, including SSTORE, TSTORE, and
+  SELFDESTRUCT). **Status: complete.**
+- `psf p m` — a state-indexed same-frame preservation predicate used
+  for opcodes whose proofs need to thread value-level facts from
+  getter-binds through to later writes. Mirrors
+  `ignores_extra_domain_pred` from `vfmDomainSeparation`. Includes a
+  bridge `psf (λs. T) m ⇔ preserves_same_frame m` so the primitive
+  lemmas auto-lift. **Status: complete.**
+- Handle-layer lemmas (`outputTo_consistent`, `psf_handle_create`,
+  `handle_exception_same_frame`, `handle_step_same_frame`) under the
+  length-preservation hypothesis. **Status: complete.**
 - `step_same_frame`: the lift from primitives to the full `step`, by
   opcode case analysis.
 - `run_within_frame_preserves`: an OWHILE induction that closes the
@@ -420,38 +438,97 @@ No existing file is deleted or rewritten.
 
 1. [x] Add `run_call_def` and `run_within_frame_def` to
    `vfmExecutionScript.sml`, rebuild `spec/`.
-2. Create `spec/prop/vfmCallFrameScript.sml`:
+2. Build `spec/prop/vfmCallFrameScript.sml`:
    a. [x] Define helpers (`msdomain_compatible`, `callee_local_changes`)
       and `same_frame_rel`; prove reflexivity and transitivity.
-   b. Prove `cp m ⇒ same_frame_rel` bridge.
-   c. Prove primitive-level `same_frame_rel` lemmas for non-`cp` writers
-      (`write_storage`, `write_transient_storage`, `push_logs`,
-      `update_gas_refund`, `access_slot`, `access_address`,
-      `ensure_storage_in_domain`, `consume_gas`, `unuse_gas`,
-      `increment_nonce-on-callee`).
-   d. Prove `step_same_frame` by case analysis over `step_inst`, and
-      handle the outermost-reraise path.
-   e. Prove `run_within_frame_preserves`.
-   f. Prove `step_same_frame_gas_monotone` and
-      `run_within_frame_gas_monotone` (separate from `same_frame_rel`;
-      see note in the `same_frame_rel` section above).
-   f. Export named corollaries.
+      Required a weakening of `callee_local_changes` to permit
+      SELFDESTRUCT (balance at non-callees is free; `toDelete` is
+      dropped from `same_frame_rel`).
+   b. [x] Define `preserves_same_frame` (monadic same-frame property)
+      with composition lemmas (bind, ignore_bind, handle, cond,
+      case_*, let, uncurry).
+   c. [x] Primitive-level `preserves_same_frame` leaves: getters,
+      head-context writers, rollback writers (`write_storage`,
+      `write_transient_storage`, `update_accounts (increment_nonce)`
+      at the callee), access/domain ops, plus a parameterised
+      `set_current_context` lemma. Plus pointwise companions
+      `write_storage_same_frame` etc. for use inside larger opcode
+      proofs.
+   d. [x] Compound-helper `preserves_same_frame` lemmas for every
+      `step_*` intermediate (arithmetic helpers, step_sload,
+      step_sstore_gas_consumption, copy_to_memory, memory and control
+      helpers, all 18 precompiles, dispatch_precompiles, abort
+      helpers, inc_pc_or_jump).
+   e. [x] Per-opcode `preserves_same_frame (step_inst op)[simp]` for
+      every Group-1 opcode (77 theorems covering everything except
+      Call, CallCode, DelegateCall, StaticCall, Create, Create2, and
+      SelfDestruct).
+   f. [x] `psf` state-indexed framework (composition rules, bridges
+      to and from `preserves_same_frame`, specialised getter-binds
+      for `get_callee`, `get_current_context`, `get_caller`,
+      `get_value`, `get_accounts`, `get_tStorage`, `get_rollback`,
+      `get_tx_params`, `get_original`, pointwise rollback-writer
+      lemmas, transfer helpers).
+   g. [x] `preserves_same_frame_step_sstore` via the `psf` framework.
+   h. [x] Handle-layer lemmas: `outputTo_consistent`,
+      `psf_handle_create`, `handle_exception_same_frame`,
+      `handle_step_same_frame`.
+   i. [x] `preserves_same_frame (step_inst SelfDestruct)` via new
+      primitives (`psf_update_accounts_transfer_value`,
+      `psf_add_to_delete`, `psf_update_accounts_callee_balance_only`)
+      plus the `transfer_value_preserves_{storage,code,nonce}` field
+      lemmas.
+   j. [x] `proceed_call_length`, `proceed_create_length` — helpers
+      showing the push always increases context length.
+   k. [x] `same_frame_bind_preserves` — state-level bind-composition
+      helper for the CALL/CREATE proofs.
+   l. `step_call_same_frame` and `step_create_same_frame` — state-
+      level proofs combining the preserves_same_frame prefix with
+      the final 3-way if; the push branch is ruled out by the length
+      hypothesis via `proceed_call_length` /
+      `proceed_create_length`. **Currently cheated.**
+   m. `step_same_frame` — the main Pass D theorem, composing the
+      Pass B opcode lemmas with `step_call_same_frame` /
+      `step_create_same_frame` and the handle-layer lemmas.
+   n. `run_within_frame_preserves` — OWHILE induction closing the
+      frame under transitivity.
+   o. `step_same_frame_gas_monotone` and
+      `run_within_frame_gas_monotone` — gas corollaries derived from
+      `decreases_gas_cred_step` (separate from `same_frame_rel`).
+   p. Export named corollaries (storage-outside-callee,
+      tStorage-outside-callee, code-outside-callee,
+      nonce-outside-callee, nonhead-contexts, head-msgParams,
+      saved-rollback, callee-nonce-monotone, logs-grow,
+      accesses-grow, refund-monotone, domain-compatible, txParams).
 3. Create `spec/prop/vfmRunCallScript.sml`:
    a. Define `run_call_tr`, prove termination, prove `run_call_eq_tr`.
    b. Prove `step_pushes` and `step_pops` cross-boundary lemmas.
    c. Prove the across-call theorems by induction on `run_call_tr`.
    d. Export the headline theorem and companions.
-4. Update `spec/prop/Holmakefile` if needed (currently `INCLUDES=..`, so
-   probably no change).
+4. Update `spec/prop/Holmakefile` if needed (currently `INCLUDES=..`,
+   so probably no change).
 
-## Open items to confirm before coding further
+## Open items
 
-- The exact shape of `step_pops` needed to discharge the cross-boundary
-  case at `run_call_tr` induction — may simplify on inspection.
+- **Pass D completion**: `step_call_same_frame`, `step_create_same_frame`,
+  and `step_same_frame` are currently cheated. These are complex
+  state-level proofs (the push branches are ruled out by length
+  contradictions; the abort branches reduce to already-proved
+  `preserves_same_frame` lemmas).
+- The exact shape of `step_pushes` / `step_pops` cross-boundary
+  lemmas needed for `run_call` induction — will simplify on
+  inspection.
 - Whether the `run_call_tr` equation requires a side condition
-  `s.contexts ≠ []` (likely yes, as `run_tr` implicitly does via
-  wellformedness).
-- Whether a global `IS_PREFIX` on head logs is still true across push/pop
-  at the `run_call` level (it should be: pop's `push_logs` on the parent
-  appends the callee's logs, preserving the prefix property). Verify
-  when we reach that lemma.
+  `s.contexts ≠ []` (likely yes, as `run_tr` implicitly does).
+- Whether a global `IS_PREFIX` on head logs holds across push/pop at
+  the `run_call` level (it should: pop's `push_logs` on the parent
+  appends the callee's logs, preserving prefix). Verify when needed.
+
+## Deferred follow-ups (outside #113 scope)
+
+- Balance-outside-accessed corollary for `run_within_frame` and
+  `run_call`, using access-list monotonicity to recover balance
+  preservation that was dropped from `same_frame_rel` for SELFDESTRUCT.
+- `toDelete`-grows-monotonically corollary.
+- A tighter `run_call_preserves_code_outside_newly_created` theorem
+  using CREATE-frame tracking.
