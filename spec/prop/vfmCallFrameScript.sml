@@ -1524,3 +1524,494 @@ Proof
   \\ qmatch_goalsub_abbrev_tac`SND p`
   \\ qexists_tac`FST p` \\ rw[]
 QED
+
+(* ================================================================ *)
+(* Pass B: per-opcode `preserves_same_frame (step_inst op)` lemmas   *)
+(*         for Group-1 opcodes (those that never push or pop the    *)
+(*         call stack within `step_inst` itself).                    *)
+(*                                                                   *)
+(* These are one-liners dispatching to the compound-helper `[simp]` *)
+(* lemmas registered above. Each is `[simp]` so that the opcode      *)
+(* case analysis inside `step_same_frame` (Pass D) closes uniformly. *)
+(*                                                                   *)
+(* Omitted Group 2 (push): Call, CallCode, DelegateCall, StaticCall, *)
+(*                         Create, Create2.                           *)
+(* Omitted Group 3 (non-callee write): SelfDestruct.                  *)
+(* ================================================================ *)
+
+(* --- Arithmetic / bitwise --- *)
+
+Theorem preserves_same_frame_step_inst_Add[simp]:
+  preserves_same_frame (step_inst Add)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Mul[simp]:
+  preserves_same_frame (step_inst Mul)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Sub[simp]:
+  preserves_same_frame (step_inst Sub)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Div[simp]:
+  preserves_same_frame (step_inst Div)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SDiv[simp]:
+  preserves_same_frame (step_inst SDiv)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Mod[simp]:
+  preserves_same_frame (step_inst Mod)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SMod[simp]:
+  preserves_same_frame (step_inst SMod)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_AddMod[simp]:
+  preserves_same_frame (step_inst AddMod)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_MulMod[simp]:
+  preserves_same_frame (step_inst MulMod)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Exp[simp]:
+  preserves_same_frame (step_inst Exp)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SignExtend[simp]:
+  preserves_same_frame (step_inst SignExtend)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_LT[simp]:
+  preserves_same_frame (step_inst LT)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_GT[simp]:
+  preserves_same_frame (step_inst GT)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SLT[simp]:
+  preserves_same_frame (step_inst SLT)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SGT[simp]:
+  preserves_same_frame (step_inst SGT)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Eq[simp]:
+  preserves_same_frame (step_inst Eq)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_IsZero[simp]:
+  preserves_same_frame (step_inst IsZero)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_And[simp]:
+  preserves_same_frame (step_inst And)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Or[simp]:
+  preserves_same_frame (step_inst Or)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_XOr[simp]:
+  preserves_same_frame (step_inst XOr)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Not[simp]:
+  preserves_same_frame (step_inst Not)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Byte[simp]:
+  preserves_same_frame (step_inst Byte)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ShL[simp]:
+  preserves_same_frame (step_inst ShL)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ShR[simp]:
+  preserves_same_frame (step_inst ShR)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SAR[simp]:
+  preserves_same_frame (step_inst SAR)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CLZ[simp]:
+  preserves_same_frame (step_inst CLZ)
+Proof
+  rw[step_inst_def]
+QED
+
+(* --- Hashing / context / tx params --- *)
+
+Theorem preserves_same_frame_step_inst_Keccak256[simp]:
+  preserves_same_frame (step_inst Keccak256)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Address[simp]:
+  preserves_same_frame (step_inst Address)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Balance[simp]:
+  preserves_same_frame (step_inst Balance)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Origin[simp]:
+  preserves_same_frame (step_inst Origin)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Caller[simp]:
+  preserves_same_frame (step_inst Caller)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CallValue[simp]:
+  preserves_same_frame (step_inst CallValue)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CallDataLoad[simp]:
+  preserves_same_frame (step_inst CallDataLoad)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CallDataSize[simp]:
+  preserves_same_frame (step_inst CallDataSize)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CallDataCopy[simp]:
+  preserves_same_frame (step_inst CallDataCopy)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CodeSize[simp]:
+  preserves_same_frame (step_inst CodeSize)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CodeCopy[simp]:
+  preserves_same_frame (step_inst CodeCopy)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_GasPrice[simp]:
+  preserves_same_frame (step_inst GasPrice)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ExtCodeSize[simp]:
+  preserves_same_frame (step_inst ExtCodeSize)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ExtCodeCopy[simp]:
+  preserves_same_frame (step_inst ExtCodeCopy)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ReturnDataSize[simp]:
+  preserves_same_frame (step_inst ReturnDataSize)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ReturnDataCopy[simp]:
+  preserves_same_frame (step_inst ReturnDataCopy)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ExtCodeHash[simp]:
+  preserves_same_frame (step_inst ExtCodeHash)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_BlockHash[simp]:
+  preserves_same_frame (step_inst BlockHash)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_CoinBase[simp]:
+  preserves_same_frame (step_inst CoinBase)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_TimeStamp[simp]:
+  preserves_same_frame (step_inst TimeStamp)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Number[simp]:
+  preserves_same_frame (step_inst Number)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_PrevRandao[simp]:
+  preserves_same_frame (step_inst PrevRandao)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_GasLimit[simp]:
+  preserves_same_frame (step_inst GasLimit)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_ChainId[simp]:
+  preserves_same_frame (step_inst ChainId)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SelfBalance[simp]:
+  preserves_same_frame (step_inst SelfBalance)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_BaseFee[simp]:
+  preserves_same_frame (step_inst BaseFee)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_BlobHash[simp]:
+  preserves_same_frame (step_inst BlobHash)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_BlobBaseFee[simp]:
+  preserves_same_frame (step_inst BlobBaseFee)
+Proof
+  rw[step_inst_def]
+QED
+
+(* --- Stack and memory --- *)
+
+Theorem preserves_same_frame_step_inst_Pop[simp]:
+  preserves_same_frame (step_inst Pop)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_MLoad[simp]:
+  preserves_same_frame (step_inst MLoad)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_MStore[simp]:
+  preserves_same_frame (step_inst MStore)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_MStore8[simp]:
+  preserves_same_frame (step_inst MStore8)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_MCopy[simp]:
+  preserves_same_frame (step_inst MCopy)
+Proof
+  rw[step_inst_def]
+QED
+
+(* --- Storage and transient storage --- *)
+
+Theorem preserves_same_frame_step_inst_SLoad[simp]:
+  preserves_same_frame (step_inst SLoad)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SStore[simp]:
+  preserves_same_frame (step_inst SStore)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_TLoad[simp]:
+  preserves_same_frame (step_inst TLoad)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_TStore[simp]:
+  preserves_same_frame (step_inst TStore)
+Proof
+  rw[step_inst_def]
+QED
+
+(* --- Control flow --- *)
+
+Theorem preserves_same_frame_step_inst_Jump[simp]:
+  preserves_same_frame (step_inst Jump)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_JumpI[simp]:
+  preserves_same_frame (step_inst JumpI)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_PC[simp]:
+  preserves_same_frame (step_inst PC)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_MSize[simp]:
+  preserves_same_frame (step_inst MSize)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Gas[simp]:
+  preserves_same_frame (step_inst Gas)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_JumpDest[simp]:
+  preserves_same_frame (step_inst JumpDest)
+Proof
+  rw[step_inst_def]
+QED
+
+(* --- Push / Dup / Swap / Log (indexed) --- *)
+
+Theorem preserves_same_frame_step_inst_Push[simp]:
+  preserves_same_frame (step_inst (Push n ws))
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Dup[simp]:
+  preserves_same_frame (step_inst (Dup n))
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Swap[simp]:
+  preserves_same_frame (step_inst (Swap n))
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Log[simp]:
+  preserves_same_frame (step_inst (Log n))
+Proof
+  rw[step_inst_def]
+QED
+
+(* --- Terminators (return INR but don't mutate state in ways that
+       violate same_frame_rel). Stop, Return, Revert, Invalid. --- *)
+
+Theorem preserves_same_frame_step_inst_Stop[simp]:
+  preserves_same_frame (step_inst Stop)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Return[simp]:
+  preserves_same_frame (step_inst Return)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Revert[simp]:
+  preserves_same_frame (step_inst Revert)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Invalid[simp]:
+  preserves_same_frame (step_inst Invalid)
+Proof
+  rw[step_inst_def]
+QED
