@@ -71,12 +71,11 @@ Contents:
   transitions for `msdomain`: `Enforce d` stays equal, `Collect d`
   grows under `subdomain`. **Status: complete.**
 - Helper predicate `callee_local_changes callee r r'` capturing the
-  permitted changes to a `rollback_state` within one frame: only the
-  callee's account and tStorage slots may move, and even there balance
-  is fixed while nonce is monotone. (Callee's `code` and `storage` are
-  free: code may be installed by `handle_create` when the current
-  frame is a CREATE-deploy frame, storage may be written by SSTORE.)
-  **Status: complete.**
+  permitted changes to a `rollback_state` within one frame: at
+  non-callee accounts, the storage, code, and nonce must match; the
+  balance is free (SELFDESTRUCT transfers balances to arbitrary
+  addresses). tStorage must match at non-callee addresses. At the
+  callee, only the nonce monotonicity is claimed. **Status: complete.**
 - The omnibus relation `same_frame_rel` built on top of those helpers.
   **Status: complete.**
 - Reflexivity, transitivity (plus refl/trans for the two helpers).
@@ -132,10 +131,13 @@ As built in `vfmCallFrameScript`:
 Definition callee_local_changes_def:
   callee_local_changes callee r r' ⇔
     (∀a. a ≠ callee ⇒
-         lookup_account a r'.accounts = lookup_account a r.accounts) ∧
+         (lookup_account a r'.accounts).storage =
+         (lookup_account a r.accounts).storage ∧
+         (lookup_account a r'.accounts).code =
+         (lookup_account a r.accounts).code ∧
+         (lookup_account a r'.accounts).nonce =
+         (lookup_account a r.accounts).nonce) ∧
     (∀a. a ≠ callee ⇒ r'.tStorage a = r.tStorage a) ∧
-    (lookup_account callee r'.accounts).balance =
-      (lookup_account callee r.accounts).balance ∧
     (lookup_account callee r.accounts).nonce ≤
       (lookup_account callee r'.accounts).nonce
 End
@@ -156,7 +158,6 @@ Definition same_frame_rel_def:
     SND (HD s'.contexts) = SND (HD s.contexts) ∧
     (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
     s'.txParams = s.txParams ∧
-    s'.rollback.toDelete = s.rollback.toDelete ∧
     callee_local_changes
       (FST (HD s.contexts)).msgParams.callee
       s.rollback s'.rollback ∧
@@ -178,6 +179,14 @@ do change during a frame:
 - The callee account's `storage`, `code`, and `nonce`.
 - The callee slot's transient storage.
 - The head context's `gasUsed` (see note below).
+- The **balance** of any account, callee or otherwise (SELFDESTRUCT can
+  transfer the callee's balance to an arbitrary beneficiary; CALL with
+  positive value transfers between two addresses).
+- The rollback's `toDelete` list (SELFDESTRUCT appends its sender).
+
+The last two entries have corollaries later that recover preservation
+under additional hypotheses (see the access-list-based corollaries
+below).
 
 Code is listed as free because when a CREATE'd frame finishes
 successfully, `handle_create` installs the returned bytecode at the
@@ -243,9 +252,16 @@ Summary of case analysis over `step`:
   permits this (nonce is free for callee, bound by monotonicity).
 - **CREATE family, non-abort**: pushes context → length changes → out of
   scope.
-- **Stop / Return / Revert / Invalid / OOG / non-outermost handled error /
-  SELFDESTRUCT**: pop frame via `handle_step` → length changes → out of
-  scope.
+- **Stop / Return / Revert / Invalid / OOG / non-outermost handled error**:
+  pop frame via `handle_step` → length changes → out of scope.
+- **SELFDESTRUCT**: `step_inst SelfDestruct` transfers balance to the
+  beneficiary and may append to `toDelete`, then `finish`es. The
+  length-change happens in `handle_step` (possibly via pop, or via
+  outermost reraise when `n ≤ 1`). The `same_frame_rel` conjuncts
+  remaining after weakening (storage, code, nonce, tStorage at
+  non-callees; callee nonce monotone; msgParams; accesses-grow; logs;
+  refunds) are all preserved. Balance and `toDelete` are deliberately
+  not claimed.
 - **Outermost-frame error** (`handle_exception` with `n ≤ 1`, reraises):
   length unchanged. Effect: head `gasUsed` may rise (by `gasLeft`), head
   `returnData` may be cleared. Both free in `same_frame_rel`. ✓
@@ -258,21 +274,30 @@ Summary of case analysis over `step`:
   `code`. `same_frame_rel` leaves callee `code` free, so the conjunct
   holds. Non-callee accounts are unaffected. ✓
 
-### SELFDESTRUCT
+### SELFDESTRUCT and why balance / toDelete are dropped
 
-SELFDESTRUCT always pops its frame via `finish` → `handle_step` →
-`handle_exception`, so every execution of SELFDESTRUCT changes
-`LENGTH contexts`. It is therefore **automatically excluded** from
-`same_frame_rel` by the length hypothesis of `step_same_frame`, without
-any special-casing.
+`step_inst SelfDestruct` transfers the callee's balance to an arbitrary
+beneficiary and may append to `toDelete`. These effects occur whether
+or not the frame is popped in the same `step` (the pop happens in
+`handle_step`, after the transfer). Including "balance equal at
+non-callees" or "`toDelete` equal" in `same_frame_rel` would make the
+relation unprovable for the SELFDESTRUCT path.
 
-Its effects (value transfer to beneficiary, optional zeroing of sender
-balance, appending to `toDelete`) are entirely confined to the pop
-boundary, where they are handled by the `step_pops` lemma in
-`vfmRunCallScript` and, for storage-preservation purposes, absorbed by the
-fact that SELFDESTRUCT calls `access_address` on the beneficiary before
-transferring — so the beneficiary is in `accesses.addresses`, and the
-final-accesses-based theorem statement remains valid.
+We considered adding an anti-SELFDESTRUCT precondition to every
+theorem, but for interactive contracts (those that make external
+CALLs) discharging "no SELFDESTRUCT anywhere in the call tree's code"
+is impractical. Instead, the relation is weakened so all theorems
+apply uniformly, with or without SELFDESTRUCT.
+
+Users who need balance preservation can derive it as a corollary:
+because SELFDESTRUCT calls `access_address` on the beneficiary before
+transferring, the beneficiary is in `rollback.accesses.addresses`.
+Likewise, `transfer_value` call-sites in `proceed_call` have access-
+listed both endpoints. So the balance of any address not in the final
+`accesses.addresses` is preserved. A separate corollary
+`run_within_frame_preserves_balance_outside_accessed` (and similar for
+`run_call`) captures this and lives as a follow-up to the main
+framework.
 
 ## Key derived theorems
 
@@ -287,19 +312,27 @@ Theorem run_within_frame_preserves:
 Named exported corollaries:
 
 - `run_within_frame_preserves_txParams`
-- `run_within_frame_preserves_toDelete`
 - `run_within_frame_preserves_storage_outside_callee`
 - `run_within_frame_preserves_tStorage_outside_callee`
+- `run_within_frame_preserves_code_outside_callee`
+- `run_within_frame_preserves_nonce_outside_callee`
 - `run_within_frame_preserves_nonhead_contexts`
 - `run_within_frame_preserves_head_msgParams`
 - `run_within_frame_preserves_saved_rollback`
-- `run_within_frame_preserves_callee_balance`
 - `run_within_frame_callee_nonce_monotone`
 - `run_within_frame_logs_grow`
 - `run_within_frame_accesses_grow`
 - `run_within_frame_gas_monotone`
 - `run_within_frame_refund_monotone`
 - `run_within_frame_domain_compatible`
+
+Additional follow-up corollaries (outside the main chain, recovering
+the dropped guarantees under access-list hypotheses):
+
+- `run_within_frame_preserves_balance_outside_accessed`
+- `run_within_frame_toDelete_grows` (and symmetrically, the added
+  addresses are all access-listed by the SELFDESTRUCT step that added
+  them).
 
 ### Across a whole call (in `vfmRunCallScript`)
 
@@ -370,9 +403,11 @@ No existing file is deleted or rewritten.
 - **Initial-state hypothesis variants.** Statements with `a ∉
   es.rollback.accesses.addresses` in the hypothesis follow from the
   final-state version by monotonicity; we expose them as corollaries.
-- **SELFDESTRUCT within `same_frame_rel`.** Deliberately not handled —
-  it is structurally excluded by the length hypothesis. The pop-boundary
-  lemma captures its effects.
+- **SELFDESTRUCT within `same_frame_rel`.** Covered. The relation is
+  deliberately weak enough (balance and `toDelete` free) that
+  SELFDESTRUCT's effects satisfy it. Addresses in SELFDESTRUCT's
+  transfer are access-listed, so follow-up balance-preservation
+  corollaries can exclude them.
 - **`code` mutation semantics.** Code can be installed at the callee's
   address via `handle_create` during the frame where the CREATE'd
   context is being deployed. `same_frame_rel` accepts this by leaving

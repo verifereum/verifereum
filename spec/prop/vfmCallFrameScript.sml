@@ -54,22 +54,27 @@ QED
 (* ================================================================ *)
 (* Callee-local account/tStorage changes permitted within a frame.   *)
 (*                                                                   *)
-(* Within one call frame, only the callee's account and its          *)
-(* transient storage slots may be written. Even at the callee,       *)
-(* balance is fixed and nonce only grows; storage and code are free  *)
-(* (storage is written by SSTORE; code can be installed by           *)
-(* `handle_create` when the current frame is a CREATE-deploy frame). *)
-(* Non-callee accounts are required to be fully equal, so code of    *)
-(* non-callee accounts is in particular preserved.                   *)
+(* Within one call frame:                                            *)
+(*  - non-callee accounts' storage, code, and nonce are preserved;   *)
+(*  - non-callee tStorage slots are preserved;                       *)
+(*  - the callee's nonce is monotone (only grows);                   *)
+(*  - balances of all accounts are free (SELFDESTRUCT can transfer   *)
+(*    from the callee to an arbitrary beneficiary);                  *)
+(*  - the callee's storage, code, and nonce beyond monotonicity are  *)
+(*    free (SSTORE writes storage; `handle_create` can install code  *)
+(*    in a CREATE-deploy frame).                                     *)
 (* ================================================================ *)
 
 Definition callee_local_changes_def:
   callee_local_changes callee r r' ⇔
     (∀a. a ≠ callee ⇒
-         lookup_account a r'.accounts = lookup_account a r.accounts) ∧
+         (lookup_account a r'.accounts).storage =
+         (lookup_account a r.accounts).storage ∧
+         (lookup_account a r'.accounts).code =
+         (lookup_account a r.accounts).code ∧
+         (lookup_account a r'.accounts).nonce =
+         (lookup_account a r.accounts).nonce) ∧
     (∀a. a ≠ callee ⇒ r'.tStorage a = r.tStorage a) ∧
-    (lookup_account callee r'.accounts).balance =
-      (lookup_account callee r.accounts).balance ∧
     (lookup_account callee r.accounts).nonce ≤
       (lookup_account callee r'.accounts).nonce
 End
@@ -101,7 +106,6 @@ Definition same_frame_rel_def:
     SND (HD s'.contexts) = SND (HD s.contexts) ∧
     (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
     s'.txParams = s.txParams ∧
-    s'.rollback.toDelete = s.rollback.toDelete ∧
     callee_local_changes
       (FST (HD s.contexts)).msgParams.callee
       s.rollback s'.rollback ∧
