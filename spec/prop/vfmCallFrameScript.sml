@@ -19,6 +19,7 @@ Libs
   BasicProvers
 
 val _ = Parse.hide "add"
+val _ = Parse.hide "from"
 
 (* ================================================================ *)
 (* Helper: compatibility of the metadata-domain field.              *)
@@ -2260,4 +2261,197 @@ Proof
   \\ `same_frame_rel s1 s'`
      by (irule handle_exception_same_frame \\ metis_tac[])
   \\ metis_tac[same_frame_rel_trans]
+QED
+
+(* ================================================================ *)
+(* Pass D: step-level same-frame theorem.                            *)
+(*                                                                   *)
+(* Builds on Pass B (per-opcode preserves_same_frame for Group 1)    *)
+(* and Pass C (handle-layer lemmas) to prove `step_same_frame`.      *)
+(*                                                                   *)
+(* Additional primitives proved here are for SELFDESTRUCT (which     *)
+(* satisfies the weakened `same_frame_rel` but needs its own psf     *)
+(* lemmas for the balance-mutating steps).                           *)
+(* ================================================================ *)
+
+(* ---------------- transfer_value field preservation ------------- *)
+
+Theorem transfer_value_preserves_storage:
+  (lookup_account a (transfer_value from to amt accs)).storage =
+  (lookup_account a accs).storage
+Proof
+  rw[transfer_value_def, lookup_account_def, update_account_def,
+     APPLY_UPDATE_THM]
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem transfer_value_preserves_code:
+  (lookup_account a (transfer_value from to amt accs)).code =
+  (lookup_account a accs).code
+Proof
+  rw[transfer_value_def, lookup_account_def, update_account_def,
+     APPLY_UPDATE_THM]
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem transfer_value_preserves_nonce:
+  (lookup_account a (transfer_value from to amt accs)).nonce =
+  (lookup_account a accs).nonce
+Proof
+  rw[transfer_value_def, lookup_account_def, update_account_def,
+     APPLY_UPDATE_THM]
+  \\ rw[] \\ gvs[]
+QED
+
+(* ---------------- SELFDESTRUCT primitive psf lemmas ------------- *)
+
+(* transfer_value only changes balances, which are free in the
+   weakened same_frame_rel. *)
+Theorem psf_update_accounts_transfer_value:
+  psf (λs. T) (update_accounts (transfer_value fromAddr toAddr amount))
+Proof
+  rw[psf_def, update_accounts_def, return_def]
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  \\ rw[transfer_value_preserves_storage,
+        transfer_value_preserves_code,
+        transfer_value_preserves_nonce]
+QED
+
+(* add_to_delete appends to toDelete, which is free in the weakened
+   relation. *)
+Theorem psf_add_to_delete:
+  psf (λs. T) (add_to_delete a)
+Proof
+  rw[psf_def, add_to_delete_def, return_def]
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+QED
+
+(* update_account at the callee with a new account agreeing with the
+   current callee account on storage, code, and nonce. Safe under
+   the weakened relation. *)
+Theorem psf_update_accounts_callee_balance_only:
+  psf (λs. senderAddr = (FST (HD s.contexts)).msgParams.callee ∧
+           newAccount.storage =
+             (lookup_account senderAddr s.rollback.accounts).storage ∧
+           newAccount.code =
+             (lookup_account senderAddr s.rollback.accounts).code ∧
+           newAccount.nonce =
+             (lookup_account senderAddr s.rollback.accounts).nonce)
+      (update_accounts (update_account senderAddr newAccount))
+Proof
+  rw[psf_def, update_accounts_def, return_def]
+  \\ rw[same_frame_rel_def, callee_local_changes_def,
+        lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+  \\ rw[] \\ gvs[lookup_account_def]
+QED
+
+(* ---------------- psf step_self_destruct ----------------------- *)
+
+(* step_self_destruct, line by line:
+     pop_stack 1                    -- preserves_same_frame
+     access_address address         -- preserves_same_frame
+     senderAddress <- get_callee;
+     accounts <- get_accounts;
+     consume_gas ...                -- preserves_same_frame
+     assert_not_static              -- preserves_same_frame
+     update_accounts (transfer_value senderAddress address balance)
+                                    -- psf_update_accounts_transfer_value
+     original <- get_original;
+     if account_empty originalContract then
+       update_accounts (update_account senderAddress (sender with balance := 0));
+                                    -- psf_update_accounts_callee_balance_only
+       add_to_delete senderAddress  -- psf_add_to_delete
+     else return ()                 -- psf_return
+     finish                         -- preserves_same_frame *)
+
+Theorem psf_step_self_destruct:
+  psf (λs. T) step_self_destruct
+Proof
+  rw[step_self_destruct_def]
+  \\ irule psf_bind >> simp[]
+  >> qexists_tac`K (K T)` >> simp[] >> gen_tac
+  \\ irule psf_bind >> simp[]
+  >> qexists_tac`K (K T)` >> simp[] >> gen_tac
+  >> irule psf_bind_get_callee >> simp[] >> qx_gen_tac`callee`
+  >> irule psf_bind_get_accounts >> simp[] >> qx_gen_tac`accounts`
+  \\ irule psf_ignore_bind >> simp[]
+  \\ qabbrev_tac`acc = lookup_account callee accounts`
+  \\ qabbrev_tac`rbc = λs. lookup_account callee s.rollback.accounts`
+  \\ qabbrev_tac`pco = λs. s.contexts ≠ [] ∧
+       callee = (FST (HD s.contexts)).msgParams.callee ∧
+       (rbc s).storage = acc.storage ∧
+       (rbc s).code = acc.code ∧
+       (rbc s).nonce = acc.nonce` >>
+  qexists_tac`pco` >>
+  simp[] >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac
+    >> qmatch_asmsub_abbrev_tac`consume_gas n`
+    >> mp_tac preserves_same_frame_consume_gas
+    >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule
+    >> impl_tac >- gvs[]
+    \\ `cp (consume_gas n)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[cp_def]
+    >> disch_then drule >> impl_tac >- rw[] >>
+    strip_tac >> gvs[Abbr`acc`,Abbr`rbc`,Abbr`pco`] ) >>
+  irule psf_ignore_bind >>
+  simp[] >>
+  qexists_tac`pco` >> simp[] >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac
+    >> `cp assert_not_static` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[cp_def]
+    >> disch_then drule >> impl_tac >- gvs[Abbr`pco`] >>
+    strip_tac >> gvs[Abbr`acc`,Abbr`rbc`,Abbr`pco`] ) >>
+  irule psf_ignore_bind >>
+  reverse conj_tac
+  >- (
+    irule psf_mono >>
+    qexists_tac`λs. T` >> simp[] >>
+    irule psf_update_accounts_transfer_value ) >>
+  qexists_tac`pco` >> simp[] >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac
+    >> gvs[update_accounts_def, return_def, Abbr`pco`, Abbr`rbc`]
+    >> simp[transfer_value_preserves_storage,
+            transfer_value_preserves_code,
+            transfer_value_preserves_nonce] ) >>
+  irule psf_bind_get_original >>
+  qx_gen_tac`original` >>
+  simp[] >>
+  irule psf_ignore_bind >>
+  rw[] >>
+  TRY (qexists_tac`pco`) >> simp[return_def]
+  >- (
+    rpt gen_tac >> strip_tac >>
+      gvs[bind_def, ignore_bind_def, update_accounts_def, return_def,
+       add_to_delete_def, Abbr`pco`, Abbr`rbc`, Abbr`acc`,
+       lookup_account_def, update_account_def, APPLY_UPDATE_THM]) >>
+  irule psf_ignore_bind >>
+  reverse conj_tac
+  >- (
+    irule psf_mono >>
+    qspecl_then[`callee`,`acc with balance := 0`]
+      mp_tac (GEN_ALL psf_update_accounts_callee_balance_only) >>
+    strip_tac >>
+    goal_assum $ drule_at Any >>
+    simp[Abbr`pco`] ) >>
+  simp[] >>
+  qexists_tac`λs. T` >>
+  simp[] >>
+  irule psf_add_to_delete
+QED
+
+Theorem preserves_same_frame_step_self_destruct[simp]:
+  preserves_same_frame step_self_destruct
+Proof
+  rw[preserves_same_frame_eq_psf_T, psf_step_self_destruct]
+QED
+
+Theorem preserves_same_frame_step_inst_SelfDestruct[simp]:
+  preserves_same_frame (step_inst SelfDestruct)
+Proof
+  rw[step_inst_def]
 QED
