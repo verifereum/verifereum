@@ -2629,6 +2629,124 @@ Proof
   >> drule_then drule proceed_create_length >> simp[]
 QED
 
+(* ================================================================ *)
+(* psf_or_grow: state-indexed variant of same_frame_or_grow.         *)
+(*                                                                   *)
+(* Same-shape predicate as `psf`, but with the or-grow disjunct     *)
+(* baked in. Used for `step_create` where the push branch only     *)
+(* same-frames under a value-level precondition from `get_callee`. *)
+(* ================================================================ *)
+
+Definition psf_or_grow_def:
+  psf_or_grow p (m: α execution) ⇔
+    ∀s r s'. m s = (r, s') ∧ p s ∧ s.contexts ≠ [] ⇒
+      same_frame_rel s s' ∨
+      LENGTH s'.contexts ≥ LENGTH s.contexts + 1
+End
+
+(* ---------------- Bridges ------------------- *)
+
+Theorem psf_or_grow_of_same_frame_or_grow[simp]:
+  same_frame_or_grow m ⇒ psf_or_grow p m
+Proof
+  rw[same_frame_or_grow_def, psf_or_grow_def]
+  >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem same_frame_or_grow_eq_psf_or_grow_T:
+  same_frame_or_grow m ⇔ psf_or_grow (λs. T) m
+Proof
+  rw[same_frame_or_grow_def, psf_or_grow_def]
+QED
+
+(* ---------------- Composition rules ------------------- *)
+
+Theorem psf_or_grow_bind:
+  psf_or_grow p g ∧
+  (∀x. psf_or_grow (p_cont x) (f x)) ∧
+  (∀x s s'. g s = (INL x, s') ∧ p s ∧ s.contexts ≠ [] ⇒
+            p_cont x s') ⇒
+  psf_or_grow p (bind g f)
+Proof
+  rw[psf_or_grow_def, bind_def]
+  >> gvs[AllCaseEqs()]
+  >> first_x_assum drule
+  >> first_x_assum drule
+  >> first_x_assum drule
+  >> rw[] >> gvs[]
+  >> imp_res_tac same_frame_rel_contexts_ne >> gvs[]
+  >- metis_tac[same_frame_rel_trans, same_frame_rel_def]
+  >- metis_tac[same_frame_rel_trans, same_frame_rel_def]
+  >> qmatch_asmsub_abbrev_tac`xxx ⇒ _`
+  >> `xxx` by (simp[Abbr`xxx`] >> strip_tac >> gvs[])
+  >> gvs[Abbr`xxx`]
+  >- metis_tac[same_frame_rel_trans, same_frame_rel_def]
+QED
+
+Theorem psf_or_grow_ignore_bind:
+  psf_or_grow p g ∧
+  psf_or_grow p_cont f ∧
+  (∀s x s'. g s = (INL x, s') ∧ p s ∧ s.contexts ≠ [] ⇒ p_cont s') ⇒
+  psf_or_grow p (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  >> irule psf_or_grow_bind >> simp[]
+  >> qexists_tac `λu s. p_cont s`
+  >> simp[] >> metis_tac[]
+QED
+
+Theorem psf_or_grow_cond[simp]:
+  psf_or_grow p m1 ∧ psf_or_grow p m2 ⇒
+  psf_or_grow p (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem psf_or_grow_case_option[simp]:
+  psf_or_grow p m_none ∧ (∀x. psf_or_grow p (m_some x)) ⇒
+  psf_or_grow p (case opt of NONE => m_none | SOME x => m_some x)
+Proof
+  Cases_on `opt` >> rw[]
+QED
+
+Theorem psf_or_grow_let[simp]:
+  (∀x. psf_or_grow p (f x)) ⇒
+  psf_or_grow p (let x = v in f x)
+Proof
+  rw[]
+QED
+
+(* ---------------- Specialised getter-bind for get_callee -------- *)
+
+Theorem psf_or_grow_bind_get_callee:
+  (∀x. psf_or_grow (λs. p s ∧ x = (FST (HD s.contexts)).msgParams.callee)
+                    (f x)) ⇒
+  psf_or_grow p (bind get_callee f)
+Proof
+  rw[psf_or_grow_def, bind_def, get_callee_def,
+     get_current_context_def, ok_state_def, return_def, fail_def]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> first_x_assum (qspec_then `s` mp_tac)
+  >> rw[psf_or_grow_def]
+QED
+
+(* ---------------- Leaf for abort_create_exists with callee ------ *)
+
+(* Under the precondition that the argument equals the head's callee,
+   abort_create_exists preserves same_frame (and therefore trivially
+   same-frame-or-grows). *)
+Theorem psf_or_grow_abort_create_exists_callee:
+  psf_or_grow
+    (λs. senderAddress = (FST (HD s.contexts)).msgParams.callee)
+    (abort_create_exists senderAddress)
+Proof
+  rw[psf_or_grow_def]
+  >> disj1_tac
+  >> drule_at Any abort_create_exists_same_frame >> simp[]
+  >> disch_then (qspec_then `senderAddress` mp_tac) >> simp[]
+  >> Cases_on `abort_create_exists senderAddress s` >> gvs[]
+QED
+
 (* ---------------- step_call and step_create -------------------- *)
 
 Theorem same_frame_or_grow_step_call[simp]:
@@ -2654,27 +2772,121 @@ QED
 Theorem same_frame_or_grow_step_create[simp]:
   same_frame_or_grow (step_create two)
 Proof
-  simp[step_create_def]
-  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_cond >> simp[]
-  >> irule same_frame_or_grow_cond >> simp[]
-  >> simp[abort_create_exists_def]
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> cheat (* TODO: need psf_or_grow framework *)
+  simp[same_frame_or_grow_eq_psf_or_grow_T, step_create_def]
+  (* Peel the prefix before get_callee using psf_or_grow_bind with
+     trivially-transferred precondition. Then use psf_or_grow_bind_get_callee
+     to strengthen to "senderAddress = callee" and continue. *)
+  >> irule psf_or_grow_bind >> simp[]
+  >> qexists_tac `λx s. T` >> simp[] >> gen_tac
+  >> irule psf_or_grow_bind >> simp[]
+  >> qexists_tac `λx s. T` >> simp[] >> gen_tac
+  >> irule psf_or_grow_ignore_bind >> simp[]
+  >> qexists_tac `λs. T` >> simp[]
+  >> irule psf_or_grow_ignore_bind >> simp[]
+  >> qexists_tac `λs. T` >> simp[]
+  >> irule psf_or_grow_bind >> simp[]
+  >> qexists_tac `λx s. T` >> simp[] >> gen_tac
+  >> irule psf_or_grow_bind_get_callee >> simp[] >> gen_tac
+  (* From here `x'` (the senderAddress) is known to equal the head's
+     callee. Continue peeling while threading this precondition. *)
+  >> qmatch_goalsub_abbrev_tac`psf_or_grow pco`
+  >> irule psf_or_grow_bind >> simp[]
+  >> qexists_tac `λx s. pco s` >> simp[]
+  >> conj_tac
+  >- (
+    rpt strip_tac
+    >> `preserves_same_frame get_accounts` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> gen_tac
+  >> irule psf_or_grow_ignore_bind >> simp[]
+  >> qexists_tac `pco` >> simp[]
+  >> conj_tac >- simp[assert_def]
+  >> irule psf_or_grow_ignore_bind >> simp[]
+  >> qexists_tac `pco` >> simp[]
+  >> conj_tac >- (
+    rpt strip_tac
+    >> qmatch_asmsub_abbrev_tac`access_address addr`
+    >> `preserves_same_frame (access_address addr)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> irule psf_or_grow_bind >> simp[] >>
+  qexists_tac `λx s. pco s` >> simp[] >>
+  conj_tac
+  >- (
+    rpt strip_tac
+    >> `preserves_same_frame get_gas_left` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> gen_tac
+  >> irule psf_or_grow_ignore_bind >> simp[] >> qexists_tac `pco` >> simp[]
+  >> conj_tac
+  >- (
+    rpt strip_tac
+    >> qmatch_asmsub_abbrev_tac`consume_gas n`
+    >> `preserves_same_frame (consume_gas n)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> irule psf_or_grow_ignore_bind >> simp[] >>
+  qexists_tac `pco` >> simp[]
+  >> conj_tac
+  >- (
+    rpt strip_tac
+    >> `preserves_same_frame assert_not_static` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> irule psf_or_grow_ignore_bind >> simp[] >> qexists_tac `pco` >> simp[]
+  >> conj_tac
+  >- (
+    rpt strip_tac
+    >> `preserves_same_frame (set_return_data [])` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> irule psf_or_grow_bind >> simp[] >>
+  qexists_tac `λx s. pco s` >> simp[]
+  >> conj_tac
+  >- (
+    rpt strip_tac
+    >> `preserves_same_frame get_num_contexts` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> gen_tac
+  >> irule psf_or_grow_ignore_bind >> simp[] >>
+  qexists_tac `pco` >> simp[]
+  >> conj_tac
+  >- (
+    rpt strip_tac
+    >> qmatch_asmsub_abbrev_tac`ensure_storage_in_domain n`
+    >> `preserves_same_frame (ensure_storage_in_domain n)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> irule psf_or_grow_cond >> conj_tac
+  >- (
+    (* abort_unuse branch: preserves_same_frame, trivially psf_or_grow *)
+    simp[])
+  >> irule psf_or_grow_cond >> conj_tac
+  >- (
+    (* abort_create_exists senderAddress: where senderAddress = head's callee *)
+    qunabbrev_tac`pco` >>
+    irule psf_or_grow_abort_create_exists_callee)
+  (* proceed_create: grows *)
+  >> simp[]
 QED
 
 (* ---------------- Final same-frame theorems -------------------- *)
