@@ -2015,3 +2015,245 @@ Theorem preserves_same_frame_step_inst_Invalid[simp]:
 Proof
   rw[step_inst_def]
 QED
+
+(* ================================================================ *)
+(* Pass C: Handle-layer lemmas.                                      *)
+(*                                                                   *)
+(* We establish `same_frame_rel` preservation through `handle_step`  *)
+(* when the step doesn't change the call-stack length (i.e. the     *)
+(* handle_exception path is the n ≤ 1 reraise, not a pop).           *)
+(*                                                                   *)
+(* This relies on a well-formedness invariant on the head context:  *)
+(* if its `outputTo = Code a`, then its `msgParams.callee = a`.      *)
+(* The invariant holds for `initial_state` by construction and is   *)
+(* preserved through the frame (because `same_frame_rel` preserves  *)
+(* `msgParams`).                                                     *)
+(* ================================================================ *)
+
+Definition outputTo_consistent_def:
+  outputTo_consistent s ⇔
+    s.contexts ≠ [] ∧
+    ∀a. (FST (HD s.contexts)).msgParams.outputTo = Code a ⇒
+        (FST (HD s.contexts)).msgParams.callee = a
+End
+
+(* The invariant is preserved through any `same_frame_rel` step, because
+   the head's `msgParams` is preserved. *)
+Theorem same_frame_rel_preserves_outputTo_consistent:
+  same_frame_rel s s' ∧ outputTo_consistent s ⇒ outputTo_consistent s'
+Proof
+  rw[outputTo_consistent_def]
+  >- metis_tac[same_frame_rel_contexts_ne]
+  \\ `(FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`
+     by metis_tac[same_frame_rel_msgParams]
+  \\ gvs[]
+QED
+
+(* ---------------- handle_create ---------------- *)
+
+(* Under outputTo_consistent, handle_create's code-install branch
+   writes at the callee (because outputTo = Code address implies
+   callee = address), which is a callee-local change permitted by
+   same_frame_rel. *)
+Theorem psf_handle_create:
+  psf outputTo_consistent (handle_create e)
+Proof
+  rw[psf_def, handle_create_def, bind_def,
+     get_return_data_def, get_output_to_def,
+     get_current_context_def, ok_state_def, return_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ PairCases_on `h` \\ gvs[]
+  \\ Cases_on `e`
+  >- (
+    (* e = NONE *)
+    Cases_on `h0.msgParams.outputTo` \\ gvs[reraise_def]
+    >- (
+      (* outputTo = Memory — reraise *)
+      irule same_frame_rel_refl \\ simp[])
+    >- (
+      (* outputTo = Code c — install code at c *)
+      gvs[ignore_bind_def, bind_def, assert_def, return_def,
+          fail_def, AllCaseEqs(), consume_gas_def,
+          get_current_context_def, ok_state_def,
+          set_current_context_def, update_accounts_def,
+          reraise_def]
+      (* Each branch: either fail (refl), or consume_gas + update_accounts.
+         The update is at address = c, which equals the head's callee by
+         outputTo_consistent. *)
+      \\ gvs[outputTo_consistent_def]
+      \\ rw[same_frame_rel_def, callee_local_changes_def,
+            lookup_account_def, update_account_def,
+            APPLY_UPDATE_THM]
+      \\ rw[]))
+  \\ (* e = SOME _ — reraise *)
+    gvs[reraise_def]
+  \\ Cases_on `h0.msgParams.outputTo` \\ gvs[reraise_def]
+  \\ irule same_frame_rel_refl \\ simp[]
+QED
+
+(* ---------------- handle_exception under length preservation ----- *)
+
+Theorem cp_imp_length_contexts_preserved:
+  cp m /\ m s = (r,s') /\ s.contexts <> []
+  ==> LENGTH s'.contexts = LENGTH s.contexts
+Proof
+  rw[cp_def] >> first_x_assum drule >> rw[] >> gvs[] >>
+  Cases_on`s.contexts` >> gvs[]
+QED
+
+Theorem psf_imp_length_contexts_preserved:
+  preserves_same_frame m /\ m s = (r,s') /\ s.contexts <> [] ==>
+  LENGTH s'.contexts = LENGTH s.contexts
+Proof
+  rw[preserves_same_frame_def] >> first_x_assum drule >>
+  rw[same_frame_rel_def]
+QED
+
+(* handle_exception either reraises (n ≤ 1) or pops (n > 1). When the
+   length is preserved, the reraise branch was taken. The prefix
+   (consume_gas + set_return_data in non-Revert error cases) is
+   preserves_same_frame. *)
+Theorem handle_exception_same_frame:
+  s.contexts ≠ [] ∧
+  handle_exception e s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  same_frame_rel s s'
+Proof
+  simp[handle_exception_def, bind_def, ignore_bind_def]
+  \\ strip_tac
+  \\ reverse (Cases_on`LENGTH s.contexts ≤ 1`)
+  >- (
+    gvs[AllCaseEqs(), COND_RATOR, get_num_contexts_def,
+        return_def, reraise_def] >>
+    TRY (
+      gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+          set_return_data_def, consume_gas_def, get_gas_left_def,
+          assert_def, set_current_context_def, fail_def,
+          get_current_context_def, same_frame_rel_def] >> NO_TAC ) >>
+    rename1`_ s1 = (_,s')` >>
+    TRY (
+      rename1`_ s = (_,s1)` >>
+      `LENGTH s1.contexts = LENGTH s.contexts` by 
+        gvs[bind_def, ignore_bind_def, AllCaseEqs(),
+            get_gas_left_def, consume_gas_def, assert_def,
+            set_return_data_def, fail_def, return_def,
+            set_current_context_def, get_current_context_def]) >>
+     `LENGTH s'.contexts <> LENGTH s1.contexts` suffices_by gvs[] >>
+     qpat_x_assum`_ = (_,s')`mp_tac >>
+     pop_assum kall_tac >>
+     simp[bind_def] >>
+     simp[get_return_data_def, bind_def,
+          return_def, get_current_context_def] >>
+     TRY IF_CASES_TAC >> gvs[return_def, fail_def] >>
+     simp[get_output_to_def, bind_def, get_current_context_def] >>
+     gvs[return_def] >>
+     simp[pop_and_incorporate_context_def,bind_def] >>
+     simp[get_gas_left_def, bind_def, get_current_context_def, return_def] >>
+     simp[pop_context_def, return_def] >>
+     simp[ignore_bind_def, bind_def] >>
+     CASE_TAC >>
+     drule_at Any cp_imp_length_contexts_preserved >>
+     simp[] >>
+     Cases_on`s1.contexts` >> gvs[] >>
+     Cases_on`t` >> gvs[] >> strip_tac >>
+     BasicProvers.TOP_CASE_TAC >> (
+     reverse BasicProvers.TOP_CASE_TAC >- (
+       rw[] >> gvs[AllCaseEqs(),set_rollback_def,return_def] >>
+       drule_at Any psf_imp_length_contexts_preserved >> rw[] >>
+       gvs[push_logs_def, bind_def, get_current_context_def, AllCaseEqs(),
+           return_def, set_current_context_def]
+     ) ) >>
+     BasicProvers.TOP_CASE_TAC >>
+     drule_at Any psf_imp_length_contexts_preserved >>
+     (impl_tac >- (simp[] >> gvs[AllCaseEqs(), set_rollback_def, return_def] >>
+                   strip_tac >> gvs[] >>
+                   qhdtm_x_assum`update_gas_refund`assume_tac >>
+                   drule_at Any psf_imp_length_contexts_preserved >>
+                   rw[] >> strip_tac >> gvs[] >>
+                   qhdtm_x_assum`push_logs`assume_tac >>
+                   drule_at Any psf_imp_length_contexts_preserved >>
+                   rw[] >> strip_tac >> gvs[] 
+     )) >> strip_tac >> (
+     reverse BasicProvers.TOP_CASE_TAC >- (
+       rw[] >>
+       strip_tac >>  gvs[AllCaseEqs(),set_rollback_def,return_def] >>
+                   qhdtm_x_assum`update_gas_refund`assume_tac >>
+                   drule_at Any psf_imp_length_contexts_preserved >>
+                   rw[] >> strip_tac >> gvs[] >>
+                   qhdtm_x_assum`push_logs`assume_tac >>
+                   drule_at Any psf_imp_length_contexts_preserved >>
+                   rw[] >> strip_tac >> gvs[]
+     ) ) >>
+     simp[AllCaseEqs(),return_destination_CASE_rator,bind_def] >>
+     rw[] >> gvs[push_stack_def, set_return_data_def, get_current_context_def,
+                 set_current_context_def, bind_def, return_def, assert_def,
+                 fail_def,AllCaseEqs(),ignore_bind_def] >>
+     strip_tac >> gvs[set_rollback_def, return_def] >>
+     gvs[write_memory_def, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def, assert_def,
+         fail_def,return_def] >>
+                   qhdtm_x_assum`update_gas_refund`assume_tac >>
+                   drule_at Any psf_imp_length_contexts_preserved >>
+                   rw[] >> strip_tac >> gvs[] >>
+                   qhdtm_x_assum`push_logs`assume_tac >>
+                   drule_at Any psf_imp_length_contexts_preserved >>
+                   rw[] >> strip_tac >> gvs[]
+  )
+  \\ gvs[AllCaseEqs(), COND_RATOR]
+  (* Various branches: the prefix may be a consume_gas + set_return_data
+     block or just return (); then n <- get_num_contexts; if n ≤ 1
+     reraise else pop. The length hypothesis rules out the pop branch. *)
+  \\ gvs[get_gas_left_def, get_current_context_def, ok_state_def,
+         return_def, get_num_contexts_def, reraise_def, fail_def,
+         consume_gas_def, set_return_data_def, set_current_context_def,
+         get_return_data_def, get_output_to_def]
+  \\ gvs[bind_def, ignore_bind_def, AllCaseEqs(), get_current_context_def,
+         assert_def, fail_def, return_def, set_current_context_def,
+         inc_pc_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ (* In each remaining branch, s' equals s with possibly modified
+        head context (gasUsed up, returnData cleared). *)
+    PairCases_on `h` \\ gvs[]
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  \\ gvs[AllCaseEqs(), rich_listTheory.IS_PREFIX_REFL]
+QED
+
+(* ---------------- handle_step under length preservation --------- *)
+
+(* handle_step = if vfm_abort e then reraise e
+                 else handle (handle_create e) handle_exception.
+   The reraise case is trivial. In the handle case, handle_create always
+   returns INR, so handle_exception is always invoked; we compose
+   psf_handle_create with the same-length version of
+   handle_exception_same_frame. *)
+Theorem handle_step_same_frame:
+  outputTo_consistent s ∧
+  handle_step e s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  same_frame_rel s s'
+Proof
+  rw[handle_step_def]
+  >- (
+    (* vfm_abort e: reraise, state unchanged *)
+    gvs[reraise_def]
+    \\ irule same_frame_rel_refl
+    \\ gvs[outputTo_consistent_def])
+  \\ (* handle (handle_create e) handle_exception s *)
+    gvs[handle_def]
+  \\ `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+  \\ drule_then(qspec_then`e`mp_tac) (INST_TYPE[alpha |-> ``:unit``]handle_create_INR)
+  \\ rw[] >> gvs[]
+  \\ rename1`handle_create _ s = (_,s1)`
+  \\ qmatch_asmsub_abbrev_tac`hce s = _`
+  \\ `psf outputTo_consistent hce` by metis_tac[psf_handle_create]
+  \\ `same_frame_rel s s1` by (
+       gvs[psf_def,Abbr`hce`]
+       \\ first_x_assum irule
+       \\ simp[] \\ metis_tac[])
+  \\ `LENGTH s1.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
+  \\ `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+  \\ `LENGTH s'.contexts = LENGTH s1.contexts` by simp[]
+  \\ `same_frame_rel s1 s'`
+     by (irule handle_exception_same_frame \\ metis_tac[])
+  \\ metis_tac[same_frame_rel_trans]
+QED
