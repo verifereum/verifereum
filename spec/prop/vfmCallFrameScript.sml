@@ -2916,3 +2916,84 @@ Proof
   >> pop_assum mp_tac >> rewrite_tac[same_frame_or_grow_def]
   >> disch_then drule >> rw[]
 QED
+
+(* ================================================================ *)
+(* step_same_frame: the main Pass D theorem.                         *)
+(*                                                                   *)
+(* Combines:                                                         *)
+(*  - per-opcode preserves_same_frame lemmas (Pass B) for Group 1;  *)
+(*  - step_call_same_frame / step_create_same_frame for CALL/CREATE; *)
+(*  - handle_step_same_frame (Pass C) for the handle layer.         *)
+(* ================================================================ *)
+
+(* Helper: same_frame_or_grow (step_inst op). Covers all opcodes     *)
+(* uniformly: Group 1 ops lift from preserves_same_frame, CALL and  *)
+(* CREATE are same_frame_or_grow via our helpers.                   *)
+Theorem same_frame_or_grow_step_inst[simp]:
+  same_frame_or_grow (step_inst op)
+Proof
+  Cases_on `op` >> simp[]
+  >> simp[step_inst_def]
+QED
+
+(* The inner monad of step (before the outer handle) is composed of
+   preserves_same_frame prefixes followed by a step_inst and
+   inc_pc_or_jump. It satisfies same_frame_or_grow. *)
+Theorem same_frame_or_grow_step_inner[simp]:
+  same_frame_or_grow
+    (do
+       context <- get_current_context;
+       if LENGTH context.msgParams.code ≤ context.pc
+       then step_inst Stop
+       else case FLOOKUP context.msgParams.parsed context.pc of
+              NONE => step_inst Invalid
+            | SOME op => do step_inst op; inc_pc_or_jump op od
+     od)
+Proof
+  irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  >> Cases_on `LENGTH x.msgParams.code ≤ x.pc` >> simp[]
+  >> CASE_TAC >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+QED
+
+Theorem step_same_frame:
+  outputTo_consistent s ∧
+  step s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  same_frame_rel s s'
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+  >> gvs[step_def, handle_def]
+  >> qmatch_asmsub_abbrev_tac`pair_CASE (inner s)`
+  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
+  >> gvs[AllCaseEqs()]
+  >- (
+    (* inner returned INL: step s = (INL _, r) so s' = r. *)
+    gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[])
+  >> (* inner returned INR with state s1: step s = handle_step e s1.
+        Two sub-cases based on same_frame_or_grow inner:
+          (a) same_frame_rel s s1: compose with handle_step_same_frame.
+          (b) inner grew: s1.contexts = s.contexts + k for some k ≥ 1.
+              handle_step must shrink back to s.contexts for our
+              hypothesis. This happens when handle_exception pops. *)
+  rename1`inner s = (INR e, s1)` >>
+  `same_frame_rel s s1 ∨ LENGTH s1.contexts ≥ LENGTH s.contexts + 1`
+  by (gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[])
+  >- (
+    (* (a) same_frame_rel s s1 *)
+    `outputTo_consistent s1` by
+       metis_tac[same_frame_rel_preserves_outputTo_consistent]
+    >> `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+    >> `LENGTH s1.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
+    >> `LENGTH s'.contexts = LENGTH s1.contexts` by simp[]
+    >> `same_frame_rel s1 s'` by (
+         drule handle_step_same_frame >> disch_then drule
+         >> disch_then drule >> simp[])
+    >> metis_tac[same_frame_rel_trans])
+  >> (* (b) inner grew. This case is real and needs dedicated analysis:
+        proceed_call dispatches a precompile that can fail, returning
+        INR after pushing. handle_step then pops. Direct proof needs
+        reasoning about the combined push+pop behaviour. *)
+     cheat
+QED
