@@ -114,32 +114,48 @@ Contents:
 
 ### 3. New theory `spec/prop/vfmRunCallScript.sml`
 
-Ancestors: `vfmExecution`, `vfmCallFrame`, `vfmDecreasesGas`.
+Ancestors: `vfmExecution`, `vfmExecutionProp`, `vfmCallFrame`.
+
+**Status: skeleton built; 1 cheat (`run_call_inv_step`).**
 
 Contents:
 
-- `run_call_tr_def` tail-recursive form, terminating by the same gas
-  argument used for `run_tr` but additionally conditioned on
-  `LENGTH contexts ≥ depth`.
-- `run_call_eq_tr`: the equation connecting `run_call` to `run_call_tr`
-  (mirrors `run_eq_tr`).
-- Cross-boundary step lemmas:
-  - `step_pushes` — describes what `step` does when
-    `LENGTH s'.contexts = LENGTH s.contexts + 1` (CALL/CREATE success).
-  - `step_pops`  — describes what `step` does when
-    `LENGTH s'.contexts < LENGTH s.contexts` (Stop/Return/Revert/
-    Invalid/OOG/SELFDESTRUCT).
-- `run_call` preservation theorems stated using the existing
-  `rollback.accesses.addresses` and `rollback.accesses.storageKeys` sets
-  as the "touched" witness — no new bookkeeping is added to the
-  execution state.
-- Revert-aware corollaries: on a reverted child, `rollback.accesses` is
-  restored along with the rest of `rollback`, so the uniform statement
-  "storage at any address not in the final `accesses.addresses` is
-  unchanged" holds in both the success and revert branches.
+- `active_rollbacks_def`: the list of rollbacks we could revert to
+  from a descendant state `s` of `es` — `s.rollback` plus every saved
+  rollback in contexts pushed on top of `es`'s depth.
+- `storage_preserved_def`, `tStorage_preserved_def`, `code_preserved_def`:
+  pointwise predicates on two rollback states saying fields agree at
+  every address not in the accesses set.
+- `run_call_inv_def`: the 2-state invariant between the initial `es`
+  and any descendant `s`. Currently asserts `s.txParams = es.txParams`
+  plus `EVERY (λrb. storage_preserved rb es.rollback) (active_rollbacks ...)`.
+  Will be extended as more corollaries are needed.
+- `run_call_inv_refl` — reflexivity for the initial state.
+- `run_call_inv_step` — single-step preservation. **Currently cheated.**
+  This is the technical core: requires characterising, for each step,
+  how `rollback` changes and showing every new `active_rollbacks` entry
+  preserves the storage property.
+- `run_call_preserves_inv` — lift to whole `run_call` via
+  `OWHILE_INV_IND`. **Proven** (modulo cheat in
+  `run_call_inv_step`).
+- `run_call_preserves_storage_outside_accessed` — the headline
+  theorem. **Proven** via `run_call_preserves_inv`.
+- `run_call_preserves_txParams` — companion. **Proven**.
 
-Decomposition / induction-principle theorems connecting `run_call` to
-`run_within_frame` are *not* required for the issue and are deferred.
+Companion theorems still to add (all simple corollaries of
+`run_call_preserves_inv` once the invariant is strengthened):
+
+- `run_call_preserves_tStorage_outside_accessed`
+- `run_call_preserves_code_outside_accessed`
+- `run_call_preserves_balance_outside_accessed`
+- `run_call_accesses_grow`, `run_call_logs_grow`, `run_call_gas_monotone`,
+  `run_call_refund_monotone`, `run_call_domain_compatible`
+- `run_call_preserves_nonhead_contexts`, `run_call_preserves_head_msgParams`
+
+`run_call_tr` tail-recursive form / `run_call_eq_tr` / cross-boundary
+step lemmas: **not needed** for the current invariant approach.
+Deferred. (`OWHILE_INV_IND` over `run_call_def` directly is
+sufficient.)
 
 ## The `same_frame_rel` relation
 
@@ -500,26 +516,51 @@ No existing file is deleted or rewritten.
       nonce-outside-callee, nonhead-contexts, head-msgParams,
       saved-rollback, callee-nonce-monotone, logs-grow,
       accesses-grow, refund-monotone, domain-compatible, txParams).
-3. Create `spec/prop/vfmRunCallScript.sml`:
-   a. Define `run_call_tr`, prove termination, prove `run_call_eq_tr`.
-   b. Prove `step_pushes` and `step_pops` cross-boundary lemmas.
-   c. Prove the across-call theorems by induction on `run_call_tr`.
-   d. Export the headline theorem and companions.
+3. [x] Create `spec/prop/vfmRunCallScript.sml` skeleton:
+   a. [x] Define `active_rollbacks`, `storage_preserved`,
+      `run_call_inv` (2-state invariant with saved-rollback chain).
+   b. [x] Prove `run_call_inv_refl`.
+   c. [cheat] Prove `run_call_inv_step` (single-step preservation).
+   d. [x] Prove `run_call_preserves_inv` via `OWHILE_INV_IND`.
+   e. [x] Export `run_call_preserves_storage_outside_accessed` and
+      `run_call_preserves_txParams` corollaries.
+   f. Extend the invariant + add remaining companion corollaries
+      (tStorage, code, balance, accesses, logs, gas, refund,
+      domain, nonhead contexts, head msgParams).
+
+   `run_call_tr` / `run_call_eq_tr` / cross-boundary step lemmas
+   are NOT needed for this approach. Deferred.
 4. Update `spec/prop/Holmakefile` if needed (currently `INCLUDES=..`,
    so probably no change).
 
 ## Open items
 
-- **Pass D completion**: `step_call_same_frame`, `step_create_same_frame`,
-  and `step_same_frame` are currently cheated. These are complex
-  state-level proofs (the push branches are ruled out by length
-  contradictions; the abort branches reduce to already-proved
-  `preserves_same_frame` lemmas).
-- The exact shape of `step_pushes` / `step_pops` cross-boundary
-  lemmas needed for `run_call` induction — will simplify on
-  inspection.
-- Whether the `run_call_tr` equation requires a side condition
-  `s.contexts ≠ []` (likely yes, as `run_tr` implicitly does).
+- **`run_call_inv_step`** — the one remaining cheat in
+  `vfmRunCallScript`. Proving this requires:
+  1. Characterising `step`'s effect on `rollback` via case analysis:
+     non-push/pop steps only grow accesses (monotone); push steps
+     keep `rollback` unchanged (modulo transfer_value on balances);
+     pop-success keeps `rollback`; pop-revert replaces `rollback`
+     with the saved rollback of the popped head.
+  2. In each case, showing the new `active_rollbacks` entries each
+     satisfy `storage_preserved _ es.rollback`. For the revert case
+     this follows from the old invariant already holding on the
+     popped context's saved rollback.
+  3. For within-frame storage changes: `write_storage` is the only
+     primitive that changes storage, and it only happens inside
+     `step_inst SStore` which access-lists the slot (hence the
+     address) via `access_slot`. So changed-address ⇒ in new
+     accesses.
+- **Pass D completion in `vfmCallFrame`**: 10 outstanding cheats
+  (`step_inst_inl_grew_is_call`, `step_inst_inr_grew_is_call_family`,
+  `pop_and_incorporate_context_failure_effect`,
+  `handle_exception_pop_failure_memory_effect`,
+  `handle_step_pop_memory_effect`, `step_call_inr_grow_structure`,
+  `step_call_handle_step_inr_grow_same_frame`,
+  `run_within_frame_preserves`, `run_within_frame_gas_monotone`,
+  and a `same_frame_or_grow step` helper inside the last two).
+  These are the complex state-level decomposition cheats from the
+  length-grew case.
 - Whether a global `IS_PREFIX` on head logs holds across push/pop at
   the `run_call` level (it should: pop's `push_logs` on the parent
   appends the callee's logs, preserving prefix). Verify when needed.
