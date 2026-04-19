@@ -533,37 +533,119 @@ No existing file is deleted or rewritten.
 4. Update `spec/prop/Holmakefile` if needed (currently `INCLUDES=..`,
    so probably no change).
 
-## Open items
+## Open items and audit of provability
 
-- **`run_call_inv_step`** — the one remaining cheat in
-  `vfmRunCallScript`. Proving this requires:
-  1. Characterising `step`'s effect on `rollback` via case analysis:
-     non-push/pop steps only grow accesses (monotone); push steps
-     keep `rollback` unchanged (modulo transfer_value on balances);
-     pop-success keeps `rollback`; pop-revert replaces `rollback`
-     with the saved rollback of the popped head.
-  2. In each case, showing the new `active_rollbacks` entries each
-     satisfy `storage_preserved _ es.rollback`. For the revert case
-     this follows from the old invariant already holding on the
-     popped context's saved rollback.
-  3. For within-frame storage changes: `write_storage` is the only
-     primitive that changes storage, and it only happens inside
-     `step_inst SStore` which access-lists the slot (hence the
-     address) via `access_slot`. So changed-address ⇒ in new
-     accesses.
-- **Pass D completion in `vfmCallFrame`**: 10 outstanding cheats
-  (`step_inst_inl_grew_is_call`, `step_inst_inr_grew_is_call_family`,
-  `pop_and_incorporate_context_failure_effect`,
-  `handle_exception_pop_failure_memory_effect`,
-  `handle_step_pop_memory_effect`, `step_call_inr_grow_structure`,
-  `step_call_handle_step_inr_grow_same_frame`,
-  `run_within_frame_preserves`, `run_within_frame_gas_monotone`,
-  and a `same_frame_or_grow step` helper inside the last two).
-  These are the complex state-level decomposition cheats from the
-  length-grew case.
+### Flaws identified during audit
+
+1. **“`same_frame_or_grow step`” is FALSE.** The cheat at line 3394
+   of `vfmCallFrameScript` asserts this as a by-step, but `step` can
+   DECREASE length (Stop/Return/Revert at inner-frame + `handle_exception`
+   pop when `n > 1`). `same_frame_or_grow` requires length to stay
+   equal or grow.
+
+   **Why we thought we needed it:** the `run_within_frame_preserves`
+   induction invariant is `(length = es AND same_frame_rel es s) OR
+   length > es`. When length drops BELOW `es.contexts`, neither
+   disjunct holds.
+
+   **Fix (provable):** reformulate the induction invariant as
+   `outputTo_consistent s AND (LENGTH s.contexts = LENGTH es.contexts
+   ⇒ same_frame_rel es s)`. Under `G x` (which forces
+   `LENGTH x.contexts = LENGTH es.contexts`), step may grow, stay,
+   or pop:
+   - If post-step length = es: same_frame via step_same_frame + trans.
+   - If post-step length ≠ es: invariant is vacuously true.
+   At termination, the theorem hypothesis
+   `LENGTH es'.contexts = LENGTH es.contexts` re-triggers the
+   same-frame conclusion. This removes the need for
+   `same_frame_or_grow step` entirely.
+
+2. **`run_call_preserves_storage_outside_accessed` (address-level)
+   is FALSE as stated.** `step_sstore` uses `access_slot`, which
+   adds to `storageKeys` only, not to `addresses`. A pathological
+   `es` whose head callee is NOT in `rollback.accesses.addresses`
+   allows SSTORE to change storage at that callee without the
+   address appearing in the final accesses.
+
+   **Fix options (listed in order of preference):**
+
+   a. **Primary: use storageKeys, not addresses.** State the
+      headline as `run_call_preserves_storage_outside_accessed_slots`:
+      `SK a k ∉ es'.rollback.accesses.storageKeys ⇒ slot (a, k) is
+      preserved`. This is strictly stronger than the address-level
+      claim, matches the SSTORE access pattern exactly, and matches
+      the actual EVM fact more precisely.
+
+   b. **Secondary: add `wf_accesses es` hypothesis.** Define
+      `wf_accesses s ⇔ s.contexts ≠ [] ⇒ (FST (HD s.contexts)).
+      msgParams.callee ∈ s.rollback.accesses.addresses`. This is
+      true for all reachable states (established at transaction
+      start via `initial_access_sets`, preserved by push/pop). Prove
+      it as an invariant, thread through `run_call_inv`. Then the
+      address-level statement is recoverable.
+
+   The plan now targets (a) as the primary theorem and (b) as a
+   corollary.
+
+### Cheats that are provable
+
+- **`vfmCallFrame` cheats 1–7** (`step_inst_inl_grew_is_call`,
+  `step_inst_inr_grew_is_call_family`, the four
+  `pop_and_incorporate_context_*` / `handle_*_pop_memory_effect`
+  lemmas, and `step_call_{inr_grow_structure,
+  handle_step_inr_grow_same_frame}`): routine state-level unfolding
+  and case analysis. Precompile failures are always `OutOfGas` /
+  `InvalidParameter` / `KZGProofError`, never `vfm_abort`
+  (verified by inspection of all 18 precompile definitions), so the
+  `¬ vfm_abort e` claim in `step_call_inr_grow_structure` is sound.
+
+- **`vfmCallFrame` `run_within_frame_preserves` and
+  `run_within_frame_gas_monotone`**: reformulate with the
+  conditional-disjunction invariant described above. Need one
+  new helper lemma `push_preserves_outputTo_consistent` (proceed_call
+  pushes `outputTo = Memory`, trivially consistent; proceed_create
+  pushes `outputTo = Code address` with `callee = address`,
+  consistent by construction).
+
+- **`vfmRunCall` `run_call_inv_step`**: provable via case analysis:
+  1. Same-frame step: `same_frame_rel s s'` via `step_same_frame`;
+     storage at non-callee preserved; callee is in accesses (by
+     `wf_accesses` invariant threaded through); every active rollback
+     in `s'` has a tail that's either a subsequence of `s`'s active
+     rollbacks (pop success) or `s`'s plus one new saved rb (push).
+  2. Push step: new saved rb = `s.rollback` at mid-step (post-prefix).
+     Storage-preserved on that intermediate rollback follows from
+     monotone accesses + callee_local_changes covering the prefix.
+  3. Pop success: active rollbacks of `s'` is a subsequence of
+     `s`'s; all entries inherited.
+  4. Pop revert: `s'.rollback = saved_rb_of_popped_head`, which was
+     in `s`'s active rollbacks and satisfied storage_preserved.
+
+### Minor gaps (provable with small helper lemmas)
+
+- `push_preserves_outputTo_consistent` (see above).
+- `wf_accesses` invariant: state, prove reflexivity at
+  `initial_state`, prove step-preservation (each CALL/CREATE prefix
+  access-lists the new callee; pop keeps accesses non-empty at the
+  head).
 - Whether a global `IS_PREFIX` on head logs holds across push/pop at
-  the `run_call` level (it should: pop's `push_logs` on the parent
-  appends the callee's logs, preserving prefix). Verify when needed.
+  the `run_call` level: it should (pop's `push_logs` on the parent
+  appends the callee's logs, preserving prefix). Verify when needed
+  as part of `run_call_logs_grow`.
+
+### Net conclusion
+
+**The plan is sound with two adjustments**:
+
+1. Replace `same_frame_or_grow step` with a conditional invariant in
+   the `run_within_frame` induction.
+2. State the address-level run_call storage theorem with a
+   `wf_accesses` hypothesis, or (preferred) replace it with the
+   per-slot `storageKeys`-based theorem as the primary.
+
+All 10 outstanding cheats in `vfmCallFrameScript` are provable (many
+routine); the 1 outstanding cheat in `vfmRunCallScript` is provable
+once the above adjustments are in place.
 
 ## Deferred follow-ups (outside #113 scope)
 
