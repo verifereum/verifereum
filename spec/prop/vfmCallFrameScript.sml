@@ -14,7 +14,7 @@ Theory vfmCallFrame
 Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
   vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmStaticCalls vfmTxParams vfmDomainSeparation
+  vfmStaticCalls vfmTxParams vfmDomainSeparation vfmDecreasesGas
 Libs
   BasicProvers
 
@@ -3329,4 +3329,336 @@ Proof
   >> simp[]
   >> rpt(goal_assum drule)
   >> simp[]
+QED
+
+(* ================================================================ *)
+(* run_within_frame_preserves: iterated step preserves same-frame.   *)
+(* ================================================================ *)
+
+(* run_within_frame_preserves needs the length-equality hypothesis
+   because OWHILE may stop due to length change (if execution pops
+   out of `es`'s frame, e.g. via SELFDESTRUCT / RETURN in a
+   non-outermost frame). In that case `es'` is not same-frame-
+   related to `es`. We require the length-preservation hypothesis to
+   restrict to the "terminated normally" case. *)
+Theorem run_within_frame_preserves:
+  outputTo_consistent es ∧
+  run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  same_frame_rel es es'
+Proof
+  rpt strip_tac
+  >> gvs[run_within_frame_def]
+  (* Use OWHILE_INV_IND with a disjunctive invariant: either we are
+     still at the starting length (and same-frame-related to es),
+     or we've grown past it. Shrinking is impossible because we only
+     make progress while the guard (length equal) holds, and step
+     either same-frames or grows from a same-frame state. *)
+  >> qabbrev_tac `P = λ(rs:(unit+exception option)#execution_state).
+       outputTo_consistent (SND rs) ∧
+       ((LENGTH (SND rs).contexts = LENGTH es.contexts ∧
+         same_frame_rel es (SND rs)) ∨
+        LENGTH (SND rs).contexts > LENGTH es.contexts)`
+  >> `P (r, es')` by (
+    irule (MP_CANON WhileTheory.OWHILE_INV_IND)
+    >> goal_assum $ drule_at Any
+    >> conj_tac
+    >- (simp[Abbr`P`] >> gvs[outputTo_consistent_def, same_frame_rel_refl])
+    (* Step case: P x ∧ G x ⇒ P (f x).
+       G x gives us length = starting and ISL at x. P x with length =
+       starting must hold via the first disjunct (same-frame). Apply
+       step_same_frame or note growth. *)
+    >> simp[]
+    >> gen_tac >> pairarg_tac >> gvs[]
+    >> simp[Abbr`P`]
+    >> qmatch_goalsub_rename_tac`SND (step s)`
+    (* At x with length = starting (from G), first disjunct of P must
+       hold, giving same_frame_rel es x. *)
+    >> Cases_on `step s` >> simp[]
+    (* Case: step preserves length. Same-frame via step_same_frame +
+       trans. *)
+    >> strip_tac >> gvs[]
+    >> Cases_on `LENGTH r'.contexts = LENGTH es.contexts`
+    >- (
+      `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+      >> `LENGTH r'.contexts = LENGTH s.contexts` by simp[]
+      >> `same_frame_rel s r'` by (
+           irule step_same_frame
+           >> goal_assum (first_assum o mp_then Any mp_tac)
+           >> simp[])
+      >> conj_tac >- metis_tac[same_frame_rel_preserves_outputTo_consistent]
+      >> metis_tac[same_frame_rel_trans])
+    (* Case: step changed the length. Since step is same_frame_or_grow,
+       this means it grew. *)
+    >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+    >> `same_frame_or_grow step` by cheat  (* from same_frame_or_grow_step_inner + handle *)
+    >> gvs[same_frame_or_grow_def]
+    >> first_x_assum drule >> simp[] >> strip_tac
+    >- (
+      (* step same-framed, so length = starting. Contradicts the
+         Cases_on. *)
+      `LENGTH r'.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
+      >> gvs[])
+    (* step grew. *)
+    >> gvs[]
+    >- (
+      (* outputTo_consistent (SND (step s)) — tricky because we only
+         have outputTo_consistent at s, not a same-frame relation. *)
+      cheat))
+  >> gvs[Abbr`P`]
+QED
+
+(* ================================================================ *)
+(* Gas monotonicity corollary (separate from same_frame_rel).        *)
+(* ================================================================ *)
+
+Theorem step_same_frame_gas_monotone:
+  outputTo_consistent s ∧ ok_state s ∧ step s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+  >> mp_tac decreases_gas_cred_step
+  >> rewrite_tac[decreases_gas_cred_def]
+  >> disch_then(qspec_then`s`mp_tac)
+  >> IF_CASES_TAC >> gvs[] >> strip_tac
+  (* Use step_same_frame to get the tail and msgParams (hence gasLimit)
+     preservation, which decreases_gas_cred_step alone doesn't give us. *)
+  >> `same_frame_rel s s'` by (
+       irule step_same_frame
+       >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
+  >> `TL s'.contexts = TL s.contexts` by gvs[same_frame_rel_def]
+  >> `(FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`
+     by gvs[same_frame_rel_def]
+  (* Now use decreases_gas_cred_step for the gas-weight inequality. *)
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `s'.contexts` >> gvs[]
+  >> gvs[contexts_weight_def, unused_gas_def]
+  >> (* The inequality reduces because the tails match and gasLimits
+        match at the heads. *)
+     BasicProvers.FULL_CASE_TAC >> gvs[]
+  >> gvs[LEX_DEF]
+  >> gvs[ok_state_def, wf_context_def]
+QED
+
+Theorem run_within_frame_gas_monotone:
+  outputTo_consistent es ∧ ok_state es ∧
+  run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  (FST (HD es.contexts)).gasUsed ≤ (FST (HD es'.contexts)).gasUsed
+Proof
+  (* The easiest route: use run_within_frame_preserves to get
+     same_frame_rel es es'. The same_frame_rel itself doesn't directly
+     give gasUsed monotonicity (we dropped that conjunct), but we can
+     iterate step_same_frame_gas_monotone over the OWHILE. We use
+     the same OWHILE_INV_IND approach as run_within_frame_preserves
+     with a gas-tracking invariant. Also thread ok_state through. *)
+  rpt strip_tac
+  >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
+  >> gvs[run_within_frame_def]
+  >> qabbrev_tac `P = λ(rs:(unit+exception option)#execution_state).
+       outputTo_consistent (SND rs) ∧ ok_state (SND rs) ∧
+       ((LENGTH (SND rs).contexts = LENGTH es.contexts ∧
+         same_frame_rel es (SND rs) ∧
+         (FST (HD es.contexts)).gasUsed ≤
+           (FST (HD (SND rs).contexts)).gasUsed) ∨
+        LENGTH (SND rs).contexts > LENGTH es.contexts)`
+  >> `P (r, es')` by (
+    irule (MP_CANON WhileTheory.OWHILE_INV_IND)
+    >> goal_assum $ drule_at Any
+    >> simp[]
+    >> conj_tac >- (
+      simp[Abbr`P`]
+      >> irule same_frame_rel_refl
+      >> gvs[outputTo_consistent_def])
+    >> rpt gen_tac >> strip_tac
+    >> pairarg_tac >> gvs[Abbr`P`]
+    >> rename1`step s`
+    >> Cases_on `step s` >> simp[]
+    >> rename1`step s = (q', s1)`
+    >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
+
+    >> Cases_on `LENGTH s1.contexts = LENGTH es.contexts`
+    >- (
+      (* same-length case: establish helpful facts, then discharge the
+         conjunction, choosing the first disjunct for the last part. *)
+      `LENGTH s1.contexts = LENGTH s.contexts` by simp[]
+      >> `same_frame_rel s s1` by (
+           irule step_same_frame
+           >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
+      >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s1.contexts)).gasUsed` by (
+           irule step_same_frame_gas_monotone
+           >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
+      >> `ok_state s1` by (
+           `ok_state (SND (step s))` suffices_by simp[]
+           >> mp_tac (SPEC ``s:execution_state`` (PURE_REWRITE_RULE
+                [decreases_gas_cred_def] decreases_gas_cred_step))
+           >> simp[])
+      >> `outputTo_consistent s1` by
+           metis_tac[same_frame_rel_preserves_outputTo_consistent]
+      >> rpt conj_tac
+      >- simp[]
+      >- simp[]
+      >> disj1_tac
+      >> rpt conj_tac
+      >- simp[]
+      >- metis_tac[same_frame_rel_trans]
+      >> simp[])
+    (* different-length case: the step either grew the stack (second
+       disjunct of P) or contradicted the guard, but here we don't have
+       same_frame_or_grow step proved (it's the cheated case). *)
+    >> cheat)
+  >> gvs[Abbr`P`]
+QED
+
+(* ================================================================ *)
+(* Named corollaries of `run_within_frame_preserves`.                *)
+(*                                                                   *)
+(* These extract individual conjuncts of `same_frame_rel` for users *)
+(* who only need a specific property.                                *)
+(* ================================================================ *)
+
+Theorem run_within_frame_preserves_txParams:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  es'.txParams = es.txParams
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
+QED
+
+Theorem run_within_frame_preserves_storage_outside_callee:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  ∀a. a ≠ (FST (HD es.contexts)).msgParams.callee ⇒
+      (lookup_account a es'.rollback.accounts).storage =
+      (lookup_account a es.rollback.accounts).storage
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem run_within_frame_preserves_tStorage_outside_callee:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  ∀a. a ≠ (FST (HD es.contexts)).msgParams.callee ⇒
+      es'.rollback.tStorage a = es.rollback.tStorage a
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem run_within_frame_preserves_code_outside_callee:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  ∀a. a ≠ (FST (HD es.contexts)).msgParams.callee ⇒
+      (lookup_account a es'.rollback.accounts).code =
+      (lookup_account a es.rollback.accounts).code
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem run_within_frame_preserves_nonce_outside_callee:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  ∀a. a ≠ (FST (HD es.contexts)).msgParams.callee ⇒
+      (lookup_account a es'.rollback.accounts).nonce =
+      (lookup_account a es.rollback.accounts).nonce
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem run_within_frame_preserves_nonhead_contexts:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  TL es'.contexts = TL es.contexts
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
+QED
+
+Theorem run_within_frame_preserves_head_msgParams:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  (FST (HD es'.contexts)).msgParams = (FST (HD es.contexts)).msgParams
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
+QED
+
+Theorem run_within_frame_preserves_saved_rollback:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  SND (HD es'.contexts) = SND (HD es.contexts)
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
+QED
+
+Theorem run_within_frame_callee_nonce_monotone:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  (lookup_account (FST (HD es.contexts)).msgParams.callee
+      es.rollback.accounts).nonce ≤
+  (lookup_account (FST (HD es.contexts)).msgParams.callee
+      es'.rollback.accounts).nonce
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem run_within_frame_logs_grow:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  IS_PREFIX (FST (HD es'.contexts)).logs (FST (HD es.contexts)).logs
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
+QED
+
+Theorem run_within_frame_accesses_grow:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  toSet es.rollback.accesses.addresses ⊆
+    toSet es'.rollback.accesses.addresses ∧
+  toSet es.rollback.accesses.storageKeys ⊆
+    toSet es'.rollback.accesses.storageKeys
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
+QED
+
+Theorem run_within_frame_refund_monotone:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  (FST (HD es.contexts)).addRefund ≤ (FST (HD es'.contexts)).addRefund ∧
+  (FST (HD es.contexts)).subRefund ≤ (FST (HD es'.contexts)).subRefund
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
+QED
+
+Theorem run_within_frame_domain_compatible:
+  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
+  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  msdomain_compatible es.msdomain es'.msdomain
+Proof
+  rpt strip_tac
+  \\ drule_all run_within_frame_preserves
+  \\ rw[same_frame_rel_def]
 QED
