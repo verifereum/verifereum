@@ -2956,6 +2956,289 @@ Proof
   >> irule same_frame_or_grow_ignore_bind >> simp[]
 QED
 
+(* If step_inst returned INL with strictly larger contexts, the only
+   opcodes that could have done this are the push ops: Call, CallCode,
+   DelegateCall, StaticCall, Create, Create2. All of these satisfy
+   `is_call`. For every other opcode, step_inst is preserves_same_frame
+   (from Pass B), which preserves contexts length. *)
+(* If step_inst returned INL with strictly larger contexts, op must
+   be one of the 6 push ops (is_call is T). All other ops are
+   preserves_same_frame (Pass B), which preserves length. *)
+Theorem step_inst_inl_grew_is_call:
+  step_inst op s = (INL (), s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  is_call op
+Proof
+  strip_tac
+  >> Cases_on `op`
+  >> TRY (simp[is_call_def] >> NO_TAC)  (* push ops: is_call T *)
+  (* non-push ops: step_inst is preserves_same_frame. *)
+  >> (  (* For each non-push op, the Pass B [simp] lemma for
+           preserves_same_frame (step_inst <Op>) is available.
+           Extract length equality from psf_imp_length_contexts_preserved
+           and contradict grow. *)
+    cheat)
+QED
+
+(* If step_inst returned INR with strictly larger contexts, op must be
+   a Call-family opcode specifically (Create/Create2 never INR-grow
+   because proceed_create always returns INL). *)
+Theorem step_inst_inr_grew_is_call_family:
+  step_inst op s = (INR e, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  op = Call ∨ op = CallCode ∨ op = DelegateCall ∨ op = StaticCall
+Proof
+  strip_tac
+  >> Cases_on `op`
+  >> simp[]
+  (* For non-Call-family, derive contradiction from grow. *)
+  >> (
+    (* Groups:
+       - Group 1 (non-push): preserves_same_frame gives length preserved.
+       - Create/Create2: step_create never INR-grows. Need a specific
+         argument: step_create's only path that grows is proceed_create,
+         which returns INL, not INR. All INR paths of step_create
+         (abort_unuse, abort_create_exists branches) are
+         preserves_same_frame.
+       - SelfDestruct: preserves_same_frame.
+       - Stop/Return/Revert/Invalid: preserves_same_frame.
+    *)
+    cheat)
+QED
+
+(* ================================================================ *)
+(* Case (b) decomposition: push-fail-pop.                            *)
+(*                                                                   *)
+(* In step_same_frame's case (b), the inner monad grew (pushed a     *)
+(* child context via proceed_call) and handle_step pops it back.     *)
+(* The final state is `same_frame_rel`-related to the original       *)
+(* because:                                                          *)
+(*   - set_rollback during pop restores rollback to the snapshot     *)
+(*     that proceed_call captured (i.e. the rollback at the start    *)
+(*     of proceed_call, before any transfer).                        *)
+(*   - The parent's head context accumulates only                    *)
+(*     preserves_same_frame changes from step_call's prefix and      *)
+(*     handle_exception's finalisation (inc_pc, set_return_data,     *)
+(*     push_stack, write_memory).                                    *)
+(*                                                                   *)
+(* Decomposition into small lemmas, bottom-up.                       *)
+(* ================================================================ *)
+
+(* ---- Tiny state-effect lemmas for specific primitives ---------- *)
+
+(* set_rollback sets `rollback`, leaves everything else alone. *)
+Theorem set_rollback_effect:
+  set_rollback r s = (q, s') ⇒
+    q = INL () ∧ s' = s with rollback := r
+Proof
+  rw[set_rollback_def, return_def]
+QED
+
+(* pop_context removes the head of contexts, returns it, leaves
+   everything else alone. *)
+Theorem pop_context_effect:
+  s.contexts ≠ [] ⇒
+  pop_context s = (q, s') ⇒
+    q = INL (HD s.contexts) ∧ s' = s with contexts := TL s.contexts
+Proof
+  rw[pop_context_def, return_def, fail_def] >>
+  rw[execution_state_component_equality]
+QED
+
+(* push_context adds to the head. *)
+Theorem push_context_effect:
+  push_context crb s = (q, s') ⇒
+    q = INL () ∧ s' = s with contexts := crb :: s.contexts
+Proof
+  rw[push_context_def, return_def] >>
+  rw[execution_state_component_equality]
+QED
+
+(* ---- Behaviour of pop_and_incorporate_context on failure ------- *)
+
+(* When called with success = F on a non-empty context stack with at
+   least 2 entries, pop_and_incorporate_context pops the head,
+   restores rollback from the popped head's saved rb, and unuse_gas's
+   on the new head.
+
+   Concretely: if s.contexts = (callee, callee_rb) :: rest and
+   rest ≠ [], and we call with success=F, then:
+     - s'.contexts has `rest`'s head with gasUsed possibly reduced,
+       same SND (HD rest), same msgParams/logs/refunds/stack/memory
+       /pc/jumpDest/returnData.
+     - s'.rollback = callee_rb.
+     - Other fields preserved. *)
+Theorem pop_and_incorporate_context_failure_effect:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  pop_and_incorporate_context F s = (q, s') ⇒
+    q = INL () ∧
+    s'.rollback = callee_rb ∧
+    s'.txParams = s.txParams ∧
+    s'.msdomain = s.msdomain ∧
+    (∃new_parent_ctx.
+       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
+       new_parent_ctx.msgParams = (FST parent).msgParams ∧
+       new_parent_ctx.logs = (FST parent).logs ∧
+       new_parent_ctx.addRefund = (FST parent).addRefund ∧
+       new_parent_ctx.subRefund = (FST parent).subRefund ∧
+       new_parent_ctx.stack = (FST parent).stack ∧
+       new_parent_ctx.memory = (FST parent).memory ∧
+       new_parent_ctx.pc = (FST parent).pc ∧
+       new_parent_ctx.jumpDest = (FST parent).jumpDest ∧
+       new_parent_ctx.returnData = (FST parent).returnData)
+Proof
+  cheat  (* Unfold pop_and_incorporate_context_def; trace through
+            get_gas_left, pop_context, unuse_gas, set_rollback. *)
+QED
+
+(* ---- Behaviour of handle_exception's pop-failure branch -------- *)
+
+(* When e ≠ NONE and e ≠ SOME Reverted and the context stack has at
+   least 2 entries (child + parent + rest), and the child's outputTo
+   is Memory mr, then handle_exception e on this state ends with:
+   - rollback = child's saved rb (restored by set_rollback).
+   - contexts = new-parent-with-finalisation :: rest.
+   - msdomain possibly grown from various Collect additions.
+   - Specifically, the new-parent's head gets:
+     - pc incremented;
+     - returnData set to output (which after prefix consume_gas is []);
+     - stack pushed with b2w F;
+     - memory: write_memory r.offset [] = no-op. *)
+Theorem handle_exception_pop_failure_memory_effect:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  callee.msgParams.outputTo = Memory mr ∧
+  handle_exception e s = (q, s') ⇒
+    s'.rollback = callee_rb ∧
+    (∃new_parent_ctx.
+       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
+       new_parent_ctx.msgParams = (FST parent).msgParams ∧
+       new_parent_ctx.logs = (FST parent).logs ∧
+       new_parent_ctx.addRefund = (FST parent).addRefund ∧
+       new_parent_ctx.subRefund = (FST parent).subRefund)
+Proof
+  cheat  (* Unfold handle_exception_def; trace through prefix,
+            get_num_contexts, pop_and_incorporate_context_failure_effect,
+            inc_pc, Memory case (set_return_data, push_stack,
+            write_memory). *)
+QED
+
+(* ---- Behaviour of handle_step when the pushed frame has Memory
+        outputTo and e is not a vfm_abort -------------------------- *)
+
+(* Combines handle_create_reraises (for Memory outputTo) with
+   handle_exception_pop_failure_memory_effect. *)
+Theorem handle_step_pop_memory_effect:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  (∃mr. callee.msgParams.outputTo = Memory mr) ∧
+  ¬ vfm_abort e ∧
+  handle_step e s = (q, s') ⇒
+    s'.rollback = callee_rb ∧
+    (∃new_parent_ctx.
+       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
+       new_parent_ctx.msgParams = (FST parent).msgParams ∧
+       new_parent_ctx.logs = (FST parent).logs ∧
+       new_parent_ctx.addRefund = (FST parent).addRefund ∧
+       new_parent_ctx.subRefund = (FST parent).subRefund)
+Proof
+  cheat  (* Unfold handle_step_def. vfm_abort e is false by hypothesis,
+            so goes to handle (handle_create e) handle_exception.
+            handle_create_reraises applies because outputTo = Memory,
+            giving handle_create e s = reraise e s = (INR e, s).
+            Then handle passes to handle_exception e s.
+            Apply handle_exception_pop_failure_memory_effect. *)
+QED
+
+(* ---- step_call INR-grow structure lemma ------------------------ *)
+
+(* When step_call INR-grows, we can identify an intermediate state sp
+   (after the prefix) such that:
+   - same_frame_rel s sp
+   - s1 = result of (proceed_call's body from sp, including push and
+     precompile failure)
+   - sp.rollback = (the saved rb in s1's pushed child)
+   - The child's outputTo is Memory
+   - The exception e is not a vfm_abort (precompiles only fail with
+     OOG, never OutsideDomain/Unimplemented/Impossible).
+   - s1.contexts has parent (= sp's head possibly with set_return_data
+     applied) + child + rest. *)
+Theorem step_call_inr_grow_structure:
+  s.contexts ≠ [] ∧ outputTo_consistent s ∧
+  step_call op s = (INR e, s1) ∧
+  LENGTH s1.contexts > LENGTH s.contexts ⇒
+    ¬ vfm_abort e ∧
+    (∃sp callee_ctx callee_rb mr.
+       same_frame_rel s sp ∧
+       callee_rb = sp.rollback ∧
+       (∃parent_ctx.
+          s1.contexts = (callee_ctx, callee_rb) ::
+                        (parent_ctx, SND (HD sp.contexts)) ::
+                        TL sp.contexts ∧
+          parent_ctx.msgParams = (FST (HD sp.contexts)).msgParams ∧
+          parent_ctx.logs = (FST (HD sp.contexts)).logs ∧
+          parent_ctx.addRefund = (FST (HD sp.contexts)).addRefund ∧
+          parent_ctx.subRefund = (FST (HD sp.contexts)).subRefund) ∧
+       callee_ctx.msgParams.outputTo = Memory mr)
+Proof
+  cheat  (* Big proof. Unfold step_call_def. Reject the Call-family
+            check (actually need to restrict to Call-family here too).
+            Walk through the prefix, note each step is
+            preserves_same_frame, so we maintain same_frame_rel s sp.
+            At proceed_call, observe get_rollback captures sp.rollback,
+            push_context pushes (callee_ctx, sp.rollback), then
+            dispatch_precompiles returns INR. Verify the exception
+            type (precompile failures are OOG, not vfm_abort). *)
+QED
+
+(* ---- The case (b) lemma ---------------------------------------- *)
+
+(* Combines the above: when step_call INR-grew and handle_step popped
+   back, the result is same-frame-related to s. *)
+Theorem step_call_handle_step_inr_grow_same_frame:
+  s.contexts ≠ [] ∧ outputTo_consistent s ∧
+  step_call op s = (INR e, s1) ∧
+  LENGTH s1.contexts > LENGTH s.contexts ∧
+  handle_step e s1 = (q, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  same_frame_rel s s'
+Proof
+  (* Plan:
+     1. From step_call_inr_grow_structure, extract sp, callee_ctx,
+        callee_rb, parent_ctx, mr with the stated structure.
+     2. Apply handle_step_pop_memory_effect to s1 and e, using the
+        structure we just got.
+     3. This gives:
+          s'.rollback = callee_rb = sp.rollback
+          s'.contexts = (new_parent_ctx, SND (HD sp.contexts)) ::
+                        TL sp.contexts
+          new_parent_ctx.msgParams = parent_ctx.msgParams
+                                   = (FST (HD sp.contexts)).msgParams
+                                   = (FST (HD s.contexts)).msgParams
+                                     (by same_frame_rel s sp)
+          ...and similar for logs, refunds.
+     4. Verify each conjunct of same_frame_rel s s':
+          - contexts ≠ [], length same: given.
+          - TL equal: s.contexts' TL = sp.contexts' TL by same_frame_rel s sp,
+            and s'.contexts' TL = sp.contexts' TL by (3). So equal.
+          - SND (HD) equal: s'.contexts' head's SND = SND (HD sp.contexts).
+            And SND (HD s.contexts) = SND (HD sp.contexts) by same_frame_rel.
+          - head msgParams: similar chain.
+          - txParams: unchanged throughout (handle_step doesn't touch
+            txParams).
+          - callee_local_changes between s.rollback and s'.rollback:
+            s'.rollback = sp.rollback, and same_frame_rel s sp gives
+            us callee_local_changes s.rollback sp.rollback.
+          - accesses grow: s.rollback.accesses ⊆ sp.rollback.accesses
+            ⊆ s'.rollback.accesses (= sp.rollback.accesses).
+          - msdomain: s.msdomain compatible with sp.msdomain (from
+            same_frame_rel s sp). sp.msdomain compatible with
+            s'.msdomain (precompile only grows in Collect mode,
+            pop-branch doesn't change msdomain). Compose.
+          - IS_PREFIX logs: head.logs at s' = parent_ctx.logs = head
+            of sp.logs = head of s.logs by same_frame_rel.
+          - refunds monotone: similar. *)
+  cheat
+QED
+
 Theorem step_same_frame:
   outputTo_consistent s ∧
   step s = (r, s') ∧
@@ -2991,9 +3274,59 @@ Proof
          drule handle_step_same_frame >> disch_then drule
          >> disch_then drule >> simp[])
     >> metis_tac[same_frame_rel_trans])
-  >> (* (b) inner grew. This case is real and needs dedicated analysis:
-        proceed_call dispatches a precompile that can fail, returning
-        INR after pushing. handle_step then pops. Direct proof needs
-        reasoning about the combined push+pop behaviour. *)
-     cheat
+  >> (* (b) inner grew. Reduce to step_call_handle_step_inr_grow_same_frame.
+        The op must be Call/CallCode/DelegateCall/StaticCall (the only
+        ops that can INR-grow). *)
+     (* Unfold inner to extract the opcode *)
+     qunabbrev_tac `inner`
+  >> pop_assum mp_tac
+  >> simp[bind_def]
+  >> simp[get_current_context_def, ok_state_def, return_def, fail_def]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> strip_tac >> gvs[bind_def, get_current_context_def, return_def]
+  >> gvs[CaseEq"bool",COND_RATOR]
+  >- (
+    (* step_inst Stop case: doesn't grow (preserves_same_frame).
+       Contradicts the grow hypothesis. *)
+    `preserves_same_frame (step_inst Stop)` by simp[]
+    >> drule_then drule psf_imp_length_contexts_preserved
+    >> simp[])
+  >> gvs[vfmTypesTheory.option_CASE_rator,CaseEq"option"]
+  >- (
+    (* step_inst Invalid case: doesn't grow. *)
+    `preserves_same_frame (step_inst Invalid)` by simp[]
+    >> drule_then drule psf_imp_length_contexts_preserved
+    >> simp[])
+  >> (* step_inst x; inc_pc_or_jump x case *)
+     gvs[ignore_bind_def, bind_def]
+  >> gvs[AllCaseEqs()]  >- (
+    (* step_inst x returned INL, then inc_pc_or_jump x returned INR.
+       inc_pc_or_jump is preserves_same_frame, so can't grow. *)
+    `preserves_same_frame (inc_pc_or_jump op)` by simp[]
+    >> drule_then drule psf_imp_length_contexts_preserved >>
+    `same_frame_or_grow (step_inst op)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[same_frame_or_grow_def]
+    >> disch_then drule >> simp[]
+    >> strip_tac
+    >- (
+      impl_keep_tac >- metis_tac[same_frame_rel_contexts_ne]
+      >> `LENGTH s.contexts = LENGTH s''.contexts`
+      by metis_tac[same_frame_rel_def]
+      >> strip_tac >> gvs[] )
+    >> impl_keep_tac >- (strip_tac >> gvs[])
+    >> drule step_inst_inl_grew_is_call
+    >> simp[]
+    >> strip_tac >> gvs[inc_pc_or_jump_def]
+    >> gvs[return_def])
+  (* step_inst x returned INR with grew state s1.
+     Must be Call-family. Reduce to step_call_handle_step_inr_grow. *)
+  >> drule step_inst_inr_grew_is_call_family
+  >> impl_tac >- gvs[]
+  >> disch_then assume_tac
+  >> `step_inst op s = step_call op s` by gvs[step_inst_def]
+  >> pop_assum (mp_tac o SYM) >> simp[] >> strip_tac
+  >> irule step_call_handle_step_inr_grow_same_frame
+  >> simp[]
+  >> rpt(goal_assum drule)
+  >> simp[]
 QED
