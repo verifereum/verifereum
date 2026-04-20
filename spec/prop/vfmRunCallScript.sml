@@ -26,20 +26,49 @@ Ancestors
   combin pair option pred_set list rich_list sum
   arithmetic finite_map While vfmTypes vfmConstants
   vfmContext vfmState vfmExecution vfmExecutionProp
-  vfmSameFrame vfmRunWithinFrame
+  vfmSameFrame vfmStepLength vfmHandleStep vfmRunWithinFrame
 Libs
   dep_rewrite BasicProvers
 
 (* -------------------------------------------------------------------------
  * Active rollbacks — the list of rollbacks we could "revert to" from a
  * descendant state s of es. The current s.rollback plus the saved
- * rollbacks of every context pushed after es's depth.
+ * rollbacks of every context pushed from es-depth onward (inclusive
+ * of the context at es-depth itself, so that a failure-pop at
+ * exactly es-depth restores a tracked rollback).
  * ------------------------------------------------------------------------- *)
 
 Definition active_rollbacks_def:
   active_rollbacks es_depth s =
-    s.rollback :: MAP SND (TAKE (LENGTH s.contexts - es_depth) s.contexts)
+    s.rollback ::
+    MAP SND (TAKE (LENGTH s.contexts - es_depth + 1) s.contexts)
 End
+
+(* -------------------------------------------------------------------------
+ * Per-context outputTo-consistency. Tracks the invariant that every
+ * context's `outputTo = Code a` matches `callee = a`. `vfmSameFrame`'s
+ * `outputTo_consistent s` only asserts this for the head; we need the
+ * per-context version to survive pops (which expose position-1 as the
+ * new head).
+ * ------------------------------------------------------------------------- *)
+
+Definition outputTo_consistent_ctx_def:
+  outputTo_consistent_ctx c ⇔
+    ∀a. c.msgParams.outputTo = Code a ⇒ c.msgParams.callee = a
+End
+
+Definition outputTo_consistent_stack_def:
+  outputTo_consistent_stack s ⇔
+    s.contexts ≠ [] ∧
+    EVERY outputTo_consistent_ctx (MAP FST s.contexts)
+End
+
+Theorem outputTo_consistent_stack_imp_consistent:
+  outputTo_consistent_stack s ⇒ outputTo_consistent s
+Proof
+  rw[outputTo_consistent_stack_def, outputTo_consistent_def]
+  >> Cases_on `s.contexts` >> gvs[outputTo_consistent_ctx_def]
+QED
 
 (* -------------------------------------------------------------------------
  * Per-slot storage preservation: slot (a, k) unchanged outside
@@ -60,7 +89,7 @@ End
 Definition run_call_inv_def:
   run_call_inv es s ⇔
     s.txParams = es.txParams ∧
-    outputTo_consistent s ∧
+    outputTo_consistent_stack s ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (active_rollbacks (LENGTH es.contexts) s)
 End
@@ -70,9 +99,13 @@ End
  * ------------------------------------------------------------------------- *)
 
 Theorem run_call_inv_refl:
-  es.contexts ≠ [] ∧ outputTo_consistent es ⇒ run_call_inv es es
+  outputTo_consistent_stack es ∧
+  storage_slot_preserved (SND (HD es.contexts)) es.rollback ⇒
+  run_call_inv es es
 Proof
   rw[run_call_inv_def, active_rollbacks_def, storage_slot_preserved_def]
+  >> gvs[outputTo_consistent_stack_def]
+  >> Cases_on `es.contexts` >> gvs[]
 QED
 
 (* -------------------------------------------------------------------------
@@ -150,6 +183,38 @@ Proof
 QED
 
 (* -------------------------------------------------------------------------
+ * `step` preserves storage at any slot not access-listed in the final
+ * state. This is the core content lemma for Case 0 (same-frame step)
+ * of run_call_inv_step.
+ *
+ * Most opcodes: `cp_step_inst_non_call[simp]` gives full accounts
+ * equality (storage preserved regardless of access-listing).
+ *
+ * Exceptions (non-trivial cases):
+ *   - SStore non-transient: `step_sstore_gas_consumption` calls
+ *     `access_slot (SK address key)` BEFORE `write_storage address
+ *     key value`, so any modification at `(a, k)` has `(SK a k) ∈
+ *     s'.storageKeys`.
+ *   - SStore transient: `write_transient_storage` modifies
+ *     `tStorage`, not accounts. Storage preserved.
+ *   - Log n, SelfDestruct: no storage change (logs / balance only).
+ *   - Call family / Create family without grow: abort_* paths which
+ *     don't change accounts, or proceed_* with grow (covered below).
+ *   - Any op with inner-grow-then-pop: handle_step's set_rollback
+ *     restores the pushed_rb whose accounts = s.rollback.accounts
+ *     (transfer_value only changes balance).
+ * ------------------------------------------------------------------------- *)
+
+Theorem step_preserves_non_accessed_storage:
+  ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ⇒
+  ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    lookup_storage k (lookup_account a s.rollback.accounts).storage
+Proof
+  cheat
+QED
+
+(* -------------------------------------------------------------------------
  * Single-step preservation of run_call_inv.
  *
  * Strategy: case on the length change. In each case, characterise
@@ -185,27 +250,70 @@ Theorem run_call_inv_step:
 Proof
   rpt strip_tac
   >> qmatch_asmsub_rename_tac `step s0 = (rr, s1)`
-  >> `outputTo_consistent s0` by fs[run_call_inv_def]
+  >> `outputTo_consistent_stack s0` by fs[run_call_inv_def]
+  >> `outputTo_consistent s0` by
+       metis_tac[outputTo_consistent_stack_imp_consistent]
   >> `s0.contexts ≠ []` by fs[outputTo_consistent_def]
   >> `s1.txParams = s0.txParams`
        by metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND]
   >> `s1.txParams = es.txParams` by fs[run_call_inv_def]
   >> simp[run_call_inv_def]
-  (* Remaining goal: outputTo_consistent s1 ∧
-                     EVERY storage_slot_preserved_es active_rollbacks.
-
-     Case analysis on step's length effect:
-     1. Length preserved: same_frame_rel s0 s1 (via step_same_frame).
-        active_rollbacks(s1) vs active_rollbacks(s0): TL identical
-        (TL s1.contexts = TL s0.contexts). HEAD replaced: need
-        storage_slot_preserved s1.rollback es.rollback.
-        Requires a step-level lemma: step preserves non-accessed
-        storage slots. This isn't directly given by same_frame_rel;
-        it follows from the fact that SSTORE access-lists before
-        writing (EIP-2929).
-     2. Length +1 (push): see comments below for structure.
-     3. Length -1 (pop): see comments below for structure. *)
-  >> cheat
+  (* Trichotomy on the length change. *)
+  >> Cases_on `LENGTH s1.contexts = LENGTH s0.contexts` >> gvs[]
+  >- (
+    (* CASE 0: same-frame. *)
+    `same_frame_rel s0 s1` by metis_tac[step_same_frame]
+    >> `LENGTH s1.contexts = LENGTH s0.contexts ∧
+        TL s1.contexts = TL s0.contexts ∧
+        SND (HD s1.contexts) = SND (HD s0.contexts) ∧
+        (FST (HD s1.contexts)).msgParams = (FST (HD s0.contexts)).msgParams ∧
+        toSet s0.rollback.accesses.storageKeys ⊆
+          toSet s1.rollback.accesses.storageKeys`
+      by fs[same_frame_rel_def]
+    >> `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+    (* outputTo_consistent_stack s1. *)
+    >> `outputTo_consistent_stack s1` by (
+         fs[outputTo_consistent_stack_def]
+         >> Cases_on `s0.contexts` >> Cases_on `s1.contexts` >> gvs[]
+         >> gvs[outputTo_consistent_ctx_def])
+    >> simp[]
+    (* active_rollbacks: tail unchanged. *)
+    >> `active_rollbacks (LENGTH es.contexts) s1 =
+          s1.rollback :: TL (active_rollbacks (LENGTH es.contexts) s0)`
+        by (simp[active_rollbacks_def]
+            >> `s0.contexts ≠ [] ∧ s1.contexts ≠ []` by simp[]
+            >> Cases_on `s0.contexts` >> Cases_on `s1.contexts` >> gvs[])
+    >> simp[]
+    (* Tail invariant transfers. *)
+    >> `EVERY (λrb. storage_slot_preserved rb es.rollback)
+              (TL (active_rollbacks (LENGTH es.contexts) s0))`
+        by (`EVERY (λrb. storage_slot_preserved rb es.rollback)
+                   (active_rollbacks (LENGTH es.contexts) s0)`
+              by fs[run_call_inv_def]
+            >> Cases_on `active_rollbacks (LENGTH es.contexts) s0` >> gvs[])
+    >> simp[]
+    (* Head: storage_slot_preserved s1.rollback es.rollback. *)
+    >> `storage_slot_preserved s0.rollback es.rollback`
+        by (fs[run_call_inv_def, active_rollbacks_def])
+    >> simp[storage_slot_preserved_def]
+    >> rpt strip_tac
+    >> `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
+        by (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+            >> metis_tac[])
+    >> `lookup_storage k (lookup_account a s0.rollback.accounts).storage =
+        lookup_storage k (lookup_account a es.rollback.accounts).storage`
+        by fs[storage_slot_preserved_def]
+    >> drule_all step_preserves_non_accessed_storage
+    >> simp[]
+    >> metis_tac[])
+  >> Cases_on `LENGTH s1.contexts > LENGTH s0.contexts` >> gvs[]
+  >- (
+    (* CASE +1: push. *)
+    cheat)
+  >> (
+    (* CASE −1: pop. *)
+    `LENGTH s1.contexts < LENGTH s0.contexts` by decide_tac
+    >> cheat)
 QED
 
 (* -------------------------------------------------------------------------
@@ -214,11 +322,13 @@ QED
 
 Theorem run_call_preserves_inv:
   ∀es res es'.
-    es.contexts ≠ [] ∧ outputTo_consistent es ∧
+    outputTo_consistent_stack es ∧
+    storage_slot_preserved (SND (HD es.contexts)) es.rollback ∧
     run_call es = SOME (res, es') ⇒
     run_call_inv es es'
 Proof
   rpt strip_tac
+  >> `es.contexts ≠ []` by fs[outputTo_consistent_stack_def]
   >> gvs[run_call_def]
   >> `(λ p. run_call_inv es (SND p)) (res, es')` suffices_by simp[]
   >> irule (MP_CANON OWHILE_INV_IND)
@@ -230,7 +340,7 @@ Proof
   >> Cases_on `step s''` >> simp[]
   >> `s''.contexts ≠ []` by (
        Cases_on `s''.contexts` >> gvs[]
-       >> Cases_on `es.contexts` >> gvs[])
+       >> Cases_on `es.contexts` >> gvs[outputTo_consistent_stack_def])
   >> irule run_call_inv_step
   >> simp[]
   >> qexistsl_tac [`q`, `s''`]
@@ -246,7 +356,8 @@ QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots:
   ∀es r es'.
-    es.contexts ≠ [] ∧ outputTo_consistent es ∧
+    outputTo_consistent_stack es ∧
+    storage_slot_preserved (SND (HD es.contexts)) es.rollback ∧
     run_call es = SOME (r, es') ⇒
     ∀a k. ¬fIN (SK a k) es'.rollback.accesses.storageKeys ⇒
         lookup_storage k (lookup_account a es'.rollback.accounts).storage =
@@ -259,7 +370,8 @@ QED
 
 Theorem run_call_preserves_txParams:
   ∀es r es'.
-    es.contexts ≠ [] ∧ outputTo_consistent es ∧
+    outputTo_consistent_stack es ∧
+    storage_slot_preserved (SND (HD es.contexts)) es.rollback ∧
     run_call es = SOME (r, es') ⇒
     es'.txParams = es.txParams
 Proof

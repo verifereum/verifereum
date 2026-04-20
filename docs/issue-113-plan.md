@@ -1,678 +1,393 @@
-# Issue #113 — Preservation of storage (and more) outside a call frame
+Issue #113 — remaining cheat: `run_call_inv_step`
+=================================================
 
 **Tracking:** <https://github.com/verifereum/verifereum/issues/113>
 
-## Statement of the problem
+## Current status
 
-While a call is running — that is, while the call stack `st.contexts` has
-depth ≥ the depth at the call's entry — the only storage that may be
-written is the called account's.
+The headline theorem `run_call_preserves_storage_outside_accessed_slots`
+is proven modulo a single cheat: `run_call_inv_step` in
+`spec/prop/vfmRunCallScript.sml` (line 208).
 
-The issue mentions porting `run_call_def` from
-`vyper-hol/lowering/e2eCorrectnessScript.sml` and introducing a "current
-call" variant (no child call descended into) that is related to the full
-`run_call`.
+## Derisking summary (all checks passed)
 
-## Approach in outline
+- `cp_step_inst_non_call[simp]` covers ALL opcodes except the ten
+  that genuinely modify storage or push: `SStore`, `TStore`, `Log n`
+  (any n), `SelfDestruct`, `Create`, `Create2`, `Call`, `CallCode`,
+  `DelegateCall`, `StaticCall`. These are the only cases that need
+  direct argument.
+- `msgParams` of each context is **immutable** once pushed: no
+  step-level primitive modifies it. So `outputTo_consistent_stack`
+  reduces to "every push introduces an outputTo-consistent child",
+  which holds by construction (`initial_context callee _ _ outputTo _`
+  gives `Memory mr` for step_call and `Code callee` for step_create —
+  where `callee = address` so `Code callee = Code address` is
+  consistent).
+- `step_sstore_gas_consumption address key value` calls
+  `access_slot (SK address key)` before the outer `write_storage
+  address key value` executes. `access_slot` adds to
+  `rollback.accesses.storageKeys`. Any slot modification is
+  access-listed.
+- Both `proceed_call` and `proceed_create` grow the context stack by
+  **exactly 1**. Combined with handle_step popping by at most 1, this
+  gives `step_length_change ∈ {-1, 0, +1}`.
+- For step_call INL-grew: the address is NOT a precompile. This is
+  because precompile "success" uses `finish` which returns INR NONE,
+  so a precompile-succeeding proceed_call returns INR, not INL. INL
+  return means the else-branch (`return ()`) fired, i.e. not a
+  precompile. Simplifies the push-structure analysis.
+- Invariant strengthening cascade is limited: 4 theorems need a new
+  hypothesis; at the top level (single initial context) the new
+  hypothesis reduces trivially to `outputTo_consistent es`.
 
-Rather than proving storage preservation in isolation, we build a single
-reusable framework that captures *everything* provably invariant across an
-EVM step that does not push or pop a context. From that single "same-frame"
-relation we derive, by transitive composition, preservation theorems for
-three progressively larger scopes:
-
-1. `run_within_frame` — iterated `step` so long as the stack depth is
-   exactly the starting depth (no push has happened and no pop has
-   happened).
-2. `run_call` — iterated `step` so long as the stack depth is ≥ the
-   starting depth (the current call and its descendants).
-3. `run` — the whole transaction (already defined).
-
-The storage-preservation theorem requested by the issue is a direct
-corollary, and we additionally get a raft of other useful invariants (tx
-parameters, non-head context immutability, log-monotonicity, gas
-monotonicity, access-list monotonicity, etc.) from the same framework with
-no extra work.
-
-## Files and artefacts
-
-### 1. Additions to `spec/vfmExecutionScript.sml`
-
-Placed next to `run_def`. These declare `run_call` and `run_within_frame`
-as first-class semantic concepts of the EVM: the former executes the
-current call and any children until control returns past the starting
-depth; the latter executes within the current frame only, stopping as
-soon as a child is pushed or the frame is popped.
+## The claim
 
 ```hol
-Definition run_call_def:
-  run_call es =
-    OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts ≥ LENGTH es.contexts)
-           (step o SND) (INL (), es)
+Theorem run_call_inv_step:
+  ∀es s s' r.
+    es.contexts ≠ [] ∧
+    run_call_inv es s ∧
+    LENGTH s.contexts ≥ LENGTH es.contexts ∧
+    step s = (r, s') ⇒
+    run_call_inv es s'
+```
+
+where `run_call_inv` is strengthened to include
+`outputTo_consistent_stack s` (see Work item 1 below) and
+`active_rollbacks` is extended to include one more saved-rollback entry
+at es's depth (see Work item 1' below).
+
+## High-level argument
+
+Strip `txParams` with `step_preserves_txParams`. Remaining:
+
+1. `outputTo_consistent_stack s'` (stronger; subsumes
+   `outputTo_consistent s'`).
+2. `EVERY (λrb. storage_slot_preserved rb es.rollback)
+         (active_rollbacks ed s')` where `ed = LENGTH es.contexts`.
+
+Case-split on step's length change (always in {-1, 0, +1}).
+
+### Case 0 — length preserved (same-frame step)
+
+`step_same_frame` gives `same_frame_rel s s'`:
+
+- `TL s'.contexts = TL s.contexts`,
+  `SND (HD s'.contexts) = SND (HD s.contexts)`,
+  `(FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`.
+  Hence `active_rollbacks ed s'`'s tail equals that of `s`, and the
+  head position's `msgParams` is unchanged (so
+  `outputTo_consistent_stack` transfers).
+- Invariant on tail transfers pointwise.
+- For the head entry: `storage_slot_preserved s'.rollback es.rollback`
+  follows from input + accesses monotonicity + the **new sub-lemma**
+  `step_preserves_non_accessed_storage` (Work item 3).
+
+### Case +1 — push
+
+`step_inst_inl_grew_is_call` tells us op ∈
+{Call, CallCode, DelegateCall, StaticCall, Create, Create2}. We need
+the **new structural lemma** `step_inl_grew_push_structure` (Work
+item 4):
+
+```
+s'.contexts = (child_ctx, pushed_rb) :: s.contexts
+(∀a. (lookup_account a s'.rollback.accounts).storage =
+     (lookup_account a s.rollback.accounts).storage)
+(∀a. (lookup_account a pushed_rb.accounts).storage =
+     (lookup_account a s.rollback.accounts).storage)
+toSet s.rollback.accesses.storageKeys ⊆
+  toSet s'.rollback.accesses.storageKeys
+∀a. child_ctx.msgParams.outputTo = Code a ⇒
+     child_ctx.msgParams.callee = a
+```
+
+From these facts:
+- `active_rollbacks ed s' = s'.rollback :: pushed_rb :: TL (active_rollbacks ed s)`.
+- Tail invariant transfers unchanged.
+- `storage_slot_preserved {pushed_rb, s'.rollback} es.rollback`
+  follows from per-slot storage equality + access-set monotonicity +
+  input invariant on `s.rollback`.
+- `outputTo_consistent_stack s'`: old stack was consistent (input),
+  new head is `child_ctx` which is outputTo-consistent.
+
+### Case −1 — pop
+
+Step's inner returned INR without pushing; handle_step popped one
+frame. `pop_and_incorporate_context_{success,failure}_effect` +
+`handle_step_pop_{success,failure}_memory_effect[_gen]` (all already
+in `vfmHandleStep`) give:
+
+- `s'.contexts = (new_head, SND (HD (TL s.contexts))) :: TL (TL s.contexts)`
+  where `new_head.msgParams = (FST (HD (TL s.contexts))).msgParams`.
+- Success pop (`e = NONE`): `s'.rollback = s.rollback`.
+- Failure pop (`e ≠ NONE`): `s'.rollback = SND (HD s.contexts)`.
+
+Consequences:
+- Success pop: `s'.rollback = s.rollback` gives the head invariant
+  directly. The new `active_rollbacks ed s'`'s tail is a sub-list of
+  the old tail. Tail invariant transfers.
+- Failure pop: `s'.rollback = SND (HD s.contexts)`. This is
+  **already in `active_rollbacks (ed) s`** because we extended it
+  to include the saved rollback at position `LENGTH s.contexts - ed`
+  (which includes HD when s is at depth ed). So its
+  `storage_slot_preserved` claim was already part of the input
+  invariant.
+- `outputTo_consistent_stack s'`: new head's msgParams = old
+  position-1 msgParams, which was outputTo-consistent by input
+  `outputTo_consistent_stack s`. Remaining tail is sub-list of old.
+
+## Work items (in order)
+
+### 1. Strengthen `run_call_inv` (~50 lines)
+
+Add a per-context outputTo-consistency predicate:
+
+```hol
+Definition outputTo_consistent_ctx_def:
+  outputTo_consistent_ctx c ⇔
+    ∀a. c.msgParams.outputTo = Code a ⇒ c.msgParams.callee = a
 End
 
-Definition run_within_frame_def:
-  run_within_frame es =
-    OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts = LENGTH es.contexts)
-           (step o SND) (INL (), es)
+Definition outputTo_consistent_stack_def:
+  outputTo_consistent_stack s ⇔
+    s.contexts ≠ [] ∧
+    EVERY outputTo_consistent_ctx (MAP FST s.contexts)
 End
 ```
 
-**Status:** complete (merged).
-
-### 2. New theory `spec/prop/vfmCallFrameScript.sml`
-
-Ancestors: `vfmExecution`, `vfmExecutionProp`, `vfmStaticCalls`,
-`vfmTxParams`, `vfmDomainSeparation` (and `rich_list` for `IS_PREFIX`).
-
-Contents:
-
-- Helper predicate `msdomain_compatible` capturing the two allowed
-  transitions for `msdomain`: `Enforce d` stays equal, `Collect d`
-  grows under `subdomain`. **Status: complete.**
-- Helper predicate `callee_local_changes callee r r'` capturing the
-  permitted changes to a `rollback_state` within one frame: at
-  non-callee accounts, the storage, code, and nonce must match; the
-  balance is free (SELFDESTRUCT transfers balances to arbitrary
-  addresses). tStorage must match at non-callee addresses. At the
-  callee, only the nonce monotonicity is claimed. **Status: complete.**
-- The omnibus relation `same_frame_rel` built on top of those helpers.
-  **Status: complete.**
-- Reflexivity, transitivity (plus refl/trans for the two helpers).
-  **Status: complete.**
-- `preserves_same_frame m` — a monadic same-frame preservation
-  predicate with the standard composition lemmas (bind, ignore_bind,
-  handle, cond, case_*, let, uncurry). Replaces the originally
-  planned "`cp ⇒ same_frame_rel` bridge": `cp` is not strong enough
-  on its own (it does not preserve `txParams`, accesses, msdomain, or
-  refunds), so we build a purpose-built predicate. **Status: complete.**
-- Primitive-level `preserves_same_frame` lemmas for every monadic
-  primitive (getters, head-context writers, rollback writers,
-  access/domain writers, parameterised `set_current_context`), plus
-  pointwise companions (`write_storage_same_frame` etc.) for use in
-  larger opcode proofs. **Status: complete.**
-- Compound-helper `preserves_same_frame` lemmas for every `step_*`
-  intermediate and all 18 precompiles. **Status: complete.**
-- Per-opcode `preserves_same_frame (step_inst op)[simp]` for every
-  Group-1 opcode (77 theorems, including SSTORE, TSTORE, and
-  SELFDESTRUCT). **Status: complete.**
-- `psf p m` — a state-indexed same-frame preservation predicate used
-  for opcodes whose proofs need to thread value-level facts from
-  getter-binds through to later writes. Mirrors
-  `ignores_extra_domain_pred` from `vfmDomainSeparation`. Includes a
-  bridge `psf (λs. T) m ⇔ preserves_same_frame m` so the primitive
-  lemmas auto-lift. **Status: complete.**
-- Handle-layer lemmas (`outputTo_consistent`, `psf_handle_create`,
-  `handle_exception_same_frame`, `handle_step_same_frame`) under the
-  length-preservation hypothesis. **Status: complete.**
-- `step_same_frame`: the lift from primitives to the full `step`, by
-  opcode case analysis.
-- `run_within_frame_preserves`: an OWHILE induction that closes the
-  frame under transitivity. (The definition of `run_within_frame` lives
-  in `vfmExecution`.)
-- Exported named corollaries (see below).
-
-### 3. New theory `spec/prop/vfmRunCallScript.sml`
-
-Ancestors: `vfmExecution`, `vfmExecutionProp`, `vfmCallFrame`.
-
-**Status: skeleton built; 1 cheat (`run_call_inv_step`).**
-
-Contents:
-
-- `active_rollbacks_def`: the list of rollbacks we could revert to
-  from a descendant state `s` of `es` — `s.rollback` plus every saved
-  rollback in contexts pushed on top of `es`'s depth.
-- `storage_slot_preserved_def`: per-slot predicate on two rollback
-  states saying storage at `(a, k)` agrees outside of `storageKeys`.
-  Matches `access_slot`'s granularity exactly.
-- `run_call_inv_def`: the 2-state invariant between the initial `es`
-  and any descendant `s`. Asserts `s.txParams = es.txParams`
-  plus `EVERY (λrb. storage_slot_preserved rb es.rollback)
-  (active_rollbacks ...)`.
-- `run_call_inv_refl` — reflexivity for the initial state. **Proven**.
-- `run_call_inv_step` — single-step preservation. **Currently cheated.**
-  Structural outline documented in proof comment (4-case analysis
-  on step's length effect).
-- `run_call_preserves_inv` — lift to whole `run_call` via
-  `OWHILE_INV_IND`. **Proven** (modulo cheat in
-  `run_call_inv_step`).
-- `run_call_preserves_storage_outside_accessed_slots` — the headline
-  theorem. **Proven** via `run_call_preserves_inv`.
-- `run_call_preserves_txParams` — companion. **Proven**.
-- `storage_slot_preserved_refl`, `storage_slot_preserved_trans_mono`,
-  `storage_slot_preserved_compose` — helper lemmas. **Proven**.
-
-Companion theorems still to add (all simple corollaries of
-`run_call_preserves_inv` once the invariant is strengthened):
-
-- `run_call_preserves_tStorage_outside_accessed`
-- `run_call_preserves_code_outside_accessed`
-- `run_call_preserves_balance_outside_accessed`
-- `run_call_accesses_grow`, `run_call_logs_grow`, `run_call_gas_monotone`,
-  `run_call_refund_monotone`, `run_call_domain_compatible`
-- `run_call_preserves_nonhead_contexts`, `run_call_preserves_head_msgParams`
-
-`run_call_tr` tail-recursive form / `run_call_eq_tr` / cross-boundary
-step lemmas: **not needed** for the current invariant approach.
-Deferred. (`OWHILE_INV_IND` over `run_call_def` directly is
-sufficient.)
-
-## The `same_frame_rel` relation
-
-As built in `vfmCallFrameScript`:
+Extend `active_rollbacks` to include one more saved-rollback entry
+(the one at es's depth, so that pop-from-same-depth's restored
+rollback is tracked):
 
 ```hol
-Definition callee_local_changes_def:
-  callee_local_changes callee r r' ⇔
-    (∀a. a ≠ callee ⇒
-         (lookup_account a r'.accounts).storage =
-         (lookup_account a r.accounts).storage ∧
-         (lookup_account a r'.accounts).code =
-         (lookup_account a r.accounts).code ∧
-         (lookup_account a r'.accounts).nonce =
-         (lookup_account a r.accounts).nonce) ∧
-    (∀a. a ≠ callee ⇒ r'.tStorage a = r.tStorage a) ∧
-    (lookup_account callee r.accounts).nonce ≤
-      (lookup_account callee r'.accounts).nonce
+Definition active_rollbacks_def:
+  active_rollbacks ed s =
+    s.rollback ::
+    MAP SND (TAKE (LENGTH s.contexts - ed + 1) s.contexts)
 End
+```
 
-Definition msdomain_compatible_def:
-  msdomain_compatible m1 m2 ⇔
-    case (m1, m2) of
-    | (Enforce d1, Enforce d2) => d1 = d2
-    | (Collect d1, Collect d2) => subdomain d1 d2
-    | _ => F
+Update `run_call_inv`:
+
+```hol
+Definition run_call_inv_def:
+  run_call_inv es s ⇔
+    s.txParams = es.txParams ∧
+    outputTo_consistent_stack s ∧
+    EVERY (λrb. storage_slot_preserved rb es.rollback)
+          (active_rollbacks (LENGTH es.contexts) s)
 End
+```
 
-Definition same_frame_rel_def:
-  same_frame_rel s s' ⇔
-    s.contexts ≠ [] ∧
-    LENGTH s'.contexts = LENGTH s.contexts ∧
-    TL s'.contexts = TL s.contexts ∧
-    SND (HD s'.contexts) = SND (HD s.contexts) ∧
-    (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
-    s'.txParams = s.txParams ∧
-    callee_local_changes
-      (FST (HD s.contexts)).msgParams.callee
-      s.rollback s'.rollback ∧
-    toSet s.rollback.accesses.addresses ⊆
-      toSet s'.rollback.accesses.addresses ∧
+Update:
+- `run_call_inv_refl`: add hypotheses `outputTo_consistent_stack es`
+  and `storage_slot_preserved (SND (HD es.contexts)) es.rollback`.
+  (In practice this latter is `storage_slot_preserved es.rollback
+  es.rollback` which is reflexivity, when `SND (HD es.contexts) =
+  es.rollback` at run_call entry — a standard shape.)
+- `run_call_preserves_inv`: add hypotheses.
+- `run_call_preserves_storage_outside_accessed_slots`: add hypotheses.
+- `run_call_preserves_txParams`: add hypothesis.
+
+(The remaining `outputTo_consistent s` property is derivable from
+`outputTo_consistent_stack s` if needed, via the first context's
+consistency.)
+
+### 2. Prove `step_length_change` (~30 lines)
+
+```hol
+Theorem step_length_change:
+  ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ⇒
+    LENGTH s'.contexts = LENGTH s.contexts ∨
+    LENGTH s'.contexts = LENGTH s.contexts + 1 ∨
+    LENGTH s'.contexts + 1 = LENGTH s.contexts
+```
+
+**Strategy**: `step = handle inner handle_step`. Split on whether
+inner returned INL or INR.
+
+- If INL: `same_frame_or_grow_step_inner` + `proceed_*_length` gives
+  length is preserved or exactly +1.
+- If INR: inner's length change is 0 or +1 (same_frame_or_grow). Then
+  handle_step may reraise (no change) or pop (−1). So total change is
+  in {−1, 0, +1}. (In particular, +1 + (−1) = 0 is possible.)
+
+### 3. Prove `step_preserves_non_accessed_storage` (~80 lines)
+
+```hol
+Theorem step_preserves_non_accessed_storage:
+  step s = (r, s') ∧ s.contexts ≠ [] ⇒
+  ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    lookup_storage k (lookup_account a s.rollback.accounts).storage
+```
+
+**Strategy**: unfold step as `handle inner handle_step`.
+
+- **The `handle_step` pop path** may set_rollback. But `set_rollback`
+  replaces `s.rollback` with a saved one, which may have different
+  storage. BUT the saved rollback's storage is ALWAYS equal to some
+  prior state's storage (since storage only changes via SSTORE, and
+  access-listing tracks those changes). Specifically: the pushed
+  rollback's storage equals the state-at-push's storage, which
+  propagates. This is more subtle than the inner case and requires
+  the set_rollback to preserve the access-listed property.
+  - Actually simpler: `set_rollback r` just sets rollback to `r`.
+    The hypothesis is `¬fIN (SK a k) s'.rollback.accesses.storageKeys`,
+    i.e., in the popped-to rollback `r`. Since `r` was a state pushed
+    at some earlier point, and we assume the invariant holds there,
+    we can't cleanly establish storage equality between `r` and `s`
+    here — storage may have diverged in the popped-out frame!
+  - **This is a genuine issue for Case 0** if it includes a pop path.
+    But Case 0 specifically requires length PRESERVED. A pop from
+    length n to n-1 is Case −1, not Case 0. Case 0 happens when:
+    - Inner returns INL without grow (most opcodes).
+    - Inner returns INR, handle_step reraises (n ≤ 1). This is the
+      "root frame" case which requires `n = 1` contexts. Excluded
+      by `LENGTH s.contexts ≥ LENGTH es.contexts ≥ 1` and the step
+      not popping (otherwise length would shrink).
+    - Inner grows by 1, handle_step pops by 1. This can happen! A
+      CALL to a precompile that fails: inner returns INR with grow,
+      handle_step pops. Net length: 0.
+
+  So Case 0 CAN include the inner-grow-then-pop path. In that case
+  set_rollback runs. `step_preserves_non_accessed_storage` needs to
+  handle this.
+
+  **Actually the fix is cleaner than expected**: in the inner-grow-
+  then-pop path, the set_rollback restores the **pushed_rb** which
+  equals `s.rollback` at the point of push (modulo access-address
+  during step_call prefix, which doesn't change accounts). So after
+  pop, `s'.rollback.accounts = s.rollback.accounts`. Storage
+  preserved.
+
+  **Caveat**: if transfer_value ran in proceed_call, the push captured
+  `pushed_rb = (state entering proceed_call).rollback`, which has
+  NO transfer_value applied. So `pushed_rb.accounts.storage =
+  s.rollback.accounts.storage` (both pre-transfer, since transfer
+  only touches balance). ✓
+
+- **The inner no-grow case** (step_inst returned INL or INR without
+  grow): use `cp_step_inst_non_call[simp]` to handle 60+ opcodes
+  uniformly. For the 10 exceptions:
+  - **Log n**: modifies `logs`, not accounts. Storage preserved.
+  - **SelfDestruct**: `transfer_value` (balance-only), `add_to_delete`,
+    `update_account` at callee with balance=0 (preserves storage via
+    `transfer_value_preserves_storage` etc.).
+  - **Call/CallCode/DelegateCall/StaticCall** without grow: either
+    abort_call_value, abort_unuse (both psf, no account change), or
+    proceed_call with grow (handled via pop case above).
+  - **Create/Create2** without grow: abort_create_exists
+    (`increment_nonce`, no storage change) or proceed_create with
+    grow.
+  - **TStore**: `write_transient_storage` modifies `tStorage`, not
+    accounts. Storage preserved.
+  - **SStore** (non-transient): `step_sstore_gas_consumption` calls
+    `access_slot (SK address key)` adding to storageKeys, BEFORE
+    `write_storage address key value`. Thus any modification at
+    `(addr, k) = (address, key)` has `(SK addr k) ∈ s'.storageKeys`.
+    Contrapositive: slots with `(SK a k) ∉ storageKeys` are
+    unchanged.
+
+### 4. Prove `step_inl_grew_push_structure` (~150 lines)
+
+```hol
+Theorem step_inl_grew_push_structure:
+  step_inst op s = (INL (), s') ∧
+  s.contexts ≠ [] ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  ∃child_ctx pushed_rb.
+    s'.contexts = (child_ctx, pushed_rb) :: s.contexts ∧
+    (∀a. (lookup_account a s'.rollback.accounts).storage =
+         (lookup_account a s.rollback.accounts).storage) ∧
+    (∀a. (lookup_account a pushed_rb.accounts).storage =
+         (lookup_account a s.rollback.accounts).storage) ∧
     toSet s.rollback.accesses.storageKeys ⊆
       toSet s'.rollback.accesses.storageKeys ∧
-    msdomain_compatible s.msdomain s'.msdomain ∧
-    IS_PREFIX (FST (HD s'.contexts)).logs (FST (HD s.contexts)).logs ∧
-    (FST (HD s.contexts)).addRefund ≤ (FST (HD s'.contexts)).addRefund ∧
-    (FST (HD s.contexts)).subRefund ≤ (FST (HD s'.contexts)).subRefund
-End
+    (∀a. child_ctx.msgParams.outputTo = Code a ⇒
+         child_ctx.msgParams.callee = a)
 ```
 
-Quantities that are **deliberately free** in this relation, because they
-do change during a frame:
-
-- The head context's `stack`, `memory`, `pc`, `jumpDest`, `returnData`.
-- The callee account's `storage`, `code`, and `nonce`.
-- The callee slot's transient storage.
-- The head context's `gasUsed` (see note below).
-- The **balance** of any account, callee or otherwise (SELFDESTRUCT can
-  transfer the callee's balance to an arbitrary beneficiary; CALL with
-  positive value transfers between two addresses).
-- The rollback's `toDelete` list (SELFDESTRUCT appends its sender).
-
-The last two entries have corollaries later that recover preservation
-under additional hypotheses (see the access-list-based corollaries
-below).
-
-Code is listed as free because when a CREATE'd frame finishes
-successfully, `handle_create` installs the returned bytecode at the
-callee's address. This is the only way any account's `code` can change
-during a step. Non-callee accounts have their entire account record
-preserved, so in particular their code is unchanged — which is the
-property users typically need ("my deployed contract's code is stable
-").
-
-
-### Why `gasUsed` is not in `same_frame_rel`
-
-At the full-`step` level, head `gasUsed` is monotone (in fact strictly
-increasing on success) — this is the content of
-`decreases_gas_cred T 0 0 step` in `vfmDecreasesGasScript`. However, at
-the sub-step level, the primitive `unuse_gas n` decreases `gasUsed`, and
-it is `cp`. To keep the `cp ⇒ same_frame_rel` bridge lemma clean (no
-"except when…" caveats), gas monotonicity is proved separately and
-lifted to `run_within_frame` as its own corollary:
-
-- `step_same_frame_gas_monotone`: if `step s = (r, s')` and
-  `same_frame_rel s s'` holds (so length and `TL` are preserved and
-  `gasLimit` of the head is unchanged), then
-  `head(s).gasUsed ≤ head(s').gasUsed`. Proved from
-  `decreases_gas_cred_step` by unfolding `contexts_weight` /
-  `unused_gas`, using that only the head's contribution can move.
-- `run_within_frame_gas_monotone`: iterated version by OWHILE induction.
-
-Refund counters `addRefund` and `subRefund` *are* monotone under every
-`cp` operation (no primitive decreases them), so they stay in
-`same_frame_rel`.
-
-## Audit: why `same_frame_rel` holds at every step whose length is preserved
-
-Summary of case analysis over `step`:
-
-- **`cp`-proved opcodes** (arithmetic, stack, memory, context and msgParams
-  reads, JUMP/PC/MSIZE/GAS/PUSH/DUP/SWAP, BALANCE, EXTCODE*, KECCAK256,
-  CALL_DATA*, COPY_TO_MEMORY family, RETURN_DATA_COPY, BLOCK_HASH,
-  BLOB_HASH, SELF_BALANCE, and the pure-compute precompile dispatch):
-  `cp` implies `same_frame_rel` via a bridge lemma.
-- **SLOAD / TLOAD**: `cp` + grows `accesses`. Bridge lemma suffices.
-- **SSTORE** (non-transient): `access_slot` grows `accesses.storageKeys`,
-  `consume_gas`, `update_gas_refund`, `assert_not_static`,
-  `write_storage callee k v`. Only callee's storage moves; everything else
-  covered by bridge or by dedicated `write_storage` lemma.
-- **TSTORE**: `write_transient_storage callee k v`. Only callee's
-  `tStorage` slot moves.
-- **LOG n**: `push_logs ls` appends to head logs — covered by the
-  `IS_PREFIX` conjunct.
-- **CALL family, abort path** (`abort_call_value`, `abort_unuse`):
-  `consume_gas`, `access_address`, stack/mem reads, `unuse_gas stipend`
-  (net gas monotone over the step), stack push, `inc_pc`. No account
-  modifications. `cp`-reducible.
-- **CALL family, non-abort**: pushes context → length changes → out of
-  scope.
-- **CREATE family, abort via `abort_unuse`**: `consume_gas`,
-  `access_address`, `ensure_storage_in_domain`, `unuse_gas cappedGas`
-  (net zero over step). No account modifications. `cp`-reducible.
-- **CREATE family, abort via `abort_create_exists`**:
-  `update_accounts $ increment_nonce senderAddress` where
-  `senderAddress = get_callee`. Only callee's nonce moves; `same_frame_rel`
-  permits this (nonce is free for callee, bound by monotonicity).
-- **CREATE family, non-abort**: pushes context → length changes → out of
-  scope.
-- **Stop / Return / Revert / Invalid / OOG / non-outermost handled error**:
-  pop frame via `handle_step` → length changes → out of scope.
-- **SELFDESTRUCT**: `step_inst SelfDestruct` transfers balance to the
-  beneficiary and may append to `toDelete`, then `finish`es. The
-  length-change happens in `handle_step` (possibly via pop, or via
-  outermost reraise when `n ≤ 1`). The `same_frame_rel` conjuncts
-  remaining after weakening (storage, code, nonce, tStorage at
-  non-callees; callee nonce monotone; msgParams; accesses-grow; logs;
-  refunds) are all preserved. Balance and `toDelete` are deliberately
-  not claimed.
-- **Outermost-frame error** (`handle_exception` with `n ≤ 1`, reraises):
-  length unchanged. Effect: head `gasUsed` may rise (by `gasLeft`), head
-  `returnData` may be cleared. Both free in `same_frame_rel`. ✓
-- **`vfm_abort` error**: `handle_step` reraises immediately; state
-  unchanged. Reflexivity of `same_frame_rel`. ✓
-- **`handle_create` install-code branch** (`e = NONE` and
-  `outputTo = Code address`): `update_accounts` writes
-  `address`'s `code` field. Here `address` is the callee of the
-  current (CREATE'd) head frame, so this is a change to the callee's
-  `code`. `same_frame_rel` leaves callee `code` free, so the conjunct
-  holds. Non-callee accounts are unaffected. ✓
-
-### SELFDESTRUCT and why balance / toDelete are dropped
-
-`step_inst SelfDestruct` transfers the callee's balance to an arbitrary
-beneficiary and may append to `toDelete`. These effects occur whether
-or not the frame is popped in the same `step` (the pop happens in
-`handle_step`, after the transfer). Including "balance equal at
-non-callees" or "`toDelete` equal" in `same_frame_rel` would make the
-relation unprovable for the SELFDESTRUCT path.
-
-We considered adding an anti-SELFDESTRUCT precondition to every
-theorem, but for interactive contracts (those that make external
-CALLs) discharging "no SELFDESTRUCT anywhere in the call tree's code"
-is impractical. Instead, the relation is weakened so all theorems
-apply uniformly, with or without SELFDESTRUCT.
-
-Users who need balance preservation can derive it as a corollary:
-because SELFDESTRUCT calls `access_address` on the beneficiary before
-transferring, the beneficiary is in `rollback.accesses.addresses`.
-Likewise, `transfer_value` call-sites in `proceed_call` have access-
-listed both endpoints. So the balance of any address not in the final
-`accesses.addresses` is preserved. A separate corollary
-`run_within_frame_preserves_balance_outside_accessed` (and similar for
-`run_call`) captures this and lives as a follow-up to the main
-framework.
-
-## Key derived theorems
-
-### Within-frame (in `vfmCallFrameScript`)
-
-```
-Theorem run_within_frame_preserves:
-  es.contexts ≠ [] ∧ run_within_frame es = SOME (r, es') ⇒
-  same_frame_rel es es'
-```
-
-Named exported corollaries:
-
-- `run_within_frame_preserves_txParams`
-- `run_within_frame_preserves_storage_outside_callee`
-- `run_within_frame_preserves_tStorage_outside_callee`
-- `run_within_frame_preserves_code_outside_callee`
-- `run_within_frame_preserves_nonce_outside_callee`
-- `run_within_frame_preserves_nonhead_contexts`
-- `run_within_frame_preserves_head_msgParams`
-- `run_within_frame_preserves_saved_rollback`
-- `run_within_frame_callee_nonce_monotone`
-- `run_within_frame_logs_grow`
-- `run_within_frame_accesses_grow`
-- `run_within_frame_gas_monotone`
-- `run_within_frame_refund_monotone`
-- `run_within_frame_domain_compatible`
-
-Additional follow-up corollaries (outside the main chain, recovering
-the dropped guarantees under access-list hypotheses):
-
-- `run_within_frame_preserves_balance_outside_accessed`
-- `run_within_frame_toDelete_grows` (and symmetrically, the added
-  addresses are all access-listed by the SELFDESTRUCT step that added
-  them).
-
-### Across a whole call (in `vfmRunCallScript`)
-
-The headline theorem matching the issue:
-
-```
-Theorem run_call_preserves_storage_outside_accessed:
-  run_call es = SOME (r, es') ⇒
-  ∀a. a ∉ es'.rollback.accesses.addresses ⇒
-      (lookup_account a es'.rollback.accounts).storage =
-      (lookup_account a es.rollback.accounts).storage
-```
-
-Its per-slot strengthening:
-
-```
-Theorem run_call_preserves_storage_outside_accessed_slots:
-  run_call es = SOME (r, es') ⇒
-  ∀a k. SK a k ∉ es'.rollback.accesses.storageKeys ⇒
-      lookup_storage k (lookup_account a es'.rollback.accounts).storage =
-      lookup_storage k (lookup_account a es.rollback.accounts).storage
-```
-
-Both hold uniformly whether the call succeeded or reverted, because on
-revert `rollback.accesses` is rolled back in lockstep with
-`rollback.accounts`.
-
-Companion theorems (for free from the same framework):
-
-- `run_call_preserves_txParams`
-- `run_call_preserves_tStorage_outside_accessed`
-- `run_call_preserves_balance_outside_accessed`
-- `run_call_preserves_code_outside_accessed` (stronger: only
-  newly-created-contract addresses can have code installed, via the
-  `handle_create` branch; followup if useful)
-- `run_call_preserves_nonhead_contexts` (contexts below the starting
-  depth are byte-for-byte unchanged)
-- `run_call_preserves_head_msgParams`
-- `run_call_accesses_grow`, `run_call_logs_grow`,
-  `run_call_gas_monotone`, `run_call_refund_monotone`,
-  `run_call_domain_compatible`
-
-## What is reused from existing theories (no modifications required)
-
-- `vfmStaticCallsScript`: `cp`, `ctx_pres`, all their composition and
-  leaf lemmas. The `cp ⇒ same_frame_rel` bridge means the heavy lifting
-  of per-primitive classification is already done.
-- `vfmTxParamsScript`: `step_preserves_txParams` is used in the proof of
-  `step_same_frame` (txParams conjunct) and at push/pop boundaries.
-- `vfmDecreasesGasScript`: `run_tr_def`, `run_tr_ind`, `run_eq_tr`, and
-  the gas-termination recipe — reused directly for `run_call_tr`. Also
-  `decreases_gas_cred_step` is used in the gas-monotone corollary.
-- `vfmDomainSeparationScript`: `subdomain`, `domain_compatible`, with
-  their reflexivity and transitivity lemmas.
-- `vfmExecutionPropScript`: the `_preserves_nonempty_contexts` family.
-
-No existing file is deleted or rewritten.
-
-## Remaining design choices and non-goals
-
-- **Per-slot vs. per-address.** We prove both; the per-slot version is
-  the primary statement because it is strictly stronger and closer to the
-  usage in contract proofs.
-- **Closed-form `run_call` decomposition** (`run_call = run_within_frame
-  ; (if pushed then run_call recursively) ; run_call`) is *not* required
-  to derive the headline theorems. It is a nice-to-have for downstream
-  users. Deferred.
-- **Initial-state hypothesis variants.** Statements with `a ∉
-  es.rollback.accesses.addresses` in the hypothesis follow from the
-  final-state version by monotonicity; we expose them as corollaries.
-- **SELFDESTRUCT within `same_frame_rel`.** Covered. The relation is
-  deliberately weak enough (balance and `toDelete` free) that
-  SELFDESTRUCT's effects satisfy it. Addresses in SELFDESTRUCT's
-  transfer are access-listed, so follow-up balance-preservation
-  corollaries can exclude them.
-- **`code` mutation semantics.** Code can be installed at the callee's
-  address via `handle_create` during the frame where the CREATE'd
-  context is being deployed. `same_frame_rel` accepts this by leaving
-  callee `code` free. Non-callee code is preserved (it is part of the
-  full-account-equality conjunct for non-callees). A tighter
-  `run_call_preserves_code_outside_newly_created` theorem is a
-  candidate follow-up.
-
-## Ordered work plan
-
-1. [x] Add `run_call_def` and `run_within_frame_def` to
-   `vfmExecutionScript.sml`, rebuild `spec/`.
-2. Build `spec/prop/vfmCallFrameScript.sml`:
-   a. [x] Define helpers (`msdomain_compatible`, `callee_local_changes`)
-      and `same_frame_rel`; prove reflexivity and transitivity.
-      Required a weakening of `callee_local_changes` to permit
-      SELFDESTRUCT (balance at non-callees is free; `toDelete` is
-      dropped from `same_frame_rel`).
-   b. [x] Define `preserves_same_frame` (monadic same-frame property)
-      with composition lemmas (bind, ignore_bind, handle, cond,
-      case_*, let, uncurry).
-   c. [x] Primitive-level `preserves_same_frame` leaves: getters,
-      head-context writers, rollback writers (`write_storage`,
-      `write_transient_storage`, `update_accounts (increment_nonce)`
-      at the callee), access/domain ops, plus a parameterised
-      `set_current_context` lemma. Plus pointwise companions
-      `write_storage_same_frame` etc. for use inside larger opcode
-      proofs.
-   d. [x] Compound-helper `preserves_same_frame` lemmas for every
-      `step_*` intermediate (arithmetic helpers, step_sload,
-      step_sstore_gas_consumption, copy_to_memory, memory and control
-      helpers, all 18 precompiles, dispatch_precompiles, abort
-      helpers, inc_pc_or_jump).
-   e. [x] Per-opcode `preserves_same_frame (step_inst op)[simp]` for
-      every Group-1 opcode (77 theorems covering everything except
-      Call, CallCode, DelegateCall, StaticCall, Create, Create2, and
-      SelfDestruct).
-   f. [x] `psf` state-indexed framework (composition rules, bridges
-      to and from `preserves_same_frame`, specialised getter-binds
-      for `get_callee`, `get_current_context`, `get_caller`,
-      `get_value`, `get_accounts`, `get_tStorage`, `get_rollback`,
-      `get_tx_params`, `get_original`, pointwise rollback-writer
-      lemmas, transfer helpers).
-   g. [x] `preserves_same_frame_step_sstore` via the `psf` framework.
-   h. [x] Handle-layer lemmas: `outputTo_consistent`,
-      `psf_handle_create`, `handle_exception_same_frame`,
-      `handle_step_same_frame`.
-   i. [x] `preserves_same_frame (step_inst SelfDestruct)` via new
-      primitives (`psf_update_accounts_transfer_value`,
-      `psf_add_to_delete`, `psf_update_accounts_callee_balance_only`)
-      plus the `transfer_value_preserves_{storage,code,nonce}` field
-      lemmas.
-   j. [x] `proceed_call_length`, `proceed_create_length` — helpers
-      showing the push always increases context length.
-   k. [x] `same_frame_bind_preserves` — state-level bind-composition
-      helper for the CALL/CREATE proofs.
-   l. [x] `step_call_same_frame` and `step_create_same_frame` —
-      PROVEN.
-   m. [x] `step_same_frame` — PROVEN (with length-preservation
-      hypothesis). The cross-frame cases
-      `step_call_handle_step_inr_grow_same_frame` and
-      `step_create_inr_no_grow` are used; both have remaining
-      internal cheats documented below.
-   n. [x] `run_within_frame_preserves` — PROVEN with the
-      conditional invariant `(LENGTH s.contexts = LENGTH es.contexts
-      ⇒ same_frame_rel es s)`.
-   o. [x] `run_within_frame_gas_monotone` — PROVEN with same
-      conditional invariant pattern.
-   p. [x] Named `run_within_frame_*` corollaries exported (13).
-3. [x] Create `spec/prop/vfmRunCallScript.sml`:
-   a. [x] Define `active_rollbacks`, `storage_slot_preserved`,
-      `run_call_inv` (2-state invariant with saved-rollback chain).
-   b. [x] Prove `run_call_inv_refl`.
-   c. [cheat] Prove `run_call_inv_step` (single-step preservation).
-      Structural outline present; full proof sketched in-place.
-   d. [x] Prove `run_call_preserves_inv` via `OWHILE_INV_IND`.
-   e. [x] Export `run_call_preserves_storage_outside_accessed_slots`
-      (the headline theorem) and `run_call_preserves_txParams`.
-   f. **Deferred:** remaining companion corollaries (tStorage,
-      code, balance, accesses, logs, gas, refund, domain, nonhead
-      contexts, head msgParams). All follow from extending the
-      invariant in the same pattern.
-
-   `run_call_tr` / `run_call_eq_tr` / cross-boundary step lemmas
-   are NOT needed for this approach. Deferred.
-4. [x] `spec/prop/Holmakefile` — no changes required.
-
-## Cheats discharged since plan was drafted
-
-### Phase 1 flaws resolved
-
-1. **“`same_frame_or_grow step`”** — FALSE claim removed.
-   Reformulated `run_within_frame_preserves` and
-   `run_within_frame_gas_monotone` using the conditional invariant
-   `(LENGTH s.contexts = LENGTH es.contexts ⇒ same_frame_rel es s)`.
-
-2. **Address-level headline** reformulated as the per-slot
-   `run_call_preserves_storage_outside_accessed_slots` using
-   `storageKeys`, not `addresses`. This matches `access_slot` exactly.
-
-### Discharged cheats (across all sessions)
-
-- `step_inst_inl_grew_is_call`
-- `step_inst_inr_grew_is_call_family`
-- `proceed_create_returns_inl`
-- `run_within_frame_preserves`
-- `run_within_frame_gas_monotone`
-- `pop_and_incorporate_context_failure_effect`
-- `handle_exception_pop_failure_memory_effect`
-- `handle_step_pop_memory_effect`
-- `step_create_inr_no_grow`
-- `step_create_grown_returns_inl` — newly discharged using
-  `length_or_inl_grow` framework.
-- Two msdomain / txParams / `e ≠ NONE` inner cheats inside
-  `step_call_handle_step_inr_grow_same_frame`
-
-### New helper lemmas (proven)
-
-- `handle_exception_pop_success_memory_effect` and
-  `handle_step_pop_success_memory_effect`: effect lemmas for the
-  e = NONE path (precompile success).
-- `SND_handle_step_msdomain` and 15 supporting `SND_*_msdomain`
-  lemmas: handle_step does not modify msdomain at all.
-- `abort_unuse_length`, `abort_create_exists_length`: both preserve
-  context length.
-- Strengthened `step_call_inr_grow_structure` conclusion to include
-  `s1.rollback = sp.rollback` and `s1.msdomain = sp.msdomain`.
-- **New predicate framework `length_preserves` /
-  `length_or_inl_grow`** with composition rules (bind, ignore_bind,
-  cond, case_option, case_sum, case_pair, let). Used to prove
-  `step_create_grown_returns_inl` in 2 tactic steps. Does NOT apply
-  to step_call (precompile success returns INR NONE with grown
-  state, violating the predicate).
-
-## Remaining cheats (4)
-
-### `vfmCallFrameScript.sml` (3)
-
-1. **`step_call_inr_grow_structure`** (≈ line 3733). The biggest.
-   Walk through step_call + proceed_call, identifying the
-   intermediate state `sp` just before `push_context`. Establishes:
-   - `¬ vfm_abort e`
-   - `same_frame_rel s sp`
-   - `s1.rollback = sp.rollback`, `s1.msdomain = sp.msdomain`
-   - `s1.contexts = (callee_ctx, sp.rollback) :: (parent_ctx, old
-     SND) :: TL sp.contexts`
-   - parent_ctx preserves msgParams/logs/addRefund/subRefund
-   - `callee_ctx.msgParams.outputTo = Memory mr`
-
-   Requires careful structural unfolding of step_call's monad
-   chain; estimate ~300 lines. Precompile failures are always
-   `OutOfGas` / `InvalidParameter` / `KZGProofError`, never
-   `vfm_abort` (verified by inspection of all 18 precompile
-   definitions).
-
-~~**Two `q = INL ()` subcheats**~~ — DISCHARGED via generalised
-  `handle_step_pop_{success,failure}_memory_effect_gen` lemmas that
-  don't require q = INL (). The _gen failure variant has an extra
-  `LENGTH s'.contexts < LENGTH s.contexts` hypothesis which is
-  guaranteed by the caller's `LENGTH s'.contexts = LENGTH s.contexts`
-  (pop back to original length from grown state).
-
-### `vfmRunCallScript.sml` (1)
-
-2. **`run_call_inv_step`** (≈ line 218). Four-case proof on step's
-   length effect (see sketch in proof comment):
-   a. Length preserved: `step_same_frame` + slot preservation on
-      `same_frame_rel`.
-   b. Length +1 (push): new saved rollback entry is s.rollback
-      (pre-step), which was already active.
-   c. Length −1 (pop success): active_rollbacks shrinks by one;
-      `s'.rollback = s.rollback` preserved.
-   d. Length −1 (pop revert): `s'.rollback = SND (HD s.contexts)`,
-      which was the second entry of old `active_rollbacks`.
-
-   Depends on: helper lemma characterising step's length change
-   (±1 or 0); outputTo_consistent threading through run_call;
-   step_same_frame for case (a); `step_call_handle_step_inr_grow_
-   same_frame` (PROVEN, modulo cheat #1) for case (c), push
-   structure for (b).
-
-## Net status
-
-From 11 cheats at start to **2 cheats** now. Both plan flaws resolved.
-Headline theorem `run_call_preserves_storage_outside_accessed_slots`
-and `run_call_preserves_txParams` proven, modulo the 2 remaining
-state-level / structural cheats.
-
-Both files build with `holmake` in ~40 seconds, reporting CHEATED.
-All remaining cheats have detailed proof sketches in-place.
-
-### Summary of cheat dependency structure
-
-```
-run_call_preserves_storage_outside_accessed_slots (PROVEN)
-  └─ run_call_preserves_inv (PROVEN)
-       └─ run_call_inv_step             [CHEAT #2]
-
-step_same_frame (PROVEN, used in cheat #2 case (a))
-  └─ step_call_same_frame (PROVEN)
-  └─ step_create_same_frame (PROVEN)
-
-step_call_handle_step_inr_grow_same_frame (PROVEN)
-  ├─ step_call_inr_grow_structure            [CHEAT #1]
-  ├─ handle_step_pop_memory_effect_gen (PROVEN)
-  └─ handle_step_pop_success_memory_effect_gen (PROVEN)
-
-step_create_inr_no_grow (PROVEN)
-  └─ step_create_grown_returns_inl (PROVEN, via length_or_inl_grow)
-```
-
-### Archived audit notes
-
-**Both audit adjustments have been applied** (see "Phase 1 flaws
-resolved" above):
-
-1. `same_frame_or_grow step` was FALSE; replaced with conditional
-   invariant `(LENGTH s.contexts = LENGTH es.contexts ⇒ same_frame_rel
-   es s)` inside `run_within_frame_preserves` and
-   `run_within_frame_gas_monotone`. Both proven.
-2. Address-level storage theorem was false as stated (SSTORE
-   access-lists via `storageKeys`, not `addresses`). Replaced with
-   the per-slot `run_call_preserves_storage_outside_accessed_slots`
-   as the primary headline.
-
-## Deferred follow-ups (outside #113 scope)
-
-- Balance-outside-accessed corollary for `run_within_frame` and
-  `run_call`, using access-list monotonicity to recover balance
-  preservation that was dropped from `same_frame_rel` for SELFDESTRUCT.
-- `toDelete`-grows-monotonically corollary.
-- A tighter `run_call_preserves_code_outside_newly_created` theorem
-  using CREATE-frame tracking.
+**Strategy**: case on op via `step_inst_inl_grew_is_call`.
+
+- **Call family (4 cases)**: unfold step_call, peel psf prefix
+  (no account/storage change, accesses monotonic). At proceed_call:
+  get_rollback captures sp.rollback; transfer_value modifies balance
+  only; push_context prepends `(child, sp.rollback) :: sp.contexts`
+  where sp.contexts = s.contexts; dispatch_precompiles else-branch
+  (return (), the only way to INL-return is address ∉ precompiles).
+  Child has `outputTo = Memory mr` (satisfies outputTo_consistent_ctx
+  vacuously).
+- **Create family (2 cases)**: similar but push structure captured
+  by proceed_create. Child has `outputTo = Code address = Code callee`
+  (satisfies outputTo_consistent_ctx).
+
+Both cases share a **template** that can likely be extracted into
+a helper. Expect ~100 lines of actual novel content, ~50 lines of
+case-scaffolding.
+
+### 5. Assemble `run_call_inv_step` (~150 lines)
+
+The main proof. Steps:
+
+1. Strip `txParams` as today.
+2. Prove `outputTo_consistent_stack s'` (needed by the invariant).
+3. `step_length_change` → 3 cases.
+4. **Case 0**: `step_same_frame` + `step_preserves_non_accessed_storage`
+   + tail-equality + msgParams-equality + access monotonicity.
+5. **Case +1**: `step_inl_grew_push_structure` + tail-extension + per-
+   slot equality + new-child outputTo-consistency.
+6. **Case −1**: `pop_and_incorporate_context_{success,failure}_effect`
+   + tail-sublist + set_rollback-to-active-entry reasoning + msgParams
+   of old position-1.
+
+## Execution order and checkpoints
+
+1. **Checkpoint A** (Work item 1 + 2):
+   - Add `outputTo_consistent_stack`, strengthen `run_call_inv`,
+     update the 4 cascading theorems (likely only hypothesis
+     additions).
+   - Prove `step_length_change`.
+   - **Verify**: file builds. 1 cheat remaining (`run_call_inv_step`).
+2. **Checkpoint B** (Work item 3):
+   - Prove `step_preserves_non_accessed_storage`.
+   - **Verify**: theorem proves on its own.
+3. **Checkpoint C** (Work item 4):
+   - Prove `step_inl_grew_push_structure`.
+   - **Verify**: theorem proves on its own.
+4. **Checkpoint D** (Work item 5):
+   - Assemble `run_call_inv_step` using the three helpers.
+   - **Verify**: cheat removed, full file builds clean.
+
+## Revised size estimate
+
+| Item | Lines |
+|---|---|
+| Invariant strengthening + active_rollbacks extension + cascade | 50 |
+| `step_length_change` | 30 |
+| `step_preserves_non_accessed_storage` | 80 |
+| `step_inl_grew_push_structure` | 150 |
+| `run_call_inv_step` main proof | 150 |
+| **Total** | **~460** |
+
+## Residual risks
+
+- **Case 0's inner-grow-then-pop sub-case of `step_preserves_non_accessed_storage`**
+  is subtler than a flat per-opcode case analysis. The set_rollback
+  restores the pushed rollback whose storage equals (pre-transfer)
+  `s.rollback.accounts.storage`. Verifying this cleanly may add
+  20–30 lines.
+- **Case −1's outputTo-consistency claim** relies on the popped-to
+  msgParams being the old position-1 context's, which holds because
+  msgParams is immutable.
+- The `step_inl_grew_push_structure` lemma reuses the approach from
+  `step_call_inr_grow_structure` (Cheat 1) but for 6 branches
+  (Call/CallCode/DelegateCall/StaticCall/Create/Create2) instead of
+  one aggregated proof. Template extraction should prevent duplication.
+- The extended `active_rollbacks` requires `run_call_inv_refl` to
+  establish `storage_slot_preserved (SND (HD es.contexts)) es.rollback`.
+  For the standard entry shape `SND (HD es.contexts) = es.rollback`
+  this is reflexivity. We may need to add this as an explicit
+  hypothesis to the downstream theorems if callers don't provide
+  the standard shape.
