@@ -26,7 +26,7 @@ Ancestors
   combin pair option pred_set list rich_list sum
   arithmetic finite_map While vfmTypes vfmConstants
   vfmContext vfmState vfmExecution vfmExecutionProp
-  vfmSameFrame vfmCallFrame
+  vfmSameFrame vfmRunWithinFrame
 Libs
   dep_rewrite BasicProvers
 

@@ -1,36 +1,49 @@
 (*
- * Application layer for call-frame reasoning.
+ * `run_within_frame` preservation theorems.
  *
- * The underlying frameworks live in separate theories:
- *   - `vfmSameFrame`: the base `same_frame_rel` relation, the
- *     `preserves_same_frame` and `psf` frameworks, per-opcode /
- *     per-precompile [simp] lemmas, `outputTo_consistent`,
- *     SELFDESTRUCT psf details, and `proceed_call_length` /
- *     `proceed_create_length`.
- *   - `vfmStepLength`: the `same_frame_or_grow` / `psf_or_grow` and
- *     `length_preserves` / `length_or_inl_grow` frameworks, with
- *     associated step_call / step_create structural lemmas.
- *   - `vfmMsdomainPreserved`: `SND_*_msdomain[simp]` leaf lemmas
- *     and `SND_handle_step_msdomain`.
+ * Application layer that composes the four underlying frameworks
+ * into the headline `run_within_frame_preserves` theorem and its
+ * named downstream corollaries. The frameworks live in:
+ *
+ *   - `vfmSameFrame`: `same_frame_rel`, `preserves_same_frame`,
+ *     `psf`, per-opcode / per-precompile [simp] lemmas,
+ *     `outputTo_consistent`, SELFDESTRUCT psf details,
+ *     `proceed_call_length`, `proceed_create_length`.
+ *   - `vfmStepLength`: `same_frame_or_grow`, `psf_or_grow`,
+ *     `length_preserves`, `length_or_inl_grow`, and associated
+ *     step_call / step_create structural lemmas.
+ *   - `vfmMsdomainPreserved`: `SND_*_msdomain[simp]` leaves and
+ *     `SND_handle_step_msdomain`.
  *   - `vfmHandleStep`: `psf_handle_create`,
- *     `handle_exception_same_frame`, `handle_step_same_frame`, the
- *     tiny state-effect lemmas for set_rollback / pop_context /
+ *     `handle_exception_same_frame`, `handle_step_same_frame`,
+ *     state-effect lemmas for set_rollback / pop_context /
  *     push_context, `pop_and_incorporate_context_failure_effect`,
- *     and the `handle_exception_pop_*` / `handle_step_pop_*`
- *     memory-effect lemmas.
+ *     `handle_exception_pop_*` / `handle_step_pop_*` memory-effect
+ *     lemmas.
  *
- * This theory composes those to prove:
- *   - `bind_inr_grow_factor` / `ignore_bind_inr_grow_factor` and
- *     the `inr_grow_witness` framework (for locating the state just
- *     before a growth-causing step);
- *   - the INR-grow structure lemma `step_call_inr_grow_structure`;
- *   - `step_call_handle_step_inr_grow_same_frame`, `step_same_frame`,
- *     `run_within_frame_preserves`, `run_within_frame_gas_monotone`;
- *   - the downstream named corollaries
- *     `run_within_frame_preserves_*` exposing individual conjuncts
- *     of `same_frame_rel` for user consumption.
+ * This theory adds:
+ *   - `bind_inr_grow_factor` / `ignore_bind_inr_grow_factor`: peel
+ *     a preserves_same_frame prefix off an INR-growing bind chain,
+ *     locating the state just before the growth-causing step.
+ *   - The `inr_grow_witness` framework and `inr_grow_P`:
+ *     compositional predicate machinery characterising INR-grow
+ *     outcomes.
+ *   - `step_call_inr_grow_structure`: structural description of the
+ *     state after step_call INR-grows (currently the only cheat).
+ *   - `step_call_handle_step_inr_grow_same_frame`: push then pop
+ *     composes to same-frame.
+ *   - `step_same_frame`: step preserves same-frame on length-
+ *     preserving transitions.
+ *   - `run_within_frame_preserves`, `run_within_frame_gas_monotone`:
+ *     the headline OWHILE-iterated theorems.
+ *   - Named downstream corollaries `run_within_frame_preserves_*`
+ *     exposing individual conjuncts of `same_frame_rel` for user
+ *     consumption (txParams, storage / tStorage / code / nonce
+ *     outside the callee, non-head contexts, saved_rollback,
+ *     callee nonce monotone, logs grow, accesses grow, refund
+ *     monotone, domain compatible).
  *)
-Theory vfmCallFrame
+Theory vfmRunWithinFrame
 Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
   vfmState vfmContext vfmExecution vfmExecutionProp

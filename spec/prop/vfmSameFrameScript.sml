@@ -25,9 +25,20 @@
  *   - the utility bridges `cp_imp_length_contexts_preserved` and
  *     `psf_imp_length_contexts_preserved`.
  *
- * Downstream theories (vfmCallFrame, vfmRunCall, ...) use this
- * relation and its companion frameworks to lift preservation
- * properties through `run_within_frame`, `run_call`, and `run`.
+ * Downstream theories (`vfmStepLength`, `vfmHandleStep`,
+ * `vfmRunWithinFrame`, `vfmRunCall`, ...) use this relation and its
+ * companion frameworks to lift preservation properties through
+ * `run_within_frame`, `run_call`, and `run`.
+ *
+ * Companion theories:
+ *   - `vfmStepLength` adds `same_frame_or_grow` / `psf_or_grow` /
+ *     `length_preserves` for reasoning about step_call / step_create.
+ *   - `vfmMsdomainPreserved` proves msdomain is preserved exactly
+ *     through handle_step.
+ *   - `vfmHandleStep` proves handle-layer same-frame and pop-effect
+ *     lemmas.
+ *   - `vfmRunWithinFrame` composes all of the above into the
+ *     `run_within_frame_preserves_*` headline theorems.
  *)
 Theory vfmSameFrame
 Ancestors
