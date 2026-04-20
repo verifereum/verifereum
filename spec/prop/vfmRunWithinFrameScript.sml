@@ -29,7 +29,7 @@
  *     compositional predicate machinery characterising INR-grow
  *     outcomes.
  *   - `step_call_inr_grow_structure`: structural description of the
- *     state after step_call INR-grows (currently the only cheat).
+ *     state after step_call INR-grows.
  *   - `step_call_handle_step_inr_grow_same_frame`: push then pop
  *     composes to same-frame.
  *   - `step_same_frame`: step preserves same-frame on length-
@@ -241,12 +241,396 @@ End
 
    When this composed monad INR-grows, we extract structural info. *)
 
-(* TODO: a helper lemma stating that, when `a` is a precompile
-   address, any INR exception raised by `dispatch_precompiles a`
-   is neither a `vfm_abort` nor `SOME Reverted`. This is consumed
-   by `step_call_inr_grow_structure` below. An earlier attempt to
-   build a compositional `inr_ok_exn` framework for this is removed;
-   the helper will be proven directly when the main theorem lands. *)
+(* ---- Framework: `inr_ok_exn` ----------------------------------- *)
+
+(* A monad `m` is `inr_ok_exn` when every INR result it returns from
+   a non-empty-contexts state is neither a `vfm_abort` nor `SOME
+   Reverted`. The `s.contexts ≠ []` hypothesis is needed because the
+   context-dependent primitives `get_current_context` /
+   `set_current_context` raise `Impossible` (a `vfm_abort`) when
+   contexts are empty; under that hypothesis they don't.
+
+   Usage mirrors `preserves_same_frame`: compositional rules applied
+   explicitly (`irule`), leaf lemmas for the few primitives the
+   precompile bodies actually call. *)
+Definition inr_ok_exn_def:
+  inr_ok_exn (m : α execution) ⇔
+    ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒
+      ∀e. r = INR e ⇒ ¬ vfm_abort e ∧ e ≠ SOME Reverted
+End
+
+(* ---- Composition lemmas --------------------------------------- *)
+
+(* bind composition requires that the prefix `g` also preserves the
+   non-emptiness of contexts (so that `f x` runs with a non-empty
+   stack). For the precompile bodies, we only compose with
+   `preserves_same_frame` primitives whose non-emptiness preservation
+   follows from `same_frame_rel_contexts_ne`. *)
+Theorem inr_ok_exn_bind:
+  preserves_same_frame g ∧ inr_ok_exn g ∧ (∀x. inr_ok_exn (f x)) ⇒
+  inr_ok_exn (bind g f)
+Proof
+  simp[inr_ok_exn_def, bind_def]
+  >> strip_tac
+  >> rpt gen_tac
+  >> Cases_on `g s` >> rename1 `g s = (q, sm)`
+  >> Cases_on `q` >> simp[]
+  >- (
+    (* g returned INL x. Use preserves_same_frame to get
+       sm.contexts ≠ [], then apply (f x)'s inr_ok_exn. *)
+    strip_tac
+    >> `same_frame_rel s sm` by (
+      qpat_x_assum `preserves_same_frame _` mp_tac
+      >> rewrite_tac[preserves_same_frame_def]
+      >> disch_then drule >> simp[])
+    >> `sm.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+    >> metis_tac[])
+  (* g returned INR y. r = INR y and s' = sm. Apply inr_ok_exn g. *)
+  >> rw[]
+  >> metis_tac[]
+QED
+
+Theorem inr_ok_exn_ignore_bind:
+  preserves_same_frame g ∧ inr_ok_exn g ∧ inr_ok_exn f ⇒
+  inr_ok_exn (ignore_bind g f)
+Proof
+  rw[ignore_bind_def] >> irule inr_ok_exn_bind >> simp[]
+QED
+
+Theorem inr_ok_exn_cond:
+  inr_ok_exn m1 ∧ inr_ok_exn m2 ⇒
+  inr_ok_exn (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem inr_ok_exn_case_option:
+  inr_ok_exn m_none ∧ (∀x. inr_ok_exn (m_some x)) ⇒
+  inr_ok_exn (case opt of NONE => m_none | SOME x => m_some x)
+Proof
+  Cases_on `opt` >> rw[]
+QED
+
+Theorem inr_ok_exn_case_pair:
+  (∀x y. inr_ok_exn (f x y)) ⇒
+  inr_ok_exn (case pr of (x, y) => f x y)
+Proof
+  Cases_on `pr` >> rw[]
+QED
+
+Theorem inr_ok_exn_let:
+  (∀x. inr_ok_exn (f x)) ⇒ inr_ok_exn (let x = v in f x)
+Proof
+  rw[]
+QED
+
+(* ---- Leaf lemmas: primitives used inside precompile bodies ---- *)
+
+Theorem inr_ok_exn_return[simp]:
+  inr_ok_exn (return x)
+Proof
+  rw[inr_ok_exn_def, return_def]
+QED
+
+Theorem inr_ok_exn_fail_OutOfGas[simp]:
+  inr_ok_exn (fail OutOfGas)
+Proof
+  rw[inr_ok_exn_def, fail_def]
+QED
+
+Theorem inr_ok_exn_fail_InvalidParameter[simp]:
+  inr_ok_exn (fail InvalidParameter)
+Proof
+  rw[inr_ok_exn_def, fail_def]
+QED
+
+Theorem inr_ok_exn_fail_KZGProofError[simp]:
+  inr_ok_exn (fail KZGProofError)
+Proof
+  rw[inr_ok_exn_def, fail_def]
+QED
+
+Theorem inr_ok_exn_assert_OutOfGas[simp]:
+  inr_ok_exn (assert b OutOfGas)
+Proof
+  rw[inr_ok_exn_def, assert_def]
+QED
+
+Theorem inr_ok_exn_assert_KZGProofError[simp]:
+  inr_ok_exn (assert b KZGProofError)
+Proof
+  rw[inr_ok_exn_def, assert_def]
+QED
+
+Theorem inr_ok_exn_finish[simp]:
+  inr_ok_exn finish
+Proof
+  rw[inr_ok_exn_def, finish_def]
+QED
+
+Theorem inr_ok_exn_get_call_data[simp]:
+  inr_ok_exn get_call_data
+Proof
+  rw[inr_ok_exn_def, get_call_data_def, bind_def,
+     get_current_context_def, return_def, fail_def, AllCaseEqs()]
+QED
+
+Theorem inr_ok_exn_consume_gas[simp]:
+  inr_ok_exn (consume_gas n)
+Proof
+  rw[inr_ok_exn_def, consume_gas_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def,
+     assert_def, return_def, fail_def, AllCaseEqs()]
+  >> gvs[]
+QED
+
+Theorem inr_ok_exn_set_return_data[simp]:
+  inr_ok_exn (set_return_data d)
+Proof
+  rw[inr_ok_exn_def, set_return_data_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, AllCaseEqs()]
+  >> gvs[]
+QED
+
+(* ---- Per-precompile `inr_ok_exn` lemmas ----------------------- *)
+
+(* Each precompile body is built from `get_call_data`, `consume_gas`,
+   `set_return_data`, `finish`, `fail {OOG,IP,KZG}`, `assert _ {OOG,KZG}`
+   and `case ... of NONE / SOME / (a, b)` combinators. The structural
+   proof pattern mirrors the `preserves_same_frame_precompile_*`
+   lemmas: unfold the definition, then `irule` bind / ignore_bind /
+   case_option / case_pair composition rules down to the leaves. *)
+
+Theorem inr_ok_exn_precompile_ecrecover:
+  inr_ok_exn precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_sha2_256:
+  inr_ok_exn precompile_sha2_256
+Proof
+  rw[precompile_sha2_256_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_ripemd_160:
+  inr_ok_exn precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_identity:
+  inr_ok_exn precompile_identity
+Proof
+  rw[precompile_identity_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_modexp:
+  inr_ok_exn precompile_modexp
+Proof
+  rw[precompile_modexp_def, LET_THM]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_ecadd:
+  inr_ok_exn precompile_ecadd
+Proof
+  rw[precompile_ecadd_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_ecmul:
+  inr_ok_exn precompile_ecmul
+Proof
+  rw[precompile_ecmul_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_ecpairing:
+  inr_ok_exn precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> irule inr_ok_exn_cond >> simp[]
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_blake2f:
+  inr_ok_exn precompile_blake2f
+Proof
+  rw[precompile_blake2f_def]
+  >> irule inr_ok_exn_bind >> simp[] >> gen_tac
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_point_eval:
+  inr_ok_exn precompile_point_eval
+Proof
+  rw[precompile_point_eval_def]
+  >> irule inr_ok_exn_bind >> simp[] >> gen_tac
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+(* The BLS precompiles share a common shape:
+     get_call_data ; consume_gas N ;
+     case f input of NONE => fail OutOfGas
+                   | SOME r => set_return_data r ; finish *)
+Theorem inr_ok_exn_precompile_bls_g1add:
+  inr_ok_exn precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_bls_g1msm:
+  inr_ok_exn precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_bls_g2add:
+  inr_ok_exn precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_bls_g2msm:
+  inr_ok_exn precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_bls_pairing:
+  inr_ok_exn precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_bls_map_fp_to_g1:
+  inr_ok_exn precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_bls_map_fp2_to_g2:
+  inr_ok_exn precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+Theorem inr_ok_exn_precompile_p256verify:
+  inr_ok_exn precompile_p256verify
+Proof
+  rw[precompile_p256verify_def]
+  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  >> BasicProvers.PURE_CASE_TAC >> simp[]
+  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+QED
+
+(* ---- Helper: precompile bodies only raise OOG/IP/KZG ---------- *)
+
+(* When `a` is a precompile address (ruling out the `fail Impossible`
+   default), any INR exception raised by dispatch_precompiles is
+   neither `SOME Reverted` nor a `vfm_abort`. *)
+Theorem dispatch_precompiles_inr_not_reverted_not_abort:
+  s.contexts ≠ [] ∧
+  fIN a precompile_addresses ∧
+  dispatch_precompiles a s = (INR e, s') ⇒
+    ¬ vfm_abort e ∧ e ≠ SOME Reverted
+Proof
+  rw[dispatch_precompiles_def]
+  >> TRY (
+    (* The 18 precompile branches: match via the `inr_ok_exn`
+       property of each. *)
+    qmatch_asmsub_abbrev_tac `pc s = (INR e, s')`
+    >> `inr_ok_exn pc`
+         by simp[Abbr`pc`, inr_ok_exn_precompile_ecrecover,
+                 inr_ok_exn_precompile_sha2_256,
+                 inr_ok_exn_precompile_ripemd_160,
+                 inr_ok_exn_precompile_identity,
+                 inr_ok_exn_precompile_modexp,
+                 inr_ok_exn_precompile_ecadd,
+                 inr_ok_exn_precompile_ecmul,
+                 inr_ok_exn_precompile_ecpairing,
+                 inr_ok_exn_precompile_blake2f,
+                 inr_ok_exn_precompile_point_eval,
+                 inr_ok_exn_precompile_bls_g1add,
+                 inr_ok_exn_precompile_bls_g1msm,
+                 inr_ok_exn_precompile_bls_g2add,
+                 inr_ok_exn_precompile_bls_g2msm,
+                 inr_ok_exn_precompile_bls_pairing,
+                 inr_ok_exn_precompile_bls_map_fp_to_g1,
+                 inr_ok_exn_precompile_bls_map_fp2_to_g2,
+                 inr_ok_exn_precompile_p256verify]
+    >> pop_assum mp_tac >> rewrite_tac[inr_ok_exn_def]
+    >> disch_then drule
+    >> simp[] >> NO_TAC)
+  (* Default branch: `dispatch_precompiles a = fail Impossible`.
+     Rule out via `fIN a precompile_addresses`. *)
+  >> gvs[precompile_addresses_def, fIN_fset_ABS]
+QED
+
 
 (* ---- step_call INR-grow structure lemma ------------------------ *)
 
@@ -261,6 +645,136 @@ End
      OOG, never OutsideDomain/Unimplemented/Impossible).
    - s1.contexts has parent (= sp's head possibly with set_return_data
      applied) + child + rest. *)
+(* Lift `psf_update_accounts_transfer_value` (which uses `psf (λs.T)`)
+   to a `preserves_same_frame` simp rule, so that the prefix-peeling
+   tactic applies uniformly through the transfer_value step. *)
+Theorem preserves_same_frame_update_accounts_transfer_value[local,simp]:
+  preserves_same_frame
+    (update_accounts (transfer_value fromAddr toAddr amount))
+Proof
+  rewrite_tac[preserves_same_frame_eq_psf_T]
+  >> irule psf_update_accounts_transfer_value
+QED
+
+(* Witness for proceed_call with outputTo = Memory mr: when it
+   INR-grows, the inr_grow_P structure holds of the entering state sp
+   and the final state s1. *)
+Theorem inr_grow_witness_proceed_call:
+  inr_grow_witness inr_grow_P
+    (proceed_call op sender address value aOff aSz code stipend
+                  (Memory mr))
+Proof
+  (* Unfold proceed_call and analyse directly. Don't use
+     `inr_grow_witness_bind_preserves_g` because it erases the
+     `x = s.rollback` equation we need for the pushed rollback. *)
+  simp[inr_grow_witness_def]
+  >> rpt gen_tac >> strip_tac
+  (* Witness: sp = s (the state entering proceed_call). The pushed
+     rollback captured by get_rollback IS s.rollback. *)
+  >> qexists_tac `s` >> simp[same_frame_rel_refl]
+  (* Split on the transfer_value and precompile conditions first,
+     then unfold proceed_call's body for each branch. *)
+  >> Cases_on `s.contexts` >> gvs[]
+  >> qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac
+  >> simp[proceed_call_def, bind_def, ignore_bind_def,
+          get_rollback_def, read_memory_def, get_caller_def,
+          get_value_def, get_static_def, update_accounts_def,
+          push_context_def, get_current_context_def, return_def]
+  >> `∀f. update_accounts f s = (INL (), s with rollback updated_by (λr. r with accounts updated_by f))`
+       by simp[update_accounts_def, return_def]
+  >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> Cases_on `fIN address precompile_addresses`
+  >> gvs[return_def]
+  >> strip_tac
+  (* In the precompile branches, extract the exception-shape fact. *)
+  >> drule_at (Pat`dispatch_precompiles`)
+       dispatch_precompiles_inr_not_reverted_not_abort
+  >> simp[]
+  >> strip_tac
+  >> simp[inr_grow_P_def]
+  (* Extract cp facts and same_frame_rel facts about the
+     dispatch_precompiles step. *)
+  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed`
+  >> `pushed.contexts ≠ []` by (gvs[Abbr`pushed`])
+  (* Extract cp facts: accounts/tStorage/toDelete preserved,
+     contexts structure. *)
+  >> drule (REWRITE_RULE [cp_def] (Q.SPEC `address` (GEN_ALL cp_dispatch_precompiles)))
+  >> simp[]
+  >> strip_tac
+  >> drule (REWRITE_RULE [preserves_same_frame_def]
+              (Q.SPEC `address` (GEN_ALL preserves_same_frame_dispatch_precompiles)))
+  >> simp[]
+  >> strip_tac
+  (* Facts about `pushed`. *)
+  >> `SND (HD pushed.contexts) = s.rollback ∧
+      TL pushed.contexts = s.contexts ∧
+      (FST (HD pushed.contexts)).msgParams.outputTo = Memory mr ∧
+      pushed.rollback.accesses = s.rollback.accesses ∧
+      pushed.msdomain = s.msdomain ∧
+      (∀a. (lookup_account a pushed.rollback.accounts).storage =
+           (lookup_account a s.rollback.accounts).storage) ∧
+      (∀a. (lookup_account a pushed.rollback.accounts).code =
+           (lookup_account a s.rollback.accounts).code) ∧
+      (∀a. (lookup_account a pushed.rollback.accounts).nonce =
+           (lookup_account a s.rollback.accounts).nonce) ∧
+      pushed.rollback.tStorage = s.rollback.tStorage`
+     by (gvs[Abbr`pushed`, initial_context_def, initial_msg_params_def,
+             transfer_value_preserves_storage,
+             transfer_value_preserves_code,
+             transfer_value_preserves_nonce])
+  >> gvs[]
+  (* Extract same_frame_rel pushed s1 into its conjuncts. *)
+  >> qpat_x_assum `same_frame_rel pushed s1` mp_tac
+  >> rewrite_tac[same_frame_rel_def]
+  >> strip_tac
+  (* Pick parent_ctx = FST h for the existential. *)
+  >> `∃parent_ctx.
+       h = (parent_ctx, SND h) ∧ parent_ctx.msgParams = (FST h).msgParams ∧
+       parent_ctx.logs = (FST h).logs ∧
+       parent_ctx.addRefund = (FST h).addRefund ∧
+       parent_ctx.subRefund = (FST h).subRefund`
+     by (qexists_tac `FST h` >> simp[pairTheory.PAIR])
+  (* Remaining: callee_local_changes, accesses ⊆, msdomain_compatible. *)
+  >> simp[]
+  >> fs[]
+  >> simp[callee_local_changes_def]
+  >> fs[callee_local_changes_def]
+  >> metis_tac[]
+QED
+
+(* Main witness lemma: step_call's INR-growth carries the full
+   inr_grow_P structure (not just the weaker same-frame-or-grow
+   disjunction). *)
+Theorem inr_grow_witness_step_call:
+  inr_grow_witness inr_grow_P (step_call op)
+Proof
+  simp[step_call_def]
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> irule inr_grow_witness_cond >> conj_tac
+  >- (
+    (* abort_call_value is preserves_same_frame, never INR-grows *)
+    irule inr_grow_witness_of_preserves_same_frame >> simp[])
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  >> irule inr_grow_witness_cond >> conj_tac
+  >- (
+    (* abort_unuse is preserves_same_frame, never INR-grows *)
+    irule inr_grow_witness_of_preserves_same_frame >> simp[])
+  >> irule inr_grow_witness_proceed_call
+QED
+
 Theorem step_call_inr_grow_structure:
   s.contexts ≠ [] ∧ outputTo_consistent s ∧
   step_call op s = (INR e, s1) ∧
@@ -293,8 +807,15 @@ Theorem step_call_inr_grow_structure:
           parent_ctx.subRefund = (FST (HD sp.contexts)).subRefund) ∧
        callee_ctx.msgParams.outputTo = Memory mr)
 Proof
-  cheat  (* Weakened-conclusion structure lemma. See
-            docs/issue-113-plan.md for analysis and proof plan. *)
+  strip_tac
+  >> mp_tac inr_grow_witness_step_call
+  >> rewrite_tac[inr_grow_witness_def]
+  >> disch_then drule
+  >> simp[]
+  >> strip_tac
+  >> gvs[inr_grow_P_def]
+  >> rpt (goal_assum (first_assum o mp_then Any mp_tac))
+  >> simp[]
 QED
 
 (* ---- The case (b) lemma ---------------------------------------- *)
