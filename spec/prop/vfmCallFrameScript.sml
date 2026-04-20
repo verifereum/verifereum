@@ -2966,44 +2966,133 @@ QED
    preserves_same_frame (Pass B), which preserves length. *)
 Theorem step_inst_inl_grew_is_call:
   step_inst op s = (INL (), s') ∧
-  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  LENGTH s'.contexts > LENGTH s.contexts ∧
+  s.contexts ≠ [] ⇒
   is_call op
 Proof
   strip_tac
-  >> Cases_on `op`
-  >> TRY (simp[is_call_def] >> NO_TAC)  (* push ops: is_call T *)
-  (* non-push ops: step_inst is preserves_same_frame. *)
-  >> (  (* For each non-push op, the Pass B [simp] lemma for
-           preserves_same_frame (step_inst <Op>) is available.
-           Extract length equality from psf_imp_length_contexts_preserved
-           and contradict grow. *)
-    cheat)
+  >> CCONTR_TAC
+  >> `LENGTH s'.contexts = LENGTH s.contexts` suffices_by simp[]
+  >> Cases_on `op` >> gvs[is_call_def]
+  >> imp_res_tac psf_imp_length_contexts_preserved
+  >> fs[]
 QED
 
 (* If step_inst returned INR with strictly larger contexts, op must be
    a Call-family opcode specifically (Create/Create2 never INR-grow
    because proceed_create always returns INL). *)
+(* Helper: step_create never INR-grows. Only proceed_create pushes,
+   and proceed_create returns INL. All abort branches are
+   preserves_same_frame. *)
+(* proceed_create always returns INL (push_context is the final
+   primitive and it returns INL). *)
+Theorem proceed_create_returns_inl:
+  s.contexts ≠ [] ∧
+  proceed_create senderAddr addr value code gas s = (r, s') ⇒
+  ISL r
+Proof
+  strip_tac
+  >> gvs[proceed_create_def, bind_def, ignore_bind_def,
+         get_rollback_def, get_original_def, set_original_def,
+         update_accounts_def, push_context_def, return_def,
+         AllCaseEqs()]
+QED
+
+(* step_create never INR-grows. Use same_frame_or_grow_step_create:
+   either same-frame (length preserved), or grew ≥ 1. In the grow case,
+   all non-proceed_create branches don't grow, so we must have reached
+   proceed_create. proceed_create returns INL, so the outer result is
+   INL too, contradicting our INR hypothesis.
+
+   We formalise this as: step_create, in the grow case, returns INL. *)
+(* step_create grown result must be INL: every primitive in step_create's
+   bind chain either preserves_same_frame (no grow) or is
+   proceed_create (returns INL). So grown + INR is impossible. The
+   proof would formalise this as a strengthened `same_frame_or_inl_grow`
+   predicate with composition rules, analogous to `same_frame_or_grow`.
+   Tedious to set up; cheating for now. *)
+(* Helper: abort_unuse/abort_create_exists both preserve length.
+   They are each a sequence of primitive effects none of which push
+   or pop contexts. *)
+Theorem abort_unuse_length:
+  s.contexts ≠ [] ∧ abort_unuse n s = (r, s') ⇒
+  LENGTH s'.contexts = LENGTH s.contexts
+Proof
+  (* abort_unuse uses push_stack, set_return_data, unuse_gas, inc_pc
+     which are all preserves_same_frame. Either it returns INL or INR
+     with state where length is preserved. *)
+  strip_tac
+  >> `preserves_same_frame (abort_unuse n)` by simp[]
+  >> pop_assum mp_tac
+  >> rewrite_tac[preserves_same_frame_def]
+  >> disch_then drule >> rw[]
+  >> metis_tac[same_frame_rel_def]
+QED
+
+Theorem abort_create_exists_length:
+  s.contexts ≠ [] ∧ abort_create_exists a s = (r, s') ⇒
+  LENGTH s'.contexts = LENGTH s.contexts
+Proof
+  strip_tac
+  >> gvs[abort_create_exists_def, bind_def, ignore_bind_def,
+         update_accounts_def, push_stack_def, inc_pc_def, return_def,
+         fail_def, get_current_context_def, set_current_context_def,
+         assert_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem step_create_grown_returns_inl:
+  s.contexts ≠ [] ∧
+  step_create two s = (r, s') ∧
+  LENGTH s'.contexts ≥ LENGTH s.contexts + 1 ⇒
+  ISL r
+Proof
+  (* Body analysis: step_create = do prefix; if cond then
+      abort_unuse _ else if cond2 then abort_create_exists _ else
+      proceed_create _. The prefix primitives don't grow. After
+      reaching the if, abort_unuse/abort_create_exists preserve
+      length (contradicting grew), and only proceed_create grows,
+      which returns INL.
+
+      Formalising this requires a new predicate psf_or_inl_grow
+      with composition rules analogous to psf_or_grow. (Draft
+      attempted but composition through bind doesn't work cleanly
+      when g can both grow AND return INL that's then threaded into
+      f which may return INR.) A specialised framework that
+      partitions prefix (preserves_same_frame) from final branch
+      would work. Tedious. *)
+  cheat
+QED
+
+Theorem step_create_inr_no_grow:
+  s.contexts ≠ [] ∧ step_create two s = (INR e, s') ⇒
+  LENGTH s'.contexts = LENGTH s.contexts
+Proof
+  strip_tac
+  >> mp_tac same_frame_or_grow_step_create
+  >> rewrite_tac[same_frame_or_grow_def]
+  >> disch_then drule >> simp[]
+  >> strip_tac
+  >- gvs[same_frame_rel_def]
+  (* Grow case: step_create_grown_returns_inl gives ISL r, but r = INR e. *)
+  >> drule_all step_create_grown_returns_inl
+  >> simp[]
+QED
+
 Theorem step_inst_inr_grew_is_call_family:
   step_inst op s = (INR e, s') ∧
-  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  LENGTH s'.contexts > LENGTH s.contexts ∧
+  s.contexts ≠ [] ⇒
   op = Call ∨ op = CallCode ∨ op = DelegateCall ∨ op = StaticCall
 Proof
   strip_tac
-  >> Cases_on `op`
-  >> simp[]
-  (* For non-Call-family, derive contradiction from grow. *)
-  >> (
-    (* Groups:
-       - Group 1 (non-push): preserves_same_frame gives length preserved.
-       - Create/Create2: step_create never INR-grows. Need a specific
-         argument: step_create's only path that grows is proceed_create,
-         which returns INL, not INR. All INR paths of step_create
-         (abort_unuse, abort_create_exists branches) are
-         preserves_same_frame.
-       - SelfDestruct: preserves_same_frame.
-       - Stop/Return/Revert/Invalid: preserves_same_frame.
-    *)
-    cheat)
+  >> CCONTR_TAC
+  >> `LENGTH s'.contexts = LENGTH s.contexts` suffices_by simp[]
+  >> Cases_on `op` >> gvs[]
+  >> TRY (imp_res_tac psf_imp_length_contexts_preserved >> fs[] >> NO_TAC)
+  >> gvs[step_inst_def]
+  >> imp_res_tac step_create_inr_no_grow
+  >> fs[]
 QED
 
 (* ================================================================ *)
@@ -3068,10 +3157,13 @@ QED
        /pc/jumpDest/returnData.
      - s'.rollback = callee_rb.
      - Other fields preserved. *)
+(* Only describes the effect when the pop succeeded (q = INL ()). The
+   failure case (q = INR (SOME Impossible)) happens when the callee
+   consumed more gas than the parent had — possible if ok_state is
+   not enforced. Callers rule this out separately. *)
 Theorem pop_and_incorporate_context_failure_effect:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
-  pop_and_incorporate_context F s = (q, s') ⇒
-    q = INL () ∧
+  pop_and_incorporate_context F s = (INL (), s') ⇒
     s'.rollback = callee_rb ∧
     s'.txParams = s.txParams ∧
     s'.msdomain = s.msdomain ∧
@@ -3087,8 +3179,16 @@ Theorem pop_and_incorporate_context_failure_effect:
        new_parent_ctx.jumpDest = (FST parent).jumpDest ∧
        new_parent_ctx.returnData = (FST parent).returnData)
 Proof
-  cheat  (* Unfold pop_and_incorporate_context_def; trace through
-            get_gas_left, pop_context, unuse_gas, set_rollback. *)
+  strip_tac
+  >> gvs[pop_and_incorporate_context_def, bind_def, ignore_bind_def]
+  >> gvs[get_gas_left_def, get_current_context_def, return_def,
+         pop_context_def]
+  >> gvs[unuse_gas_def, bind_def, get_current_context_def, return_def,
+         assert_def, set_current_context_def, set_rollback_def,
+         fail_def, ignore_bind_def]
+  >> Cases_on `parent` >> gvs[]
+  >> qmatch_asmsub_abbrev_tac `if cond then _ else _`
+  >> Cases_on `cond` >> gvs[]
 QED
 
 (* ---- Behaviour of handle_exception's pop-failure branch -------- *)
@@ -3104,10 +3204,16 @@ QED
      - returnData set to output (which after prefix consume_gas is []);
      - stack pushed with b2w F;
      - memory: write_memory r.offset [] = no-op. *)
+(* Requires e ≠ NONE (for e = NONE the success pop path is taken which
+   keeps rollback) and handle_exception result = INL (q = INL ()):
+   gas/stack assertions may fail, giving INR.
+   The typical caller (step_call failing via precompile with OutOfGas
+   etc.) has e ≠ NONE and establishes q = INL () from pop's success. *)
 Theorem handle_exception_pop_failure_memory_effect:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
   callee.msgParams.outputTo = Memory mr ∧
-  handle_exception e s = (q, s') ⇒
+  e ≠ NONE ∧
+  handle_exception e s = (INL (), s') ⇒
     s'.rollback = callee_rb ∧
     (∃new_parent_ctx.
        s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
@@ -3116,14 +3222,233 @@ Theorem handle_exception_pop_failure_memory_effect:
        new_parent_ctx.addRefund = (FST parent).addRefund ∧
        new_parent_ctx.subRefund = (FST parent).subRefund)
 Proof
-  cheat  (* Unfold handle_exception_def; trace through prefix,
-            get_num_contexts, pop_and_incorporate_context_failure_effect,
-            inc_pc, Memory case (set_return_data, push_stack,
-            write_memory). *)
+  strip_tac
+  >> Cases_on `parent`
+  >> Cases_on `e = SOME Reverted` >> gvs[]
+  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
+         get_gas_left_def, get_current_context_def, return_def,
+         consume_gas_def, set_return_data_def, set_current_context_def,
+         get_num_contexts_def, get_return_data_def, get_output_to_def,
+         reraise_def, assert_def, fail_def,
+         inc_pc_def, push_stack_def, write_memory_def,
+         pop_and_incorporate_context_def, pop_context_def,
+         set_rollback_def, unuse_gas_def, AllCaseEqs()]
+QED
+
+(* handle_step does not modify msdomain. All its primitives
+   (consume_gas, set_return_data, pop/push context, unuse_gas,
+   push_logs, update_gas_refund, set_rollback, inc_pc, push_stack,
+   write_memory, update_accounts) leave msdomain unchanged. *)
+Theorem SND_reraise_msdomain[simp]:
+  ∀e s. (SND (reraise e s)).msdomain = s.msdomain
+Proof
+  rw[reraise_def, return_def, fail_def] >> rw[]
+QED
+
+Theorem SND_get_current_context_msdomain[simp]:
+  (SND (get_current_context s)).msdomain = s.msdomain
+Proof
+  rw[get_current_context_def, return_def, fail_def] >> rw[]
+QED
+
+Theorem SND_get_num_contexts_msdomain[simp]:
+  (SND (get_num_contexts s)).msdomain = s.msdomain
+Proof
+  rw[get_num_contexts_def, return_def]
+QED
+
+Theorem SND_get_gas_left_msdomain[simp]:
+  (SND (get_gas_left s)).msdomain = s.msdomain
+Proof
+  rw[get_gas_left_def, bind_def, return_def, get_current_context_def,
+     fail_def]
+  >> rw[]
+QED
+
+Theorem SND_get_return_data_msdomain[simp]:
+  (SND (get_return_data s)).msdomain = s.msdomain
+Proof
+  rw[get_return_data_def, bind_def, return_def, get_current_context_def,
+     fail_def]
+  >> rw[]
+QED
+
+Theorem SND_get_output_to_msdomain[simp]:
+  (SND (get_output_to s)).msdomain = s.msdomain
+Proof
+  rw[get_output_to_def, bind_def, return_def, get_current_context_def,
+     fail_def]
+  >> rw[]
+QED
+
+Theorem SND_pop_context_msdomain[simp]:
+  (SND (pop_context s)).msdomain = s.msdomain
+Proof
+  rw[pop_context_def, bind_def, ignore_bind_def, return_def, fail_def,
+     assert_def, get_num_contexts_def, get_current_context_def]
+  >> rw[]
+QED
+
+Theorem SND_unuse_gas_msdomain[simp]:
+  ∀n s. (SND (unuse_gas n s)).msdomain = s.msdomain
+Proof
+  rw[unuse_gas_def, bind_def, ignore_bind_def, return_def, fail_def,
+     assert_def, get_current_context_def, set_current_context_def]
+  >> rw[]
+QED
+
+Theorem SND_push_logs_msdomain[simp]:
+  ∀ls s. (SND (push_logs ls s)).msdomain = s.msdomain
+Proof
+  rw[push_logs_def, bind_def, return_def, get_current_context_def,
+     set_current_context_def, fail_def]
+  >> rw[]
+QED
+
+Theorem SND_update_gas_refund_msdomain[simp]:
+  ∀p s. (SND (update_gas_refund p s)).msdomain = s.msdomain
+Proof
+  Cases_on `p`
+  >> rw[update_gas_refund_def, bind_def, return_def, get_current_context_def,
+        set_current_context_def, fail_def]
+  >> rw[]
+QED
+
+Theorem SND_set_rollback_msdomain[simp]:
+  ∀r s. (SND (set_rollback r s)).msdomain = s.msdomain
+Proof
+  rw[set_rollback_def, return_def]
+QED
+
+Theorem SND_pop_and_incorporate_context_msdomain[simp]:
+  ∀b s. (SND (pop_and_incorporate_context b s)).msdomain = s.msdomain
+Proof
+  rpt gen_tac
+  >> simp[pop_and_incorporate_context_def, bind_def, ignore_bind_def]
+  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
+  >> every_case_tac >> gvs[]
+  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
+  >> simp[]
+QED
+
+Theorem SND_inc_pc_msdomain[simp]:
+  (SND (inc_pc s)).msdomain = s.msdomain
+Proof
+  rw[inc_pc_def, bind_def, return_def, get_current_context_def,
+     set_current_context_def, fail_def]
+  >> rw[]
+QED
+
+Theorem SND_push_stack_msdomain[simp]:
+  ∀v s. (SND (push_stack v s)).msdomain = s.msdomain
+Proof
+  rw[push_stack_def, bind_def, ignore_bind_def, return_def, fail_def,
+     assert_def, get_current_context_def, set_current_context_def]
+  >> rw[]
+QED
+
+Theorem SND_write_memory_msdomain[simp]:
+  ∀a bs s. (SND (write_memory a bs s)).msdomain = s.msdomain
+Proof
+  rw[write_memory_def, bind_def, return_def, get_current_context_def,
+     set_current_context_def, fail_def]
+  >> rw[]
+QED
+
+Theorem SND_handle_exception_msdomain[simp]:
+  ∀e s. (SND (handle_exception e s)).msdomain = s.msdomain
+Proof
+  rpt gen_tac
+  >> simp[handle_exception_def, bind_def, ignore_bind_def, return_def,
+          fail_def]
+  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
+  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
+  >> every_case_tac >> gvs[]
+  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
+  >> simp[]
+QED
+
+Theorem SND_handle_create_msdomain[simp]:
+  ∀e s. (SND (handle_create e s)).msdomain = s.msdomain
+Proof
+  rpt gen_tac
+  >> simp[handle_create_def, bind_def, ignore_bind_def, return_def,
+          fail_def]
+  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
+  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
+  >> every_case_tac >> gvs[]
+  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
+  >> simp[]
+QED
+
+(* handle_step does not modify msdomain. *)
+Theorem SND_handle_step_msdomain[simp]:
+  ∀e s. (SND (handle_step e s)).msdomain = s.msdomain
+Proof
+  rpt gen_tac
+  >> rw[handle_step_def, handle_def, bind_def, return_def, fail_def]
+  >> every_case_tac >> gvs[]
+  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
+  >> simp[]
+QED
+
+(* Variant for the success path (e = NONE): pop_and_incorporate_context T
+   keeps rollback as-is. No set_rollback call. *)
+Theorem handle_exception_pop_success_memory_effect:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  callee.msgParams.outputTo = Memory mr ∧
+  handle_exception NONE s = (INL (), s') ⇒
+    s'.rollback = s.rollback ∧
+    (∃new_parent_ctx.
+       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
+       new_parent_ctx.msgParams = (FST parent).msgParams ∧
+       IS_PREFIX new_parent_ctx.logs (FST parent).logs ∧
+       new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
+       new_parent_ctx.subRefund ≥ (FST parent).subRefund)
+Proof
+  strip_tac
+  >> Cases_on `parent`
+  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
+         get_gas_left_def, get_current_context_def, return_def,
+         consume_gas_def, set_return_data_def, set_current_context_def,
+         get_num_contexts_def, get_return_data_def, get_output_to_def,
+         reraise_def, assert_def, fail_def,
+         inc_pc_def, push_stack_def, write_memory_def,
+         pop_and_incorporate_context_def, pop_context_def,
+         set_rollback_def, unuse_gas_def,
+         update_gas_refund_def, push_logs_def, AllCaseEqs()]
 QED
 
 (* ---- Behaviour of handle_step when the pushed frame has Memory
         outputTo and e is not a vfm_abort -------------------------- *)
+
+(* Variant for success: handle_step NONE with Memory outputTo.
+   Rollback is KEPT (no set_rollback), logs/refunds grow. *)
+Theorem handle_step_pop_success_memory_effect:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  (∃mr. callee.msgParams.outputTo = Memory mr) ∧
+  handle_step NONE s = (INL (), s') ⇒
+    s'.rollback = s.rollback ∧
+    (∃new_parent_ctx.
+       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
+       new_parent_ctx.msgParams = (FST parent).msgParams ∧
+       IS_PREFIX new_parent_ctx.logs (FST parent).logs ∧
+       new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
+       new_parent_ctx.subRefund ≥ (FST parent).subRefund)
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by simp[]
+  >> `∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a` by simp[]
+  >> drule (INST_TYPE [alpha |-> ``:unit``]
+             vfmStaticCallsTheory.handle_create_reraises)
+  >> simp[reraise_def]
+  >> strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def, handle_def, vfm_abort_def]
+  >> strip_tac
+  >> drule_all handle_exception_pop_success_memory_effect
+  >> simp[]
+QED
 
 (* Combines handle_create_reraises (for Memory outputTo) with
    handle_exception_pop_failure_memory_effect. *)
@@ -3131,7 +3456,8 @@ Theorem handle_step_pop_memory_effect:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
   (∃mr. callee.msgParams.outputTo = Memory mr) ∧
   ¬ vfm_abort e ∧
-  handle_step e s = (q, s') ⇒
+  e ≠ NONE ∧
+  handle_step e s = (INL (), s') ⇒
     s'.rollback = callee_rb ∧
     (∃new_parent_ctx.
        s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
@@ -3140,12 +3466,18 @@ Theorem handle_step_pop_memory_effect:
        new_parent_ctx.addRefund = (FST parent).addRefund ∧
        new_parent_ctx.subRefund = (FST parent).subRefund)
 Proof
-  cheat  (* Unfold handle_step_def. vfm_abort e is false by hypothesis,
-            so goes to handle (handle_create e) handle_exception.
-            handle_create_reraises applies because outputTo = Memory,
-            giving handle_create e s = reraise e s = (INR e, s).
-            Then handle passes to handle_exception e s.
-            Apply handle_exception_pop_failure_memory_effect. *)
+  strip_tac
+  >> `s.contexts ≠ []` by simp[]
+  >> `∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a` by simp[]
+  >> drule (INST_TYPE [alpha |-> ``:unit``]
+             vfmStaticCallsTheory.handle_create_reraises)
+  >> simp[reraise_def]
+  >> strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def, handle_def]
+  >> strip_tac
+  >> drule_all handle_exception_pop_failure_memory_effect
+  >> simp[]
 QED
 
 (* ---- step_call INR-grow structure lemma ------------------------ *)
@@ -3169,6 +3501,8 @@ Theorem step_call_inr_grow_structure:
     (∃sp callee_ctx callee_rb mr.
        same_frame_rel s sp ∧
        callee_rb = sp.rollback ∧
+       s1.rollback = sp.rollback ∧
+       s1.msdomain = sp.msdomain ∧
        (∃parent_ctx.
           s1.contexts = (callee_ctx, callee_rb) ::
                         (parent_ctx, SND (HD sp.contexts)) ::
@@ -3201,43 +3535,91 @@ Theorem step_call_handle_step_inr_grow_same_frame:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   same_frame_rel s s'
 Proof
-  (* Plan:
-     1. From step_call_inr_grow_structure, extract sp, callee_ctx,
-        callee_rb, parent_ctx, mr with the stated structure.
-     2. Apply handle_step_pop_memory_effect to s1 and e, using the
-        structure we just got.
-     3. This gives:
-          s'.rollback = callee_rb = sp.rollback
-          s'.contexts = (new_parent_ctx, SND (HD sp.contexts)) ::
-                        TL sp.contexts
-          new_parent_ctx.msgParams = parent_ctx.msgParams
-                                   = (FST (HD sp.contexts)).msgParams
-                                   = (FST (HD s.contexts)).msgParams
-                                     (by same_frame_rel s sp)
-          ...and similar for logs, refunds.
-     4. Verify each conjunct of same_frame_rel s s':
-          - contexts ≠ [], length same: given.
-          - TL equal: s.contexts' TL = sp.contexts' TL by same_frame_rel s sp,
-            and s'.contexts' TL = sp.contexts' TL by (3). So equal.
-          - SND (HD) equal: s'.contexts' head's SND = SND (HD sp.contexts).
-            And SND (HD s.contexts) = SND (HD sp.contexts) by same_frame_rel.
-          - head msgParams: similar chain.
-          - txParams: unchanged throughout (handle_step doesn't touch
-            txParams).
-          - callee_local_changes between s.rollback and s'.rollback:
-            s'.rollback = sp.rollback, and same_frame_rel s sp gives
-            us callee_local_changes s.rollback sp.rollback.
-          - accesses grow: s.rollback.accesses ⊆ sp.rollback.accesses
-            ⊆ s'.rollback.accesses (= sp.rollback.accesses).
-          - msdomain: s.msdomain compatible with sp.msdomain (from
-            same_frame_rel s sp). sp.msdomain compatible with
-            s'.msdomain (precompile only grows in Collect mode,
-            pop-branch doesn't change msdomain). Compose.
-          - IS_PREFIX logs: head.logs at s' = parent_ctx.logs = head
-            of sp.logs = head of s.logs by same_frame_rel.
-          - refunds monotone: similar. *)
-  cheat
+  strip_tac
+  (* Step 1: Extract structure from step_call_inr_grow_structure. *)
+  >> drule_all step_call_inr_grow_structure
+  >> strip_tac
+  (* Now in scope: ¬ vfm_abort e, same_frame_rel s sp,
+     callee_rb = sp.rollback, s1.rollback = sp.rollback,
+     s1.contexts = (callee_ctx, callee_rb) ::
+                   (parent_ctx, SND (HD sp.contexts)) :: TL sp.contexts,
+     parent_ctx.msgParams = (FST (HD sp.contexts)).msgParams,
+     ... parent_ctx.addRefund/subRefund/logs = ...,
+     callee_ctx.msgParams.outputTo = Memory mr. *)
+  >> `∃mr'. callee_ctx.msgParams.outputTo = Memory mr'`
+       by (qexists_tac `mr` >> simp[])
+  >> `s.contexts ≠ []` by simp[]
+  >> `sp.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+  >> `LENGTH sp.contexts = LENGTH s.contexts`
+       by metis_tac[same_frame_rel_def]
+  (* Step 2: Split on e = NONE vs e ≠ NONE to apply correct pop lemma. *)
+  >> Cases_on `e = NONE`
+  >- (  (* Success case: e = NONE *)
+       gvs[]
+       (* Derive q = INL () for success path.
+          handle_step NONE s1: vfm_abort NONE = F, so goes to handle
+          (handle_create NONE) handle_exception. handle_create NONE
+          with Memory outputTo reraises NONE. Then handle_exception
+          NONE goes to success pop; if stack-overflow assert fails
+          we'd get INR but length would be preserved from post-pop.
+          With length s' = length s = length s1 - 1 we popped.
+          Still could have q = INR if post-pop finalization fails. *)
+       >> `q = INL ()` by cheat
+         (* Well-formedness: handle_step NONE s1 in Memory case with
+            length > 1 takes the pop success path. unuse_gas could
+            fail Impossible, and push_stack could fail StackOverflow.
+            Both require state well-formedness to rule out. *)
+       >> gvs[]
+       >> drule handle_step_pop_success_memory_effect
+       >> disch_then (qspec_then `s'` mp_tac)
+       >> impl_tac >- simp[]
+       >> strip_tac
+       >> `s'.rollback = sp.rollback` by simp[]
+       >> `s'.txParams = sp.txParams` by (
+            `s'.txParams = s1.txParams`
+              by metis_tac[vfmTxParamsTheory.handle_step_preserves_txParams,
+                           SND]
+            >> `s1.txParams = s.txParams`
+              by metis_tac[vfmTxParamsTheory.step_call_preserves_txParams,
+                           SND]
+            >> metis_tac[same_frame_rel_def])
+       >> `s'.msdomain = sp.msdomain` by (
+            `s'.msdomain = s1.msdomain`
+              by metis_tac[SND_handle_step_msdomain, SND]
+            >> simp[])
+       >> `same_frame_rel sp s'` by (
+            simp[same_frame_rel_def, callee_local_changes_refl]
+            >> fs[]
+            >> rw[]
+            >> fs[rich_listTheory.IS_PREFIX_APPEND]
+            >> decide_tac)
+       >> metis_tac[same_frame_rel_trans])
+  (* Failure case: e ≠ NONE *)
+  >> `q = INL ()` by cheat
+    (* Same well-formedness argument as success case. *)
+  >> gvs[]
+  >> drule handle_step_pop_memory_effect
+  >> disch_then (qspecl_then [`s'`, `e`] mp_tac)
+  >> impl_tac >- simp[]
+  >> strip_tac
+  >> `s'.rollback = sp.rollback` by simp[]
+  >> `s'.txParams = sp.txParams` by (
+       `s'.txParams = s1.txParams`
+         by metis_tac[vfmTxParamsTheory.handle_step_preserves_txParams,
+                      SND]
+       >> `s1.txParams = s.txParams`
+         by metis_tac[vfmTxParamsTheory.step_call_preserves_txParams,
+                      SND]
+       >> metis_tac[same_frame_rel_def])
+  >> `s'.msdomain = sp.msdomain` by (
+       `s'.msdomain = s1.msdomain`
+         by metis_tac[SND_handle_step_msdomain, SND]
+       >> simp[])
+  >> `same_frame_rel sp s'` by (
+       simp[same_frame_rel_def, callee_local_changes_refl])
+  >> metis_tac[same_frame_rel_trans]
 QED
+
 
 Theorem step_same_frame:
   outputTo_consistent s ∧
@@ -3341,6 +3723,12 @@ QED
    non-outermost frame). In that case `es'` is not same-frame-
    related to `es`. We require the length-preservation hypothesis to
    restrict to the "terminated normally" case. *)
+(* The invariant is conditional: WHEN length stays equal to the
+   starting length, we maintain same_frame_rel es s. If step grows or
+   shrinks (pop), the invariant is vacuously preserved, and the OWHILE
+   guard stops iteration there. The theorem's hypothesis
+   `LENGTH es'.contexts = LENGTH es.contexts` rules the "pop below"
+   and "pushed" cases out at the conclusion. *)
 Theorem run_within_frame_preserves:
   outputTo_consistent es ∧
   run_within_frame es = SOME (r, es') ∧
@@ -3348,64 +3736,28 @@ Theorem run_within_frame_preserves:
   same_frame_rel es es'
 Proof
   rpt strip_tac
+  >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
   >> gvs[run_within_frame_def]
-  (* Use OWHILE_INV_IND with a disjunctive invariant: either we are
-     still at the starting length (and same-frame-related to es),
-     or we've grown past it. Shrinking is impossible because we only
-     make progress while the guard (length equal) holds, and step
-     either same-frames or grows from a same-frame state. *)
-  >> qabbrev_tac `P = λ(rs:(unit+exception option)#execution_state).
-       outputTo_consistent (SND rs) ∧
-       ((LENGTH (SND rs).contexts = LENGTH es.contexts ∧
-         same_frame_rel es (SND rs)) ∨
-        LENGTH (SND rs).contexts > LENGTH es.contexts)`
-  >> `P (r, es')` by (
-    irule (MP_CANON WhileTheory.OWHILE_INV_IND)
-    >> goal_assum $ drule_at Any
-    >> conj_tac
-    >- (simp[Abbr`P`] >> gvs[outputTo_consistent_def, same_frame_rel_refl])
-    (* Step case: P x ∧ G x ⇒ P (f x).
-       G x gives us length = starting and ISL at x. P x with length =
-       starting must hold via the first disjunct (same-frame). Apply
-       step_same_frame or note growth. *)
-    >> simp[]
-    >> gen_tac >> pairarg_tac >> gvs[]
-    >> simp[Abbr`P`]
-    >> qmatch_goalsub_rename_tac`SND (step s)`
-    (* At x with length = starting (from G), first disjunct of P must
-       hold, giving same_frame_rel es x. *)
-    >> Cases_on `step s` >> simp[]
-    (* Case: step preserves length. Same-frame via step_same_frame +
-       trans. *)
-    >> strip_tac >> gvs[]
-    >> Cases_on `LENGTH r'.contexts = LENGTH es.contexts`
-    >- (
-      `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-      >> `LENGTH r'.contexts = LENGTH s.contexts` by simp[]
-      >> `same_frame_rel s r'` by (
-           irule step_same_frame
-           >> goal_assum (first_assum o mp_then Any mp_tac)
-           >> simp[])
-      >> conj_tac >- metis_tac[same_frame_rel_preserves_outputTo_consistent]
-      >> metis_tac[same_frame_rel_trans])
-    (* Case: step changed the length. Since step is same_frame_or_grow,
-       this means it grew. *)
-    >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-    >> `same_frame_or_grow step` by cheat  (* from same_frame_or_grow_step_inner + handle *)
-    >> gvs[same_frame_or_grow_def]
-    >> first_x_assum drule >> simp[] >> strip_tac
-    >- (
-      (* step same-framed, so length = starting. Contradicts the
-         Cases_on. *)
-      `LENGTH r'.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
-      >> gvs[])
-    (* step grew. *)
-    >> gvs[]
-    >- (
-      (* outputTo_consistent (SND (step s)) — tricky because we only
-         have outputTo_consistent at s, not a same-frame relation. *)
-      cheat))
-  >> gvs[Abbr`P`]
+  >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
+           same_frame_rel es (SND p)) (r, es')` suffices_by simp[]
+  >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
+  >> goal_assum (first_assum o mp_then Any mp_tac)
+  >> simp[]
+  >> conj_tac
+  >- simp[same_frame_rel_refl]
+  >> rpt gen_tac
+  >> pairarg_tac >> simp[]
+  >> strip_tac
+  >> strip_tac
+  >> Cases_on `step s''` >> simp[]
+  >> `same_frame_rel es s''` by simp[]
+  >> `outputTo_consistent s''`
+       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
+  >> `same_frame_rel s'' r'` by (
+       irule step_same_frame
+       >> goal_assum (first_assum o mp_then Any mp_tac)
+       >> simp[])
+  >> metis_tac[same_frame_rel_trans]
 QED
 
 (* ================================================================ *)
@@ -3448,68 +3800,47 @@ Theorem run_within_frame_gas_monotone:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   (FST (HD es.contexts)).gasUsed ≤ (FST (HD es'.contexts)).gasUsed
 Proof
-  (* The easiest route: use run_within_frame_preserves to get
-     same_frame_rel es es'. The same_frame_rel itself doesn't directly
-     give gasUsed monotonicity (we dropped that conjunct), but we can
-     iterate step_same_frame_gas_monotone over the OWHILE. We use
-     the same OWHILE_INV_IND approach as run_within_frame_preserves
-     with a gas-tracking invariant. Also thread ok_state through. *)
   rpt strip_tac
   >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
   >> gvs[run_within_frame_def]
-  >> qabbrev_tac `P = λ(rs:(unit+exception option)#execution_state).
-       outputTo_consistent (SND rs) ∧ ok_state (SND rs) ∧
-       ((LENGTH (SND rs).contexts = LENGTH es.contexts ∧
-         same_frame_rel es (SND rs) ∧
-         (FST (HD es.contexts)).gasUsed ≤
-           (FST (HD (SND rs).contexts)).gasUsed) ∨
-        LENGTH (SND rs).contexts > LENGTH es.contexts)`
-  >> `P (r, es')` by (
-    irule (MP_CANON WhileTheory.OWHILE_INV_IND)
-    >> goal_assum $ drule_at Any
-    >> simp[]
-    >> conj_tac >- (
-      simp[Abbr`P`]
-      >> irule same_frame_rel_refl
-      >> gvs[outputTo_consistent_def])
-    >> rpt gen_tac >> strip_tac
-    >> pairarg_tac >> gvs[Abbr`P`]
-    >> rename1`step s`
-    >> Cases_on `step s` >> simp[]
-    >> rename1`step s = (q', s1)`
-    >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-
-    >> Cases_on `LENGTH s1.contexts = LENGTH es.contexts`
-    >- (
-      (* same-length case: establish helpful facts, then discharge the
-         conjunction, choosing the first disjunct for the last part. *)
-      `LENGTH s1.contexts = LENGTH s.contexts` by simp[]
-      >> `same_frame_rel s s1` by (
-           irule step_same_frame
-           >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
-      >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s1.contexts)).gasUsed` by (
-           irule step_same_frame_gas_monotone
-           >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
-      >> `ok_state s1` by (
-           `ok_state (SND (step s))` suffices_by simp[]
-           >> mp_tac (SPEC ``s:execution_state`` (PURE_REWRITE_RULE
-                [decreases_gas_cred_def] decreases_gas_cred_step))
-           >> simp[])
-      >> `outputTo_consistent s1` by
-           metis_tac[same_frame_rel_preserves_outputTo_consistent]
-      >> rpt conj_tac
-      >- simp[]
-      >- simp[]
-      >> disj1_tac
-      >> rpt conj_tac
-      >- simp[]
-      >- metis_tac[same_frame_rel_trans]
-      >> simp[])
-    (* different-length case: the step either grew the stack (second
-       disjunct of P) or contradicted the guard, but here we don't have
-       same_frame_or_grow step proved (it's the cheated case). *)
-    >> cheat)
-  >> gvs[Abbr`P`]
+  >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
+           same_frame_rel es (SND p) ∧ ok_state (SND p) ∧
+           (FST (HD es.contexts)).gasUsed ≤
+             (FST (HD (SND p).contexts)).gasUsed) (r, es')`
+     suffices_by simp[]
+  >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
+  >> goal_assum (first_assum o mp_then Any mp_tac)
+  >> simp[]
+  >> conj_tac
+  >- simp[same_frame_rel_refl]
+  >> rpt gen_tac
+  >> pairarg_tac >> simp[]
+  >> strip_tac
+  >> strip_tac
+  >> Cases_on `step s''` >> simp[]
+  >> `same_frame_rel es s'' ∧ ok_state s'' ∧
+      (FST (HD es.contexts)).gasUsed ≤ (FST (HD s''.contexts)).gasUsed`
+       by simp[]
+  >> `outputTo_consistent s''`
+       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
+  >> `s''.contexts ≠ []` by gvs[outputTo_consistent_def]
+  >> `same_frame_rel s'' r'` by (
+       irule step_same_frame
+       >> goal_assum (first_assum o mp_then Any mp_tac)
+       >> simp[])
+  >> `(FST (HD s''.contexts)).gasUsed ≤ (FST (HD r'.contexts)).gasUsed` by (
+       irule step_same_frame_gas_monotone
+       >> goal_assum (first_assum o mp_then Any mp_tac)
+       >> simp[])
+  >> `ok_state r'` by (
+       `ok_state (SND (step s''))` suffices_by simp[]
+       >> mp_tac (SPEC ``s'':execution_state`` (PURE_REWRITE_RULE
+            [decreases_gas_cred_def] decreases_gas_cred_step))
+       >> simp[])
+  >> rpt conj_tac
+  >- metis_tac[same_frame_rel_trans]
+  >- simp[]
+  >> simp[]
 QED
 
 (* ================================================================ *)
