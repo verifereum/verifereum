@@ -62,6 +62,7 @@ End
 Definition run_call_inv_def:
   run_call_inv es s ⇔
     s.txParams = es.txParams ∧
+    outputTo_consistent s ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (active_rollbacks (LENGTH es.contexts) s)
 End
@@ -71,7 +72,7 @@ End
  * ------------------------------------------------------------------------- *)
 
 Theorem run_call_inv_refl:
-  es.contexts ≠ [] ⇒ run_call_inv es es
+  es.contexts ≠ [] ∧ outputTo_consistent es ⇒ run_call_inv es es
 Proof
   rw[run_call_inv_def, active_rollbacks_def, storage_slot_preserved_def]
 QED
@@ -184,23 +185,28 @@ Theorem run_call_inv_step:
     step s = (r, s') ⇒
     run_call_inv es s'
 Proof
-  (* Full proof requires extensive case analysis on step's length
-     effect. Structure:
-     1. step s = (r, s'): either length preserved, +1 (push), or -1
-        (pop from handle_step pop_and_incorporate_context).
-     2. For each case, characterise active_rollbacks s' relative to
-        s active_rollbacks.
-     3. Preserved case: active_rollbacks elementwise preserved by
-        same_frame_rel s s' (from step_same_frame).
-     4. Push case: new head context has saved rollback s.rollback,
-        which is already in old active_rollbacks. Tail of old list
-        is in new list.
-     5. Pop success: active_rollbacks drops one element from the
-        TL; s.rollback = new s.rollback preserved.
-     6. Pop revert: s.rollback replaced by SND of popped head,
-        which was already an active rollback entry satisfying
-        the invariant. *)
-  cheat
+  rpt strip_tac
+  >> qmatch_asmsub_rename_tac `step s0 = (rr, s1)`
+  >> `outputTo_consistent s0` by fs[run_call_inv_def]
+  >> `s0.contexts ≠ []` by fs[outputTo_consistent_def]
+  >> `s1.txParams = s0.txParams`
+       by metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND]
+  >> `s1.txParams = es.txParams` by fs[run_call_inv_def]
+  >> simp[run_call_inv_def]
+  (* Remaining goal: outputTo_consistent s1 ∧
+                     EVERY storage_slot_preserved_es
+                       (active_rollbacks es_depth s1).
+     Full proof requires case analysis on step's length effect:
+     1. Length preserved: use step_same_frame for same_frame_rel;
+        active_rollbacks elementwise preserved because TL contexts
+        and SND of head preserved.
+     2. Length +1 (push): new active entry is s0.rollback (mid-step);
+        tail of old list inherited.
+     3. Length -1 pop success: active_rollbacks drops one TL entry;
+        s1.rollback = s0.rollback preserved.
+     4. Length -1 pop revert: s1.rollback = SND (HD s0.contexts),
+        already in old active_rollbacks. *)
+  >> cheat
 QED
 
 (* -------------------------------------------------------------------------
@@ -209,7 +215,7 @@ QED
 
 Theorem run_call_preserves_inv:
   ∀es res es'.
-    es.contexts ≠ [] ∧
+    es.contexts ≠ [] ∧ outputTo_consistent es ∧
     run_call es = SOME (res, es') ⇒
     run_call_inv es es'
 Proof
@@ -241,7 +247,7 @@ QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots:
   ∀es r es'.
-    es.contexts ≠ [] ∧
+    es.contexts ≠ [] ∧ outputTo_consistent es ∧
     run_call es = SOME (r, es') ⇒
     ∀a k. ¬fIN (SK a k) es'.rollback.accesses.storageKeys ⇒
         lookup_storage k (lookup_account a es'.rollback.accounts).storage =
@@ -254,7 +260,7 @@ QED
 
 Theorem run_call_preserves_txParams:
   ∀es r es'.
-    es.contexts ≠ [] ∧
+    es.contexts ≠ [] ∧ outputTo_consistent es ∧
     run_call es = SOME (r, es') ⇒
     es'.txParams = es.txParams
 Proof

@@ -626,6 +626,103 @@ Hypotheses (untested):
 - Manually construct the goal using `conj_tac` / `exists_tac` /
   `qsuff_tac` rather than rewriting.
 
+## Progress this session (6)
+
+- **Cheats #2 & #3: Two `q = INL ()` subcheats** — DISCHARGED via
+  new `_gen` variants of the pop-effect lemmas that don't require
+  the q = INL () hypothesis:
+  - `handle_exception_pop_success_memory_effect_gen`: drops INL req;
+    proof unchanged (gvs[AllCaseEqs()] handles both INL and INR).
+  - `handle_exception_pop_failure_memory_effect_gen`: drops INL req
+    but adds `LENGTH s'.contexts < LENGTH s.contexts` (rules out
+    the consume_gas-failure case where no pop happens). Adds
+    `s.rollback = callee_rb` precondition (handles the unuse_gas-
+    Impossible INR case where set_rollback hasn't run).
+  - `handle_step_pop_success_memory_effect_gen` and
+    `handle_step_pop_memory_effect_gen`: compose the above.
+  - Used in `step_call_handle_step_inr_grow_same_frame`'s two
+    branches, eliminating both cheats.
+
+- **Cheat #1 `step_create_grown_returns_inl`** — DISCHARGED! Used a
+  new `length_or_inl_grow` predicate framework:
+  - `length_preserves m`: m never changes contexts length.
+  - `length_or_inl_grow m`: m either preserves length or grows
+    length AND returns INL.
+  - Composition rules: `length_or_inl_grow_bind_preserves_g`,
+    `length_or_inl_grow_ignore_bind_preserves_g`, cond/case_option/
+    case_sum/case_pair/let, plus corresponding length_preserves
+    composition rules.
+  - Leaf lemmas: `length_or_inl_grow_of_length_preserves`,
+    `length_preserves_of_preserves_same_frame`,
+    `length_or_inl_grow_proceed_create`,
+    `length_preserves_abort_unuse`,
+    `length_preserves_abort_create_exists`.
+  - Final proof: `length_or_inl_grow (step_create two)` via `rpt`
+    of the composition rules. Two-line proof.
+  - Note: this predicate does NOT work for step_call because
+    precompile success (finish) returns (INR NONE, grown_state),
+    violating the length_or_inl_grow property.
+
+Remaining cheats: 2
+  - `step_call_inr_grow_structure` (big structural lemma)
+  - `run_call_inv_step`
+
+Also added: `bind_inr_grow_factor` and `ignore_bind_inr_grow_factor`
+framework lemmas for peeling a preserves_same_frame prefix off a
+bind chain when the tail INR-grows.
+
+## Analysis of step_call_inr_grow_structure complications
+
+### Resolved: weakened conclusion to be provable
+
+The original conclusion `s1.rollback = sp.rollback` was NOT provable
+because:
+
+1. **update_accounts issue**: In `proceed_call`'s prefix, when
+   `op = Call ∧ 0 < value`, `update_accounts` is called which
+   modifies `rollback.accounts`.
+2. **Precompile rollback preservation**: Verified that no precompile
+   modifies rollback (use consume_gas / set_return_data only).
+
+**Resolution this session**: Replaced `s1.rollback = sp.rollback`
+with weaker but provable claims:
+- `callee_local_changes (sp-callee) sp.rollback s1.rollback`
+  (transfer_value changes only balance; preserves callee_local_changes).
+- `sp.rollback.accesses ⊆ s1.rollback.accesses` (accesses monotone).
+- `msdomain_compatible sp.msdomain s1.msdomain` (msdomain monotone).
+
+Also added `e ≠ SOME Reverted` to the conclusion (precompiles never
+raise Reverted), which let us drop `s.rollback = callee_rb` from
+`handle_step_pop_memory_effect_gen`.
+
+### Remaining: prove the weakened lemma
+
+All claims hold semantically; the proof requires unfolding
+step_call_def and tracking state through ~30 prefix primitives
++ proceed_call. Helpers available: `bind_inr_grow_factor`,
+`ignore_bind_inr_grow_factor`.
+
+## run_call_inv_step progress
+
+- Added `outputTo_consistent s` to `run_call_inv_def` so we can use
+  `step_same_frame` without extra hypotheses.
+- Added `outputTo_consistent es` to `run_call_preserves_inv` and
+  `run_call_preserves_storage_outside_accessed_slots` signatures.
+- Proof setup done: `s0.contexts ≠ []`, `s1.txParams = es.txParams`.
+- Remaining: EVERY storage_slot_preserved case analysis on step's
+  length effect (preserved/+1/-1).
+
+## Key insight: s1.rollback = sp.rollback was unprovable
+
+The original conclusion was WRONG in two ways:
+1. `update_accounts` in proceed_call (for Call+value>0) modifies
+   rollback.accounts. So `s1.rollback ≠ sp.rollback` in that case.
+2. `access_address` in step_call's prefix modifies rollback.accesses.
+   So `sp.rollback ≠ s.rollback` always.
+
+Fixed by weakening to `callee_local_changes` + monotonicity claims,
+which ARE true.
+
 ## Progress this session (4)
 
 - **New helper lemmas** added:

@@ -553,7 +553,9 @@ No existing file is deleted or rewritten.
 - `pop_and_incorporate_context_failure_effect`
 - `handle_exception_pop_failure_memory_effect`
 - `handle_step_pop_memory_effect`
-- `step_create_inr_no_grow` (reduced to `step_create_grown_returns_inl`)
+- `step_create_inr_no_grow`
+- `step_create_grown_returns_inl` — newly discharged using
+  `length_or_inl_grow` framework.
 - Two msdomain / txParams / `e ≠ NONE` inner cheats inside
   `step_call_handle_step_inr_grow_same_frame`
 
@@ -568,25 +570,18 @@ No existing file is deleted or rewritten.
   context length.
 - Strengthened `step_call_inr_grow_structure` conclusion to include
   `s1.rollback = sp.rollback` and `s1.msdomain = sp.msdomain`.
+- **New predicate framework `length_preserves` /
+  `length_or_inl_grow`** with composition rules (bind, ignore_bind,
+  cond, case_option, case_sum, case_pair, let). Used to prove
+  `step_create_grown_returns_inl` in 2 tactic steps. Does NOT apply
+  to step_call (precompile success returns INR NONE with grown
+  state, violating the predicate).
 
-## Remaining cheats (5)
+## Remaining cheats (4)
 
-### `vfmCallFrameScript.sml` (4)
+### `vfmCallFrameScript.sml` (3)
 
-1. **`step_create_grown_returns_inl`** (≈ line 3045). Helper for the
-   already-discharged `step_create_inr_no_grow`. States: if
-   `step_create two s` grows contexts, its result is INL. Provable
-   by structural analysis: prefix primitives preserve length;
-   final if-branches are abort_unuse (length preserved, #3 helper),
-   abort_create_exists (length preserved, #4 helper), or
-   proceed_create (grows +1 and returns INL,
-   `proceed_create_returns_inl`). Attempted `psf_or_inl_grow`
-   predicate framework but composition through `bind` doesn't work
-   cleanly when g grows+INL threaded into f that may return INR.
-   A specialised framework that splits prefix (preserves_same_frame)
-   from final branch would work.
-
-2. **`step_call_inr_grow_structure`** (≈ line 3450). The biggest.
+1. **`step_call_inr_grow_structure`** (≈ line 3733). The biggest.
    Walk through step_call + proceed_call, identifying the
    intermediate state `sp` just before `push_context`. Establishes:
    - `¬ vfm_abort e`
@@ -603,29 +598,16 @@ No existing file is deleted or rewritten.
    `vfm_abort` (verified by inspection of all 18 precompile
    definitions).
 
-3. **Two `q = INL ()` subcheats** (≈ lines 3555, 3585) inside
-   `step_call_handle_step_inr_grow_same_frame`. One in the e = NONE
-   branch, one in the e ≠ NONE branch. Both assert: when
-   `handle_step` pops the callee frame (length drops by 1), the
-   result is INL.
-
-   **Why not trivially true:** `handle_step`'s pop path runs
-   `pop_and_incorporate_context`, which calls `unuse_gas` (may fail
-   `Impossible`) and, in the Memory case, `push_stack` (may fail
-   `StackOverflow`). Both INR paths leave state with length already
-   dropped to `LENGTH s.contexts`, matching the theorem hypothesis.
-
-   **What's needed to discharge:** either add a well-formedness
-   hypothesis (`callee.gasUsed ≤ callee.msgParams.gasLimit` and
-   `LENGTH (FST parent).stack < 1024`) threaded from prior
-   invariants, OR strengthen the theorem conclusion to hold even
-   when q = INR (state structure is still related to `s` via
-   `same_frame_rel` because the partial finalization doesn't
-   change msdomain/txParams/non-head-contexts/rollback).
+~~**Two `q = INL ()` subcheats**~~ — DISCHARGED via generalised
+  `handle_step_pop_{success,failure}_memory_effect_gen` lemmas that
+  don't require q = INL (). The _gen failure variant has an extra
+  `LENGTH s'.contexts < LENGTH s.contexts` hypothesis which is
+  guaranteed by the caller's `LENGTH s'.contexts = LENGTH s.contexts`
+  (pop back to original length from grown state).
 
 ### `vfmRunCallScript.sml` (1)
 
-4. **`run_call_inv_step`** (≈ line 188). Four-case proof on step's
+2. **`run_call_inv_step`** (≈ line 218). Four-case proof on step's
    length effect (see sketch in proof comment):
    a. Length preserved: `step_same_frame` + slot preservation on
       `same_frame_rel`.
@@ -639,13 +621,14 @@ No existing file is deleted or rewritten.
    Depends on: helper lemma characterising step's length change
    (±1 or 0); outputTo_consistent threading through run_call;
    step_same_frame for case (a); `step_call_handle_step_inr_grow_
-   same_frame` (cheat #3) for case (c), push structure for (b).
+   same_frame` (PROVEN, modulo cheat #1) for case (c), push
+   structure for (b).
 
 ## Net status
 
-From 11 cheats at start to **5 cheats** now. Both plan flaws resolved.
+From 11 cheats at start to **2 cheats** now. Both plan flaws resolved.
 Headline theorem `run_call_preserves_storage_outside_accessed_slots`
-and `run_call_preserves_txParams` proven, modulo the 5 remaining
+and `run_call_preserves_txParams` proven, modulo the 2 remaining
 state-level / structural cheats.
 
 Both files build with `holmake` in ~40 seconds, reporting CHEATED.
@@ -656,19 +639,19 @@ All remaining cheats have detailed proof sketches in-place.
 ```
 run_call_preserves_storage_outside_accessed_slots (PROVEN)
   └─ run_call_preserves_inv (PROVEN)
-       └─ run_call_inv_step             [CHEAT #4]
+       └─ run_call_inv_step             [CHEAT #2]
 
-step_same_frame (PROVEN, used in cheat #4 case (a))
+step_same_frame (PROVEN, used in cheat #2 case (a))
   └─ step_call_same_frame (PROVEN)
   └─ step_create_same_frame (PROVEN)
 
-step_call_handle_step_inr_grow_same_frame     [2 inner CHEATS #3]
-  ├─ step_call_inr_grow_structure            [CHEAT #2]
-  ├─ handle_step_pop_memory_effect (PROVEN)
-  └─ handle_step_pop_success_memory_effect (PROVEN)
+step_call_handle_step_inr_grow_same_frame (PROVEN)
+  ├─ step_call_inr_grow_structure            [CHEAT #1]
+  ├─ handle_step_pop_memory_effect_gen (PROVEN)
+  └─ handle_step_pop_success_memory_effect_gen (PROVEN)
 
 step_create_inr_no_grow (PROVEN)
-  └─ step_create_grown_returns_inl          [CHEAT #1]
+  └─ step_create_grown_returns_inl (PROVEN, via length_or_inl_grow)
 ```
 
 ### Archived audit notes
