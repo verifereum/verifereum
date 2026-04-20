@@ -21,16 +21,14 @@
  * popped head, but that was already known to satisfy the storage
  * invariant, so the invariant is preserved across reverts.
  * ========================================================================== *)
-
-open HolKernel boolLib bossLib Parse dep_rewrite BasicProvers
-     combinTheory pairTheory optionTheory pred_setTheory listTheory
-     rich_listTheory sumTheory arithmeticTheory finite_mapTheory
-     WhileTheory
-     vfmTypesTheory vfmConstantsTheory vfmContextTheory vfmStateTheory
-     vfmExecutionTheory vfmExecutionPropTheory
-     vfmCallFrameTheory;
-
-val _ = new_theory "vfmRunCall";
+Theory vfmRunCall
+Ancestors
+  combin pair option pred_set list rich_list sum
+  arithmetic finite_map While vfmTypes vfmConstants
+  vfmContext vfmState vfmExecution vfmExecutionProp
+  vfmSameFrame vfmCallFrame
+Libs
+  dep_rewrite BasicProvers
 
 (* -------------------------------------------------------------------------
  * Active rollbacks — the list of rollbacks we could "revert to" from a
@@ -194,18 +192,19 @@ Proof
   >> `s1.txParams = es.txParams` by fs[run_call_inv_def]
   >> simp[run_call_inv_def]
   (* Remaining goal: outputTo_consistent s1 ∧
-                     EVERY storage_slot_preserved_es
-                       (active_rollbacks es_depth s1).
-     Full proof requires case analysis on step's length effect:
-     1. Length preserved: use step_same_frame for same_frame_rel;
-        active_rollbacks elementwise preserved because TL contexts
-        and SND of head preserved.
-     2. Length +1 (push): new active entry is s0.rollback (mid-step);
-        tail of old list inherited.
-     3. Length -1 pop success: active_rollbacks drops one TL entry;
-        s1.rollback = s0.rollback preserved.
-     4. Length -1 pop revert: s1.rollback = SND (HD s0.contexts),
-        already in old active_rollbacks. *)
+                     EVERY storage_slot_preserved_es active_rollbacks.
+
+     Case analysis on step's length effect:
+     1. Length preserved: same_frame_rel s0 s1 (via step_same_frame).
+        active_rollbacks(s1) vs active_rollbacks(s0): TL identical
+        (TL s1.contexts = TL s0.contexts). HEAD replaced: need
+        storage_slot_preserved s1.rollback es.rollback.
+        Requires a step-level lemma: step preserves non-accessed
+        storage slots. This isn't directly given by same_frame_rel;
+        it follows from the fact that SSTORE access-lists before
+        writing (EIP-2929).
+     2. Length +1 (push): see comments below for structure.
+     3. Length -1 (pop): see comments below for structure. *)
   >> cheat
 QED
 
@@ -268,5 +267,3 @@ Proof
   >> drule_all run_call_preserves_inv
   >> rw[run_call_inv_def]
 QED
-
-val _ = export_theory ();
