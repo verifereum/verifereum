@@ -9,7 +9,9 @@
  * `vfmSameFrame`. The `same_frame_or_grow` / `psf_or_grow` and
  * `length_preserves` / `length_or_inl_grow` frameworks, together with
  * the associated step_call / step_create structural lemmas, live in
- * `vfmStepLength`.
+ * `vfmStepLength`. The `SND_*_msdomain[simp]` leaf lemmas and
+ * `SND_handle_step_msdomain`, showing msdomain is preserved exactly
+ * through handle_step, live in `vfmMsdomainPreserved`.
  *
  * This theory adds:
  *   - `psf_handle_create`, `handle_exception_same_frame`,
@@ -18,8 +20,6 @@
  *     preserving branch;
  *   - `pop_and_incorporate_context_failure_effect` and related
  *     pop-effect lemmas;
- *   - `SND_*_msdomain` leaf lemmas and `SND_handle_step_msdomain`
- *     showing msdomain is preserved exactly through handle_step;
  *   - `bind_inr_grow_factor` / `ignore_bind_inr_grow_factor` and the
  *     `inr_grow_witness` framework;
  *   - the INR-grow structure + same-frame lemmas for step_call and
@@ -31,7 +31,7 @@ Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
   vfmState vfmContext vfmExecution vfmExecutionProp
   vfmStaticCalls vfmTxParams vfmDomainSeparation vfmDecreasesGas
-  vfmSameFrame vfmStepLength
+  vfmSameFrame vfmStepLength vfmMsdomainPreserved
 Libs
   BasicProvers
 
@@ -369,163 +369,6 @@ Proof
          inc_pc_def, push_stack_def, write_memory_def,
          pop_and_incorporate_context_def, pop_context_def,
          set_rollback_def, unuse_gas_def, AllCaseEqs()]
-QED
-
-(* handle_step does not modify msdomain. All its primitives
-   (consume_gas, set_return_data, pop/push context, unuse_gas,
-   push_logs, update_gas_refund, set_rollback, inc_pc, push_stack,
-   write_memory, update_accounts) leave msdomain unchanged. *)
-Theorem SND_reraise_msdomain[simp]:
-  ∀e s. (SND (reraise e s)).msdomain = s.msdomain
-Proof
-  rw[reraise_def, return_def, fail_def] >> rw[]
-QED
-
-Theorem SND_get_current_context_msdomain[simp]:
-  (SND (get_current_context s)).msdomain = s.msdomain
-Proof
-  rw[get_current_context_def, return_def, fail_def] >> rw[]
-QED
-
-Theorem SND_get_num_contexts_msdomain[simp]:
-  (SND (get_num_contexts s)).msdomain = s.msdomain
-Proof
-  rw[get_num_contexts_def, return_def]
-QED
-
-Theorem SND_get_gas_left_msdomain[simp]:
-  (SND (get_gas_left s)).msdomain = s.msdomain
-Proof
-  rw[get_gas_left_def, bind_def, return_def, get_current_context_def,
-     fail_def]
-  >> rw[]
-QED
-
-Theorem SND_get_return_data_msdomain[simp]:
-  (SND (get_return_data s)).msdomain = s.msdomain
-Proof
-  rw[get_return_data_def, bind_def, return_def, get_current_context_def,
-     fail_def]
-  >> rw[]
-QED
-
-Theorem SND_get_output_to_msdomain[simp]:
-  (SND (get_output_to s)).msdomain = s.msdomain
-Proof
-  rw[get_output_to_def, bind_def, return_def, get_current_context_def,
-     fail_def]
-  >> rw[]
-QED
-
-Theorem SND_pop_context_msdomain[simp]:
-  (SND (pop_context s)).msdomain = s.msdomain
-Proof
-  rw[pop_context_def, bind_def, ignore_bind_def, return_def, fail_def,
-     assert_def, get_num_contexts_def, get_current_context_def]
-  >> rw[]
-QED
-
-Theorem SND_unuse_gas_msdomain[simp]:
-  ∀n s. (SND (unuse_gas n s)).msdomain = s.msdomain
-Proof
-  rw[unuse_gas_def, bind_def, ignore_bind_def, return_def, fail_def,
-     assert_def, get_current_context_def, set_current_context_def]
-  >> rw[]
-QED
-
-Theorem SND_push_logs_msdomain[simp]:
-  ∀ls s. (SND (push_logs ls s)).msdomain = s.msdomain
-Proof
-  rw[push_logs_def, bind_def, return_def, get_current_context_def,
-     set_current_context_def, fail_def]
-  >> rw[]
-QED
-
-Theorem SND_update_gas_refund_msdomain[simp]:
-  ∀p s. (SND (update_gas_refund p s)).msdomain = s.msdomain
-Proof
-  Cases_on `p`
-  >> rw[update_gas_refund_def, bind_def, return_def, get_current_context_def,
-        set_current_context_def, fail_def]
-  >> rw[]
-QED
-
-Theorem SND_set_rollback_msdomain[simp]:
-  ∀r s. (SND (set_rollback r s)).msdomain = s.msdomain
-Proof
-  rw[set_rollback_def, return_def]
-QED
-
-Theorem SND_pop_and_incorporate_context_msdomain[simp]:
-  ∀b s. (SND (pop_and_incorporate_context b s)).msdomain = s.msdomain
-Proof
-  rpt gen_tac
-  >> simp[pop_and_incorporate_context_def, bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
-  >> simp[]
-QED
-
-Theorem SND_inc_pc_msdomain[simp]:
-  (SND (inc_pc s)).msdomain = s.msdomain
-Proof
-  rw[inc_pc_def, bind_def, return_def, get_current_context_def,
-     set_current_context_def, fail_def]
-  >> rw[]
-QED
-
-Theorem SND_push_stack_msdomain[simp]:
-  ∀v s. (SND (push_stack v s)).msdomain = s.msdomain
-Proof
-  rw[push_stack_def, bind_def, ignore_bind_def, return_def, fail_def,
-     assert_def, get_current_context_def, set_current_context_def]
-  >> rw[]
-QED
-
-Theorem SND_write_memory_msdomain[simp]:
-  ∀a bs s. (SND (write_memory a bs s)).msdomain = s.msdomain
-Proof
-  rw[write_memory_def, bind_def, return_def, get_current_context_def,
-     set_current_context_def, fail_def]
-  >> rw[]
-QED
-
-Theorem SND_handle_exception_msdomain[simp]:
-  ∀e s. (SND (handle_exception e s)).msdomain = s.msdomain
-Proof
-  rpt gen_tac
-  >> simp[handle_exception_def, bind_def, ignore_bind_def, return_def,
-          fail_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
-  >> simp[]
-QED
-
-Theorem SND_handle_create_msdomain[simp]:
-  ∀e s. (SND (handle_create e s)).msdomain = s.msdomain
-Proof
-  rpt gen_tac
-  >> simp[handle_create_def, bind_def, ignore_bind_def, return_def,
-          fail_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
-  >> simp[]
-QED
-
-(* handle_step does not modify msdomain. *)
-Theorem SND_handle_step_msdomain[simp]:
-  ∀e s. (SND (handle_step e s)).msdomain = s.msdomain
-Proof
-  rpt gen_tac
-  >> rw[handle_step_def, handle_def, bind_def, return_def, fail_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
-  >> simp[]
 QED
 
 (* Variant for the success path (e = NONE): pop_and_incorporate_context T
