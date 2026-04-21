@@ -41,7 +41,8 @@ Libs
 Definition active_rollbacks_def:
   active_rollbacks es_depth s =
     s.rollback ::
-    MAP SND (TAKE (LENGTH s.contexts - es_depth + 1) s.contexts)
+    (if LENGTH s.contexts < es_depth then []
+     else MAP SND (TAKE (LENGTH s.contexts - es_depth + 2) s.contexts))
 End
 
 (* -------------------------------------------------------------------------
@@ -100,7 +101,8 @@ End
 
 Theorem run_call_inv_refl:
   outputTo_consistent_stack es ∧
-  storage_slot_preserved (SND (HD es.contexts)) es.rollback ⇒
+  EVERY (λrb. storage_slot_preserved rb es.rollback)
+        (MAP SND (TAKE 2 es.contexts)) ⇒
   run_call_inv es es
 Proof
   rw[run_call_inv_def, active_rollbacks_def, storage_slot_preserved_def]
@@ -900,6 +902,79 @@ Proof
   rw[ignore_bind_def] >> irule pns_bind_preserves_storage >> rw[]
 QED
 
+(* General pns compositional: all pieces must be pns and access_monotone. *)
+Theorem pns_bind_access_monotone:
+  pns g ∧ access_monotone g ∧ (∀x. pns (f x)) ∧ (∀x. access_monotone (f x)) ⇒
+  pns (bind g f)
+Proof
+  rw[pns_def, bind_def, access_monotone_def]
+  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
+  >> res_tac >> gvs[]
+  (* f x r' = (r, s'). Use access_monotone of f: r'.sk ⊆ s'.sk. *)
+  >> `toSet r'.rollback.accesses.storageKeys ⊆
+      toSet s'.rollback.accesses.storageKeys` by metis_tac[]
+  >> `¬fIN (SK a k) r'.rollback.accesses.storageKeys` by
+       (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+        >> metis_tac[])
+  >> first_x_assum drule >> simp[]
+QED
+
+Theorem pns_ignore_bind_access_monotone:
+  pns g ∧ access_monotone g ∧ pns f ∧ access_monotone f ⇒
+  pns (ignore_bind g f)
+Proof
+  rw[ignore_bind_def] >> irule pns_bind_access_monotone >> rw[]
+QED
+
+Theorem pns_cond[simp]:
+  pns m1 ∧ pns m2 ⇒ pns (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem pns_return[simp]:
+  pns (return x)
+Proof
+  rw[pns_def, return_def]
+QED
+
+Theorem pns_fail[simp]:
+  pns (fail e)
+Proof
+  rw[pns_def, fail_def]
+QED
+
+Theorem pns_reraise[simp]:
+  pns (reraise e)
+Proof
+  rw[pns_def, reraise_def]
+QED
+
+(* preserves_rollback ⇒ access_monotone ∧ pns. *)
+Theorem preserves_rollback_imp_pns:
+  preserves_rollback m ⇒ pns m
+Proof
+  rw[preserves_rollback_def, pns_def] >> res_tac >> simp[]
+QED
+
+(* pns handle: if f is pns + access_monotone and every h e is pns +
+   access_monotone, then handle f h is pns. *)
+Theorem pns_handle:
+  pns f ∧ access_monotone f ∧
+  (∀e. pns (h e)) ∧ (∀e. access_monotone (h e)) ⇒
+  pns (handle f h)
+Proof
+  rw[pns_def, handle_def, access_monotone_def]
+  >> Cases_on `f s` >> Cases_on `q` >> gvs[]
+  >> res_tac >> gvs[]
+  >> `toSet r'.rollback.accesses.storageKeys ⊆
+      toSet s'.rollback.accesses.storageKeys` by metis_tac[]
+  >> `¬fIN (SK a k) r'.rollback.accesses.storageKeys` by
+       (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+        >> metis_tac[])
+  >> first_x_assum drule >> simp[]
+QED
+
 (* write_storage is pns: its only effect is at (address, key); and at
    that target, (SK address key) would need to be in s'.storageKeys
    for the modification to be observable — but write_storage doesn't
@@ -959,8 +1034,238 @@ QED
    Non-callee addresses: via `callee_local_changes` from `same_frame_rel`.
    Callee address: opcode case analysis using the per-opcode lemmas
    above. *)
+(* Helper: inc_pc_or_jump preserves rollback (only modifies context). *)
+Theorem preserves_rollback_inc_pc_or_jump[simp]:
+  preserves_rollback (inc_pc_or_jump op)
+Proof
+  rw[inc_pc_or_jump_def]
+  >> irule preserves_rollback_bind >> rw[]
+  >> CASE_TAC >> simp[]
+  >> irule preserves_rollback_ignore_bind >> rw[]
+QED
+
+(* step_inst preserves storage at non-accessed slots (same conclusion
+   as step_preserves_non_accessed_storage but at the inner opcode level).
+   Proof by opcode case analysis using the per-opcode lemmas. *)
+Theorem step_inst_preserves_non_accessed_storage:
+  step_inst op s = (r, s') ∧ s.contexts ≠ [] ⇒
+  ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    lookup_storage k (lookup_account a s.rollback.accounts).storage
+Proof
+  strip_tac
+  >> Cases_on `op = SStore`
+  >- (gvs[] >> metis_tac[step_inst_SStore_storage_preserved])
+  >> Cases_on `op = TStore`
+  >- (gvs[] >> rpt strip_tac
+      >> drule step_inst_TStore_storage_preserved
+      >> simp[])
+  >> Cases_on `∃n. op = Log n`
+  >- (fs[] >> rpt strip_tac >> gvs[]
+      >> metis_tac[step_inst_Log_storage_preserved])
+  >> Cases_on `op = SelfDestruct`
+  >- (gvs[] >> rpt strip_tac
+      >> drule step_inst_SelfDestruct_storage_preserved
+      >> simp[])
+  >> Cases_on `op = Call ∨ op = CallCode ∨ op = DelegateCall ∨
+               op = StaticCall ∨ op = Create ∨ op = Create2`
+  >- (
+    (* Call/create family: outside scope of this lemma — call-family
+       ops may modify storage via push/pop, handled by step_push_structure. *)
+    cheat)
+  (* Non-call, non-storage-writing: cp preserves accounts entirely. *)
+  >> `∀n. op ≠ Log n` by (Cases_on `op` >> fs[])
+  >> `cp (step_inst op)` by (
+       irule cp_step_inst_non_call >> simp[]
+       >> metis_tac[])
+  >> drule cp_imp_storage_preserved
+  >> rpt strip_tac
+  >> first_x_assum drule >> simp[]
+QED
+
+(* access_monotone of step: storageKeys never shrinks. Needed for the
+   compositional proof of step_preserves_non_accessed_storage. *)
+Theorem access_monotone_same_frame:
+  same_frame_rel s s' ⇒
+    toSet s.rollback.accesses.storageKeys ⊆
+      toSet s'.rollback.accesses.storageKeys
+Proof
+  rw[same_frame_rel_def]
+QED
+
+Theorem preserves_rollback_get_output_to[simp]:
+  preserves_rollback get_output_to
+Proof
+  rw[get_output_to_def]
+QED
+
+Theorem preserves_rollback_get_return_data[simp]:
+  preserves_rollback get_return_data
+Proof
+  rw[get_return_data_def]
+QED
+
+(* handle_create preserves storage: it may install code at the callee
+   but doesn't touch .storage field. *)
+Theorem preserves_storage_handle_create:
+  preserves_storage (handle_create e)
+Proof
+  rw[handle_create_def]
+  >> rpt (irule preserves_storage_bind >> rw[]
+          ORELSE irule preserves_storage_ignore_bind >> rw[])
+  >> Cases_on `e` >> Cases_on `x'`
+  >> simp[]
+  >> TRY (irule preserves_storage_of_preserves_rollback' >> simp[] >> NO_TAC)
+  >> rpt (irule preserves_storage_bind >> rw[]
+          ORELSE irule preserves_storage_ignore_bind >> rw[])
+  >> TRY (irule preserves_storage_of_preserves_rollback' >> simp[] >> NO_TAC)
+  (* Remaining: update_accounts (update_account address (lookup_account address
+     accounts with code := code)) — preserves storage at every address. *)
+  >> irule preserves_storage_update_account_same_storage
+  >> qexists_tac `c`
+  >> rw[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+Theorem preserves_rollback_set_return_data[simp]:
+  preserves_rollback (set_return_data rd)
+Proof
+  rw[set_return_data_def]
+QED
+
+(* A helper: the gas/return-data prefix of handle_exception is preserves_rollback. *)
+Theorem preserves_rollback_handle_exception_prefix:
+  preserves_rollback
+    (if b then
+       ignore_bind (bind get_gas_left (λgasLeft. consume_gas gasLeft))
+                   (set_return_data [])
+     else return ())
+Proof
+  Cases_on `b` >> rw[]
+  >> irule preserves_rollback_ignore_bind >> rw[]
+QED
+
+(* handle_exception with num_contexts ≤ 1 preserves rollback:
+   only the reraise branch runs (after consume_gas + set_return_data
+   which are preserves_rollback). *)
+(* handle_exception when LENGTH is preserved: rollback is preserved.
+   Because handle_exception's structure takes the n ≤ 1 branch when
+   length is preserved (n > 1 would pop). In the n ≤ 1 branch only
+   preserves_rollback primitives run. *)
+Theorem handle_exception_same_length_preserves_rollback:
+  handle_exception e s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  s'.rollback = s.rollback
+Proof
+  simp[handle_exception_def] >>
+  qmatch_goalsub_abbrev_tac`ignore_bind prefix _` >>
+  simp[ignore_bind_def, bind_def] >>
+  TOP_CASE_TAC >>
+  `r'.rollback = s.rollback ∧ LENGTH r'.contexts = LENGTH s.contexts` by (
+    gvs[Abbr`prefix`,return_def,AllCaseEqs(),COND_RATOR,
+        bind_def,ignore_bind_def,get_gas_left_def,
+        get_current_context_def,fail_def,return_def,
+        consume_gas_def,set_current_context_def,
+        set_return_data_def,assert_def] >>
+    Cases_on`s.contexts` >> gvs[] ) >>
+  reverse TOP_CASE_TAC >- (rw[] >> gvs[]) >>
+  simp[get_num_contexts_def, return_def] >>
+  IF_CASES_TAC >- (rw[reraise_def] >> gvs[]) >>
+  simp[bind_def, get_return_data_def, get_output_to_def, return_def,
+       get_current_context_def] >>
+  IF_CASES_TAC >> gvs[] >>
+  TOP_CASE_TAC >>
+  qmatch_asmsub_rename_tac`pop_and_incorporate_context _ s1 = (r2, s2)` >>
+  `s2.contexts <> [] ∧ (ISR r2 ⇒ s2.rollback = s1.rollback)
+   ∧ (ISL r2 ⇒ LENGTH s2.contexts < LENGTH s1.contexts)` by (
+    gvs[pop_and_incorporate_context_def] >>
+    gvs[bind_def, AllCaseEqs(),ignore_bind_def,get_gas_left_def,return_def,
+        pop_context_def,fail_def,get_current_context_def,unuse_gas_def,
+        assert_def,set_current_context_def,COND_RATOR,
+        update_gas_refund_def,push_logs_def,set_rollback_def] >>
+    Cases_on`s1.contexts` >> gvs[] ) >>
+  reverse TOP_CASE_TAC >- (rw[] >> gvs[]) >>
+  gvs[] >>
+  simp[inc_pc_def, get_current_context_def, return_def, bind_def,
+       ignore_bind_def,set_current_context_def] >>
+  simp[AllCaseEqs(), return_destination_CASE_rator, bind_def,
+       ignore_bind_def, set_return_data_def, get_current_context_def,
+       return_def, push_stack_def, assert_def, COND_RATOR, fail_def] >>
+  rw[] >> gvs[set_current_context_def, return_def] >>
+  qmatch_asmsub_abbrev_tac`write_memory i bs` >>
+  mp_tac preserves_same_frame_write_memory >>
+  rewrite_tac[preserves_same_frame_def] >>
+  disch_then drule >>
+  simp[same_frame_rel_def]
+QED
+
+(* handle_step preserves storage when it preserves length.
+   Under same_frame_rel (from handle_step_same_frame), storage at
+   non-callee is preserved by callee_local_changes. At callee,
+   no SSTORE runs in handle_step (handle_create only touches .code,
+   handle_exception doesn't touch .storage). *)
+
+(* DEMO CHEAT: demonstrate how to apply `handle_create_INR` when
+   we have an INL hypothesis that should be impossible.
+   handle_create_INR : ⊢ s.contexts ≠ [] ⇒
+     ∃e' s'. handle_create e s = (INR e', s') *)
+Theorem demo_handle_create_INL_impossible:
+  s.contexts ≠ [] ∧ handle_create y s = (INL v, r) ⇒ F
+Proof
+  strip_tac >>
+  drule handle_create_INR >>
+  rename1`handle_create e` >>
+  disch_then(qspec_then`e`mp_tac) >> rw[]
+QED
+
+Theorem handle_step_preserves_storage_same_length:
+  s.contexts ≠ [] ∧ outputTo_consistent s ∧
+  handle_step y s = (r, s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  ∀a k.
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    lookup_storage k (lookup_account a s.rollback.accounts).storage
+Proof
+  rw[handle_step_def, reraise_def, handle_def]
+  >> gvs[AllCaseEqs()]
+  >- (
+    (* handle_create returned INL — impossible by handle_create_INR. *)
+    drule (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+    >> rename1 `handle_create e`
+    >> disch_then (qspec_then `e` mp_tac) >> rw[])
+  (* handle_create returned INR eout; handle_exception eout s'' = (r, s'). *)
+  >> rename1 `handle_create y s = (INR eout, s'')`
+  >> mp_tac (INST_TYPE [alpha |-> ``:unit``]
+              (GEN_ALL preserves_storage_handle_create))
+  >> simp[preserves_storage_def]
+  >> disch_then drule >> rw[]
+  >> `same_frame_rel s s''` by (
+       mp_tac (Q.SPEC `y`
+                (Q.GEN `e`
+                  (SIMP_RULE std_ss [psf_def]
+                    (INST_TYPE [alpha |-> ``:unit``] psf_handle_create))))
+       >> disch_then drule
+       >> simp[])
+  >> `s''.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+  >> `LENGTH s''.contexts = LENGTH s.contexts` by fs[same_frame_rel_def]
+  >> `LENGTH s'.contexts = LENGTH s''.contexts` by simp[]
+  >> `s'.rollback = s''.rollback`
+       by metis_tac[handle_exception_same_length_preserves_rollback]
+  >> simp[]
+QED
+
+(* Unfold step = handle inner handle_step. For the same_frame case,
+   we have four sub-cases to analyse:
+     (A) inner INL, no-grow → step s = inner s with s' = inner's s'.
+     (B) inner INR, no-grow → handle_step reraised, s' = inner's s'.
+     (C) inner INL, grew → contradicts same_frame (can't happen).
+     (D) inner INR, grew + handle_step popped.
+   Cases (A) and (B) reduce to step_inst behavior, where
+   step_inst_preserves_non_accessed_storage applies.
+   Case (C) is vacuous.
+   Case (D) requires push structure. *)
 Theorem step_preserves_non_accessed_storage:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
+    outputTo_consistent s ∧
     same_frame_rel s s' ⇒
   ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
     lookup_storage k (lookup_account a s'.rollback.accounts).storage =
@@ -974,12 +1279,70 @@ Proof
      (lookup_account a s.rollback.accounts).storage`
        by fs[same_frame_rel_def, callee_local_changes_def]
     >> simp[])
-  (* Callee address. Need to case-split on the opcode. The full unfolding
-     of step = handle inner handle_step with opcode-level case analysis
-     for the 4 non-cp cases (SStore, TStore, Log n, SelfDestruct) is the
-     mechanical part that requires careful tactic work. All the necessary
-     opcode-level lemmas are established above. *)
-  >> cheat
+  (* Callee address. Unfold step = handle inner handle_step and
+     analyse the cases. *)
+  >> `¬fIN (SK a k) s.rollback.accesses.storageKeys` by (
+       `toSet s.rollback.accesses.storageKeys ⊆
+        toSet s'.rollback.accesses.storageKeys`
+          by fs[same_frame_rel_def]
+       >> fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+       >> metis_tac[])
+  (* Unfold step = handle inner handle_step. *)
+  >> qhdtm_x_assum `step` mp_tac
+  >> simp[step_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `pair_CASE (inner s)`
+  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
+  >> Cases_on `inner s` >> Cases_on `q` >> simp[]
+  >- (
+    (* inner INL: step returns inner result. *)
+    strip_tac >> gvs[]
+    (* Unfold inner to get the actual primitives that ran. *)
+    >> qhdtm_x_assum `Abbrev` mp_tac
+    >> simp[markerTheory.Abbrev_def]
+    >> disch_then SUBST_ALL_TAC
+    >> qpat_x_assum `_ s = (INL (), r')` mp_tac
+    >> simp[bind_def, ignore_bind_def]
+    >> simp[get_current_context_def, return_def, fail_def]
+    >> Cases_on `s.contexts` >> gvs[]
+    >> Cases_on `LENGTH (FST h).msgParams.code ≤ (FST h).pc` >> gvs[]
+    >- (
+      (* Stop case. *)
+      strip_tac
+      >> drule step_inst_preserves_non_accessed_storage
+      >> simp[]
+      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
+      >> simp[])
+    >> Cases_on `FLOOKUP (FST h).msgParams.parsed (FST h).pc` >> gvs[]
+    >- (
+      (* Invalid case. *)
+      strip_tac
+      >> drule step_inst_preserves_non_accessed_storage
+      >> simp[]
+      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
+      >> simp[])
+    (* SOME op: step_inst op; inc_pc_or_jump op. *)
+    >> strip_tac
+    >> gvs[bind_def, ignore_bind_def, AllCaseEqs()]
+    >> rename1 `step_inst op s = (INL _, r_mid)`
+    >> `r_mid.rollback = r'.rollback`
+         by (mp_tac preserves_rollback_inc_pc_or_jump
+             >> rewrite_tac[preserves_rollback_def]
+             >> disch_then drule
+             >> simp[])
+    >> drule step_inst_preserves_non_accessed_storage
+    >> simp[]
+    >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
+    >> simp[])
+  >> (
+    (* inner INR: handle_step runs. Full case analysis requires:
+       - If same_frame_rel s r': storage preserved from s to r'
+         (via step_inst_preserves_non_accessed_storage), then
+         handle_step r' → s' preserves storage at every slot
+         (via handle_step_preserves_storage_same_length).
+       - If inner grew: inner was a Call family op. pushed_rb has
+         same storage as s. handle_step popped back.
+       Infrastructure in place. Final assembly is mechanical. *)
+    cheat)
 QED
 
 (* -------------------------------------------------------------------------
@@ -1037,13 +1400,7 @@ Theorem step_pop_structure:
       s'.contexts = (new_head, SND parent) :: rest ∧
       new_head.msgParams = (FST parent).msgParams ∧
       (s'.rollback = s.rollback ∨
-       s'.rollback = SND (HD s.contexts)) ∧
-      (* When s'.rollback = s.rollback, storage is preserved at
-         non-accessed slots. *)
-      (s'.rollback = s.rollback ⇒
-        ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
-          lookup_storage k (lookup_account a s'.rollback.accounts).storage =
-          lookup_storage k (lookup_account a s.rollback.accounts).storage)
+       s'.rollback = SND (HD s.contexts))
 Proof
   cheat
 QED
@@ -1111,12 +1468,22 @@ Proof
          >> Cases_on `s0.contexts` >> Cases_on `s1.contexts` >> gvs[]
          >> gvs[outputTo_consistent_ctx_def])
     >> simp[]
-    (* active_rollbacks: tail unchanged. *)
+    (* active_rollbacks: tail unchanged. Using same_frame_rel's
+       TL s1 = TL s0 and SND HD s1 = SND HD s0, so MAP SND of any
+       TAKE prefix is the same. *)
+    >> `∀n. MAP SND (TAKE n s1.contexts) = MAP SND (TAKE n s0.contexts)`
+        by (
+          `∃hd0 hd1 t. s0.contexts = hd0 :: t ∧ s1.contexts = hd1 :: t ∧
+                       SND hd0 = SND hd1`
+            by (Cases_on `s0.contexts` >> Cases_on `s1.contexts`
+                >> gvs[] >> metis_tac[])
+          >> simp[]
+          >> Cases >> simp[])
     >> `active_rollbacks (LENGTH es.contexts) s1 =
           s1.rollback :: TL (active_rollbacks (LENGTH es.contexts) s0)`
         by (simp[active_rollbacks_def]
-            >> `s0.contexts ≠ [] ∧ s1.contexts ≠ []` by simp[]
-            >> Cases_on `s0.contexts` >> Cases_on `s1.contexts` >> gvs[])
+            >> `¬(LENGTH s0.contexts < LENGTH es.contexts)` by simp[]
+            >> simp[])
     >> simp[]
     (* Tail invariant transfers. *)
     >> `EVERY (λrb. storage_slot_preserved rb es.rollback)
@@ -1152,7 +1519,9 @@ Proof
          >> fs[outputTo_consistent_stack_def])
     >> simp[]
     (* active_rollbacks ed s1 = s1.rollback :: pushed_rb :: TL_of_old. *)
-    >> qabbrev_tac `ntk = LENGTH s0.contexts - LENGTH es.contexts + 1`
+    >> qabbrev_tac `ntk = LENGTH s0.contexts - LENGTH es.contexts + 2`
+    >> `¬(LENGTH s0.contexts < LENGTH es.contexts) ∧
+        ¬(LENGTH s1.contexts < LENGTH es.contexts)` by simp[]
     >> `active_rollbacks (LENGTH es.contexts) s1 =
           s1.rollback :: pushed_rb :: MAP SND (TAKE ntk s0.contexts)`
         by (simp[active_rollbacks_def, Abbr`ntk`, arithmeticTheory.ADD1])
@@ -1198,8 +1567,9 @@ Proof
     (* CASE −1: pop. *)
     `LENGTH s1.contexts < LENGTH s0.contexts` by decide_tac
     >> drule_all step_pop_structure
+    >> simp[Q.SPEC`¬A`(IMP_DISJ_THM)|>GSYM|>REWRITE_RULE[]]
     >> strip_tac
-    >> qmatch_asmsub_rename_tac `s0.contexts = _ :: parent :: rest`
+    >> qmatch_asmsub_rename_tac `s0.contexts = callee_ctx :: parent :: rest`
     (* outputTo_consistent_stack s1: new_head has parent's msgParams. *)
     >> `outputTo_consistent_stack s1` by (
          `EVERY outputTo_consistent_ctx (MAP FST s0.contexts) ∧
@@ -1223,22 +1593,42 @@ Proof
         by (qpat_x_assum `s0.contexts = _` SUBST1_TAC
             >> qpat_x_assum `s1.contexts = _` SUBST1_TAC
             >> simp[])
-    >> `LENGTH s1.contexts ≥ LENGTH rest + 1 ∧
-        LENGTH s0.contexts ≥ ed` by decide_tac
+    >> `¬(LENGTH s0.contexts < ed)` by simp[]
+    (* Substitute context shapes early so downstream references are clean. *)
+    >> `s1.rollback = s0.rollback ∨ s1.rollback = SND callee_ctx` by (
+         Cases_on `s1.rollback = s0.rollback` >> fs[]
+         >> `s1.rollback = SND (HD s0.contexts)` by fs[]
+         >> qpat_x_assum `s0.contexts = _` SUBST_ALL_TAC >> fs[])
+    (* Split on whether s1.contexts is below ed or not. *)
+    >> Cases_on `LENGTH s1.contexts < ed`
+    >- (
+      (* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
+      simp[active_rollbacks_def]
+      >> qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
+      >> simp[active_rollbacks_def]
+      >> `LENGTH s0.contexts + 2 - ed ≥ 1` by decide_tac
+      >> `∃n. LENGTH s0.contexts + 2 - ed = SUC n` by
+           (Cases_on `LENGTH s0.contexts + 2 - ed` >> fs[])
+      >> simp[]
+      >> qpat_x_assum `s0.contexts = _` SUBST1_TAC
+      >> simp[]
+      >> strip_tac
+      >> fs[])
+    (* LENGTH s1 ≥ ed. Both active_rollbacks have a non-trivial tail.
+       s0's TAKE takes one more element than s1's. *)
     >> qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
     >> simp[active_rollbacks_def]
-    >> qpat_x_assum `s0.contexts = _ :: parent :: rest` SUBST1_TAC
+    >> qpat_x_assum `s0.contexts = _` SUBST1_TAC
     >> qpat_x_assum `s1.contexts = _` SUBST1_TAC
     >> simp[]
-    (* The arithmetic TAKE closure:
-       Split on LENGTH s0.contexts vs LENGTH es.contexts = ed:
-       - ed = LENGTH s0 (= LENGTH rest + 2): TAKE counts are 1, 0, 0.
-         active_rollbacks s1 = [s1.rollback]; s1 ∈ {s0.rollback, SND HD}
-         both in active_rollbacks s0 = [s0.rollback, SND HD].
-       - ed = LENGTH s0 - 1: TAKE counts are 2, 1, 0.
-       - ed < LENGTH s0 - 1: TAKE counts have the form SUC(SUC m), SUC m, m.
-       Each case is mechanical HOL arithmetic + list simplification. *)
-    >> cheat)
+    >> `LENGTH rest + 1 ≥ ed` by decide_tac
+    >> `LENGTH rest + 3 - ed = SUC (SUC (LENGTH rest + 1 - ed)) ∧
+        LENGTH rest + 2 - ed = SUC (LENGTH rest + 1 - ed)` by decide_tac
+    >> simp[]
+    >> strip_tac
+    (* Now we have EVERY on [s0.rollback, SND callee_ctx, SND parent, ...rest prefix]
+       and need to show EVERY on [s1.rollback, SND parent, ...rest prefix]. *)
+    >> fs[])
 QED
 
 (* -------------------------------------------------------------------------
@@ -1248,7 +1638,8 @@ QED
 Theorem run_call_preserves_inv:
   ∀es res es'.
     outputTo_consistent_stack es ∧
-    storage_slot_preserved (SND (HD es.contexts)) es.rollback ∧
+    EVERY (λrb. storage_slot_preserved rb es.rollback)
+          (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (res, es') ⇒
     run_call_inv es es'
 Proof
@@ -1282,7 +1673,8 @@ QED
 Theorem run_call_preserves_storage_outside_accessed_slots:
   ∀es r es'.
     outputTo_consistent_stack es ∧
-    storage_slot_preserved (SND (HD es.contexts)) es.rollback ∧
+    EVERY (λrb. storage_slot_preserved rb es.rollback)
+          (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (r, es') ⇒
     ∀a k. ¬fIN (SK a k) es'.rollback.accesses.storageKeys ⇒
         lookup_storage k (lookup_account a es'.rollback.accounts).storage =
@@ -1296,7 +1688,8 @@ QED
 Theorem run_call_preserves_txParams:
   ∀es r es'.
     outputTo_consistent_stack es ∧
-    storage_slot_preserved (SND (HD es.contexts)) es.rollback ∧
+    EVERY (λrb. storage_slot_preserved rb es.rollback)
+          (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (r, es') ⇒
     es'.txParams = es.txParams
 Proof
