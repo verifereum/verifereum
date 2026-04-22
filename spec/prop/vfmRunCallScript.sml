@@ -2669,7 +2669,41 @@ Proof
     rewrite_tac[preserves_storage_def] >>
     Cases_on`op` >> gvs[is_call_def, step_inst_def] >>
     rpt strip_tac >> first_x_assum drule >> rw[] ) >>
-  gvs[] >> cheat
+  (* Now prove: storage s'.rollback @ a,k = storage r'.rollback @ a,k.
+     From handle_step_pop_generic_gen disjunction:
+       (A) ∀a. storage s'.rollback @ a = storage r'.rollback @ a, OR
+       (B) ∀a. storage s'.rollback @ a = storage r''.accounts @ a
+     where SND (HD r'.contexts) = r''.
+     For (A): direct.
+     For (B): use step_call_pushed_rb_storage (or step_create variant)
+     to get storage r''.accounts @ a = storage s.rollback @ a, then
+     chain via preserves_storage_step_call/create to relate s.rollback
+     to r'.rollback. *)
+  qpat_x_assum `_ ∧ _` strip_assume_tac
+  (* strip_assume_tac splits the conjunction AND the inner disjunction,
+     producing 2 subgoals — one per disjunct from handle_step_pop_generic_gen. *)
+  >- ((* Disjunct A: ∀a. storage s'.rollback @ a = storage r'.rollback @ a. *)
+      simp[] >> metis_tac[])
+  (* Disjunct B: ∀a. storage s'.rollback @ a = storage r''.accounts @ a.
+     Here r'' = SND (HD r'.contexts). Chain:
+       storage s'.rollback @ a = storage r''.accounts @ a (hypothesis)
+                             = storage s.rollback @ a  (step_call_pushed_rb_storage)
+                             = storage r'.rollback @ a (preserves_storage step_inst) *)
+  >> `(lookup_account a r''.accounts).storage =
+      (lookup_account a s.rollback.accounts).storage` by (
+       `LENGTH r'.contexts > LENGTH s.contexts` by simp[]
+       >> `SND (HD r'.contexts) = r''` by simp[]
+       >> Cases_on `op` >> fs[is_call_def, step_inst_def]
+       >> metis_tac[step_call_pushed_rb_storage,
+                    step_create_pushed_rb_storage])
+  >> `lookup_storage k (lookup_account a s.rollback.accounts).storage =
+      lookup_storage k (lookup_account a r'.rollback.accounts).storage` by (
+       Cases_on `op` >> fs[is_call_def, step_inst_def]
+       >> metis_tac[preserves_storage_step_call, preserves_storage_step_create,
+                    preserves_storage_def])
+  >> `lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+      lookup_storage k (lookup_account a r''.accounts).storage` by simp[]
+  >> simp[]
   (*
  6. Second disjunct needs a new helper: step_call_saved_rollback_preserves_storage / step_call_saved_rollback_preserves_storage_create — if is_call op ∧
  step_inst op s = (q, r') ∧ LENGTH r'.contexts = LENGTH s.contexts + 1, then the top saved rollback SND (HD r'.contexts) has the same storage as s.rollback at
@@ -2683,36 +2717,46 @@ QED
  * Push-structure lemma for step (Case +1 of run_call_inv_step).
  *
  * When step grows by +1 (push), the new contexts prepend a child context
- * with a pushed rollback whose accounts.storage equals s.rollback.accounts.storage
- * (because the only modification during the push prefix is transfer_value,
- * which only touches balance). The new s'.rollback.accounts.storage also
- * equals s.rollback.accounts.storage. Accesses are monotone. Child's
- * msgParams is outputTo-consistent.
+ * with a pushed rollback. The prior parent context may have been modified
+ * (gasUsed/stack updated by consume_gas/pop_stack in the step_call prefix),
+ * but its SND component (saved rollback) is unchanged and its .msgParams
+ * is unchanged (modifications via set_current_context preserve both).
  *
- * Covers both INL-grow (plain proceed_call or proceed_create) and
- * INR-grow-then-reraise (precompile failure with LENGTH s1 > LENGTH s
- * handled by handle_step reraising).
+ * The pushed rollback's .accounts.storage equals s.rollback.accounts.storage
+ * (via step_call_pushed_rb_storage / step_create_pushed_rb_storage).
+ * The new s'.rollback.accounts.storage also equals s.rollback.accounts.storage
+ * (the only modifications during push prefix are transfer_value and
+ * increment_nonce, both of which preserve storage).
+ *
+ * Accesses are monotone.
+ *
+ * Covers both:
+ *   - INL-grow: plain proceed_call or proceed_create success (no precompile).
+ *   - INR-grow: step_call INR-grew with vfm_abort e (handle_step reraised).
+ *     (step_create never INR-grows, per step_create_inr_no_grow.)
  * ------------------------------------------------------------------------- *)
 Theorem step_push_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent_stack s ∧
     LENGTH s'.contexts > LENGTH s.contexts ⇒
-    ∃child_ctx pushed_rb.
-      s'.contexts = (child_ctx, pushed_rb) :: s.contexts ∧
+    ∃child_ctx pushed_rb modified_parent_ctx.
+      s'.contexts = (child_ctx, pushed_rb) ::
+                    (modified_parent_ctx, SND (HD s.contexts)) ::
+                    TL s.contexts ∧
+      modified_parent_ctx.msgParams = (FST (HD s.contexts)).msgParams ∧
       (∀a. (lookup_account a s'.rollback.accounts).storage =
            (lookup_account a s.rollback.accounts).storage) ∧
       (∀a. (lookup_account a pushed_rb.accounts).storage =
            (lookup_account a s.rollback.accounts).storage) ∧
       toSet s.rollback.accesses.storageKeys ⊆
         toSet s'.rollback.accesses.storageKeys ∧
-      (* s.rollback.accesses ⊆ pushed_rb.accesses because pushed_rb is
-         captured during proceed_call/create AFTER step_inst's prefix
-         (which only grows accesses). *)
       toSet s.rollback.accesses.storageKeys ⊆
         toSet pushed_rb.accesses.storageKeys ∧
       outputTo_consistent_ctx child_ctx
 Proof
-  cheat
+  cheat (* TODO: Requires an `inl_grow_witness` / `inl_grow_P` framework
+           parallel to the existing `inr_grow_witness` / `inr_grow_P`
+           framework in vfmRunWithinFrameScript. See the sketch above. *)
 QED
 
 (* -------------------------------------------------------------------------
@@ -2846,19 +2890,34 @@ Proof
     (* CASE +1: push. *)
     drule_all step_push_structure
     >> strip_tac
-    >> qmatch_asmsub_rename_tac `s1.contexts = (child_ctx, pushed_rb) :: s0.contexts`
-    (* outputTo_consistent_stack s1: old stack consistent + new child consistent. *)
+    >> qmatch_asmsub_rename_tac
+        `s1.contexts = (child_ctx, pushed_rb) ::
+                       (modified_parent_ctx, SND (HD s0.contexts)) ::
+                       TL s0.contexts`
+    (* outputTo_consistent_stack s1: new child + modified parent (same msgParams
+       as old HD, which was consistent) + rest of old stack. *)
+    >> `s1.contexts ≠ []` by simp[]
     >> `outputTo_consistent_stack s1` by (
          simp[outputTo_consistent_stack_def]
-         >> fs[outputTo_consistent_stack_def])
+         >> fs[outputTo_consistent_stack_def]
+         >> Cases_on `s0.contexts` >> fs[]
+         >> PairCases_on `h` >> fs[]
+         >> fs[outputTo_consistent_ctx_def])
     >> simp[]
-    (* active_rollbacks ed s1 = s1.rollback :: pushed_rb :: TL_of_old. *)
+    (* active_rollbacks ed s1 = s1.rollback :: pushed_rb :: MAP SND (TAKE ntk s0.contexts).
+       Computed from active_rollbacks_def: TAKE m s1.contexts for m = LENGTH s1 - ed + 2. *)
     >> qabbrev_tac `ntk = LENGTH s0.contexts - LENGTH es.contexts + 2`
     >> `¬(LENGTH s0.contexts < LENGTH es.contexts) ∧
         ¬(LENGTH s1.contexts < LENGTH es.contexts)` by simp[]
+    >> `LENGTH s1.contexts = LENGTH s0.contexts + 1` by (
+       gvs[] >> Cases_on`s0.contexts` >> gvs[])
+    >> `MAP SND s1.contexts = pushed_rb :: MAP SND s0.contexts` by (
+         qpat_x_assum `s1.contexts = _` SUBST1_TAC
+         >> Cases_on `s0.contexts` >> fs[])
     >> `active_rollbacks (LENGTH es.contexts) s1 =
-          s1.rollback :: pushed_rb :: MAP SND (TAKE ntk s0.contexts)`
-        by (simp[active_rollbacks_def, Abbr`ntk`, arithmeticTheory.ADD1])
+          s1.rollback :: pushed_rb :: MAP SND (TAKE ntk s0.contexts)` by (
+         simp[active_rollbacks_def, Abbr`ntk`, arithmeticTheory.ADD1]
+         >> Cases_on `s0.contexts` >> gvs[])
     >> `active_rollbacks (LENGTH es.contexts) s0 =
           s0.rollback :: MAP SND (TAKE ntk s0.contexts)`
         by simp[active_rollbacks_def, Abbr`ntk`]
