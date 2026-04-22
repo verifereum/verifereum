@@ -2874,7 +2874,7 @@ Definition inl_grow_structure_def:
   inl_grow_structure (m : α execution) ⇔
     ∀s r s'. m s = (INL r, s') ∧ s.contexts ≠ [] ∧
              LENGTH s'.contexts > LENGTH s.contexts ⇒
-      ∃callee_ctx pushed_rb parent_ctx mr.
+      ∃callee_ctx pushed_rb parent_ctx.
         s'.contexts = (callee_ctx, pushed_rb) ::
                       (parent_ctx, SND (HD s.contexts)) ::
                       TL s.contexts ∧
@@ -2887,7 +2887,7 @@ Definition inl_grow_structure_def:
           toSet pushed_rb.accesses.storageKeys ∧
         toSet s.rollback.accesses.storageKeys ⊆
           toSet s'.rollback.accesses.storageKeys ∧
-        callee_ctx.msgParams.outputTo = Memory mr
+        outputTo_consistent_ctx callee_ctx
 End
 
 Theorem inl_grow_structure_of_same_frame[simp]:
@@ -2911,7 +2911,7 @@ Proof
     (fs[same_frame_rel_def] >> decide_tac) >>
   first_x_assum (qspecl_then [`x`,`s''`,`r`,`s'`] mp_tac) >>
   simp[] >> strip_tac >>
-  qexists `callee_ctx` >> qexists `pushed_rb` >> qexists `parent_ctx` >> qexists `mr` >>
+  qexists `callee_ctx` >> qexists `pushed_rb` >> qexists `parent_ctx` >>
   gvs[same_frame_rel_def] >>
   rpt conj_tac >-
     (* storage equality: preserves_storage gives lookup_storage eq, then FUN_EQ_THM *)
@@ -3023,9 +3023,11 @@ Proof
        >> strip_tac >> gvs[]
        >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
        >> simp[initial_context_simp, initial_msg_params_def]
+       >> simp[outputTo_consistent_ctx_def]
        >> gvs[Abbr`g`,COND_RATOR,CaseEq"bool",return_def,update_accounts_def]
        >> Cases_on`s.contexts` >> gvs[]
-       >> Cases_on`h` >> gvs[])
+       >> Cases_on`h` >> gvs[]
+       >> gvs[Abbr`ctx`, initial_context_simp, initial_msg_params_def] )
   >> drule push_context_effect >> strip_tac >> gvs[]
   >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
   >> strip_tac
@@ -3051,7 +3053,8 @@ Proof
   >> Cases_on`s1.contexts` >> gvs[]
   >> Cases_on`h` >> gvs[]
   >> simp[initial_context_simp,Abbr`ctx`]
-  >> simp[initial_msg_params_def]
+  >> gvs[initial_msg_params_def]
+  >> gvs[outputTo_consistent_ctx_def]
 QED
 
 Theorem inl_grow_structure_step_call[simp]:
@@ -3082,7 +3085,7 @@ Theorem step_call_inl_grow_structure:
   s.contexts ≠ [] ∧ outputTo_consistent s ∧
   step_call op s = (INL (), s1) ∧
   LENGTH s1.contexts > LENGTH s.contexts ⇒
-    ∃callee_ctx pushed_rb parent_ctx mr.
+    ∃callee_ctx pushed_rb parent_ctx.
       s1.contexts = (callee_ctx, pushed_rb) ::
                     (parent_ctx, SND (HD s.contexts)) ::
                     TL s.contexts ∧
@@ -3095,19 +3098,92 @@ Theorem step_call_inl_grow_structure:
         toSet pushed_rb.accesses.storageKeys ∧
       toSet s.rollback.accesses.storageKeys ⊆
         toSet s1.rollback.accesses.storageKeys ∧
-      callee_ctx.msgParams.outputTo = Memory mr
+      outputTo_consistent_ctx callee_ctx
 Proof
   strip_tac >>
   mp_tac inl_grow_structure_step_call >>
-  rewrite_tac[inl_grow_structure_def] >>
+  rewrite_tac[inl_grow_structure_def, outputTo_consistent_ctx_def] >>
   disch_then drule >> simp[]
+QED
+
+(* TODO: move *)
+Theorem transfer_value_storage[simp]:
+  (transfer_value fr to va ac a).storage = (ac a).storage
+Proof
+  rw[transfer_value_def, lookup_account_def, update_account_def,
+     APPLY_UPDATE_THM] >> rw[]
+QED
+
+Theorem increment_nonce_storage[simp]:
+  ((increment_nonce x ac) a).storage = (ac a).storage
+Proof
+  rw[increment_nonce_def, lookup_account_def, update_account_def,
+     APPLY_UPDATE_THM] >> rw[]
+QED
+
+Theorem inl_grow_structure_proceed_create[simp]:
+  inl_grow_structure
+    (proceed_create senderAddress address value code cappedGas)
+Proof
+  rw[inl_grow_structure_def, outputTo_consistent_ctx_def]
+  >> qhdtm_x_assum `proceed_create` mp_tac
+  >> simp[proceed_create_def]
+  (* update_accounts (increment_nonce senderAddress) — ignore_bind *)
+  >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
+  (* get_rollback: captures the rollback after increment_nonce *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_rollback_def, return_def]
+  (* get_original *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_original_def, return_def, fail_def]
+  (* set_original = bind get_current_context (\c. set_current_context (...)) *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[set_original_def, return_def, fail_def,
+          get_current_context_def, set_current_context_def]
+  >> gvs[AllCaseEqs()]
+  >> TRY (strip_tac >> gvs[] >> NO_TAC)
+  (* update_accounts (transfer_value ... o increment_nonce address) — ignore_bind *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[update_accounts_def, return_def]
+  (* push_context *)
+  >> strip_tac
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> qexists`h0` >> simp[]
+  >> simp[initial_msg_params_def]
+  >> simp[lookup_account_def]
+  >> cheat
+QED
+
+Theorem inl_grow_structure_abort_create_exists[simp]:
+  inl_grow_structure (abort_create_exists x)
+Proof
+  rw[abort_create_exists_def]
+  >> rw[ignore_bind_def, inl_grow_structure_def]
+  >> gvs[bind_def, AllCaseEqs()]
+  >> gvs[update_accounts_def, increment_nonce_def, bind_def, AllCaseEqs()]
+  >> gvs[return_def, push_stack_def, inc_pc_def, bind_def, AllCaseEqs()]
+  >> gvs[ignore_bind_def, assert_def, get_current_context_def, AllCaseEqs(),
+         return_def, fail_def, bind_def, set_current_context_def] >>
+  Cases_on`s.contexts` >> gvs[]
+QED
+
+Theorem inl_grow_structure_step_create[simp]:
+  inl_grow_structure (step_create two)
+Proof
+  simp[step_create_def]
+  >> rpt((irule inl_grow_structure_bind >> simp[] >> gen_tac)
+     ORELSE (irule inl_grow_structure_ignore_bind >> simp[]))
+  >> irule inl_grow_structure_cond >> simp[]
+  >> irule inl_grow_structure_cond >> simp[]
 QED
 
 Theorem step_create_inl_grow_structure:
   s.contexts ≠ [] ∧ outputTo_consistent s ∧
   step_create two s = (INL (), s1) ∧
   LENGTH s1.contexts > LENGTH s.contexts ⇒
-    ∃callee_ctx pushed_rb parent_ctx address.
+    ∃callee_ctx pushed_rb parent_ctx.
       s1.contexts = (callee_ctx, pushed_rb) ::
                     (parent_ctx, SND (HD s.contexts)) ::
                     TL s.contexts ∧
@@ -3120,14 +3196,14 @@ Theorem step_create_inl_grow_structure:
         toSet pushed_rb.accesses.storageKeys ∧
       toSet s.rollback.accesses.storageKeys ⊆
         toSet s1.rollback.accesses.storageKeys ∧
-      callee_ctx.msgParams.outputTo = Code address ∧
-      callee_ctx.msgParams.callee = address
+      (∀address.
+        callee_ctx.msgParams.outputTo = Code address ⇒
+        callee_ctx.msgParams.callee = address)
 Proof
-  cheat
-  (* Same as step_call_inl_grow_structure, but simpler (no precompile
-     branch). proceed_create's final push_context pushes
-     (initial_context address ..., rollback) with outputTo = Code address
-     and callee = address by initial_msg_params_def. *)
+  strip_tac >>
+  mp_tac inl_grow_structure_step_create >>
+  rewrite_tac[inl_grow_structure_def, outputTo_consistent_ctx_def] >>
+  disch_then drule >> simp[]
 QED
 
 Theorem step_push_structure:
