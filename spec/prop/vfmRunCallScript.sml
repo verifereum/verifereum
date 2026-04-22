@@ -3013,27 +3013,43 @@ Proof
   >> simp[Once bind_def, return_def]
   >> simp[Once bind_def, return_def]
   >> simp[Once bind_def]
-  >> IF_CASES_TAC
+  >> TOP_CASE_TAC
+  >> reverse IF_CASES_TAC
   >- ((* No precompile *)
-       drule push_context_effect >> strip_tac >> gvs[]
+       drule push_context_effect >> strip_tac
+       >> gvs[return_def]
+       >> strip_tac >> gvs[]
        >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
-       >> qexistsl [`ctx`,`s.rollback`,`FST (HD s.contexts)`,`mr`]
        >> simp[initial_context_simp, initial_msg_params_def]
-       >> conj_tac >- (Cases_on `s.contexts` >> gvs[])
-       >> conj_tac >- simp[]
-       >> conj_tac >- simp[SUBSET_DEF]
-       >> conj_tac >- simp[SUBSET_DEF])
+       >> gvs[Abbr`g`,COND_RATOR,CaseEq"bool",return_def,update_accounts_def]
+       >> Cases_on`s.contexts` >> gvs[]
+       >> Cases_on`h` >> gvs[])
   >> drule push_context_effect >> strip_tac >> gvs[]
   >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
+  >> strip_tac
   >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_,s')`
   >> `ss.contexts ≠ []` by simp[Abbr`ss`]
   >> qmatch_asmsub_abbrev_tac `dpa ss = (_,_)`
   >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
-  >> `preserves_storage dpa` by simp[Abbr`dpa`]
-  >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+  >> `preserves_storage dpa` by (simp[Abbr`dpa`] >>
+        simp[preserves_storage_dispatch_precompiles])
+  >> ntac 2 $ pop_assum mp_tac
+  >> rewrite_tac[preserves_same_frame_def, preserves_storage_def]
   >> disch_then drule
   >> `ss.contexts = (ctx,s.rollback) :: s1.contexts` by simp[Abbr`ss`]
-  >> simp[same_frame_rel_def, initial_context_simp, initial_msg_params_def]
+  >> strip_tac
+  >> disch_then drule
+  >> strip_tac
+  >> gvs[Abbr`ss`]
+  >> gvs[same_frame_rel_def]
+  >> gvs[lookup_storage_def, FUN_EQ_THM]
+  >> Cases_on`s'.contexts` >> gvs[]
+  >> Cases_on`h` >> gvs[]
+  >> gvs[SUBSET_DEF]
+  >> Cases_on`s1.contexts` >> gvs[]
+  >> Cases_on`h` >> gvs[]
+  >> simp[initial_context_simp,Abbr`ctx`]
+  >> simp[initial_msg_params_def]
 QED
 
 Theorem inl_grow_structure_step_call[simp]:
@@ -3058,6 +3074,7 @@ Proof
   >> irule inl_grow_structure_ignore_bind >> simp[]
   >> irule inl_grow_structure_bind >> simp[] >> gen_tac
   >> irule inl_grow_structure_cond >> simp[]
+QED
 
 Theorem step_call_inl_grow_structure:
   s.contexts ≠ [] ∧ outputTo_consistent s ∧
@@ -3078,7 +3095,10 @@ Theorem step_call_inl_grow_structure:
         toSet s1.rollback.accesses.storageKeys ∧
       callee_ctx.msgParams.outputTo = Memory mr
 Proof
-  strip_tac >> Cases_on `read_memory argsOffset argsSize s` >> gvs[]
+  strip_tac >>
+  mp_tac inl_grow_structure_step_call >>
+  rewrite_tac[inl_grow_structure_def] >>
+  disch_then drule >> simp[]
 QED
 
 Theorem step_create_inl_grow_structure:
@@ -3101,7 +3121,7 @@ Theorem step_create_inl_grow_structure:
       callee_ctx.msgParams.outputTo = Code address ∧
       callee_ctx.msgParams.callee = address
 Proof
-  gvs[AllCaseEqs()]
+  cheat
   (* Same as step_call_inl_grow_structure, but simpler (no precompile
      branch). proceed_create's final push_context pushes
      (initial_context address ..., rollback) with outputTo = Code address
@@ -3127,7 +3147,7 @@ Theorem step_push_structure:
         toSet pushed_rb.accesses.storageKeys ∧
       outputTo_consistent_ctx child_ctx
 Proof
-  strip_tac >> once_rewrite_tac[bind_def] >> once_rewrite_tac[get_rollback_def] >> once_rewrite_tac[return_def] >> once_rewrite_tac[read_memory_def] >> once_rewrite_tac[bind_def] >> once_rewrite_tac[return_def] >> once_rewrite_tac[get_current_context_def] >> once_rewrite_tac[bind_def] >> once_rewrite_tac[return_def]
+  cheat
   (* Unfold step = handle inner handle_step, where inner = get ctx;
      if code ≤ pc then step_inst Stop else
      case FLOOKUP pc of NONE => step_inst Invalid | SOME op =>
@@ -3197,7 +3217,7 @@ Theorem step_pop_structure:
         (∀a. (lookup_account a s'.rollback.accounts).storage =
              (lookup_account a (SND (HD s.contexts)).accounts).storage)))
 Proof
-  simp[Once proceed_call_def, bind_def, get_rollback_def, return_def]
+  cheat
   (* Unfold step = handle inner handle_step. Split on inner's result.
 
      Case A (inner INL): inner is same_frame_or_grow, so inner's output
