@@ -1661,8 +1661,334 @@ Theorem is_call_same_frame_preserves_storage:
 Proof
   strip_tac
   >> Cases_on `op` >> fs[is_call_def, step_inst_def]
-  >> metis_tac[step_call_same_frame_preserves_storage,
-               step_create_same_frame_preserves_storage]
+  >> (drule step_call_same_frame_preserves_storage ORELSE
+      drule step_create_same_frame_preserves_storage ) >> rw[]
+QED
+
+(* =====================================================================
+ * Pushed-rollback storage lemmas.
+ *
+ * When step_call / step_create grows contexts by +1, the saved
+ * rollback at the new head (SND (HD s'.contexts)) has the same
+ * .accounts.storage as s.rollback.accounts.storage.
+ *
+ * Proof sketch (for when these are discharged, not cheated):
+ *   - step_call/step_create run preserves_storage primitives until
+ *     they reach proceed_call/proceed_create.
+ *   - proceed_call/proceed_create:
+ *       rollback <- get_rollback;       (* captures rb with same storage *)
+ *       ... preserves_storage prefix ...
+ *       push_context (context, rollback);
+ *       (optional) dispatch_precompiles (preserves_rollback; doesn't touch SND HD)
+ *   - After push_context, SND (HD s'.contexts) = rollback captured above,
+ *     whose .accounts.storage equals s.rollback.accounts.storage.
+ *   - The subsequent ops (set_current_context inside precompiles,
+ *     consume_gas, set_return_data, finish) only touch FST (HD contexts)
+ *     or s.rollback, never SND (HD contexts).
+ * ===================================================================== *)
+
+(* Intermediate: proceed_call captures s.rollback as the pushed rollback.
+   Since get_rollback is the first thing that matters and nothing before
+   it touches storage, the captured rollback's .accounts.storage equals
+   s.rollback.accounts.storage. dispatch_precompiles afterwards is
+   preserves_same_frame, so SND (HD ·) is unchanged. *)
+Theorem proceed_call_pushed_rb_storage:
+  proceed_call op sender address value argsOffset argsSize code stipend
+                outputTo s = (r, s') ∧ s.contexts ≠ [] ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  ∀a. (lookup_account a (SND (HD s'.contexts)).accounts).storage =
+      (lookup_account a s.rollback.accounts).storage
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_call` mp_tac
+  >> simp[proceed_call_def]
+  (* get_rollback captures s.rollback. *)
+  >> simp[bind_def, get_rollback_def, return_def]
+  >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
+  >> qmatch_goalsub_abbrev_tac `ignore_bind g`
+  >> simp[ignore_bind_def, Once bind_def]
+  >> TOP_CASE_TAC
+  >> qmatch_asmsub_rename_tac `g s = (q, s1)`
+  (* g is either update_accounts (transfer_value ...) or return () — both
+     preserve storage of s.rollback.accounts at every address. *)
+  >> `∀a. (lookup_account a s1.rollback.accounts).storage =
+         (lookup_account a s.rollback.accounts).storage`
+      by (`preserves_storage g`
+            by (simp[Abbr`g`] >> IF_CASES_TAC >> simp[])
+          >> fs[preserves_storage_def] >> first_x_assum drule >>
+          rw[lookup_storage_def] >> gvs[FUN_EQ_THM])
+  >> `ISL q` by (gvs[Abbr`g`,AllCaseEqs(),COND_RATOR,return_def,
+                     update_accounts_def])
+  >> TOP_CASE_TAC >> gvs[]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_caller_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_caller_def, return_def, get_current_context_def]
+  >> IF_CASES_TAC >> gvs[fail_def] >- (rw[] >> gvs[])
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_value_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_value_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_static_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_static_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> TOP_CASE_TAC
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  (* After push_context: HD = (context, s1.rollback-like). Specifically,
+     push_context (c, rollback) where `rollback` was captured by get_rollback
+     after g ran. So HD s_after_push.contexts = (c, s1.rollback). *)
+  >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
+  >> reverse IF_CASES_TAC >> simp[return_def]
+  >- ((* No precompile: result state has HD = (ctx, s1.rollback). *)
+      strip_tac >> gvs[])
+  (* Precompile: dispatch_precompiles runs after push. It is
+     preserves_same_frame at the new depth, so SND (HD ·) is invariant. *)
+  >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_, s')`
+  >> `ss.contexts ≠ []` by simp[Abbr`ss`]
+  >> qmatch_asmsub_abbrev_tac`dpa ss = (_,_)`
+  >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
+  >> pop_assum mp_tac
+  >> rewrite_tac[preserves_same_frame_def]
+  >> disch_then drule
+  >> `ss.contexts = (ctx, s.rollback) :: s1.contexts` by simp[Abbr`ss`]
+  >> simp[same_frame_rel_def]
+QED
+
+(* Intermediate: proceed_create captures s.rollback (post increment_nonce)
+   as the pushed rollback. increment_nonce and set_original do not touch
+   s.rollback.accounts.storage. transfer_value happens AFTER get_rollback,
+   so it doesn't affect the captured rollback. *)
+Theorem proceed_create_pushed_rb_storage:
+  proceed_create senderAddress address value code cappedGas s = (r, s') ∧
+  s.contexts ≠ [] ∧ LENGTH s'.contexts > LENGTH s.contexts ⇒
+  ∀a. (lookup_account a (SND (HD s'.contexts)).accounts).storage =
+      (lookup_account a s.rollback.accounts).storage
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_create` mp_tac
+  >> simp[proceed_create_def]
+  (* update_accounts (increment_nonce senderAddress) *)
+  >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
+  (* get_rollback: captures increment_nonce'd rollback. *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_rollback_def, return_def]
+  (* get_original / set_original: don't modify s.rollback. *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_original_def, return_def, fail_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[set_original_def, return_def, fail_def]
+  (* update_accounts (transfer_value o increment_nonce): modifies s.rollback,
+     but the captured `rollback` variable already holds the pre-transfer one. *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[update_accounts_def, return_def]
+  (* push_context. *)
+  >> strip_tac
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  (* After push: HD s'.contexts = (ctx, rollback-with-incremented-nonce).
+     increment_nonce preserves storage at every address. *)
+  >> rw[lookup_account_def, increment_nonce_def,
+        combinTheory.APPLY_UPDATE_THM, finite_mapTheory.FLOOKUP_UPDATE]
+  >> gvs[update_account_def, APPLY_UPDATE_THM]
+  >> rw[]
+QED
+
+(* Wrapper: step_call runs preserves_storage primitives (pop_stack, consume_gas,
+   memory_expansion, access_address, ...) until it reaches either an abort
+   branch (which does not grow) or proceed_call (which grows and is handled
+   by proceed_call_pushed_rb_storage above). For the grow case, the state
+   just before proceed_call has the same storage as s (by preserves_storage
+   of all the prefix ops), so proceed_call_pushed_rb_storage gives us what
+   we need. *)
+(* Helper principle: if a monad m is preserves_storage and
+   preserves_same_frame, and bind m f s = (r, s'), then we can
+   replace s by an intermediate s_mid — with same storage and
+   contexts as s — and reduce to proving the property for f at s_mid. *)
+
+(* We use the following shape for step_call/step_create:
+
+     step_call = do ...preserves_storage_prefix... ;
+                    if cond1 then abort_call_value stipend
+                    else do ...preserves_storage_prefix'... ;
+                           if cond2 then abort_unuse stipend
+                           else proceed_call ... od od
+
+   The prefixes are preserves_storage + preserves_same_frame. The two
+   abort branches are preserves_same_frame (hence don't grow contexts).
+   Only proceed_call grows. *)
+
+(* -----------------------------------------------------------------
+ * preserves_pushed_rb_storage: a monad m preserves the pushed rollback
+ * storage at every address that was valid before m ran.
+ *
+ * Formally: if m s = (r, s') and LENGTH s'.contexts > LENGTH s.contexts
+ * then the new top frame's saved rollback has the same .accounts.storage
+ * as s.rollback.accounts.storage at every address.
+ *
+ * This lets us compose: a bind of two ops that each "preserves pushed rb
+ * storage when growing" does so. A preserves_storage + preserves_same_frame
+ * prefix IS `preserves_pushed_rb_storage` vacuously (it can't grow).
+ * ----------------------------------------------------------------- *)
+Definition preserves_pushed_rb_storage_def:
+  preserves_pushed_rb_storage (m : α execution) ⇔
+    ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ∧
+             LENGTH s'.contexts > LENGTH s.contexts ⇒
+      ∀a. (lookup_account a (SND (HD s'.contexts)).accounts).storage =
+          (lookup_account a s.rollback.accounts).storage
+End
+
+(* preserves_storage + preserves_same_frame ⇒ preserves_pushed_rb_storage
+   vacuously (same_frame rules out LENGTH growth). *)
+Theorem preserves_pushed_rb_storage_of_same_frame[simp]:
+  preserves_same_frame m ⇒ preserves_pushed_rb_storage m
+Proof
+  rw[preserves_same_frame_def, preserves_pushed_rb_storage_def]
+  >> first_x_assum drule >> simp[same_frame_rel_def]
+QED
+
+(* bind composition: if g preserves_pushed_rb_storage AND
+   (preserves_storage g ∧ preserves_same_frame g), and f x
+   preserves_pushed_rb_storage for all x, then bind g f does. *)
+Theorem preserves_pushed_rb_storage_bind:
+  preserves_storage g ∧ preserves_same_frame g ∧
+  (∀x. preserves_pushed_rb_storage (f x)) ⇒
+  preserves_pushed_rb_storage (bind g f)
+Proof
+  rw[preserves_pushed_rb_storage_def, bind_def]
+  >> gvs[AllCaseEqs()]
+  >> fs[preserves_storage_def, preserves_same_frame_def]
+  >> rpt (first_x_assum drule) >> simp[same_frame_rel_def] >> strip_tac
+  >> rpt strip_tac
+  (* intermediate s_mid after g: same contexts, same storage. *)
+  >> qmatch_asmsub_rename_tac `g s = (_, s_mid)`
+  >> `s_mid.contexts ≠ []` by (Cases_on `s.contexts` >> Cases_on `s_mid.contexts` >> fs[])
+  >> `LENGTH s'.contexts > LENGTH s_mid.contexts` by fs[]
+  >> first_x_assum drule >> simp[]
+  >> disch_then (qspec_then `a` mp_tac) >> simp[]
+  >> gvs[lookup_storage_def, FUN_EQ_THM]
+QED
+
+Theorem preserves_pushed_rb_storage_ignore_bind:
+  preserves_storage g ∧ preserves_same_frame g ∧
+  preserves_pushed_rb_storage f ⇒
+  preserves_pushed_rb_storage (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  >> irule preserves_pushed_rb_storage_bind >> rw[]
+QED
+
+Theorem preserves_pushed_rb_storage_cond[simp]:
+  preserves_pushed_rb_storage m1 ∧ preserves_pushed_rb_storage m2 ⇒
+  preserves_pushed_rb_storage (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+(* Base case: proceed_call preserves pushed rb storage. *)
+Theorem preserves_pushed_rb_storage_proceed_call[simp]:
+  preserves_pushed_rb_storage
+    (proceed_call op sender address value argsOffset argsSize
+                  code stipend outputTo)
+Proof
+  rw[preserves_pushed_rb_storage_def]
+  >> drule_all proceed_call_pushed_rb_storage
+  >> simp[]
+QED
+
+Theorem preserves_pushed_rb_storage_proceed_create[simp]:
+  preserves_pushed_rb_storage
+    (proceed_create senderAddress address value code cappedGas)
+Proof
+  rw[preserves_pushed_rb_storage_def]
+  >> drule_all proceed_create_pushed_rb_storage
+  >> simp[]
+QED
+
+(* Now step_call = a bunch of preserves_storage+preserves_same_frame
+   primitives followed by either abort_call_value (which is
+   preserves_same_frame, vacuously preserves_pushed_rb_storage),
+   abort_unuse (likewise), or proceed_call. *)
+Theorem preserves_pushed_rb_storage_step_call[simp]:
+  preserves_pushed_rb_storage (step_call op)
+Proof
+  simp[step_call_def]
+  (* Shape mirrors preserves_storage_step_call's proof. Every bind
+     prefix is preserves_storage + preserves_same_frame; use the
+     bind rule with those two side conditions. *)
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_bind >> simp[]
+  >> reverse conj_tac >- (CASE_TAC >> simp[])
+  >> Cases >> simp[]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_cond >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_cond >> simp[]
+QED
+
+(* abort_create_exists doesn't grow contexts, so vacuously preserves
+   pushed-rb storage. Unlike abort_call_value/abort_unuse, it is NOT
+   unconditionally preserves_same_frame (it requires the sender address
+   to match the current callee), so we prove it from the length lemma. *)
+Theorem preserves_pushed_rb_storage_abort_create_exists[simp]:
+  preserves_pushed_rb_storage (abort_create_exists a)
+Proof
+  rw[preserves_pushed_rb_storage_def]
+  >> drule_all abort_create_exists_length
+  >> simp[]
+QED
+
+Theorem preserves_pushed_rb_storage_step_create[simp]:
+  preserves_pushed_rb_storage (step_create two)
+Proof
+  simp[step_create_def]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> rpt (irule preserves_pushed_rb_storage_ignore_bind >> simp[])
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
+  >> rpt (irule preserves_pushed_rb_storage_ignore_bind >> simp[])
+  >> irule preserves_pushed_rb_storage_cond >> simp[]
+  >> irule preserves_pushed_rb_storage_cond >> simp[]
+QED
+
+(* Final user-facing lemmas. *)
+Theorem step_call_pushed_rb_storage:
+  ∀op s r s'. step_call op s = (r, s') ∧ s.contexts ≠ [] ∧
+    LENGTH s'.contexts > LENGTH s.contexts ⇒
+    ∀a. (lookup_account a (SND (HD s'.contexts)).accounts).storage =
+        (lookup_account a s.rollback.accounts).storage
+Proof
+  metis_tac[preserves_pushed_rb_storage_step_call,
+            preserves_pushed_rb_storage_def]
+QED
+
+Theorem step_create_pushed_rb_storage:
+  ∀two s r s'. step_create two s = (r, s') ∧ s.contexts ≠ [] ∧
+    LENGTH s'.contexts > LENGTH s.contexts ⇒
+    ∀a. (lookup_account a (SND (HD s'.contexts)).accounts).storage =
+        (lookup_account a s.rollback.accounts).storage
+Proof
+  metis_tac[preserves_pushed_rb_storage_step_create,
+            preserves_pushed_rb_storage_def]
 QED
 
 (* A helper: the gas/return-data prefix of handle_exception is preserves_rollback. *)
@@ -1784,116 +2110,6 @@ Proof
   >> `s'.rollback = s''.rollback`
        by metis_tac[handle_exception_same_length_preserves_rollback]
   >> simp[]
-QED
-
-(* Unfold step = handle inner handle_step. For the same_frame case,
-   we have four sub-cases to analyse:
-     (A) inner INL, no-grow → step s = inner s with s' = inner's s'.
-     (B) inner INR, no-grow → handle_step reraised, s' = inner's s'.
-     (C) inner INL, grew → contradicts same_frame (can't happen).
-     (D) inner INR, grew + handle_step popped.
-   Cases (A) and (B) reduce to step_inst behavior, where
-   step_inst_preserves_non_accessed_storage applies.
-   Case (C) is vacuous.
-   Case (D) requires push structure. *)
-Theorem step_preserves_non_accessed_storage:
-  ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
-    outputTo_consistent s ∧
-    same_frame_rel s s' ⇒
-  ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
-    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
-    lookup_storage k (lookup_account a s.rollback.accounts).storage
-Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
-  >> reverse (Cases_on `a = (FST (HD s.contexts)).msgParams.callee`)
-  >- (
-    (* Non-callee address: callee_local_changes gives equality directly. *)
-    `(lookup_account a s'.rollback.accounts).storage =
-     (lookup_account a s.rollback.accounts).storage`
-       by fs[same_frame_rel_def, callee_local_changes_def]
-    >> simp[])
-  (* Callee address. Unfold step = handle inner handle_step and
-     analyse the cases. *)
-  >> `¬fIN (SK a k) s.rollback.accesses.storageKeys` by (
-       `toSet s.rollback.accesses.storageKeys ⊆
-        toSet s'.rollback.accesses.storageKeys`
-          by fs[same_frame_rel_def]
-       >> fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
-       >> metis_tac[])
-  (* Unfold step = handle inner handle_step. *)
-  >> qhdtm_x_assum `step` mp_tac
-  >> simp[step_def, handle_def]
-  >> qmatch_goalsub_abbrev_tac `pair_CASE (inner s)`
-  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
-  >> Cases_on `inner s` >> Cases_on `q` >> simp[]
-  >- (
-    (* inner INL: step returns inner result. *)
-    strip_tac >> gvs[]
-    (* Unfold inner to get the actual primitives that ran. *)
-    >> qhdtm_x_assum `Abbrev` mp_tac
-    >> simp[markerTheory.Abbrev_def]
-    >> disch_then SUBST_ALL_TAC
-    >> qpat_x_assum `_ s = (INL (), r')` mp_tac
-    >> simp[bind_def, ignore_bind_def]
-    >> simp[get_current_context_def, return_def, fail_def]
-    >> Cases_on `s.contexts` >> gvs[]
-    >> Cases_on `LENGTH (FST h).msgParams.code ≤ (FST h).pc` >> gvs[]
-    >- (
-      (* Stop case. *)
-      strip_tac
-      >> drule step_inst_preserves_non_accessed_storage
-      >> simp[is_call_def]
-      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
-      >> simp[])
-    >> Cases_on `FLOOKUP (FST h).msgParams.parsed (FST h).pc` >> gvs[]
-    >- (
-      (* Invalid case. *)
-      strip_tac
-      >> drule step_inst_preserves_non_accessed_storage
-      >> simp[is_call_def]
-      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
-      >> simp[])
-    (* SOME op: step_inst op; inc_pc_or_jump op. *)
-    >> strip_tac
-    >> gvs[bind_def, ignore_bind_def, AllCaseEqs()]
-    >> rename1 `step_inst op s = (INL _, r_mid)`
-    >> `r_mid.rollback = r'.rollback`
-         by (mp_tac preserves_rollback_inc_pc_or_jump
-             >> rewrite_tac[preserves_rollback_def]
-             >> disch_then drule
-             >> simp[])
-    >> `s.contexts ≠ []` by (strip_tac >> fs[])
-    >> Cases_on `is_call op`
-    >- (
-      (* Call/Create family: step_inst returned INL with same frame length
-         (since inc_pc_or_jump is same_frame and r' has same length as s).
-         This means an abort path ran — no storage written. *)
-      `r_mid.contexts ≠ []` by (
-         `(SND (step_inst op s)).contexts ≠ []`
-            by metis_tac[step_inst_preserves_nonempty_contexts]
-         >> rev_full_simp_tac std_ss [])
-      >> `LENGTH r_mid.contexts = LENGTH s.contexts` by (
-         `LENGTH r'.contexts = LENGTH r_mid.contexts` by (
-            `preserves_same_frame (inc_pc_or_jump op)` by simp[]
-            >> metis_tac[psf_imp_length_contexts_preserved])
-         >> fs[same_frame_rel_def])
-      >> drule_all is_call_same_frame_preserves_storage
-      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
-      >> simp[])
-    >> drule step_inst_preserves_non_accessed_storage
-    >> simp[]
-    >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
-    >> simp[])
-  >> (
-    (* inner INR: handle_step runs. Full case analysis requires:
-       - If same_frame_rel s r': storage preserved from s to r'
-         (via step_inst_preserves_non_accessed_storage), then
-         handle_step r' → s' preserves storage at every slot
-         (via handle_step_preserves_storage_same_length).
-       - If inner grew: inner was a Call family op. pushed_rb has
-         same storage as s. handle_step popped back.
-       Infrastructure in place. Final assembly is mechanical. *)
-    cheat)
 QED
 
 (* =====================================================================
@@ -2104,6 +2320,47 @@ Proof
   >> gvs[lookup_storage_def, FUN_EQ_THM]
 QED
 
+(* When starting with exactly one context, handle_step cannot pop
+   (pop requires n > 1), so contexts length is preserved. *)
+Theorem handle_step_preserves_length_1:
+  handle_step e s = (q, s') ∧ LENGTH s.contexts = 1 ⇒
+  LENGTH s'.contexts = 1
+Proof
+  strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def]
+  >> reverse IF_CASES_TAC >> simp[]
+  >> TRY (simp[reraise_def] >> strip_tac >> gvs[] >> NO_TAC)
+  >> simp[handle_def]
+  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
+  >> drule_then (qspec_then `e` mp_tac)
+       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> strip_tac >> simp[]
+  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
+  >> drule_all handle_create_preserves_length
+  >> strip_tac
+  >> `LENGTH s1.contexts = 1` by simp[]
+  >> simp[Once handle_exception_def]
+  >> simp[ignore_bind_def, Once bind_def]
+  >> qmatch_goalsub_abbrev_tac `pair_CASE (prefix s1)`
+  >> `preserves_same_frame prefix` by (
+       simp[Abbr`prefix`]
+       >> IF_CASES_TAC >> simp[]
+       >> irule preserves_same_frame_ignore_bind >> simp[]
+       >> irule preserves_same_frame_bind >> simp[])
+  >> Cases_on `prefix s1`
+  >> qmatch_asmsub_rename_tac `prefix s1 = (res, sp)`
+  >> `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> fs[])
+  >> `same_frame_rel s1 sp` by (
+       Cases_on `res` >> metis_tac[preserves_same_frame_def])
+  >> `LENGTH sp.contexts = 1` by fs[same_frame_rel_def]
+  >> reverse (Cases_on `res`) >> simp[]
+  >- (strip_tac >> gvs[])
+  >> simp[Once bind_def, get_num_contexts_def, return_def]
+  >> simp[reraise_def]
+  >> strip_tac >> gvs[]
+QED
+
 (* handle_step reduces contexts by at most one. *)
 Theorem handle_step_shrinks_by_one:
   handle_step e s = (q, s') ∧ s.contexts ≠ [] ⇒
@@ -2126,6 +2383,300 @@ Proof
   >> strip_tac
   >> imp_res_tac handle_exception_shrinks_by_one
   >> fs[]
+QED
+
+(* Unfold step = handle inner handle_step. For the same_frame case,
+   we have four sub-cases to analyse:
+     (A) inner INL, no-grow → step s = inner s with s' = inner's s'.
+     (B) inner INR, no-grow → handle_step reraised, s' = inner's s'.
+     (C) inner INL, grew → contradicts same_frame (can't happen).
+     (D) inner INR, grew + handle_step popped.
+   Cases (A) and (B) reduce to step_inst behavior, where
+   step_inst_preserves_non_accessed_storage applies.
+   Case (C) is vacuous.
+   Case (D) requires push structure. *)
+Theorem step_preserves_non_accessed_storage:
+  ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
+    outputTo_consistent s ∧
+    same_frame_rel s s' ⇒
+  ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    lookup_storage k (lookup_account a s.rollback.accounts).storage
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
+  >> reverse (Cases_on `a = (FST (HD s.contexts)).msgParams.callee`)
+  >- (
+    (* Non-callee address: callee_local_changes gives equality directly. *)
+    `(lookup_account a s'.rollback.accounts).storage =
+     (lookup_account a s.rollback.accounts).storage`
+       by fs[same_frame_rel_def, callee_local_changes_def]
+    >> simp[])
+  (* Callee address. Unfold step = handle inner handle_step and
+     analyse the cases. *)
+  >> `¬fIN (SK a k) s.rollback.accesses.storageKeys` by (
+       `toSet s.rollback.accesses.storageKeys ⊆
+        toSet s'.rollback.accesses.storageKeys`
+          by fs[same_frame_rel_def]
+       >> fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+       >> metis_tac[])
+  (* Unfold step = handle inner handle_step. *)
+  >> qhdtm_x_assum `step` mp_tac
+  >> simp[step_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `pair_CASE (inner s)`
+  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
+  >> Cases_on `inner s` >> Cases_on `q` >> simp[]
+  >- (
+    (* inner INL: step returns inner result. *)
+    strip_tac >> gvs[]
+    (* Unfold inner to get the actual primitives that ran. *)
+    >> qhdtm_x_assum `Abbrev` mp_tac
+    >> simp[markerTheory.Abbrev_def]
+    >> disch_then SUBST_ALL_TAC
+    >> qpat_x_assum `_ s = (INL (), r')` mp_tac
+    >> simp[bind_def, ignore_bind_def]
+    >> simp[get_current_context_def, return_def, fail_def]
+    >> Cases_on `s.contexts` >> gvs[]
+    >> Cases_on `LENGTH (FST h).msgParams.code ≤ (FST h).pc` >> gvs[]
+    >- (
+      (* Stop case. *)
+      strip_tac
+      >> drule step_inst_preserves_non_accessed_storage
+      >> simp[is_call_def]
+      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
+      >> simp[])
+    >> Cases_on `FLOOKUP (FST h).msgParams.parsed (FST h).pc` >> gvs[]
+    >- (
+      (* Invalid case. *)
+      strip_tac
+      >> drule step_inst_preserves_non_accessed_storage
+      >> simp[is_call_def]
+      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
+      >> simp[])
+    (* SOME op: step_inst op; inc_pc_or_jump op. *)
+    >> strip_tac
+    >> gvs[bind_def, ignore_bind_def, AllCaseEqs()]
+    >> rename1 `step_inst op s = (INL _, r_mid)`
+    >> `r_mid.rollback = r'.rollback`
+         by (mp_tac preserves_rollback_inc_pc_or_jump
+             >> rewrite_tac[preserves_rollback_def]
+             >> disch_then drule
+             >> simp[])
+    >> `s.contexts ≠ []` by (strip_tac >> fs[])
+    >> Cases_on `is_call op`
+    >- (
+      (* Call/Create family: step_inst returned INL with same frame length
+         (since inc_pc_or_jump is same_frame and r' has same length as s).
+         This means an abort path ran — no storage written. *)
+      `r_mid.contexts ≠ []` by (
+         `(SND (step_inst op s)).contexts ≠ []`
+            by metis_tac[step_inst_preserves_nonempty_contexts]
+         >> rev_full_simp_tac std_ss [])
+      >> `LENGTH r_mid.contexts = LENGTH s.contexts` by (
+         `LENGTH r'.contexts = LENGTH r_mid.contexts` by (
+            `preserves_same_frame (inc_pc_or_jump op)` by simp[]
+            >> metis_tac[psf_imp_length_contexts_preserved])
+         >> fs[same_frame_rel_def])
+      >> drule_all is_call_same_frame_preserves_storage
+      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
+      >> simp[])
+    >> drule step_inst_preserves_non_accessed_storage
+    >> simp[]
+    >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
+    >> simp[])
+  >> strip_tac >>
+  qhdtm_x_assum`same_frame_or_grow`mp_tac >>
+  simp[same_frame_or_grow_def] >> disch_then drule >> simp[] >>
+  strip_tac >- (
+    qpat_x_assum`inner _ = _`mp_tac >>
+    simp[Abbr`inner`, bind_def,AllCaseEqs()] >>
+    simp[get_current_context_def, return_def, COND_RATOR, AllCaseEqs()] >>
+    strip_tac >- (
+      drule step_inst_preserves_non_accessed_storage >>
+      simp[is_call_def] >>
+      disch_then(qspecl_then[`a`,`k`]mp_tac) >>
+      impl_keep_tac >- (
+        gvs[step_inst_def, bind_def, ignore_bind_def,
+            set_return_data_def, finish_def, AllCaseEqs(),
+            get_current_context_def,set_current_context_def,
+            return_def,fail_def] ) >>
+      disch_then $ assume_tac o SYM >> gvs[] >>
+      irule handle_step_preserves_storage_same_length >>
+      drule same_frame_rel_contexts_ne >> simp[] >> strip_tac >>
+      conj_asm1_tac >- (
+        gvs[same_frame_rel_def] >>
+        gvs[outputTo_consistent_def] ) >>
+      reverse conj_tac >- goal_assum drule >>
+      fs[same_frame_rel_def] ) >>
+    gvs[AllCaseEqs(),option_CASE_rator] >- (
+      drule step_inst_preserves_non_accessed_storage >>
+      simp[is_call_def] >>
+      qmatch_goalsub_abbrev_tac`lookup_account a` >>
+      disch_then(qspecl_then[`a`,`k`]mp_tac) >>
+      impl_keep_tac >- (
+        gvs[step_inst_def, bind_def, ignore_bind_def,
+            set_return_data_def, finish_def, AllCaseEqs(),
+            get_current_context_def,set_current_context_def,
+            return_def,fail_def] ) >>
+      disch_then $ assume_tac o SYM >> gvs[] >>
+      irule handle_step_preserves_storage_same_length >>
+      drule same_frame_rel_contexts_ne >> simp[] >> strip_tac >>
+      conj_asm1_tac >- (
+        gvs[same_frame_rel_def] >>
+        gvs[outputTo_consistent_def] ) >>
+      reverse conj_tac >- goal_assum drule >>
+      fs[same_frame_rel_def] ) >>
+    pop_assum mp_tac >>
+    simp[ignore_bind_def,bind_def] >>
+    TOP_CASE_TAC >> strip_tac >>
+    reverse (Cases_on `q`) >> gvs[] >- (
+      (* step_inst op s = (INR y, r' = r'') *)
+      Cases_on `is_call op` >- (
+        (* call op INR same-length: use preserves_storage_step_call/create *)
+        `lookup_storage k
+            (lookup_account (FST (HD s.contexts)).msgParams.callee
+               r'.rollback.accounts).storage =
+         lookup_storage k
+            (lookup_account (FST (HD s.contexts)).msgParams.callee
+               s.rollback.accounts).storage` by (
+          Cases_on `op` >> fs[is_call_def, step_inst_def]
+          >> metis_tac[preserves_storage_step_call, preserves_storage_step_create,
+                       preserves_storage_def])
+        >> irule EQ_TRANS
+        >> qexists `lookup_storage k
+                      (lookup_account (FST (HD s.contexts)).msgParams.callee
+                         r'.rollback.accounts).storage`
+        >> reverse conj_tac >- metis_tac[]
+        >> irule handle_step_preserves_storage_same_length
+        >> drule same_frame_rel_contexts_ne >> simp[] >> strip_tac
+        >> conj_asm1_tac >- (gvs[same_frame_rel_def] >> gvs[outputTo_consistent_def])
+        >> reverse conj_tac >- goal_assum drule
+        >> fs[same_frame_rel_def])
+      >> (* non-call op *)
+         `outputTo_consistent r'` by (
+           fs[outputTo_consistent_def]
+           >> `r'.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+           >> `(FST (HD r'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`
+                by fs[same_frame_rel_def]
+           >> simp[])
+         >> `LENGTH s'.contexts = LENGTH r'.contexts` by fs[same_frame_rel_def]
+         >> `same_frame_rel r' s'` by metis_tac[handle_step_same_frame]
+         >> drule step_inst_preserves_non_accessed_storage >> simp[]
+         >> disch_then (qspecl_then [`(FST (HD s.contexts)).msgParams.callee`, `k`] mp_tac)
+         >> impl_keep_tac
+         >- (`toSet r'.rollback.accesses.storageKeys ⊆
+              toSet s'.rollback.accesses.storageKeys`
+               by fs[same_frame_rel_def]
+             >> fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+             >> metis_tac[])
+         >> strip_tac
+         >> pop_assum $ assume_tac o SYM >> gvs[]
+         >> irule handle_step_preserves_storage_same_length
+         >> drule same_frame_rel_contexts_ne >> simp[] >> strip_tac
+         >> reverse conj_tac >- goal_assum drule
+         >> imp_res_tac same_frame_rel_contexts_ne)
+    >> (* step_inst op s = (INL x, r''), inc_pc_or_jump op r'' = (INR y, r').
+          Jump ops can fail with InvalidJumpDest. We handle this by first
+          using step_inst_preserves_non_accessed_storage on s → r''
+          (for non-call ops), then inc_pc_or_jump preserves rollback
+          (storage and accesses unchanged), so r' ≡ r'' on rollback. *)
+       Cases_on `is_call op`
+       >- ((* is_call op + step_inst INL + inc_pc_or_jump INR: impossible.
+              For is_call op, inc_pc_or_jump op = return () which always
+              returns (INL (), r). So INR is impossible. *)
+           fs[inc_pc_or_jump_def, return_def])
+       >> (* non-call op case *)
+          `outputTo_consistent r'` by (
+            fs[outputTo_consistent_def]
+            >> `r'.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
+            >> `(FST (HD r'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`
+                 by fs[same_frame_rel_def]
+            >> simp[])
+          >> `LENGTH s'.contexts = LENGTH r'.contexts` by fs[same_frame_rel_def]
+          >> `same_frame_rel r' s'` by metis_tac[handle_step_same_frame]
+          >> `lookup_storage k
+                (lookup_account (FST (HD s.contexts)).msgParams.callee
+                   r'.rollback.accounts).storage =
+              lookup_storage k
+                (lookup_account (FST (HD s.contexts)).msgParams.callee
+                   s.rollback.accounts).storage` by (
+             (* Chain: s → r'' (step_inst) → r' (inc_pc_or_jump).
+                inc_pc_or_jump preserves_rollback, so r'.rollback = r''.rollback.
+                step_inst_preserves_non_accessed_storage gives storage r'' = storage s
+                at non-accessed slots. *)
+             qhdtm_x_assum `step_inst` assume_tac
+             >> drule step_inst_preserves_non_accessed_storage
+             >> simp[]
+             >> disch_then (qspecl_then
+                 [`(FST (HD s.contexts)).msgParams.callee`, `k`] mp_tac)
+             >> `r'.rollback = r''.rollback` by (
+                mp_tac preserves_rollback_inc_pc_or_jump
+                >> rewrite_tac[preserves_rollback_def]
+                >> disch_then drule >> simp[])
+             >> fs[]
+             >> impl_tac
+             >- (`toSet r''.rollback.accesses.storageKeys ⊆
+                  toSet s'.rollback.accesses.storageKeys`
+                    by (`r''.rollback = r'.rollback` by simp[]
+                        >> fs[same_frame_rel_def])
+                 >> fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+                 >> metis_tac[])
+             >> strip_tac >> fs[])
+          >> pop_assum $ assume_tac o SYM >> gvs[]
+          >> irule handle_step_preserves_storage_same_length
+          >> simp[]
+          >> reverse conj_tac >- goal_assum drule
+          >> imp_res_tac same_frame_rel_contexts_ne) >>
+  `LENGTH s'.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def] >>
+  gvs[Abbr`inner`,bind_def,AllCaseEqs(),get_current_context_def,return_def] >>
+  gvs[COND_RATOR,AllCaseEqs()] >- (
+    `¬is_call Stop` by simp[is_call_def] >>
+    drule preserves_same_frame_step_inst_not_call >>
+    rewrite_tac[preserves_same_frame_def] >>
+    disch_then drule >> simp[] >>
+    simp[same_frame_rel_def] ) >>
+  gvs[option_CASE_rator,AllCaseEqs()] >- (
+    `¬is_call Invalid` by simp[is_call_def] >>
+    drule preserves_same_frame_step_inst_not_call >>
+    rewrite_tac[preserves_same_frame_def] >>
+    disch_then drule >> simp[] >>
+    simp[same_frame_rel_def] ) >>
+  qpat_x_assum`_ = (INR _, _)`mp_tac >>
+  simp[ignore_bind_def,bind_def] >> TOP_CASE_TAC >>
+  reverse $ Cases_on`is_call op` >- (
+    drule preserves_same_frame_step_inst_not_call >>
+    rewrite_tac[preserves_same_frame_def] >>
+    disch_then drule >> simp[] >>
+    simp[same_frame_rel_def] >> strip_tac >>
+    CASE_TAC >> rw[] >> gvs[] >>
+    mp_tac preserves_same_frame_inc_pc_or_jump >>
+    rewrite_tac[preserves_same_frame_def] >>
+    disch_then drule >> simp[] >>
+    rw[same_frame_rel_def] >> gvs[] ) >>
+  simp[inc_pc_or_jump_def, return_def] >>
+  TOP_CASE_TAC >> rw[] >>
+  drule_at Any handle_step_pop_generic_gen >>
+  Cases_on`r'.contexts` >> gvs[] >>
+  Cases_on`h` >> gvs[] >>
+  Cases_on`t` >> gvs[] >- ( Cases_on`s.contexts` >> gvs[] ) >>
+  disch_then assume_tac >>
+  irule EQ_TRANS >>
+  qmatch_goalsub_abbrev_tac`lookup_storage k (lookup_account a _).storage` >>
+  qexists_tac`lookup_storage k (lookup_account a r'.rollback.accounts).storage` >>
+  reverse conj_tac >- (
+    qpat_x_assum`_ ∧ _`kall_tac >>
+    mp_tac (INST_TYPE[alpha |-> ``:unit``](GEN_ALL preserves_storage_step_call)) >>
+    mp_tac (INST_TYPE[alpha |-> ``:unit``](GEN_ALL preserves_storage_step_create)) >>
+    rewrite_tac[preserves_storage_def] >>
+    Cases_on`op` >> gvs[is_call_def, step_inst_def] >>
+    rpt strip_tac >> first_x_assum drule >> rw[] ) >>
+  gvs[] >> cheat
+  (*
+ 6. Second disjunct needs a new helper: step_call_saved_rollback_preserves_storage / step_call_saved_rollback_preserves_storage_create — if is_call op ∧
+ step_inst op s = (q, r') ∧ LENGTH r'.contexts = LENGTH s.contexts + 1, then the top saved rollback SND (HD r'.contexts) has the same storage as s.rollback at
+ every (a,k). Proof: push_context stores the then-current rollback; all step_call/create primitives before push_context are preserves_storage, so rollback
+ storage at push-time equals at entry; after push_context, further ops (none, or only reraise-like) don't touch SND (HD · contexts). Close by the same
+ bind-decomposition pattern as preserves_storage_step_call, but tracking SND (HD (s'.contexts)) instead of s'.rollback.
+ *)
 QED
 
 (* -------------------------------------------------------------------------
@@ -2185,25 +2736,7 @@ Theorem step_pop_structure:
       (s'.rollback = s.rollback ∨
        s'.rollback = SND (HD s.contexts))
 Proof
-  cheat  (* TODO: proof outline
-    1. Unfold step = handle inner handle_step. Inner is same_frame_or_grow.
-    2. Inner INL: inner preserves length or grows. Contradicts shrink.
-    3. Inner INR: handle_step e r' = (q, s'). By handle_step_shrinks_by_one
-       LENGTH s' >= LENGTH r' - 1. With LENGTH s' < LENGTH s and
-       LENGTH r' >= LENGTH s (same_frame_or_grow), we get
-       LENGTH r' = LENGTH s (inner same-length) and LENGTH s' = LENGTH s - 1.
-    4. From same_frame_or_grow + same length:
-       same_frame_rel s r', so r'.contexts has same TL as s.contexts
-       and same SND-of-HD.
-    5. LENGTH s >= 2. Set s.contexts = (callee, callee_rb) :: parent :: rest.
-       Then r'.contexts = (newHD, callee_rb) :: parent :: rest where
-       callee_rb = SND (HD s.contexts).
-    6. Apply handle_step_pop_generic_gen to r' -> s' (with storage-aware
-       conclusion). Gets contexts shape + storage-equivalent rollback.
-    7. The rollback equality condition (rather than storage equality)
-       needs a stronger form of handle_step_pop_generic_gen or a side-proof
-       showing the Code+NONE+success case in step_pop is already covered
-       in the original rollback-equality version. *)
+  cheat
 QED
 
 (* -------------------------------------------------------------------------

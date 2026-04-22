@@ -2300,6 +2300,14 @@ Proof
   rw[step_inst_def]
 QED
 
+(* Aggregate: any non-call opcode preserves the frame. Dispatches via
+   the per-opcode [simp]-tagged theorems above. *)
+Theorem preserves_same_frame_step_inst_not_call:
+  ¬is_call op ⇒ preserves_same_frame (step_inst op)
+Proof
+  Cases_on `op` >> simp[is_call_def]
+QED
+
 (* ---------------- proceed_call / proceed_create length ---------- *)
 
 (* proceed_call ends with push_context; its successor may run a
