@@ -2997,8 +2997,10 @@ Proof
            >- (simp[Once (Abbr `g`), preserves_same_frame_eq_psf_T,
                     psf_update_accounts_transfer_value])
            >- (simp[Once (Abbr `g`), preserves_same_frame_return]))
-  >> `same_frame_rel s s1` by cheat
-  >> `s1.contexts ≠ []` by cheat
+  >> `same_frame_rel s s1` by (
+    pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def] >>
+    disch_then drule >> rw[] )
+  >> `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
   >> simp[Once bind_def, get_caller_def, return_def, get_current_context_def, fail_def]
   >> simp[Once bind_def, return_def, get_current_context_def, fail_def]
   >> simp[Once bind_def, return_def, get_current_context_def, fail_def]
