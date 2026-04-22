@@ -1672,7 +1672,7 @@ QED
  * rollback at the new head (SND (HD s'.contexts)) has the same
  * .accounts.storage as s.rollback.accounts.storage.
  *
- * Proof sketch (for when these are discharged, not cheated):
+ * Proof sketch:
  *   - step_call/step_create run preserves_storage primitives until
  *     they reach proceed_call/proceed_create.
  *   - proceed_call/proceed_create:
@@ -2270,6 +2270,23 @@ Proof
          update_accounts_def, return_def]
 QED
 
+(* handle_create preserves .accesses: all primitives within
+   handle_create are either reads, preserves_rollback, or update_accounts
+   with a function touching only .accounts (not .accesses). *)
+Theorem handle_create_preserves_accesses:
+  handle_create e s = (q, s') ⇒
+  s'.rollback.accesses = s.rollback.accesses
+Proof
+  rw[handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def]
+  >> BasicProvers.every_case_tac
+  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
+         assert_def, get_current_context_def, set_current_context_def,
+         update_accounts_def, return_def]
+QED
+
 (* Generic handle_step pop structure — storage-aware.
 
    When handle_step shrinks contexts, the contexts structure is 
@@ -2320,8 +2337,78 @@ Proof
   >> gvs[lookup_storage_def, FUN_EQ_THM]
 QED
 
-(* When starting with exactly one context, handle_step cannot pop
-   (pop requires n > 1), so contexts length is preserved. *)
+(* Strengthening of handle_step_pop_generic_gen that pairs each
+   storage disjunct with the matching accesses subset. *)
+Theorem handle_step_pop_generic_gen_paired:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  handle_step e s = (q, s') ∧
+  LENGTH s'.contexts < LENGTH s.contexts ⇒
+    ∃new_parent_ctx.
+      s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
+      new_parent_ctx.msgParams = (FST parent).msgParams ∧
+      ((toSet s.rollback.accesses.storageKeys ⊆
+          toSet s'.rollback.accesses.storageKeys ∧
+        (∀a. (lookup_account a s'.rollback.accounts).storage =
+             (lookup_account a s.rollback.accounts).storage)) ∨
+       (toSet callee_rb.accesses.storageKeys ⊆
+          toSet s'.rollback.accesses.storageKeys ∧
+        (∀a. (lookup_account a s'.rollback.accounts).storage =
+             (lookup_account a callee_rb.accounts).storage)))
+Proof
+  strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[])
+  >> simp[handle_def]
+  >> `s.contexts ≠ []` by simp[]
+  >> drule_then (qspec_then `e` mp_tac)
+       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> strip_tac >> simp[]
+  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
+  >> drule_all handle_create_preserves_tl_and_snd_hd
+  >> strip_tac
+  >> `s1.contexts = (FST (HD s1.contexts), callee_rb) :: parent :: rest` by (
+       Cases_on `s1.contexts` >> fs[]
+       >> PairCases_on `h` >> fs[])
+  >> drule_all handle_create_preserves_length
+  >> strip_tac
+  >> strip_tac
+  >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
+  >> drule_all handle_exception_pop_generic_gen
+  >> strip_tac >> gvs[]
+  >> drule handle_create_preserves_accesses
+  >> mp_tac (INST_TYPE[alpha|->``:unit``]preserves_storage_handle_create)
+  >> rewrite_tac[preserves_storage_def]
+  >> disch_then drule
+  >> gvs[lookup_storage_def, FUN_EQ_THM]
+QED
+
+(* Saved rollback's accesses are in s'.rollback's accesses, regardless
+   of which pop branch handle_step took.
+   Requires the hypothesis callee_rb.accesses ⊆ s.rollback.accesses
+   (a structural invariant: at push_context time the saved rollback
+   equals current, and accesses only grow). This invariant needs to
+   be added to run_call_inv as:
+     EVERY (λrb. toSet rb.accesses.storageKeys ⊆
+                 toSet s.rollback.accesses.storageKeys)
+           (MAP SND s.contexts)
+   and maintained by run_call_inv_step. *)
+Theorem handle_step_pop_accesses_bound:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  handle_step e s = (q, s') ∧
+  LENGTH s'.contexts < LENGTH s.contexts ∧
+  toSet callee_rb.accesses.storageKeys ⊆
+    toSet s.rollback.accesses.storageKeys ⇒
+  toSet callee_rb.accesses.storageKeys ⊆
+    toSet s'.rollback.accesses.storageKeys
+Proof
+  rw[] >>
+  drule_then drule handle_step_pop_generic_gen_paired >>
+  rw[] >>
+  gvs[SUBSET_DEF]
+QED
+
 Theorem handle_step_preserves_length_1:
   handle_step e s = (q, s') ∧ LENGTH s.contexts = 1 ⇒
   LENGTH s'.contexts = 1
@@ -2735,6 +2822,62 @@ QED
  *   - INR-grow: step_call INR-grew with vfm_abort e (handle_step reraised).
  *     (step_create never INR-grows, per step_create_inr_no_grow.)
  * ------------------------------------------------------------------------- *)
+(* INL-grow structure lemmas. INL analogues of step_call_inr_grow_structure.
+   Proof: mirror step_call_inr_grow_structure, either by extending the
+   inr_grow_witness framework in vfmRunWithinFrame to also track INL
+   grow points, or directly unfolding step_call_def / step_create_def
+   and using proceed_call_pushed_rb_storage / proceed_create_pushed_rb_storage
+   + push_context_effect + preserves_same_frame_dispatch_precompiles. *)
+
+Theorem step_call_inl_grow_structure:
+  s.contexts ≠ [] ∧ outputTo_consistent s ∧
+  step_call op s = (INL (), s1) ∧
+  LENGTH s1.contexts > LENGTH s.contexts ⇒
+    ∃callee_ctx pushed_rb parent_ctx mr.
+      s1.contexts = (callee_ctx, pushed_rb) ::
+                    (parent_ctx, SND (HD s.contexts)) ::
+                    TL s.contexts ∧
+      parent_ctx.msgParams = (FST (HD s.contexts)).msgParams ∧
+      (∀a. (lookup_account a pushed_rb.accounts).storage =
+           (lookup_account a s.rollback.accounts).storage) ∧
+      (∀a. (lookup_account a s1.rollback.accounts).storage =
+           (lookup_account a s.rollback.accounts).storage) ∧
+      toSet s.rollback.accesses.storageKeys ⊆
+        toSet pushed_rb.accesses.storageKeys ∧
+      toSet s.rollback.accesses.storageKeys ⊆
+        toSet s1.rollback.accesses.storageKeys ∧
+      callee_ctx.msgParams.outputTo = Memory mr
+Proof
+  cheat
+QED
+
+Theorem step_create_inl_grow_structure:
+  s.contexts ≠ [] ∧ outputTo_consistent s ∧
+  step_create two s = (INL (), s1) ∧
+  LENGTH s1.contexts > LENGTH s.contexts ⇒
+    ∃callee_ctx pushed_rb parent_ctx address.
+      s1.contexts = (callee_ctx, pushed_rb) ::
+                    (parent_ctx, SND (HD s.contexts)) ::
+                    TL s.contexts ∧
+      parent_ctx.msgParams = (FST (HD s.contexts)).msgParams ∧
+      (∀a. (lookup_account a pushed_rb.accounts).storage =
+           (lookup_account a s.rollback.accounts).storage) ∧
+      (∀a. (lookup_account a s1.rollback.accounts).storage =
+           (lookup_account a s.rollback.accounts).storage) ∧
+      toSet s.rollback.accesses.storageKeys ⊆
+        toSet pushed_rb.accesses.storageKeys ∧
+      toSet s.rollback.accesses.storageKeys ⊆
+        toSet s1.rollback.accesses.storageKeys ∧
+      callee_ctx.msgParams.outputTo = Code address ∧
+      callee_ctx.msgParams.callee = address
+Proof
+  cheat
+  (* Same as step_call_inl_grow_structure, but simpler (no precompile
+     branch). proceed_create's final push_context pushes
+     (initial_context address ..., rollback) with outputTo = Code address
+     and callee = address by initial_msg_params_def. *)
+QED
+
 Theorem step_push_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent_stack s ∧
@@ -2754,9 +2897,38 @@ Theorem step_push_structure:
         toSet pushed_rb.accesses.storageKeys ∧
       outputTo_consistent_ctx child_ctx
 Proof
-  cheat (* TODO: Requires an `inl_grow_witness` / `inl_grow_P` framework
-           parallel to the existing `inr_grow_witness` / `inr_grow_P`
-           framework in vfmRunWithinFrameScript. See the sketch above. *)
+  cheat
+  (* Unfold step = handle inner handle_step, where inner = get ctx;
+     if code ≤ pc then step_inst Stop else
+     case FLOOKUP pc of NONE => step_inst Invalid | SOME op =>
+     step_inst op; inc_pc_or_jump op.
+
+     Split on whether inner returns INL or INR.
+
+     Case A (inner INL ⇒ s' = inner's output):
+       Stop/Invalid are preserves_same_frame, can't grow — vacuous.
+       SOME op: step_inst op s = (INL _, s_mid); inc_pc_or_jump op
+       is preserves_same_frame so s_mid and s' have same length.
+       By step_inst_inl_grew_is_call, is_call op. For is_call op,
+       inc_pc_or_jump op = return (), so s_mid = s'.
+       Dispatch on op: Call-family uses step_call_inl_grow_structure,
+       Create-family uses step_create_inl_grow_structure.
+
+     Case B (inner INR ⇒ handle_step e r' = (_, s')):
+       handle_step never grows (reraise preserves, handle_exception
+       only pops). Combined with inner growing by at most 1 and
+       LENGTH s' > LENGTH s, force LENGTH r' = LENGTH s + 1, LENGTH s'
+       = LENGTH s + 1, i.e. handle_step preserved length exactly.
+       handle_exception on LENGTH r' ≥ 2 always pops → contradiction
+       unless we took the reraise branch, which requires vfm_abort e.
+       So s' = r' (reraise). By step_inst_inr_grew_is_call_family +
+       step_create_inr_no_grow, op is Call-family. Apply
+       step_call_inr_grow_structure to get the structure; lift witnesses
+       through same_frame_rel s sp.
+
+     For the outputTo_consistent_ctx child conclusion: Call-family ops
+     have outputTo = Memory _ (vacuously consistent); Create-family
+     ops have outputTo = Code a with callee = a. *)
 QED
 
 (* -------------------------------------------------------------------------
@@ -2769,6 +2941,15 @@ QED
  * In both cases, this rollback is already tracked by run_call_inv's
  * invariant on active_rollbacks.
  * ------------------------------------------------------------------------- *)
+(* Weakened from literal rollback equality to storage-pointwise
+   disjunction, because handle_create in the Code+NONE+success case
+   modifies rollback.accounts.code (but not .storage).
+
+   The conclusion pairs each storage disjunct with the matching accesses
+   subset:
+     - Reraise-like pop (disjunct A): s.rollback.accesses ⊆ s'.rollback.accesses.
+     - Failure pop (disjunct B): callee_rb.accesses ⊆ s'.rollback.accesses.
+   (A single universal `s.accesses ⊆ s'.accesses` would fail in disjunct B.) *)
 Theorem step_pop_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent_stack s ∧
@@ -2777,10 +2958,37 @@ Theorem step_pop_structure:
       s.contexts = HD s.contexts :: parent :: rest ∧
       s'.contexts = (new_head, SND parent) :: rest ∧
       new_head.msgParams = (FST parent).msgParams ∧
-      (s'.rollback = s.rollback ∨
-       s'.rollback = SND (HD s.contexts))
+      ((toSet s.rollback.accesses.storageKeys ⊆
+          toSet s'.rollback.accesses.storageKeys ∧
+        (∀a. (lookup_account a s'.rollback.accounts).storage =
+             (lookup_account a s.rollback.accounts).storage)) ∨
+       (toSet (SND (HD s.contexts)).accesses.storageKeys ⊆
+          toSet s'.rollback.accesses.storageKeys ∧
+        (∀a. (lookup_account a s'.rollback.accounts).storage =
+             (lookup_account a (SND (HD s.contexts)).accounts).storage)))
 Proof
   cheat
+  (* Unfold step = handle inner handle_step. Split on inner's result.
+
+     Case A (inner INL): inner is same_frame_or_grow, so inner's output
+     has length ≥ LENGTH s. Contradicts strict shrink. Vacuous.
+
+     Case B (inner INR; handle_step e r' = (_, s') with shrink):
+       - inner grows by at most 1 (same_frame_or_grow_step_inner).
+       - handle_step shrinks by at most 1 (handle_step_shrinks_by_one).
+       - Combined with LENGTH s' < LENGTH s: force LENGTH r' = LENGTH s
+         and LENGTH s' = LENGTH s - 1.
+       - LENGTH s ≥ 2 (else handle_step_preserves_length_1 contradicts
+         strict shrink).
+       - LENGTH r' = LENGTH s gives same_frame_rel s r', so
+         r'.contexts = (ctx', SND (HD s.contexts)) :: TL s.contexts
+         = (ctx', SND h) :: parent :: rest where s.contexts = h :: parent :: rest.
+       - Apply handle_step_pop_generic_gen_paired to r' to get the
+         paired disjunction on s'.rollback w.r.t. r'.rollback and
+         SND h = SND (HD s.contexts).
+       - Lift disjunct A from r'.rollback to s.rollback via same_frame_rel's
+         callee_local_changes (preserves storage pointwise) and accesses
+         subset. Disjunct B matches step_pop_structure's directly. *)
 QED
 
 (* -------------------------------------------------------------------------
@@ -2960,16 +3168,14 @@ Proof
     (* CASE −1: pop. *)
     `LENGTH s1.contexts < LENGTH s0.contexts` by decide_tac
     >> drule_all step_pop_structure
-    >> simp[Q.SPEC`¬A`(IMP_DISJ_THM)|>GSYM|>REWRITE_RULE[]]
-    >> strip_tac
-    >> qmatch_asmsub_rename_tac `s0.contexts = callee_ctx :: parent :: rest`
+    >> disch_then $ qx_choosel_then[`new_head`,`parent`,`rest`]assume_tac
+    >> qmatch_asmsub_abbrev_tac `s0.contexts = callee_ctx :: parent :: rest`
     (* outputTo_consistent_stack s1: new_head has parent's msgParams. *)
     >> `outputTo_consistent_stack s1` by (
          `EVERY outputTo_consistent_ctx (MAP FST s0.contexts) ∧
           s0.contexts ≠ []`
            by fs[outputTo_consistent_stack_def]
-         >> qpat_x_assum `s0.contexts = _` SUBST_ALL_TAC
-         >> fs[]
+         >> gvs[]
          >> simp[outputTo_consistent_stack_def,
                  outputTo_consistent_ctx_def]
          >> gvs[outputTo_consistent_ctx_def])
@@ -2983,45 +3189,57 @@ Proof
          by fs[run_call_inv_def]
     >> `LENGTH s0.contexts = 2 + LENGTH rest ∧
         LENGTH s1.contexts = 1 + LENGTH rest`
-        by (qpat_x_assum `s0.contexts = _` SUBST1_TAC
-            >> qpat_x_assum `s1.contexts = _` SUBST1_TAC
-            >> simp[])
+        by (gvs[])
     >> `¬(LENGTH s0.contexts < ed)` by simp[]
-    (* Substitute context shapes early so downstream references are clean. *)
-    >> `s1.rollback = s0.rollback ∨ s1.rollback = SND callee_ctx` by (
-         Cases_on `s1.rollback = s0.rollback` >> fs[]
-         >> `s1.rollback = SND (HD s0.contexts)` by fs[]
-         >> qpat_x_assum `s0.contexts = _` SUBST_ALL_TAC >> fs[])
+    (* Key: show storage_slot_preserved s1.rollback es.rollback from the
+       storage-pointwise disjunction + access monotonicity + the relevant
+       s0-side slot-preserved facts. *)
+    >> `storage_slot_preserved s0.rollback es.rollback ∧
+        storage_slot_preserved (SND callee_ctx) es.rollback`
+         by (qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
+             >> simp[active_rollbacks_def]
+             >> qpat_x_assum `s0.contexts = _` SUBST1_TAC
+             >> `LENGTH s0.contexts + 2 - ed ≥ 2` by simp[]
+             >> `∃n. LENGTH s0.contexts + 2 - ed = SUC (SUC n)` by
+                  (Cases_on `LENGTH s0.contexts + 2 - ed` >> fs[]
+                   >> Cases_on `n` >> fs[])
+             >> simp[] >> strip_tac >> fs[])
+    >> `storage_slot_preserved s1.rollback es.rollback` by (
+         (* step_pop_structure's conclusion is a disjunction of
+            (accesses-subset ∧ storage-eq) pairs. Case-split and discharge
+            each via the matching subset and the corresponding
+            storage_slot_preserved hypothesis. *)
+         simp[storage_slot_preserved_def]
+         >> rpt strip_tac
+         >> gvs[]
+         >- (
+           (* Disjunct A: s.accesses ⊆ s'.accesses ∧ storage s' = storage s. *)
+           `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
+             by (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+                 >> metis_tac[])
+           >> `lookup_storage k (lookup_account a s0.rollback.accounts).storage =
+               lookup_storage k (lookup_account a es.rollback.accounts).storage`
+                by fs[storage_slot_preserved_def]
+           >> fs[lookup_storage_def]
+           >> metis_tac[])
+         >>
+           (* Disjunct B: callee_rb.accesses ⊆ s'.accesses ∧
+              storage s' = storage callee_rb. *)
+           `¬fIN (SK a k) (SND callee_ctx).accesses.storageKeys`
+             by (gvs[]
+                 >> gvs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
+                 >> metis_tac[])
+           >> `lookup_storage k (lookup_account a (SND callee_ctx).accounts).storage =
+               lookup_storage k (lookup_account a es.rollback.accounts).storage`
+                by fs[storage_slot_preserved_def])
     (* Split on whether s1.contexts is below ed or not. *)
     >> Cases_on `LENGTH s1.contexts < ed`
-    >- (
-      (* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
-      simp[active_rollbacks_def]
-      >> qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
-      >> simp[active_rollbacks_def]
-      >> `LENGTH s0.contexts + 2 - ed ≥ 1` by decide_tac
-      >> `∃n. LENGTH s0.contexts + 2 - ed = SUC n` by
-           (Cases_on `LENGTH s0.contexts + 2 - ed` >> fs[])
-      >> simp[]
-      >> qpat_x_assum `s0.contexts = _` SUBST1_TAC
-      >> simp[]
-      >> strip_tac
-      >> fs[])
+    >- ((* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
+        simp[active_rollbacks_def])
     (* LENGTH s1 ≥ ed. Both active_rollbacks have a non-trivial tail.
        s0's TAKE takes one more element than s1's. *)
     >> qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
     >> simp[active_rollbacks_def]
-    >> qpat_x_assum `s0.contexts = _` SUBST1_TAC
-    >> qpat_x_assum `s1.contexts = _` SUBST1_TAC
-    >> simp[]
-    >> `LENGTH rest + 1 ≥ ed` by decide_tac
-    >> `LENGTH rest + 3 - ed = SUC (SUC (LENGTH rest + 1 - ed)) ∧
-        LENGTH rest + 2 - ed = SUC (LENGTH rest + 1 - ed)` by decide_tac
-    >> simp[]
-    >> strip_tac
-    (* Now we have EVERY on [s0.rollback, SND callee_ctx, SND parent, ...rest prefix]
-       and need to show EVERY on [s1.rollback, SND parent, ...rest prefix]. *)
-    >> fs[])
 QED
 
 (* -------------------------------------------------------------------------
