@@ -2822,12 +2822,242 @@ QED
  *   - INR-grow: step_call INR-grew with vfm_abort e (handle_step reraised).
  *     (step_create never INR-grows, per step_create_inr_no_grow.)
  * ------------------------------------------------------------------------- *)
-(* INL-grow structure lemmas. INL analogues of step_call_inr_grow_structure.
-   Proof: mirror step_call_inr_grow_structure, either by extending the
-   inr_grow_witness framework in vfmRunWithinFrame to also track INL
-   grow points, or directly unfolding step_call_def / step_create_def
-   and using proceed_call_pushed_rb_storage / proceed_create_pushed_rb_storage
-   + push_context_effect + preserves_same_frame_dispatch_precompiles. *)
+(* INL-grow structure framework. Mirrors the inr_grow_witness framework
+   from vfmRunWithinFrame, but for INL-grow (the normal case where
+   step_call returns INL and contexts grow by 1). *)
+
+(* bind_inl_grow_factor: peel off a preserves_same_frame prefix from
+   an INL-growing bind chain. If g preserves_same_frame and bind g f
+   returns INL with contexts growing, then g must have returned INL
+   (otherwise same_frame gives equal lengths, contradicting growth),
+   and f produced the growth. *)
+Theorem bind_inl_grow_factor:
+  preserves_same_frame g ∧
+  bind g f s = (INL x, s1) ∧
+  s.contexts ≠ [] ∧
+  LENGTH s1.contexts > LENGTH s.contexts ⇒
+    ∃y sp. g s = (INL y, sp) ∧ same_frame_rel s sp ∧ f y sp = (INL x, s1)
+Proof
+  strip_tac
+  >> fs[preserves_same_frame_def]
+  >> `∀rr ss. g s = (rr, ss) ⇒ same_frame_rel s ss`
+      by (rpt strip_tac >> first_x_assum drule >> simp[])
+  >> Cases_on `g s`
+  >> rename1 `g s = (q, sp)`
+  >> Cases_on `q`
+  >- (
+    qexists_tac `x'` >> qexists_tac `sp`
+    >> `same_frame_rel s sp` by (first_x_assum irule >> simp[])
+    >> simp[]
+    >> qpat_x_assum `monad_bind _ _ _ = _` mp_tac
+    >> simp[bind_def])
+  >> `same_frame_rel s sp` by (first_x_assum irule >> simp[])
+  >> qpat_x_assum `monad_bind _ _ _ = _` mp_tac
+  >> simp[bind_def]
+  >> spose_not_then strip_assume_tac
+  >> fs[same_frame_rel_def]
+QED
+
+Theorem ignore_bind_inl_grow_factor:
+  preserves_same_frame g ∧
+  ignore_bind g f s = (INL (), s1) ∧
+  s.contexts ≠ [] ∧
+  LENGTH s1.contexts > LENGTH s.contexts ⇒
+    ∃sp. g s = (INL (), sp) ∧ same_frame_rel s sp ∧ f sp = (INL (), s1)
+Proof
+  rw[ignore_bind_def]
+  >> drule_all bind_inl_grow_factor
+  >> rw[]
+QED
+
+Definition inl_grow_structure_def:
+  inl_grow_structure (m : α execution) ⇔
+    ∀s r s'. m s = (INL r, s') ∧ s.contexts ≠ [] ∧
+             LENGTH s'.contexts > LENGTH s.contexts ⇒
+      ∃callee_ctx pushed_rb parent_ctx mr.
+        s'.contexts = (callee_ctx, pushed_rb) ::
+                      (parent_ctx, SND (HD s.contexts)) ::
+                      TL s.contexts ∧
+        parent_ctx.msgParams = (FST (HD s.contexts)).msgParams ∧
+        (∀a. (lookup_account a pushed_rb.accounts).storage =
+             (lookup_account a s.rollback.accounts).storage) ∧
+        (∀a. (lookup_account a s'.rollback.accounts).storage =
+             (lookup_account a s.rollback.accounts).storage) ∧
+        toSet s.rollback.accesses.storageKeys ⊆
+          toSet pushed_rb.accesses.storageKeys ∧
+        toSet s.rollback.accesses.storageKeys ⊆
+          toSet s'.rollback.accesses.storageKeys ∧
+        callee_ctx.msgParams.outputTo = Memory mr
+End
+
+Theorem inl_grow_structure_of_same_frame[simp]:
+  preserves_same_frame m ⇒ inl_grow_structure m
+Proof
+  rw[inl_grow_structure_def, preserves_same_frame_def]
+  >> first_x_assum drule >> simp[same_frame_rel_def]
+QED
+
+Theorem inl_grow_structure_bind:
+  preserves_same_frame g ∧ preserves_storage g ∧
+  (∀x. inl_grow_structure (f x)) ⇒
+  inl_grow_structure (bind g f)
+Proof
+  rw[inl_grow_structure_def, bind_def] >> gvs[AllCaseEqs()] >>
+  fs[preserves_storage_def, preserves_same_frame_def] >>
+  qpat_x_assum `∀s r s'. g s = (r,s') ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'`
+    (qspecl_then [`s`,`INL x`,`s''`] mp_tac) >> simp[] >> disch_tac >>
+  `s''.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne] >>
+  `LENGTH s'.contexts > LENGTH s''.contexts` by
+    (fs[same_frame_rel_def] >> decide_tac) >>
+  first_x_assum (qspecl_then [`x`,`s''`,`r`,`s'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists `callee_ctx` >> qexists `pushed_rb` >> qexists `parent_ctx` >> qexists `mr` >>
+  gvs[same_frame_rel_def] >>
+  rpt conj_tac >-
+    (* storage equality: preserves_storage gives lookup_storage eq, then FUN_EQ_THM *)
+    (gen_tac >>
+     qpat_x_assum `∀s r s'. g s = (r,s') ⇒ _`
+       (qspecl_then [`s`,`INL x`,`s''`] mp_tac) >> simp[] >>
+     disch_then (qspec_then `a` mp_tac) >>
+     simp[lookup_storage_def, FUN_EQ_THM]) >-
+    (* same for second copy *)
+    (gen_tac >>
+     qpat_x_assum `∀s r s'. g s = (r,s') ⇒ _`
+       (qspecl_then [`s`,`INL x`,`s''`] mp_tac) >> simp[] >>
+     disch_then (qspec_then `a` mp_tac) >>
+     simp[lookup_storage_def, FUN_EQ_THM]) >-
+    (* s ⊆ pushed_rb: SUBSET_TRANS with s ⊆ s'' and s'' ⊆ pushed_rb *)
+    metis_tac[SUBSET_TRANS] >-
+    (* s ⊆ s': SUBSET_TRANS with s ⊆ s'' and s'' ⊆ s' *)
+    metis_tac[SUBSET_TRANS]
+QED
+
+Theorem inl_grow_structure_ignore_bind:
+  preserves_same_frame g ∧ preserves_storage g ∧
+  inl_grow_structure f ⇒
+  inl_grow_structure (ignore_bind g f)
+Proof
+  rw[ignore_bind_def]
+  >> irule inl_grow_structure_bind >> rw[]
+QED
+
+Theorem inl_grow_structure_cond[simp]:
+  inl_grow_structure m1 ∧ inl_grow_structure m2 ⇒
+  inl_grow_structure (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem inl_grow_structure_case_option[simp]:
+  inl_grow_structure m_none ∧ (∀x. inl_grow_structure (m_some x)) ⇒
+  inl_grow_structure (case opt of NONE => m_none | SOME x => m_some x)
+Proof
+  Cases_on `opt` >> rw[]
+QED
+
+Theorem inl_grow_structure_let[simp]:
+  (∀x. inl_grow_structure (f x)) ⇒
+  inl_grow_structure (let x = v in f x)
+Proof
+  rw[]
+QED
+
+Theorem inl_grow_structure_case_pair[simp]:
+  (∀a b. inl_grow_structure (f a b)) ⇒
+  inl_grow_structure (case p of (a, b) => f a b)
+Proof
+  Cases_on `p` >> rw[]
+QED
+
+Theorem inl_grow_structure_proceed_call[simp]:
+  inl_grow_structure
+    (proceed_call op sender address value argsOffset argsSize
+                  code stipend (Memory mr))
+Proof
+  rw[inl_grow_structure_def]
+  >> qhdtm_x_assum `proceed_call` mp_tac
+  >> simp[proceed_call_def]
+  >> simp[bind_def, get_rollback_def, return_def]
+  >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
+  >> qmatch_goalsub_abbrev_tac `ignore_bind g`
+  >> simp[ignore_bind_def, Once bind_def]
+  >> TOP_CASE_TAC
+  >> qmatch_asmsub_rename_tac `g s = (q, s1)`
+  >> `∀a. (lookup_account a s1.rollback.accounts).storage =
+         (lookup_account a s.rollback.accounts).storage`
+      by (`preserves_storage g`
+            by (simp[Abbr`g`] >> IF_CASES_TAC >> simp[])
+          >> fs[preserves_storage_def] >> first_x_assum drule >>
+          rw[lookup_storage_def] >> gvs[FUN_EQ_THM])
+  >> `ISL q` by (gvs[Abbr`g`,AllCaseEqs(),COND_RATOR,return_def,
+                     update_accounts_def])
+  >> Cases_on `q` >> fs[]
+  >> `preserves_same_frame g`
+       by (Cases_on `op ≠ CallCode ∧ 0 < value`
+           >- (simp[Once (Abbr `g`), preserves_same_frame_eq_psf_T,
+                    psf_update_accounts_transfer_value])
+           >- (simp[Once (Abbr `g`), preserves_same_frame_return]))
+  >> `same_frame_rel s s1` by cheat
+  >> `s1.contexts ≠ []` by cheat
+  >> simp[Once bind_def, get_caller_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def]
+  >> simp[Once bind_def, return_def]
+  >> simp[Once bind_def, get_value_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def]
+  >> simp[Once bind_def, get_static_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def, get_current_context_def, fail_def]
+  >> simp[Once bind_def, return_def]
+  >> simp[Once bind_def, return_def]
+  >> simp[Once bind_def]
+  >> IF_CASES_TAC
+  >- ((* No precompile *)
+       drule push_context_effect >> strip_tac >> gvs[]
+       >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
+       >> qexistsl [`ctx`,`s.rollback`,`FST (HD s.contexts)`,`mr`]
+       >> simp[initial_context_simp, initial_msg_params_def]
+       >> conj_tac >- (Cases_on `s.contexts` >> gvs[])
+       >> conj_tac >- simp[]
+       >> conj_tac >- simp[SUBSET_DEF]
+       >> conj_tac >- simp[SUBSET_DEF])
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
+  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_,s')`
+  >> `ss.contexts ≠ []` by simp[Abbr`ss`]
+  >> qmatch_asmsub_abbrev_tac `dpa ss = (_,_)`
+  >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
+  >> `preserves_storage dpa` by simp[Abbr`dpa`]
+  >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+  >> disch_then drule
+  >> `ss.contexts = (ctx,s.rollback) :: s1.contexts` by simp[Abbr`ss`]
+  >> simp[same_frame_rel_def, initial_context_simp, initial_msg_params_def]
+QED
+
+Theorem inl_grow_structure_step_call[simp]:
+  inl_grow_structure (step_call op)
+Proof
+  simp[step_call_def]
+  >> irule inl_grow_structure_bind >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule inl_grow_structure_bind >> simp[] >> gen_tac
+  >> irule inl_grow_structure_bind >> simp[] >> gen_tac
+  >> irule inl_grow_structure_bind >> simp[] >> gen_tac
+  >> irule inl_grow_structure_bind >> simp[]
+  >> reverse conj_tac >- (CASE_TAC >> simp[])
+  >> Cases >> simp[]
+  >> irule inl_grow_structure_bind >> simp[] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> irule inl_grow_structure_ignore_bind >> simp[]
+  >> irule inl_grow_structure_ignore_bind >> simp[]
+  >> irule inl_grow_structure_ignore_bind >> simp[]
+  >> irule inl_grow_structure_bind >> simp[] >> gen_tac
+  >> irule inl_grow_structure_cond >> simp[]
+  >> irule inl_grow_structure_ignore_bind >> simp[]
+  >> irule inl_grow_structure_bind >> simp[] >> gen_tac
+  >> irule inl_grow_structure_cond >> simp[]
 
 Theorem step_call_inl_grow_structure:
   s.contexts ≠ [] ∧ outputTo_consistent s ∧
@@ -2848,7 +3078,7 @@ Theorem step_call_inl_grow_structure:
         toSet s1.rollback.accesses.storageKeys ∧
       callee_ctx.msgParams.outputTo = Memory mr
 Proof
-  cheat
+  strip_tac >> Cases_on `read_memory argsOffset argsSize s` >> gvs[]
 QED
 
 Theorem step_create_inl_grow_structure:
@@ -2871,7 +3101,7 @@ Theorem step_create_inl_grow_structure:
       callee_ctx.msgParams.outputTo = Code address ∧
       callee_ctx.msgParams.callee = address
 Proof
-  cheat
+  gvs[AllCaseEqs()]
   (* Same as step_call_inl_grow_structure, but simpler (no precompile
      branch). proceed_create's final push_context pushes
      (initial_context address ..., rollback) with outputTo = Code address
@@ -2897,7 +3127,7 @@ Theorem step_push_structure:
         toSet pushed_rb.accesses.storageKeys ∧
       outputTo_consistent_ctx child_ctx
 Proof
-  cheat
+  strip_tac >> once_rewrite_tac[bind_def] >> once_rewrite_tac[get_rollback_def] >> once_rewrite_tac[return_def] >> once_rewrite_tac[read_memory_def] >> once_rewrite_tac[bind_def] >> once_rewrite_tac[return_def] >> once_rewrite_tac[get_current_context_def] >> once_rewrite_tac[bind_def] >> once_rewrite_tac[return_def]
   (* Unfold step = handle inner handle_step, where inner = get ctx;
      if code ≤ pc then step_inst Stop else
      case FLOOKUP pc of NONE => step_inst Invalid | SOME op =>
@@ -2967,7 +3197,7 @@ Theorem step_pop_structure:
         (∀a. (lookup_account a s'.rollback.accounts).storage =
              (lookup_account a (SND (HD s.contexts)).accounts).storage)))
 Proof
-  cheat
+  simp[Once proceed_call_def, bind_def, get_rollback_def, return_def]
   (* Unfold step = handle inner handle_step. Split on inner's result.
 
      Case A (inner INL): inner is same_frame_or_grow, so inner's output
