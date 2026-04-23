@@ -3280,6 +3280,15 @@ QED
      - Reraise-like pop (disjunct A): s.rollback.accesses ⊆ s'.rollback.accesses.
      - Failure pop (disjunct B): callee_rb.accesses ⊆ s'.rollback.accesses.
    (A single universal `s.accesses ⊆ s'.accesses` would fail in disjunct B.) *)
+Theorem same_frame_or_grow_length:
+  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ⇒
+    LENGTH s'.contexts ≥ LENGTH s.contexts
+Proof
+  rw[same_frame_or_grow_def]
+  >> res_tac
+  >> fs[same_frame_rel_def]
+  >> decide_tac
+QED
 Theorem step_pop_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent_stack s ∧
@@ -3297,35 +3306,59 @@ Theorem step_pop_structure:
         (∀a. (lookup_account a s'.rollback.accounts).storage =
              (lookup_account a (SND (HD s.contexts)).accounts).storage)))
 Proof
-  cheat
-  (* Unfold step = handle inner handle_step. Split on inner's result.
-
-     Case A (inner INL): inner is same_frame_or_grow, so inner's output
-     has length ≥ LENGTH s. Contradicts strict shrink. Vacuous.
-
-     Case B (inner INR; handle_step e r' = (_, s') with shrink):
-       - inner grows by at most 1 (same_frame_or_grow_step_inner).
-       - handle_step shrinks by at most 1 (handle_step_shrinks_by_one).
-       - Combined with LENGTH s' < LENGTH s: force LENGTH r' = LENGTH s
-         and LENGTH s' = LENGTH s - 1.
-       - LENGTH s ≥ 2 (else handle_step_preserves_length_1 contradicts
-         strict shrink).
-       - LENGTH r' = LENGTH s gives same_frame_rel s r', so
-         r'.contexts = (ctx', SND (HD s.contexts)) :: TL s.contexts
-         = (ctx', SND h) :: parent :: rest where s.contexts = h :: parent :: rest.
-       - Apply handle_step_pop_generic_gen_paired to r' to get the
-         paired disjunction on s'.rollback w.r.t. r'.rollback and
-         SND h = SND (HD s.contexts).
-       - Lift disjunct A from r'.rollback to s.rollback via same_frame_rel's
-         callee_local_changes (preserves storage pointwise) and accesses
-         subset. Disjunct B matches step_pop_structure's directly. *)
+  rpt strip_tac
+  >> qpat_x_assum `step s = (r,s')` mp_tac
+  >> simp[step_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `inner s`
+  >> Cases_on `inner s` >> Cases_on `q` >> gvs[Abbr `inner`]
+  >- (rpt strip_tac >> assume_tac same_frame_or_grow_step_inner
+      >> drule_all same_frame_or_grow_length >> fs[])
+  >> rpt strip_tac
+  >> ASSUME_TAC same_frame_or_grow_step_inner
+  >> `LENGTH r'.contexts ≥ LENGTH s.contexts`
+       by (drule_all same_frame_or_grow_length >> fs[])
+  >> `r'.contexts ≠ []` by (Cases_on `r'.contexts` >> fs[])
+  >> `LENGTH s'.contexts + 1 ≥ LENGTH r'.contexts ∧ LENGTH s'.contexts ≤ LENGTH r'.contexts`
+       by (drule handle_step_shrinks_by_one >> fs[])
+  >> `LENGTH r'.contexts = LENGTH s.contexts` by decide_tac
+  >> `same_frame_rel s r'` by (
+       fs[same_frame_or_grow_def] >> res_tac >> fs[same_frame_rel_def]
+       >> decide_tac)
+  >> `LENGTH s.contexts ≥ 2` by (
+       CCONTR_TAC >> fs[]
+       >> `LENGTH s.contexts ≤ 1` by decide_tac
+       >> `LENGTH s.contexts = 1` by decide_tac
+       >> drule handle_step_preserves_length_1 >> fs[])
+  >> `s.contexts = HD s.contexts :: TL s.contexts`
+       by (Cases_on `s.contexts` >> fs[])
+  >> `LENGTH (TL s.contexts) ≥ 1`
+       by (Cases_on `TL s.contexts` >> fs[])
+  >> `?parent rest. TL s.contexts = parent :: rest`
+       by (Cases_on `TL s.contexts` >> fs[])
+  >> `r'.contexts ≠ []` by fs[same_frame_rel_def]
+  >> `TL r'.contexts = TL s.contexts ∧ SND (HD r'.contexts) = SND (HD s.contexts)`
+       by fs[same_frame_rel_def]
+  >> `r'.contexts = (FST (HD r'.contexts), SND (HD s.contexts)) :: parent :: rest`
+       by (Cases_on `r'.contexts` >> fs[] >> Cases_on `h` >> fs[])
+  >> `LENGTH s'.contexts < LENGTH r'.contexts`
+       by decide_tac
+  >> drule handle_step_pop_generic_gen_paired
+  >> disch_then (qx_choosel_then [`new_head`] assume_tac)
+  >> qexistsl [`new_head`, `parent`, `rest`] >> simp[]
+  >> disj2_tac
+  >> conj_tac
+  >- (match_mp_tac SUBSET_TRANS
+      >> qexistsl [`toSet (SND (HD r'.contexts)).accesses.storageKeys`]
+      >> simp[])
+  >> rpt strip_tac
+  >> first_x_assum (qspec_then `a` mp_tac)
+  >> simp[]
 QED
 
 (* -------------------------------------------------------------------------
  * Single-step preservation of run_call_inv.
  *
  * Strategy: case on the length change. In each case, characterise
- * active_rollbacks after the step and show each entry inherits from
  * the previous invariant.
  * ------------------------------------------------------------------------- *)
 
