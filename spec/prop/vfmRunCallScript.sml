@@ -1084,6 +1084,7 @@ Proof
   >> first_x_assum drule >> simp[]
 QED
 
+
 (* access_monotone of step: storageKeys never shrinks. Needed for the
    compositional proof of step_preserves_non_accessed_storage. *)
 Theorem access_monotone_same_frame:
@@ -1648,6 +1649,20 @@ Theorem step_create_same_frame_preserves_storage:
 Proof
   strip_tac
   >> metis_tac[preserves_storage_step_create, preserves_storage_def]
+QED
+
+Theorem inner_step_inr_preserves_storage:
+  ∀s y s'. (do context <- get_current_context;
+       if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+       else case FLOOKUP context.msgParams.parsed context.pc of
+              NONE => step_inst Invalid
+            | SOME op => do step_inst op; inc_pc_or_jump op od
+     od) s = (INR y, s') ∧ s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).jumpDest = NONE ⇒
+    ∀a. (lookup_account a s'.rollback.accounts).storage =
+        (lookup_account a s.rollback.accounts).storage
+Proof
+  cheat
 QED
 
 (* Main dispatcher: is_call op + step_inst INL + same length ⇒ storage preserved. *)
@@ -3289,6 +3304,14 @@ Proof
   >> fs[same_frame_rel_def]
   >> decide_tac
 QED
+
+Theorem same_frame_or_grow_eq_length:
+  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ∧
+    LENGTH s'.contexts = LENGTH s.contexts ⇒ same_frame_rel s s'
+Proof
+  rw[same_frame_or_grow_def] >> res_tac >> fs[same_frame_rel_def] >> decide_tac
+QED
+
 Theorem step_pop_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent_stack s ∧
@@ -3321,9 +3344,7 @@ Proof
   >> `LENGTH s'.contexts + 1 ≥ LENGTH r'.contexts ∧ LENGTH s'.contexts ≤ LENGTH r'.contexts`
        by (drule handle_step_shrinks_by_one >> fs[])
   >> `LENGTH r'.contexts = LENGTH s.contexts` by decide_tac
-  >> `same_frame_rel s r'` by (
-       fs[same_frame_or_grow_def] >> res_tac >> fs[same_frame_rel_def]
-       >> decide_tac)
+  >> `same_frame_rel s r'` by (drule_all same_frame_or_grow_eq_length >> fs[])
   >> `LENGTH s.contexts ≥ 2` by (
        CCONTR_TAC >> fs[]
        >> `LENGTH s.contexts ≤ 1` by decide_tac
@@ -3342,7 +3363,7 @@ Proof
        by (Cases_on `r'.contexts` >> fs[] >> Cases_on `h` >> fs[])
   >> `LENGTH s'.contexts < LENGTH r'.contexts`
        by decide_tac
-  >> drule handle_step_pop_generic_gen_paired
+  >> drule_all handle_step_pop_generic_gen_paired
   >> disch_then (qx_choosel_then [`new_head`] assume_tac)
   >> qexistsl [`new_head`, `parent`, `rest`] >> simp[]
   >> disj2_tac
