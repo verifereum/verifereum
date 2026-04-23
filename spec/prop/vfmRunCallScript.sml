@@ -2121,7 +2121,8 @@ QED
    most one. *)
 Theorem handle_exception_shrinks_by_one:
   handle_exception e s = (q, s') ∧ s.contexts ≠ [] ⇒
-  LENGTH s'.contexts + 1 ≥ LENGTH s.contexts
+  LENGTH s'.contexts + 1 ≥ LENGTH s.contexts ∧
+  LENGTH s'.contexts ≤ LENGTH s.contexts
 Proof
   strip_tac
   >> qhdtm_x_assum `handle_exception` mp_tac
@@ -2451,7 +2452,8 @@ QED
 (* handle_step reduces contexts by at most one. *)
 Theorem handle_step_shrinks_by_one:
   handle_step e s = (q, s') ∧ s.contexts ≠ [] ⇒
-  LENGTH s'.contexts + 1 ≥ LENGTH s.contexts
+  LENGTH s'.contexts + 1 ≥ LENGTH s.contexts ∧
+  LENGTH s'.contexts ≤ LENGTH s.contexts
 Proof
   strip_tac
   >> qhdtm_x_assum `handle_step` mp_tac
