@@ -1351,3 +1351,37 @@ Proof
        >> Cases_on `op` >> gvs[is_call_def])
   >> metis_tac[cp_imp_storage_preserved]
 QED
+
+(* set_jump_dest preserves rollback *)
+Theorem preserves_rollback_set_jump_dest[simp]:
+  preserves_rollback (set_jump_dest d)
+Proof
+  rw[preserves_rollback_def, set_jump_dest_def, bind_def, AllCaseEqs(),
+     get_current_context_def, set_current_context_def, return_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_rollback_step_jump[simp]:
+  preserves_rollback step_jump
+Proof
+  rw[step_jump_def]
+QED
+
+Theorem preserves_rollback_step_jumpi[simp]:
+  preserves_rollback step_jumpi
+Proof
+  rw[step_jumpi_def]
+QED
+
+(* step_inst Jump and step_inst JumpI preserve rollback *)
+Theorem step_inst_Jump_preserves_rollback:
+  preserves_rollback (step_inst Jump)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem step_inst_JumpI_preserves_rollback:
+  preserves_rollback (step_inst JumpI)
+Proof
+  rw[step_inst_def]
+QED

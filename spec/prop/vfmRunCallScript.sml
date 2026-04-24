@@ -1736,7 +1736,24 @@ Proof
   (* SOME op case: step_inst op returned INR *)
   >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
   >> strip_tac >> gvs[]
-  >- cheat
+  >- (
+    gvs[inc_pc_or_jump_def]
+    >> gvs[COND_RATOR, AllCaseEqs(), return_def]
+    >> gvs[bind_def, AllCaseEqs(), get_current_context_def, return_def, fail_def]
+    >> gvs[option_CASE_rator, AllCaseEqs(), set_current_context_def,
+           return_def, fail_def, ignore_bind_def]
+    >> gvs[bind_def,AllCaseEqs(),assert_def,fail_def,return_def,
+           set_current_context_def]
+    (* step_inst x returned INL, inc_pc_or_jump failed with InvalidJumpDest.
+       This means jumpDest was set to SOME pc. Only Jump/JumpI do this,
+       and both preserve rollback. *)
+    >> `r'.rollback = s.rollback` by (
+         `x = Jump ∨ x = JumpI` by cheat (* TODO: only Jump/JumpI set jumpDest *)
+         >> gvs[]
+         >- metis_tac[step_inst_Jump_preserves_rollback, preserves_rollback_def]
+         >> metis_tac[step_inst_JumpI_preserves_rollback, preserves_rollback_def])
+    >> DISJ1_TAC
+    >> gvs[SUBSET_DEF] )
   >> rename1 `step_inst op s = (INR e, r')`
   >> drule step_inst_inr_preserves_storage
   >> simp[lookup_storage_def, FUN_EQ_THM]
