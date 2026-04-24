@@ -853,3 +853,217 @@ Proof
   >> imp_res_tac step_create_inr_no_grow
   >> fs[]
 QED
+
+Theorem bind_length_preserves_imp_grow:
+  length_preserves m ∧
+  (∀x s r. f x s = (r,s') ∧ s.contexts ≠ [] ∧
+           LENGTH s'.contexts > LENGTH s.contexts
+     ⇒ LENGTH s'.contexts = LENGTH s.contexts + 1) ∧
+  bind m f s = (r,s') ∧ s.contexts ≠ [] ∧
+  LENGTH s'.contexts > LENGTH s.contexts
+  ⇒
+  LENGTH s'.contexts = LENGTH s.contexts + 1
+Proof
+  rw[length_preserves_def, bind_def, AllCaseEqs()] >>
+  first_x_assum drule >> rw[] >>
+  first_x_assum drule >> rw[] >>
+  Cases_on`s''.contexts` >> gvs[]
+QED
+
+(* When step_call grows, it grows by exactly 1 (via proceed_call). *)
+Theorem step_call_grows_by_exactly_one:
+  s.contexts ≠ [] ∧ step_call op s = (r, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  LENGTH s'.contexts = LENGTH s.contexts + 1
+Proof
+  simp[step_call_def] >> strip_tac >>
+  qpat_x_assum`_ = (_,_)`mp_tac >>
+  simp[bind_def] >> TOP_CASE_TAC >>
+  reverse TOP_CASE_TAC >- (
+    rw[] >> gvs[pop_stack_def, bind_def, AllCaseEqs(),
+                get_current_context_def, return_def] >>
+    gvs[ignore_bind_def,bind_def,assert_def,
+        set_current_context_def,return_def,fail_def,
+        AllCaseEqs()] ) >>
+  pairarg_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac`pop_stack n s` >>
+  `length_preserves (pop_stack n)` by simp[] >>
+  pop_assum mp_tac >> rewrite_tac[length_preserves_def] >>
+  disch_then drule >> impl_tac >- rw[] >> strip_tac >>
+  pop_assum(assume_tac o SYM) >> gvs[] >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  reverse conj_asm2_tac >- (strip_tac >> gvs[]) >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  pairarg_tac >> gvs[] >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  pairarg_tac >> gvs[] >>
+  gvs[ignore_bind_def] >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum`_ = (r'',_)`kall_tac >>
+  gvs[COND_RATOR,CaseEq"bool"]
+  >- (
+    drule_at(Pat`_ = (_,_)`)psf_imp_length_contexts_preserved >>
+    simp[] ) >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  gvs[COND_RATOR,CaseEq"bool"]
+  >- (
+    drule_at(Pat`_ = (_,_)`)psf_imp_length_contexts_preserved >>
+    simp[] ) >>
+  drule_all proceed_call_length >> gvs[]
+QED
+
+(* When step_create grows, it grows by exactly 1 (via proceed_create). *)
+Theorem step_create_grows_by_exactly_one:
+  s.contexts ≠ [] ∧ step_create two s = (r, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  LENGTH s'.contexts = LENGTH s.contexts + 1
+Proof
+  simp[step_create_def, ignore_bind_def] >> strip_tac >>
+  (* Peel away length-preserving prefixes *)
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  gvs[ignore_bind_def] >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  gvs[COND_RATOR,CaseEq"bool"]
+  (* abort_unuse path: preserves_same_frame, can't grow *)
+  >> TRY (
+    drule_at(Pat`_ = (_,_)`)psf_imp_length_contexts_preserved >>
+    simp[] >> NO_TAC ) >>
+  TRY (
+    drule(REWRITE_RULE[length_preserves_def]
+      length_preserves_abort_create_exists) >> gvs[] >> NO_TAC) >>
+  drule_all proceed_create_length >> gvs[]
+QED
+
+(* When the inner computation of step grows, it grows by exactly 1.
+   This is because all growth paths go through step_call or step_create,
+   which grow by exactly 1 via proceed_call/proceed_create. *)
+Theorem step_inner_grows_by_exactly_one:
+  s.contexts ≠ [] ∧
+  (do
+     context <- get_current_context;
+     if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+     else case FLOOKUP context.msgParams.parsed context.pc of
+            NONE => step_inst Invalid
+          | SOME op => do step_inst op; inc_pc_or_jump op od
+   od) s = (r, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  LENGTH s'.contexts = LENGTH s.contexts + 1
+Proof
+  strip_tac
+  >> gvs[bind_def, get_current_context_def, return_def, fail_def,
+         COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs(),
+         ignore_bind_def]
+  (* Stop case: preserves_same_frame, can't grow *)
+  >- (`preserves_same_frame (step_inst Stop)` by simp[]
+      >> imp_res_tac psf_imp_length_contexts_preserved >> gvs[])
+  (* Invalid case: preserves_same_frame, can't grow *)
+  >- (`preserves_same_frame (step_inst Invalid)` by simp[]
+      >> imp_res_tac psf_imp_length_contexts_preserved >> gvs[])
+  (* SOME op case *)
+  >> rename1 `step_inst op s = _`
+  >> Cases_on `step_inst op s` >> gvs[AllCaseEqs()]
+  (* step_inst INL: inc_pc_or_jump ran. inc_pc_or_jump is psf, so growth from step_inst *)
+  >- (
+    `preserves_same_frame (inc_pc_or_jump op)` by simp[]
+    >> drule_then drule psf_imp_length_contexts_preserved
+    >> impl_keep_tac
+    >- (
+      strip_tac >> gvs[inc_pc_or_jump_def,COND_RATOR,AllCaseEqs(),return_def] >>
+      gvs[bind_def,get_current_context_def,return_def,AllCaseEqs(),fail_def] )
+    >> strip_tac >> gvs[]
+    >> drule_all step_inst_inl_grew_is_call
+    >> Cases_on`step_inst op s = step_call op s` >> gvs[]
+    >- ( drule_then drule step_call_grows_by_exactly_one >> rw[] )
+    >> strip_tac
+    >> `∃two. step_inst op s = step_create two s` by (
+      Cases_on`op` >> gvs[step_inst_def,is_call_def] >> metis_tac[])
+    >> irule step_create_grows_by_exactly_one >> simp[]
+    >> metis_tac[] )
+  (* step_inst INR: s' is from step_inst directly *)
+  >> rename1 `step_inst op s = (INR e, s')`
+  >> `op = Call ∨ op = CallCode ∨ op = DelegateCall ∨ op = StaticCall`
+       by metis_tac[step_inst_inr_grew_is_call_family]
+  >> gvs[step_inst_def]
+  >> irule step_call_grows_by_exactly_one >> simp[]
+  >> metis_tac[]
+QED

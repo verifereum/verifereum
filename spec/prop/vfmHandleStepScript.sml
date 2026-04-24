@@ -793,6 +793,78 @@ Proof
          get_gas_left_def,set_rollback_def]
 QED
 
+(* When LENGTH ≥ 2 and ok_state, handle_exception takes the pop branch and
+   shrinks by exactly 1. The n ≤ 1 reraise branch is not taken, and the
+   prefix (consume_gas) succeeds because ok_state ensures gasUsed ≤ gasLimit. *)
+Theorem handle_exception_ge_2_pops:
+  ok_state s ∧ LENGTH s.contexts ≥ 2 ∧ handle_exception e s = (q, s') ⇒
+  LENGTH s'.contexts + 1 = LENGTH s.contexts
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
+  >> `wf_context (FST (HD s.contexts))` by (
+       gvs[ok_state_def] >> Cases_on `s.contexts` >> gvs[])
+  >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s.contexts)).msgParams.gasLimit`
+       by gvs[wf_context_def]
+  >> qhdtm_x_assum `handle_exception` mp_tac
+  >> simp[handle_exception_def]
+  >> simp[ignore_bind_def, Once bind_def]
+  >> qmatch_goalsub_abbrev_tac `prefix s`
+  (* prefix always succeeds (INL) when gasUsed ≤ gasLimit *)
+  >> `∃r sp. prefix s = (INL r, sp) ∧ LENGTH sp.contexts = LENGTH s.contexts` by (
+       simp[Abbr`prefix`]
+       >> IF_CASES_TAC >> simp[return_def]
+       >> simp[bind_def, get_gas_left_def, get_current_context_def, return_def]
+       >> simp[consume_gas_def, bind_def, assert_def, return_def, ignore_bind_def,
+               get_current_context_def, set_current_context_def]
+       >> simp[ignore_bind_def, set_return_data_def, bind_def,
+               get_current_context_def, set_current_context_def, return_def])
+  >> gvs[]
+  >> simp[Once bind_def, get_num_contexts_def, return_def]
+  (* The key: LENGTH sp.contexts ≥ 2 means ¬(n ≤ 1), so pop branch taken *)
+  >> `¬(LENGTH sp.contexts ≤ 1)` by simp[]
+  >> simp[]
+  >> simp[Once bind_def]
+  >> simp[get_return_data_def, bind_def, get_current_context_def,
+          return_def, fail_def]
+  >> `sp.contexts ≠ []` by (Cases_on `sp.contexts` >> gvs[])
+  >> Cases_on `sp.contexts` >> fs[]
+  >> simp[get_output_to_def, bind_def, get_current_context_def,
+          return_def, fail_def]
+  >> Cases_on `pop_and_incorporate_context (e = NONE) sp` >> simp[]
+  >> Cases_on `q'` >> simp[]
+  >- ((* INL case: pop succeeded, shrinks by exactly 1. *)
+      `LENGTH r.contexts + 1 = LENGTH sp.contexts` by (
+        qhdtm_x_assum `pop_and_incorporate_context` mp_tac
+        >> gvs[pop_and_incorporate_context_def, bind_def, ignore_bind_def,
+               get_gas_left_def, return_def, pop_context_def, fail_def,
+               unuse_gas_def, get_current_context_def,
+               set_current_context_def, push_logs_def,
+               update_gas_refund_def, set_rollback_def, assert_def,
+               AllCaseEqs()]
+        >> strip_tac >> gvs[] >> pop_assum mp_tac
+        >> IF_CASES_TAC
+        >> gvs[bind_def, get_current_context_def, set_current_context_def,
+               return_def, fail_def, set_rollback_def, AllCaseEqs()]
+        >> strip_tac >> gvs[])
+      >> simp[inc_pc_def, bind_def, get_current_context_def,
+              ignore_bind_def, set_current_context_def]
+      >> IF_CASES_TAC >> gvs[return_def, return_destination_CASE_rator]
+      >> rw[] >> gvs[AllCaseEqs(),bind_def,COND_RATOR]
+      >> gvs[set_return_data_def,push_stack_def,write_memory_def,
+             get_current_context_def,bind_def,return_def,fail_def,
+             assert_def,pop_and_incorporate_context_def,AllCaseEqs(),
+             ignore_bind_def,set_current_context_def])
+  (* INR case: pop failed. *)
+  >> strip_tac >> gvs[]
+  >> gvs[set_return_data_def,push_stack_def,write_memory_def,
+         get_current_context_def,bind_def,return_def,fail_def,
+         assert_def,pop_and_incorporate_context_def,AllCaseEqs(),
+         ignore_bind_def,set_current_context_def,COND_RATOR,
+         pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
+         get_gas_left_def,set_rollback_def]
+QED
+
 (* handle_create doesn't change contexts length (it may modify
    account.code for Code outputTo success but doesn't touch contexts). *)
 Theorem handle_create_preserves_length:
@@ -809,6 +881,24 @@ Proof
          update_accounts_def, return_def]
   >> gvs[AllCaseEqs()]
   >> Cases_on `s.contexts` >> fs[]
+QED
+
+(* handle_create preserves ok_state: it doesn't modify stack, gasUsed, or
+   msgParams - only return_data/output_to/accounts. *)
+Theorem handle_create_preserves_ok_state:
+  ok_state s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s') ⇒
+  ok_state s'
+Proof
+  rw[handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def,
+     ok_state_def, wf_context_def]
+  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
+         assert_def, get_current_context_def, set_current_context_def,
+         update_accounts_def, return_def, ok_state_def, wf_context_def,
+         return_destination_CASE_rator, vfmTypesTheory.option_CASE_rator]
+  >> Cases_on `s.contexts` >> gvs[wf_context_def]
 QED
 
 (* Generic handle_exception pop structure: when it shrinks, the contexts
@@ -1084,5 +1174,27 @@ Proof
   >> strip_tac
   >> imp_res_tac handle_exception_shrinks_by_one
   >> fs[]
+QED
+
+(* When ¬vfm_abort e, ok_state, and LENGTH ≥ 2, handle_step shrinks by exactly 1. *)
+Theorem handle_step_not_abort_pops:
+  ok_state s ∧ ¬vfm_abort e ∧ LENGTH s.contexts ≥ 2 ∧
+  handle_step e s = (q, s') ⇒
+  LENGTH s'.contexts + 1 = LENGTH s.contexts
+Proof
+  strip_tac
+  >> gvs[handle_step_def, handle_def]
+  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
+  >> drule_then (qspec_then `e` mp_tac)
+       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> strip_tac >> gvs[]
+  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
+  >> drule_all handle_create_preserves_length
+  >> strip_tac
+  >> `LENGTH s1.contexts ≥ 2` by simp[]
+  (* Need ok_state s1 to apply handle_exception_ge_2_pops *)
+  >> `ok_state s1` by metis_tac[handle_create_preserves_ok_state]
+  >> drule_all handle_exception_ge_2_pops
+  >> simp[]
 QED
 
