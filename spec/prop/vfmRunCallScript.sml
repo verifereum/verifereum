@@ -882,151 +882,212 @@ Proof
 QED
 
 (* step_create_push_structure: structural facts when step_create grows.
-   The prefix ops are preserves_same_frame, so sm.contexts = s.contexts.
+   We peel prefix ops using bind_psf_grows_extract to get same_frame_rel s sm.
    proceed_create modifies LAST context's SND.accounts via set_original,
-   but only at the new contract address which had empty storage (else
-   abort_create_exists ran). So storage is preserved at all positions.
-   FST parts are preserved by proceed_create_push_structure. *)
+   so we only claim accesses preservation (not storage equality) for per-position
+   SND facts. Storage equality for CREATE is handled in run_call_inv_step using
+   the invariant + fresh address argument. *)
 Theorem step_create_push_structure:
   step_create two s = (r, s') ∧ s.contexts ≠ [] ∧
   LENGTH s'.contexts > LENGTH s.contexts ⇒
   MAP FST (TL (TL s'.contexts)) = MAP FST (TL s.contexts) ∧
   (∀i. i < LENGTH s.contexts ⇒
-       (SND (EL i (TL s'.contexts))).accesses = (SND (EL i s.contexts)).accesses ∧
-       (∀a. (lookup_account a (SND (EL i (TL s'.contexts))).accounts).storage =
-            (lookup_account a (SND (EL i s.contexts)).accounts).storage)) ∧
+       (SND (EL i (TL s'.contexts))).accesses = (SND (EL i s.contexts)).accesses) ∧
   (FST (HD (TL s'.contexts))).msgParams = (FST (HD s.contexts)).msgParams ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
   outputTo_consistent_ctx (FST (HD s'.contexts))
 Proof
-  strip_tac
-  (* Unfold step_create to reach proceed_create *)
-  >> qpat_x_assum `step_create two s = _` mp_tac
-  >> simp[step_create_def, bind_def, ignore_bind_def, AllCaseEqs(),
-          pop_stack_def, get_current_context_def, set_current_context_def,
-          return_def, fail_def]
-  >> strip_tac >> gvs[]
-  (* The conditional branches: abort_unuse and abort_create_exists are
-     preserves_same_frame, so they can't grow. Growth must be via proceed_create. *)
-  >> gvs[COND_RATOR, CaseEq"bool"]
-  >> TRY (drule psf_imp_length_contexts_preserved >> simp[] >> NO_TAC)
-  >> TRY (drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists)
-          >> gvs[] >> NO_TAC)
-  (* Now we have proceed_create. Extract the key facts about the guard condition:
-     ¬ account_already_created toCreate, so toCreate has empty storage. *)
-  >> qmatch_asmsub_abbrev_tac `proceed_create senderAddress address value code
-                                cappedGas sm`
-  >> `¬ account_already_created (lookup_account address
-         (lookup_account senderAddress (SND (HD s.contexts)).accounts).accounts)`
-       by (gvs[Abbr`sm`] >> CCONTR_TAC >> gvs[])
-  (* sm.contexts = s.contexts and accesses monotone from prefix ops *)
-  >> `sm.contexts = s.contexts` by (
-       gvs[Abbr`sm`]
-       >> gvs[memory_expansion_info_def, expand_memory_def, consume_gas_def,
-              read_memory_def, get_callee_def, get_accounts_def,
-              assert_def, access_address_def, get_gas_left_def,
-              assert_not_static_def, set_return_data_def, get_num_contexts_def,
-              ensure_storage_in_domain_def, domain_check_def, set_domain_def,
-              bind_def, ignore_bind_def, return_def, fail_def,
-              get_current_context_def, set_current_context_def,
-              get_static_def, update_accounts_def,
-              AllCaseEqs(), COND_RATOR])
-  >> `toSet s.rollback.accesses.storageKeys ⊆
-      toSet sm.rollback.accesses.storageKeys` by (
-       gvs[Abbr`sm`]
-       >> gvs[memory_expansion_info_def, expand_memory_def, consume_gas_def,
-              read_memory_def, get_callee_def, get_accounts_def,
-              assert_def, access_address_def, get_gas_left_def,
-              assert_not_static_def, set_return_data_def, get_num_contexts_def,
-              ensure_storage_in_domain_def, domain_check_def, set_domain_def,
-              bind_def, ignore_bind_def, return_def, fail_def,
-              get_current_context_def, set_current_context_def,
-              get_static_def, update_accounts_def,
-              AllCaseEqs(), COND_RATOR, SUBSET_DEF])
-  >> `sm.contexts ≠ []` by simp[]
+  simp[step_create_def] >> strip_tac
+  (* Peel pop_stack *)
+  >> qmatch_asmsub_abbrev_tac`pop_stack n`
+  >> `preserves_same_frame (pop_stack n)` by simp[]
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> `sm.contexts ≠ []` by (strip_tac >> gvs[same_frame_rel_def])
+  >> `LENGTH sm.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
+  (* Peel memory_expansion_info *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ sm = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sm s2`
+  >> `same_frame_rel s s2` by metis_tac[same_frame_rel_trans]
+  >> `s2.contexts ≠ [] ∧ LENGTH s2.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel consume_gas *)
+  >> gvs[ignore_bind_def]
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s2 s3`
+  >> `same_frame_rel s s3` by metis_tac[same_frame_rel_trans]
+  >> `s3.contexts ≠ [] ∧ LENGTH s3.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel expand_memory *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s3 s4`
+  >> `same_frame_rel s s4` by metis_tac[same_frame_rel_trans]
+  >> `s4.contexts ≠ [] ∧ LENGTH s4.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel read_memory *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s4 s5`
+  >> `same_frame_rel s s5` by metis_tac[same_frame_rel_trans]
+  >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel get_callee *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s5 s6`
+  >> `same_frame_rel s s6` by metis_tac[same_frame_rel_trans]
+  >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel get_accounts *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s6 s7`
+  >> `same_frame_rel s s7` by metis_tac[same_frame_rel_trans]
+  >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel assert (code length) via ignore_bind *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s7 s8`
+  >> `same_frame_rel s s8` by metis_tac[same_frame_rel_trans]
+  >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel access_address *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s8 s9`
+  >> `same_frame_rel s s9` by metis_tac[same_frame_rel_trans]
+  >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel get_gas_left *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s9 s0`
+  >> `same_frame_rel s s0` by metis_tac[same_frame_rel_trans]
+  >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel consume_gas (cappedGas) *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel s0 sa`
+  >> `same_frame_rel s sa` by metis_tac[same_frame_rel_trans]
+  >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel assert_not_static *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sa sb`
+  >> `same_frame_rel s sb` by metis_tac[same_frame_rel_trans]
+  >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel set_return_data *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sb sc`
+  >> `same_frame_rel s sc` by metis_tac[same_frame_rel_trans]
+  >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel get_num_contexts *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sc sd`
+  >> `same_frame_rel s sd` by metis_tac[same_frame_rel_trans]
+  >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel ensure_storage_in_domain *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sd se`
+  >> `same_frame_rel s se` by metis_tac[same_frame_rel_trans]
+  >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Now at the conditional *)
+  >> gvs[Ntimes COND_RATOR 2]
+  >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
+  >> qpat_x_assum`COND bbb _ _ = _`mp_tac
+  >> IF_CASES_TAC
+  >- ((* abort_unuse: preserves_same_frame, can't grow *)
+      strip_tac >>
+      drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
+      >> simp[])
+  >> IF_CASES_TAC
+  >- ((* abort_create_exists: length_preserves, can't grow *)
+      strip_tac >>
+      drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists)
+      >> simp[])
+  (* Now we have proceed_create sf = (_, s') with growth, and same_frame_rel s sf *)
+  >> strip_tac
   >> drule_all proceed_create_push_structure
   >> strip_tac
-  (* From proceed_create_push_structure: MAP FST (TL s'.contexts) = MAP FST sm.contexts *)
-  >> `MAP FST (TL (TL s'.contexts)) = MAP FST (TL sm.contexts)` by (
-       Cases_on `sm.contexts` >> gvs[]
-       >> Cases_on `TL s'.contexts` >> gvs[])
-  >> `MAP FST (TL s.contexts) = MAP FST (TL sm.contexts)` by simp[]
-  >> simp[]
-  (* msgParams preservation: from proceed_create_push_structure, FST parts preserved *)
-  >> `(FST (HD (TL s'.contexts))).msgParams = (FST (HD sm.contexts)).msgParams` by (
-       `MAP FST (TL s'.contexts) = MAP FST sm.contexts` by metis_tac[]
-       >> Cases_on `sm.contexts` >> gvs[]
-       >> Cases_on `TL s'.contexts` >> gvs[])
-  >> simp[]
-  >> conj_tac >- metis_tac[SUBSET_TRANS]
-  (* Per-position SND facts: proceed_create uses set_original which modifies
-     LAST context's SND.accounts, but only at address which had empty storage.
-     Unfold proceed_create to trace the SND modifications. *)
-  >> qpat_x_assum `proceed_create _ _ _ _ _ sm = _` mp_tac
+  (* From same_frame_rel s sf: TL sf.contexts = TL s.contexts *)
+  >> `TL se.contexts = TL s.contexts` by gvs[same_frame_rel_def]
+  >> gvs[]
+  >> conj_asm1_tac >- (
+    qpat_x_assum`same_frame_rel s se`mp_tac >>
+    simp[same_frame_rel_def] >> strip_tac >>
+    Cases_on`s'.contexts` >> gvs[] >>
+    Cases_on`t` >> gvs[] >>
+    Cases_on`se.contexts` >> gvs[] )
+  >> reverse conj_tac >- (
+    conj_tac >- (
+      qpat_x_assum`same_frame_rel s se`mp_tac >>
+      simp[same_frame_rel_def] >> strip_tac >>
+      Cases_on`s.contexts` >- gvs[] >> simp[] >>
+      Cases_on`s'.contexts` >- gvs[] >> simp[] >>
+      Cases_on`t'` >- gvs[] >> simp[] >>
+      Cases_on`se.contexts` >- gvs[] >>
+      fs[] ) >>
+    metis_tac[SUBSET_TRANS, same_frame_rel_def] )
+  (* Per-position accesses preservation: set_original only touches .accounts *)
+  >> qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac
   >> simp[proceed_create_def]
   >> simp[ignore_bind_def, bind_def, update_accounts_def, return_def,
           get_rollback_def, get_original_def, set_original_def, fail_def]
   >> strip_tac >> gvs[]
   >> drule push_context_effect >> strip_tac >> gvs[]
-  (* After push_context: TL s'.contexts = set_last_accounts modified sm.contexts *)
-  (* set_last_accounts modifies LAST context's SND.accounts *)
+  (* TL s'.contexts = set_last_accounts ... sf.contexts *)
   >> rpt strip_tac
-  (* For position i in TL s'.contexts vs position i in s.contexts = sm.contexts *)
-  >> `i < LENGTH sm.contexts` by simp[]
-  (* set_last_accounts structure: SNOC (FST LAST, modified_SND) (FRONT contexts) *)
+  >> `i < LENGTH se.contexts` by gvs[same_frame_rel_def]
   >> simp[set_last_accounts_def]
-  >> `sm.contexts ≠ []` by simp[]
-  >> Cases_on `i < LENGTH sm.contexts - 1`
-  >- ((* i is in FRONT: unchanged *)
-      `EL i (SNOC (FST (LAST sm.contexts),
-                   SND (LAST sm.contexts) with accounts :=
-                     update_account address empty_account_state
-                       (SND (LAST sm.contexts)).accounts)
-                  (FRONT sm.contexts)) = EL i (FRONT sm.contexts)` by (
-        simp[EL_SNOC] >> simp[LENGTH_FRONT])
-      >> `EL i (FRONT sm.contexts) = EL i sm.contexts` by (
-           simp[EL_FRONT] >> simp[])
-      >> simp[])
-  >> (* i = LENGTH sm.contexts - 1: the LAST position, modified *)
-     `i = LENGTH sm.contexts - 1` by simp[]
-     >> `EL i (SNOC (FST (LAST sm.contexts),
-                     SND (LAST sm.contexts) with accounts :=
-                       update_account address empty_account_state
-                         (SND (LAST sm.contexts)).accounts)
-                    (FRONT sm.contexts)) =
-         (FST (LAST sm.contexts),
-          SND (LAST sm.contexts) with accounts :=
-            update_account address empty_account_state
-              (SND (LAST sm.contexts)).accounts)` by (
-       simp[EL_SNOC, LENGTH_FRONT])
-     >> simp[]
-     >> `EL i sm.contexts = LAST sm.contexts` by (
-          `i = PRE (LENGTH sm.contexts)` by simp[]
-          >> simp[LAST_EL])
-     >> simp[]
-     (* accesses unchanged (set_original only touches .accounts) *)
-     >> conj_tac >- simp[]
-     (* storage: update_account at address, but address had empty storage *)
-     >> rpt strip_tac
-     >> simp[update_account_def, lookup_account_def]
-     >> Cases_on `a = address` >> simp[APPLY_UPDATE_THM]
-     (* a = address: original had empty storage, new is empty_account_state.
-        This requires that (SND (LAST sm.contexts)).accounts at address has
-        empty storage. The guard only tells us s.rollback.accounts at address
-        has empty storage. These are equal if the invariant ensures saved
-        rollbacks match the current rollback at unaccessed addresses.
-        For now, we note this gap. In run_call_inv_step, we can prove this
-        using the invariant directly. *)
-     >> `storage_empty (lookup_account address
-           (SND (LAST sm.contexts)).accounts).storage` by (
-          (* TODO: This needs additional invariant about relationship between
-             s.rollback and saved rollbacks. The guard ensures
-             storage_empty (lookup_account address s.rollback.accounts).storage,
-             and the invariant should ensure this equals
-             (lookup_account address (SND (LAST s.contexts)).accounts).storage
-             if address hasn't been accessed. *)
-          cheat)
-     >> gvs[storage_empty_def, empty_account_state_def, empty_storage_def]
+  >> qmatch_goalsub_abbrev_tac`SNOC new`
+  >> qhdtm_x_assum`push_context` kall_tac
+  >> qpat_x_assum`_ = TL s.contexts`mp_tac
+  >> simp[LIST_EQ_REWRITE] >> rewrite_tac[GSYM EL]
+  >> Cases_on`i=0` >- (
+    Cases_on`FRONT se.contexts = []`
+    >- (
+      gvs[] >>
+      gvs[Abbr`new`] >>
+      Cases_on`se.contexts` >> gvs[] >>
+      Cases_on`s.contexts` >> gvs[] >>
+      qpat_x_assum`same_frame_rel s se`mp_tac >>
+      simp[same_frame_rel_def] ) >>
+    rewrite_tac[GSYM EL] >>
+    DEP_REWRITE_TAC[EL_SNOC] >>
+    simp[LENGTH_FRONT] >>
+    simp[PRE_SUB1] >>
+    Cases_on`se.contexts` >> gvs[] >>
+    Cases_on`s.contexts` >> gvs[] >>
+    Cases_on`t` >> gvs[] >>
+    qpat_x_assum`same_frame_rel s se`mp_tac >>
+    simp[same_frame_rel_def] )
+  >> Cases_on`i = LENGTH s.contexts - 1`
+  >- (
+    `i = LENGTH (FRONT se.contexts)` by simp[LENGTH_FRONT] >>
+    pop_assum SUBST1_TAC >>
+    simp[EL_LENGTH_SNOC] >>
+    simp[Abbr`new`, LENGTH_FRONT, GSYM LAST_EL] >>
+    simp[LAST_EL] >> strip_tac >>
+    AP_TERM_TAC >> AP_TERM_TAC >>
+    first_x_assum(qspec_then`PRE i`mp_tac) >>
+    simp[PRE_SUB1,ADD1] )
+  >> strip_tac
+  >> simp[EL_SNOC, LENGTH_FRONT, EL_FRONT, NULL_EQ]
+  >> first_x_assum(qspec_then`PRE i`mp_tac)
+  >> simp[ADD1, PRE_SUB1]
 QED
 
 (* Unfold step = handle inner handle_step. For the same_frame case,
