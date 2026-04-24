@@ -896,6 +896,57 @@ Proof
   >> metis_tac[same_frame_rel_trans]
 QED
 
+(* When the step inner computation INR-grows, the exception is not a
+   vfm_abort. This follows because:
+   - Stop/Invalid are preserves_same_frame, can't grow
+   - For other ops that grew: by step_inst_inr_grew_is_call_family, op is Call-family
+   - For Call-family ops: by step_call_inr_grow_structure, ¬vfm_abort e *)
+Theorem step_inner_inr_grow_not_abort:
+  s.contexts ≠ [] ∧ outputTo_consistent s ∧
+  (do
+     context <- get_current_context;
+     if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+     else case FLOOKUP context.msgParams.parsed context.pc of
+            NONE => step_inst Invalid
+          | SOME op => do step_inst op; inc_pc_or_jump op od
+   od) s = (INR e, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  ¬vfm_abort e
+Proof
+  strip_tac
+  >> gvs[bind_def, get_current_context_def, return_def, fail_def,
+         COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs(),
+         ignore_bind_def]
+  (* Stop case: preserves_same_frame, can't grow - contradiction *)
+  >- (`preserves_same_frame (step_inst Stop)` by simp[]
+      >> imp_res_tac psf_imp_length_contexts_preserved
+      >> gvs[])
+  (* Invalid case: preserves_same_frame, can't grow - contradiction *)
+  >- (`preserves_same_frame (step_inst Invalid)` by simp[]
+      >> imp_res_tac psf_imp_length_contexts_preserved
+      >> gvs[])
+  (* SOME op case: step_inst op >>= inc_pc_or_jump op *)
+  (* step_inst INL, inc_pc_or_jump INR: inc_pc_or_jump is psf, contradiction *)
+  >- (`preserves_same_frame (inc_pc_or_jump op)` by simp[]
+      >> drule_then drule psf_imp_length_contexts_preserved
+        >> impl_tac
+        >- (
+          strip_tac >> gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def]
+          >> gvs[bind_def, AllCaseEqs(), get_current_context_def, fail_def] )
+      >> strip_tac >> drule step_inst_inl_grew_is_call >> gvs[]
+      >> strip_tac >> gvs[inc_pc_or_jump_def, return_def])
+  (* step_inst INR with growth *)
+  >> rename1 `step_inst op s = (INR e, s')`
+  (* By step_inst_inr_grew_is_call_family, op is Call-family *)
+  >> drule step_inst_inr_grew_is_call_family
+  >> impl_tac >- gvs[]
+  >> reverse(Cases_on`step_inst op s = step_call op s`)
+  >- ( strip_tac >> gvs[step_inst_def] )
+  (* By step_call_inr_grow_structure, ¬vfm_abort e *)
+  >> gvs[]
+  >> drule_all step_call_inr_grow_structure
+  >> simp[]
+QED
 
 Theorem step_same_frame:
   outputTo_consistent s ∧
