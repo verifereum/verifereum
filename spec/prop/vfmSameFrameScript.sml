@@ -219,6 +219,24 @@ Proof
   rw[ignore_bind_def] \\ irule preserves_same_frame_bind \\ simp[]
 QED
 
+(* When g is preserves_same_frame and bind g f grows, we can extract
+   the intermediate state sm with same_frame_rel s sm. This is useful
+   for peeling prefix operations when proving structural facts about
+   push operations like step_call/step_create. *)
+Theorem bind_psf_grows_extract:
+  preserves_same_frame g ∧
+  bind g f s = (r, s') ∧ s.contexts ≠ [] ∧
+  LENGTH s'.contexts > LENGTH s.contexts
+  ⇒
+  ∃x sm. g s = (INL x, sm) ∧ same_frame_rel s sm ∧ f x sm = (r, s')
+Proof
+  rw[preserves_same_frame_def, bind_def]
+  \\ gvs[AllCaseEqs()]
+  (* g must return INL, since psf preserves length and we grew *)
+  \\ first_x_assum drule \\ rw[]
+  \\ gvs[same_frame_rel_def]
+QED
+
 Theorem preserves_same_frame_handle[simp]:
   preserves_same_frame f ∧ (∀e. preserves_same_frame (h e)) ⇒
   preserves_same_frame (handle f h)
