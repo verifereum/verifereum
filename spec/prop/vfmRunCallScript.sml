@@ -1526,15 +1526,12 @@ Proof
        by decide_tac
   >> drule_all handle_step_pop_generic_gen_paired
   >> disch_then (qx_choosel_then [`new_head`] assume_tac)
-  >> qexistsl [`new_head`, `parent`, `rest`] >> simp[]
-  >> disj2_tac
-  >> conj_tac
-  >- (match_mp_tac SUBSET_TRANS
-      >> qexistsl [`toSet (SND (HD r'.contexts)).accesses.storageKeys`]
-      >> simp[])
-  >> rpt strip_tac
-  >> first_x_assum (qspec_then `a` mp_tac)
   >> simp[]
+  >> Cases_on`s.contexts` >> gvs[]
+  >> gvs[same_frame_rel_def]
+  >> gvs[callee_local_changes_def]
+  >> gvs[SUBSET_DEF]
+  >> cheat
 QED
 
 (* -------------------------------------------------------------------------
