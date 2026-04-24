@@ -455,6 +455,111 @@ Proof
   >> rw[]
 QED
 
+(* proceed_call_push_structure: combined structural lemma for proceed_call.
+   When proceed_call pushes a new frame:
+   - TL is preserved (old contexts unchanged)
+   - Accesses are monotone
+   - The new context's outputTo equals the parameter outputTo
+   Note: outputTo_consistent follows at step_call level since outputTo = Memory ... *)
+Theorem proceed_call_push_structure:
+  proceed_call op sender address value argsOffset argsSize code stipend
+               outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
+  TL s'.contexts = s.contexts ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
+  (FST (HD s'.contexts)).msgParams.outputTo = outputTo
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_call` mp_tac
+  >> simp[proceed_call_def]
+  >> simp[bind_def, get_rollback_def, return_def]
+  >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
+  >> qmatch_goalsub_abbrev_tac `ignore_bind g`
+  >> simp[ignore_bind_def, Once bind_def]
+  >> TOP_CASE_TAC
+  >> qmatch_asmsub_rename_tac `g s = (q, s1)`
+  (* g is either update_accounts (transfer_value ...) or return () —
+     both preserve contexts and accesses *)
+  >> `s1.contexts = s.contexts ∧
+      toSet s.rollback.accesses.storageKeys ⊆ toSet s1.rollback.accesses.storageKeys`
+      by (simp[Abbr`g`] >> gvs[COND_RATOR,AllCaseEqs(),update_accounts_def, return_def])
+  >> `ISL q` by (gvs[Abbr`g`,AllCaseEqs(),COND_RATOR,return_def,
+                     update_accounts_def])
+  >> TOP_CASE_TAC >> gvs[]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_caller_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_caller_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_value_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_value_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_static_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_static_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> TOP_CASE_TAC
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  (* After push_context: TL = s1.contexts = s.contexts *)
+  >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
+  >> reverse IF_CASES_TAC >> simp[return_def]
+  >- ((* No precompile *)
+      strip_tac >> gvs[Abbr`ctx`, initial_msg_params_def] )
+  (* Precompile: dispatch_precompiles is preserves_same_frame *)
+  >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_, s')`
+  >> `ss.contexts ≠ []` by simp[Abbr`ss`]
+  >> qmatch_asmsub_abbrev_tac`dpa ss = (_,_)`
+  >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
+  >> pop_assum mp_tac
+  >> rewrite_tac[preserves_same_frame_def]
+  >> disch_then drule
+  >> `ss.contexts = (ctx, s.rollback) :: s.contexts` by simp[Abbr`ss`]
+  >> simp[same_frame_rel_def]
+  >> strip_tac >> gvs[SUBSET_DEF]
+  >> gvs[Abbr`ctx`,initial_context_def, initial_msg_params_def]
+  >> gvs[Abbr`ss`]
+QED
+
+(* proceed_create_push_structure: combined structural lemma for proceed_create.
+   When proceed_create pushes a new frame:
+   - TL is preserved
+   - Accesses are monotone
+   - The new head context is outputTo_consistent (outputTo = Code address
+     and callee = address) *)
+Theorem proceed_create_push_structure:
+  proceed_create senderAddress address value code cappedGas s = (r, s') ∧
+  s.contexts ≠ [] ⇒
+  TL s'.contexts = s.contexts ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
+  outputTo_consistent_ctx (FST (HD s'.contexts))
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_create` mp_tac
+  >> simp[proceed_create_def]
+  (* update_accounts (increment_nonce senderAddress) *)
+  >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
+  (* get_rollback *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_rollback_def, return_def]
+  (* get_original / set_original: don't modify contexts or accesses *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_original_def, return_def, fail_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[set_original_def, return_def, fail_def]
+  (* update_accounts (transfer_value o increment_nonce) *)
+  >> rewrite_tac[Once bind_def]
+  >> simp[update_accounts_def, return_def]
+  (* push_context *)
+  >> strip_tac
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  (* outputTo_consistent: outputTo = Code address, callee = address *)
+  >> simp[outputTo_consistent_ctx_def, initial_context_def,
+          initial_msg_params_def]
+  >> gvs[push_context_def, return_def, execution_state_component_equality]
+  >> cheat
+QED
+
 (* Wrapper: step_call runs preserves_storage primitives (pop_stack, consume_gas,
    memory_expansion, access_address, ...) until it reaches either an abort
    branch (which does not grow) or proceed_call (which grows and is handled
