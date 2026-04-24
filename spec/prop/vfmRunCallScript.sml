@@ -1524,7 +1524,68 @@ Proof
          gvs[outputTo_consistent_def, outputTo_consistent_stack_def]
          >> Cases_on`s0.contexts`
          >> gvs[outputTo_consistent_ctx_def])
-    >> cheat)
+    (* Case split on which call/create op *)
+    >> Cases_on `∃two. step_inst op s0 = step_create two s0`
+    >- (
+      (* CREATE/CREATE2 case *)
+      gvs[] >> pop_assum(assume_tac o SYM) >>
+      (* Use step_create lemmas *)
+      drule_then drule step_create_grows_by_exactly_one
+      >> simp[] >> strip_tac
+      (* s1.rollback storage preserved *)
+      >> `preserves_storage (step_create two)` by simp[preserves_storage_step_create]
+      >> gvs[preserves_storage_def]
+      >> pop_assum drule >> strip_tac
+      >> gvs[lookup_storage_def, FUN_EQ_THM]
+      (* Use step_create_push_structure *)
+      >> drule step_create_push_structure
+      >> simp[]
+      >> strip_tac
+      (* Per-position storage facts *)
+      >> conj_tac >- (
+        gen_tac >> strip_tac
+        >> IF_CASES_TAC
+        >- ((* i=0: pushed rollback = s0.rollback *)
+            gvs[]
+            >> drule step_create_pushed_rb_storage
+            >> simp[]
+            >> cheat
+        )
+        >> (* i > 0: from step_create_push_structure *)
+           simp[EL_CONS, PRE_SUB1]
+           >> first_x_assum (qspec_then `i-1` mp_tac)
+           >> impl_tac >- simp[]
+           >> simp[]
+           >> cheat
+      )
+      (* msgParams at position 1 *)
+      >> conj_tac >- (Cases_on`r'.contexts` >> gvs[])
+      (* outputTo_consistent preserved *)
+      >> rpt strip_tac
+      >> Cases_on `i = 0`
+      >- (Cases_on`r'.contexts` >> gvs[]
+          >> Cases_on`t` >> gvs[]
+          >> cheat )
+      (* For outputTo_consistent, we only need FST equality *)
+      >> cheat)
+    >> (
+      (* CALL family case *)
+      `step_inst op s0 = step_call op s0`
+      by (Cases_on`op` >> gvs[step_inst_def, is_call_def])
+      (* Use step_call lemmas *)
+      >> gvs[]
+      >> drule_then drule step_call_grows_by_exactly_one
+      >> simp[] >> strip_tac
+      (* s1.rollback storage preserved *)
+      >> drule(REWRITE_RULE[preserves_storage_def]preserves_storage_step_call)
+      >> simp[lookup_storage_def, FUN_EQ_THM]
+      >> strip_tac
+      (* Use step_call_push_structure *)
+      >> drule_all step_call_push_structure
+      >> strip_tac
+      >> simp[]
+      (* Per-position storage facts *)
+      >> cheat))
   (* Case: inner returned INR - handle_step runs *)
   >> simp[]
   >> rename1 `handle_step e r' = (_, s')`
@@ -1653,9 +1714,37 @@ Proof
   >> simp[]
   >> Cases_on`s.contexts` >> gvs[]
   >> gvs[same_frame_rel_def]
-  >> gvs[callee_local_changes_def]
-  >> gvs[SUBSET_DEF]
-  >> cheat
+  (* handle_step_pop_generic_gen_paired gives us disjunction about r'.rollback → s'.rollback.
+     We need to connect s.rollback → r'.rollback.
+     From inner returning INR (which is step_inst INR), step_inst_inr_preserves_storage
+     gives s.rollback.storage = r'.rollback.storage for all addresses. *)
+  (* First, extract the step_inst call from inner *)
+  >> qpat_x_assum `_ s = (INR _, r')` mp_tac
+  >> simp[bind_def, get_current_context_def, return_def, AllCaseEqs()]
+  >> strip_tac >> gvs[]
+  >> pop_assum mp_tac
+  >> IF_CASES_TAC
+  >- (
+    simp[step_inst_def, ignore_bind_def, set_return_data_def, bind_def,
+         get_current_context_def, return_def, set_current_context_def,
+         finish_def] >> strip_tac >> gvs[] )
+  >> TOP_CASE_TAC
+  >- (
+    simp[step_inst_def, ignore_bind_def, set_return_data_def, bind_def,
+         get_current_context_def, return_def, set_current_context_def,
+         finish_def] >> strip_tac >> gvs[fail_def] )
+  (* SOME op case: step_inst op returned INR *)
+  >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
+  >> strip_tac >> gvs[]
+  >- cheat
+  >> rename1 `step_inst op s = (INR e, r')`
+  >> drule step_inst_inr_preserves_storage
+  >> simp[lookup_storage_def, FUN_EQ_THM]
+  (* Now we have:
+     - s.rollback.storage = r'.rollback.storage (from step_inst_inr_preserves_storage)
+     - disjunction from handle_step_pop_generic_gen_paired about r' → s'
+     Compose to get s → s' storage facts. *)
+  >> gvs[callee_local_changes_def, SUBSET_DEF]
 QED
 
 (* -------------------------------------------------------------------------
