@@ -1298,3 +1298,56 @@ Proof
   >> (drule step_call_same_frame_preserves_storage ORELSE
       drule step_create_same_frame_preserves_storage ) >> rw[]
 QED
+
+(* step_inst returning INR preserves storage unconditionally.
+   This is because write_storage (the only storage-modifying primitive)
+   always succeeds, so if step_inst returns INR, write_storage didn't run.
+   - For call/create ops: preserves_storage_step_call/create is unconditional
+   - For SStore: if it fails, it's before write_storage
+   - For other ops: they don't write storage at all (cp or preserves_storage) *)
+Theorem step_inst_inr_preserves_storage:
+  step_inst op s = (INR e, s') ∧ s.contexts ≠ [] ⇒
+  ∀a k.
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    lookup_storage k (lookup_account a s.rollback.accounts).storage
+Proof
+  strip_tac
+  >> Cases_on `is_call op`
+  >- ((* Call/create: use preserves_storage_step_call/create *)
+      Cases_on `op` >> gvs[is_call_def, step_inst_def]
+      >> metis_tac[preserves_storage_step_call, preserves_storage_step_create,
+                   preserves_storage_def])
+  (* Non-call ops *)
+  >> Cases_on `op = SStore`
+  >- ((* SStore INR: failed before write_storage *)
+      gvs[step_inst_def, step_sstore_def, bind_def, ignore_bind_def,
+          AllCaseEqs(), pop_stack_def, get_callee_def, assert_not_static_def,
+          return_def, get_current_context_def, set_current_context_def,
+          assert_def, fail_def, get_static_def]
+      (* Each failure case is before write_storage, so s' = some intermediate
+         state that preserved storage. The gas consumption primitives
+         preserve storage. *)
+      >- ((* gas consumption INL but contexts empty - use gas consumption preservation *)
+          drule (REWRITE_RULE[preserves_storage_def] preserves_storage_step_sstore_gas_consumption)
+          >> simp[])
+      >- ((* write_storage INR - impossible since write_storage always returns INL *)
+          gvs[write_storage_def, update_accounts_def, return_def])
+      >- ((* assert_not_static failed - s' from gas consumption *)
+          drule (REWRITE_RULE[preserves_storage_def] preserves_storage_step_sstore_gas_consumption)
+          >> simp[])
+      (* gas consumption INR - s' from gas consumption *)
+      >> drule (REWRITE_RULE[preserves_storage_def] preserves_storage_step_sstore_gas_consumption)
+      >> simp[])
+  >> Cases_on `op = TStore`
+  >- (gvs[] >> drule step_inst_TStore_storage_preserved >> simp[])
+  >> Cases_on `∃n. op = Log n`
+  >- (gvs[] >> metis_tac[step_inst_Log_storage_preserved])
+  >> Cases_on `op = SelfDestruct`
+  >- (gvs[] >> drule step_inst_SelfDestruct_storage_preserved >> simp[])
+  (* Remaining non-call, non-storage ops are cp *)
+  >> `∀n. op ≠ Log n` by (Cases_on `op` >> fs[])
+  >> `cp (step_inst op)` by (
+       irule cp_step_inst_non_call >> simp[]
+       >> Cases_on `op` >> gvs[is_call_def])
+  >> metis_tac[cp_imp_storage_preserved]
+QED
