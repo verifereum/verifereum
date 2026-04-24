@@ -523,14 +523,14 @@ QED
 
 (* proceed_create_push_structure: combined structural lemma for proceed_create.
    When proceed_create pushes a new frame:
-   - TL is preserved
+   - FST parts of TL are preserved (SND parts may change due to ensure_storage_in_domain)
    - Accesses are monotone
    - The new head context is outputTo_consistent (outputTo = Code address
      and callee = address) *)
 Theorem proceed_create_push_structure:
   proceed_create senderAddress address value code cappedGas s = (r, s') ∧
   s.contexts ≠ [] ⇒
-  TL s'.contexts = s.contexts ∧
+  MAP FST (TL s'.contexts) = MAP FST s.contexts ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
   outputTo_consistent_ctx (FST (HD s'.contexts))
 Proof
@@ -556,8 +556,9 @@ Proof
   (* outputTo_consistent: outputTo = Code address, callee = address *)
   >> simp[outputTo_consistent_ctx_def, initial_context_def,
           initial_msg_params_def]
-  >> gvs[push_context_def, return_def, execution_state_component_equality]
-  >> cheat
+  >> simp[set_last_accounts_def, MAP_SNOC, MAP_FRONT]
+  >> qspec_then`MAP FST s.contexts`mp_tac SNOC_LAST_FRONT
+  >> simp[]
 QED
 
 (* Wrapper: step_call runs preserves_storage primitives (pop_stack, consume_gas,
