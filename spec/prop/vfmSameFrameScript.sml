@@ -2318,7 +2318,7 @@ Theorem proceed_call_length:
   s.contexts ≠ [] ∧
   proceed_call op sender addr value aOff aSz code stipend outTo s
     = (r, s') ⇒
-  LENGTH s'.contexts ≥ LENGTH s.contexts + 1
+  LENGTH s'.contexts = LENGTH s.contexts + 1
 Proof
   strip_tac
   >> gvs[proceed_call_def, bind_def, ignore_bind_def, AllCaseEqs(),
