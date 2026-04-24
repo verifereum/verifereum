@@ -26,7 +26,8 @@ Ancestors
   combin pair option pred_set list rich_list sum
   arithmetic finite_map While vfmTypes vfmConstants
   vfmContext vfmState vfmExecution vfmExecutionProp
-  vfmStoragePredicates vfmSameFrame vfmStaticCalls vfmStepLength vfmHandleStep vfmRunWithinFrame
+  vfmStoragePredicates vfmSameFrame vfmStaticCalls
+  vfmDecreasesGas vfmStepLength vfmHandleStep vfmRunWithinFrame
 Libs
   dep_rewrite BasicProvers
 
@@ -91,6 +92,7 @@ Definition run_call_inv_def:
   run_call_inv es s ⇔
     s.txParams = es.txParams ∧
     outputTo_consistent_stack s ∧
+    ok_state s ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (active_rollbacks (LENGTH es.contexts) s)
 End
@@ -100,7 +102,7 @@ End
  * ------------------------------------------------------------------------- *)
 
 Theorem run_call_inv_refl:
-  outputTo_consistent_stack es ∧
+  outputTo_consistent_stack es ∧ ok_state es ∧
   EVERY (λrb. storage_slot_preserved rb es.rollback)
         (MAP SND (TAKE 2 es.contexts)) ⇒
   run_call_inv es es
@@ -978,6 +980,16 @@ Proof
  *)
 QED
 
+Theorem same_frame_or_grow_length:
+  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ⇒
+    LENGTH s'.contexts ≥ LENGTH s.contexts
+Proof
+  rw[same_frame_or_grow_def]
+  >> res_tac
+  >> fs[same_frame_rel_def]
+  >> decide_tac
+QED
+
 (* -------------------------------------------------------------------------
  * Push-structure lemma for step (Case +1 of run_call_inv_step).
  *
@@ -1002,7 +1014,7 @@ QED
  * ------------------------------------------------------------------------- *)
 Theorem step_push_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
-    outputTo_consistent_stack s ∧
+    outputTo_consistent_stack s ∧ ok_state s ∧
     LENGTH s'.contexts > LENGTH s.contexts ⇒
     LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
     (* Storage preservation for s'.rollback *)
@@ -1028,33 +1040,97 @@ Theorem step_push_structure:
          outputTo_consistent_ctx (FST (EL i s.contexts)) ⇒
          outputTo_consistent_ctx (FST (EL (i+1) s'.contexts)))
 Proof
-  cheat
-  (* Proof sketch:
-     Unfold step = handle inner handle_step.
-
-     Case A (inner INL, grew):
-       By step_inst_inl_grew_is_call, op is Call/Create family.
-       Use step_call_pushed_rb_storage / step_create_pushed_rb_storage
-       for i=0 case (SND (HD s'.contexts) storage = s.rollback storage).
-       Use preserves_storage_step_call / preserves_storage_step_create
-       for s'.rollback storage.
-       For i>0: EL i s'.contexts = EL (i-1) s.contexts with possibly
-       modified FST (for i=1, the parent context) or modified
-       SND.accounts (for i=LENGTH s.contexts, due to set_last_accounts
-       in Create). But storage is preserved because:
-       - For i=1: SND unchanged (push_context preserves it)
-       - For i>1 except last: literally unchanged
-       - For last (Create only): set_last_accounts uses accounts from
-         increment_nonce + transfer_value which preserve storage
-
-     Case B (inner INR, grew, then handle_step):
-       handle_step never grows, so s' = r' (reraise with vfm_abort).
-       Use step_call_inr_grow_structure from vfmRunWithinFrame.
-
-     outputTo_consistent_ctx: Call ops have Memory (vacuous);
-     Create ops have Code a with callee = a.
-     For i>0: outputTo_consistent_ctx only depends on msgParams which
-     is preserved by push_context and set_last_accounts. *)
+  rpt gen_tac >> strip_tac
+  (* Unfold step = handle inner handle_step *)
+  >> qpat_x_assum `step s = _` mp_tac
+  >> simp[step_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `inner s`
+  >> Cases_on `inner s` >> Cases_on `q`
+  (* Case: inner returned INL - step returns inner's result *)
+  >- (
+    simp[] >> strip_tac >> gvs[]
+    (* inner = get_ctx; step_inst; inc_pc_or_jump *)
+    >> gvs[Abbr`inner`, bind_def,AllCaseEqs()]
+    >> gvs[get_current_context_def, return_def, fail_def, bind_def]
+    >> gvs[COND_RATOR, CaseEq"bool"]
+    (* Case: code ≤ pc, step_inst Stop *)
+    >- (
+      `preserves_same_frame (step_inst Stop)` by simp[]
+      >> drule_all psf_imp_length_contexts_preserved
+      >> simp[])
+    (* Case: FLOOKUP *)
+    >> gvs[option_CASE_rator,CaseEq"option"]
+    (* NONE: step_inst Invalid *)
+    >- (
+      `preserves_same_frame (step_inst Invalid)` by simp[]
+      >> drule_all psf_imp_length_contexts_preserved
+      >> simp[])
+    (* SOME op: step_inst op; inc_pc_or_jump op *)
+    >> gvs[ignore_bind_def, bind_def]
+    >> gvs[AllCaseEqs()]
+    >> rename1 `step_inst op s0 = (INL (), s1)`
+    >> drule_at Any psf_imp_length_contexts_preserved
+    >> simp[]
+    >> impl_keep_tac >- (strip_tac >>
+         gvs[inc_pc_or_jump_def,COND_RATOR,AllCaseEqs(),return_def] >>
+         gvs[bind_def,get_current_context_def,fail_def,AllCaseEqs()] )
+    >> strip_tac
+    >> `LENGTH s1.contexts > LENGTH s0.contexts` by simp[]
+    (* By step_inst_inl_grew_is_call, is_call op *)
+    >> `is_call op` by metis_tac[step_inst_inl_grew_is_call]
+    (* For is_call, inc_pc_or_jump = return (), so s' = s1 *)
+    >> `r' = s1` by (
+         gvs[inc_pc_or_jump_def, return_def, COND_RATOR, CaseEq"bool"])
+    >> gvs[]
+    >> `outputTo_consistent s0` by (
+         gvs[outputTo_consistent_def, outputTo_consistent_stack_def]
+         >> Cases_on`s0.contexts`
+         >> gvs[outputTo_consistent_ctx_def])
+    >> cheat)
+  (* Case: inner returned INR - handle_step runs *)
+  >> simp[]
+  >> rename1 `handle_step e r' = (_, s')`
+  (* inner is same_frame_or_grow *)
+  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
+  >> `LENGTH r'.contexts ≥ LENGTH s.contexts` by (
+       drule_all same_frame_or_grow_length >> simp[])
+  >> strip_tac
+  >> `r'.contexts ≠ []` by (strip_tac >> gvs[] >> Cases_on`s.contexts` >> gvs[])
+  (* For LENGTH s' > LENGTH s with inner INR, we derive a contradiction.
+     The inner INR-grew, so by step_inner_inr_grow_not_abort, ¬vfm_abort e.
+     With ¬vfm_abort e and LENGTH r' ≥ 2, handle_step_not_abort_pops says
+     handle_step shrinks by exactly 1: LENGTH s' + 1 = LENGTH r'.
+     By step_inner_grows_by_exactly_one, LENGTH r' = LENGTH s + 1.
+     So LENGTH s' + 1 = LENGTH s + 1, giving LENGTH s' = LENGTH s.
+     This contradicts LENGTH s' > LENGTH s. *)
+  >> `LENGTH s'.contexts ≤ LENGTH s.contexts` suffices_by gvs[]
+  >> Cases_on `LENGTH r'.contexts = LENGTH s.contexts` >- (
+       drule handle_step_shrinks_by_one >> simp[])
+  (* inner grew *)
+  >> `LENGTH r'.contexts > LENGTH s.contexts` by simp[]
+  >> `outputTo_consistent s` by
+       metis_tac[outputTo_consistent_stack_imp_consistent]
+  >> `¬vfm_abort e` by (
+       irule step_inner_inr_grow_not_abort
+       >> qexistsl_tac [`s`, `r'`] >> simp[Abbr`inner`])
+  >> `0 < LENGTH s.contexts` by (Cases_on`s.contexts` >> gvs[])
+  >> `LENGTH r'.contexts ≥ 2` by simp[]
+  (* Inner grew by exactly 1 *)
+  >> `LENGTH r'.contexts = LENGTH s.contexts + 1` by (
+       qunabbrev_tac`inner` >>
+       drule_then drule step_inner_grows_by_exactly_one >> gvs[])
+  (* Need ok_state r' to apply handle_step_not_abort_pops *)
+  >> drule_at(Pat`handle_step`) handle_step_not_abort_pops
+  >> gvs[]
+  >> `decreases_gas_cred T 0 0 inner` suffices_by (
+    gvs[decreases_gas_cred_def] >>
+    disch_then(qspec_then`s`mp_tac) >> rw[] ) >>
+  simp[Abbr`inner`] >>
+  irule decreases_gas_cred_bind_mono >>
+  qexistsl_tac[`T`,`F`] >> simp[] >> gen_tac >>
+  rw[] >> CASE_TAC >> rw[] >>
+  irule decreases_gas_cred_ignore_bind_mono >> rw[] >>
+  qexistsl_tac[`F`,`T`] >> simp[]
 QED
 
 (* -------------------------------------------------------------------------
@@ -1076,16 +1152,6 @@ QED
      - Reraise-like pop (disjunct A): s.rollback.accesses ⊆ s'.rollback.accesses.
      - Failure pop (disjunct B): callee_rb.accesses ⊆ s'.rollback.accesses.
    (A single universal `s.accesses ⊆ s'.accesses` would fail in disjunct B.) *)
-Theorem same_frame_or_grow_length:
-  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ⇒
-    LENGTH s'.contexts ≥ LENGTH s.contexts
-Proof
-  rw[same_frame_or_grow_def]
-  >> res_tac
-  >> fs[same_frame_rel_def]
-  >> decide_tac
-QED
-
 Theorem same_frame_or_grow_eq_length:
   ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ∧
     LENGTH s'.contexts = LENGTH s.contexts ⇒ same_frame_rel s s'
@@ -1196,6 +1262,12 @@ Proof
   >> `s1.txParams = s0.txParams`
        by metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND]
   >> `s1.txParams = es.txParams` by fs[run_call_inv_def]
+  >> `ok_state s0` by fs[run_call_inv_def]
+  >> `ok_state s1` by (
+       mp_tac decreases_gas_cred_step
+       >> rewrite_tac[decreases_gas_cred_def]
+       >> disch_then (qspec_then `s0` mp_tac)
+       >> simp[])
   >> simp[run_call_inv_def]
   (* Trichotomy on the length change. *)
   >> Cases_on `LENGTH s1.contexts = LENGTH s0.contexts` >> gvs[]
@@ -1402,7 +1474,7 @@ QED
 
 Theorem run_call_preserves_inv:
   ∀es res es'.
-    outputTo_consistent_stack es ∧
+    outputTo_consistent_stack es ∧ ok_state es ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (res, es') ⇒
@@ -1437,7 +1509,7 @@ QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots:
   ∀es r es'.
-    outputTo_consistent_stack es ∧
+    outputTo_consistent_stack es ∧ ok_state es ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (r, es') ⇒
@@ -1452,7 +1524,7 @@ QED
 
 Theorem run_call_preserves_txParams:
   ∀es r es'.
-    outputTo_consistent_stack es ∧
+    outputTo_consistent_stack es ∧ ok_state es ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (r, es') ⇒
