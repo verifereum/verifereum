@@ -15,7 +15,8 @@
 Theory vfmJumpDest
 Ancestors
   combin pair list
-  vfmExecution vfmContext vfmSameFrame
+  vfmExecution vfmExecutionProp vfmContext vfmSameFrame
+  vfmHandleStep vfmStepLength
 Libs
   BasicProvers
 
@@ -2052,6 +2053,82 @@ Proof
   cheat
 QED
 
+(*) handle_step INL establishes all_jumpDest_NONE given only TL has jumpDest NONE.
+
+   Motivation: when the inner block of step returns INR because step_inst Jump
+   set jumpDest = SOME pc and inc_pc_or_jump failed with InvalidJumpDest, the
+   intermediate state s'' has a dirty head but a clean tail. handle_step then
+   pops the dirty head (it can't reraise with n > 1 because popping returns INL),
+   exposing position 1 as the new head, which has jumpDest = NONE. The
+   post-pop operations (inc_pc, push_stack, set_return_data, etc.) don't
+   touch jumpDest. So all_jumpDest_NONE holds on the final state.
+
+   This is strictly weaker than preserves_all_jumpDest_NONE_handle_step,
+   which requires all_jumpDest_NONE on the input. That stronger lemma can't
+   handle the Jump/JumpI + InvalidJumpDest sub-case because the head is dirty.
+   *)
+Theorem handle_step_INL_ESTABLISHES_all_jumpDest_NONE:
+  handle_step e s = (INL (), s') ∧ s.contexts ≠ [] ∧
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ⇒
+  all_jumpDest_NONE s'
+Proof
+  strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC >- (
+    (* vfm_abort e ⇒ reraise ⇒ returns INR, contradicting INL *)
+    simp[reraise_def] >> strip_tac >> gvs[] )
+  >> simp[handle_def]
+  >> TOP_CASE_TAC
+  >> TOP_CASE_TAC >> gvs[]
+  >- metis_tac[handle_create_INR, PAIR_EQ, sumTheory.INR_neq_INL]
+  >> drule handle_create_preserves_length
+  >> strip_tac
+  >> rename1`handle_create _ _ = (INR eout,s1)`
+  >> (* handle_create only modifies the head context's FST (via *)
+  (* set_current_context) or reraise/fail. TL is preserved.          *)
+  `TL s1.contexts = TL s.contexts` by (
+       Cases_on `s1.contexts` >> Cases_on `s.contexts` >> gvs[]
+       >> qpat_x_assum `handle_create _ _ = _` mp_tac
+       >> simp[handle_create_def, return_destination_CASE_rator,
+              bind_def, ignore_bind_def, get_return_data_def,
+              get_output_to_def, get_current_context_def,
+              return_def, fail_def, reraise_def, consume_gas_def,
+              update_accounts_def, assert_def,
+              vfmTypesTheory.option_CASE_rator,
+              set_current_context_def, AllCaseEqs()]
+       >> strip_tac >> gvs[] )
+  >> strip_tac
+  >> (* LENGTH > 1 because n ≤ 1 ⇒ reraise ⇒ INR, not INL *)
+  `LENGTH s1.contexts > 1` by (
+    CCONTR_TAC >> fs[handle_exception_def] >>
+    gvs[bind_def,ignore_bind_def,AllCaseEqs(),COND_RATOR,reraise_def,
+        get_num_contexts_def,return_def] >>
+    rpt(drule_at_then Any
+      (fn th => CHANGED_TAC(mp_tac th >>
+                impl_tac >- (gvs[] >> strip_tac >> gvs[]) >> rw[]))
+      psf_imp_length_contexts_preserved))
+  >> (* handle_exception pops the head (n > 1), exposing position 1 which has
+       jumpDest = NONE. After pop, every remaining context had jumpDest = NONE.
+       The subsequent inc_pc, push_stack, set_return_data, write_memory,
+       set_rollback, update_gas_refund, push_logs don't touch jumpDest. *)
+  `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> gvs[])
+  >> gvs[handle_exception_def]
+  >> simp[all_jumpDest_NONE_def]
+  >> gvs[bind_def, ignore_bind_def, AllCaseEqs(),
+         get_gas_left_def, consume_gas_def, set_return_data_def,
+         get_current_context_def, return_def, set_current_context_def,
+         fail_def, get_return_data_def, get_output_to_def,
+         get_num_contexts_def, COND_RATOR, vfmTypesTheory.option_CASE_rator,
+         assert_def, get_current_context_def, unuse_gas_def,
+         pop_and_incorporate_context_def, pop_context_def,
+         set_rollback_def, inc_pc_def, push_stack_def,
+         write_memory_def, update_gas_refund_def, push_logs_def,
+         outputTo_consistent_def, return_destination_CASE_rator]
+  >> Cases_on `s.contexts` >> fs[]
+  >> Cases_on `t` >> fs[]
+QED
+
 (* Main theorem: step INL preserves all_jumpDest_NONE *)
 Theorem step_all_jumpDest_NONE:
   step s = (INL (), s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
@@ -2059,16 +2136,74 @@ Proof
   rw[step_def, handle_def, AllCaseEqs()]
   >- ((* INL case from inner block *)
       drule step_inner_INL_preserves_all_jumpDest_NONE >> simp[])
-  >- ((* INR from inner block, then handle_step returns INL *)
+  >> (* INR from inner block, then handle_step returns INL *)
       `EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts)` by (
         gvs[all_jumpDest_NONE_def] >>
         Cases_on `s.contexts` >> gvs[]) >>
       Cases_on`s.contexts = []` >- (
         gvs[bind_def,AllCaseEqs(),get_current_context_def,fail_def] >>
         gvs[handle_step_def,reraise_def] ) >>
-      `TL s''.contexts = TL s.contexts` by (
-        drule step_inner_INR_preserves_tail >> simp[]) >>
-      cheat)
+      drule handle_step_INL_ESTABLISHES_all_jumpDest_NONE >>
+      disch_then irule >>
+      conj_asm1_tac >- (
+        strip_tac >> gvs[handle_step_def, COND_RATOR, CaseEq"bool", reraise_def] >>
+        gvs[handle_def,AllCaseEqs()]
+        >- metis_tac[handle_create_INR, sumTheory.INR_neq_INL, PAIR_EQ]
+        >> drule handle_create_preserves_length
+        >> gvs[]
+        >> strip_tac
+        >> gvs[handle_exception_def]
+        >> gvs[bind_def,ignore_bind_def,AllCaseEqs(),get_num_contexts_def,
+               reraise_def,COND_RATOR,return_def,get_gas_left_def,
+               get_current_context_def,fail_def] ) >>
+  gvs[bind_def,AllCaseEqs(),get_current_context_def,return_def,fail_def] >>
+  gvs[COND_RATOR,AllCaseEqs()] >- (
+    drule_at(Pat`step_inst`)(
+      REWRITE_RULE[preserves_all_jumpDest_NONE_def]
+        preserves_all_jumpDest_NONE_step_inst) >>
+    impl_tac >- gvs[] >>
+    gvs[all_jumpDest_NONE_def] >>
+    Cases_on`s''.contexts` >> gvs[] ) >>
+  gvs[vfmTypesTheory.option_CASE_rator, AllCaseEqs()] >- (
+    drule_at(Pat`step_inst`)(
+      REWRITE_RULE[preserves_all_jumpDest_NONE_def]
+        preserves_all_jumpDest_NONE_step_inst) >>
+    impl_tac >- gvs[] >>
+    gvs[all_jumpDest_NONE_def] >>
+    Cases_on`s''.contexts` >> gvs[] ) >>
+  Cases_on `is_call op` >- (
+    (* is_call: inc_pc_or_jump = return (), so s'' comes directly from
+       step_inst op returning INR. step_call is same_frame_or_grow:
+       either same_frame (TL preserved) or grew (old TL still present,
+       new child has jumpDest = NONE by initial_context_simp, and the
+       parent at position 1 derives its msgParams from the old head but
+       its jumpDest is set by set_current_context which only touches
+       the head of the running frame). In both cases TL s''.contexts
+       jumpDests are NONE. *)
+    `same_frame_or_grow (step_inst op)` by simp[]
+    >> pop_assum mp_tac
+    >> rewrite_tac[same_frame_or_grow_def]
+    >> gvs[ignore_bind_def,AllCaseEqs(),bind_def]
+    >- gvs[inc_pc_or_jump_def,return_def]
+    >> disch_then drule >> simp[]
+    >> strip_tac >- ( gvs[same_frame_rel_def] )
+    >> (* Grew by 1: new child from initial_context has jumpDest = NONE, *)
+    (* parent's FST has jumpDest from set_current_context (not modified     *)
+    (* in the push path for call/create). Either way, TL is old TL + 1   *)
+    (* element with jumpDest = NONE.                                       *)
+    gvs[inc_pc_or_jump_def, return_def] >>
+    cheat
+    ) >>
+  (* ¬is_call: step_inst op is preserves_same_frame, so TL preserved *)
+  `preserves_same_frame (step_inst op)` by (
+    Cases_on`op` >> gvs[step_inst_def,is_call_def] ) >>
+  gvs[preserves_same_frame_def] >>
+  gvs[ignore_bind_def,AllCaseEqs(),bind_def] >>
+  first_x_assum drule >> rw[same_frame_rel_def] >>
+  drule(REWRITE_RULE[preserves_same_frame_def]
+          preserves_same_frame_inc_pc_or_jump) >>
+  gvs[same_frame_rel_def] >>
+  impl_tac >- (strip_tac >> gvs[]) >> gvs[]
 QED
 
 (* Derived theorem: if all contexts have jumpDest = NONE and contexts ≠ [],

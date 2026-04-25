@@ -102,7 +102,7 @@ Proof
     rename1`_ s1 = (_,s')` >>
     TRY (
       rename1`_ s = (_,s1)` >>
-      `LENGTH s1.contexts = LENGTH s.contexts` by 
+      `LENGTH s1.contexts = LENGTH s.contexts` by
         gvs[bind_def, ignore_bind_def, AllCaseEqs(),
             get_gas_left_def, consume_gas_def, assert_def,
             set_return_data_def, fail_def, return_def,
@@ -141,7 +141,7 @@ Proof
                    rw[] >> strip_tac >> gvs[] >>
                    qhdtm_x_assum`push_logs`assume_tac >>
                    drule_at Any psf_imp_length_contexts_preserved >>
-                   rw[] >> strip_tac >> gvs[] 
+                   rw[] >> strip_tac >> gvs[]
      )) >> strip_tac >> (
      reverse BasicProvers.TOP_CASE_TAC >- (
        rw[] >>
@@ -210,7 +210,7 @@ Proof
   \\ (* handle (handle_create e) handle_exception s *)
     gvs[handle_def]
   \\ `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-  \\ drule_then(qspec_then`e`mp_tac) (INST_TYPE[alpha |-> ``:unit``]handle_create_INR)
+  \\ qspec_then`e`mp_tac(Q.GEN`e`(INST_TYPE[alpha |-> ``:unit``]handle_create_INR))
   \\ rw[] >> gvs[]
   \\ rename1`handle_create _ s = (_,s1)`
   \\ qmatch_asmsub_abbrev_tac`hce s = _`
@@ -675,19 +675,6 @@ QED
    no SSTORE runs in handle_step (handle_create only touches .code,
    handle_exception doesn't touch .storage). *)
 
-(* DEMO CHEAT: demonstrate how to apply `handle_create_INR` when
-   we have an INL hypothesis that should be impossible.
-   handle_create_INR : ⊢ s.contexts ≠ [] ⇒
-     ∃e' s'. handle_create e s = (INR e', s') *)
-Theorem demo_handle_create_INL_impossible:
-  s.contexts ≠ [] ∧ handle_create y s = (INL v, r) ⇒ F
-Proof
-  strip_tac >>
-  drule handle_create_INR >>
-  rename1`handle_create e` >>
-  disch_then(qspec_then`e`mp_tac) >> rw[]
-QED
-
 Theorem handle_step_preserves_storage_same_length:
   s.contexts ≠ [] ∧ outputTo_consistent s ∧
   handle_step y s = (r, s') ∧
@@ -700,9 +687,9 @@ Proof
   >> gvs[AllCaseEqs()]
   >- (
     (* handle_create returned INL — impossible by handle_create_INR. *)
-    drule (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-    >> rename1 `handle_create e`
-    >> disch_then (qspec_then `e` mp_tac) >> rw[])
+    rename1 `handle_create e`
+    >> strip_assume_tac(INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+    >> gvs[] )
   (* handle_create returned INR eout; handle_exception eout s'' = (r, s'). *)
   >> rename1 `handle_create y s = (INR eout, s'')`
   >> mp_tac (INST_TYPE [alpha |-> ``:unit``]
@@ -868,7 +855,7 @@ QED
 (* handle_create doesn't change contexts length (it may modify
    account.code for Code outputTo success but doesn't touch contexts). *)
 Theorem handle_create_preserves_length:
-  handle_create e s = (q, s') ∧ s.contexts ≠ [] ⇒
+  handle_create e s = (q, s') ⇒
   LENGTH s'.contexts = LENGTH s.contexts
 Proof
   rw[handle_create_def, bind_def, ignore_bind_def,
@@ -992,7 +979,7 @@ QED
 
 (* Generic handle_step pop structure — storage-aware.
 
-   When handle_step shrinks contexts, the contexts structure is 
+   When handle_step shrinks contexts, the contexts structure is
    (new_head, SND parent) :: rest, and the storage of s'.rollback.accounts
    equals the storage of either s.rollback.accounts (success pop) OR
    callee_rb.accounts (failure pop) — at every address.
@@ -1019,9 +1006,8 @@ Proof
   >- (simp[reraise_def] >> strip_tac >> gvs[])
   >> simp[handle_def]
   >> `s.contexts ≠ []` by simp[]
-  >> drule_then (qspec_then `e` mp_tac)
-       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> strip_tac >> simp[]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[]
   >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
   >> drule_all handle_create_preserves_tl_and_snd_hd
   >> strip_tac
@@ -1065,9 +1051,9 @@ Proof
   >- (simp[reraise_def] >> strip_tac >> gvs[])
   >> simp[handle_def]
   >> `s.contexts ≠ []` by simp[]
-  >> drule_then (qspec_then `e` mp_tac)
+  >> strip_assume_tac
        (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> strip_tac >> simp[]
+  >> simp[]
   >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
   >> drule_all handle_create_preserves_tl_and_snd_hd
   >> strip_tac
@@ -1123,9 +1109,8 @@ Proof
   >> TRY (simp[reraise_def] >> strip_tac >> gvs[] >> NO_TAC)
   >> simp[handle_def]
   >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
-  >> drule_then (qspec_then `e` mp_tac)
-       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> strip_tac >> simp[]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[]
   >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
   >> drule_all handle_create_preserves_length
   >> strip_tac
@@ -1163,9 +1148,8 @@ Proof
   >> reverse IF_CASES_TAC >> simp[]
   >> TRY (strip_tac >> gvs[reraise_def] >> NO_TAC)
   >> simp[handle_def]
-  >> drule_then (qspec_then `e` mp_tac)
+  >> strip_assume_tac
        (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> strip_tac
   >> simp[]
   >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
   >> drule_all handle_create_preserves_length
@@ -1185,9 +1169,9 @@ Proof
   strip_tac
   >> gvs[handle_step_def, handle_def]
   >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
-  >> drule_then (qspec_then `e` mp_tac)
+  >> strip_assume_tac
        (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> strip_tac >> gvs[]
+  >> gvs[]
   >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
   >> drule_all handle_create_preserves_length
   >> strip_tac
