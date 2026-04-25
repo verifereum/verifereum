@@ -32,6 +32,496 @@ Definition preserves_jumpDest_def:
 End
 
 (* ================================================================ *)
+(* all_jumpDest_NONE: strengthened property for full stack          *)
+(* ================================================================ *)
+
+Definition all_jumpDest_NONE_def:
+  all_jumpDest_NONE s ⇔ EVERY (λc. (FST c).jumpDest = NONE) s.contexts
+End
+
+Definition preserves_all_jumpDest_NONE_def:
+  preserves_all_jumpDest_NONE m ⇔
+    ∀s r s'. m s = (r, s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
+End
+
+(* Bridge lemma: primitives that preserve jumpDest and don't change
+   contexts structure also preserve all_jumpDest_NONE *)
+Theorem preserves_jumpDest_same_contexts_imp_all:
+  preserves_jumpDest m ∧
+  (∀s r s'. m s = (r, s') ⇒ s'.contexts = s.contexts) ⇒
+  preserves_all_jumpDest_NONE m
+Proof
+  rw[preserves_jumpDest_def, preserves_all_jumpDest_NONE_def,
+  all_jumpDest_NONE_def] >> first_x_assum drule >>
+  first_x_assum drule >> rw[]
+QED
+
+(* Combinator lemmas for preserves_all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_bind[simp]:
+  preserves_all_jumpDest_NONE g ∧ (∀x. preserves_all_jumpDest_NONE (f x)) ⇒
+  preserves_all_jumpDest_NONE (bind g f)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, bind_def, AllCaseEqs()]
+  >> first_x_assum drule >> gvs[]
+  >> first_x_assum drule >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_ignore_bind[simp]:
+  preserves_all_jumpDest_NONE g ∧ preserves_all_jumpDest_NONE f ⇒
+  preserves_all_jumpDest_NONE (ignore_bind g f)
+Proof
+  rw[ignore_bind_def] >> irule preserves_all_jumpDest_NONE_bind >> simp[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_handle[simp]:
+  preserves_all_jumpDest_NONE f ∧ (∀e. preserves_all_jumpDest_NONE (h e)) ⇒
+  preserves_all_jumpDest_NONE (handle f h)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, handle_def, AllCaseEqs()]
+  >> first_x_assum drule >> gvs[]
+  >> first_x_assum drule >> gvs[]
+QED
+
+(* Leaf operations for preserves_all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_return[simp]:
+  preserves_all_jumpDest_NONE (return x)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, return_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_fail[simp]:
+  preserves_all_jumpDest_NONE (fail e)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, fail_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_assert[simp]:
+  preserves_all_jumpDest_NONE (assert b e)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, assert_def, return_def, fail_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_finish[simp]:
+  preserves_all_jumpDest_NONE finish
+Proof
+  rw[preserves_all_jumpDest_NONE_def, finish_def, all_jumpDest_NONE_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_revert[simp]:
+  preserves_all_jumpDest_NONE revert
+Proof
+  rw[preserves_all_jumpDest_NONE_def, revert_def, all_jumpDest_NONE_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_reraise[simp]:
+  preserves_all_jumpDest_NONE (reraise e)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, reraise_def]
+QED
+
+(* State-reading operations that don't change contexts *)
+Theorem preserves_all_jumpDest_NONE_get_current_context[simp]:
+  preserves_all_jumpDest_NONE get_current_context
+Proof
+  rw[preserves_all_jumpDest_NONE_def, get_current_context_def, bind_def,
+     return_def, fail_def, AllCaseEqs()] >> rw[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_gas_left[simp]:
+  preserves_all_jumpDest_NONE get_gas_left
+Proof
+  rw[get_gas_left_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_callee[simp]:
+  preserves_all_jumpDest_NONE get_callee
+Proof
+  rw[get_callee_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_accounts[simp]:
+  preserves_all_jumpDest_NONE get_accounts
+Proof
+  rw[preserves_all_jumpDest_NONE_def, get_accounts_def, bind_def,
+     get_rollback_def, return_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_rollback[simp]:
+  preserves_all_jumpDest_NONE get_rollback
+Proof
+  rw[preserves_all_jumpDest_NONE_def, get_rollback_def, return_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_static[simp]:
+  preserves_all_jumpDest_NONE get_static
+Proof
+  rw[get_static_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_num_contexts[simp]:
+  preserves_all_jumpDest_NONE get_num_contexts
+Proof
+  rw[preserves_all_jumpDest_NONE_def, get_num_contexts_def, return_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_original[simp]:
+  preserves_all_jumpDest_NONE get_original
+Proof
+  rw[preserves_all_jumpDest_NONE_def, get_original_def, return_def]
+  >> gvs[AllCaseEqs(),fail_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_tx_params[simp]:
+  preserves_all_jumpDest_NONE get_tx_params
+Proof
+  rw[preserves_all_jumpDest_NONE_def, get_tx_params_def, return_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_tStorage[simp]:
+  preserves_all_jumpDest_NONE get_tStorage
+Proof
+  rw[preserves_all_jumpDest_NONE_def, get_tStorage_def, return_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_call_data[simp]:
+  preserves_all_jumpDest_NONE get_call_data
+Proof
+  rw[get_call_data_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_return_data[simp]:
+  preserves_all_jumpDest_NONE get_return_data
+Proof
+  rw[get_return_data_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_current_code[simp]:
+  preserves_all_jumpDest_NONE get_current_code
+Proof
+  rw[get_current_code_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_output_to[simp]:
+  preserves_all_jumpDest_NONE get_output_to
+Proof
+  rw[get_output_to_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_value[simp]:
+  preserves_all_jumpDest_NONE get_value
+Proof
+  rw[get_value_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_caller[simp]:
+  preserves_all_jumpDest_NONE get_caller
+Proof
+  rw[get_caller_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_return_data_check[simp]:
+  preserves_all_jumpDest_NONE (get_return_data_check off sz)
+Proof
+  rw[get_return_data_check_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_code[simp]:
+  preserves_all_jumpDest_NONE (get_code a)
+Proof
+  rw[get_code_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_memory_expansion_info[simp]:
+  preserves_all_jumpDest_NONE (memory_expansion_info off len)
+Proof
+  rw[memory_expansion_info_def]
+QED
+
+(* Operations that modify rollback/domain but not contexts *)
+Theorem preserves_all_jumpDest_NONE_set_rollback[simp]:
+  preserves_all_jumpDest_NONE (set_rollback rb)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, set_rollback_def, return_def,
+     all_jumpDest_NONE_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_update_accounts[simp]:
+  preserves_all_jumpDest_NONE (update_accounts f)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, update_accounts_def, return_def,
+     all_jumpDest_NONE_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_set_domain[simp]:
+  preserves_all_jumpDest_NONE (set_domain d)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, set_domain_def, return_def,
+     all_jumpDest_NONE_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_set_tStorage[simp]:
+  preserves_all_jumpDest_NONE (set_tStorage x)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, set_tStorage_def, return_def,
+     all_jumpDest_NONE_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_add_to_delete[simp]:
+  preserves_all_jumpDest_NONE (add_to_delete a)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, add_to_delete_def, return_def,
+     all_jumpDest_NONE_def]
+QED
+
+(* Operations that modify current context but keep jumpDest = NONE *)
+Theorem preserves_all_jumpDest_NONE_set_current_context_jumpDest_NONE:
+  (∀c. (f c).jumpDest = NONE) ⇒
+  preserves_all_jumpDest_NONE (bind get_current_context (λc. set_current_context (f c)))
+Proof
+  rw[preserves_all_jumpDest_NONE_def, bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def, all_jumpDest_NONE_def,
+     AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_pop_stack[simp]:
+  preserves_all_jumpDest_NONE (pop_stack n)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, pop_stack_def, ignore_bind_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     assert_def, return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_push_stack[simp]:
+  preserves_all_jumpDest_NONE (push_stack ws)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, push_stack_def, ignore_bind_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     assert_def, return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_consume_gas[simp]:
+  preserves_all_jumpDest_NONE (consume_gas g)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, consume_gas_def, ignore_bind_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     assert_def, return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_unuse_gas[simp]:
+  preserves_all_jumpDest_NONE (unuse_gas g)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, unuse_gas_def, ignore_bind_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     assert_def, return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_set_return_data[simp]:
+  preserves_all_jumpDest_NONE (set_return_data rd)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, set_return_data_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_push_logs[simp]:
+  preserves_all_jumpDest_NONE (push_logs ls)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, push_logs_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_update_gas_refund[simp]:
+  preserves_all_jumpDest_NONE (update_gas_refund (a, sb))
+Proof
+  rw[preserves_all_jumpDest_NONE_def, update_gas_refund_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_expand_memory[simp]:
+  preserves_all_jumpDest_NONE (expand_memory n)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, expand_memory_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_write_memory[simp]:
+  preserves_all_jumpDest_NONE (write_memory off bytes)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, write_memory_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_read_memory[simp]:
+  preserves_all_jumpDest_NONE (read_memory off len)
+Proof
+  rw[read_memory_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_access_address[simp]:
+  preserves_all_jumpDest_NONE (access_address a)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, access_address_def, domain_check_def,
+     ignore_bind_def, bind_def, set_domain_def, set_rollback_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+     >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_access_slot[simp]:
+  preserves_all_jumpDest_NONE (access_slot sk)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, access_slot_def, domain_check_def,
+     ignore_bind_def, bind_def, set_domain_def, set_rollback_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+     >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_assert_not_static[simp]:
+  preserves_all_jumpDest_NONE assert_not_static
+Proof
+  rw[preserves_all_jumpDest_NONE_def, assert_not_static_def, bind_def,
+     get_static_def, get_current_context_def, assert_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+     >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_ensure_storage_in_domain[simp]:
+  preserves_all_jumpDest_NONE (ensure_storage_in_domain a)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, ensure_storage_in_domain_def, domain_check_def,
+     ignore_bind_def, bind_def, set_domain_def, set_rollback_def,
+     get_rollback_def, return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+     >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_write_storage[simp]:
+  preserves_all_jumpDest_NONE (write_storage a k v)
+Proof
+  rw[write_storage_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_write_transient_storage[simp]:
+  preserves_all_jumpDest_NONE (write_transient_storage a k v)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, write_transient_storage_def, bind_def,
+     get_tStorage_def, set_tStorage_def, return_def, all_jumpDest_NONE_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_set_original[simp]:
+  preserves_all_jumpDest_NONE (set_original orig)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, set_original_def, return_def, fail_def,
+     all_jumpDest_NONE_def, AllCaseEqs()]
+  >> gvs[set_last_accounts_def]
+  >> qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES >> gvs[]
+QED
+
+(* inc_pc sets jumpDest := NONE explicitly, preserving all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_inc_pc[simp]:
+  preserves_all_jumpDest_NONE inc_pc
+Proof
+  rw[preserves_all_jumpDest_NONE_def, inc_pc_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+(* push_context: new context has jumpDest = NONE from initial_context *)
+Theorem preserves_all_jumpDest_NONE_push_context[simp]:
+  (FST ctx).jumpDest = NONE ⇒
+  preserves_all_jumpDest_NONE (push_context ctx)
+Proof
+  rw[preserves_all_jumpDest_NONE_def, push_context_def, return_def,
+     all_jumpDest_NONE_def]
+QED
+
+(* pop_context: removes head, tail still all NONE *)
+Theorem preserves_all_jumpDest_NONE_pop_context[simp]:
+  preserves_all_jumpDest_NONE pop_context
+Proof
+  rw[preserves_all_jumpDest_NONE_def, pop_context_def, return_def, fail_def,
+     all_jumpDest_NONE_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+(* Tactic for preserves_all_jumpDest_NONE proofs *)
+val pajdn_tac = rpt (
+  (irule preserves_all_jumpDest_NONE_bind >> rw[]) ORELSE
+  (irule preserves_all_jumpDest_NONE_ignore_bind >> rw[]) ORELSE
+  (irule preserves_all_jumpDest_NONE_handle >> rw[])
+)
+
+(* Abort functions preserve all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_abort_call_value[simp]:
+  preserves_all_jumpDest_NONE (abort_call_value x)
+Proof
+  rw[abort_call_value_def] >> pajdn_tac
+QED
+
+Theorem preserves_all_jumpDest_NONE_abort_unuse[simp]:
+  preserves_all_jumpDest_NONE (abort_unuse x)
+Proof
+  rw[abort_unuse_def] >> pajdn_tac
+QED
+
+Theorem preserves_all_jumpDest_NONE_abort_create_exists[simp]:
+  preserves_all_jumpDest_NONE (abort_create_exists a)
+Proof
+  rw[abort_create_exists_def] >> pajdn_tac
+QED
+
+(* handle_create preserves all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_handle_create[simp]:
+  preserves_all_jumpDest_NONE (handle_create e)
+Proof
+  rw[handle_create_def] >> pajdn_tac >>
+  TOP_CASE_TAC >> pajdn_tac >> gvs[] >>
+  TOP_CASE_TAC >> pajdn_tac >> gvs[]
+QED
+
+(* pop_and_incorporate_context preserves all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_pop_and_incorporate_context[simp]:
+  preserves_all_jumpDest_NONE (pop_and_incorporate_context b)
+Proof
+  rw[pop_and_incorporate_context_def] >> pajdn_tac >>
+  IF_CASES_TAC >> gvs[] >> pajdn_tac
+QED
+
+(* handle_exception preserves all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_handle_exception[simp]:
+  preserves_all_jumpDest_NONE (handle_exception e)
+Proof
+  rw[handle_exception_def] >> pajdn_tac >>
+  TOP_CASE_TAC >> pajdn_tac >> gvs[]
+QED
+
+(* inc_pc_or_jump: either increments pc (preserves) or jumps and sets jumpDest := NONE *)
+Theorem preserves_all_jumpDest_NONE_inc_pc_or_jump[simp]:
+  preserves_all_jumpDest_NONE (inc_pc_or_jump op)
+Proof
+  rw[inc_pc_or_jump_def] >>
+  rw[preserves_all_jumpDest_NONE_def, bind_def, AllCaseEqs(),
+     vfmTypesTheory.option_CASE_rator, get_current_context_def,
+     ignore_bind_def, assert_def,
+     set_current_context_def, return_def, fail_def] >> gvs[] >>
+  gvs[all_jumpDest_NONE_def] >>
+  Cases_on`s.contexts` >> gvs[]
+QED
+
+(* ================================================================ *)
 (* Layer 1: Monad combinator preservation rules                     *)
 (* ================================================================ *)
 
@@ -1116,39 +1606,6 @@ Proof
   TOP_CASE_TAC >> pjd_tac >> gvs[]
 QED
 
-(* NOT TRUE
-Theorem preserves_jumpDest_handle_exception[simp]:
-  preserves_jumpDest (handle_exception e)
-Proof
-  simp[handle_exception_def] >>
-  irule preserves_jumpDest_ignore_bind >>
-  conj_tac >- (rw[] >> pjd_tac) >>
-  simp[preserves_jumpDest_def, get_num_contexts_def, bind_def, return_def] >>
-  rpt gen_tac >>
-  IF_CASES_TAC >> gvs[reraise_def]
-  >- (strip_tac >> gvs[]) >>
-  Cases_on`s.contexts` >> gvs[] >>
-  simp[bind_def, ignore_bind_def, AllCaseEqs(),
-       get_return_data_def, get_current_context_def,
-       return_def, PULL_EXISTS, get_output_to_def] >>
-  rpt gen_tac >> strip_tac >>
-  gvs[inc_pc_def, bind_def, get_current_context_def, return_def,
-      set_current_context_def, AllCaseEqs(), fail_def] >>
-  gvs[return_destination_CASE_rator, bind_def, ignore_bind_def,
-      AllCaseEqs(), set_return_data_def, push_stack_def, return_def,
-      assert_def, set_current_context_def, get_current_context_def,
-      write_memory_def, pop_and_incorporate_context_def, unuse_gas_def,
-      COND_RATOR, set_rollback_def, push_logs_def, fail_def, pop_context_def,
-      get_gas_left_def, update_gas_refund_def]
-
-  f"return_destination_CASE"
-  simp[pop_and_incorporate_context_def, bind_def,
-       get_gas_left_def, pop_context_def, return_def,
-       get_current_context_def, unuse_gas_def, ignore_bind_def] >>
-  IF_CASES_TAC >> gvs[assert_def, set_current_context_def, return_def, fail_def] >>
-  rw[inc_pc_def]
-*)
-
 Theorem inc_pc_or_jump_INL_jumpDest_NONE:
   inc_pc_or_jump op s = (INL x, s') ∧
   (FST (HD s.contexts)).jumpDest = NONE
@@ -1160,56 +1617,23 @@ Proof
       return_def, fail_def, assert_def]
 QED
 
+(* Main theorem using all_jumpDest_NONE framework *)
+Theorem step_all_jumpDest_NONE:
+  step s = (r, s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
+Proof
+  rw[step_def] >>
+  gvs[handle_def, AllCaseEqs()] >>
+  cheat
+QED
+
+(* Derived theorem: if all contexts have jumpDest = NONE and contexts ≠ [],
+   then HD s'.contexts has jumpDest = NONE *)
 Theorem step_jumpDest_NONE:
-  step s = (r,s') ∧ s.contexts ≠ [] ∧ (FST (HD s.contexts)).jumpDest = NONE
+  step s = (r,s') ∧ all_jumpDest_NONE s ∧ s'.contexts ≠ []
   ⇒ (FST (HD s'.contexts)).jumpDest = NONE
 Proof
-  rw[step_def, handle_def, AllCaseEqs(), bind_def,
-     get_current_context_def, fail_def, return_def,
-     handle_step_def] >> gvs[reraise_def, COND_RATOR] >>
-  gvs[AllCaseEqs(),vfmTypesTheory.option_CASE_rator] >>
-  TRY (
-    drule(REWRITE_RULE[
-      preserves_jumpDest_def] step_inst_Stop_preserves_jumpDest)
-    >> gvs[] ) >>
-  TRY (
-    drule(REWRITE_RULE[
-        preserves_jumpDest_def] step_inst_Invalid_preserves_jumpDest)
-    >> gvs[] ) >> rw[] >>
-  TRY (
-    gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
-    drule inc_pc_or_jump_INL_jumpDest_NONE >>
-    gvs[inc_pc_or_jump_def, COND_RATOR, CaseEq"bool", return_def]
-    >- (
-      Cases_on`step_inst op s = step_call op s`
-      >- ( gvs[] >> drule preserves_jumpDest_NONE_step_call >> gvs[] ) >>
-      `∃two. step_inst op s = step_create two s` by
-      (Cases_on`op` >> gvs[step_inst_def, is_call_def] >> metis_tac[]) >>
-      gvs[] >> drule preserves_jumpDest_NONE_step_create >> rw[] ) >>
-    gvs[bind_def, AllCaseEqs(), get_current_context_def, fail_def, return_def] >>
-    gvs[vfmTypesTheory.option_CASE_rator,AllCaseEqs()] >>
-    gvs[ignore_bind_def,AllCaseEqs(),bind_def,assert_def] >>
-    gvs[set_current_context_def,bind_def,AllCaseEqs(),return_def,fail_def] >>
-    NO_TAC) >>
-  cheat
-    (*
-  TRY (
-    preserves_jumpDest_handle
-    preserves_jumpDest_handle_create
-    handle_exception_def
-  TRY (
-    gvs[ignore_bind_def, bind_def, AllCaseEqs(),
-        inc_pc_or_jump_def, COND_RATOR, return_def,
-        get_current_context_def, fail_def,
-        vfmTypesTheory.option_CASE_rator, set_current_context_def,
-        assert_def]
-    >- cheat
-    >> cheat
-
-  TRY (
-    UNDISCH_ALL preserves_jumpDest_handle
-    |> REWRITE_RULE[preserves_jumpDest_def]
-    |> SPEC_ALL |> DISCH_ALL |> drule_at(Pat`handle`) >>
-    simp[]
-    *)
+  rw[all_jumpDest_NONE_def] >>
+  drule step_all_jumpDest_NONE >>
+  rw[all_jumpDest_NONE_def] >>
+  Cases_on `s'.contexts` >> gvs[]
 QED
