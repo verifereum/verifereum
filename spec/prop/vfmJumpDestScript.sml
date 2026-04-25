@@ -15,7 +15,7 @@
 Theory vfmJumpDest
 Ancestors
   combin pair list
-  vfmExecution vfmContext
+  vfmExecution vfmContext vfmSameFrame
 Libs
   BasicProvers
 
@@ -54,6 +54,21 @@ Proof
   rw[preserves_jumpDest_def, preserves_all_jumpDest_NONE_def,
   all_jumpDest_NONE_def] >> first_x_assum drule >>
   first_x_assum drule >> rw[]
+QED
+
+(* Bridge lemma: use existing preserves_jumpDest and preserves_same_frame.
+   The extra condition handles the empty contexts case. *)
+Theorem preserves_jumpDest_and_same_frame_imp_all:
+  preserves_jumpDest m ∧ preserves_same_frame m ∧
+  (∀s r s'. m s = (r, s') ∧ s.contexts = [] ⇒ s'.contexts = []) ⇒
+  preserves_all_jumpDest_NONE m
+Proof
+  rw[preserves_jumpDest_def, preserves_same_frame_def,
+     preserves_all_jumpDest_NONE_def, all_jumpDest_NONE_def] >>
+  rpt(first_x_assum drule) >> rw[] >>
+  Cases_on `s.contexts` >> gvs[] >>
+  gvs[same_frame_rel_def] >>
+  Cases_on `s'.contexts` >> gvs[]
 QED
 
 (* Combinator lemmas for preserves_all_jumpDest_NONE *)
@@ -1617,13 +1632,102 @@ Proof
       return_def, fail_def, assert_def]
 QED
 
+(* handle_step preserves all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_handle_step[simp]:
+  preserves_all_jumpDest_NONE (handle_step e)
+Proof
+  rw[handle_step_def] >>
+  IF_CASES_TAC >> gvs[] >> pajdn_tac
+QED
+
+(* For step_inst on non-call/create ops, we use the bridge lemma.
+   They satisfy preserves_jumpDest and preserves_same_frame. *)
+
+Theorem preserves_all_jumpDest_NONE_dispatch_precompiles[simp]:
+  preserves_all_jumpDest_NONE (dispatch_precompiles a)
+Proof
+  rw[dispatch_precompiles_def] >>
+  rpt (IF_CASES_TAC >> gvs[] >> pajdn_tac) >>
+  rw[precompile_ecrecover_def, precompile_sha2_256_def,
+     precompile_ripemd_160_def, precompile_identity_def,
+     precompile_modexp_def, precompile_ecadd_def,
+     precompile_ecmul_def, precompile_ecpairing_def,
+     precompile_blake2f_def, precompile_point_eval_def,
+     precompile_bls_g1add_def, precompile_bls_g1msm_def,
+     precompile_bls_g2add_def, precompile_bls_g2msm_def,
+     precompile_bls_pairing_def, precompile_bls_map_fp_to_g1_def,
+     precompile_bls_map_fp2_to_g2_def, precompile_p256verify_def] >>
+  pajdn_tac >> CASE_TAC >> pajdn_tac >> rw[] >>
+  CASE_TAC >> pajdn_tac >> gvs[]
+QED
+
+(* step_call and step_create preserve all_jumpDest_NONE *)
+Theorem preserves_all_jumpDest_NONE_proceed_call[simp]:
+  preserves_all_jumpDest_NONE (proceed_call a b c d e f g h s)
+Proof
+  rw[proceed_call_def] >> pajdn_tac >>
+  (* push_context case: initial_context has jumpDest = NONE *)
+  irule preserves_all_jumpDest_NONE_push_context >>
+  simp[initial_context_simp]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_call[simp]:
+  preserves_all_jumpDest_NONE (step_call op)
+Proof
+  rw[step_call_def] >> pajdn_tac >>
+  TRY pairarg_tac >> gvs[] >> pajdn_tac >> gvs[] >>
+  TRY pairarg_tac >> gvs[] >> pajdn_tac >> gvs[] >>
+  TRY pairarg_tac >> gvs[] >> pajdn_tac >> gvs[] >>
+  TOP_CASE_TAC >> pajdn_tac >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_proceed_create:
+  preserves_all_jumpDest_NONE (proceed_create a b c d e)
+Proof
+  rw[proceed_create_def] >> pajdn_tac >>
+  irule preserves_all_jumpDest_NONE_push_context >>
+  simp[initial_context_simp]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_create:
+  preserves_all_jumpDest_NONE (step_create two)
+Proof
+  rw[step_create_def] >> pajdn_tac >>
+  rpt (IF_CASES_TAC >> gvs[] >> pajdn_tac) >>
+  simp[preserves_all_jumpDest_NONE_proceed_create]
+QED
+
+(* step_inst preserves all_jumpDest_NONE for all opcodes *)
+Theorem preserves_all_jumpDest_NONE_step_inst:
+  preserves_all_jumpDest_NONE (step_inst op)
+Proof
+  Cases_on `op` >> rw[step_inst_def] >> pajdn_tac >>
+  (* Call/Create cases use dedicated lemmas *)
+  TRY (simp[preserves_all_jumpDest_NONE_step_call] >> NO_TAC) >>
+  TRY (simp[preserves_all_jumpDest_NONE_step_create] >> NO_TAC) >>
+  (* Other cases: use bridge or direct pajdn_tac *)
+  cheat (* TODO: may need bridge lemma or more pajdn_tac unfolding *)
+QED
+
 (* Main theorem using all_jumpDest_NONE framework *)
 Theorem step_all_jumpDest_NONE:
   step s = (r, s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
 Proof
-  rw[step_def] >>
-  gvs[handle_def, AllCaseEqs()] >>
-  cheat
+  rw[step_def, handle_def, AllCaseEqs()] >>
+  (* INL case: inner block succeeded *)
+  TRY (
+    gvs[bind_def, AllCaseEqs(), get_current_context_def,
+        fail_def, return_def] >>
+    `preserves_all_jumpDest_NONE (step_inst Stop)`
+       by simp[preserves_all_jumpDest_NONE_step_inst] >>
+    `preserves_all_jumpDest_NONE (step_inst Invalid)`
+       by simp[preserves_all_jumpDest_NONE_step_inst] >>
+    gvs[preserves_all_jumpDest_NONE_def] >>
+    NO_TAC) >>
+  (* INR case: inner block raised exception, handle_step handles it *)
+  `preserves_all_jumpDest_NONE (handle_step e)`
+     by simp[preserves_all_jumpDest_NONE_handle_step] >>
+  cheat (* TODO: compose inner block + handle_step *)
 QED
 
 (* Derived theorem: if all contexts have jumpDest = NONE and contexts ≠ [],
