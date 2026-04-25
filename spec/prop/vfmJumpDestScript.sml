@@ -669,6 +669,141 @@ Proof
   rw[get_caller_def]
 QED
 
+(* ================================================================ *)
+(* Precompiles                                                       *)
+(* ================================================================ *)
+
+Theorem preserves_jumpDest_precompile_ecrecover[simp]:
+  preserves_jumpDest precompile_ecrecover
+Proof
+  rw[precompile_ecrecover_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_identity[simp]:
+  preserves_jumpDest precompile_identity
+Proof
+  rw[precompile_identity_def] >> pjd_tac
+QED
+
+Theorem preserves_jumpDest_precompile_modexp[simp]:
+  preserves_jumpDest precompile_modexp
+Proof
+  rw[precompile_modexp_def] >> pjd_tac
+QED
+
+Theorem preserves_jumpDest_precompile_sha2_256[simp]:
+  preserves_jumpDest precompile_sha2_256
+Proof
+  rw[precompile_sha2_256_def] >> pjd_tac
+QED
+
+Theorem preserves_jumpDest_precompile_ripemd_160[simp]:
+  preserves_jumpDest precompile_ripemd_160
+Proof
+  rw[precompile_ripemd_160_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_ecadd[simp]:
+  preserves_jumpDest precompile_ecadd
+Proof
+  rw[precompile_ecadd_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_ecmul[simp]:
+  preserves_jumpDest precompile_ecmul
+Proof
+  rw[precompile_ecmul_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_ecpairing[simp]:
+  preserves_jumpDest precompile_ecpairing
+Proof
+  rw[precompile_ecpairing_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_blake2f[simp]:
+  preserves_jumpDest precompile_blake2f
+Proof
+  rw[precompile_blake2f_def] >> pjd_tac
+QED
+
+Theorem preserves_jumpDest_precompile_point_eval[simp]:
+  preserves_jumpDest precompile_point_eval
+Proof
+  rw[precompile_point_eval_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_bls_g1add[simp]:
+  preserves_jumpDest precompile_bls_g1add
+Proof
+  rw[precompile_bls_g1add_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_bls_g1msm[simp]:
+  preserves_jumpDest precompile_bls_g1msm
+Proof
+  rw[precompile_bls_g1msm_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_bls_g2add[simp]:
+  preserves_jumpDest precompile_bls_g2add
+Proof
+  rw[precompile_bls_g2add_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_bls_g2msm[simp]:
+  preserves_jumpDest precompile_bls_g2msm
+Proof
+  rw[precompile_bls_g2msm_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_bls_pairing[simp]:
+  preserves_jumpDest precompile_bls_pairing
+Proof
+  rw[precompile_bls_pairing_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_bls_map_fp_to_g1[simp]:
+  preserves_jumpDest precompile_bls_map_fp_to_g1
+Proof
+  rw[precompile_bls_map_fp_to_g1_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_bls_map_fp2_to_g2[simp]:
+  preserves_jumpDest precompile_bls_map_fp2_to_g2
+Proof
+  rw[precompile_bls_map_fp2_to_g2_def] >> pjd_tac
+  >> CASE_TAC >> pjd_tac >> rw[]
+QED
+
+Theorem preserves_jumpDest_precompile_p256verify[simp]:
+  preserves_jumpDest precompile_p256verify
+Proof
+  rw[precompile_p256verify_def] >> pjd_tac
+QED
+
+Theorem preserves_jumpDest_dispatch_precompiles[simp]:
+  preserves_jumpDest (dispatch_precompiles a)
+Proof
+  rw[dispatch_precompiles_def]
+  >> rpt (IF_CASES_TAC >> gvs[])
+QED
+
 Theorem bind_preserves_jumpDest_imp:
   bind g f s = (r,s') ∧
   preserves_jumpDest g ∧
@@ -735,7 +870,10 @@ Proof
   qpat_x_assum`_ = (_,_)`mp_tac >>
   reverse IF_CASES_TAC >- (
     simp[] >> strip_tac >> gvs[] ) >>
-  cheat
+  strip_tac >>
+  drule(REWRITE_RULE[preserves_jumpDest_def]
+          preserves_jumpDest_dispatch_precompiles) >>
+  simp[]
 QED
 
 Theorem preserves_jumpDest_NONE_step_call:
