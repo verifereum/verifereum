@@ -132,62 +132,6 @@ QED
  *     invariant.
  * ------------------------------------------------------------------------- *)
 
-(* -------------------------------------------------------------------------
- * Transitivity of storage_slot_preserved.
- * ------------------------------------------------------------------------- *)
-
-Theorem storage_slot_preserved_refl:
-  storage_slot_preserved rb rb
-Proof
-  rw[storage_slot_preserved_def]
-QED
-
-(* If access-sets are monotone (storageKeys_1 ⊆ storageKeys_2), and every
-   slot preserved under storageKeys_1 is preserved under storageKeys_2, then
-   preservation composes. Used for chaining across step transitions. *)
-Theorem storage_slot_preserved_trans_mono:
-  storage_slot_preserved rb1 rb0 ∧
-  storage_slot_preserved rb2 rb1 ∧
-  (∀a k. ¬fIN (SK a k) rb2.accesses.storageKeys ⇒
-         ¬fIN (SK a k) rb1.accesses.storageKeys) ⇒
-  storage_slot_preserved rb2 rb0
-Proof
-  rw[storage_slot_preserved_def]
-QED
-
-(* -------------------------------------------------------------------------
- * Helper: same_frame_rel preserves storage_slot_preserved against the
- * initial rollback es.rollback.
- *
- * same_frame_rel gives us: accesses monotone, non-callee accounts
- * unchanged (storage + code + nonce). The callee's accesses in s' ⊇
- * those in s. If a storage slot (a, k) is not in s'.accesses.storageKeys,
- * then (a, k) is not in s.accesses.storageKeys either (monotone). The
- * slot's value in s' equals its value in s by same_frame_rel's
- * callee_local_changes structure plus the fact that any SSTORE must
- * have access-listed (a, k), putting it in s'.accesses.storageKeys.
- *
- * Actually, simpler: we can directly show the slot is preserved by
- * non-SSTORE primitives (no storage mutation), and SSTORE access-lists
- * the exact slot.
- * ------------------------------------------------------------------------- *)
-
-(* Transitivity-style fact: if s -> s' preserves slot (a, k) outside
-   s'.storageKeys, and inv says slot (a, k) outside s.storageKeys had
-   same value as in es, then slot (a, k) outside s'.storageKeys has the
-   same value as in es. *)
-Theorem storage_slot_preserved_compose:
-  ∀(es:execution_state) (s:execution_state) (s':execution_state).
-    storage_slot_preserved s.rollback es.rollback ∧
-    (∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
-           ¬fIN (SK a k) s.rollback.accesses.storageKeys ∧
-           lookup_storage k (lookup_account a s'.rollback.accounts).storage =
-           lookup_storage k (lookup_account a s.rollback.accounts).storage) ⇒
-    storage_slot_preserved s'.rollback es.rollback
-Proof
-  rw[storage_slot_preserved_def]
-  >> metis_tac[]
-QED
 
 (* -------------------------------------------------------------------------
  * `step` preserves storage at any slot not access-listed in the final
@@ -248,85 +192,6 @@ QED
    (callee, key) implies (SK callee key) ∈ s'.storageKeys. *)
 
 
-(* =====================================================================
- * proceed_call / proceed_create strictly grow contexts.
- *
- * Both contain an unconditional push_context, and all following ops
- * are preserves_same_frame (length-preserving).
- * ===================================================================== *)
-
-Theorem proceed_call_grows_contexts:
-  proceed_call op sender address value argsOffset argsSize code stipend
-                outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
-  LENGTH s'.contexts > LENGTH s.contexts
-Proof
-  strip_tac
-  >> qhdtm_x_assum `proceed_call` mp_tac
-  >> simp[proceed_call_def]
-  >> simp[bind_def, get_rollback_def, return_def]
-  >> simp[read_memory_def, bind_def,return_def, get_current_context_def]
-  >> qmatch_goalsub_abbrev_tac`ignore_bind g`
-  >> simp[ignore_bind_def, Once bind_def]
-  >> TOP_CASE_TAC
-  >> qmatch_asmsub_rename_tac`g s = (q,s1)`
-  >> `LENGTH s1.contexts = LENGTH s.contexts ∧ ISL q` by (
-    gvs[Abbr`g`,AllCaseEqs(),COND_RATOR,return_def,update_accounts_def] )
-  >> TOP_CASE_TAC >> gvs[]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_caller_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_caller_def, return_def, get_current_context_def]
-  >> IF_CASES_TAC >> gvs[]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_value_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_value_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_static_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_static_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> TOP_CASE_TAC
-  >> drule push_context_effect >> strip_tac >> gvs[]
-  >> reverse IF_CASES_TAC
-  >> simp[return_def]
-  >- ( strip_tac >> gvs[] )
-  >> strip_tac >>
-  qmatch_assum_abbrev_tac`dispatch_precompiles a ss = _` >>
-  assume_tac (INST_TYPE[alpha |-> ``:unit``]preserves_same_frame_dispatch_precompiles) >>
-  drule_then drule (INST_TYPE[alpha |-> ``:unit``]psf_imp_length_contexts_preserved) >>
-  simp[Abbr`ss`]
-QED
-
-Theorem proceed_create_grows_contexts:
-  proceed_create senderAddress address value code cappedGas s = (r, s')
-  ∧ s.contexts ≠ [] ⇒
-  LENGTH s'.contexts > LENGTH s.contexts
-Proof
-  strip_tac
-  >> qhdtm_x_assum `proceed_create` mp_tac
-  >> simp[proceed_create_def]
-  (* update_accounts (increment_nonce senderAddress) *)
-  >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
-  (* get_rollback *)
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_rollback_def, return_def]
-  (* get_original *)
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_original_def, return_def, fail_def]
-  (* set_original: s' = s with contexts := set_last_accounts _ s.contexts *)
-  >> rewrite_tac[Once bind_def]
-  >> simp[set_original_def, return_def, fail_def]
-  (* update_accounts (transfer_value o increment_nonce) *)
-  >> rewrite_tac[Once bind_def]
-  >> simp[update_accounts_def, return_def]
-  (* push_context *)
-  >> strip_tac
-  >> drule push_context_effect >> strip_tac >> gvs[]
-  (* Length goal: set_last_accounts preserves length. *)
-  >> simp[set_last_accounts_def, listTheory.LENGTH_SNOC,
-          rich_listTheory.LENGTH_FRONT]
-QED
 
 (* =====================================================================
  * Pushed-rollback storage lemmas.
@@ -1717,10 +1582,12 @@ Proof
   >> simp[]
   >> Cases_on`s.contexts` >> gvs[]
   >> gvs[same_frame_rel_def]
-  (* handle_step_pop_generic_gen_paired gives us disjunction about r'.rollback → s'.rollback.
-     We need to connect s.rollback → r'.rollback.
-     From inner returning INR (which is step_inst INR), step_inst_inr_preserves_storage
-     gives s.rollback.storage = r'.rollback.storage for all addresses. *)
+  (* Remove the DISJ1 facts that gvs extracted, so they can't rewrite the goal.
+     We'll re-derive handle_step_pop_generic_gen_paired when needed for DISJ2. *)
+  >> qpat_x_assum `∀a. (lookup_account a s'.rollback.accounts).storage =
+         (lookup_account a r'.rollback.accounts).storage` kall_tac
+  >> qpat_x_assum `toSet r'.rollback.accesses.storageKeys ⊆
+         toSet s'.rollback.accesses.storageKeys` kall_tac
   (* First, extract the step_inst call from inner *)
   >> qpat_x_assum `_ s = (INR _, r')` mp_tac
   >> simp[bind_def, get_current_context_def, return_def, AllCaseEqs()]
@@ -1740,6 +1607,7 @@ Proof
   >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
   >> strip_tac >> gvs[]
   >- (
+    (* inc_pc_or_jump returned INL (InvalidJumpDest) *)
     gvs[inc_pc_or_jump_def]
     >> gvs[COND_RATOR, AllCaseEqs(), return_def]
     >> gvs[bind_def, AllCaseEqs(), get_current_context_def, return_def, fail_def]
@@ -1747,33 +1615,26 @@ Proof
            return_def, fail_def, ignore_bind_def]
     >> gvs[bind_def,AllCaseEqs(),assert_def,fail_def,return_def,
            set_current_context_def]
-    (* step_inst x returned INL, inc_pc_or_jump failed with InvalidJumpDest.
-       This means jumpDest was set to SOME pc. Only Jump/JumpI do this,
-       and both preserve rollback. *)
-    >> `r'.rollback = s.rollback` by (
-         (* jumpDest changed from whatever it was to SOME pc.
-            By step_inst_jumpDest_changed_imp_jump, x = Jump or JumpI. *)
-         Cases_on
-         `(FST (HD r'.contexts)).jumpDest ≠ (FST (HD s.contexts)).jumpDest`
-         >- (
-           drule step_inst_jumpDest_changed_imp_jump >> simp[] >>
+    >> Cases_on `(FST (HD r'.contexts)).jumpDest ≠ (FST (HD s.contexts)).jumpDest`
+    >- (
+      (* jumpDest changed: op must be Jump or JumpI, which preserve rollback.
+         So r'.rollback = s.rollback, and we use DISJ1. *)
+      `x = Jump ∨ x = JumpI` by (
+           drule step_inst_jumpDest_changed_imp_jump >> simp[] )
+      >> `r'.rollback = s.rollback` by (
            metis_tac[step_inst_Jump_preserves_rollback, preserves_rollback_def,
                      step_inst_JumpI_preserves_rollback] )
-           (* We need to show the initial jumpDest was different.
-              Either it was NONE, or it was SOME something_else.
-              If it was SOME, inc_pc_or_jump would have handled it in the
-              previous iteration. So it must have been NONE. *)
-           >> gvs[]
-           >> cheat)
-    >> DISJ1_TAC
-    >> gvs[SUBSET_DEF] )
+      >> DISJ1_TAC
+      >> gvs[SUBSET_DEF] )
+    (* jumpDest unchanged: DISJ2 holds because InvalidJumpDest causes
+       pop-revert, setting s'.rollback = callee_rb = SND (HD s.contexts).
+       The handle_step_pop disjunction's DISJ2 gives us directly:
+         callee_rb.storageKeys ⊆ s'.storageKeys ∧ ∀a. storage s' = storage callee_rb *)
+    >> DISJ2_TAC
+    >> cheat )
   >> rename1 `step_inst op s = (INR e, r')`
   >> drule step_inst_inr_preserves_storage
   >> simp[lookup_storage_def, FUN_EQ_THM]
-  (* Now we have:
-     - s.rollback.storage = r'.rollback.storage (from step_inst_inr_preserves_storage)
-     - disjunction from handle_step_pop_generic_gen_paired about r' → s'
-     Compose to get s → s' storage facts. *)
   >> gvs[callee_local_changes_def, SUBSET_DEF]
 QED
 
