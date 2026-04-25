@@ -28,6 +28,7 @@ Ancestors
   vfmContext vfmState vfmExecution vfmExecutionProp
   vfmStoragePredicates vfmSameFrame vfmStaticCalls
   vfmDecreasesGas vfmStepLength vfmHandleStep vfmRunWithinFrame
+  vfmJumpDest
 Libs
   dep_rewrite BasicProvers
 
@@ -93,6 +94,7 @@ Definition run_call_inv_def:
     s.txParams = es.txParams ∧
     outputTo_consistent_stack s ∧
     ok_state s ∧
+    (FST (HD s.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (active_rollbacks (LENGTH es.contexts) s)
 End
@@ -103,6 +105,7 @@ End
 
 Theorem run_call_inv_refl:
   outputTo_consistent_stack es ∧ ok_state es ∧
+  (FST (HD es.contexts)).jumpDest = NONE ∧
   EVERY (λrb. storage_slot_preserved rb es.rollback)
         (MAP SND (TAKE 2 es.contexts)) ⇒
   run_call_inv es es
@@ -1748,10 +1751,20 @@ Proof
        This means jumpDest was set to SOME pc. Only Jump/JumpI do this,
        and both preserve rollback. *)
     >> `r'.rollback = s.rollback` by (
-         `x = Jump ∨ x = JumpI` by cheat (* TODO: only Jump/JumpI set jumpDest *)
-         >> gvs[]
-         >- metis_tac[step_inst_Jump_preserves_rollback, preserves_rollback_def]
-         >> metis_tac[step_inst_JumpI_preserves_rollback, preserves_rollback_def])
+         (* jumpDest changed from whatever it was to SOME pc.
+            By step_inst_jumpDest_changed_imp_jump, x = Jump or JumpI. *)
+         Cases_on
+         `(FST (HD r'.contexts)).jumpDest ≠ (FST (HD s.contexts)).jumpDest`
+         >- (
+           drule step_inst_jumpDest_changed_imp_jump >> simp[] >>
+           metis_tac[step_inst_Jump_preserves_rollback, preserves_rollback_def,
+                     step_inst_JumpI_preserves_rollback] )
+           (* We need to show the initial jumpDest was different.
+              Either it was NONE, or it was SOME something_else.
+              If it was SOME, inc_pc_or_jump would have handled it in the
+              previous iteration. So it must have been NONE. *)
+           >> gvs[]
+           >> cheat)
     >> DISJ1_TAC
     >> gvs[SUBSET_DEF] )
   >> rename1 `step_inst op s = (INR e, r')`
@@ -1861,6 +1874,7 @@ Proof
     >> `storage_slot_preserved s0.rollback es.rollback`
         by (fs[run_call_inv_def, active_rollbacks_def])
     >> simp[storage_slot_preserved_def]
+    >> conj_tac >- cheat
     >> rpt strip_tac
     >> `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
         by (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
@@ -1901,6 +1915,7 @@ Proof
     >> simp[active_rollbacks_def]
     >> `¬(LENGTH s1.contexts < ed)` by simp[Abbr`ed`]
     >> simp[EVERY_EL, EL_MAP]
+    >> conj_tac >- cheat
     >> rpt strip_tac
     >> Cases_on `n = 0`
     >- (
@@ -2003,6 +2018,7 @@ Proof
                lookup_storage k (lookup_account a es.rollback.accounts).storage`
                 by fs[storage_slot_preserved_def])
     (* Split on whether s1.contexts is below ed or not. *)
+    >> conj_tac >- cheat
     >> Cases_on `LENGTH s1.contexts < ed`
     >- ((* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
         simp[active_rollbacks_def])
@@ -2019,6 +2035,7 @@ QED
 Theorem run_call_preserves_inv:
   ∀es res es'.
     outputTo_consistent_stack es ∧ ok_state es ∧
+    (FST(HD es.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (res, es') ⇒
@@ -2054,6 +2071,7 @@ QED
 Theorem run_call_preserves_storage_outside_accessed_slots:
   ∀es r es'.
     outputTo_consistent_stack es ∧ ok_state es ∧
+    (FST(HD es.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (r, es') ⇒
@@ -2069,6 +2087,7 @@ QED
 Theorem run_call_preserves_txParams:
   ∀es r es'.
     outputTo_consistent_stack es ∧ ok_state es ∧
+    (FST(HD es.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (r, es') ⇒

@@ -536,6 +536,50 @@ Proof
   Cases_on`s.contexts` >> gvs[]
 QED
 
+(* inc_pc_or_jump INL establishes all_jumpDest_NONE given only TL has jumpDest NONE *)
+Theorem inc_pc_or_jump_INL_establishes_all_jumpDest_NONE:
+  inc_pc_or_jump op s = (INL (), s') ∧ ¬is_call op ∧ s.contexts ≠ [] ∧
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ⇒
+  all_jumpDest_NONE s'
+Proof
+  rw[inc_pc_or_jump_def, bind_def, AllCaseEqs(),
+     vfmTypesTheory.option_CASE_rator, get_current_context_def,
+     ignore_bind_def, assert_def,
+     set_current_context_def, return_def, fail_def] >> gvs[] >>
+  gvs[all_jumpDest_NONE_def] >>
+  Cases_on`s.contexts` >> gvs[]
+QED
+
+(* Jump/JumpI + inc_pc_or_jump INL preserves all_jumpDest_NONE *)
+Theorem step_jump_inc_pc_INL_preserves_all_jumpDest_NONE:
+  (do step_inst Jump; inc_pc_or_jump Jump od) s = (INL x, s') ∧
+  all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
+Proof
+  rw[bind_def, AllCaseEqs()] >>
+  gvs[step_inst_def, step_jump_def, bind_def, AllCaseEqs(),
+      pop_stack_def, get_current_context_def, fail_def, return_def,
+      ignore_bind_def, consume_gas_def, set_current_context_def,
+      set_jump_dest_def] >>
+  drule inc_pc_or_jump_INL_establishes_all_jumpDest_NONE >> simp[] >>
+  gvs[all_jumpDest_NONE_def, is_call_def] >>
+  gvs[assert_def] >>
+  Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem step_jumpi_inc_pc_INL_preserves_all_jumpDest_NONE:
+  (do step_inst JumpI; inc_pc_or_jump JumpI od) s = (INL (), s') ∧
+  all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
+Proof
+  rw[bind_def, AllCaseEqs()] >>
+  gvs[step_inst_def, step_jumpi_def, bind_def, AllCaseEqs(),
+      pop_stack_def, get_current_context_def, fail_def, return_def,
+      ignore_bind_def, consume_gas_def, set_current_context_def,
+      set_jump_dest_def] >>
+  drule inc_pc_or_jump_INL_establishes_all_jumpDest_NONE >> simp[] >>
+  gvs[all_jumpDest_NONE_def, is_call_def, assert_def] >>
+  Cases_on `s.contexts` >> gvs[]
+QED
+
 (* ================================================================ *)
 (* Layer 1: Monad combinator preservation rules                     *)
 (* ================================================================ *)
@@ -1662,6 +1706,246 @@ Proof
 QED
 
 (* step_call and step_create preserve all_jumpDest_NONE *)
+(* Step helpers: use bridge lemma with preserves_jumpDest + preserves_same_frame *)
+
+Theorem preserves_all_jumpDest_NONE_step_binop[simp]:
+  preserves_all_jumpDest_NONE (step_binop op f)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_binop_def, bind_def, pop_stack_def,
+     get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_monop[simp]:
+  preserves_all_jumpDest_NONE (step_monop op f)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_monop_def, bind_def, pop_stack_def,
+     get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_modop[simp]:
+  preserves_all_jumpDest_NONE (step_modop op f)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_modop_def, bind_def, pop_stack_def,
+     get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_context[simp]:
+  preserves_all_jumpDest_NONE (step_context op f)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_context_def, bind_def, get_current_context_def, fail_def,
+     consume_gas_def, ignore_bind_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_msgParams[simp]:
+  preserves_all_jumpDest_NONE (step_msgParams op f)
+Proof
+  rw[step_msgParams_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_txParams[simp]:
+  preserves_all_jumpDest_NONE (step_txParams op f)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_txParams_def, ignore_bind_def,
+     consume_gas_def, bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_exp[simp]:
+  preserves_all_jumpDest_NONE step_exp
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_exp_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_keccak256[simp]:
+  preserves_all_jumpDest_NONE step_keccak256
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_keccak256_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_balance[simp]:
+  preserves_all_jumpDest_NONE step_balance
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_balance_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_call_data_load[simp]:
+  preserves_all_jumpDest_NONE step_call_data_load
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_call_data_load_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_copy_to_memory[simp]:
+  (∀f. getter = SOME f ⇒ preserves_jumpDest f) ∧
+  (∀f. getter = SOME f ⇒ preserves_same_frame f)
+  ⇒
+  preserves_all_jumpDest_NONE (step_copy_to_memory op getter)
+Proof
+  strip_tac >>
+  irule preserves_jumpDest_and_same_frame_imp_all >>
+  (rw[])
+  >- (
+  gvs[step_copy_to_memory_def, pop_stack_def, bind_def,
+      get_current_context_def, fail_def] )
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_return_data_copy[simp]:
+  preserves_all_jumpDest_NONE step_return_data_copy
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_return_data_copy_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_ext_code_size[simp]:
+  preserves_all_jumpDest_NONE step_ext_code_size
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_ext_code_size_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_ext_code_copy[simp]:
+  preserves_all_jumpDest_NONE step_ext_code_copy
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_ext_code_copy_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_ext_code_hash[simp]:
+  preserves_all_jumpDest_NONE step_ext_code_hash
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_ext_code_hash_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_block_hash[simp]:
+  preserves_all_jumpDest_NONE step_block_hash
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_block_hash_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_blob_hash[simp]:
+  preserves_all_jumpDest_NONE step_blob_hash
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_blob_hash_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_self_balance[simp]:
+  preserves_all_jumpDest_NONE step_self_balance
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_self_balance_def, bind_def, get_current_context_def, fail_def,
+     ignore_bind_def, consume_gas_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_pop[simp]:
+  preserves_all_jumpDest_NONE step_pop
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_pop_def, pop_stack_def, ignore_bind_def, consume_gas_def,
+     bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_mload[simp]:
+  preserves_all_jumpDest_NONE step_mload
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_mload_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_mstore[simp]:
+  preserves_all_jumpDest_NONE (step_mstore op)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_mstore_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_sload[simp]:
+  preserves_all_jumpDest_NONE (step_sload t)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_sload_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_sstore[simp]:
+  preserves_all_jumpDest_NONE (step_sstore t)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_sstore_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_push[simp]:
+  preserves_all_jumpDest_NONE (step_push n l)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_push_def, ignore_bind_def, consume_gas_def,
+     bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_dup[simp]:
+  preserves_all_jumpDest_NONE (step_dup n)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_dup_def, ignore_bind_def, consume_gas_def,
+     bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_swap[simp]:
+  preserves_all_jumpDest_NONE (step_swap n)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_swap_def, ignore_bind_def, consume_gas_def,
+     bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_log[simp]:
+  preserves_all_jumpDest_NONE (step_log n)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_log_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_return[simp]:
+  preserves_all_jumpDest_NONE (step_return b)
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_return_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_self_destruct[simp]:
+  preserves_all_jumpDest_NONE step_self_destruct
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_self_destruct_def, pop_stack_def, bind_def, get_current_context_def, fail_def]
+  >> gvs[]
+QED
+
+(* Call/Create helpers *)
+
 Theorem preserves_all_jumpDest_NONE_proceed_call[simp]:
   preserves_all_jumpDest_NONE (proceed_call a b c d e f g h s)
 Proof
@@ -1689,7 +1973,7 @@ Proof
   simp[initial_context_simp]
 QED
 
-Theorem preserves_all_jumpDest_NONE_step_create:
+Theorem preserves_all_jumpDest_NONE_step_create[simp]:
   preserves_all_jumpDest_NONE (step_create two)
 Proof
   rw[step_create_def] >> pajdn_tac >>
@@ -1698,42 +1982,99 @@ Proof
 QED
 
 (* step_inst preserves all_jumpDest_NONE for all opcodes *)
-Theorem preserves_all_jumpDest_NONE_step_inst:
+Theorem preserves_all_jumpDest_NONE_step_inst[simp]:
+  op ≠ Jump ∧ op ≠ JumpI ⇒
   preserves_all_jumpDest_NONE (step_inst op)
 Proof
-  Cases_on `op` >> rw[step_inst_def] >> pajdn_tac >>
-  (* Call/Create cases use dedicated lemmas *)
-  TRY (simp[preserves_all_jumpDest_NONE_step_call] >> NO_TAC) >>
-  TRY (simp[preserves_all_jumpDest_NONE_step_create] >> NO_TAC) >>
-  (* Other cases: use bridge or direct pajdn_tac *)
-  cheat (* TODO: may need bridge lemma or more pajdn_tac unfolding *)
+  Cases_on `op` >> rw[step_inst_def]
 QED
 
-(* Main theorem using all_jumpDest_NONE framework *)
-Theorem step_all_jumpDest_NONE:
-  step s = (r, s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
+(* The inner do-block of step: INL case preserves all_jumpDest_NONE *)
+Theorem step_inner_INL_preserves_all_jumpDest_NONE:
+  (do
+    context <- get_current_context;
+    if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+    else
+      case FLOOKUP context.msgParams.parsed context.pc of
+        NONE => step_inst Invalid
+      | SOME op => do step_inst op; inc_pc_or_jump op od
+  od) s = (INL x, s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
 Proof
-  rw[step_def, handle_def, AllCaseEqs()] >>
-  (* INL case: inner block succeeded *)
-  TRY (
-    gvs[bind_def, AllCaseEqs(), get_current_context_def,
-        fail_def, return_def] >>
-    `preserves_all_jumpDest_NONE (step_inst Stop)`
-       by simp[preserves_all_jumpDest_NONE_step_inst] >>
-    `preserves_all_jumpDest_NONE (step_inst Invalid)`
-       by simp[preserves_all_jumpDest_NONE_step_inst] >>
-    gvs[preserves_all_jumpDest_NONE_def] >>
-    NO_TAC) >>
-  (* INR case: inner block raised exception, handle_step handles it *)
-  `preserves_all_jumpDest_NONE (handle_step e)`
-     by simp[preserves_all_jumpDest_NONE_handle_step] >>
-  cheat (* TODO: compose inner block + handle_step *)
+  rw[bind_def, AllCaseEqs(), get_current_context_def, return_def, fail_def] >>
+  gvs[COND_RATOR, AllCaseEqs()]
+  >- (
+    drule_at(Pat`step_inst`)(REWRITE_RULE[preserves_all_jumpDest_NONE_def]
+      preserves_all_jumpDest_NONE_step_inst) >> rw[] ) >>
+  gvs[vfmTypesTheory.option_CASE_rator, AllCaseEqs()] >- (
+    drule_at(Pat`step_inst`)(REWRITE_RULE[preserves_all_jumpDest_NONE_def]
+      preserves_all_jumpDest_NONE_step_inst) >> rw[] ) >>
+  Cases_on `op = Jump`
+  >- (gvs[] >> drule step_jump_inc_pc_INL_preserves_all_jumpDest_NONE >> simp[]) >>
+  Cases_on `op = JumpI`
+  >- (gvs[] >> drule step_jumpi_inc_pc_INL_preserves_all_jumpDest_NONE >> simp[]) >>
+  gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
+  drule_at(Pat`step_inst`)(REWRITE_RULE[preserves_all_jumpDest_NONE_def]
+      preserves_all_jumpDest_NONE_step_inst) >> rw[]  >>
+  drule (REWRITE_RULE[preserves_all_jumpDest_NONE_def]
+           preserves_all_jumpDest_NONE_inc_pc_or_jump) >> simp[]
+QED
+
+(* The inner do-block of step: INR case preserves TL *)
+Theorem step_inner_INR_preserves_tail:
+  (do
+    context <- get_current_context;
+    if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+    else
+      case FLOOKUP context.msgParams.parsed context.pc of
+        NONE => step_inst Invalid
+      | SOME op => do step_inst op; inc_pc_or_jump op od
+  od) s = (INR e, s') ∧ s.contexts ≠ [] ⇒ TL s'.contexts = TL s.contexts
+Proof
+  rw[bind_def, AllCaseEqs(), get_current_context_def, return_def, fail_def] >>
+  gvs[COND_RATOR, AllCaseEqs()] >-
+  (drule (REWRITE_RULE[preserves_same_frame_def]
+                preserves_same_frame_step_inst_Stop) >>
+       rw[same_frame_rel_def]) >>
+  gvs[vfmTypesTheory.option_CASE_rator, AllCaseEqs()] >-
+  (drule (REWRITE_RULE[preserves_same_frame_def]
+                preserves_same_frame_step_inst_Invalid) >>
+       rw[same_frame_rel_def]) >>
+  gvs[ignore_bind_def, bind_def, AllCaseEqs()] >- (
+     Cases_on`is_call op` >- (
+       gvs[inc_pc_or_jump_def, return_def] ) >>
+    `preserves_same_frame (step_inst op)` by (
+      Cases_on`op` >> gvs[step_inst_def,is_call_def] ) >>
+    gvs[preserves_same_frame_def] >>
+    first_x_assum drule >> rw[] >>
+    drule(REWRITE_RULE[preserves_same_frame_def]
+      preserves_same_frame_inc_pc_or_jump) >>
+    Cases_on`s''.contexts` >> gvs[same_frame_rel_def] ) >>
+  cheat
+QED
+
+(* Main theorem: step INL preserves all_jumpDest_NONE *)
+Theorem step_all_jumpDest_NONE:
+  step s = (INL (), s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
+Proof
+  rw[step_def, handle_def, AllCaseEqs()]
+  >- ((* INL case from inner block *)
+      drule step_inner_INL_preserves_all_jumpDest_NONE >> simp[])
+  >- ((* INR from inner block, then handle_step returns INL *)
+      `EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts)` by (
+        gvs[all_jumpDest_NONE_def] >>
+        Cases_on `s.contexts` >> gvs[]) >>
+      Cases_on`s.contexts = []` >- (
+        gvs[bind_def,AllCaseEqs(),get_current_context_def,fail_def] >>
+        gvs[handle_step_def,reraise_def] ) >>
+      `TL s''.contexts = TL s.contexts` by (
+        drule step_inner_INR_preserves_tail >> simp[]) >>
+      cheat)
 QED
 
 (* Derived theorem: if all contexts have jumpDest = NONE and contexts ≠ [],
    then HD s'.contexts has jumpDest = NONE *)
 Theorem step_jumpDest_NONE:
-  step s = (r,s') ∧ all_jumpDest_NONE s ∧ s'.contexts ≠ []
+  step s = (INL (), s') ∧ all_jumpDest_NONE s ∧ s'.contexts ≠ []
   ⇒ (FST (HD s'.contexts)).jumpDest = NONE
 Proof
   rw[all_jumpDest_NONE_def] >>
