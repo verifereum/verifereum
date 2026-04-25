@@ -942,6 +942,108 @@ Proof
   simp[]
 QED
 
+Theorem preserves_jumpDest_abort_create_exists[simp]:
+  preserves_jumpDest (abort_create_exists a)
+Proof
+  rw[abort_create_exists_def] >> pjd_tac
+QED
+
+Theorem preserves_jumpDest_NONE_proceed_create:
+  proceed_create a b c d e s = (x, s') ∧ s.contexts ≠ [] ∧
+  (FST(HD s.contexts)).jumpDest = NONE
+  ⇒
+  s'.contexts ≠ [] ∧
+  (FST(HD s'.contexts)).jumpDest = NONE
+Proof
+  simp[proceed_create_def] >> strip_tac >>
+  gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  gvs[bind_def, return_def, push_context_def]
+QED
+
+Theorem preserves_jumpDest_NONE_step_create:
+  step_create two s = (x, s') ∧ s.contexts ≠ [] ∧
+  (FST (HD s.contexts)).jumpDest = NONE
+  ⇒
+  s'.contexts ≠ [] ∧
+  (FST (HD s'.contexts)).jumpDest = NONE
+Proof
+  simp[step_create_def] >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  gvs[COND_RATOR] >>
+  qpat_x_assum`_ = (_,_)`mp_tac >>
+  IF_CASES_TAC >- (
+    strip_tac >>
+    drule(REWRITE_RULE[preserves_jumpDest_def]
+            preserves_jumpDest_abort_unuse) >>
+    rw[] ) >>
+  IF_CASES_TAC >- (
+    strip_tac >>
+    drule(REWRITE_RULE[preserves_jumpDest_def]
+            preserves_jumpDest_abort_create_exists) >>
+    rw[] ) >>
+  strip_tac >> drule preserves_jumpDest_NONE_proceed_create >>
+  simp[]
+QED
+
 (* ================================================================ *)
 (* Main theorem: non-Jump/JumpI step_inst preserves jumpDest        *)
 (* ================================================================ *)
@@ -1014,7 +1116,7 @@ Proof
   TOP_CASE_TAC >> pjd_tac >> gvs[]
 QED
 
-(*
+(* NOT TRUE
 Theorem preserves_jumpDest_handle_exception[simp]:
   preserves_jumpDest (handle_exception e)
 Proof
@@ -1058,7 +1160,6 @@ Proof
       return_def, fail_def, assert_def]
 QED
 
-(*
 Theorem step_jumpDest_NONE:
   step s = (r,s') ∧ s.contexts ≠ [] ∧ (FST (HD s.contexts)).jumpDest = NONE
   ⇒ (FST (HD s'.contexts)).jumpDest = NONE
@@ -1080,11 +1181,35 @@ Proof
     drule inc_pc_or_jump_INL_jumpDest_NONE >>
     gvs[inc_pc_or_jump_def, COND_RATOR, CaseEq"bool", return_def]
     >- (
-      drule step_inst_non_jump_preserves_jumpDest
+      Cases_on`step_inst op s = step_call op s`
+      >- ( gvs[] >> drule preserves_jumpDest_NONE_step_call >> gvs[] ) >>
+      `∃two. step_inst op s = step_create two s` by
+      (Cases_on`op` >> gvs[step_inst_def, is_call_def] >> metis_tac[]) >>
+      gvs[] >> drule preserves_jumpDest_NONE_step_create >> rw[] ) >>
+    gvs[bind_def, AllCaseEqs(), get_current_context_def, fail_def, return_def] >>
+    gvs[vfmTypesTheory.option_CASE_rator,AllCaseEqs()] >>
+    gvs[ignore_bind_def,AllCaseEqs(),bind_def,assert_def] >>
+    gvs[set_current_context_def,bind_def,AllCaseEqs(),return_def,fail_def] >>
+    NO_TAC) >>
+  cheat
+    (*
+  TRY (
+    preserves_jumpDest_handle
+    preserves_jumpDest_handle_create
+    handle_exception_def
+  TRY (
+    gvs[ignore_bind_def, bind_def, AllCaseEqs(),
+        inc_pc_or_jump_def, COND_RATOR, return_def,
+        get_current_context_def, fail_def,
+        vfmTypesTheory.option_CASE_rator, set_current_context_def,
+        assert_def]
+    >- cheat
+    >> cheat
 
   TRY (
     UNDISCH_ALL preserves_jumpDest_handle
     |> REWRITE_RULE[preserves_jumpDest_def]
     |> SPEC_ALL |> DISCH_ALL |> drule_at(Pat`handle`) >>
     simp[]
-*)
+    *)
+QED
