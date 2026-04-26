@@ -2020,6 +2020,61 @@ Proof
            preserves_all_jumpDest_NONE_inc_pc_or_jump) >> simp[]
 QED
 
+(* ----------------------------------------------------------------- *)
+(* Bridge: same_frame_rel implies TL preservation                    *)
+(* ----------------------------------------------------------------- *)
+
+Theorem same_frame_rel_TL:
+  same_frame_rel s s' ⇒ TL s'.contexts = TL s.contexts
+Proof
+  rw[same_frame_rel_def]
+QED
+
+(* ----------------------------------------------------------------- *)
+(* step_inst returning INR implies same_frame_rel (hence TL preserved) *)
+(*                                                                    *)
+(* Key insight: the only way step_inst can grow the stack is via       *)
+(* proceed_call / proceed_create (in the Call / Create family), which  *)
+(* always return INL. So INR ⇒ no growth ⇒ same_frame_rel.           *)
+(* ----------------------------------------------------------------- *)
+
+Theorem step_inst_INR_imp_same_frame_rel:
+  step_inst op s = (INR e, s') ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'
+Proof
+  strip_tac
+  >> Cases_on `is_call op`
+  >- (
+    (* Call / Create / Create2 family *)
+    (* First determine which sub-family: step_call or step_create *)
+    Cases_on `op` >> gvs[step_inst_def, is_call_def]
+    >> TRY (
+      (* step_call variants *)
+      mp_tac (GEN_ALL same_frame_or_grow_step_call)
+      >> rewrite_tac[same_frame_or_grow_def]
+      >> disch_then drule >> simp[]
+      >> strip_tac
+      >> (* grow case: step_call_grown_returns_inl contradicts INR *)
+      drule_all step_call_grown_returns_inl >> simp[] )
+    >> (* step_create variants *)
+    mp_tac (GEN_ALL same_frame_or_grow_step_create)
+    >> rewrite_tac[same_frame_or_grow_def]
+    >> disch_then drule >> simp[]
+    >> strip_tac
+    >> (* grow case: step_create_grown_returns_inl contradicts INR *)
+    drule_all step_create_grown_returns_inl >> simp[] )
+  >> (* Non-call: preserves_same_frame gives same_frame_rel directly *)
+  drule (REWRITE_RULE[preserves_same_frame_def]
+           preserves_same_frame_step_inst_not_call)
+  >> simp[]
+QED
+
+Theorem step_inst_INR_preserves_TL:
+  step_inst op s = (INR e, s') ∧ s.contexts ≠ [] ⇒
+  TL s'.contexts = TL s.contexts
+Proof
+  metis_tac[step_inst_INR_imp_same_frame_rel, same_frame_rel_TL]
+QED
+
 (* The inner do-block of step: INR case preserves TL *)
 Theorem step_inner_INR_preserves_tail:
   (do
@@ -2050,7 +2105,8 @@ Proof
     drule(REWRITE_RULE[preserves_same_frame_def]
       preserves_same_frame_inc_pc_or_jump) >>
     Cases_on`s''.contexts` >> gvs[same_frame_rel_def] ) >>
-  cheat
+  (* step_inst returned INR directly: use step_inst_INR_preserves_TL *)
+  drule step_inst_INR_preserves_TL >> simp[]
 QED
 
 (*) handle_step INL establishes all_jumpDest_NONE given only TL has jumpDest NONE.
@@ -2171,35 +2227,30 @@ Proof
     impl_tac >- gvs[] >>
     gvs[all_jumpDest_NONE_def] >>
     Cases_on`s''.contexts` >> gvs[] ) >>
+  gvs[ignore_bind_def, bind_def] >>
+  qpat_x_assum`_ = (INR _,_)`mp_tac >>
+  TOP_CASE_TAC >> strip_tac >>
   Cases_on `is_call op` >- (
-    (* is_call: inc_pc_or_jump = return (), so s'' comes directly from
-       step_inst op returning INR. step_call is same_frame_or_grow:
-       either same_frame (TL preserved) or grew (old TL still present,
-       new child has jumpDest = NONE by initial_context_simp, and the
-       parent at position 1 derives its msgParams from the old head but
-       its jumpDest is set by set_current_context which only touches
-       the head of the running frame). In both cases TL s''.contexts
-       jumpDests are NONE. *)
-    `same_frame_or_grow (step_inst op)` by simp[]
-    >> pop_assum mp_tac
-    >> rewrite_tac[same_frame_or_grow_def]
-    >> gvs[ignore_bind_def,AllCaseEqs(),bind_def]
-    >- gvs[inc_pc_or_jump_def,return_def]
-    >> disch_then drule >> simp[]
-    >> strip_tac >- ( gvs[same_frame_rel_def] )
-    >> (* Grew by 1: new child from initial_context has jumpDest = NONE, *)
-    (* parent's FST has jumpDest from set_current_context (not modified     *)
-    (* in the push path for call/create). Either way, TL is old TL + 1   *)
-    (* element with jumpDest = NONE.                                       *)
-    gvs[inc_pc_or_jump_def, return_def] >>
-    cheat
-    ) >>
+    (* is_call: step_inst op preserves all_jumpDest_NONE (since call-family
+       ops are not Jump/JumpI). inc_pc_or_jump = return () for call ops. *)
+    drule_at(Pat`step_inst`)(
+      REWRITE_RULE[preserves_all_jumpDest_NONE_def]
+        preserves_all_jumpDest_NONE_step_inst) >>
+    impl_tac >- (rpt strip_tac >> gvs[is_call_def]) >>
+    reverse(gvs[AllCaseEqs()])
+    >- (
+      gvs[all_jumpDest_NONE_def] >>
+      Cases_on`r.contexts` >> gvs[] ) >>
+    mp_tac preserves_all_jumpDest_NONE_inc_pc_or_jump >>
+    rewrite_tac[preserves_all_jumpDest_NONE_def] >>
+    disch_then drule >> rw[] >> gvs[] >>
+    gvs[all_jumpDest_NONE_def] >>
+    Cases_on`s''.contexts` >> gvs[] ) >>
   (* ¬is_call: step_inst op is preserves_same_frame, so TL preserved *)
-  `preserves_same_frame (step_inst op)` by (
-    Cases_on`op` >> gvs[step_inst_def,is_call_def] ) >>
-  gvs[preserves_same_frame_def] >>
-  gvs[ignore_bind_def,AllCaseEqs(),bind_def] >>
-  first_x_assum drule >> rw[same_frame_rel_def] >>
+  drule preserves_same_frame_step_inst_not_call >>
+  gvs[preserves_same_frame_def] >> disch_then drule >>
+  rw[same_frame_rel_def] >>
+  gvs[AllCaseEqs()] >>
   drule(REWRITE_RULE[preserves_same_frame_def]
           preserves_same_frame_inc_pc_or_jump) >>
   gvs[same_frame_rel_def] >>
