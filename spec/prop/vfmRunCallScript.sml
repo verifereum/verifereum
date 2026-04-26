@@ -334,7 +334,8 @@ Theorem proceed_call_push_structure:
                outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
   TL s'.contexts = s.contexts ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
-  (FST (HD s'.contexts)).msgParams.outputTo = outputTo
+  (FST (HD s'.contexts)).msgParams.outputTo = outputTo ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
 Proof
   strip_tac
   >> qhdtm_x_assum `proceed_call` mp_tac
@@ -372,7 +373,8 @@ Proof
   >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
   >> reverse IF_CASES_TAC >> simp[return_def]
   >- ((* No precompile *)
-      strip_tac >> gvs[Abbr`ctx`, initial_msg_params_def] )
+      strip_tac >> gvs[Abbr`ctx`, initial_msg_params_def] >>
+      gvs[SUBSET_DEF] )
   (* Precompile: dispatch_precompiles is preserves_same_frame *)
   >> strip_tac
   >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_, s')`
@@ -400,7 +402,8 @@ Theorem proceed_create_push_structure:
   s.contexts ≠ [] ⇒
   MAP FST (TL s'.contexts) = MAP FST s.contexts ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
-  outputTo_consistent_ctx (FST (HD s'.contexts))
+  outputTo_consistent_ctx (FST (HD s'.contexts)) ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
 Proof
   strip_tac
   >> qhdtm_x_assum `proceed_create` mp_tac
@@ -427,6 +430,9 @@ Proof
   >> simp[set_last_accounts_def, MAP_SNOC, MAP_FRONT]
   >> qspec_then`MAP FST s.contexts`mp_tac SNOC_LAST_FRONT
   >> simp[]
+  (* SND (HD s'.contexts) = captured rollback = s.rollback (after increment_nonce,
+     which doesn't modify accesses), so accesses subset is reflexivity *)
+  >> gvs[SUBSET_DEF]
 QED
 
 (* Wrapper: step_call runs preserves_storage primitives (pop_stack, consume_gas,
@@ -637,7 +643,8 @@ Theorem step_call_push_structure:
   SND (HD (TL s'.contexts)) = SND (HD s.contexts) ∧
   (FST (HD (TL s'.contexts))).msgParams = (FST (HD s.contexts)).msgParams ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
-  outputTo_consistent_ctx (FST (HD s'.contexts))
+  outputTo_consistent_ctx (FST (HD s'.contexts)) ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
 Proof
   simp[step_call_def] >> strip_tac
   (* Peel pop_stack *)
@@ -746,15 +753,32 @@ Proof
   >> conj_asm1_tac >- gvs[same_frame_rel_def]
   >> conj_tac >- metis_tac[SUBSET_TRANS, same_frame_rel_def]
   (* outputTo_consistent: outputTo = Memory from step_call, so Code a is vacuous *)
-  >> simp[outputTo_consistent_ctx_def]
+  >> conj_tac >- simp[outputTo_consistent_ctx_def]
+  >> metis_tac[SUBSET_TRANS, same_frame_rel_def]
+QED
+
+(* TODO: move *)
+Theorem LAST_CONS_SNOC:
+  LAST (x::(SNOC y z)) = y
+Proof
+  map_every qid_spec_tac[`x`,`y`,`z`] >> Induct >> rw[]
+QED
+
+(* TODO: move *)
+Theorem FRONT_CONS_SNOC:
+  FRONT (x::(SNOC y z)) = x::z
+Proof
+  map_every qid_spec_tac[`x`,`y`,`z`] >> Induct >> rw[] >>
+  rewrite_tac[GSYM SNOC_APPEND] >> rw[]
 QED
 
 (* step_create_push_structure: structural facts when step_create grows.
    We peel prefix ops using bind_psf_grows_extract to get same_frame_rel s sm.
    proceed_create modifies LAST context's SND.accounts via set_original,
    so we only claim accesses preservation (not storage equality) for per-position
-   SND facts. Storage equality for CREATE is handled in run_call_inv_step using
-   the invariant + fresh address argument. *)
+   SND facts. For the old head (position 1 in new stack), we additionally
+   claim storage equality for a ≠ callee, since set_original only modifies
+   the callee address. *)
 Theorem step_create_push_structure:
   step_create two s = (r, s') ∧ s.contexts ≠ [] ∧
   LENGTH s'.contexts > LENGTH s.contexts ⇒
@@ -763,7 +787,17 @@ Theorem step_create_push_structure:
        (SND (EL i (TL s'.contexts))).accesses = (SND (EL i s.contexts)).accesses) ∧
   (FST (HD (TL s'.contexts))).msgParams = (FST (HD s.contexts)).msgParams ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
-  outputTo_consistent_ctx (FST (HD s'.contexts))
+  outputTo_consistent_ctx (FST (HD s'.contexts)) ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys ∧
+  (∀a. a ≠ (FST (HD s'.contexts)).msgParams.callee ⇒
+     (lookup_account a (SND (HD (TL s'.contexts))).accounts).storage =
+     (lookup_account a (SND (HD s.contexts)).accounts).storage) ∧
+  (∀i. i < LENGTH s.contexts - 1 ⇒
+     (SND (EL i (TL s'.contexts))).accounts =
+     (SND (EL i s.contexts)).accounts) ∧
+  (∀a. a ≠ (FST (HD s'.contexts)).msgParams.callee ⇒
+    (lookup_account a (SND (EL (LENGTH s.contexts) s'.contexts)).accounts).storage =
+    (lookup_account a (SND (LAST s.contexts)).accounts).storage)
 Proof
   simp[step_create_def] >> strip_tac
   (* Peel pop_stack *)
@@ -899,16 +933,59 @@ Proof
     Cases_on`s'.contexts` >> gvs[] >>
     Cases_on`t` >> gvs[] >>
     Cases_on`se.contexts` >> gvs[] )
+  (* Remaining: per-pos accesses, msgParams, rollback, outputTo, SND(HD),
+     a≠callee storage *)
+  >> rewrite_tac[Ntimes CONJ_ASSOC 3]
   >> reverse conj_tac >- (
-    conj_tac >- (
+    (* a ≠ callee ⇒ storage equality at position 1.
+       set_last_accounts only modifies the LAST element's .accounts.
+       When LENGTH se.contexts > 1, HD of TL is NOT the last, so unchanged.
+       When LENGTH se.contexts = 1, HD of TL IS the last, modified by
+       set_last_accounts (update_account address empty_account_state)
+       which doesn't touch a ≠ address. *)
+    qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac >>
+    rewrite_tac[proceed_create_def] >>
+    simp[ignore_bind_def, bind_def, update_accounts_def, return_def,
+          get_rollback_def, get_original_def, set_original_def, fail_def] >>
+    strip_tac >> gvs[] >>
+    drule push_context_effect >> strip_tac >> gvs[] >>
+    simp[lookup_storage_def, lookup_account_def] >>
+    qmatch_goalsub_abbrev_tac`SND (EL _ (slc uc _))` >>
+    qmatch_goalsub_abbrev_tac`(SND (EL _ icc)).accounts _` >>
+    gvs[push_context_def,return_def,execution_state_component_equality] >>
+    gvs[account_already_created_def,lookup_account_def] >>
+    Cases_on`s.contexts` >- gvs[] >> simp[] >>
+    Cases_on`se.contexts` >- gvs[] >> simp[Abbr`slc`] >>
+    gvs[set_last_accounts_def] >>
+    simp[EL_SNOC] >>
+    simp[Abbr`icc`] >>
+    qmatch_goalsub_abbrev_tac`EL (LENGTH t) (SNOC sn fr)` >>
+    `LENGTH fr = LENGTH t` by simp[Abbr`fr`] >>
+    pop_assum(SUBST1_TAC o SYM) >> simp[EL_LENGTH_SNOC,Abbr`sn`] >>
+    gvs[Abbr`fr`] >>
+    `SND h = SND h'` by (
       qpat_x_assum`same_frame_rel s se`mp_tac >>
-      simp[same_frame_rel_def] >> strip_tac >>
-      Cases_on`s.contexts` >- gvs[] >> simp[] >>
-      Cases_on`s'.contexts` >- gvs[] >> simp[] >>
-      Cases_on`t'` >- gvs[] >> simp[] >>
-      Cases_on`se.contexts` >- gvs[] >>
-      fs[] ) >>
-    metis_tac[SUBSET_TRANS, same_frame_rel_def] )
+      simp[same_frame_rel_def] ) >>
+    simp[initial_msg_params_def] >>
+    reverse(qspec_then`t`FULL_STRUCT_CASES_TAC SNOC_CASES >> gvs[]) >- (
+      simp[LAST_CONS_SNOC, FRONT_CONS_SNOC] >>
+      conj_tac >- ( Cases >> simp[EL_SNOC] ) >>
+      simp[Abbr`uc`, update_account_def, APPLY_UPDATE_THM] >>
+      gen_tac >> simp[LAST_CONS_SNOC] ) >>
+    simp[Abbr`uc`, lookup_account_def, update_account_def, APPLY_UPDATE_THM] )
+  >> simp[GSYM CONJ_ASSOC]
+  >> reverse conj_tac >- (
+    (* SND (HD s'.contexts) accesses subset *)
+    reverse conj_tac
+    >- metis_tac[SUBSET_TRANS, same_frame_rel_def] >>
+    (* msgParams *)
+    qpat_x_assum`same_frame_rel s se`mp_tac >>
+    simp[same_frame_rel_def] >> strip_tac >>
+    Cases_on`s.contexts` >- gvs[] >> simp[] >>
+    Cases_on`s'.contexts` >- gvs[] >> simp[] >>
+    Cases_on`t'` >- gvs[] >> simp[] >>
+    Cases_on`se.contexts` >- gvs[] >>
+    fs[]  )
   (* Per-position accesses preservation: set_original only touches .accounts *)
   >> qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac
   >> simp[proceed_create_def]
