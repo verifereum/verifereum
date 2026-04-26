@@ -1552,86 +1552,85 @@ Proof
       >> drule_all same_frame_or_grow_length >> fs[])
   >> rpt strip_tac
   >> ASSUME_TAC same_frame_or_grow_step_inner
-  >> `LENGTH r'.contexts ≥ LENGTH s.contexts`
+  >> `LENGTH r'.contexts >= LENGTH s.contexts`
        by (drule_all same_frame_or_grow_length >> fs[])
-  >> `r'.contexts ≠ []` by (Cases_on `r'.contexts` >> fs[])
-  >> `LENGTH s'.contexts + 1 ≥ LENGTH r'.contexts ∧ LENGTH s'.contexts ≤ LENGTH r'.contexts`
+  >> `r'.contexts <> []` by (Cases_on `r'.contexts` >> fs[])
+  >> `LENGTH s'.contexts + 1 >= LENGTH r'.contexts /\ LENGTH s'.contexts <= LENGTH r'.contexts`
        by (drule handle_step_shrinks_by_one >> fs[])
   >> `LENGTH r'.contexts = LENGTH s.contexts` by decide_tac
   >> `same_frame_rel s r'` by (drule_all same_frame_or_grow_eq_length >> fs[])
-  >> `LENGTH s.contexts ≥ 2` by (
+  >> `LENGTH s.contexts >= 2` by (
        CCONTR_TAC >> fs[]
-       >> `LENGTH s.contexts ≤ 1` by decide_tac
+       >> `LENGTH s.contexts <= 1` by decide_tac
        >> `LENGTH s.contexts = 1` by decide_tac
        >> drule handle_step_preserves_length_1 >> fs[])
   >> `s.contexts = HD s.contexts :: TL s.contexts`
        by (Cases_on `s.contexts` >> fs[])
-  >> `LENGTH (TL s.contexts) ≥ 1`
+  >> `LENGTH (TL s.contexts) >= 1`
        by (Cases_on `TL s.contexts` >> fs[])
   >> `?parent rest. TL s.contexts = parent :: rest`
        by (Cases_on `TL s.contexts` >> fs[])
-  >> `r'.contexts ≠ []` by fs[same_frame_rel_def]
-  >> `TL r'.contexts = TL s.contexts ∧ SND (HD r'.contexts) = SND (HD s.contexts)`
+  >> `r'.contexts <> []` by fs[same_frame_rel_def]
+  >> `TL r'.contexts = TL s.contexts /\ SND (HD r'.contexts) = SND (HD s.contexts)`
        by fs[same_frame_rel_def]
   >> `r'.contexts = (FST (HD r'.contexts), SND (HD s.contexts)) :: parent :: rest`
        by (Cases_on `r'.contexts` >> fs[] >> Cases_on `h` >> fs[])
-  >> `LENGTH s'.contexts < LENGTH r'.contexts`
-       by decide_tac
+  >> `LENGTH s'.contexts < LENGTH r'.contexts` by decide_tac
+  (* Use paired lemma. Split its disjunction into two separate subgoals
+     via strip_assume_tac, avoiding gvs contamination.
+     DISJ1(r'): storage s'.rollback = storage r'.rollback
+     DISJ2(r'): storage s'.rollback = storage (SND (HD r'.contexts)) *)
   >> drule_all handle_step_pop_generic_gen_paired
-  >> disch_then (qx_choosel_then [`new_head`] assume_tac)
-  >> simp[]
-  >> Cases_on`s.contexts` >> gvs[]
-  >> gvs[same_frame_rel_def]
-  (* Remove the DISJ1 facts that gvs extracted, so they can't rewrite the goal.
-     We'll re-derive handle_step_pop_generic_gen_paired when needed for DISJ2. *)
-  >> qpat_x_assum `∀a. (lookup_account a s'.rollback.accounts).storage =
-         (lookup_account a r'.rollback.accounts).storage` kall_tac
-  >> qpat_x_assum `toSet r'.rollback.accesses.storageKeys ⊆
-         toSet s'.rollback.accesses.storageKeys` kall_tac
-  (* First, extract the step_inst call from inner *)
+  >> disch_then (qx_choosel_then [`new_head`] strip_assume_tac)
+  >- (
+    (* Paired DISJ2: storage s'.rollback = storage callee_rb = storage (SND h).
+       Directly proves theorem's DISJ2. *)
+    DISJ2_TAC
+    >> gvs[SUBSET_DEF])
+  (* Paired DISJ1: storage s'.rollback = storage r'.rollback.
+     Need to bridge from r'.rollback to s.rollback.
+     Key: DISJ1 implies success pop (e=NONE). For a success pop,
+     inner step returned (INR NONE, r'), meaning step_inst returned INR
+     without any SSTORE. So step_inst_inr_preserves_storage gives
+     storage r'.rollback = storage s.rollback for ALL addresses. *)
+  >> DISJ1_TAC
   >> qpat_x_assum `_ s = (INR _, r')` mp_tac
   >> simp[bind_def, get_current_context_def, return_def, AllCaseEqs()]
   >> strip_tac >> gvs[]
   >> pop_assum mp_tac
   >> IF_CASES_TAC
   >- (
+    (* Stop case: step_inst Stop returns INR NONE (finish).
+       r'.rollback = s.rollback directly (only contexts changed). *)
     simp[step_inst_def, ignore_bind_def, set_return_data_def, bind_def,
          get_current_context_def, return_def, set_current_context_def,
-         finish_def] >> strip_tac >> gvs[] )
+         finish_def]
+    >> strip_tac >> gvs[]
+    >> match_mp_tac SUBSET_TRANS
+    >> simp[])
   >> TOP_CASE_TAC
   >- (
+    (* Invalid opcode: step_inst Invalid returns INR (SOME Invalid).
+       This is a failure pop, not DISJ1. Contradiction. *)
     simp[step_inst_def, ignore_bind_def, set_return_data_def, bind_def,
          get_current_context_def, return_def, set_current_context_def,
-         finish_def] >> strip_tac >> gvs[fail_def] )
-  (* SOME op case: step_inst op returned INR *)
+         finish_def, fail_def]
+    >> strip_tac >> gvs[])
+  (* SOME op case: step_inst op + inc_pc_or_jump op *)
   >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
   >> strip_tac >> gvs[]
   >- (
-    (* inc_pc_or_jump returned INL (InvalidJumpDest) *)
-    gvs[inc_pc_or_jump_def]
-    >> gvs[COND_RATOR, AllCaseEqs(), return_def]
-    >> gvs[bind_def, AllCaseEqs(), get_current_context_def, return_def, fail_def]
+    (* inc_pc_or_jump returned INL (InvalidJumpDest) → failure pop.
+       This is DISJ2, not DISJ1, so contradiction with paired DISJ1. *)
+    gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def]
+    >> gvs[bind_def, AllCaseEqs(), get_current_context_def, return_def,
+           fail_def]
     >> gvs[option_CASE_rator, AllCaseEqs(), set_current_context_def,
            return_def, fail_def, ignore_bind_def]
-    >> gvs[bind_def,AllCaseEqs(),assert_def,fail_def,return_def,
-           set_current_context_def]
-    >> Cases_on `(FST (HD r'.contexts)).jumpDest ≠ (FST (HD s.contexts)).jumpDest`
-    >- (
-      (* jumpDest changed: op must be Jump or JumpI, which preserve rollback.
-         So r'.rollback = s.rollback, and we use DISJ1. *)
-      `x = Jump ∨ x = JumpI` by (
-           drule step_inst_jumpDest_changed_imp_jump >> simp[] )
-      >> `r'.rollback = s.rollback` by (
-           metis_tac[step_inst_Jump_preserves_rollback, preserves_rollback_def,
-                     step_inst_JumpI_preserves_rollback] )
-      >> DISJ1_TAC
-      >> gvs[SUBSET_DEF] )
-    (* jumpDest unchanged: DISJ2 holds because InvalidJumpDest causes
-       pop-revert, setting s'.rollback = callee_rb = SND (HD s.contexts).
-       The handle_step_pop disjunction's DISJ2 gives us directly:
-         callee_rb.storageKeys ⊆ s'.storageKeys ∧ ∀a. storage s' = storage callee_rb *)
-    >> DISJ2_TAC
-    >> cheat )
+    >> gvs[bind_def, AllCaseEqs(), assert_def, fail_def, return_def,
+           set_current_context_def])
+  (* step_inst op returned INR: no SSTORE happened.
+     step_inst_inr_preserves_storage bridges r'.rollback -> s.rollback. *)
   >> rename1 `step_inst op s = (INR e, r')`
   >> drule step_inst_inr_preserves_storage
   >> simp[lookup_storage_def, FUN_EQ_THM]

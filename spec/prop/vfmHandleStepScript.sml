@@ -596,6 +596,46 @@ Proof
   >> simp[]
 QED
 
+(* Rollback-only version of handle_exception_pop_failure_memory_effect_gen.
+   Drops the Memory precondition because rollback after a failure pop
+   is always callee_rb regardless of outputTo. *)
+Theorem handle_exception_pop_failure_rollback_gen:
+  s.contexts = (callee, callee_rb) :: parent :: rest ∧
+  e ≠ NONE ∧
+  e ≠ SOME Reverted ∧
+  handle_exception e s = (q, s') ∧
+  LENGTH s'.contexts < LENGTH s.contexts ⇒
+    s'.rollback = callee_rb
+Proof
+  strip_tac
+  >> Cases_on `parent`
+  >> Cases_on `callee.msgParams.outputTo`
+  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
+         get_gas_left_def, get_current_context_def, return_def,
+         consume_gas_def, set_return_data_def, set_current_context_def,
+         get_num_contexts_def, get_return_data_def, get_output_to_def,
+         reraise_def, assert_def, fail_def,
+         inc_pc_def, push_stack_def, write_memory_def,
+         pop_and_incorporate_context_def, pop_context_def,
+         set_rollback_def, unuse_gas_def,
+         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+QED
+
+(* When e <> NONE, handle_create always reraises regardless of outputTo.
+   The Code+NONE branch is the only non-reraise path, and e <> NONE
+   rules it out. *)
+Theorem handle_create_reraises_when_some:
+  e <> NONE /\ s.contexts <> [] ==> handle_create e s = reraise e s
+Proof
+  strip_tac
+  >> Cases_on `e` >> gvs[]
+  >> simp[handle_create_def, bind_def, get_return_data_def, get_output_to_def,
+          get_current_context_def, return_def, reraise_def, AllCaseEqs()]
+  >> Cases_on `(FST (HD s.contexts)).msgParams.outputTo` >> gvs[reraise_def]
+QED
+
+
+
 (* =====================================================================
  * Handle-step structural, length, rollback, and storage lemmas.
  *
