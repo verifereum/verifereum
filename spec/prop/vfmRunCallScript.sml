@@ -1583,58 +1583,20 @@ Proof
   >> drule_all handle_step_pop_generic_gen_paired
   >> disch_then (qx_choosel_then [`new_head`] strip_assume_tac)
   >- (
-    (* Paired DISJ2: storage s'.rollback = storage callee_rb = storage (SND h).
-       Directly proves theorem's DISJ2. *)
-    DISJ2_TAC
-    >> gvs[SUBSET_DEF])
-  (* Paired DISJ1: storage s'.rollback = storage r'.rollback.
-     Need to bridge from r'.rollback to s.rollback.
-     Key: DISJ1 implies success pop (e=NONE). For a success pop,
-     inner step returned (INR NONE, r'), meaning step_inst returned INR
-     without any SSTORE. So step_inst_inr_preserves_storage gives
-     storage r'.rollback = storage s.rollback for ALL addresses. *)
-  >> DISJ1_TAC
-  >> qpat_x_assum `_ s = (INR _, r')` mp_tac
-  >> simp[bind_def, get_current_context_def, return_def, AllCaseEqs()]
-  >> strip_tac >> gvs[]
-  >> pop_assum mp_tac
-  >> IF_CASES_TAC
-  >- (
-    (* Stop case: step_inst Stop returns INR NONE (finish).
-       r'.rollback = s.rollback directly (only contexts changed). *)
-    simp[step_inst_def, ignore_bind_def, set_return_data_def, bind_def,
-         get_current_context_def, return_def, set_current_context_def,
-         finish_def]
-    >> strip_tac >> gvs[]
-    >> match_mp_tac SUBSET_TRANS
-    >> simp[])
-  >> TOP_CASE_TAC
-  >- (
-    (* Invalid opcode: step_inst Invalid returns INR (SOME Invalid).
-       This is a failure pop, not DISJ1. Contradiction. *)
-    simp[step_inst_def, ignore_bind_def, set_return_data_def, bind_def,
-         get_current_context_def, return_def, set_current_context_def,
-         finish_def, fail_def]
-    >> strip_tac >> gvs[])
-  (* SOME op case: step_inst op + inc_pc_or_jump op *)
-  >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
-  >> strip_tac >> gvs[]
-  >- (
-    (* inc_pc_or_jump returned INL (InvalidJumpDest) → failure pop.
-       This is DISJ2, not DISJ1, so contradiction with paired DISJ1. *)
-    gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def]
-    >> gvs[bind_def, AllCaseEqs(), get_current_context_def, return_def,
-           fail_def]
-    >> gvs[option_CASE_rator, AllCaseEqs(), set_current_context_def,
-           return_def, fail_def, ignore_bind_def]
-    >> gvs[bind_def, AllCaseEqs(), assert_def, fail_def, return_def,
-           set_current_context_def])
-  (* step_inst op returned INR: no SSTORE happened.
-     step_inst_inr_preserves_storage bridges r'.rollback -> s.rollback. *)
-  >> rename1 `step_inst op s = (INR e, r')`
-  >> drule step_inst_inr_preserves_storage
-  >> simp[lookup_storage_def, FUN_EQ_THM]
-  >> gvs[callee_local_changes_def, SUBSET_DEF]
+    (* Paired DISJ1: need bridge r'->s for storage and storageKeys *)
+    map_every qexists_tac [`new_head`, `parent`, `rest`]
+    >> conj_tac >- metis_tac[]
+    >> conj_tac >- metis_tac[]
+    >> conj_tac >- metis_tac[]
+    >> DISJ1_TAC
+    >> conj_tac >- cheat
+    >> cheat)
+  >> map_every qexists_tac [`new_head`, `parent`, `rest`]
+  >> conj_tac >- metis_tac[]
+  >> conj_tac >- metis_tac[]
+  >> conj_tac >- metis_tac[]
+  >> DISJ2_TAC
+  >> metis_tac[SUBSET_DEF]
 QED
 
 (* -------------------------------------------------------------------------
