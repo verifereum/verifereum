@@ -1684,7 +1684,27 @@ Proof
     >> conj_tac >- metis_tac[]
     >> conj_tac >- metis_tac[]
     >> DISJ1_TAC
-    >> conj_tac >- cheat
+    >> conj_tac
+    >- gvs[SUBSET_DEF, same_frame_rel_def]
+    >> gvs[lookup_account_def]
+    >> gvs[same_frame_rel_def, callee_local_changes_def]
+    >> gen_tac >> gvs[lookup_account_def]
+    >> reverse(Cases_on`a = (FST(HD s.contexts)).msgParams.callee`)
+    >- metis_tac[] >> gvs[]
+    >> qmatch_goalsub_abbrev_tac`s.rollback.accounts a`
+    >> gvs[bind_def,get_current_context_def,return_def,
+           COND_RATOR,AllCaseEqs()]
+    >- (
+      drule step_inst_inr_preserves_storage >>
+      simp[lookup_account_def, lookup_storage_def, FUN_EQ_THM] )
+    >> gvs[AllCaseEqs(),option_CASE_rator]
+    >- (
+      drule step_inst_inr_preserves_storage >>
+      simp[lookup_account_def, lookup_storage_def, FUN_EQ_THM] )
+    >> reverse(gvs[AllCaseEqs(),ignore_bind_def,bind_def])
+    >- (
+      drule step_inst_inr_preserves_storage >>
+      simp[lookup_account_def, lookup_storage_def, FUN_EQ_THM] )
     >> cheat)
   >> map_every qexists_tac [`new_head`, `parent`, `rest`]
   >> conj_tac >- metis_tac[]
