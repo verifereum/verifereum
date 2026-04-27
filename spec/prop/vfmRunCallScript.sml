@@ -1486,32 +1486,6 @@ Proof
       >> drule step_create_push_structure
       >> simp[]
       >> strip_tac
-      (* Per-position storage facts *)
-      >> conj_tac >- (
-        gen_tac >> strip_tac
-        >> IF_CASES_TAC
-        >- ((* i=0: pushed rollback = s0.rollback *)
-            gvs[]
-            >> drule step_create_pushed_rb_storage
-            >> simp[]
-            >> cheat
-        )
-        >> (* i > 0: from step_create_push_structure *)
-           simp[EL_CONS, PRE_SUB1]
-           >> first_x_assum (qspec_then `i-1` mp_tac)
-           >> impl_tac >- simp[]
-           >> simp[]
-           >> cheat
-      )
-      (* msgParams at position 1 *)
-      >> conj_tac >- (Cases_on`r'.contexts` >> gvs[])
-      (* outputTo_consistent preserved *)
-      >> rpt strip_tac
-      >> Cases_on `i = 0`
-      >- (Cases_on`r'.contexts` >> gvs[]
-          >> Cases_on`t` >> gvs[]
-          >> cheat )
-      (* For outputTo_consistent, we only need FST equality *)
       >> cheat)
     >> (
       (* CALL family case *)
@@ -1525,12 +1499,26 @@ Proof
       >> drule(REWRITE_RULE[preserves_storage_def]preserves_storage_step_call)
       >> simp[lookup_storage_def, FUN_EQ_THM]
       >> strip_tac
+      >> drule_all step_call_pushed_rb_storage
+      >> strip_tac
       (* Use step_call_push_structure *)
       >> drule_all step_call_push_structure
       >> strip_tac
       >> simp[]
-      (* Per-position storage facts *)
-      >> cheat))
+      >> conj_tac
+      >- (
+        Cases >> gvs[ADD1] >>
+        Cases_on`r'.contexts` >> gvs[EL_CONS,PRE_SUB1] >>
+        Cases_on`n` >> gvs[] >>
+        qmatch_goalsub_rename_tac`SUC n < _` >>
+        Cases_on`s0.contexts` >> gvs[] >>
+        Cases_on`t` >> gvs[] )
+      >> conj_tac >- ( Cases_on`r'.contexts` >> gvs[] )
+      >> Cases_on`r'.contexts` >> gvs[EL_CONS, PRE_SUB1]
+      >> Cases_on`s0.contexts` >> gvs[EL_CONS, PRE_SUB1, ADD1]
+      >> Cases_on`t` >> gvs[EL_CONS, PRE_SUB1, ADD1]
+      >> Cases >> gvs[]
+      >> gvs[outputTo_consistent_ctx_def]))
   (* Case: inner returned INR - handle_step runs *)
   >> simp[]
   >> rename1 `handle_step e r' = (_, s')`
