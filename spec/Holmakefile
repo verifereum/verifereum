@@ -1,1 +1,1 @@
-INCLUDES=../util $(HOLDIR)/examples/Crypto/SHA-2 $(HOLDIR)/examples/Crypto/RIPEMD
+INCLUDES=../util $(HOLDIR)/examples/Crypto/SHA-2 $(HOLDIR)/examples/Crypto/RIPEMD $(HOLDIR)/examples/Crypto/Keccak
