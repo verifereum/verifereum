@@ -1385,3 +1385,39 @@ Theorem step_inst_JumpI_preserves_rollback:
 Proof
   rw[step_inst_def]
 QED
+
+Theorem step_inst_Stop_preserves_rollback[simp]:
+  preserves_rollback (step_inst Stop)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_rollback_revert[simp]:
+  preserves_rollback revert
+Proof
+  rw[preserves_rollback_def, revert_def]
+QED
+
+Theorem step_return_preserves_rollback[simp]:
+  preserves_rollback (step_return b)
+Proof
+  rw[step_return_def]
+  >> irule preserves_rollback_bind >> rw[]
+  >> irule preserves_rollback_bind >> rw[]
+  >> irule preserves_rollback_ignore_bind >> rw[]
+  >> irule preserves_rollback_ignore_bind >> rw[]
+  >> irule preserves_rollback_bind >> rw[]
+  >> irule preserves_rollback_ignore_bind >> rw[]
+QED
+
+Theorem step_inst_Return_preserves_rollback[simp]:
+  preserves_rollback (step_inst Return)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem step_inst_Revert_preserves_rollback[simp]:
+  preserves_rollback (step_inst Revert)
+Proof
+  rw[step_inst_def]
+QED
