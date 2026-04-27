@@ -1675,43 +1675,56 @@ Proof
      via strip_assume_tac, avoiding gvs contamination.
      DISJ1(r'): storage s'.rollback = storage r'.rollback
      DISJ2(r'): storage s'.rollback = storage (SND (HD r'.contexts)) *)
-  >> drule_all handle_step_pop_generic_gen_paired
-  >> disch_then (qx_choosel_then [`new_head`] strip_assume_tac)
+  >> Cases_on`y`
   >- (
-    (* Paired DISJ1: need bridge r'->s for storage and storageKeys *)
-    map_every qexists_tac [`new_head`, `parent`, `rest`]
-    >> conj_tac >- metis_tac[]
-    >> conj_tac >- metis_tac[]
-    >> conj_tac >- metis_tac[]
-    >> DISJ1_TAC
-    >> conj_tac
-    >- gvs[SUBSET_DEF, same_frame_rel_def]
-    >> gvs[lookup_account_def]
-    >> gvs[same_frame_rel_def, callee_local_changes_def]
-    >> gen_tac >> gvs[lookup_account_def]
-    >> reverse(Cases_on`a = (FST(HD s.contexts)).msgParams.callee`)
-    >- metis_tac[] >> gvs[]
-    >> qmatch_goalsub_abbrev_tac`s.rollback.accounts a`
-    >> gvs[bind_def,get_current_context_def,return_def,
-           COND_RATOR,AllCaseEqs()]
+    gvs[bind_def,get_current_context_def,return_def,fail_def]
+    >> Cases_on`∃op. step_inst op s = (INR NONE, r')`
     >- (
-      drule step_inst_inr_preserves_storage >>
-      simp[lookup_account_def, lookup_storage_def, FUN_EQ_THM] )
-    >> gvs[AllCaseEqs(),option_CASE_rator]
-    >- (
-      drule step_inst_inr_preserves_storage >>
-      simp[lookup_account_def, lookup_storage_def, FUN_EQ_THM] )
-    >> reverse(gvs[AllCaseEqs(),ignore_bind_def,bind_def])
-    >- (
-      drule step_inst_inr_preserves_storage >>
-      simp[lookup_account_def, lookup_storage_def, FUN_EQ_THM] )
-    >> cheat)
-  >> map_every qexists_tac [`new_head`, `parent`, `rest`]
-  >> conj_tac >- metis_tac[]
-  >> conj_tac >- metis_tac[]
-  >> conj_tac >- metis_tac[]
-  >> DISJ2_TAC
-  >> metis_tac[SUBSET_DEF]
+      gvs[] >>
+      drule_all step_inst_inr_preserves_storage >> rw[] >>
+      drule_at_then(Pat`handle_step`)drule
+        handle_step_pop_generic_gen_paired >>
+      simp[] >>
+      Cases_on`s.contexts` >> gvs[] >>
+      disch_then (qx_choosel_then [`new_head`] strip_assume_tac) >>
+      gvs[lookup_storage_def, FUN_EQ_THM] >>
+      gvs[SUBSET_DEF,same_frame_rel_def] )
+    >> gvs[COND_RATOR,AllCaseEqs()]
+    >> gvs[option_CASE_rator, AllCaseEqs()]
+    >> gvs[ignore_bind_def,bind_def,AllCaseEqs()]
+    >> drule inc_pc_or_jump_inr_eq >> rw[] )
+  >> gvs[handle_step_def]
+  >> gvs[COND_RATOR,CaseEq"bool",reraise_def]
+  >> gvs[handle_def,CaseEq"prod"]
+  >> gvs[handle_create_reraises_when_some]
+  >> gvs[reraise_def]
+  >> reverse(Cases_on`x = Reverted`)
+  >- (
+    drule_at(Pat`handle_exception`)handle_exception_pop_failure_rollback_gen >>
+    simp[] >> Cases_on`r'.contexts` >> gvs[] >>
+    Cases_on`h` >> gvs[] >> Cases_on`s'.contexts` >> gvs[] >>
+    Cases_on`h` >> gvs[] >> strip_tac >>
+    gvs[same_frame_rel_def] >>
+    Cases_on`s.contexts` >> fs[] >>
+    BasicProvers.VAR_EQ_TAC >> fs[] >>
+    drule_at(Pat`handle_exception`)handle_exception_pop_generic_gen >>
+    simp[] )
+  >> drule_at(Pat`handle_exception`)handle_exception_pop_generic_gen
+  >> simp[]
+  >> Cases_on`r'.contexts` >> gvs[]
+  >> Cases_on`h` >> gvs[]
+  >> rpt strip_tac >> gvs[]
+  >- (
+    qexists_tac`parent` >> gvs[] >>
+    gvs[same_frame_rel_def] >>
+    Cases_on`s.contexts` >> fs[] >>
+    disj1_tac >> qx_gen_tac`a` >>
+    qmatch_asmsub_abbrev_tac`callee_local_changes callee` >>
+    reverse(Cases_on`a = callee`) >- (
+      gvs[callee_local_changes_def] ) >>
+    gvs[] >>
+    cheat ) >>
+  Cases_on`s.contexts` >> fs[]
 QED
 
 (* -------------------------------------------------------------------------

@@ -769,6 +769,16 @@ Proof
   >> irule preserves_rollback_ignore_bind >> rw[]
 QED
 
+Theorem inc_pc_or_jump_inr_eq:
+  inc_pc_or_jump op s = (INR e, s') ⇒
+    e IN {SOME InvalidJumpDest; SOME Impossible}
+Proof
+  rw[inc_pc_or_jump_def, AllCaseEqs(), return_def, fail_def,
+      bind_def, get_current_context_def, set_current_context_def,
+      assert_def, vfmTypesTheory.option_CASE_rator,
+      ignore_bind_def]
+QED
+
 (* step_inst preserves storage at non-accessed slots (same conclusion
    as step_preserves_non_accessed_storage but at the inner opcode level).
    Proof by opcode case analysis using the per-opcode lemmas. *)
