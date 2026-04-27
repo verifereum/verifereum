@@ -1722,8 +1722,16 @@ Proof
     qmatch_asmsub_abbrev_tac`callee_local_changes callee` >>
     reverse(Cases_on`a = callee`) >- (
       gvs[callee_local_changes_def] ) >>
-    gvs[] >>
-    cheat ) >>
+    gvs[bind_def,get_current_context_def,return_def,AllCaseEqs()] >>
+    Cases_on`∃op. step_inst op s = (INR (SOME Reverted),r')`
+    >- (
+      gvs[] >>
+      drule step_inst_inr_preserves_storage >>
+      simp[lookup_storage_def, FUN_EQ_THM] ) >>
+    gvs[COND_RATOR,AllCaseEqs()] >>
+    gvs[option_CASE_rator,AllCaseEqs()] >>
+    gvs[ignore_bind_def,bind_def,AllCaseEqs()] >>
+    drule inc_pc_or_jump_inr_eq >> rw[]) >>
   Cases_on`s.contexts` >> fs[]
 QED
 
