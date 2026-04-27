@@ -103,7 +103,6 @@ Definition run_call_inv_def:
     s.txParams = es.txParams ∧
     outputTo_consistent_stack s ∧
     ok_state s ∧
-    (FST (HD s.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (active_rollbacks (LENGTH es.contexts) s)
 End
@@ -1778,7 +1777,6 @@ Proof
     >> `storage_slot_preserved s0.rollback es.rollback`
         by (fs[run_call_inv_def, active_rollbacks_def])
     >> simp[storage_slot_preserved_def]
-    >> conj_tac >- cheat
     >> rpt strip_tac
     >> `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
         by (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
@@ -1819,7 +1817,6 @@ Proof
     >> simp[active_rollbacks_def]
     >> `¬(LENGTH s1.contexts < ed)` by simp[Abbr`ed`]
     >> simp[EVERY_EL, EL_MAP]
-    >> conj_tac >- cheat
     >> rpt strip_tac
     >> Cases_on `n = 0`
     >- (
@@ -1929,7 +1926,6 @@ Proof
                lookup_storage k (lookup_account a es.rollback.accounts).storage`
                 by fs[storage_slot_preserved_def])
     (* Split on whether s1.contexts is below ed or not. *)
-    >> conj_tac >- cheat
     >> Cases_on `LENGTH s1.contexts < ed`
     >- ((* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
         simp[active_rollbacks_def])
