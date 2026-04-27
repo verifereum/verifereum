@@ -2050,3 +2050,54 @@ Proof
   >> drule_all run_call_preserves_inv
   >> rw[run_call_inv_def]
 QED
+
+(* ---------------------------------------------------------------------
+ * Single-context entry corollary. At entry to run_call with a single
+ * context (the standard top-level transaction case), most preconditions
+ * are trivially satisfied: SND (HD es.contexts) = es.rollback makes
+ * storage_slot_preserved reflexive, and initial_context gives
+ * jumpDest = NONE.
+ * --------------------------------------------------------------------- *)
+
+Theorem run_call_preserves_storage_outside_accessed_slots_single:
+    outputTo_consistent_ctx ctx ∧ wf_context ctx ∧
+    ctx.jumpDest = NONE ∧
+    es.contexts = [(ctx, es.rollback)] ∧
+    run_call es = SOME (r, es') ⇒
+    ∀a k. ¬fIN (SK a k) es'.rollback.accesses.storageKeys ⇒
+        lookup_storage k (lookup_account a es'.rollback.accounts).storage =
+        lookup_storage k (lookup_account a es.rollback.accounts).storage
+Proof
+  rpt strip_tac
+  >> irule run_call_preserves_storage_outside_accessed_slots
+  >> gvs[ok_state_def, outputTo_consistent_stack_def]
+  >> simp[storage_slot_preserved_def]
+QED
+
+Theorem run_call_preserves_storage_outside_accessed_slots_initial:
+    es.contexts = [(initial_context callee code static rd t, es.rollback)] ∧
+    (∀a. rd = Code a ⇒ callee = a) ∧
+    run_call es = SOME (r, es') ⇒
+    ∀a k. ¬fIN (SK a k) es'.rollback.accesses.storageKeys ⇒
+        lookup_storage k (lookup_account a es'.rollback.accounts).storage =
+        lookup_storage k (lookup_account a es.rollback.accounts).storage
+Proof
+  rpt strip_tac
+  >> irule run_call_preserves_storage_outside_accessed_slots_single
+  >> gvs[]
+  >> simp[outputTo_consistent_ctx_def, initial_msg_params_def]
+QED
+
+Theorem run_call_preserves_txParams_single:
+  ∀es r es'.
+    outputTo_consistent_ctx ctx ∧ wf_context ctx ∧
+    ctx.jumpDest = NONE ∧
+    es.contexts = [(ctx,es.rollback)] ∧
+    run_call es = SOME (r, es') ⇒
+    es'.txParams = es.txParams
+Proof
+  rpt strip_tac
+  >> irule run_call_preserves_txParams
+  >> gvs[storage_slot_preserved_def]
+  >> gvs[ok_state_def, outputTo_consistent_stack_def]
+QED
