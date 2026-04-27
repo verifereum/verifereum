@@ -1742,24 +1742,6 @@ QED
  * the previous invariant.
  * ------------------------------------------------------------------------- *)
 
-(* TODO: Case analysis on step's length effect:
-    - Same-frame step (length preserved): same_frame_rel s s' via
-      step_same_frame; active_rollbacks preserved entry-wise
-      because TL s'.contexts = TL s.contexts and SND (HD s'.contexts)
-      = SND (HD s.contexts) by same_frame_rel. Head s'.rollback:
-      storage slot (a, k) not in s'.accesses.storageKeys ⇒ not in
-      s.accesses.storageKeys (monotone); storage at (a, k) in
-      s'.rollback equals s.rollback by callee_local_changes at
-      non-callee (with access-listing tracking callee writes).
-    - Grow step (length +1): new active rollback entry is
-      s.rollback at mid-step. Prior entries shifted down by one but
-      preserved. s'.rollback = s.rollback at mid-step too.
-    - Shrink (pop success): active_rollbacks shrinks by dropping
-      first TL entry. s'.rollback = s.rollback preserved.
-    - Shrink (pop revert): s'.rollback = SND (HD s.contexts)
-      which was the second entry of old active_rollbacks.
-      Remaining TL entries preserved.
-   Requires helper lemmas for each step-effect shape. *)
 Theorem run_call_inv_step:
   ∀es s s' r.
     es.contexts ≠ [] ∧
@@ -1911,7 +1893,12 @@ Proof
       >> Cases_on`es.contexts` >> gvs[Abbr`ed`,ADD1]
       >> Cases_on`n` >> gvs[ADD1]
       >> qmatch_asmsub_rename_tac`n < LENGTH t`
-      >> cheat))
+      >> last_x_assum(qspec_then`n + 1`mp_tac)
+      >> simp[SUBSET_DEF] >> gvs[finite_setTheory.fIN_IN]
+      >> disch_then(qspec_then`SK a k`mp_tac) >> simp[] >> strip_tac
+      >> first_x_assum(qspecl_then[`a`,`k`]mp_tac)
+      >> Cases_on`n` >> gvs[]
+      >> simp[EL_TAKE,EL_CONS]))
   >> (
     (* CASE −1: pop. *)
     `LENGTH s1.contexts < LENGTH s0.contexts` by decide_tac
