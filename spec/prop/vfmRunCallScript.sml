@@ -1417,10 +1417,17 @@ Theorem step_push_structure:
     toSet s.rollback.accesses.storageKeys ⊆
       toSet s'.rollback.accesses.storageKeys ∧
     (* Per-position storage facts for saved rollbacks in s'.contexts *)
-    (∀i. i < LENGTH s'.contexts ⇒
+    (* Per-position storage: excludes i = LENGTH s.contexts (the old LAST
+       position) because set_original in proceed_create replaces the
+       callee account with empty_account_state, breaking ∀a storage
+       equality at that position for the CREATE case. The accesses-subset
+       clause still covers all positions since set_original only touches
+       .accounts, not .accesses. *)
+    (∀i. i < LENGTH s.contexts ⇒
          (∀a. (lookup_account a (SND (EL i s'.contexts)).accounts).storage =
               (lookup_account a (if i = 0 then s.rollback
-                                 else SND (EL (i-1) s.contexts)).accounts).storage) ∧
+                                 else SND (EL (i-1) s.contexts)).accounts).storage)) ∧
+    (∀i. i < LENGTH s'.contexts ⇒
          toSet (if i = 0 then s.rollback
                 else SND (EL (i-1) s.contexts)).accesses.storageKeys ⊆
            toSet (SND (EL i s'.contexts)).accesses.storageKeys) ∧
@@ -1520,15 +1527,14 @@ Proof
       >- (
         Cases >> gvs[ADD1] >>
         Cases_on`r'.contexts` >> gvs[EL_CONS,PRE_SUB1] >>
-        Cases_on`n` >> gvs[] >>
-        qmatch_goalsub_rename_tac`SUC n < _` >>
-        Cases_on`s0.contexts` >> gvs[] >>
-        Cases_on`t` >> gvs[] )
-      >> conj_tac >- ( Cases_on`r'.contexts` >> gvs[] )
+        Cases_on`s0.contexts` >> gvs[ADD1] >>
+        Cases_on`t` >> gvs[ADD1] >>
+        Cases_on`n` >> gvs[ADD1] )
       >> Cases_on`r'.contexts` >> gvs[EL_CONS, PRE_SUB1]
-      >> Cases_on`s0.contexts` >> gvs[EL_CONS, PRE_SUB1, ADD1]
       >> Cases_on`t` >> gvs[EL_CONS, PRE_SUB1, ADD1]
-      >> Cases >> gvs[]
+      >> Cases_on`s0.contexts` >> gvs[EL_CONS, PRE_SUB1, ADD1]
+      >> conj_tac >> Cases >> gvs[ADD1]
+      >- ( Cases_on`n` >> gvs[] )
       >> gvs[outputTo_consistent_ctx_def]))
   (* Case: inner returned INR - handle_step runs *)
   >> simp[]
@@ -1829,6 +1835,10 @@ Proof
       >> rpt strip_tac
       >> first_x_assum irule
       >> gvs[SUBSET_DEF, finite_setTheory.fIN_IN]
+      >> Cases_on`s1.contexts` >> gvs[]
+      >> strip_tac
+      >> first_x_assum(qspec_then`0`(fn th => mp_tac th >> impl_tac >- gvs[]
+            >> IF_CASES_TAC)) >> rw[]
       >> metis_tac[])
     >> (
       (* n > 0: SND (EL n s1.contexts) has storage = SND (EL (n-1) s0.contexts) storage *)
