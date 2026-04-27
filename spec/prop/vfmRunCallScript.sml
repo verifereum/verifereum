@@ -38,13 +38,22 @@ Libs
  * rollbacks of every context pushed from es-depth onward (inclusive
  * of the context at es-depth itself, so that a failure-pop at
  * exactly es-depth restores a tracked rollback).
+ *
+ * The TAKE excludes the LAST context's saved rollback: it can never be
+ * restored as s.rollback during run_call (at depth 1, handle_exception
+ * sees n ≤ 1 and does not pop), yet set_original in proceed_create
+ * modifies it by replacing the CREATE target's account with
+ * empty_account_state, potentially breaking storage_slot_preserved.
+ * The MIN ensures we take enough for pop-restore tracking while never
+ * including the LAST position.
  * ------------------------------------------------------------------------- *)
 
 Definition active_rollbacks_def:
   active_rollbacks es_depth s =
     s.rollback ::
     (if LENGTH s.contexts < es_depth then []
-     else MAP SND (TAKE (LENGTH s.contexts - es_depth + 2) s.contexts))
+     else MAP SND (TAKE (MIN (LENGTH s.contexts - es_depth + 1)
+                              (LENGTH s.contexts - 1)) s.contexts))
 End
 
 (* -------------------------------------------------------------------------
@@ -113,6 +122,8 @@ Proof
   rw[run_call_inv_def, active_rollbacks_def, storage_slot_preserved_def]
   >> gvs[outputTo_consistent_stack_def]
   >> Cases_on `es.contexts` >> gvs[]
+  >> rw[MIN_DEF]
+  >> Cases_on`t` >> gvs[ADD1]
 QED
 
 (* -------------------------------------------------------------------------
@@ -1829,13 +1840,16 @@ Proof
       >> gvs[EVERY_EL, EL_MAP, LENGTH_TAKE_EQ]
       >> last_x_assum(qspec_then`n-1`mp_tac)
       >> simp[EL_TAKE]
-      >> impl_tac >- (rw[] >> gvs[])
       >> strip_tac
       >> gvs[storage_slot_preserved_def]
       >> rpt strip_tac
-      >> first_x_assum irule
-      >> gvs[SUBSET_DEF, finite_setTheory.fIN_IN]
-      >> metis_tac[]))
+      >> gvs[EL_TAKE]
+      >> gvs[MIN_DEF]
+      >> Cases_on`s0.contexts` >> gvs[ADD1]
+      >> Cases_on`es.contexts` >> gvs[Abbr`ed`,ADD1]
+      >> Cases_on`n` >> gvs[ADD1]
+      >> qmatch_asmsub_rename_tac`n < LENGTH t`
+      >> cheat))
   >> (
     (* CASE −1: pop. *)
     `LENGTH s1.contexts < LENGTH s0.contexts` by decide_tac
@@ -1912,7 +1926,11 @@ Proof
     (* LENGTH s1 ≥ ed. Both active_rollbacks have a non-trivial tail.
        s0's TAKE takes one more element than s1's. *)
     >> qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
-    >> simp[active_rollbacks_def])
+    >> simp[active_rollbacks_def]
+    >> gvs[MIN_DEF] >> rw[] >> gvs[ADD1,Abbr`ed`]
+    >> Cases_on`es.contexts` >> gvs[ADD1]
+    >> Cases_on`rest` >> Cases_on`t` >> gvs[ADD1]
+  )
 QED
 
 (* -------------------------------------------------------------------------
