@@ -1503,7 +1503,21 @@ Proof
       >> drule step_create_push_structure
       >> simp[]
       >> strip_tac
-      >> cheat)
+      >> drule_then drule step_create_pushed_rb_storage
+      >> simp[] >> strip_tac
+      >> conj_tac
+      >- ( Cases >> simp[] >> Cases_on`r'.contexts` >> gvs[] )
+      >> conj_tac >- ( Cases >> gvs[] >> Cases_on`r'.contexts` >> gvs[] )
+      >> conj_tac
+      >- ( Cases_on`s0.contexts` >> gvs[] >> Cases_on`r'.contexts` >> gvs[] )
+      >> Cases_on`s0.contexts` >> gvs[]
+      >> Cases_on`r'.contexts` >> gvs[]
+      >> Cases_on`t'` >> gvs[]
+      >> Cases >> gvs[EL_CONS]
+      >- ( simp[outputTo_consistent_ctx_def] )
+      >> gvs[PRE_SUB1,ADD1]
+      >> simp[outputTo_consistent_ctx_def]
+      >> gvs[LIST_EQ_REWRITE,EL_MAP])
     >> (
       (* CALL family case *)
       `step_inst op s0 = step_call op s0`
