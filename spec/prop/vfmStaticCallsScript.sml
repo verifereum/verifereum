@@ -1060,38 +1060,6 @@ Proof
   >> gvs[]
 QED
 
-(* handle_create always returns INR *)
-Theorem handle_create_INR:
-  s.contexts ≠ [] ⇒
-  ∃e' s'. handle_create e s = (INR e', s')
-Proof
-  strip_tac
-  >> simp[handle_create_def, bind_def,
-          get_return_data_def, get_output_to_def,
-          get_current_context_def, ok_state_def, return_def]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> PairCases_on `h` >> gvs[]
-  >> Cases_on `e` >> gvs[reraise_def]
-  >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def]
-  >> simp[ignore_bind_def, bind_def, assert_def, return_def, fail_def]
-  >> rpt (CASE_TAC >> gvs[return_def, reraise_def])
-QED
-
-(* update_accounts preserves contexts exactly *)
-Theorem update_accounts_contexts[simp]:
-  (SND (update_accounts f s)).contexts = s.contexts
-Proof
-  simp[vfmExecutionTheory.update_accounts_def, return_def]
-QED
-
-Theorem update_accounts_contexts_pair:
-  update_accounts f s = (q, r) ⇒ r.contexts = s.contexts
-Proof
-  strip_tac
-  >> `r = SND (update_accounts f s)` by gvs[]
-  >> gvs[update_accounts_contexts]
-QED
-
 (* context-preserving: a weaker property than cp —
    only requires contexts structure preservation (not rollback) *)
 Definition ctx_pres_def:

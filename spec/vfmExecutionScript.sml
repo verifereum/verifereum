@@ -1763,6 +1763,18 @@ Definition run_def:
   run s = OWHILE (ISL o FST) (step o SND) (INL (), s)
 End
 
+Definition run_call_def:
+  run_call es =
+    OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts ≥ LENGTH es.contexts)
+           (step o SND) (INL (), es)
+End
+
+Definition run_within_frame_def:
+  run_within_frame es =
+    OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts = LENGTH es.contexts)
+           (step o SND) (INL (), es)
+End
+
 Datatype:
   transaction_result =
   <| gasUsed  : num
