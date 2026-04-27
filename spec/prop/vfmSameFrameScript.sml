@@ -45,6 +45,7 @@ Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
   vfmState vfmContext vfmExecution vfmExecutionProp
   vfmStaticCalls vfmTxParams vfmDomainSeparation vfmDecreasesGas
+  vfmPreserves
 Libs
   BasicProvers
 
@@ -2365,3 +2366,102 @@ Proof
   >> gvs[listTheory.SNOC_APPEND]
 QED
 
+(* ================================================================== *)
+(* Stage 1: preserves / preserves_when equivalences for existing       *)
+(*          predicates defined in this theory.                         *)
+(* ================================================================== *)
+
+Theorem preserves_same_frame_eq_preserves_when:
+  preserves_same_frame m ⇔ preserves_when (λs. s.contexts ≠ []) same_frame_rel m
+Proof
+  rw[preserves_same_frame_def, preserves_when_def]
+QED
+
+Theorem psf_eq_preserves_when:
+  psf p m ⇔ preserves_when (λs. p s ∧ s.contexts ≠ []) same_frame_rel m
+Proof
+  rw[psf_def, preserves_when_def] >> metis_tac[]
+QED
+
+(* ================================================================== *)
+(* Stage 2: Implication bridges from same_frame_rel.                  *)
+(*                                                                    *)
+(* IMPORTANT: same_frame_rel does NOT imply rollback_rel or cp_rel,    *)
+(* because callee_local_changes allows the callee's storage, code,    *)
+(* and nonce to change, and any account's balance to change. cp_rel    *)
+(* requires full rollback equality, which is strictly stronger.        *)
+(*                                                                    *)
+(* What same_frame_rel DOES imply:                                    *)
+(*   - access monotonicity (addresses and storageKeys subsets)        *)
+(*   - non-callee accounts: storage, code, nonce preserved             *)
+(*   - msdomain_compatible                                            *)
+(*   - txParams equality                                              *)
+(* These bridges live in vfmStoragePredicates (for access_monotone)   *)
+(* and here (for cp_rel and non-callee preservation).                 *)
+(* ================================================================== *)
+
+(* same_frame_rel implies that the head's callee has its storage,    *)
+(* code, and nonce possibly changed, but non-callee accounts are     *)
+(* preserved in storage/code/nonce. This is the callee_local_changes  *)
+(* component extracted as a relation.                                *)
+Definition non_callee_storage_rel_def:
+  non_callee_storage_rel callee s s' ⇔
+    ∀a. a ≠ callee ⇒
+      (lookup_account a s'.rollback.accounts).storage =
+      (lookup_account a s.rollback.accounts).storage ∧
+      (lookup_account a s'.rollback.accounts).code =
+      (lookup_account a s.rollback.accounts).code ∧
+      (lookup_account a s'.rollback.accounts).nonce =
+      (lookup_account a s.rollback.accounts).nonce
+End
+
+Theorem same_frame_rel_imp_non_callee_storage_rel:
+  same_frame_rel s s' ⇒
+  non_callee_storage_rel (FST (HD s.contexts)).msgParams.callee s s'
+Proof
+  rw[same_frame_rel_def, non_callee_storage_rel_def, callee_local_changes_def]
+QED
+
+(* same_frame_rel implies txParams equality. *)
+Theorem same_frame_rel_imp_txParams_rel:
+  same_frame_rel s s' ⇒ s'.txParams = s.txParams
+Proof
+  rw[same_frame_rel_def]
+QED
+
+(* same_frame_rel implies msdomain_compatible. *)
+Theorem same_frame_rel_imp_msdomain_compatible:
+  same_frame_rel s s' ⇒ msdomain_compatible s.msdomain s'.msdomain
+Proof
+  rw[same_frame_rel_def]
+QED
+
+(* Bridge: preserves same_frame_rel implies preserves                   *)
+(* non_callee_storage_rel (when contexts ≠ []).                        *)
+Theorem preserves_same_frame_imp_preserves_non_callee_storage:
+  preserves same_frame_rel m ⇒
+  preserves (λs s'. s.contexts ≠ [] ⇒
+    non_callee_storage_rel (FST (HD s.contexts)).msgParams.callee s s') m
+Proof
+  rw[preserves_def] >> first_x_assum drule >> rw[]
+  >> irule same_frame_rel_imp_non_callee_storage_rel
+  >> goal_assum drule
+QED
+
+(* Bridge: preserves same_frame_rel implies preserves txParams_rel.     *)
+Theorem preserves_same_frame_imp_preserves_txParams:
+  preserves same_frame_rel m ⇒ preserves (λs s'. s'.txParams = s.txParams) m
+Proof
+  match_mp_tac preserves_mono
+  >> metis_tac[same_frame_rel_imp_txParams_rel]
+QED
+
+(* Bridge: preserves same_frame_rel implies preserves                   *)
+(* msdomain_compatible.                                               *)
+Theorem preserves_same_frame_imp_preserves_msdomain_compatible:
+  preserves same_frame_rel m ⇒
+  preserves (λs s'. msdomain_compatible s.msdomain s'.msdomain) m
+Proof
+  match_mp_tac preserves_mono
+  >> metis_tac[same_frame_rel_imp_msdomain_compatible]
+QED

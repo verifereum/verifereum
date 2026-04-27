@@ -1,6 +1,6 @@
 Theory vfmStaticCalls
 Ancestors
-  vfmExecution vfmDecreasesGas vfmExecutionProp
+  vfmExecution vfmDecreasesGas vfmExecutionProp vfmPreserves
 
 (*
   Proof that static calls do not modify world state.
@@ -1756,4 +1756,85 @@ Proof
   >> Cases_on `step es` >> gvs[]
   >> `snc (SND (run_tr (q, r)))` by metis_tac[run_tr_preserves_snc]
   >> Cases_on `run_tr (q, r)` >> gvs[snc_def]
+QED
+
+(* ================================================================== *)
+(* Stage 1: cp_rel — the state relation underlying cp.                 *)
+(*                                                                    *)
+(* cp_rel captures exactly what cp says: rollback state is fully      *)
+(* preserved, the head context agrees on msgParams and logs, and       */)
+(* the tail is unchanged.                                             *)
+(* ================================================================== *)
+
+Definition cp_rel_def:
+  cp_rel s s' ⇔
+    s'.rollback.accounts = s.rollback.accounts ∧
+    s'.rollback.tStorage = s.rollback.tStorage ∧
+    s'.rollback.toDelete = s.rollback.toDelete ∧
+    (s.contexts ≠ [] ⇒
+      ∃q'. s'.contexts = (q', SND (HD s.contexts)) :: TL s.contexts ∧
+           q'.msgParams = (FST (HD s.contexts)).msgParams ∧
+           q'.logs = (FST (HD s.contexts)).logs)
+End
+
+Theorem cp_eq_preserves_when:
+  cp m ⇔ preserves_when (λs. s.contexts ≠ []) cp_rel m
+Proof
+  rw[cp_def, preserves_when_def, cp_rel_def]
+  >> eq_tac >> rw[]
+  >- (first_x_assum drule >> rw[] >> first_x_assum drule >> rw[])
+  >> first_x_assum drule >> rw[] >> goal_assum drule
+QED
+
+(* cp_rel ⇒ rollback_rel (since cp requires full rollback equality). *)
+Theorem cp_rel_imp_rollback_rel:
+  cp_rel s s' ⇒ rollback_rel s s'
+Proof
+  rw[cp_rel_def, rollback_rel_def] >> metis_tac[]
+QED
+
+(* cp_rel ⇒ storage_rel (via rollback_rel). *)
+Theorem cp_rel_imp_storage_rel:
+  cp_rel s s' ⇒ storage_rel s s'
+Proof
+  metis_tac[cp_rel_imp_rollback_rel, rollback_rel_imp_storage_rel]
+QED
+
+(* cp_rel ⇒ pns_rel (via rollback_rel). *)
+Theorem cp_rel_imp_pns_rel:
+  cp_rel s s' ⇒ pns_rel s s'
+Proof
+  metis_tac[cp_rel_imp_rollback_rel, rollback_rel_imp_pns_rel]
+QED
+
+(* cp_rel ⇒ access_monotone_sk_rel (rollback unchanged ⇒ subsets hold). *)
+Theorem cp_rel_imp_access_monotone_sk_rel:
+  cp_rel s s' ⇒ access_monotone_sk_rel s s'
+Proof
+  metis_tac[cp_rel_imp_rollback_rel, rollback_rel_imp_access_monotone_sk_rel]
+QED
+
+(* Predicate-level bridges via preserves_mono. *)
+Theorem cp_imp_preserves_rollback_via_mono:
+  preserves cp_rel m ⇒ preserves rollback_rel m
+Proof
+  irule preserves_mono >> metis_tac[cp_rel_imp_rollback_rel]
+QED
+
+Theorem cp_imp_preserves_storage_via_mono:
+  preserves cp_rel m ⇒ preserves storage_rel m
+Proof
+  irule preserves_mono >> metis_tac[cp_rel_imp_storage_rel]
+QED
+
+Theorem cp_imp_pns_via_mono:
+  preserves cp_rel m ⇒ preserves pns_rel m
+Proof
+  irule preserves_mono >> metis_tac[cp_rel_imp_pns_rel]
+QED
+
+Theorem cp_imp_access_monotone_sk_via_mono:
+  preserves cp_rel m ⇒ preserves access_monotone_sk_rel m
+Proof
+  irule preserves_mono >> metis_tac[cp_rel_imp_access_monotone_sk_rel]
 QED
