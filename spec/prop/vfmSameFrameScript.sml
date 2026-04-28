@@ -45,6 +45,7 @@ Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
   vfmState vfmContext vfmExecution vfmExecutionProp
   vfmStaticCalls vfmTxParams vfmDomainSeparation vfmDecreasesGas
+  vfmPreserves
 Libs
   BasicProvers
 
@@ -197,26 +198,34 @@ Definition preserves_same_frame_def:
     ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'
 End
 
+Theorem preserves_same_frame_eq_preserves_when:
+  preserves_same_frame m ⇔ preserves_when (λs. s.contexts ≠ []) same_frame_rel m
+Proof
+  rw[preserves_same_frame_def, preserves_when_def]
+QED
+
 (* ---------------- Composition lemmas ---------------- *)
 
 Theorem preserves_same_frame_bind[simp]:
   preserves_same_frame g ∧ (∀x. preserves_same_frame (f x)) ⇒
   preserves_same_frame (bind g f)
 Proof
-  rw[preserves_same_frame_def, bind_def]
-  \\ gvs[AllCaseEqs()]
-  \\ irule same_frame_rel_trans
-  \\ first_x_assum drule
-  \\ first_x_assum drule \\ rw[]
-  \\ drule same_frame_rel_contexts_ne \\ rw[] \\ gvs[]
-  \\ goal_assum drule \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_bind
+  >> simp[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_contexts_ne,
+               preserves_same_frame_eq_preserves_when]
 QED
 
 Theorem preserves_same_frame_ignore_bind[simp]:
   preserves_same_frame g ∧ preserves_same_frame f ⇒
   preserves_same_frame (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] \\ irule preserves_same_frame_bind \\ simp[]
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_ignore_bind
+  >> simp[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_contexts_ne,
+               preserves_same_frame_eq_preserves_when]
 QED
 
 (* When g is preserves_same_frame and bind g f grows, we can extract
@@ -241,54 +250,53 @@ Theorem preserves_same_frame_handle[simp]:
   preserves_same_frame f ∧ (∀e. preserves_same_frame (h e)) ⇒
   preserves_same_frame (handle f h)
 Proof
-  rw[preserves_same_frame_def, handle_def]
-  \\ gvs[AllCaseEqs()]
-  \\ first_x_assum drule
-  \\ first_x_assum drule \\ rw[]
-  \\ drule same_frame_rel_contexts_ne \\ rw[] \\ gvs[]
-  \\ metis_tac[same_frame_rel_trans]
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_handle
+  >> simp[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_contexts_ne,
+               preserves_same_frame_eq_preserves_when]
 QED
 
 Theorem preserves_same_frame_cond[simp]:
   preserves_same_frame m1 ∧ preserves_same_frame m2 ⇒
   preserves_same_frame (if b then m1 else m2)
 Proof
-  rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_cond]
 QED
 
 Theorem preserves_same_frame_case_option[simp]:
   preserves_same_frame m_none ∧ (∀x. preserves_same_frame (m_some x)) ⇒
   preserves_same_frame (case opt of NONE => m_none | SOME x => m_some x)
 Proof
-  Cases_on `opt` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_case_option]
 QED
 
 Theorem preserves_same_frame_case_sum[simp]:
   (∀x. preserves_same_frame (f x)) ∧ (∀y. preserves_same_frame (g y)) ⇒
   preserves_same_frame (case s of INL x => f x | INR y => g y)
 Proof
-  Cases_on `s` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_case_sum]
 QED
 
 Theorem preserves_same_frame_case_pair[simp]:
   (∀x y. preserves_same_frame (f x y)) ⇒
   preserves_same_frame (case p of (x, y) => f x y)
 Proof
-  Cases_on `p` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_case_pair]
 QED
 
 Theorem preserves_same_frame_let[simp]:
   (∀x. preserves_same_frame (f x)) ⇒
   preserves_same_frame (let x = v in f x)
 Proof
-  rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_let]
 QED
 
 Theorem preserves_same_frame_uncurry[simp]:
   (∀x y. preserves_same_frame (f x y)) ⇒
   preserves_same_frame (UNCURRY f p)
 Proof
-  Cases_on `p` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_uncurry]
 QED
 
 (* ================================================================ *)
@@ -327,25 +335,33 @@ val psf_refl_tac =
 Theorem preserves_same_frame_return[simp]:
   preserves_same_frame (return x)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_return
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_fail[simp]:
   preserves_same_frame (fail e)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_fail
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_reraise[simp]:
   preserves_same_frame (reraise eo)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_reraise
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_assert[simp]:
   preserves_same_frame (assert b e)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_assert
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_finish[simp]:
@@ -1202,6 +1218,12 @@ Definition psf_def:
   psf p (m: α execution) ⇔
     ∀s r s'. m s = (r, s') ∧ p s ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'
 End
+
+Theorem psf_eq_preserves_when:
+  psf p m ⇔ preserves_when (λs. p s ∧ s.contexts ≠ []) same_frame_rel m
+Proof
+  rw[psf_def, preserves_when_def] >> metis_tac[]
+QED
 
 (* ---------------- Monotonicity and bridges --------------------- *)
 
@@ -2365,3 +2387,85 @@ Proof
   >> gvs[listTheory.SNOC_APPEND]
 QED
 
+(* ================================================================== *)
+(* Stage 2: Implication bridges from same_frame_rel.                  *)
+(*                                                                    *)
+(* IMPORTANT: same_frame_rel does NOT imply rollback_rel or cp_rel,    *)
+(* because callee_local_changes allows the callee's storage, code,    *)
+(* and nonce to change, and any account's balance to change. cp_rel    *)
+(* requires full rollback equality, which is strictly stronger.        *)
+(*                                                                    *)
+(* What same_frame_rel DOES imply:                                    *)
+(*   - access monotonicity (addresses and storageKeys subsets)        *)
+(*   - non-callee accounts: storage, code, nonce preserved             *)
+(*   - msdomain_compatible                                            *)
+(*   - txParams equality                                              *)
+(* These bridges live in vfmStoragePredicates (for access_monotone)   *)
+(* and here (for cp_rel and non-callee preservation).                 *)
+(* ================================================================== *)
+
+(* same_frame_rel implies that the head's callee has its storage,    *)
+(* code, and nonce possibly changed, but non-callee accounts are     *)
+(* preserved in storage/code/nonce. This is the callee_local_changes  *)
+(* component extracted as a relation.                                *)
+Definition non_callee_storage_rel_def:
+  non_callee_storage_rel callee s s' ⇔
+    ∀a. a ≠ callee ⇒
+      (lookup_account a s'.rollback.accounts).storage =
+      (lookup_account a s.rollback.accounts).storage ∧
+      (lookup_account a s'.rollback.accounts).code =
+      (lookup_account a s.rollback.accounts).code ∧
+      (lookup_account a s'.rollback.accounts).nonce =
+      (lookup_account a s.rollback.accounts).nonce
+End
+
+Theorem same_frame_rel_imp_non_callee_storage_rel:
+  same_frame_rel s s' ⇒
+  non_callee_storage_rel (FST (HD s.contexts)).msgParams.callee s s'
+Proof
+  rw[same_frame_rel_def, non_callee_storage_rel_def, callee_local_changes_def]
+QED
+
+(* same_frame_rel implies txParams equality. *)
+Theorem same_frame_rel_imp_txParams_rel:
+  same_frame_rel s s' ⇒ s'.txParams = s.txParams
+Proof
+  rw[same_frame_rel_def]
+QED
+
+(* same_frame_rel implies msdomain_compatible. *)
+Theorem same_frame_rel_imp_msdomain_compatible:
+  same_frame_rel s s' ⇒ msdomain_compatible s.msdomain s'.msdomain
+Proof
+  rw[same_frame_rel_def]
+QED
+
+(* Bridge: preserves same_frame_rel implies preserves                   *)
+(* non_callee_storage_rel (when contexts ≠ []).                        *)
+Theorem preserves_same_frame_imp_preserves_non_callee_storage:
+  preserves same_frame_rel m ⇒
+  preserves (λs s'. s.contexts ≠ [] ⇒
+    non_callee_storage_rel (FST (HD s.contexts)).msgParams.callee s s') m
+Proof
+  rw[preserves_def] >> first_x_assum drule >> rw[]
+  >> irule same_frame_rel_imp_non_callee_storage_rel
+  >> goal_assum drule
+QED
+
+(* Bridge: preserves same_frame_rel implies preserves txParams_rel.     *)
+Theorem preserves_same_frame_imp_preserves_txParams:
+  preserves same_frame_rel m ⇒ preserves (λs s'. s'.txParams = s.txParams) m
+Proof
+  match_mp_tac preserves_mono
+  >> metis_tac[same_frame_rel_imp_txParams_rel]
+QED
+
+(* Bridge: preserves same_frame_rel implies preserves                   *)
+(* msdomain_compatible.                                               *)
+Theorem preserves_same_frame_imp_preserves_msdomain_compatible:
+  preserves same_frame_rel m ⇒
+  preserves (λs s'. msdomain_compatible s.msdomain s'.msdomain) m
+Proof
+  match_mp_tac preserves_mono
+  >> metis_tac[same_frame_rel_imp_msdomain_compatible]
+QED

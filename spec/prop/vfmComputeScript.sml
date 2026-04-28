@@ -957,6 +957,33 @@ QED
 
 val () = cv_trans run_eq_tr;
 
+val run_call_tr_pre_def = cv_trans_pre "run_call_tr_pre" run_call_tr_def;
+
+Theorem run_call_tr_pre[cv_pre]:
+  !n x. run_call_tr_pre n x
+Proof
+  simp[FORALL_PROD]
+  \\ recInduct run_call_tr_ind
+  \\ rw[]
+  \\ rw[Once run_call_tr_pre_def]
+QED
+
+val () = cv_trans run_call_eq_tr;
+
+val run_within_frame_tr_pre_def =
+  cv_trans_pre "run_within_frame_tr_pre" run_within_frame_tr_def;
+
+Theorem run_within_frame_tr_pre[cv_pre]:
+  !n x. run_within_frame_tr_pre n x
+Proof
+  simp[FORALL_PROD]
+  \\ recInduct run_within_frame_tr_ind
+  \\ rw[]
+  \\ rw[Once run_within_frame_tr_pre_def]
+QED
+
+val () = cv_trans run_within_frame_eq_tr;
+
 val () = cv_auto_trans process_deletions_def;
 
 val post_transaction_accounting_pre_def = post_transaction_accounting_def
