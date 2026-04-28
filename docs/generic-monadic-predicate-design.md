@@ -261,54 +261,59 @@ Theorem preserves_mono:
   preserves R1 m ⇒ preserves R2 m
 ```
 
-Then proving `preserves_same_frame ⇒ cp` reduces to proving
-`same_frame_rel ⇒ cp_rel`:
+Then proving that one `preserves` instance implies another reduces
+to proving the implication between the underlying state relations:
 
 ```
-Theorem same_frame_rel_imp_cp_rel:
-  same_frame_rel s s' ⇒ cp_rel s s'
-Proof
-  rw[same_frame_rel_def, cp_rel_def, callee_local_changes_def] >> ...
-QED
+Theorem preserves_mono:
+  (∀s s'. R1 s s' ⇒ R2 s s') ⇒
+  preserves R1 m ⇒ preserves R2 m
 ```
 
-The full hierarchy:
+**However**, `same_frame_rel` does **not** imply `cp_rel` or
+`rollback_rel`. The `callee_local_changes` component of
+`same_frame_rel` allows the callee's storage, code, and nonce to
+change and permits arbitrary balance transfers, while `cp_rel`
+requires full rollback equality. So the hierarchy is not a simple
+chain; it splits into three strands:
 
 ```
-same_frame_rel
-  ⇒ rollback_rel        (λs s'. s'.rollback = s.rollback)   [actually weaker: callee_local_changes]
-  ⇒ cp_rel              (head msgParams + rollback.accounts/tStorage/toDelete)
-  ⇒ storage_rel         (storage at every a,k unchanged)
-  ⇒ pns_rel             (storage at non-accessed a,k unchanged)
-  ⇒ access_monotone_rel (storageKeys monotone)
-
-same_frame_rel ⇒ access_monotone_rel
-rollback_rel ⇒ storage_rel ⇒ pns_rel
-rollback_rel ∧ access_monotone_rel ⇒ pns_rel  [stronger composition rule]
-```
-
-Wait — `same_frame_rel` does **not** imply `rollback_rel`, because
-`callee_local_changes` allows the callee's nonce/storage/code to
-change and arbitrary balance transfers. So the hierarchy splits:
-
-```
-same_frame_rel
-  ⇒ cp_rel
-  ⇒ access_monotone_rel (addresses + storageKeys monotone)
-
 rollback_rel
   ⇒ storage_rel
   ⇒ pns_rel
 
-same_frame_rel ⊓ rollback_rel
-  ⇒ storage_rel at non-callee addresses  [from callee_local_changes]
-  ⇒ pns_rel at non-callee + access-monotone at callee
+rollback_rel ⇒ access_monotone_sk_rel   (vacuously: unchanged = ⊆)
+
+same_frame_rel
+  ⇒ access_monotone_sk_rel           (from ⊆ constraints in definition)
+  ⇒ access_monotone_addr_rel
+  ⇒ non_callee_storage_rel callee     (from callee_local_changes)
+  ⇒ txParams_rel                     (s'.txParams = s.txParams)
+  ⇒ msdomain_compatible_rel         (msdomain_compatible s.ms s'.ms)
+
+cp_rel
+  ⇒ storage_rel                     (accounts preserved ⇒ storage at every a,k preserved)
+  ⇒ pns_rel                        (via storage_rel)
+
+NOTE: cp_rel does NOT imply rollback_rel or access_monotone_sk_rel.
+cp preserves rollback.accounts/tStorage/toDelete but says nothing
+about rollback.accesses — operations like access_address, access_slot
+modify accesses while being cp. cp and access_monotone are orthogonal
+properties.
 ```
 
-The key insight: `same_frame_rel` + `access_monotone_rel` ≠ `pns_rel`
-directly. We need `callee_local_changes` (from `same_frame_rel`) plus
-`access_monotone` to get `pns` at the callee address. This is exactly
-what `step_inst_preserves_non_accessed_storage` does case-by-case.
+Note: `cp_rel ⇒ same_frame_rel` does **not** hold either. `cp_rel`
+says nothing about callee-local vs non-callee changes to
+storage/code/nonce, about access-list monotonicity, or about
+msdomain compatibility. The two relations overlap but neither
+subsumes the other.
+
+The key insight for `pns`: `same_frame_rel` alone is **not**
+sufficient to derive `pns_rel`. We need `callee_local_changes` +
+`access_monotone` to get `pns` at the callee address. This is
+exactly what `step_inst_preserves_non_accessed_storage` does
+case-by-case, and what the `pns_bind_access_monotone` composition
+rule captures structurally.
 
 ### Leaf Lemmas — Primitive Effect Characterisation
 
@@ -402,25 +407,66 @@ This doesn't change any existing code but establishes the link.
 
 ### Stage 2: Add implication bridges between predicates
 
-In `vfmStoragePredicates`, prove `rollback_rel ⇒ storage_rel ⇒ pns_rel`.
-In `vfmSameFrame`, prove `same_frame_rel ⇒ cp_rel` and
-`same_frame_rel ⇒ access_monotone_rel`.
+In `vfmStoragePredicates`, prove `rollback_rel ⇒ storage_rel ⇒ pns_rel`,
+`rollback_rel ⇒ access_monotone_sk_rel`, and
+`same_frame_rel ⇒ access_monotone_sk_rel`.
 
-### Stage 3: Derive leaf lemmas via bridges
+In `vfmSameFrame`, prove `same_frame_rel ⇒ non_callee_storage_rel`,
+`same_frame_rel ⇒ txParams_rel`, and
+`same_frame_rel ⇒ msdomain_compatible_rel`.
 
-Replace proofs like:
+Note: `same_frame_rel ⇒ cp_rel` does **not** hold and is not proved.
+`callee_local_changes` allows the callee's storage/code/nonce and
+arbitrary balances to change, while `cp_rel` requires full rollback
+equality. The two relations overlap but neither subsumes the other.
 
-```
-Theorem cp_get_current_context[simp]: cp get_current_context
-Proof rw[cp_def, ...] QED
-```
+### Stage 3: Derive per-predicate composition rules from generic framework
 
-with:
+In each theory, replace hand-proved per-predicate composition rules
+(bind, ignore_bind, return, fail, reraise, cond, handle, case_*, let,
+uncurry) with derivations from the generic `preserves`/`preserves_when`
+framework via the Stage 1 equivalence theorems.
 
-```
-Theorem cp_get_current_context[simp]: cp get_current_context
-Proof irule preserves_same_frame_imp_cp >> simp[] QED
-```
+**vfmStoragePredicates (unguarded `preserves R` pattern):**
+
+Add reflexivity and transitivity lemmas for each state relation
+(`rollback_rel_refl`, `rollback_rel_trans`, `storage_rel_trans`, etc.),
+then derive:
+- `preserves_rollback_*` from `preserves_*` + `preserves_rollback_eq_preserves`
+- `preserves_storage_*` from `preserves_*` + `preserves_storage_eq_preserves`
+- `access_monotone_*` from `preserves_*` + `access_monotone_eq_preserves`
+- `pns_return/fail/reraise/cond` from `preserves_*` + `pns_eq_preserves`
+- Bridge theorems (`preserves_rollback_imp_preserves_storage`, etc.)
+  from `preserves_mono` + relation-level bridges
+
+Note: `pns_bind_access_monotone` and `pns_handle` cannot be derived
+from the generic framework alone — `pns_rel` is not transitive
+without `access_monotone`, so the combined pattern requires
+special treatment.
+
+**vfmSameFrame (guarded `preserves_when pre R` pattern):**
+
+Derive `preserves_same_frame_*` from `preserves_when_*` +
+`preserves_same_frame_eq_preserves_when` + `same_frame_rel_trans` +
+`same_frame_rel_contexts_ne`.
+
+Note: `psf_*` composition rules are NOT changed — they use a
+getter-bind continuation pattern that maps to
+`preserves_when_bind_gen` but with non-trivial `p`/`p_cont`
+parameterisation.
+
+**vfmStaticCalls (guarded `preserves_when pre R` pattern):**
+
+Add `cp_rel_refl`, `cp_rel_trans`, `cp_rel_contexts_ne`, then derive
+`cp_*` composition rules from `preserves_when_*` +
+`cp_eq_preserves_when`.
+
+**vfmStoragePredicates (cp_rel implication bridges):**
+
+Prove `cp_rel ⇒ storage_rel` directly (accounts preserved),
+`cp_rel ⇒ pns_rel` (via storage_rel). Do NOT prove
+`cp_rel ⇒ rollback_rel` (cp doesn't preserve accesses) or
+`cp_rel ⇒ access_monotone_sk_rel` (orthogonal).
 
 Do this incrementally, one theory at a time, verifying each builds.
 
@@ -539,7 +585,7 @@ theories. This keeps the dependency graph clean and avoids polluting
 spec/prop/vfmPreservesScript.sml    (NEW — generic framework)
 spec/prop/vfmSameFrameScript.sml    (modified — use preserves_when + bridges)
 spec/prop/vfmStoragePredicatesScript.sml  (modified — use preserves + bridges)
-spec/prop/vfmStaticCallsScript.sml  (modified — derive cp from preserves_same_frame)
+spec/prop/vfmStaticCallsScript.sml  (modified — derive cp from preserves_when + cp_rel)
 spec/prop/vfmJumpDestScript.sml     (modified — use preserves/preserves_when)
 ...
 ```
@@ -550,10 +596,10 @@ spec/prop/vfmJumpDestScript.sml     (modified — use preserves/preserves_when)
 |---|---|---|
 | Composition lemmas | ~50 (7 frameworks × 7 combinators) | ~14 (2 variants × 7) |
 | Implication bridges | 0 | ~5 |
-| `cp` leaf lemmas | ~41 | 0 (derived from `preserves_same_frame`) |
+| `cp` leaf lemmas | ~41 | ~41 (not derived from same_frame; cp_rel ≠ same_frame_rel) |
 | `preserves_rollback` leaf lemmas | ~257 | ~50 (most derived from `preserves`) |
 | `preserves_storage` leaf lemmas | ~20 | ~5 (derived from `preserves_rollback`) |
-| `access_monotone` leaf lemmas | ~10 | 0 (derived from `preserves_same_frame`) |
+| `access_monotone` leaf lemmas | ~10 | ~5 (some derived from `preserves_rollback`) |
 | Precompile leaf lemmas | ~102 (6 frameworks × 17) | ~6 (1 per framework) |
 | `preserves_txParams` leaf lemmas | ~125 | ~20 (most derived from `preserves`) |
 | **Total** | **~600+** | **~100** |

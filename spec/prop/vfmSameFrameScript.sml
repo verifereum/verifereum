@@ -198,26 +198,34 @@ Definition preserves_same_frame_def:
     ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'
 End
 
+Theorem preserves_same_frame_eq_preserves_when:
+  preserves_same_frame m ⇔ preserves_when (λs. s.contexts ≠ []) same_frame_rel m
+Proof
+  rw[preserves_same_frame_def, preserves_when_def]
+QED
+
 (* ---------------- Composition lemmas ---------------- *)
 
 Theorem preserves_same_frame_bind[simp]:
   preserves_same_frame g ∧ (∀x. preserves_same_frame (f x)) ⇒
   preserves_same_frame (bind g f)
 Proof
-  rw[preserves_same_frame_def, bind_def]
-  \\ gvs[AllCaseEqs()]
-  \\ irule same_frame_rel_trans
-  \\ first_x_assum drule
-  \\ first_x_assum drule \\ rw[]
-  \\ drule same_frame_rel_contexts_ne \\ rw[] \\ gvs[]
-  \\ goal_assum drule \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_bind
+  >> simp[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_contexts_ne,
+               preserves_same_frame_eq_preserves_when]
 QED
 
 Theorem preserves_same_frame_ignore_bind[simp]:
   preserves_same_frame g ∧ preserves_same_frame f ⇒
   preserves_same_frame (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] \\ irule preserves_same_frame_bind \\ simp[]
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_ignore_bind
+  >> simp[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_contexts_ne,
+               preserves_same_frame_eq_preserves_when]
 QED
 
 (* When g is preserves_same_frame and bind g f grows, we can extract
@@ -242,54 +250,53 @@ Theorem preserves_same_frame_handle[simp]:
   preserves_same_frame f ∧ (∀e. preserves_same_frame (h e)) ⇒
   preserves_same_frame (handle f h)
 Proof
-  rw[preserves_same_frame_def, handle_def]
-  \\ gvs[AllCaseEqs()]
-  \\ first_x_assum drule
-  \\ first_x_assum drule \\ rw[]
-  \\ drule same_frame_rel_contexts_ne \\ rw[] \\ gvs[]
-  \\ metis_tac[same_frame_rel_trans]
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_handle
+  >> simp[]
+  >> metis_tac[same_frame_rel_trans, same_frame_rel_contexts_ne,
+               preserves_same_frame_eq_preserves_when]
 QED
 
 Theorem preserves_same_frame_cond[simp]:
   preserves_same_frame m1 ∧ preserves_same_frame m2 ⇒
   preserves_same_frame (if b then m1 else m2)
 Proof
-  rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_cond]
 QED
 
 Theorem preserves_same_frame_case_option[simp]:
   preserves_same_frame m_none ∧ (∀x. preserves_same_frame (m_some x)) ⇒
   preserves_same_frame (case opt of NONE => m_none | SOME x => m_some x)
 Proof
-  Cases_on `opt` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_case_option]
 QED
 
 Theorem preserves_same_frame_case_sum[simp]:
   (∀x. preserves_same_frame (f x)) ∧ (∀y. preserves_same_frame (g y)) ⇒
   preserves_same_frame (case s of INL x => f x | INR y => g y)
 Proof
-  Cases_on `s` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_case_sum]
 QED
 
 Theorem preserves_same_frame_case_pair[simp]:
   (∀x y. preserves_same_frame (f x y)) ⇒
   preserves_same_frame (case p of (x, y) => f x y)
 Proof
-  Cases_on `p` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_case_pair]
 QED
 
 Theorem preserves_same_frame_let[simp]:
   (∀x. preserves_same_frame (f x)) ⇒
   preserves_same_frame (let x = v in f x)
 Proof
-  rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_let]
 QED
 
 Theorem preserves_same_frame_uncurry[simp]:
   (∀x y. preserves_same_frame (f x y)) ⇒
   preserves_same_frame (UNCURRY f p)
 Proof
-  Cases_on `p` \\ rw[]
+  rw[preserves_same_frame_eq_preserves_when, preserves_when_uncurry]
 QED
 
 (* ================================================================ *)
@@ -328,25 +335,33 @@ val psf_refl_tac =
 Theorem preserves_same_frame_return[simp]:
   preserves_same_frame (return x)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_return
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_fail[simp]:
   preserves_same_frame (fail e)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_fail
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_reraise[simp]:
   preserves_same_frame (reraise eo)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_reraise
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_assert[simp]:
   preserves_same_frame (assert b e)
 Proof
-  psf_refl_tac
+  rw[preserves_same_frame_eq_preserves_when]
+  >> match_mp_tac preserves_when_assert
+  >> rw[same_frame_rel_refl]
 QED
 
 Theorem preserves_same_frame_finish[simp]:
@@ -1203,6 +1218,12 @@ Definition psf_def:
   psf p (m: α execution) ⇔
     ∀s r s'. m s = (r, s') ∧ p s ∧ s.contexts ≠ [] ⇒ same_frame_rel s s'
 End
+
+Theorem psf_eq_preserves_when:
+  psf p m ⇔ preserves_when (λs. p s ∧ s.contexts ≠ []) same_frame_rel m
+Proof
+  rw[psf_def, preserves_when_def] >> metis_tac[]
+QED
 
 (* ---------------- Monotonicity and bridges --------------------- *)
 
@@ -2364,23 +2385,6 @@ Proof
          set_last_accounts_def, LET_THM]
   >> Cases_on`s.contexts` >> gvs[]
   >> gvs[listTheory.SNOC_APPEND]
-QED
-
-(* ================================================================== *)
-(* Stage 1: preserves / preserves_when equivalences for existing       *)
-(*          predicates defined in this theory.                         *)
-(* ================================================================== *)
-
-Theorem preserves_same_frame_eq_preserves_when:
-  preserves_same_frame m ⇔ preserves_when (λs. s.contexts ≠ []) same_frame_rel m
-Proof
-  rw[preserves_same_frame_def, preserves_when_def]
-QED
-
-Theorem psf_eq_preserves_when:
-  psf p m ⇔ preserves_when (λs. p s ∧ s.contexts ≠ []) same_frame_rel m
-Proof
-  rw[psf_def, preserves_when_def] >> metis_tac[]
 QED
 
 (* ================================================================== *)

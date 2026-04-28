@@ -112,10 +112,15 @@ and `vfmSameFrame` (254 theorems) exist as independent hierarchies
 indicates the theories evolved before the relationship was
 understood. A clean factoring would:
 
-1. Make `cp` a derived notion: `cp m ⇔ preserves (λs s'. cp_rel s s') m`
+1. Make `cp` a derived notion: `cp m ⇔ preserves_when (λs. s.contexts ≠ []) cp_rel m`
    where `cp_rel` is the state relation capturing `cp`'s constraints
-2. Prove `same_frame_rel ⇒ cp_rel`
-3. Derive all `cp` lemmas from `preserves_same_frame` via this bridge
+2. `same_frame_rel ⇒ cp_rel` does **not** hold — the two relations are
+   orthogonal (cp doesn't guarantee access monotonicity or msdomain
+   compatibility; same_frame_rel doesn't guarantee full rollback equality).
+   The valid bridge is `cp_rel ⇒ storage_rel` (proved directly from
+   accounts preservation)
+3. Derive `cp` composition lemmas from the generic `preserves_when`
+   framework via `cp_eq_preserves_when`
 
 ## 4. Weakness in `step_inst_preserves_non_accessed_storage`
 

@@ -91,45 +91,342 @@ Definition preserves_rollback_def:
     ∀s r s'. m s = (r, s') ⇒ s'.rollback = s.rollback
 End
 
+Definition preserves_storage_def:
+  preserves_storage (m: α execution) ⇔
+    ∀s r s'. m s = (r, s') ⇒
+      ∀a k.
+        lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+        lookup_storage k (lookup_account a s.rollback.accounts).storage
+End
+
+Definition access_monotone_def:
+  access_monotone (m: α execution) ⇔
+    ∀s r s'. m s = (r, s') ⇒
+      toSet s.rollback.accesses.storageKeys ⊆
+        toSet s'.rollback.accesses.storageKeys
+End
+
+Definition pns_def:
+  pns (m: α execution) ⇔
+    ∀s r s'. m s = (r, s') ⇒
+      ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
+        lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+        lookup_storage k (lookup_account a s.rollback.accounts).storage
+End
+
+(* ================================================================== *)
+(* Stage 1: State-relation definitions and equivalences with           *)
+(*          preserves / preserves_when instances.                      *)
+(* ================================================================== *)
+
+(* rollback_rel: the entire rollback state is unchanged. *)
+Definition rollback_rel_def:
+  rollback_rel s s' ⇔ s'.rollback = s.rollback
+End
+
+(* storage_rel: storage at every address and key is unchanged. *)
+Definition storage_rel_def:
+  storage_rel s s' ⇔
+    ∀a k.
+      lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+      lookup_storage k (lookup_account a s.rollback.accounts).storage
+End
+
+(* access_monotone_sk_rel: storageKeys only grow (subset). *)
+Definition access_monotone_sk_rel_def:
+  access_monotone_sk_rel s s' ⇔
+    toSet s.rollback.accesses.storageKeys ⊆
+      toSet s'.rollback.accesses.storageKeys
+End
+
+(* access_monotone_addr_rel: addresses only grow (subset). *)
+Definition access_monotone_addr_rel_def:
+  access_monotone_addr_rel s s' ⇔
+    toSet s.rollback.accesses.addresses ⊆
+      toSet s'.rollback.accesses.addresses
+End
+
+(* pns_rel: storage at (a,k) is preserved unless (SK a k) is
+   in the final storageKeys. This is the relation underlying pns. *)
+Definition pns_rel_def:
+  pns_rel s s' ⇔
+    ∀a k.
+      ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
+      lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+      lookup_storage k (lookup_account a s.rollback.accounts).storage
+End
+
+Theorem preserves_rollback_eq_preserves:
+  preserves_rollback m ⇔ preserves rollback_rel m
+Proof
+  rw[preserves_rollback_def, preserves_def, rollback_rel_def]
+QED
+
+Theorem preserves_storage_eq_preserves:
+  preserves_storage m ⇔ preserves storage_rel m
+Proof
+  rw[preserves_storage_def, preserves_def, storage_rel_def]
+QED
+
+Theorem access_monotone_eq_preserves:
+  access_monotone m ⇔ preserves access_monotone_sk_rel m
+Proof
+  rw[access_monotone_def, preserves_def, access_monotone_sk_rel_def]
+QED
+
+Theorem pns_eq_preserves:
+  pns m ⇔ preserves pns_rel m
+Proof
+  rw[pns_def, preserves_def, pns_rel_def]
+QED
+
+(* ================================================================== *)
+(* Reflexivity and transitivity of state relations.                    *)
+(*                                                                    *)
+(* These are needed as side-conditions for the generic composition   *)
+(* lemmas preserves_bind / preserves_when_bind. Each is trivially     *)
+(* proved from the relation definition.                               *)
+(* ================================================================== *)
+
+Theorem rollback_rel_refl:
+  ∀s. rollback_rel s s
+Proof
+  rw[rollback_rel_def]
+QED
+
+Theorem rollback_rel_trans:
+  rollback_rel s1 s2 ∧ rollback_rel s2 s3 ⇒ rollback_rel s1 s3
+Proof
+  rw[rollback_rel_def]
+QED
+
+Theorem storage_rel_refl:
+  ∀s. storage_rel s s
+Proof
+  rw[storage_rel_def]
+QED
+
+Theorem storage_rel_trans:
+  storage_rel s1 s2 ∧ storage_rel s2 s3 ⇒ storage_rel s1 s3
+Proof
+  rw[storage_rel_def] >> metis_tac[]
+QED
+
+Theorem access_monotone_sk_rel_refl:
+  ∀s. access_monotone_sk_rel s s
+Proof
+  rw[access_monotone_sk_rel_def]
+QED
+
+Theorem access_monotone_sk_rel_trans:
+  access_monotone_sk_rel s1 s2 ∧ access_monotone_sk_rel s2 s3 ⇒
+  access_monotone_sk_rel s1 s3
+Proof
+  rw[access_monotone_sk_rel_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
+QED
+
+Theorem access_monotone_addr_rel_refl:
+  ∀s. access_monotone_addr_rel s s
+Proof
+  rw[access_monotone_addr_rel_def]
+QED
+
+Theorem access_monotone_addr_rel_trans:
+  access_monotone_addr_rel s1 s2 ∧ access_monotone_addr_rel s2 s3 ⇒
+  access_monotone_addr_rel s1 s3
+Proof
+  rw[access_monotone_addr_rel_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
+QED
+
+Theorem pns_rel_refl:
+  ∀s. pns_rel s s
+Proof
+  rw[pns_rel_def]
+QED
+
+(* ================================================================== *)
+(* Stage 2: Implication bridges between state relations.               *)
+(*                                                                    *)
+(* These give bridges between the corresponding predicates for free    *)
+(* via preserves_mono.                                                *)
+(*                                                                    *)
+(* Hierarchy: rollback_rel ⇒ storage_rel ⇒ pns_rel                     *)
+(*            rollback_rel ⇒ access_monotone_sk_rel (vacuously, since  *)
+(*              rollback_rel means storageKeys is unchanged, thus ⊆)    *)
+(* ================================================================== *)
+
+Theorem rollback_rel_imp_storage_rel:
+  rollback_rel s s' ⇒ storage_rel s s'
+Proof
+  rw[rollback_rel_def, storage_rel_def]
+QED
+
+Theorem storage_rel_imp_pns_rel:
+  storage_rel s s' ⇒ pns_rel s s'
+Proof
+  rw[storage_rel_def, pns_rel_def] >> metis_tac[]
+QED
+
+Theorem rollback_rel_imp_pns_rel:
+  rollback_rel s s' ⇒ pns_rel s s'
+Proof
+  metis_tac[rollback_rel_imp_storage_rel, storage_rel_imp_pns_rel]
+QED
+
+Theorem rollback_rel_imp_access_monotone_sk_rel:
+  rollback_rel s s' ⇒ access_monotone_sk_rel s s'
+Proof
+  rw[rollback_rel_def, access_monotone_sk_rel_def]
+QED
+
+Theorem rollback_rel_imp_access_monotone_addr_rel:
+  rollback_rel s s' ⇒ access_monotone_addr_rel s s'
+Proof
+  rw[rollback_rel_def, access_monotone_addr_rel_def]
+QED
+
+(* Bridge from same_frame_rel to access_monotone relations.            *)
+(* same_frame_rel includes monotone subset constraints on both        *)
+(* addresses and storageKeys.                                         *)
+Theorem same_frame_rel_imp_access_monotone_sk_rel:
+  same_frame_rel s s' ⇒ access_monotone_sk_rel s s'
+Proof
+  rw[same_frame_rel_def, access_monotone_sk_rel_def]
+QED
+
+Theorem same_frame_rel_imp_access_monotone_addr_rel:
+  same_frame_rel s s' ⇒ access_monotone_addr_rel s s'
+Proof
+  rw[same_frame_rel_def, access_monotone_addr_rel_def]
+QED
+
+(* Derived predicate bridges via preserves_mono.                       *)
+(* These restate the existing implication theorems                     *)
+(* (preserves_rollback_imp_preserves_storage,                        *)
+(*  pns_of_preserves_storage,                                          *)
+(*  preserves_rollback_imp_pns) in the generic framework.              *)
+
+Theorem preserves_rollback_imp_preserves_storage_via_mono:
+  preserves rollback_rel m ⇒ preserves storage_rel m
+Proof
+  match_mp_tac preserves_mono >> metis_tac[rollback_rel_imp_storage_rel]
+QED
+
+Theorem preserves_storage_imp_pns_via_mono:
+  preserves storage_rel m ⇒ preserves pns_rel m
+Proof
+  match_mp_tac preserves_mono >> metis_tac[storage_rel_imp_pns_rel]
+QED
+
+Theorem preserves_rollback_imp_pns_via_mono:
+  preserves rollback_rel m ⇒ preserves pns_rel m
+Proof
+  match_mp_tac preserves_mono >> metis_tac[rollback_rel_imp_pns_rel]
+QED
+
+Theorem preserves_rollback_imp_access_monotone_via_mono:
+  preserves rollback_rel m ⇒ preserves access_monotone_sk_rel m
+Proof
+  match_mp_tac preserves_mono >> metis_tac[rollback_rel_imp_access_monotone_sk_rel]
+QED
+
+Theorem same_frame_rel_imp_access_monotone_via_mono:
+  preserves same_frame_rel m ⇒ preserves access_monotone_sk_rel m
+Proof
+  match_mp_tac preserves_mono >> metis_tac[same_frame_rel_imp_access_monotone_sk_rel]
+QED
+
+(* ================================================================== *)
+(* Bridges from cp_rel to storage predicates.                         *)
+(*                                                                    *)
+(* These live here (not in vfmStaticCalls) because they reference     *)
+(* storage_rel, pns_rel — defined in this theory.                     *)
+(*                                                                    *)
+(* IMPORTANT: cp_rel does NOT imply rollback_rel or                   *)
+(* access_monotone_sk_rel. cp preserves rollback.accounts/tStorage/    *)
+(* toDelete but says nothing about rollback.accesses — operations    *)
+(* like access_address, access_slot modify accesses while being cp.   *)
+(* Similarly cp and access_monotone are orthogonal properties.         *)
+(* ================================================================== *)
+
+(* cp_rel ⇒ storage_rel: accounts preserved ⇒ storage at every       *)
+(* (a,k) is preserved.                                                *)
+Theorem cp_rel_imp_storage_rel:
+  cp_rel s s' ⇒ storage_rel s s'
+Proof
+  rw[cp_rel_def, storage_rel_def]
+QED
+
+(* cp_rel ⇒ pns_rel: if storage at every (a,k) is preserved, then     *)
+(* certainly storage at non-accessed (a,k) is preserved.              *)
+Theorem cp_rel_imp_pns_rel:
+  cp_rel s s' ⇒ pns_rel s s'
+Proof
+  metis_tac[cp_rel_imp_storage_rel, storage_rel_imp_pns_rel]
+QED
+
+(* Predicate-level bridges via preserves_mono. *)
+Theorem cp_imp_preserves_storage_via_mono:
+  preserves cp_rel m ⇒ preserves storage_rel m
+Proof
+  match_mp_tac preserves_mono >> metis_tac[cp_rel_imp_storage_rel]
+QED
+
+Theorem cp_imp_pns_via_mono:
+  preserves cp_rel m ⇒ preserves pns_rel m
+Proof
+  match_mp_tac preserves_mono >> metis_tac[cp_rel_imp_pns_rel]
+QED
+
 Theorem preserves_rollback_bind[simp]:
   preserves_rollback g ∧ (∀x. preserves_rollback (f x)) ⇒
   preserves_rollback (bind g f)
 Proof
-  rw[preserves_rollback_def, bind_def]
-  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
-  >> res_tac >> gvs[]
+  rw[preserves_rollback_eq_preserves]
+  >> match_mp_tac preserves_bind
+  >> simp[preserves_rollback_eq_preserves]
+  >> metis_tac[rollback_rel_trans]
 QED
 
 Theorem preserves_rollback_ignore_bind[simp]:
   preserves_rollback g ∧ preserves_rollback f ⇒
   preserves_rollback (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] >> irule preserves_rollback_bind >> simp[]
+  rw[preserves_rollback_eq_preserves]
+  >> match_mp_tac preserves_ignore_bind
+  >> simp[preserves_rollback_eq_preserves]
+  >> metis_tac[rollback_rel_trans]
 QED
 
 Theorem preserves_rollback_return[simp]:
   preserves_rollback (return x)
 Proof
-  rw[preserves_rollback_def, return_def]
+  rw[preserves_rollback_eq_preserves]
+  >> irule preserves_return
+  >> simp[rollback_rel_refl]
 QED
 
 Theorem preserves_rollback_fail[simp]:
   preserves_rollback (fail e)
 Proof
-  rw[preserves_rollback_def, fail_def]
+  rw[preserves_rollback_eq_preserves]
+  >> irule preserves_fail
+  >> simp[rollback_rel_refl]
 QED
 
 Theorem preserves_rollback_reraise[simp]:
   preserves_rollback (reraise e)
 Proof
-  rw[preserves_rollback_def, reraise_def]
+  rw[preserves_rollback_eq_preserves]
+  >> irule preserves_reraise
+  >> simp[rollback_rel_refl]
 QED
 
 Theorem preserves_rollback_cond[simp]:
   preserves_rollback m1 ∧ preserves_rollback m2 ⇒
   preserves_rollback (if b then m1 else m2)
 Proof
-  rw[]
+  rw[preserves_rollback_eq_preserves, preserves_cond]
 QED
 
 Theorem preserves_rollback_get_current_context[simp]:
@@ -155,7 +452,9 @@ QED
 Theorem preserves_rollback_assert[simp]:
   preserves_rollback (assert b e)
 Proof
-  rw[preserves_rollback_def, assert_def, return_def, fail_def]
+  rw[preserves_rollback_eq_preserves]
+  >> irule preserves_assert
+  >> simp[rollback_rel_refl]
 QED
 
 Theorem preserves_rollback_pop_stack[simp]:
@@ -233,62 +532,62 @@ Proof
   >> simp[]
 QED
 
-(* Monadic predicate: preserves storage at every address and key. *)
-Definition preserves_storage_def:
-  preserves_storage (m: α execution) ⇔
-    ∀s r s'. m s = (r, s') ⇒
-      ∀a k.
-        lookup_storage k (lookup_account a s'.rollback.accounts).storage =
-        lookup_storage k (lookup_account a s.rollback.accounts).storage
-End
-
 Theorem preserves_rollback_imp_preserves_storage[simp]:
   preserves_rollback m ⇒ preserves_storage m
 Proof
-  rw[preserves_rollback_def, preserves_storage_def]
-  >> res_tac >> simp[]
+  metis_tac[preserves_rollback_eq_preserves, preserves_storage_eq_preserves,
+            preserves_mono, rollback_rel_imp_storage_rel]
 QED
 
 Theorem preserves_storage_bind[simp]:
   preserves_storage g ∧ (∀x. preserves_storage (f x)) ⇒
   preserves_storage (bind g f)
 Proof
-  rw[preserves_storage_def, bind_def]
-  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
-  >> res_tac >> gvs[]
-  >> metis_tac[]
+  rw[preserves_storage_eq_preserves]
+  >> match_mp_tac preserves_bind
+  >> simp[preserves_storage_eq_preserves]
+  >> metis_tac[storage_rel_trans]
 QED
 
 Theorem preserves_storage_ignore_bind[simp]:
   preserves_storage g ∧ preserves_storage f ⇒
   preserves_storage (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] >> irule preserves_storage_bind >> rw[]
+  rw[preserves_storage_eq_preserves]
+  >> match_mp_tac preserves_ignore_bind
+  >> simp[preserves_storage_eq_preserves]
+  >> metis_tac[storage_rel_trans]
 QED
 
 Theorem preserves_storage_cond[simp]:
   preserves_storage m1 ∧ preserves_storage m2 ⇒
   preserves_storage (if b then m1 else m2)
 Proof
-  rw[]
+  rw[preserves_storage_eq_preserves, preserves_cond]
 QED
 
 Theorem preserves_storage_return[simp]:
   preserves_storage (return x)
 Proof
-  rw[preserves_storage_def, return_def]
+  rw[preserves_storage_eq_preserves]
+  >> irule preserves_return
+  >> simp[storage_rel_refl]
 QED
 
 Theorem preserves_storage_fail[simp]:
   preserves_storage (fail e)
 Proof
-  rw[preserves_storage_def, fail_def]
+  rw[preserves_storage_eq_preserves]
+  >> irule preserves_fail
+  >> simp[storage_rel_refl]
 QED
 
 Theorem preserves_storage_reraise[simp]:
   preserves_storage (reraise e)
 Proof
-  rw[preserves_storage_def, reraise_def]
+  rw[preserves_storage_eq_preserves]
+  >> irule preserves_reraise
+  >> simp[storage_rel_refl]
 QED
 
 (* transfer_value preserves storage at every address. *)
@@ -409,43 +708,38 @@ Proof
   >> gvs[AllCaseEqs()]
 QED
 
-(* Monotone accesses: storageKeys never shrinks. *)
-Definition access_monotone_def:
-  access_monotone (m: α execution) ⇔
-    ∀s r s'. m s = (r, s') ⇒
-      toSet s.rollback.accesses.storageKeys ⊆
-        toSet s'.rollback.accesses.storageKeys
-End
-
 Theorem access_monotone_bind[simp]:
   access_monotone g ∧ (∀x. access_monotone (f x)) ⇒
   access_monotone (bind g f)
 Proof
-  rw[access_monotone_def, bind_def]
-  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
-  >> res_tac >> gvs[]
-  >> metis_tac[pred_setTheory.SUBSET_TRANS]
+  rw[access_monotone_eq_preserves]
+  >> match_mp_tac preserves_bind
+  >> simp[access_monotone_eq_preserves]
+  >> metis_tac[access_monotone_sk_rel_trans]
 QED
 
 Theorem access_monotone_ignore_bind[simp]:
   access_monotone g ∧ access_monotone f ⇒
   access_monotone (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] >> irule access_monotone_bind >> rw[]
+  rw[access_monotone_eq_preserves]
+  >> match_mp_tac preserves_ignore_bind
+  >> simp[access_monotone_eq_preserves]
+  >> metis_tac[access_monotone_sk_rel_trans]
 QED
 
 Theorem access_monotone_cond[simp]:
   access_monotone m1 ∧ access_monotone m2 ⇒
   access_monotone (if b then m1 else m2)
 Proof
-  rw[]
+  rw[access_monotone_eq_preserves, preserves_cond]
 QED
 
 Theorem access_monotone_of_preserves_rollback[simp]:
   preserves_rollback m ⇒ access_monotone m
 Proof
-  rw[preserves_rollback_def, access_monotone_def]
-  >> res_tac >> simp[]
+  metis_tac[preserves_rollback_eq_preserves, access_monotone_eq_preserves,
+            preserves_mono, rollback_rel_imp_access_monotone_sk_rel]
 QED
 
 (* access_slot: storageKeys grows (by inserting x). *)
@@ -595,13 +889,6 @@ QED
 (* A monadic predicate combining preserves_storage with the
    access-listing invariant: storage at (a,k) unchanged UNLESS
    (SK a k) was added to storageKeys. This is exactly what we want. *)
-Definition pns_def:
-  pns (m: α execution) ⇔
-    ∀s r s'. m s = (r, s') ⇒
-      ∀a k. ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
-        lookup_storage k (lookup_account a s'.rollback.accounts).storage =
-        lookup_storage k (lookup_account a s.rollback.accounts).storage
-End
 
 Theorem pns_of_preserves_storage:
   preserves_storage m ⇒ pns m
@@ -654,32 +941,39 @@ QED
 Theorem pns_cond[simp]:
   pns m1 ∧ pns m2 ⇒ pns (if b then m1 else m2)
 Proof
-  rw[]
+  rw[pns_eq_preserves, preserves_cond]
 QED
 
 Theorem pns_return[simp]:
   pns (return x)
 Proof
-  rw[pns_def, return_def]
+  rw[pns_eq_preserves]
+  >> irule preserves_return
+  >> simp[pns_rel_refl]
 QED
 
 Theorem pns_fail[simp]:
   pns (fail e)
 Proof
-  rw[pns_def, fail_def]
+  rw[pns_eq_preserves]
+  >> irule preserves_fail
+  >> simp[pns_rel_refl]
 QED
 
 Theorem pns_reraise[simp]:
   pns (reraise e)
 Proof
-  rw[pns_def, reraise_def]
+  rw[pns_eq_preserves]
+  >> irule preserves_reraise
+  >> simp[pns_rel_refl]
 QED
 
 (* preserves_rollback ⇒ access_monotone ∧ pns. *)
 Theorem preserves_rollback_imp_pns:
   preserves_rollback m ⇒ pns m
 Proof
-  rw[preserves_rollback_def, pns_def] >> res_tac >> simp[]
+  metis_tac[preserves_rollback_eq_preserves, pns_eq_preserves,
+            preserves_mono, rollback_rel_imp_pns_rel]
 QED
 
 (* pns handle: if f is pns + access_monotone and every h e is pns +
@@ -1196,21 +1490,21 @@ Theorem preserves_storage_case_pair[simp]:
   (∀x y. preserves_storage (f x y)) ⇒
   preserves_storage (case p of (x, y) => f x y)
 Proof
-  Cases_on `p` >> rw[]
+  rw[preserves_storage_eq_preserves, preserves_case_pair]
 QED
 
 Theorem preserves_storage_UNCURRY[simp]:
   (∀x y. preserves_storage (f x y)) ⇒
   preserves_storage (UNCURRY f p)
 Proof
-  Cases_on `p` >> rw[]
+  rw[preserves_storage_eq_preserves, preserves_uncurry]
 QED
 
 Theorem preserves_storage_let[simp]:
   (∀x. preserves_storage (f x)) ⇒
   preserves_storage (let x = v in f x)
 Proof
-  rw[]
+  rw[preserves_storage_eq_preserves, preserves_let]
 QED
 
 Theorem preserves_storage_proceed_call[simp]:
@@ -1430,162 +1724,4 @@ Theorem step_inst_Revert_preserves_rollback[simp]:
   preserves_rollback (step_inst Revert)
 Proof
   rw[step_inst_def]
-QED
-
-(* ================================================================== *)
-(* Stage 1: State-relation definitions and equivalences with           *)
-(*          preserves / preserves_when instances.                      *)
-(* ================================================================== *)
-
-(* rollback_rel: the entire rollback state is unchanged. *)
-Definition rollback_rel_def:
-  rollback_rel s s' ⇔ s'.rollback = s.rollback
-End
-
-(* storage_rel: storage at every address and key is unchanged. *)
-Definition storage_rel_def:
-  storage_rel s s' ⇔
-    ∀a k.
-      lookup_storage k (lookup_account a s'.rollback.accounts).storage =
-      lookup_storage k (lookup_account a s.rollback.accounts).storage
-End
-
-(* access_monotone_sk_rel: storageKeys only grow (subset). *)
-Definition access_monotone_sk_rel_def:
-  access_monotone_sk_rel s s' ⇔
-    toSet s.rollback.accesses.storageKeys ⊆
-      toSet s'.rollback.accesses.storageKeys
-End
-
-(* access_monotone_addr_rel: addresses only grow (subset). *)
-Definition access_monotone_addr_rel_def:
-  access_monotone_addr_rel s s' ⇔
-    toSet s.rollback.accesses.addresses ⊆
-      toSet s'.rollback.accesses.addresses
-End
-
-(* pns_rel: storage at (a,k) is preserved unless (SK a k) is
-   in the final storageKeys. This is the relation underlying pns. *)
-Definition pns_rel_def:
-  pns_rel s s' ⇔
-    ∀a k.
-      ¬fIN (SK a k) s'.rollback.accesses.storageKeys ⇒
-      lookup_storage k (lookup_account a s'.rollback.accounts).storage =
-      lookup_storage k (lookup_account a s.rollback.accounts).storage
-End
-
-Theorem preserves_rollback_eq_preserves:
-  preserves_rollback m ⇔ preserves rollback_rel m
-Proof
-  rw[preserves_rollback_def, preserves_def, rollback_rel_def]
-QED
-
-Theorem preserves_storage_eq_preserves:
-  preserves_storage m ⇔ preserves storage_rel m
-Proof
-  rw[preserves_storage_def, preserves_def, storage_rel_def]
-QED
-
-Theorem access_monotone_eq_preserves:
-  access_monotone m ⇔ preserves access_monotone_sk_rel m
-Proof
-  rw[access_monotone_def, preserves_def, access_monotone_sk_rel_def]
-QED
-
-Theorem pns_eq_preserves:
-  pns m ⇔ preserves pns_rel m
-Proof
-  rw[pns_def, preserves_def, pns_rel_def]
-QED
-
-(* ================================================================== *)
-(* Stage 2: Implication bridges between state relations.               *)
-(*                                                                    *)
-(* These give bridges between the corresponding predicates for free    *)
-(* via preserves_mono.                                                *)
-(*                                                                    *)
-(* Hierarchy: rollback_rel ⇒ storage_rel ⇒ pns_rel                     *)
-(*            rollback_rel ⇒ access_monotone_sk_rel (vacuously, since  *)
-(*              rollback_rel means storageKeys is unchanged, thus ⊆)    *)
-(* ================================================================== *)
-
-Theorem rollback_rel_imp_storage_rel:
-  rollback_rel s s' ⇒ storage_rel s s'
-Proof
-  rw[rollback_rel_def, storage_rel_def]
-QED
-
-Theorem storage_rel_imp_pns_rel:
-  storage_rel s s' ⇒ pns_rel s s'
-Proof
-  rw[storage_rel_def, pns_rel_def] >> metis_tac[]
-QED
-
-Theorem rollback_rel_imp_pns_rel:
-  rollback_rel s s' ⇒ pns_rel s s'
-Proof
-  metis_tac[rollback_rel_imp_storage_rel, storage_rel_imp_pns_rel]
-QED
-
-Theorem rollback_rel_imp_access_monotone_sk_rel:
-  rollback_rel s s' ⇒ access_monotone_sk_rel s s'
-Proof
-  rw[rollback_rel_def, access_monotone_sk_rel_def]
-QED
-
-Theorem rollback_rel_imp_access_monotone_addr_rel:
-  rollback_rel s s' ⇒ access_monotone_addr_rel s s'
-Proof
-  rw[rollback_rel_def, access_monotone_addr_rel_def]
-QED
-
-(* Bridge from same_frame_rel to access_monotone relations.            *)
-(* same_frame_rel includes monotone subset constraints on both        *)
-(* addresses and storageKeys.                                         *)
-Theorem same_frame_rel_imp_access_monotone_sk_rel:
-  same_frame_rel s s' ⇒ access_monotone_sk_rel s s'
-Proof
-  rw[same_frame_rel_def, access_monotone_sk_rel_def]
-QED
-
-Theorem same_frame_rel_imp_access_monotone_addr_rel:
-  same_frame_rel s s' ⇒ access_monotone_addr_rel s s'
-Proof
-  rw[same_frame_rel_def, access_monotone_addr_rel_def]
-QED
-
-(* Derived predicate bridges via preserves_mono.                       *)
-(* These restate the existing implication theorems                     *)
-(* (preserves_rollback_imp_preserves_storage,                        *)
-(*  pns_of_preserves_storage,                                          *)
-(*  preserves_rollback_imp_pns) in the generic framework.              *)
-
-Theorem preserves_rollback_imp_preserves_storage_via_mono:
-  preserves rollback_rel m ⇒ preserves storage_rel m
-Proof
-  match_mp_tac preserves_mono >> metis_tac[rollback_rel_imp_storage_rel]
-QED
-
-Theorem preserves_storage_imp_pns_via_mono:
-  preserves storage_rel m ⇒ preserves pns_rel m
-Proof
-  match_mp_tac preserves_mono >> metis_tac[storage_rel_imp_pns_rel]
-QED
-
-Theorem preserves_rollback_imp_pns_via_mono:
-  preserves rollback_rel m ⇒ preserves pns_rel m
-Proof
-  match_mp_tac preserves_mono >> metis_tac[rollback_rel_imp_pns_rel]
-QED
-
-Theorem preserves_rollback_imp_access_monotone_via_mono:
-  preserves rollback_rel m ⇒ preserves access_monotone_sk_rel m
-Proof
-  match_mp_tac preserves_mono >> metis_tac[rollback_rel_imp_access_monotone_sk_rel]
-QED
-
-Theorem same_frame_rel_imp_access_monotone_via_mono:
-  preserves same_frame_rel m ⇒ preserves access_monotone_sk_rel m
-Proof
-  match_mp_tac preserves_mono >> metis_tac[same_frame_rel_imp_access_monotone_sk_rel]
 QED

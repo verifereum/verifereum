@@ -1,5 +1,6 @@
 Theory vfmStaticCalls
 Ancestors
+  pair
   vfmExecution vfmDecreasesGas vfmExecutionProp vfmPreserves
 
 (*
@@ -73,65 +74,122 @@ Definition cp_def:
            q'.logs = (FST (HD s.contexts)).logs
 End
 
-(* Composition lemmas *)
+(* ================================================================== *)
+(* cp_rel: the state relation underlying cp.                           *)
+(*                                                                    *)
+(* cp_rel captures exactly what cp says: rollback.accounts, tStorage,  *)
+(* and toDelete are preserved, the head context agrees on msgParams  *)
+(* and logs, and the tail is unchanged. NOTE: cp_rel does NOT        *)
+(* preserve rollback.accesses — operations like access_address and  *)
+(* access_slot modify accesses while being cp.                         *)
+(* ================================================================== *)
+
+Definition cp_rel_def:
+  cp_rel s s' ⇔
+    s'.rollback.accounts = s.rollback.accounts ∧
+    s'.rollback.tStorage = s.rollback.tStorage ∧
+    s'.rollback.toDelete = s.rollback.toDelete ∧
+    (s.contexts ≠ [] ⇒
+      ∃q'. s'.contexts = (q', SND (HD s.contexts)) :: TL s.contexts ∧
+           q'.msgParams = (FST (HD s.contexts)).msgParams ∧
+           q'.logs = (FST (HD s.contexts)).logs)
+End
+
+Theorem cp_eq_preserves_when:
+  cp m ⇔ preserves_when (λs. s.contexts ≠ []) cp_rel m
+Proof
+  rw[cp_def, preserves_when_def, cp_rel_def]
+QED
+
+(* ================================================================== *)
+(* Reflexivity and transitivity of cp_rel.                             *)
+(* Needed for the generic preserves_when composition lemmas.          *)
+(* ================================================================== *)
+
+Theorem cp_rel_refl:
+  s.contexts ≠ [] ⇒ cp_rel s s
+Proof
+  rw[cp_rel_def]
+  >> qexists_tac `FST (HD s.contexts)` >> simp[GSYM PAIR]
+QED
+
+Theorem cp_rel_trans:
+  cp_rel s1 s2 ∧ cp_rel s2 s3 ⇒ cp_rel s1 s3
+Proof
+  rw[cp_rel_def]
+  >> first_x_assum drule >> rw[] >> gvs[]
+QED
+
+(* cp_rel preserves non-empty contexts (precondition transfer).       *)
+Theorem cp_rel_contexts_ne:
+  s.contexts ≠ [] ∧ cp_rel s s' ⇒ s'.contexts ≠ []
+Proof
+  rw[cp_rel_def] >> gvs[]
+QED
+
+(* Composition lemmas (derived from the generic preserves_when     *)
+(* framework via cp_eq_preserves_when + cp_rel_trans / cp_rel_refl / *)
+(* cp_rel_contexts_ne).                                            *)
 Theorem cp_bind[simp]:
   cp g ∧ (∀x. cp (f x)) ⇒ cp (bind g f)
 Proof
-  rw[cp_def, bind_def]
-  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
-  >> res_tac >> gvs[]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> PairCases_on `h` >> gvs[]
-  >> res_tac >> gvs[] >> metis_tac[]
+  rw[cp_eq_preserves_when]
+  >> match_mp_tac preserves_when_bind
+  >> rw[]
+  >> TRY(drule_all cp_rel_contexts_ne >> rw[] >> NO_TAC)
+  >> irule cp_rel_trans >> metis_tac[]
 QED
 
 Theorem cp_ignore_bind[simp]:
   cp g ∧ cp f ⇒ cp (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] >> irule cp_bind >> simp[]
+  rw[cp_eq_preserves_when]
+  >> match_mp_tac preserves_when_ignore_bind
+  >> rw[]
+  >> TRY(drule_all cp_rel_contexts_ne >> rw[] >> NO_TAC)
+  >> irule cp_rel_trans >> metis_tac[]
 QED
 
 Theorem cp_handle[simp]:
   cp f ∧ (∀e. cp (h e)) ⇒ cp (handle f h)
 Proof
-  rw[cp_def, handle_def]
-  >> Cases_on `f s` >> Cases_on `q` >> gvs[]
-  >> res_tac >> gvs[]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> PairCases_on `h'` >> gvs[]
-  >> res_tac >> gvs[] >> metis_tac[]
+  rw[cp_eq_preserves_when]
+  >> match_mp_tac preserves_when_handle
+  >> rw[]
+  >> TRY(drule_all cp_rel_contexts_ne >> rw[] >> NO_TAC)
+  >> irule cp_rel_trans >> metis_tac[]
 QED
 
 Theorem cp_cond[simp]:
   cp m1 ∧ cp m2 ⇒ cp (if b then m1 else m2)
 Proof
-  rw[]
+  rw[cp_eq_preserves_when, preserves_when_cond]
 QED
 
 Theorem cp_case_option[simp]:
   cp m_none ∧ (∀x. cp (m_some x)) ⇒
   cp (case opt of NONE => m_none | SOME x => m_some x)
 Proof
-  Cases_on `opt` >> rw[]
+  rw[cp_eq_preserves_when, preserves_when_case_option]
 QED
 
 Theorem cp_case_sum[simp]:
   (∀x. cp (f x)) ∧ (∀y. cp (g y)) ⇒
   cp (case s of INL x => f x | INR y => g y)
 Proof
-  Cases_on `s` >> rw[]
+  rw[cp_eq_preserves_when, preserves_when_case_sum]
 QED
 
 Theorem cp_case_pair[simp]:
   (∀x y. cp (f x y)) ⇒ cp (case p of (x, y) => f x y)
 Proof
-  Cases_on `p` >> rw[]
+  rw[cp_eq_preserves_when, preserves_when_case_pair]
 QED
 
 Theorem cp_let[simp]:
   (∀x. cp (f x)) ⇒ cp (let x = v in f x)
 Proof
-  rw[]
+  rw[cp_eq_preserves_when, preserves_when_let]
 QED
 
 Theorem cp_preserves_static_inv:
@@ -1756,85 +1814,4 @@ Proof
   >> Cases_on `step es` >> gvs[]
   >> `snc (SND (run_tr (q, r)))` by metis_tac[run_tr_preserves_snc]
   >> Cases_on `run_tr (q, r)` >> gvs[snc_def]
-QED
-
-(* ================================================================== *)
-(* Stage 1: cp_rel — the state relation underlying cp.                 *)
-(*                                                                    *)
-(* cp_rel captures exactly what cp says: rollback state is fully      *)
-(* preserved, the head context agrees on msgParams and logs, and       */)
-(* the tail is unchanged.                                             *)
-(* ================================================================== *)
-
-Definition cp_rel_def:
-  cp_rel s s' ⇔
-    s'.rollback.accounts = s.rollback.accounts ∧
-    s'.rollback.tStorage = s.rollback.tStorage ∧
-    s'.rollback.toDelete = s.rollback.toDelete ∧
-    (s.contexts ≠ [] ⇒
-      ∃q'. s'.contexts = (q', SND (HD s.contexts)) :: TL s.contexts ∧
-           q'.msgParams = (FST (HD s.contexts)).msgParams ∧
-           q'.logs = (FST (HD s.contexts)).logs)
-End
-
-Theorem cp_eq_preserves_when:
-  cp m ⇔ preserves_when (λs. s.contexts ≠ []) cp_rel m
-Proof
-  rw[cp_def, preserves_when_def, cp_rel_def]
-  >> eq_tac >> rw[]
-  >- (first_x_assum drule >> rw[] >> first_x_assum drule >> rw[])
-  >> first_x_assum drule >> rw[] >> goal_assum drule
-QED
-
-(* cp_rel ⇒ rollback_rel (since cp requires full rollback equality). *)
-Theorem cp_rel_imp_rollback_rel:
-  cp_rel s s' ⇒ rollback_rel s s'
-Proof
-  rw[cp_rel_def, rollback_rel_def] >> metis_tac[]
-QED
-
-(* cp_rel ⇒ storage_rel (via rollback_rel). *)
-Theorem cp_rel_imp_storage_rel:
-  cp_rel s s' ⇒ storage_rel s s'
-Proof
-  metis_tac[cp_rel_imp_rollback_rel, rollback_rel_imp_storage_rel]
-QED
-
-(* cp_rel ⇒ pns_rel (via rollback_rel). *)
-Theorem cp_rel_imp_pns_rel:
-  cp_rel s s' ⇒ pns_rel s s'
-Proof
-  metis_tac[cp_rel_imp_rollback_rel, rollback_rel_imp_pns_rel]
-QED
-
-(* cp_rel ⇒ access_monotone_sk_rel (rollback unchanged ⇒ subsets hold). *)
-Theorem cp_rel_imp_access_monotone_sk_rel:
-  cp_rel s s' ⇒ access_monotone_sk_rel s s'
-Proof
-  metis_tac[cp_rel_imp_rollback_rel, rollback_rel_imp_access_monotone_sk_rel]
-QED
-
-(* Predicate-level bridges via preserves_mono. *)
-Theorem cp_imp_preserves_rollback_via_mono:
-  preserves cp_rel m ⇒ preserves rollback_rel m
-Proof
-  irule preserves_mono >> metis_tac[cp_rel_imp_rollback_rel]
-QED
-
-Theorem cp_imp_preserves_storage_via_mono:
-  preserves cp_rel m ⇒ preserves storage_rel m
-Proof
-  irule preserves_mono >> metis_tac[cp_rel_imp_storage_rel]
-QED
-
-Theorem cp_imp_pns_via_mono:
-  preserves cp_rel m ⇒ preserves pns_rel m
-Proof
-  irule preserves_mono >> metis_tac[cp_rel_imp_pns_rel]
-QED
-
-Theorem cp_imp_access_monotone_sk_via_mono:
-  preserves cp_rel m ⇒ preserves access_monotone_sk_rel m
-Proof
-  irule preserves_mono >> metis_tac[cp_rel_imp_access_monotone_sk_rel]
 QED
