@@ -470,13 +470,60 @@ Prove `cp_rel ⇒ storage_rel` directly (accounts preserved),
 
 Do this incrementally, one theory at a time, verifying each builds.
 
-### Stage 4: Remove redundant leaf lemmas
+### Stage 4: Extend the framework to remaining theories
 
-Once all downstream consumers use the bridge-derived versions, remove
-the standalone proofs. This can be done lazily — old lemmas that are
-no longer `[simp]` entry points can simply be left as dead code initially.
+Apply the same Stage 0–3 pattern (equivalence theorem → reflexivitiy/transitivity
+→ implication bridges → derive composition rules) to the remaining
+Tier 1/2 predicate theories:
 
-### Stage 5 (optional): Refactor Tier 3 predicates
+**vfmTxParams** (`preserves_txParams`):
+- Define `txParams_rel s s' ⇔ s'.txParams = s.txParams`
+- Prove `preserves_txParams m ⇔ preserves txParams_rel m`
+- Add `txParams_rel_refl`, `txParams_rel_trans`
+- Derive composition rules from generic `preserves_*`
+
+**vfmJumpDest** (`preserves_jumpDest`, `preserves_all_jumpDest_NONE`):
+- Define `jumpDest_rel` and `all_jumpDest_NONE_rel`
+- Prove equivalences with `preserves`/`preserves_when`
+- Add reflexivity/transitivity
+- Derive composition rules
+
+### Stage 5: Consolidate per-opcode leaf lemmas
+
+This is where the major line-count reductions come from. The current
+codebase has ~18 per-precompile leaf lemmas per predicate (~100 total)
+and ~100+ per-opcode `preserves_same_frame` leaf lemmas.
+
+**Precompile dispatch consolidation:**
+Instead of proving 18 separate `preserves_rollback_precompile_*` lemmas,
+prove one dispatch theorem:
+```
+Theorem preserves_rollback_dispatch_precompiles[simp]:
+  preserves_rollback (dispatch_precompiles a)
+```
+This already exists; the individual lemmas can be de-registered from
+`[simp]` if the dispatch theorem fires instead.
+
+**Opcode dispatch consolidation (vfmSameFrame):**
+The ~100 `preserves_same_frame_step_inst_*` lemmas are currently
+proved one-by-one. Many share structure (stack ops, arithmetic ops,
+comparison ops). Grouping them into families with shared tactics
+or deriving them from `cp_step_inst_non_call` via bridges would
+reduce the proof code significantly.
+
+Note: `same_frame_rel ⇒ cp_rel` does **not** hold (the relations are
+orthogonal), so direct bridge derivation is not possible here. The
+reduction must come from better tactic hygiene, not from bridges.
+
+### Stage 6: Remove redundant leaf lemmas
+
+Once Stages 4–5 have provided replacement `[simp]` entry points
+(dispatch theorems, family tactics), the individual leaf lemmas
+that are no longer `[simp]` can be removed. This can be done lazily
+— old lemmas that are no longer `[simp]` entry points can simply be
+left as dead code initially.
+
+### Stage 7 (optional): Refactor Tier 3 predicates
 
 Factor `decreases_gas` into `preserves_result`-based form. Prove
 `computes_minimal_domain ⇒ ignores_extra_domain` bridge.
@@ -592,16 +639,37 @@ spec/prop/vfmJumpDestScript.sml     (modified — use preserves/preserves_when)
 
 ## Estimated Impact
 
-| Item | Current leaf lemmas | After refactoring |
-|---|---|---|
-| Composition lemmas | ~50 (7 frameworks × 7 combinators) | ~14 (2 variants × 7) |
-| Implication bridges | 0 | ~5 |
-| `cp` leaf lemmas | ~41 | ~41 (not derived from same_frame; cp_rel ≠ same_frame_rel) |
-| `preserves_rollback` leaf lemmas | ~257 | ~50 (most derived from `preserves`) |
-| `preserves_storage` leaf lemmas | ~20 | ~5 (derived from `preserves_rollback`) |
-| `access_monotone` leaf lemmas | ~10 | ~5 (some derived from `preserves_rollback`) |
-| Precompile leaf lemmas | ~102 (6 frameworks × 17) | ~6 (1 per framework) |
-| `preserves_txParams` leaf lemmas | ~125 | ~20 (most derived from `preserves`) |
-| **Total** | **~600+** | **~100** |
+### Already achieved (Stages 0–3)
 
-Net code reduction: estimated **10–15K lines** saved out of 26K.
+| Item | Before | After Stages 0–3 |
+|---|---|---|
+| Composition rules | ~50 hand-proved (7 frameworks × 7 combinators) | ~14 generic + 36 one-line derivations |
+| Implication bridges | 0 | ~12 (relation-level + predicate-level) |
+| `cp` leaf lemmas | ~41 | ~41 (cp_rel ≠ same_frame_rel; no bridge reduction) |
+| `preserves_rollback` leaf lemmas | ~257 | ~257 (leaf proofs unchanged; only composition rules genericised) |
+| `preserves_storage` leaf lemmas | ~20 | ~20 |
+| `access_monotone` leaf lemmas | ~10 | ~10 |
+| `pns` leaf lemmas | ~4 | ~4 |
+
+Stages 0–3 primarily deliver **structural benefits** (one place to
+add new combinators, consistent proof patterns, bridges between
+predicates). They do **not** significantly reduce line count — the
+leaf lemmas are still needed as `[simp]` entry points.
+
+### Projected (Stages 4–6)
+
+| Item | After Stages 0–3 | After Stages 4–6 |
+|---|---|---|
+| `preserves_txParams` leaf lemmas | ~125 | ~20 (most derived from `preserves`) |
+| `preserves_jumpDest` leaf lemmas | ~10 | ~3 (derived from `preserves_when`) |
+| Precompile leaf lemmas | ~102 (6 frameworks × 17) | ~6 (1 dispatch per framework) |
+| `preserves_same_frame` leaf lemmas | ~100+ (per opcode) | ~20–30 (family tactics + consolidation) |
+| Redundant `[simp]` leaf lemmas | various | 0 (removed in Stage 6) |
+| **Line-count reduction** | | **~5–8K lines saved** |
+
+Note: The original estimate of **10–15K lines saved** was based on
+the assumption that `cp` leaf lemmas could be derived from
+`preserves_same_frame` via a bridge. Since `same_frame_rel ⇒ cp_rel`
+does not hold, that reduction is not available. The realistic
+saving is ~5–8K lines, mostly from precompile dispatch and opcode
+family consolidation.
