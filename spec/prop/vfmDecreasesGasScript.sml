@@ -2085,6 +2085,83 @@ Proof
   \\ rw[Once WhileTheory.OWHILE_THM]
 QED
 
+Definition run_call_tr_def:
+  run_call_tr n (r, s) =
+    case r of
+    | INR x => (r, s)
+    | _ => if LENGTH s.contexts < n then (r, s)
+           else run_call_tr n (step s)
+Termination
+  WF_REL_TAC `inv_image ($< LEX ($< LEX $<)) (λ(n, (r, s)).
+    if ISR r ∨ LENGTH s.contexts < n then ((0:num), (0, 0))
+    else (1, contexts_weight 0 s.contexts))`
+  \\ rpt gen_tac
+  \\ mp_tac (Q.SPEC `s` (REWRITE_RULE [decreases_gas_cred_def]
+             decreases_gas_cred_step))
+  \\ IF_CASES_TAC >- (
+    rw [contexts_weight_def, unused_gas_def]
+    >> gvs[step_def, handle_def, get_current_context_def, bind_def, fail_def]
+    >> gvs[handle_step_def, reraise_def] )
+  \\ rw []
+  \\ fs[LEX_DEF, UNCURRY]
+  \\ metis_tac[sum_CASES, ISL, ISR]
+End
+
+Theorem run_call_eq_tr:
+  run_call es = SOME (run_call_tr (LENGTH es.contexts) (step es))
+Proof
+  rw[run_call_def]
+  \\ rw[Once WhileTheory.OWHILE_THM]
+  \\ qspec_tac(`step es`,`x`)
+  \\ Cases
+  \\ map_every qid_spec_tac [`r`,`q`]
+  \\ qspec_tac(`LENGTH es.contexts`,`n`)
+  \\ recInduct run_call_tr_ind
+  \\ rw[]
+  \\ rw[Once run_call_tr_def]
+  \\ CASE_TAC \\ gs[]
+  \\ rw[Once WhileTheory.OWHILE_THM]
+QED
+
+Definition run_within_frame_tr_def:
+  run_within_frame_tr n (r, s) =
+    case r of
+    | INR x => (r, s)
+    | _ => if LENGTH s.contexts ≠ n then (r, s)
+           else run_within_frame_tr n (step s)
+Termination
+  WF_REL_TAC `inv_image ($< LEX ($< LEX $<)) (λ(n, (r, s)).
+    if ISR r ∨ LENGTH s.contexts ≠ n then ((0:num), (0, 0))
+    else (1, contexts_weight 0 s.contexts))`
+  \\ rpt gen_tac
+  \\ mp_tac (Q.SPEC `s` (REWRITE_RULE [decreases_gas_cred_def]
+             decreases_gas_cred_step))
+  \\ IF_CASES_TAC >- (
+    rw [contexts_weight_def, unused_gas_def]
+    >> gvs[step_def, handle_def, get_current_context_def, bind_def, fail_def]
+    >> gvs[handle_step_def, reraise_def] )
+  \\ rw []
+  \\ fs[LEX_DEF, UNCURRY]
+  \\ metis_tac[sum_CASES, ISL, ISR]
+End
+
+Theorem run_within_frame_eq_tr:
+  run_within_frame es =
+    SOME (run_within_frame_tr (LENGTH es.contexts) (step es))
+Proof
+  rw[run_within_frame_def]
+  \\ rw[Once WhileTheory.OWHILE_THM]
+  \\ qspec_tac(`step es`,`x`)
+  \\ Cases
+  \\ map_every qid_spec_tac [`r`,`q`]
+  \\ qspec_tac(`LENGTH es.contexts`,`n`)
+  \\ recInduct run_within_frame_tr_ind
+  \\ rw[]
+  \\ rw[Once run_within_frame_tr_def]
+  \\ CASE_TAC \\ gs[]
+  \\ rw[Once WhileTheory.OWHILE_THM]
+QED
+
 Theorem step_preserves_wf_state:
   wf_state s ⇒ wf_state (SND (step s))
 Proof
