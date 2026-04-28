@@ -21,6 +21,21 @@ Replace this with a small generic framework that:
    `ignores_extra_domain`, `computes_minimal_domain`) that don't fit
    the simple `R s s'` pattern, without distorting the core design
 
+## Current Status
+
+Stages 0–4 are **complete and building**. Stages 5–7 are not started.
+
+| Stage | Description | Status |
+|---|---|---|
+| 0 | Create `vfmPreserves` theory | ✅ Done |
+| 1 | State-relation definitions + equivalences | ✅ Done |
+| 2 | Reflexivity/transitivity + implication bridges | ✅ Done |
+| 3 | Derive composition rules from generic framework | ✅ Done |
+| 4 | Extend framework to vfmTxParams + vfmJumpDest | ✅ Done |
+| 5 | Consolidate per-opcode leaf lemmas | Not started |
+| 6 | Remove redundant leaf lemmas | Not started |
+| 7 | Refactor Tier 3 predicates (optional) | Not started |
+
 ## Classification of Existing Predicates
 
 ### Tier 1: Simple state-relation predicates
@@ -46,7 +61,7 @@ These generalise Tier 1 by parameterising over a precondition `p`:
 | Predicate | Precondition `p s` | State relation |
 |---|---|---|
 | `psf p m` | `p s ∧ s.contexts ≠ []` | `same_frame_rel s s'` |
-| `preserves_txParams` | (none) | `(SND (m s)).txParams = s.txParams` |
+| `preserves_txParams` | (none) | `txParams_rel s s'` (now converted) |
 | `ignores_extra_domain_pred p m` | `p s ∧ s.msdomain = Enforce d1` | multi-clause (see below) |
 
 ### Tier 3: Non-standard predicates
@@ -382,113 +397,116 @@ dispatch case-split.
 
 ## Migration Strategy
 
-The migration should be done in stages to avoid breaking the build:
+The migration is done in stages to avoid breaking the build:
 
-### Stage 0: Create the new theory `vfmPreserves`
+### Stage 0: Create the new theory `vfmPreserves` ✅ DONE
 
-Put it in `spec/prop/vfmPreservesScript.sml` with no ancestor changes.
-It depends only on `vfmExecution` (for the monad types). Contains:
+`spec/prop/vfmPreservesScript.sml` (385 lines).
+Depends only on `vfmExecution` (for the monad types). Contains:
 
 - `preserves_def`, `preserves_when_def`
-- Generic composition lemmas (bind, ignore_bind, handle, cond, case)
-- `preserves_mono`, `preserves_when_mono` (implication bridges)
-- `preserves_when_imp_preserves` (weakening the precondition)
+- Generic composition lemmas: `preserves_bind/ignore_bind/handle/cond/case_option/case_sum/case_pair/let/uncurry`
+- Generic composition lemmas: `preserves_when_bind/ignore_bind/handle/cond/case_option/case_sum/case_pair/let/uncurry`
+- Generalised variants: `preserves_when_bind_gen`, `preserves_when_ignore_bind_gen`, `preserves_when_handle_gen`
+- Primitive lemmas: `preserves_return/fail/reraise/assert`, `preserves_when_return/fail/reraise/assert`
+- Implication bridges: `preserves_mono`, `preserves_when_mono_R`, `preserves_when_mono_pre`
+- Conjunction: `preserves_conj/elim1/elim2`, `preserves_when_conj/elim1/elim2`
+- Weakening: `preserves_imp_preserves_when`, `preserves_when_T_imp_preserves`, `preserves_eq_preserves_when_T`
 
-### Stage 1: Add `preserves`-based alternative definitions
+### Stage 1: Add `preserves`-based alternative definitions ✅ DONE
 
-In each existing theory, add an alternative definition:
+Each existing predicate theory now has a state-relation definition and
+equivalence theorem:
 
-```
-Theorem preserves_rollback_alt:
-  preserves_rollback m ⇔ preserves rollback_rel m
-```
+| Theory | State relation | Equivalence theorem |
+|---|---|---|
+| vfmStoragePredicates | `rollback_rel`, `storage_rel`, `access_monotone_sk_rel`, `access_monotone_addr_rel`, `pns_rel` | `preserves_rollback_eq_preserves`, `preserves_storage_eq_preserves`, `access_monotone_eq_preserves`, `pns_eq_preserves` |
+| vfmSameFrame | `same_frame_rel` (pre-existing) | `preserves_same_frame_eq_preserves_when` |
+| vfmStaticCalls | `cp_rel` | `cp_eq_preserves_when` |
+| vfmTxParams | `txParams_rel` | `preserves_txParams_eq_preserves` |
+| vfmJumpDest | `jumpDest_rel` | `preserves_jumpDest_eq_preserves_when` |
 
-This doesn't change any existing code but establishes the link.
+### Stage 2: Add implication bridges between predicates ✅ DONE
 
-### Stage 2: Add implication bridges between predicates
+**Valid bridges proved:**
+- `rollback_rel ⇒ storage_rel ⇒ pns_rel`
+- `rollback_rel ⇒ access_monotone_sk_rel`, `rollback_rel ⇒ access_monotone_addr_rel`
+- `same_frame_rel ⇒ access_monotone_sk_rel`, `same_frame_rel ⇒ access_monotone_addr_rel`
+- `same_frame_rel ⇒ non_callee_storage_rel`, `same_frame_rel ⇒ txParams_rel`, `same_frame_rel ⇒ msdomain_compatible`
+- `cp_rel ⇒ storage_rel`, `cp_rel ⇒ pns_rel`
 
-In `vfmStoragePredicates`, prove `rollback_rel ⇒ storage_rel ⇒ pns_rel`,
-`rollback_rel ⇒ access_monotone_sk_rel`, and
-`same_frame_rel ⇒ access_monotone_sk_rel`.
+**Bridges that do NOT hold (correctly absent):**
+- `same_frame_rel ⇒ cp_rel` (callee_local_changes allows storage/balance changes)
+- `cp_rel ⇒ same_frame_rel` (cp says nothing about callee-local changes or access monotonicity)
+- `cp_rel ⇒ rollback_rel` (cp doesn't preserve `rollback.accesses`)
+- `cp_rel ⇒ access_monotone_sk_rel` (cp and access_monotone are orthogonal)
 
-In `vfmSameFrame`, prove `same_frame_rel ⇒ non_callee_storage_rel`,
-`same_frame_rel ⇒ txParams_rel`, and
-`same_frame_rel ⇒ msdomain_compatible_rel`.
-
-Note: `same_frame_rel ⇒ cp_rel` does **not** hold and is not proved.
-`callee_local_changes` allows the callee's storage/code/nonce and
-arbitrary balances to change, while `cp_rel` requires full rollback
-equality. The two relations overlap but neither subsumes the other.
-
-### Stage 3: Derive per-predicate composition rules from generic framework
-
-In each theory, replace hand-proved per-predicate composition rules
-(bind, ignore_bind, return, fail, reraise, cond, handle, case_*, let,
-uncurry) with derivations from the generic `preserves`/`preserves_when`
-framework via the Stage 1 equivalence theorems.
+### Stage 3: Derive per-predicate composition rules from generic framework ✅ DONE
 
 **vfmStoragePredicates (unguarded `preserves R` pattern):**
 
-Add reflexivity and transitivity lemmas for each state relation
-(`rollback_rel_refl`, `rollback_rel_trans`, `storage_rel_trans`, etc.),
-then derive:
-- `preserves_rollback_*` from `preserves_*` + `preserves_rollback_eq_preserves`
-- `preserves_storage_*` from `preserves_*` + `preserves_storage_eq_preserves`
-- `access_monotone_*` from `preserves_*` + `access_monotone_eq_preserves`
-- `pns_return/fail/reraise/cond` from `preserves_*` + `pns_eq_preserves`
-- Bridge theorems (`preserves_rollback_imp_preserves_storage`, etc.)
-  from `preserves_mono` + relation-level bridges
+Reflexivity and transitivity lemmas proved for `rollback_rel`,
+`storage_rel`, `access_monotone_sk_rel`, `access_monotone_addr_rel`.
+`pns_rel` has refl but NOT trans (correctly — it is not transitive).
 
-Note: `pns_bind_access_monotone` and `pns_handle` cannot be derived
-from the generic framework alone — `pns_rel` is not transitive
-without `access_monotone`, so the combined pattern requires
-special treatment.
+Composition rules derived:
+- `preserves_rollback_*`: 12 rules (bind, ignore_bind, return, fail, reraise, cond, assert, case_pair, case_sum, case_option, let, uncurry)
+- `preserves_storage_*`: 9 rules
+- `access_monotone_*`: 3 rules (bind, ignore_bind, cond)
+- `pns`: 4 from generic (return, fail, reraise, cond) + 4 specialised (bind_access_monotone, bind_preserves_storage, handle, ignore_bind_access_monotone)
+- Predicate-level bridges via `preserves_mono`: `preserves_rollback_imp_preserves_storage`, `access_monotone_of_preserves_rollback`, `preserves_rollback_imp_pns`, etc.
 
 **vfmSameFrame (guarded `preserves_when pre R` pattern):**
 
-Derive `preserves_same_frame_*` from `preserves_when_*` +
-`preserves_same_frame_eq_preserves_when` + `same_frame_rel_trans` +
-`same_frame_rel_contexts_ne`.
-
-Note: `psf_*` composition rules are NOT changed — they use a
-getter-bind continuation pattern that maps to
-`preserves_when_bind_gen` but with non-trivial `p`/`p_cont`
-parameterisation.
+`same_frame_rel_refl`, `same_frame_rel_trans`, `same_frame_rel_contexts_ne` proved.
+12 composition rules derived from `preserves_when_*`.
+`psf_*` composition rules NOT changed (getter-bind pattern, non-trivial `p`/`p_cont`).
 
 **vfmStaticCalls (guarded `preserves_when pre R` pattern):**
 
-Add `cp_rel_refl`, `cp_rel_trans`, `cp_rel_contexts_ne`, then derive
-`cp_*` composition rules from `preserves_when_*` +
-`cp_eq_preserves_when`.
+`cp_rel_refl`, `cp_rel_trans`, `cp_rel_contexts_ne` proved.
+8 composition rules derived from `preserves_when_*`.
 
 **vfmStoragePredicates (cp_rel implication bridges):**
 
-Prove `cp_rel ⇒ storage_rel` directly (accounts preserved),
-`cp_rel ⇒ pns_rel` (via storage_rel). Do NOT prove
-`cp_rel ⇒ rollback_rel` (cp doesn't preserve accesses) or
-`cp_rel ⇒ access_monotone_sk_rel` (orthogonal).
+`cp_rel ⇒ storage_rel` proved directly (accounts preserved).
+`cp_rel ⇒ pns_rel` proved via `storage_rel`.
+`cp_rel ⇒ rollback_rel` and `cp_rel ⇒ access_monotone_sk_rel` correctly absent.
 
-Do this incrementally, one theory at a time, verifying each builds.
-
-### Stage 4: Extend the framework to remaining theories
-
-Apply the same Stage 0–3 pattern (equivalence theorem → reflexivitiy/transitivity
-→ implication bridges → derive composition rules) to the remaining
-Tier 1/2 predicate theories:
+### Stage 4: Extend the framework to remaining theories ✅ DONE
 
 **vfmTxParams** (`preserves_txParams`):
-- Define `txParams_rel s s' ⇔ s'.txParams = s.txParams`
-- Prove `preserves_txParams m ⇔ preserves txParams_rel m`
-- Add `txParams_rel_refl`, `txParams_rel_trans`
-- Derive composition rules from generic `preserves_*`
+- `txParams_rel_def`: `txParams_rel s s' ⇔ s'.txParams = s.txParams`
+- `preserves_txParams_def` (direct form) + `preserves_txParams_eq_preserves:`
+  `preserves_txParams m ⇔ preserves txParams_rel m`
+- `txParams_rel_refl[simp]`, `txParams_rel_trans`
+- 5 composition rules derived: `preserves_txParams_bind/ignore_bind/handle/cond/domain_check`
+- All ~125 leaf lemmas converted from raw `(SND (m s)).txParams = s.txParams`
+  to predicate form `preserves_txParams m`
+- 4 backward-compat raw-form theorems for downstream consumers:
+  `step_preserves_txParams`, `handle_step_preserves_txParams`,
+  `step_call_preserves_txParams`, `run_preserves_txParams`
+- `return/fail/reraise/assert` derived from generic `preserves_return/fail/reraise/assert`
 
-**vfmJumpDest** (`preserves_jumpDest`, `preserves_all_jumpDest_NONE`):
-- Define `jumpDest_rel` and `all_jumpDest_NONE_rel`
-- Prove equivalences with `preserves`/`preserves_when`
-- Add reflexivity/transitivity
-- Derive composition rules
+**vfmJumpDest** (`preserves_jumpDest`):
+- `jumpDest_rel_def`: guarded relation `s'.contexts ≠ [] ∧ (s.contexts ≠ [] ⇒ HD jumpDest equality)`
+- `preserves_jumpDest_eq_preserves_when:`
+  `preserves_jumpDest m ⇔ preserves_when (λs. s.contexts ≠ []) jumpDest_rel m`
+- `jumpDest_rel_refl`, `jumpDest_rel_trans`, `jumpDest_rel_contexts_ne`
+- 12 composition rules derived (bind/ignore_bind/handle/cond + case_*/let/uncurry)
+- `return/fail/reraise/assert` derived from generic `preserves_when_return/fail/reraise/assert`
 
-### Stage 5: Consolidate per-opcode leaf lemmas
+**vfmJumpDest** (`preserves_all_jumpDest_NONE`) — NOT CONVERTED:
+- The precondition `all_jumpDest_NONE s` does not fit cleanly into `preserves_when`
+  because the state relation `λs s'. all_jumpDest_NONE s'` is degenerate
+  (ignores the input state) and reflexivity doesn't hold unconditionally.
+- Left as-is with hand-proved composition rules.
+- Could be addressed in a future pass using the relation
+  `λs s'. all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'` with `preserves`
+  (reflexivity and transitivity are trivially satisfied).
+- Decision to defer: the benefit is small (only 3 composition rules).
+
+### Stage 5: Consolidate per-opcode leaf lemmas — NOT STARTED
 
 This is where the major line-count reductions come from. The current
 codebase has ~18 per-precompile leaf lemmas per predicate (~100 total)
@@ -515,15 +533,15 @@ Note: `same_frame_rel ⇒ cp_rel` does **not** hold (the relations are
 orthogonal), so direct bridge derivation is not possible here. The
 reduction must come from better tactic hygiene, not from bridges.
 
-### Stage 6: Remove redundant leaf lemmas
+### Stage 6: Remove redundant leaf lemmas — NOT STARTED
 
-Once Stages 4–5 have provided replacement `[simp]` entry points
+Once Stage 5 has provided replacement `[simp]` entry points
 (dispatch theorems, family tactics), the individual leaf lemmas
 that are no longer `[simp]` can be removed. This can be done lazily
 — old lemmas that are no longer `[simp]` entry points can simply be
 left as dead code initially.
 
-### Stage 7 (optional): Refactor Tier 3 predicates
+### Stage 7 (optional): Refactor Tier 3 predicates — NOT STARTED
 
 Factor `decreases_gas` into `preserves_result`-based form. Prove
 `computes_minimal_domain ⇒ ignores_extra_domain` bridge.
@@ -629,39 +647,57 @@ theories. This keeps the dependency graph clean and avoids polluting
 ## File Layout
 
 ```
-spec/prop/vfmPreservesScript.sml    (NEW — generic framework)
-spec/prop/vfmSameFrameScript.sml    (modified — use preserves_when + bridges)
-spec/prop/vfmStoragePredicatesScript.sml  (modified — use preserves + bridges)
-spec/prop/vfmStaticCallsScript.sml  (modified — derive cp from preserves_when + cp_rel)
-spec/prop/vfmJumpDestScript.sml     (modified — use preserves/preserves_when)
-...
+spec/prop/vfmPreservesScript.sml    (385 lines — generic framework)
+spec/prop/vfmStoragePredicatesScript.sml  (1727 lines — rollback/storage/pns/access_monotone + bridges)
+spec/prop/vfmSameFrameScript.sml    (2471 lines — same_frame/psf + bridges)
+spec/prop/vfmStaticCallsScript.sml  (1817 lines — cp + static_inv)
+spec/prop/vfmTxParamsScript.sml     (944 lines — txParams, fully converted to preserves)
+spec/prop/vfmJumpDestScript.sml    (2288 lines — jumpDest converted, all_jumpDest_NONE kept)
+```
+
+Dependency graph:
+```
+vfmPreserves → vfmExecution
+vfmStaticCalls → vfmExecution, vfmPreserves
+vfmSameFrame → vfmStaticCalls, vfmTxParams, vfmPreserves
+vfmStoragePredicates → vfmStaticCalls, vfmSameFrame, vfmPreserves
+vfmTxParams → vfmExecution, vfmPreserves
+vfmJumpDest → vfmSameFrame, vfmPreserves
 ```
 
 ## Estimated Impact
 
-### Already achieved (Stages 0–3)
+### Already achieved (Stages 0–4)
 
-| Item | Before | After Stages 0–3 |
+| Item | Before | After Stages 0–4 |
 |---|---|---|
-| Composition rules | ~50 hand-proved (7 frameworks × 7 combinators) | ~14 generic + 36 one-line derivations |
-| Implication bridges | 0 | ~12 (relation-level + predicate-level) |
+| Composition rules | ~50 hand-proved (7 frameworks × 7 combinators) | ~14 generic + ~55 one-line derivations |
+| Implication bridges | 0 | ~18 (relation-level + predicate-level) |
+| New state-rel definitions | 0 | 9 (`*_rel_def`) |
+| New refl/trans lemmas | 0 | ~16 |
 | `cp` leaf lemmas | ~41 | ~41 (cp_rel ≠ same_frame_rel; no bridge reduction) |
-| `preserves_rollback` leaf lemmas | ~257 | ~257 (leaf proofs unchanged; only composition rules genericised) |
+| `preserves_txParams` leaf lemmas | ~125 raw-form | ~125 predicate-form + 4 backward-compat |
+| `preserves_jumpDest` leaf lemmas | ~80 (hand-proved comp rules) | ~80 (3 comp rules now generic-derived, +9 new comp rules added) |
+| `preserves_rollback` leaf lemmas | ~257 | ~257 (leaf proofs unchanged; composition rules genericised) |
 | `preserves_storage` leaf lemmas | ~20 | ~20 |
 | `access_monotone` leaf lemmas | ~10 | ~10 |
 | `pns` leaf lemmas | ~4 | ~4 |
+| `preserves_all_jumpDest_NONE` | ~70 | ~70 (not converted; degenerate relation) |
 
-Stages 0–3 primarily deliver **structural benefits** (one place to
-add new combinators, consistent proof patterns, bridges between
-predicates). They do **not** significantly reduce line count — the
-leaf lemmas are still needed as `[simp]` entry points.
+Stages 0–4 primarily deliver **structural benefits**:
+- One place to add new combinators (add to `vfmPreserves`, all predicates inherit)
+- Consistent proof patterns across all predicate theories
+- Bridges between predicates (e.g., `preserves_rollback m ⇒ preserves_storage m`)
+- A clear hierarchy of state relations with proven implications
+- vfmTxParams fully in predicate form (enabling future `preserves_mono` bridges)
 
-### Projected (Stages 4–6)
+They do **not** significantly reduce line count — leaf lemmas are still
+needed as `[simp]` entry points, and new definitions/theorems add ~100 lines.
 
-| Item | After Stages 0–3 | After Stages 4–6 |
+### Projected (Stages 5–6)
+
+| Item | After Stages 0–4 | After Stages 5–6 |
 |---|---|---|
-| `preserves_txParams` leaf lemmas | ~125 | ~20 (most derived from `preserves`) |
-| `preserves_jumpDest` leaf lemmas | ~10 | ~3 (derived from `preserves_when`) |
 | Precompile leaf lemmas | ~102 (6 frameworks × 17) | ~6 (1 dispatch per framework) |
 | `preserves_same_frame` leaf lemmas | ~100+ (per opcode) | ~20–30 (family tactics + consolidation) |
 | Redundant `[simp]` leaf lemmas | various | 0 (removed in Stage 6) |

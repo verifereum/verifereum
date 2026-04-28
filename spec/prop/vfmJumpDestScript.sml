@@ -16,7 +16,7 @@ Theory vfmJumpDest
 Ancestors
   combin pair list
   vfmExecution vfmExecutionProp vfmContext vfmSameFrame
-  vfmHandleStep vfmStepLength
+  vfmHandleStep vfmStepLength vfmPreserves
 Libs
   BasicProvers
 
@@ -28,9 +28,51 @@ val _ = Parse.hide "add"
 
 Definition preserves_jumpDest_def:
   preserves_jumpDest m ⇔
-    ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒ s'.contexts ≠ [] ∧
+    ∀s r s'. m s = ((r:α + exception option), s') ∧
+             s.contexts ≠ [] ⇒ s'.contexts ≠ [] ∧
       (FST (HD s'.contexts)).jumpDest = (FST (HD s.contexts)).jumpDest
 End
+
+(* ================================================================== *)
+(* jumpDest_rel: the state relation underlying preserves_jumpDest.      *)
+(*                                                                    *)
+(* When s.contexts ≠ [], jumpDest_rel preserves the head context's    *)
+(* jumpDest and ensures contexts remain non-empty. When s.contexts    *)
+(* = [], only the non-emptiness of s'.contexts is required (the       *)
+(* jumpDest equality is vacuously true).                              *)
+(* ================================================================== *)
+
+Definition jumpDest_rel_def:
+  jumpDest_rel s s' ⇔
+    s'.contexts ≠ [] ∧
+    (s.contexts ≠ [] ⇒
+      (FST (HD s'.contexts)).jumpDest = (FST (HD s.contexts)).jumpDest)
+End
+
+Theorem preserves_jumpDest_eq_preserves_when:
+  preserves_jumpDest m ⇔ preserves_when (λs. s.contexts ≠ []) jumpDest_rel m
+Proof
+  rw[preserves_jumpDest_def, preserves_when_def, jumpDest_rel_def]
+QED
+
+Theorem jumpDest_rel_refl:
+  s.contexts ≠ [] ⇒ jumpDest_rel s s
+Proof
+  rw[jumpDest_rel_def]
+QED
+
+Theorem jumpDest_rel_trans:
+  jumpDest_rel s1 s2 ∧ jumpDest_rel s2 s3 ⇒ jumpDest_rel s1 s3
+Proof
+  rw[jumpDest_rel_def] >> metis_tac[]
+QED
+
+(* jumpDest_rel preserves non-empty contexts (precondition transfer).  *)
+Theorem jumpDest_rel_contexts_ne:
+  s.contexts ≠ [] ∧ jumpDest_rel s s' ⇒ s'.contexts ≠ []
+Proof
+  rw[jumpDest_rel_def]
+QED
 
 (* ================================================================ *)
 (* all_jumpDest_NONE: strengthened property for full stack          *)
@@ -589,26 +631,75 @@ Theorem preserves_jumpDest_bind[simp]:
   preserves_jumpDest g ∧ (∀x. preserves_jumpDest (f x)) ⇒
   preserves_jumpDest (bind g f)
 Proof
-  rw[preserves_jumpDest_def, bind_def, AllCaseEqs()]
-  >> first_x_assum drule >> gvs[]
-  >> first_x_assum drule >> gvs[]
-  >> res_tac >> gvs[]
+  rw[preserves_jumpDest_eq_preserves_when]
+  >> match_mp_tac preserves_when_bind
+  >> rw[]
+  >> TRY(drule_all jumpDest_rel_contexts_ne >> rw[] >> NO_TAC)
+  >> metis_tac[jumpDest_rel_trans]
 QED
 
 Theorem preserves_jumpDest_ignore_bind[simp]:
   preserves_jumpDest g ∧ preserves_jumpDest f ⇒
   preserves_jumpDest (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] >> irule preserves_jumpDest_bind >> simp[]
+  rw[preserves_jumpDest_eq_preserves_when]
+  >> match_mp_tac preserves_when_ignore_bind
+  >> rw[]
+  >> TRY(drule_all jumpDest_rel_contexts_ne >> rw[] >> NO_TAC)
+  >> metis_tac[jumpDest_rel_trans]
 QED
 
 Theorem preserves_jumpDest_handle[simp]:
   preserves_jumpDest f ∧ (∀e. preserves_jumpDest (h e)) ⇒
   preserves_jumpDest (handle f h)
 Proof
-  rw[preserves_jumpDest_def, handle_def, AllCaseEqs()]
-  >> first_x_assum drule >> gvs[]
-  >> first_x_assum drule >> gvs[]
+  rw[preserves_jumpDest_eq_preserves_when]
+  >> match_mp_tac preserves_when_handle
+  >> rw[]
+  >> TRY(drule_all jumpDest_rel_contexts_ne >> rw[] >> NO_TAC)
+  >> metis_tac[jumpDest_rel_trans]
+QED
+
+Theorem preserves_jumpDest_cond[simp]:
+  preserves_jumpDest m1 ∧ preserves_jumpDest m2 ⇒
+  preserves_jumpDest (if b then m1 else m2)
+Proof
+  rw[preserves_jumpDest_eq_preserves_when, preserves_when_cond]
+QED
+
+Theorem preserves_jumpDest_case_option[simp]:
+  preserves_jumpDest m_none ∧ (∀x. preserves_jumpDest (m_some x)) ⇒
+  preserves_jumpDest (case opt of NONE => m_none | SOME x => m_some x)
+Proof
+  gvs[preserves_jumpDest_eq_preserves_when, preserves_when_case_option]
+QED
+
+Theorem preserves_jumpDest_case_sum[simp]:
+  (∀x. preserves_jumpDest (f x)) ∧ (∀y. preserves_jumpDest (g y)) ⇒
+  preserves_jumpDest (case s of INL x => f x | INR y => g y)
+Proof
+  rw[preserves_jumpDest_eq_preserves_when, preserves_when_case_sum]
+QED
+
+Theorem preserves_jumpDest_case_pair[simp]:
+  (∀x y. preserves_jumpDest (f x y)) ⇒
+  preserves_jumpDest (case p of (x, y) => f x y)
+Proof
+  rw[preserves_jumpDest_eq_preserves_when, preserves_when_case_pair]
+QED
+
+Theorem preserves_jumpDest_let[simp]:
+  (∀x. preserves_jumpDest (f x)) ⇒
+  preserves_jumpDest (let x = v in f x)
+Proof
+  rw[preserves_jumpDest_eq_preserves_when, preserves_when_let]
+QED
+
+Theorem preserves_jumpDest_uncurry[simp]:
+  (∀x y. preserves_jumpDest (f x y)) ⇒
+  preserves_jumpDest (UNCURRY f p)
+Proof
+  rw[preserves_jumpDest_eq_preserves_when, preserves_when_uncurry]
 QED
 
 (* ================================================================ *)
@@ -618,19 +709,25 @@ QED
 Theorem preserves_jumpDest_return[simp]:
   preserves_jumpDest (return x)
 Proof
-  rw[preserves_jumpDest_def, return_def]
+  rw[preserves_jumpDest_eq_preserves_when]
+  >> match_mp_tac preserves_when_return
+  >> rw[jumpDest_rel_refl]
 QED
 
 Theorem preserves_jumpDest_fail[simp]:
   preserves_jumpDest (fail e)
 Proof
-  rw[preserves_jumpDest_def, fail_def]
+  rw[preserves_jumpDest_eq_preserves_when]
+  >> match_mp_tac preserves_when_fail
+  >> rw[jumpDest_rel_refl]
 QED
 
 Theorem preserves_jumpDest_assert[simp]:
   preserves_jumpDest (assert b e)
 Proof
-  rw[preserves_jumpDest_def, assert_def, return_def, fail_def]
+  rw[preserves_jumpDest_eq_preserves_when]
+  >> match_mp_tac preserves_when_assert
+  >> rw[jumpDest_rel_refl]
 QED
 
 Theorem preserves_jumpDest_finish[simp]:
@@ -1406,7 +1503,7 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  reverse conj_tac >- rw[] >> gen_tac >> strip_tac >>
+  gen_tac >> strip_tac >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1448,7 +1545,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  reverse conj_tac >- ( CASE_TAC >> rw[] ) >>
   rpt gen_tac >> strip_tac >>
   pairarg_tac >> gvs[] >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
@@ -1460,7 +1556,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  reverse conj_tac >- (rw[] ) >>
   rpt gen_tac >> strip_tac >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
@@ -1655,7 +1750,9 @@ QED
 Theorem preserves_jumpDest_reraise[simp]:
   preserves_jumpDest (reraise e)
 Proof
-  rw[preserves_jumpDest_def, reraise_def]
+  rw[preserves_jumpDest_eq_preserves_when]
+  >> match_mp_tac preserves_when_reraise
+  >> rw[jumpDest_rel_refl]
 QED
 
 Theorem preserves_jumpDest_handle_create[simp]:
