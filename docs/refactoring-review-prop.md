@@ -1,6 +1,8 @@
 # Refactoring Review: `spec/prop/` Theories
 
-Date: 2026-04-27
+Date: 2026-04-27. Status update: 2026-04-28.
+
+Status key: ✅ Done, ⚠️ Partially done, ❌ Not started, 🚫 No longer applicable
 
 ## Scope
 
@@ -53,6 +55,14 @@ of "primitive effect characterisation" lemmas that describe what each
 primitive does to the state, rather than re-proving 7 different
 preservation properties of each primitive independently.
 
+**STATUS ✅ (structural), 🚫 (line-count)**: The generic framework
+(`vfmPreservesScript.sml`) exists and 5 Tier 1/2 theories derive their
+composition rules from it. However, the leaf-lemma-reduction claim was
+wrong — leaf lemmas are base cases of compositional proofs
+(characterising what each primitive does) and cannot be eliminated.
+The framework's value is structural: one place to add new
+combinators, consistent patterns, implication bridges.
+
 ## 2. Missing Implication Bridges Between Predicates
 
 There are logical entailments between the predicates that are never
@@ -93,6 +103,18 @@ made formal, forcing parallel proof trails:
 Making these bridges explicit would eliminate roughly half the leaf
 lemmas across the codebase.
 
+**STATUS ✅ (with corrections)**: Bridges now exist for all valid
+implications. The original hierarchy was wrong in two places:
+- `same_frame_rel ⇒ cp_rel` does **not** hold (the relations are
+  orthogonal — same_frame allows balance changes and callee-local
+  storage changes; cp doesn't guarantee access monotonicity)
+- `same_frame_rel ⇒ rollback_rel` does **not** hold
+  (`callee_local_changes` allows balance changes)
+Valid bridges proved: `rollback_rel ⇒ storage_rel ⇒ pns_rel`,
+`rollback_rel ⇒ access_monotone_*_rel`,
+`same_frame_rel ⇒ access_monotone_*_rel / non_callee_storage_rel / txParams_rel / msdomain_compatible`,
+`cp_rel ⇒ storage_rel ⇒ pns_rel`.
+
 ## 3. `cp` and `preserves_same_frame` Should Be Related
 
 `cp` (context-preserving, in `vfmStaticCalls`) and
@@ -107,7 +129,13 @@ concepts. Specifically:
   compatible + log prefix/refund monotone
 
 Since `preserves_same_frame` is strictly stronger, every `cp` leaf
-lemma is redundant. The fact that `vfmStaticCalls` (125 theorems)
+lemma is redundant.
+
+**⚠️ This claim is false.** `same_frame_rel` does **not** imply
+`cp_rel`. The two relations are orthogonal: `same_frame_rel` allows
+arbitrary balance changes via `callee_local_changes` and doesn't
+guarantee full rollback equality; `cp_rel` doesn't guarantee access
+monotonicity or msdomain compatibility. Neither subsumes the other. The fact that `vfmStaticCalls` (125 theorems)
 and `vfmSameFrame` (254 theorems) exist as independent hierarchies
 indicates the theories evolved before the relationship was
 understood. A clean factoring would:
@@ -122,7 +150,11 @@ understood. A clean factoring would:
 3. Derive `cp` composition lemmas from the generic `preserves_when`
    framework via `cp_eq_preserves_when`
 
-## 4. Weakness in `step_inst_preserves_non_accessed_storage`
+**STATUS ✅**: All three done. `cp_rel_def`, `cp_eq_preserves_when`,
+`cp_rel_refl/trans/contexts_ne`, and composition rules derived from
+`preserves_when` all exist in `vfmStaticCalls`.
+
+## 4. Weakness in `step_inst_preserves_non_accessed_storage` — ❌ Not started
 
 The main opcode-level lemma in `vfmStoragePredicates`:
 
@@ -150,7 +182,11 @@ of `¬is_call`) would:
 - Eliminate the separate `is_call_same_frame_preserves_storage` lemma
 - Make the codebase more robust when new call-family opcodes are added
 
-## 5. `active_rollbacks` Definition Could Be Strengthened/Simplified
+**STATUS ❌**: Still valid. The `¬is_call op` hypothesis remains
+restrictive. A `LENGTH s'.contexts = LENGTH s.contexts` hypothesis
+would be stronger and cover same-frame aborts.
+
+## 5. `active_rollbacks` Definition Could Be Strengthened/Simplified — ❌ Not started
 
 In `vfmRunCall`:
 ```
@@ -174,6 +210,9 @@ The `MIN` is there to exclude the LAST context's saved rollback
   s.contexts))`, making the "exclude LAST" and "start from es_depth"
   structure explicit.
 
+**STATUS ❌**: Still valid. The MIN formulation and dead branch
+remain unchanged.
+
 Even better: the reason the LAST rollback is excluded is that
 `set_original` modifies it. This suggests that the correct invariant
 is not "exclude last" but rather "the LAST rollback satisfies
@@ -183,7 +222,7 @@ account with `empty_account_state` at a known address) would close
 the gap and let the invariant include the LAST rollback, simplifying
 the MIN logic.
 
-## 6. `decreases_gas` Composition Rules Are Overly Proliferated
+## 6. `decreases_gas` Composition Rules Are Overly Proliferated — ❌ Not started
 
 The `decreases_gas` predicate has a `strict` boolean parameter,
 leading to 7 bind variants: `decreases_gas_bind`,
@@ -197,7 +236,9 @@ non-strict version composes cleanly. The strict version is a
 strengthening that applies only at `consume_gas` calls. This would
 reduce to ~3 composition lemmas instead of 7.
 
-## 7. `computes_minimal_domain` and `ignores_extra_domain` — Unrelated But Overlapping
+**STATUS ❌**: Still valid. 9 bind/ignore_bind variants remain.
+
+## 7. `computes_minimal_domain` and `ignores_extra_domain` — Unrelated But Overlapping — ❌ Not started
 
 These two predicates in `vfmDomainCollection` and
 `vfmDomainSeparation` express related but independent concepts about
@@ -218,7 +259,9 @@ collection makes no difference). Making this relationship formal would:
   `computes_minimal_domain` lemmas
 - Halve the number of per-primitive domain lemmas
 
-## 8. `step_inst_inr_preserves_storage` Should Be Nearly Trivial
+**STATUS ❌**: Still valid. No formal bridge between the two predicates.
+
+## 8. `step_inst_inr_preserves_storage` Should Be Nearly Trivial — ⚠️ Infrastructure exists
 
 The theorem states that if `step_inst` returns INR, storage is
 preserved. The proof in `vfmStoragePredicates` is long and case-heavy,
@@ -229,7 +272,7 @@ never reached. Making this observation formal (as a theorem about
 `write_storage` always returning INL) would collapse the 50+ line
 proof into a 3-line argument.
 
-## 9. Precompile Lemma Explosion
+## 9. Precompile Lemma Explosion — 🚫 Not a problem
 
 Each monadic predicate theory has ~17 precompile lemmas (one per
 precompile), all with identical proof structure. For
@@ -251,7 +294,14 @@ provided all precompiles have the property. This would fold 17 leaf
 lemmas into 1 per predicate, or even 1 total if the generic framework
 is adopted.
 
-## 10. `same_frame_rel` Doesn't Track `gasUsed` Directly
+**STATUS 🚫**: On reflection, each precompile lemma is a genuine
+leaf-level characterisation of what that precompile does — the same
+kind of compositional fact as `preserves_rollback_consume_gas`. The
+dispatch theorems already exist and depend on the individual lemmas.
+Removing them would make the dispatch proofs longer, not shorter.
+No real improvement.
+
+## 10. `same_frame_rel` Doesn't Track `gasUsed` Directly — ❌ Not started
 
 `same_frame_rel` says the head context's `msgParams` is preserved
 (which includes `gasLimit`), but says nothing about `gasUsed`. The
@@ -264,7 +314,10 @@ significant reduction in proof bookkeeping. Alternatively, a separate
 `gas_monotone_rel` could be combined with `same_frame_rel` in a
 product relation.
 
-## 11. `outputTo_consistent` Needs To Move Earlier
+**STATUS ❌**: Still valid but ambitious. Would require significant
+restructuring of `decreases_gas`.
+
+## 11. `outputTo_consistent` Needs To Move Earlier — ❌ Not started
 
 `outputTo_consistent` is defined in `vfmSameFrame` for the head
 context only. `vfmRunCall` then defines
@@ -276,7 +329,10 @@ stack-level definitions should be in `vfmSameFrame`. This would let
 version, potentially simplifying proofs that currently work around the
 head-only limitation.
 
-## 12. `vfmRunCall`'s `proceed_call_pushed_rb_storage` Proof Is Needlessly Manual
+**STATUS ❌**: Still valid. `outputTo_consistent_stack_def` and
+`outputTo_consistent_ctx_def` remain in `vfmRunCall`.
+
+## 12. `vfmRunCall`'s `proceed_call_pushed_rb_storage` Proof Is Needlessly Manual — ⚠️ Could simplify, hasn't been
 
 The ~80-line proof in `vfmRunCall` for
 `proceed_call_pushed_rb_storage` unfolds `proceed_call_def` step by
@@ -291,38 +347,39 @@ framework is not being used at the right level of abstraction.
 The same applies to `proceed_create_pushed_rb_storage` and
 `proceed_call_push_structure`.
 
-## 13. Priority Ranking
+**STATUS ⚠️**: The `preserves_storage` framework and leaf lemmas now
+exist, but these proofs haven't been rewritten to use them. The ~68-line
+`proceed_call_pushed_rb_storage` proof still does manual unfolds.
 
-**High impact** (would eliminate hundreds of lemmas and thousands of
-lines):
+## 13. Priority Ranking (revised 2026-04-28)
 
-1. Create a generic monadic-predicate framework and instantiate it for
-   each property
-2. Prove `preserves_same_frame ⇒ cp`,
-   `preserves_same_frame ⇒ preserves_rollback ⇒ preserves_storage ⇒ pns`,
-   and `preserves_same_frame ⇒ access_monotone`, then derive weaker
-   predicate lemmas from stronger ones
-3. Collapse `ignores_extra_domain` and `computes_minimal_domain`
-   per-primitive lemmas by proving their duality
+**Done:**
 
-**Medium impact** (would simplify and strengthen key proofs):
+1. ✅ Generic monadic-predicate framework created; 5 theories migrated
+   (composition rules derive from `preserves`/`preserves_when`)
+2. ✅ Implication bridges proved (with corrected hierarchy:
+   `same_frame_rel ⇒/ cp_rel` and `same_frame_rel ⇒/ rollback_rel`)
 
+**Still valid, high priority:**
+
+3. Prove `computes_minimal_domain ⇒ ignores_extra_domain` duality
 4. Strengthen `step_inst_preserves_non_accessed_storage` to cover
    call-family same-frame aborts
-5. Prove `write_storage` always returns INL, then simplify
+
+**Still valid, medium priority:**
+
+5. Prove `write_storage` always returns INL, simplify
    `step_inst_inr_preserves_storage`
-6. Move `outputTo_consistent_stack` to `vfmSameFrame`
-7. Simplify `active_rollbacks` definition and make the invariant
-   include the LAST rollback properly
-
-**Lower impact** (would improve maintainability):
-
-8. Collapse precompile lemma families into single dispatch theorems
-   per predicate
+6. Simplify `active_rollbacks` definition
+7. Move `outputTo_consistent_stack` to `vfmSameFrame`
+8. Rewrite `proceed_call_pushed_rb_storage` etc. compositionally
 9. Simplify `decreases_gas` composition API by splitting
    strict/non-strict
-10. Make `proceed_call_pushed_rb_storage` etc. use the compositional
-    framework rather than manual unfolds
+
+**No longer applicable:**
+
+10. 🚫 Collapse precompile lemma families — these are genuine leaf
+    facts, not redundancy
 
 ---
 
