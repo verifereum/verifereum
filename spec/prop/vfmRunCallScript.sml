@@ -2101,3 +2101,31 @@ Proof
   >> gvs[storage_slot_preserved_def]
   >> gvs[ok_state_def, outputTo_consistent_stack_def]
 QED
+
+Theorem run_call_eq_run_single_context:
+  LENGTH es.contexts = 1 ⇒
+  run_call es = run es
+Proof
+  rw[run_call_def,run_def] >>
+  simp[OWHILE_def] >>
+  qho_match_abbrev_tac`COND (∃n. P1 n es) _ _ = COND (∃n. P2 n es) _ _` >>
+  simp[] >>
+  `∀n es. LENGTH es.contexts ≥ 1 ⇒ P1 n es = P2 n es` by (
+    Induct >> simp[Abbr`P1`,Abbr`P2`] >>
+    simp[FUNPOW_SUC] >> rpt strip_tac >> gvs[] >>
+    first_x_assum drule >> pairarg_tac >> gvs[] >>
+    pairarg_tac >> gvs[] >>
+    qmatch_asmsub_rename_tac`step s1 = (_,s2)` >>
+    qmatch_asmsub_rename_tac`_ (_,s0) = (_,s1)` >>
+    `s0.contexts <> []` by (strip_tac >> gvs[]) >>
+    `s1.contexts <> []` by (
+      qmatch_asmsub_abbrev_tac`FUNPOW f m x` >>
+      `(λp. (SND p).contexts ≠ []) (FUNPOW f m x)` suffices_by rw[] >>
+      irule FUNPOW_invariant >> rw[Abbr`f`,Abbr`x`] >>
+      irule step_preserves_nonempty_contexts >> rw[] ) >>
+    `s2.contexts <> []` by (
+      drule step_preserves_nonempty_contexts >> rw[] ) >>
+    Cases_on`LENGTH s1.contexts` >> gvs[] >>
+    Cases_on`LENGTH s2.contexts` >> gvs[] ) >>
+  gvs[]
+QED
