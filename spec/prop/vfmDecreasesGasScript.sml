@@ -2162,17 +2162,3 @@ Proof
   \\ CASE_TAC \\ gs[]
   \\ rw[Once WhileTheory.OWHILE_THM]
 QED
-
-Theorem step_preserves_wf_state:
-  wf_state s ⇒ wf_state (SND (step s))
-Proof
-  mp_tac decreases_gas_cred_step
-  \\ mp_tac preserves_wf_accounts_step
-  \\ mp_tac (GEN_ALL limits_num_contexts_step)
-  \\ rewrite_tac[decreases_gas_cred_def, preserves_wf_accounts_def,
-                 limits_num_contexts_def]
-  \\ rw[wf_state_def]
-  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[] )
-  >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
-  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[])
-QED

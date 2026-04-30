@@ -2073,6 +2073,7 @@ Proof
   >> gvs[outputTo_consistent_stack_def]
   >> simp[storage_slot_preserved_def]
   >> gvs[wf_state_def, all_accounts_def]
+  >> gs[stack_room_ok_def, gas_stack_ok_def]
 QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots_initial:
@@ -2103,6 +2104,7 @@ Proof
   >> irule run_call_preserves_txParams
   >> gvs[storage_slot_preserved_def]
   >> gvs[outputTo_consistent_stack_def, wf_state_def, all_accounts_def]
+  >> gs[gas_stack_ok_def, stack_room_ok_def]
 QED
 
 Theorem run_call_eq_run_single_context:

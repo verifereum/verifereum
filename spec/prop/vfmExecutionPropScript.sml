@@ -104,15 +104,28 @@ Definition all_accounts_def:
   s.rollback.accounts :: (MAP (λcr. (SND cr).accounts) s.contexts)
 End
 
+Definition stack_room_ok_def:
+  stack_room_ok s ⇔
+    EVERY (λc. LENGTH c.stack < stack_limit) (MAP FST (TL s.contexts))
+End
+
+Definition gas_stack_ok_def:
+  gas_stack_ok s ⇔
+    ∀i. SUC i < LENGTH s.contexts ⇒
+      (FST (EL (SUC i) s.contexts)).gasUsed ≥
+      (FST (EL i s.contexts)).msgParams.gasLimit -
+      (FST (EL i s.contexts)).gasUsed
+End
+
 Definition wf_state_def:
   wf_state s ⇔
     s.contexts ≠ [] ∧
     LENGTH s.contexts ≤ SUC context_limit ∧
     EVERY (wf_context o FST) s.contexts ∧
-    EVERY wf_accounts (all_accounts s)
+    EVERY wf_accounts (all_accounts s) ∧
+    stack_room_ok s ∧
+    gas_stack_ok s
 End
-
-
 
 Theorem wf_initial_context[simp]:
   wf_context (initial_context callee c s rd t)
@@ -183,6 +196,7 @@ Proof
   \\ conj_tac
   >- ( drule wf_context_apply_intrinsic_cost \\ simp[] )
   \\ simp[initial_rollback_def]
+  >> simp[gas_stack_ok_def, stack_room_ok_def]
   \\ irule wf_accounts_process_authorizations
   \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
   \\ irule wf_accounts_pre_transaction_updates
