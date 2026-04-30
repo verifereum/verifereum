@@ -328,7 +328,7 @@ val psf_refl_tac =
          get_current_code_def, get_call_data_def,
          get_return_data_check_def, read_memory_def,
          memory_expansion_info_def,
-         get_original_def, ok_state_def, bind_def, ignore_bind_def]
+         get_original_def, bind_def, ignore_bind_def]
   \\ gvs[AllCaseEqs()]
   \\ irule same_frame_rel_refl \\ simp[];
 
@@ -512,7 +512,7 @@ QED
 val psf_head_tac =
   rw[preserves_same_frame_def, same_frame_rel_def,
      bind_def, ignore_bind_def,
-     get_current_context_def, set_current_context_def, ok_state_def,
+     get_current_context_def, set_current_context_def,
      return_def, fail_def, assert_def,
      push_stack_def, pop_stack_def,
      consume_gas_def, unuse_gas_def,
@@ -617,7 +617,7 @@ Theorem preserves_same_frame_write_transient_storage_callee:
      od)
 Proof
   rw[preserves_same_frame_def, bind_def,
-     get_callee_def, get_current_context_def, ok_state_def, return_def,
+     get_callee_def, get_current_context_def, return_def,
      fail_def, write_transient_storage_def,
      get_tStorage_def, set_tStorage_def, ignore_bind_def]
   \\ Cases_on `s.contexts` \\ gvs[]
@@ -637,7 +637,7 @@ Theorem preserves_same_frame_write_storage_callee:
      od)
 Proof
   rw[preserves_same_frame_def, bind_def,
-     get_callee_def, get_current_context_def, ok_state_def, return_def,
+     get_callee_def, get_current_context_def, return_def,
      fail_def, write_storage_def, update_accounts_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ PairCases_on `h` \\ gvs[]
@@ -656,7 +656,7 @@ Theorem preserves_same_frame_update_accounts_increment_nonce_callee:
      od)
 Proof
   rw[preserves_same_frame_def, bind_def,
-     get_callee_def, get_current_context_def, ok_state_def, return_def,
+     get_callee_def, get_current_context_def, return_def,
      fail_def, update_accounts_def, increment_nonce_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ PairCases_on `h` \\ gvs[]
@@ -1401,7 +1401,7 @@ Theorem psf_bind_get_callee:
   psf p (bind get_callee f)
 Proof
   rw[psf_def, bind_def, get_callee_def,
-     get_current_context_def, ok_state_def, return_def, fail_def]
+     get_current_context_def, return_def, fail_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ first_x_assum (qspec_then `(FST h).msgParams.callee` mp_tac)
   \\ rw[psf_def]
@@ -1413,7 +1413,7 @@ Theorem psf_bind_get_current_context:
   (∀x. psf (λs. p s ∧ s.contexts ≠ [] ∧ x = FST (HD s.contexts)) (f x)) ⇒
   psf p (bind get_current_context f)
 Proof
-  rw[psf_def, bind_def, get_current_context_def, ok_state_def,
+  rw[psf_def, bind_def, get_current_context_def,
      return_def, fail_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ first_x_assum (qspec_then `FST h` mp_tac)
@@ -1427,7 +1427,7 @@ Theorem psf_bind_get_caller:
   psf p (bind get_caller f)
 Proof
   rw[psf_def, bind_def, get_caller_def,
-     get_current_context_def, ok_state_def, return_def, fail_def]
+     get_current_context_def, return_def, fail_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ first_x_assum (qspec_then `(FST h).msgParams.caller` mp_tac)
   \\ rw[psf_def]
@@ -1440,7 +1440,7 @@ Theorem psf_bind_get_value:
   psf p (bind get_value f)
 Proof
   rw[psf_def, bind_def, get_value_def,
-     get_current_context_def, ok_state_def, return_def, fail_def]
+     get_current_context_def, return_def, fail_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ first_x_assum (qspec_then `(FST h).msgParams.value` mp_tac)
   \\ rw[psf_def]
@@ -2365,7 +2365,7 @@ Proof
         get_rollback_def, read_memory_def, get_current_context_def,
         get_caller_def, get_value_def, get_static_def,
         update_accounts_def, push_context_def, return_def,
-        ok_state_def, fail_def, COND_RATOR]
+        fail_def, COND_RATOR]
   >> qmatch_asmsub_abbrev_tac`dispatch_precompiles _ sp = _`
   >> `LENGTH sp.contexts = LENGTH s.contexts + 1` by gvs[Abbr`sp`]
   >> drule_at Any (GEN_ALL psf_imp_length_contexts_preserved)
@@ -2381,7 +2381,7 @@ Proof
   >> gvs[proceed_create_def, bind_def, ignore_bind_def, AllCaseEqs(),
          get_rollback_def, get_original_def, set_original_def,
          update_accounts_def, push_context_def, return_def,
-         ok_state_def, fail_def,
+         fail_def,
          set_last_accounts_def, LET_THM]
   >> Cases_on`s.contexts` >> gvs[]
   >> gvs[listTheory.SNOC_APPEND]

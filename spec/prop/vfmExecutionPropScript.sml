@@ -112,10 +112,7 @@ Definition wf_state_def:
     EVERY wf_accounts (all_accounts s)
 End
 
-Definition ok_state_def:
-  ok_state s ⇔
-    EVERY (wf_context o FST) s.contexts
-End
+
 
 Theorem wf_initial_context[simp]:
   wf_context (initial_context callee c s rd t)
@@ -1880,6 +1877,13 @@ Proof
   rw[abort_call_value_def] >> tac
 QED
 
+Theorem preserves_wf_accounts_set_rollback:
+  wf_accounts r.accounts ⇒
+  preserves_wf_accounts (set_rollback r)
+Proof
+  rw[set_rollback_def, preserves_wf_accounts_def, return_def, all_accounts_def]
+QED
+
 Theorem preserves_wf_accounts_push_context[simp]:
   wf_accounts (SND x).accounts ⇒
   preserves_wf_accounts (push_context x)
@@ -2038,6 +2042,19 @@ Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
   preserves_wf_accounts (dispatch_precompiles x)
 Proof
   rw[dispatch_precompiles_def]
+QED
+
+Theorem preserves_wf_accounts_proceed_call[simp]:
+  preserves_wf_accounts (proceed_call op sender address value
+    argsOffset argsSize code stipend outputTo)
+Proof
+  simp[proceed_call_def]
+  >> irule preserves_wf_accounts_bind_pred
+  >> simp[]
+  >> qexists_tac `λrb. wf_accounts rb.accounts`
+  >> rw[proceed_call_def, get_rollback_def, return_def, all_accounts_def]
+  >> tac
+  >> gvs[]
 QED
 
 Theorem preserves_wf_accounts_step_call[simp]:
@@ -3371,7 +3388,7 @@ Theorem handle_create_INR:
 Proof
   simp[handle_create_def, bind_def,
           get_return_data_def, get_output_to_def,
-          get_current_context_def, ok_state_def, return_def]
+          get_current_context_def, return_def]
   >> Cases_on `s.contexts` >> gvs[fail_def]
   >> PairCases_on `h` >> gvs[]
   >> Cases_on `e` >> gvs[reraise_def]

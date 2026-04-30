@@ -57,7 +57,7 @@ Theorem assert_not_static_static:
   assert_not_static s = (INR (SOME WriteInStaticContext), s)
 Proof
   rw[assert_not_static_def, bind_def, get_static_def,
-     get_current_context_def, ok_state_def, return_def,
+     get_current_context_def, return_def,
      assert_def, fail_def]
 QED
 
@@ -217,7 +217,7 @@ QED
 (* General tactic for proving cp of leaf operations *)
 val basic_defs = [bind_def, return_def, fail_def, assert_def,
   ignore_bind_def, reraise_def,
-  get_current_context_def, set_current_context_def, ok_state_def];
+  get_current_context_def, set_current_context_def];
 
 val cp_tac = fn defs =>
   rw[cp_def] >> rpt strip_tac
@@ -261,7 +261,7 @@ Proof
      get_callee_def, get_caller_def, get_value_def,
      get_num_contexts_def, get_gas_left_def, get_static_def,
      get_output_to_def, get_return_data_def, get_tStorage_def,
-     get_current_context_def, ok_state_def,
+     get_current_context_def,
      return_def, bind_def, fail_def]
   >> rpt strip_tac
   >> Cases_on `s.contexts` >> gvs[]
@@ -284,7 +284,7 @@ Theorem cp_get_set_context:
   (∀ctxt. (f ctxt).logs = ctxt.logs) ⇒
   cp (bind get_current_context (λctxt. set_current_context (f ctxt)))
 Proof
-  rw[cp_def, bind_def, get_current_context_def, ok_state_def,
+  rw[cp_def, bind_def, get_current_context_def,
      set_current_context_def, return_def, fail_def]
   >> Cases_on `s.contexts` >> gvs[]
 QED
@@ -295,7 +295,7 @@ Theorem cp_get_cp_set_context:
   (∀ctxt x. (f ctxt x).logs = ctxt.logs) ⇒
   cp (bind get_current_context (λctxt. bind (g ctxt) (λx. set_current_context (f ctxt x))))
 Proof
-  rw[cp_def, bind_def, get_current_context_def, ok_state_def,
+  rw[cp_def, bind_def, get_current_context_def,
      set_current_context_def, return_def, fail_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> Cases_on `g (FST h) s` >> Cases_on `q` >> gvs[]
@@ -318,7 +318,7 @@ Proof
   rw[cp_def, inc_pc_or_jump_def, is_call_def] >> rpt strip_tac
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
-  >> gvs[bind_def, get_current_context_def, ok_state_def, return_def,
+  >> gvs[bind_def, get_current_context_def, return_def,
          set_current_context_def, fail_def, assert_def]
   >> Cases_on `h0.jumpDest`
   >> gvs[set_current_context_def, bind_def, assert_def, return_def,
@@ -388,7 +388,7 @@ Proof
   >> PairCases_on `h`
   >> `h0.msgParams.static` by gvs[static_inv_def]
   >> simp[bind_def, assert_not_static_def, get_static_def,
-          get_current_context_def, ok_state_def, return_def,
+          get_current_context_def, return_def,
           assert_def, fail_def]
 QED
 
@@ -413,7 +413,7 @@ Proof
   >> `s.contexts ≠ []` by fs[static_inv_def]
   >> fs[cp_def] >> first_x_assum drule_all >> strip_tac >> gvs[]
   >> fs[assert_not_static_def, bind_def, get_static_def,
-        get_current_context_def, ok_state_def, return_def,
+        get_current_context_def, return_def,
         fail_def, assert_def, ignore_bind_def]
   >> fs[static_inv_def] >> gvs[listTheory.FRONT_DEF]
   >> Cases_on `s.contexts` >> gvs[]
@@ -569,7 +569,7 @@ Theorem handle_create_reraises:
   handle_create e s = reraise e s
 Proof
   rw[handle_create_def, bind_def, get_return_data_def,
-     get_output_to_def, get_current_context_def, ok_state_def,
+     get_output_to_def, get_current_context_def,
      return_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
@@ -581,7 +581,7 @@ Theorem cp_push_logs_nil:
   cp (push_logs [])
 Proof
   rw[cp_def, push_logs_def, bind_def, get_current_context_def,
-     ok_state_def, set_current_context_def, return_def, fail_def]
+     set_current_context_def, return_def, fail_def]
   >> rpt strip_tac >> Cases_on `s.contexts` >> gvs[]
 QED
 
@@ -622,7 +622,7 @@ Proof
   simp[handle_exception_def, handle_ex_helper_def, LET_THM,
        bind_def, ignore_bind_def, after_pop_def,
        get_num_contexts_def, get_return_data_def, get_output_to_def,
-       get_current_context_def, ok_state_def, return_def, fail_def,
+       get_current_context_def, return_def, fail_def,
        get_gas_left_def, consume_gas_def, set_return_data_def,
        pop_and_incorporate_context_def, pop_context_def,
        set_rollback_def, push_logs_def, set_current_context_def,
@@ -646,12 +646,12 @@ Proof
   >> Cases_on `t` >> gvs[]
   >> PairCases_on `h` >> gvs[]
   >> simp[pop_and_incorporate_context_def, bind_def,
-          get_gas_left_def, get_current_context_def, ok_state_def,
+          get_gas_left_def, get_current_context_def,
           return_def, pop_context_def, unuse_gas_def, LET_THM,
           set_current_context_def, fail_def, assert_def,
           ignore_bind_def]
   >> rpt (CASE_TAC >> gvs[return_def])
-  >> simp[push_logs_def, bind_def, get_current_context_def, ok_state_def,
+  >> simp[push_logs_def, bind_def, get_current_context_def,
           set_current_context_def, return_def,
           update_gas_refund_def, set_rollback_def]
   >> gvs[listTheory.FRONT_DEF, combinTheory.C_DEF]
@@ -667,7 +667,7 @@ Proof
   strip_tac
   >> `s.contexts <> []` by fs[static_inv_def]
   >> simp[handle_ex_helper_def, bind_def,
-          get_num_contexts_def, get_current_context_def, ok_state_def,
+          get_num_contexts_def, get_current_context_def,
           return_def, fail_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
@@ -675,7 +675,7 @@ Proof
   >- (simp[reraise_def] >> gvs[static_inv_def])
   >> simp[]
   >> simp[bind_def, get_return_data_def, get_output_to_def,
-          get_current_context_def, ok_state_def, return_def,
+          get_current_context_def, return_def,
           ignore_bind_def]
   >> `1 < LENGTH s.contexts` by gvs[]
   >> `static_inv a0 t0 d0 l0 (SND (pop_and_incorporate_context (e = NONE) s))`
@@ -858,7 +858,7 @@ Proof
   >> simp[proceed_call_def, bind_def, ignore_bind_def, return_def,
           get_rollback_def, read_memory_def,
           get_caller_def, get_value_def, get_static_def,
-          get_current_context_def, ok_state_def,
+          get_current_context_def,
           push_context_def,
           vfmContextTheory.initial_context_def,
           vfmContextTheory.initial_msg_params_def]
@@ -969,7 +969,7 @@ Proof
   rpt strip_tac
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h`
-  >> gvs[bind_def, get_current_context_def, ok_state_def, return_def]
+  >> gvs[bind_def, get_current_context_def, return_def]
   >> Cases_on `LENGTH h0.msgParams.code <= h0.pc` >> gvs[]
   >- (`cp (step_inst Stop)` by simp[]
       >> metis_tac[cp_preserves_static_inv_pair])
@@ -1093,12 +1093,12 @@ Proof
   >> Cases_on `t` >> gvs[]
   >> PairCases_on `h` >> gvs[]
   >> simp[pop_and_incorporate_context_def, bind_def,
-          get_gas_left_def, get_current_context_def, ok_state_def,
+          get_gas_left_def, get_current_context_def,
           return_def, pop_context_def, unuse_gas_def, LET_THM,
           set_current_context_def, fail_def, assert_def,
           ignore_bind_def]
   >> rpt (CASE_TAC >> gvs[return_def])
-  >> simp[push_logs_def, bind_def, get_current_context_def, ok_state_def,
+  >> simp[push_logs_def, bind_def, get_current_context_def,
           set_current_context_def, return_def,
           update_gas_refund_def, set_rollback_def]
 QED
@@ -1238,7 +1238,7 @@ Proof
   >> pop_assum kall_tac
   >> gvs[handle_create_def, bind_def,
          get_return_data_def, get_output_to_def,
-         get_current_context_def, ok_state_def, return_def]
+         get_current_context_def, return_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
   >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def, snc_def]
@@ -1257,13 +1257,13 @@ Proof
   strip_tac
   >> gvs[handle_create_def, bind_def,
          get_return_data_def, get_output_to_def,
-         get_current_context_def, ok_state_def, return_def]
+         get_current_context_def, return_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
   >> Cases_on `e` >> gvs[reraise_def, snc_def]
   >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def, snc_def]
   >> gvs[ignore_bind_def, bind_def, assert_def, return_def, fail_def,
-         consume_gas_def, get_current_context_def, ok_state_def,
+         consume_gas_def, get_current_context_def,
          set_current_context_def, vfmExecutionTheory.update_accounts_def]
   >> rpt (IF_CASES_TAC >> gvs[return_def, reraise_def, snc_def, fail_def])
   >> rpt (BasicProvers.FULL_CASE_TAC
@@ -1282,13 +1282,13 @@ Proof
   >> Cases_on `t` >> gvs[]
   >> PairCases_on `h` >> gvs[]
   >> gvs[pop_and_incorporate_context_def, bind_def,
-         get_gas_left_def, get_current_context_def, ok_state_def,
+         get_gas_left_def, get_current_context_def,
          return_def, pop_context_def, unuse_gas_def, LET_THM,
          set_current_context_def, fail_def, assert_def,
          ignore_bind_def]
   >> BasicProvers.FULL_CASE_TAC >> gvs[return_def]
   >> Cases_on `success` >> gvs[return_def]
-  >> gvs[push_logs_def, bind_def, get_current_context_def, ok_state_def,
+  >> gvs[push_logs_def, bind_def, get_current_context_def,
          set_current_context_def, return_def,
          update_gas_refund_def, set_rollback_def]
 QED
@@ -1300,7 +1300,7 @@ Theorem handle_ex_helper_snc:
 Proof
   strip_tac
   >> simp[handle_ex_helper_def, bind_def,
-          get_num_contexts_def, get_current_context_def, ok_state_def,
+          get_num_contexts_def, get_current_context_def,
           return_def, fail_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
@@ -1308,7 +1308,7 @@ Proof
   >- (simp[reraise_def] >> gvs[snc_def])
   >> simp[]
   >> simp[bind_def, get_return_data_def, get_output_to_def,
-          get_current_context_def, ok_state_def, return_def,
+          get_current_context_def, return_def,
           ignore_bind_def]
   >> `1 < LENGTH s.contexts` by gvs[]
   >> `snc (SND (pop_and_incorporate_context (e = NONE) s))`
@@ -1353,7 +1353,7 @@ Theorem ctx_pres_more_leaves[simp]:
 Proof
   rpt conj_tac
   >> rw[ctx_pres_def, push_logs_def, add_to_delete_def, set_tStorage_def,
-        bind_def, get_current_context_def, ok_state_def,
+        bind_def, get_current_context_def,
         set_current_context_def, return_def, fail_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
@@ -1396,7 +1396,7 @@ Proof
   strip_tac
   >> simp[proceed_create_def, bind_def, ignore_bind_def, return_def,
        get_rollback_def, get_original_def,
-       get_current_context_def, ok_state_def,
+       get_current_context_def,
        set_original_def, vfmExecutionTheory.update_accounts_def,
        push_context_def, set_last_accounts_def, listTheory.SNOC_APPEND]
 QED
@@ -1409,7 +1409,7 @@ Proof
   >> simp[proceed_call_def, bind_def, ignore_bind_def, return_def,
        get_rollback_def, read_memory_def,
        get_caller_def, get_value_def, get_static_def,
-       get_current_context_def, ok_state_def, get_callee_def,
+       get_current_context_def, get_callee_def,
        push_context_def, vfmExecutionTheory.update_accounts_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
@@ -1547,7 +1547,7 @@ Proof
   >> simp[proceed_call_def, bind_def, ignore_bind_def, return_def,
           get_rollback_def, read_memory_def,
           get_caller_def, get_value_def, get_static_def,
-          get_current_context_def, ok_state_def, get_callee_def,
+          get_current_context_def, get_callee_def,
           push_context_def,
           vfmContextTheory.initial_context_def,
           vfmContextTheory.initial_msg_params_def]
@@ -1586,7 +1586,7 @@ Proof
   strip_tac
   >> simp[proceed_create_def, bind_def, ignore_bind_def, return_def,
           get_rollback_def, get_original_def,
-          get_current_context_def, ok_state_def,
+          get_current_context_def,
           set_original_def, vfmExecutionTheory.update_accounts_def,
           push_context_def,
           vfmContextTheory.initial_context_def,
@@ -1746,7 +1746,7 @@ Theorem inner_preserves_snc_pair[local]:
   snc s1 ∧ s1.contexts ≠ []
 Proof
   strip_tac
-  \\ gvs[bind_def, get_current_context_def, ok_state_def, return_def]
+  \\ gvs[bind_def, get_current_context_def, return_def]
   \\ PairCases_on `h` \\ gvs[]
   \\ Cases_on `LENGTH h0.msgParams.code ≤ h0.pc` \\ gvs[]
   >- (`cp (step_inst Stop)` by simp[]
@@ -1771,7 +1771,7 @@ Proof
   strip_tac
   \\ Cases_on `s.contexts`
   >- (simp[step_def, handle_def, bind_def, get_current_context_def,
-           ok_state_def, fail_def, handle_step_def, reraise_def, snc_def])
+           fail_def, handle_step_def, reraise_def, snc_def])
   \\ simp[step_def, handle_def]
   \\ `∃r s1. (do
         context <- get_current_context;

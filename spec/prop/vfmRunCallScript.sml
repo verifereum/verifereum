@@ -102,7 +102,7 @@ Definition run_call_inv_def:
   run_call_inv es s ⇔
     s.txParams = es.txParams ∧
     outputTo_consistent_stack s ∧
-    ok_state s ∧
+    wf_state s ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (active_rollbacks (LENGTH es.contexts) s)
 End
@@ -112,7 +112,7 @@ End
  * ------------------------------------------------------------------------- *)
 
 Theorem run_call_inv_refl:
-  outputTo_consistent_stack es ∧ ok_state es ∧
+  outputTo_consistent_stack es ∧ wf_state es ∧
   (FST (HD es.contexts)).jumpDest = NONE ∧
   EVERY (λrb. storage_slot_preserved rb es.rollback)
         (MAP SND (TAKE 2 es.contexts)) ⇒
@@ -1407,7 +1407,7 @@ QED
  * ------------------------------------------------------------------------- *)
 Theorem step_push_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
-    outputTo_consistent_stack s ∧ ok_state s ∧
+    outputTo_consistent_stack s ∧ wf_state s ∧
     LENGTH s'.contexts > LENGTH s.contexts ⇒
     LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
     (* Storage preservation for s'.rollback *)
@@ -1581,12 +1581,14 @@ Proof
   >> `LENGTH r'.contexts = LENGTH s.contexts + 1` by (
        qunabbrev_tac`inner` >>
        drule_then drule step_inner_grows_by_exactly_one >> gvs[])
-  (* Need ok_state r' to apply handle_step_not_abort_pops *)
+  (* Need EVERY (wf_context o FST) r'.contexts to apply handle_step_not_abort_pops *)
   >> drule_at(Pat`handle_step`) handle_step_not_abort_pops
   >> gvs[]
   >> `decreases_gas_cred T 0 0 inner` suffices_by (
     gvs[decreases_gas_cred_def] >>
-    disch_then(qspec_then`s`mp_tac) >> rw[] ) >>
+    disch_then(qspec_then`s`mp_tac) >> rw[] >>
+    gvs[wf_state_def] >>
+    gvs[EVERY_MEM] ) >>
   simp[Abbr`inner`] >>
   irule decreases_gas_cred_bind_mono >>
   qexistsl_tac[`T`,`F`] >> simp[] >> gen_tac >>
@@ -1759,12 +1761,8 @@ Proof
   >> `s1.txParams = s0.txParams`
        by metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND]
   >> `s1.txParams = es.txParams` by fs[run_call_inv_def]
-  >> `ok_state s0` by fs[run_call_inv_def]
-  >> `ok_state s1` by (
-       mp_tac decreases_gas_cred_step
-       >> rewrite_tac[decreases_gas_cred_def]
-       >> disch_then (qspec_then `s0` mp_tac)
-       >> simp[])
+  >> `wf_state s0` by fs[run_call_inv_def]
+  >> `wf_state s1` by metis_tac[step_preserves_wf_state, SND]
   >> simp[run_call_inv_def]
   (* Trichotomy on the length change. *)
   >> Cases_on `LENGTH s1.contexts = LENGTH s0.contexts` >> gvs[]
@@ -1987,7 +1985,7 @@ QED
 
 Theorem run_call_preserves_inv:
   ∀es res es'.
-    outputTo_consistent_stack es ∧ ok_state es ∧
+    outputTo_consistent_stack es ∧ wf_state es ∧
     (FST(HD es.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
@@ -2023,7 +2021,7 @@ QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots:
   ∀es r es'.
-    outputTo_consistent_stack es ∧ ok_state es ∧
+    outputTo_consistent_stack es ∧ wf_state es ∧
     (FST(HD es.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
@@ -2039,7 +2037,7 @@ QED
 
 Theorem run_call_preserves_txParams:
   ∀es r es'.
-    outputTo_consistent_stack es ∧ ok_state es ∧
+    outputTo_consistent_stack es ∧ wf_state es ∧
     (FST(HD es.contexts)).jumpDest = NONE ∧
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
@@ -2060,7 +2058,9 @@ QED
  * --------------------------------------------------------------------- *)
 
 Theorem run_call_preserves_storage_outside_accessed_slots_single:
-    outputTo_consistent_ctx ctx ∧ wf_context ctx ∧
+    outputTo_consistent_ctx ctx ∧
+    wf_context ctx ∧
+    wf_accounts es.rollback.accounts ∧
     ctx.jumpDest = NONE ∧
     es.contexts = [(ctx, es.rollback)] ∧
     run_call es = SOME (r, es') ⇒
@@ -2070,12 +2070,14 @@ Theorem run_call_preserves_storage_outside_accessed_slots_single:
 Proof
   rpt strip_tac
   >> irule run_call_preserves_storage_outside_accessed_slots
-  >> gvs[ok_state_def, outputTo_consistent_stack_def]
+  >> gvs[outputTo_consistent_stack_def]
   >> simp[storage_slot_preserved_def]
+  >> gvs[wf_state_def, all_accounts_def]
 QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots_initial:
     es.contexts = [(initial_context callee code static rd t, es.rollback)] ∧
+    wf_accounts es.rollback.accounts ∧
     (∀a. rd = Code a ⇒ callee = a) ∧
     run_call es = SOME (r, es') ⇒
     ∀a k. ¬fIN (SK a k) es'.rollback.accesses.storageKeys ⇒
@@ -2091,6 +2093,7 @@ QED
 Theorem run_call_preserves_txParams_single:
   ∀es r es'.
     outputTo_consistent_ctx ctx ∧ wf_context ctx ∧
+    wf_accounts es.rollback.accounts ∧
     ctx.jumpDest = NONE ∧
     es.contexts = [(ctx,es.rollback)] ∧
     run_call es = SOME (r, es') ⇒
@@ -2099,7 +2102,7 @@ Proof
   rpt strip_tac
   >> irule run_call_preserves_txParams
   >> gvs[storage_slot_preserved_def]
-  >> gvs[ok_state_def, outputTo_consistent_stack_def]
+  >> gvs[outputTo_consistent_stack_def, wf_state_def, all_accounts_def]
 QED
 
 Theorem run_call_eq_run_single_context:

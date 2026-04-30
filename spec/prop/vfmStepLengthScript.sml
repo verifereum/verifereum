@@ -266,7 +266,7 @@ Theorem psf_or_grow_bind_get_callee:
   psf_or_grow p (bind get_callee f)
 Proof
   rw[psf_or_grow_def, bind_def, get_callee_def,
-     get_current_context_def, ok_state_def, return_def, fail_def]
+     get_current_context_def, return_def, fail_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> first_x_assum (qspec_then `s` mp_tac)
   >> rw[psf_or_grow_def]
