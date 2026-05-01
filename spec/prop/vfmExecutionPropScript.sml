@@ -104,6 +104,17 @@ Definition all_accounts_def:
   s.rollback.accounts :: (MAP (λcr. (SND cr).accounts) s.contexts)
 End
 
+Definition outputTo_consistent_ctx_def:
+  outputTo_consistent_ctx c ⇔
+    ∀a. c.msgParams.outputTo = Code a ⇒ c.msgParams.callee = a
+End
+
+Definition outputTo_consistent_stack_def:
+  outputTo_consistent_stack s ⇔
+    s.contexts ≠ [] ∧
+    EVERY outputTo_consistent_ctx (MAP FST s.contexts)
+End
+
 Definition stack_room_ok_def:
   stack_room_ok s ⇔
     EVERY (λc. LENGTH c.stack < stack_limit) (MAP FST (TL s.contexts))
@@ -124,7 +135,8 @@ Definition wf_state_def:
     EVERY (wf_context o FST) s.contexts ∧
     EVERY wf_accounts (all_accounts s) ∧
     stack_room_ok s ∧
-    gas_stack_ok s
+    gas_stack_ok s ∧
+    outputTo_consistent_stack s
 End
 
 Theorem wf_initial_context[simp]:
@@ -181,6 +193,23 @@ Proof
   \\ gvs[APPLY_UPDATE_THM] \\ rw[]
 QED
 
+Theorem outputTo_consistent_ctx_initial_context:
+  (∀a. rd = Code a ⇒ a = callee) ⇒
+  outputTo_consistent_ctx (initial_context callee code st rd t)
+Proof
+  rw[outputTo_consistent_ctx_def, initial_context_def,
+     initial_msg_params_def]
+QED
+
+Theorem outputTo_consistent_ctx_apply_intrinsic_cost:
+  apply_intrinsic_cost x y c1 = SOME ctxt ∧
+  outputTo_consistent_ctx c1 ⇒
+  outputTo_consistent_ctx ctxt
+Proof
+  rw[apply_intrinsic_cost_def] >>
+  gvs[outputTo_consistent_ctx_def]
+QED
+
 Theorem wf_initial_state:
   wf_accounts a ∧ initial_state d st c h b a t = SOME s
   ⇒
@@ -197,6 +226,13 @@ Proof
   >- ( drule wf_context_apply_intrinsic_cost \\ simp[] )
   \\ simp[initial_rollback_def]
   >> simp[gas_stack_ok_def, stack_room_ok_def]
+  >> simp[outputTo_consistent_stack_def]
+  >> reverse conj_tac
+  >- (
+    drule_at_then Any irule outputTo_consistent_ctx_apply_intrinsic_cost >>
+    irule outputTo_consistent_ctx_initial_context >>
+    Cases_on`t.to` >> simp[] >>
+    EVAL_TAC >> rw[] )
   \\ irule wf_accounts_process_authorizations
   \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
   \\ irule wf_accounts_pre_transaction_updates

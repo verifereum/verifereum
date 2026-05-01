@@ -64,17 +64,6 @@ End
  * new head).
  * ------------------------------------------------------------------------- *)
 
-Definition outputTo_consistent_ctx_def:
-  outputTo_consistent_ctx c ⇔
-    ∀a. c.msgParams.outputTo = Code a ⇒ c.msgParams.callee = a
-End
-
-Definition outputTo_consistent_stack_def:
-  outputTo_consistent_stack s ⇔
-    s.contexts ≠ [] ∧
-    EVERY outputTo_consistent_ctx (MAP FST s.contexts)
-End
-
 Theorem outputTo_consistent_stack_imp_consistent:
   outputTo_consistent_stack s ⇒ outputTo_consistent s
 Proof
