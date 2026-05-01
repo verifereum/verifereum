@@ -28,7 +28,7 @@ Ancestors
   vfmContext vfmState vfmExecution vfmExecutionProp
   vfmStoragePredicates vfmSameFrame vfmStaticCalls
   vfmDecreasesGas vfmStepLength vfmHandleStep vfmRunWithinFrame
-  vfmJumpDest
+  vfmHeadStack vfmJumpDest
 Libs
   dep_rewrite BasicProvers
 
@@ -1373,6 +1373,204 @@ Proof
 QED
 
 (* -------------------------------------------------------------------------
+ * Stack room for CALL/CREATE growth.
+ * ------------------------------------------------------------------------- *)
+
+Theorem bind_psf_phs_grows_extract:
+  preserves_same_frame g ∧ preserves_head_stack g ∧
+  bind g f s = (r, s') ∧ s.contexts ≠ [] ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  ∃x sm.
+    g s = (INL x, sm) ∧ same_frame_rel s sm ∧
+    (FST (HD sm.contexts)).stack = (FST (HD s.contexts)).stack ∧
+    f x sm = (r, s')
+Proof
+  strip_tac
+  >> drule_all bind_psf_grows_extract
+  >> strip_tac >> gvs[]
+  >> drule_all preserves_head_stack_imp
+  >> strip_tac >> gvs[]
+QED
+
+Theorem step_call_grow_parent_stack_room:
+  wf_context (FST (HD s.contexts)) ∧ step_call op s = (r, s') ∧
+  s.contexts ≠ [] ∧ LENGTH s'.contexts > LENGTH s.contexts ⇒
+    LENGTH (FST (HD (TL s'.contexts))).stack < stack_limit
+Proof
+  simp[step_call_def] >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `pop_stack n`
+  >> `0 < n` by (simp[Abbr`n`] >> Cases_on `call_has_value op` >> simp[])
+  >> qpat_x_assum `_ s = _` mp_tac
+  >> simp[Abbr`n`]
+  >> qmatch_goalsub_abbrev_tac `bind (pop_stack n) k s`
+  >> Cases_on `pop_stack n s` >> Cases_on `q` >> gvs[bind_def]
+  >- (
+    rename1 `pop_stack n s = (INL args, sp)`
+    >> `LENGTH (FST (HD sp.contexts)).stack < stack_limit ∧
+        LENGTH sp.contexts = LENGTH s.contexts` by (
+         qpat_x_assum `pop_stack n s = _` mp_tac
+         >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+              bind_def, return_def, assert_def, fail_def, set_current_context_def,
+              wf_context_def, ignore_bind_def, AllCaseEqs()]
+         >> strip_tac >> gvs[])
+    >> simp[Abbr`k`]
+    >> strip_tac
+    >> pairarg_tac >> gvs[]
+    (* Peel memory_expansion_info *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ sp = (_,_)`kall_tac
+    >> impl_keep_tac >- (strip_tac >> gvs[])
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sp s2`
+    >> `s2.contexts ≠ [] ∧ LENGTH s2.contexts = LENGTH sp.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s2.contexts)).stack < stack_limit` by gvs[]
+    (* Peel consume_gas *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s2 s3`
+    >> `s3.contexts ≠ [] ∧ LENGTH s3.contexts = LENGTH s2.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s3.contexts)).stack < stack_limit` by gvs[]
+    (* Peel expand_memory *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s3 s4`
+    >> `s4.contexts ≠ [] ∧ LENGTH s4.contexts = LENGTH s3.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s4.contexts)).stack < stack_limit` by gvs[]
+    (* Peel access/read prefix pieces, following step_call_push_structure. *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> impl_keep_tac >- (CASE_TAC >> simp[] >> irule preserves_head_stack_bind
+                         >> simp[])
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s4 s5`
+    >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s4.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s5.contexts)).stack < stack_limit` by gvs[]
+    >> pairarg_tac >> gvs[]
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s5 s6`
+    >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s5.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s6.contexts)).stack < stack_limit` by gvs[]
+    >> pairarg_tac >> gvs[ignore_bind_def]
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s6 s7`
+    >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH s6.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s7.contexts)).stack < stack_limit` by gvs[]
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s7 s8`
+    >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s8.contexts)).stack < stack_limit` by gvs[]
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s8 s9`
+    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s9.contexts)).stack < stack_limit` by gvs[]
+    (* Peel get_callee *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s9 s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD s0.contexts)).stack < stack_limit` by gvs[]
+    >> gvs[Ntimes COND_RATOR 2]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
+    >> Cases_on`bbb` >> gs[]
+    >- (
+      drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
+      >> simp[])
+    (* Peel set_return_data via ignore_bind *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s0 sa`
+    >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s0.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD sa.contexts)).stack < stack_limit` by gvs[]
+    (* Peel get_num_contexts *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sa sb`
+    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD sb.contexts)).stack < stack_limit` by gvs[]
+    >> gvs[COND_RATOR]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
+    >> Cases_on`bbb` >> gs[]
+    >- (
+      drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
+      >> simp[])
+    >> drule_all proceed_call_push_structure
+    >> strip_tac
+    >> `TL s'.contexts = sb.contexts` by simp[]
+    >> Cases_on`sb.contexts` >> gvs[])
+  >> (
+    (* If pop_stack failed, the state did not grow. *)
+    qpat_x_assum `pop_stack n s = _` mp_tac
+    >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+         bind_def, return_def, assert_def, fail_def, set_current_context_def]
+    >> rw[] >> pop_assum mp_tac
+    >> simp[ignore_bind_def,bind_def,assert_def,set_current_context_def,
+            return_def,fail_def,AllCaseEqs()] >> rw[]
+    >> gvs[Abbr`k`] )
+QED
+
+Theorem step_create_grow_parent_stack_room:
+  wf_context (FST (HD s.contexts)) ∧ step_create two s = (r, s') ∧
+  s.contexts ≠ [] ∧ LENGTH s'.contexts > LENGTH s.contexts ⇒
+    LENGTH (FST (HD (TL s'.contexts))).stack < stack_limit
+Proof
+  simp[step_create_def] >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `pop_stack n`
+  >> `0 < n` by (simp[Abbr`n`] >> Cases_on `two` >> simp[])
+  >> qpat_x_assum `_ s = _` mp_tac
+  >> simp[Abbr`n`]
+  >> qmatch_goalsub_abbrev_tac `bind (pop_stack n) k s`
+  >> Cases_on `pop_stack n s` >> Cases_on `q` >> gvs[bind_def]
+  >- (
+    rename1 `pop_stack n s = (INL args, sp)`
+    >> `LENGTH (FST (HD sp.contexts)).stack < stack_limit ∧
+        LENGTH sp.contexts = LENGTH s.contexts` by (
+         qpat_x_assum `pop_stack n s = _` mp_tac
+         >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+              bind_def, return_def, assert_def, fail_def, set_current_context_def,
+              wf_context_def, ignore_bind_def, AllCaseEqs()]
+         >> strip_tac >> gvs[])
+    >> simp[Abbr`k`]
+    (* TODO: Use preserves_head_stack on the post-pop prefix up to
+       proceed_create, then proceed_create_push_structure gives
+       MAP FST (TL s'.contexts) = MAP FST pre.contexts, so the saved
+       parent at HD (TL s'.contexts) has the same stack as the pre-push
+       head. *)
+    >> cheat)
+  >> (
+    qpat_x_assum `pop_stack n s = _` mp_tac
+    >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+         bind_def, return_def, assert_def, fail_def, set_current_context_def]
+    >> rw[] >> pop_assum mp_tac
+    >> simp[ignore_bind_def, bind_def, assert_def, set_current_context_def,
+            return_def, fail_def, AllCaseEqs()] >> rw[]
+    >> gvs[Abbr`k`] )
+QED
+
+(* -------------------------------------------------------------------------
  * Push-structure lemma for step (Case +1 of run_call_inv_step).
  *
  * When step grows by +1 (push), the new contexts prepend a child context
@@ -1744,6 +1942,7 @@ Theorem step_preserves_stack_room_ok:
 Proof
   strip_tac
   >> Cases_on `step s` >> simp[]
+  >> rename1 `step s = (_, s')`
   >> rename1 `step s = (r, s')`
   >> Cases_on `LENGTH s'.contexts = LENGTH s.contexts`
   >- (
@@ -1754,11 +1953,13 @@ Proof
   >- (
     `LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit`
       by metis_tac[step_push_parent_stack_room] >>
-    drule_all step_push_structure >> strip_tac >>
+    drule step_push_structure >> impl_tac >- gvs[wf_state_def] >>
+    strip_tac >>
     gvs[stack_room_ok_def, wf_state_def] >>
     Cases_on `s'.contexts` >> gvs[] >>
     Cases_on `t` >> gvs[] >>
-    rw[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> gvs[])
+    rw[EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
+    gvs[])
   >> (
     `LENGTH s'.contexts < LENGTH s.contexts` by decide_tac >>
     `outputTo_consistent_stack s` by gvs[wf_state_def] >>
