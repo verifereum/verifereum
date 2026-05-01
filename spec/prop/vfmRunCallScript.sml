@@ -1740,6 +1740,8 @@ Theorem step_push_structure:
          toSet (if i = 0 then s.rollback
                 else SND (EL (i-1) s.contexts)).accesses.storageKeys ⊆
            toSet (SND (EL i s'.contexts)).accesses.storageKeys) ∧
+    (* saved parent stack room *)
+    LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit ∧
     (* msgParams preservation at position 1 *)
     (LENGTH s.contexts ≥ 1 ⇒
        (FST (EL 1 s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams) ∧
@@ -1818,6 +1820,12 @@ Proof
       >> conj_tac
       >- ( Cases >> simp[] >> Cases_on`r'.contexts` >> gvs[] )
       >> conj_tac >- ( Cases >> gvs[] >> Cases_on`r'.contexts` >> gvs[] )
+      >> drule_at Any step_create_grow_parent_stack_room
+      >> impl_tac >- ( gvs[wf_state_def] >> Cases_on`s0.contexts` >> gvs[] )
+      >> strip_tac
+      >> conj_tac >- (
+        qmatch_goalsub_rename_tac`EL 1 rr.contexts` >>
+        Cases_on`rr.contexts` >> gvs[] )
       >> conj_tac
       >- ( Cases_on`s0.contexts` >> gvs[] >> Cases_on`r'.contexts` >> gvs[] )
       >> Cases_on`s0.contexts` >> gvs[]
@@ -1853,6 +1861,10 @@ Proof
         Cases_on`s0.contexts` >> gvs[ADD1] >>
         Cases_on`t` >> gvs[ADD1] >>
         Cases_on`n` >> gvs[ADD1] )
+      >> drule_at(Pat`step_call`)step_call_grow_parent_stack_room
+      >> impl_tac >- ( gvs[wf_state_def] >> Cases_on`s0.contexts` >- gvs[] >>
+                       simp[] >> fs[])
+      >> strip_tac
       >> Cases_on`r'.contexts` >> gvs[EL_CONS, PRE_SUB1]
       >> Cases_on`t` >> gvs[EL_CONS, PRE_SUB1, ADD1]
       >> Cases_on`s0.contexts` >> gvs[EL_CONS, PRE_SUB1, ADD1]
@@ -2056,8 +2068,12 @@ Theorem step_push_parent_stack_room:
   wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts > LENGTH s.contexts
   ⇒ LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit
 Proof
-  cheat (* TODO: growth is only through CALL/CREATE; their pop_stack prefix
-           removes at least one item from a wf_context stack before push_context. *)
+  rpt strip_tac
+  >> drule step_push_structure
+  >> gvs[]
+  >> impl_tac >- gvs[wf_state_def]
+  >> strip_tac
+  >> simp[]
 QED
 
 Theorem step_preserves_stack_room_ok:
