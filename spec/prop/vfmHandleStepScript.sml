@@ -943,11 +943,14 @@ Proof
   >> gvs[update_account_def, lookup_account_def, APPLY_UPDATE_THM,
          wf_accounts_def] >> rw[] >>
      gvs[wf_account_state_def, EVAL``max_code_size``]
-  >> gvs[stack_room_ok_def, gas_stack_ok_def]
+  >> gvs[stack_room_ok_def, gas_stack_ok_def,
+         outputTo_consistent_ctx_def,
+         outputTo_consistent_stack_def]
   >> Cases_on`t` >> gvs[]
-  >> Cases >> gvs[]
-  >> TRY ( first_x_assum(qspec_then`0`mp_tac) >> simp[] >> NO_TAC)
-  >> first_x_assum(qspec_then`SUC n`mp_tac) >> simp[]
+  >> TRY (
+    Cases >> gvs[]
+    >> TRY ( first_x_assum(qspec_then`0`mp_tac) >> simp[] >> NO_TAC)
+    >> first_x_assum(qspec_then`SUC n`mp_tac) >> simp[] )
 QED
 
 Theorem handle_create_preserves_wf_contexts:
@@ -1304,141 +1307,6 @@ Proof
   Cases_on`i` >> simp[]
 QED
 
-(* --- head.gasUsed never decreases through same-frame part of step  *)
-(*                                                                    *)
-(* Every same-frame sub-execution in step's inner computation only    *)
-(* increases gasUsed (consume_gas adds gas; unuse_gas subtracts but  *)
-(* only after consume_gas added more; reads/push_stack/pop_stack      *)
-(* don't change gasUsed; set_current_context is the final write and   *)
-(* only writes what the computation computed). This is proved by     *)
-(* unfolding step_def and case-splitting on the instruction.         *)
-
-Theorem step_inner_gasUsed_monotone:
-  step s = (INL (), s') ∧ LENGTH s'.contexts = LENGTH s.contexts ∧
-  s.contexts ≠ [] ∧ wf_state s ∧ outputTo_consistent s
-  ⇒ (FST (HD s'.contexts)).gasUsed ≥ (FST (HD s.contexts)).gasUsed
-Proof
-  cheat (* TODO: unfold step_def. Same-frame inner returns INL.
-    step_inst always calls consume_gas for the static cost (unless
-    it's Stop which returns INR). So if inner returns INL, consume_gas
-    succeeded, gasUsed increased. inc_pc_or_jump doesn't touch gasUsed.
-    Additionally, handle_create success may consume_gas codeGas (further
-    increase). handle_exception at depth 1 reraises without change.
-    At depth ≥ 2 returning INL: pop_and_incorporate_context does
-    unuse_gas calleeGasLeft on the parent, INCREASING head.gasUsed.
-    push_stack on new head doesn't touch gasUsed. *)
-QED
-
-(* --- Case 2: step_call / step_create push invariants --- *)
-(*                                                                    *)
-(* When step_call grows by 1, the old head's stack had pop_stack      *)
-(* (6 + valueOffset) run, removing ≥ 1 items from a stack at ≤      *)
-(* stack_limit, giving LENGTH < stack_limit. No push_stack runs      *)
-(* between pop_stack and push_context (only consume_gas,             *)
-(* expand_memory, get_* read operations).                            *)
-(*                                                                    *)
-(* Gas: consume_gas (static_gas + gas + otherCost + mx.cost) before   *)
-(* push_context. child.gasLimit = stipend = gas + call_stipend        *)
-(* (value > 0) or gas (value = 0). Since otherCost ≥ call_value_cost *)
-(* = 9000 > call_stipend = 2300 when value > 0, the consumed gas ≥   *)
-(* stipend. When value = 0, call_stipend = 0, trivially held.        *)
-
-Theorem step_call_grow_preserves_stack_room_ok:
-  wf_state s ∧ step_call op s = (r, s') ∧
-  LENGTH s'.contexts = LENGTH s.contexts + 1
-  ⇒ stack_room_ok s'
-Proof
-  cheat (* TODO: unfold step_call_def. The growth path goes through
-    pop_stack (6 + valueOffset) → ... → proceed_call → push_context.
-    Between pop_stack and push_context: no push_stack runs. After
-    pop_stack, head's stack has LENGTH ≤ stack_limit - (6+valueOffset)
-    < stack_limit. push_context puts (initial_context, rb) as new
-    head (empty stack) with old head becoming TL[0].
-    stack_room_ok on new TL[0]: LENGTH < stack_limit ✓
-    stack_room_ok on rest of TL: shifted from old TL, unchanged ✓
-    stack_room_ok: no entry for new head (position 0, not in TL) ✓ *)
-QED
-
-Theorem step_call_grow_preserves_gas_stack_ok:
-  wf_state s ∧ step_call op s = (r, s') ∧
-  LENGTH s'.contexts = LENGTH s.contexts + 1
-  ⇒ gas_stack_ok s'
-Proof
-  cheat (* TODO: unfold step_call_def to the proceed_call path.
-    After push_context, contexts = (child, rb) :: (parent, old_rb) :: old_TL.
-    i=0: parent.gasUsed ≥ child.gasLimit - child.gasUsed.
-      child.gasUsed = 0 (initial_context).
-      child.gasLimit = stipend.
-      parent.gasUsed = old_head.gasUsed + static_gas + gas + otherCost + mx.cost.
-      Need: old_head.gasUsed + static_gas + gas + otherCost + mx.cost ≥ stipend.
-      If value > 0: stipend = gas + call_stipend.
-        Need: static_gas + otherCost + mx.cost ≥ call_stipend.
-        otherCost ≥ positiveValueCost = call_value_cost = 9000 > 2300 = call_stipend. ✓
-      If value = 0: stipend = gas.
-        Need: old_head.gasUsed + static_gas + otherCost + mx.cost ≥ 0. ✓
-    i=1 (if LENGTH ≥ 3): old_TL[0].gasUsed ≥ parent.gasLimit - parent.gasUsed.
-      parent.gasUsed increased → parent.gasLimit - parent.gasUsed decreased.
-      Old i=0 from gas_stack_ok s: old_TL[0].gasUsed ≥ parent.gasLimit - parent.gasUsed_old.
-      So old_TL[0].gasUsed ≥ parent.gasLimit - parent.gasUsed_new. ✓
-    i≥2: shifted, same old relationships. ✓ *)
-QED
-
-(* For step_create, pop_stack removes 3 (or 4 for CREATE2).         *)
-(* Gas: consume_gas cappedGas where child.gasLimit = cappedGas.      *)
-(* parent.gasUsed_after = parent.gasUsed_before + ... + cappedGas    *)
-(* ≥ cappedGas = child.gasLimit.                                     *)
-
-Theorem step_create_grow_preserves_stack_room_ok:
-  wf_state s ∧ step_create two s = (r, s') ∧
-  LENGTH s'.contexts = LENGTH s.contexts + 1
-  ⇒ stack_room_ok s'
-Proof
-  cheat (* TODO: similar to step_call. pop_stack (3 or 4) removes
-    ≥ 1 items. No push_stack between pop_stack and push_context
-    (via proceed_create). *)
-QED
-
-Theorem step_create_grow_preserves_gas_stack_ok:
-  wf_state s ∧ step_create two s = (r, s') ∧
-  LENGTH s'.contexts = LENGTH s.contexts + 1
-  ⇒ gas_stack_ok s'
-Proof
-  cheat (* TODO: consume_gas cappedGas where cappedGas = child.gasLimit.
-    parent.gasUsed + ... + cappedGas ≥ cappedGas. ✓
-    Other relationships: same shift argument as step_call. *)
-QED
-
-(* --- Case 3: handle_exception at depth ≥ 2 preserves invariants --- *)
-
-Theorem handle_exception_ge_2_preserves_stack_room_ok:
-  stack_room_ok s ∧ LENGTH s.contexts ≥ 2 ∧
-  handle_exception e s = (q, s') ∧ ISL q
-  ⇒ stack_room_ok s'
-Proof
-  cheat (* TODO: After pop_and_incorporate_context, new contexts =
-    (new_parent, old_snd_parent) :: rest where rest = TL (TL s.contexts).
-    new TL = rest = old TL without its first entry.
-    All entries had LENGTH stack < stack_limit, unchanged. *)
-QED
-
-Theorem handle_exception_ge_2_preserves_gas_stack_ok:
-  gas_stack_ok s ∧ LENGTH s.contexts ≥ 2 ∧
-  EVERY (wf_context o FST) s.contexts ∧
-  handle_exception e s = (q, s') ∧ ISL q
-  ⇒ gas_stack_ok s'
-Proof
-  cheat (* TODO: After pop, contexts = (new_parent, _) :: old_TL_from_2_on.
-    new_parent.gasLimit = old_parent.msgParams.gasLimit (preserved by
-    pop_and_incorporate_context which only modifies gasUsed via
-    unuse_gas, not msgParams).
-    new_parent.gasUsed = old_parent.gasUsed + calleeGasLeft ≥ old_parent.gasUsed.
-    i=0: old_TL[1].gasUsed ≥ new_parent.gasLimit - new_parent.gasUsed
-      = old_parent.gasLimit - (old_parent.gasUsed + calleeGasLeft)
-      ≤ old_parent.gasLimit - old_parent.gasUsed
-      ≤ old_TL[1].gasUsed. ✓
-    i≥1: shifted, same relationships. ✓ *)
-QED
-
 (* --- handle_create preserves both invariants (contexts structure    *)
 (* unchanged, only head.gasUsed/accounts modified) --- *)
 
@@ -1446,66 +1314,39 @@ Theorem handle_create_preserves_stack_room_ok:
   stack_room_ok s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s')
   ⇒ stack_room_ok s'
 Proof
-  cheat (* TODO: handle_create only modifies head context's gasUsed
-    and accounts via consume_gas + update_accounts. TL unchanged.
-    stack_room_ok is about TL, so preserved. *)
+  rw[stack_room_ok_def, handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def,
+     AllCaseEqs()] >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `(FST h).msgParams.outputTo` >> gvs[reraise_def]
+  >> Cases_on `e` >> gvs[reraise_def]
+  >> gvs[consume_gas_def, bind_def, get_current_context_def, return_def,
+         assert_def, set_current_context_def, update_accounts_def,
+         set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
+         reraise_def]
 QED
 
 Theorem handle_create_preserves_gas_stack_ok:
   gas_stack_ok s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s')
   ⇒ gas_stack_ok s'
 Proof
-  cheat (* TODO: TL unchanged. Head's gasUsed increases or stays
-    same (consume_gas codeGas or no consume_gas in non-Code cases).
-    i≥1: unchanged. i=0: head.gasUsed' ≥ head.gasUsed, so
-    gasLimit - gasUsed' ≤ gasLimit - gasUsed ≤ TL[0].gasUsed. ✓ *)
-QED
-
-(* --- Combined: step preserves both invariants --- *)
-
-Theorem step_preserves_stack_room_ok:
-  wf_state s ⇒ stack_room_ok (SND (step s))
-Proof
-  cheat (* TODO: case analysis on step = handle inner handle_step.
-    1. Same-frame (inner INL, length unchanged):
-       same_frame_rel → same_frame_rel_preserves_stack_room_ok.
-    2. Push (inner INL or INR, contexts grew by 1):
-       Must be via step_call/step_create. Use
-       step_call/step_create_grow_preserves_stack_room_ok.
-    3. Pop (handle_exception at depth ≥ 2):
-       handle_exception_ge_2_preserves_stack_room_ok.
-    4. Reraise at depth ≤ 1 or handle_create INL:
-       TL unchanged, stack_room_ok trivially preserved. *)
-QED
-
-Theorem step_preserves_gas_stack_ok:
-  wf_state s ⇒ gas_stack_ok (SND (step s))
-Proof
-  cheat (* TODO: same three-case analysis as above.
-    1. Same-frame: same_frame_rel_preserves_gas_stack_ok +
-       step_inner_gasUsed_monotone.
-    2. Push: step_call/step_create_grow_preserves_gas_stack_ok.
-    3. Pop: handle_exception_ge_2_preserves_gas_stack_ok.
-    4. Reraise/handle_create: gas_stack_ok preserved (TL unchanged,
-       head gasUsed monotone). *)
-QED
-
-(* --- Combined: step preserves wf_state (all 6 conjuncts) --- *)
-
-Theorem step_preserves_wf_state:
-  wf_state s ⇒ wf_state (SND (step s))
-Proof
-  mp_tac decreases_gas_cred_step
-  \\ mp_tac preserves_wf_accounts_step
-  \\ mp_tac (GEN_ALL limits_num_contexts_step)
-  \\ rewrite_tac[decreases_gas_cred_def, preserves_wf_accounts_def,
-                 limits_num_contexts_def]
-  \\ rw[wf_state_def]
-  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[] )
-  >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
-  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[])
-  >- ( irule step_preserves_stack_room_ok \\ simp[] \\ gvs[wf_state_def])
-  >- ( irule step_preserves_gas_stack_ok \\ simp[] \\ gvs[wf_state_def])
+  rw[gas_stack_ok_def, handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def,
+     AllCaseEqs()] >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `(FST h).msgParams.outputTo` >> gvs[reraise_def]
+  >> Cases_on `e` >> gvs[reraise_def]
+  >> gvs[consume_gas_def, bind_def, get_current_context_def, return_def,
+         assert_def, set_current_context_def, update_accounts_def,
+         set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
+         reraise_def]
+  >> Cases_on `i` >> gvs[]
+  >> TRY(first_x_assum(qspec_then `0` mp_tac) >> rw[] >> NO_TAC)
+  >> first_x_assum(qspec_then `SUC n` mp_tac) >> rw[]
 QED
 
 (* --- Linchpin: handle_exception at depth ≥ 2 returns INL under     *)

@@ -1727,6 +1727,70 @@ Proof
 QED
 
 (* -------------------------------------------------------------------------
+ * Full wf_state preservation. Placed here because the strong wf_state
+ * invariants use whole-step push/pop structure proved above.
+ * ------------------------------------------------------------------------- *)
+
+Theorem step_push_parent_stack_room:
+  wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts > LENGTH s.contexts
+  ⇒ LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit
+Proof
+  cheat (* TODO: growth is only through CALL/CREATE; their pop_stack prefix
+           removes at least one item from a wf_context stack before push_context. *)
+QED
+
+Theorem step_preserves_stack_room_ok:
+  wf_state s ⇒ stack_room_ok (SND (step s))
+Proof
+  strip_tac
+  >> Cases_on `step s` >> simp[]
+  >> rename1 `step s = (r, s')`
+  >> Cases_on `LENGTH s'.contexts = LENGTH s.contexts`
+  >- (
+    `outputTo_consistent s` by metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent] >>
+    `same_frame_rel s s'` by metis_tac[step_same_frame] >>
+    metis_tac[same_frame_rel_preserves_stack_room_ok, wf_state_def])
+  >> Cases_on `LENGTH s'.contexts > LENGTH s.contexts`
+  >- (
+    `LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit`
+      by metis_tac[step_push_parent_stack_room] >>
+    drule_all step_push_structure >> strip_tac >>
+    gvs[stack_room_ok_def, wf_state_def] >>
+    Cases_on `s'.contexts` >> gvs[] >>
+    Cases_on `t` >> gvs[] >>
+    rw[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> gvs[])
+  >> (
+    `LENGTH s'.contexts < LENGTH s.contexts` by decide_tac >>
+    `outputTo_consistent_stack s` by gvs[wf_state_def] >>
+    drule_all step_pop_structure >>
+    disch_then $ qx_choosel_then [`new_head`, `parent`, `rest`] assume_tac >>
+    gvs[stack_room_ok_def, wf_state_def])
+QED
+
+Theorem step_preserves_gas_stack_ok:
+  wf_state s ⇒ gas_stack_ok (SND (step s))
+Proof
+  cheat (* TODO: prove using same-frame/push/pop structure above. *)
+QED
+
+Theorem step_preserves_wf_state:
+  wf_state s ⇒ wf_state (SND (step s))
+Proof
+  mp_tac decreases_gas_cred_step
+  \\ mp_tac preserves_wf_accounts_step
+  \\ mp_tac (GEN_ALL limits_num_contexts_step)
+  \\ rewrite_tac[decreases_gas_cred_def, preserves_wf_accounts_def,
+                 limits_num_contexts_def]
+  \\ rw[wf_state_def]
+  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[] )
+  >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
+  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[])
+  >- ( irule step_preserves_stack_room_ok \\ simp[] \\ gvs[wf_state_def])
+  >- ( irule step_preserves_gas_stack_ok \\ simp[] \\ gvs[wf_state_def])
+  >- cheat (* outputTo_consistent_stack *)
+QED
+
+(* -------------------------------------------------------------------------
  * Single-step preservation of run_call_inv.
  *
  * Strategy: case on the length change. In each case, characterise
