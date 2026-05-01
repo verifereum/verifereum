@@ -1,0 +1,13 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "HOLCryptoRIPEMD"
+version = "prototype"
+
+[build]
+members = ["."]
+exclude = ["*Theory.sml", "*Theory.sig", "selftest.sml", "test.sml"]
+
+[dependencies.HOLCryptoMD]
+manifest = "crypto-md.holproject.toml"

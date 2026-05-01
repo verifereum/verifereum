@@ -1,1 +1,7 @@
 .hol
+.holbuild
+.holconfig.toml
+
+*Theory.dat
+*Theory.sig
+*Theory.sml

@@ -1,0 +1,25 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "verifereum"
+version = "prototype"
+
+[build]
+members = ["util", "spec", "prog", "examples"]
+exclude = ["*Theory.sml", "*Theory.sig"]
+
+[dependencies.HOLKeccak]
+manifest = "holbuild-shims/keccak.holproject.toml"
+
+[dependencies.HOLCryptoSHA2]
+manifest = "holbuild-shims/sha2.holproject.toml"
+
+[dependencies.HOLCryptoRIPEMD]
+manifest = "holbuild-shims/ripemd.holproject.toml"
+
+[dependencies.HOLHoareTriple]
+manifest = "holbuild-shims/hoare-triple.holproject.toml"
+
+[actions.wrappedEtherTheory]
+loads = ["finite_mapSyntax"]

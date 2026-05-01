@@ -1,0 +1,10 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "HOLCryptoMD"
+version = "prototype"
+
+[build]
+members = ["."]
+exclude = ["*Theory.sml", "*Theory.sig", "selftest.sml", "test.sml"]

@@ -1,0 +1,24 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "HOLHoareTriple"
+version = "prototype"
+
+[build]
+members = ["."]
+exclude = ["*Theory.sml", "*Theory.sig", "selftest.sml", "test.sml"]
+
+[actions.progSyntax]
+deps = ["progTheory"]
+
+[actions.temporalSyntax]
+deps = ["temporalTheory"]
+loads = ["progSyntax"]
+
+[actions.helperLib]
+loads = ["wordsLib", "stringLib", "progSyntax"]
+
+[actions.mc_tailrecLib]
+deps = ["tailrecTheory"]
+loads = ["helperLib"]
