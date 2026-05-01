@@ -1092,7 +1092,8 @@ QED
 (* ================================================================ *)
 
 Theorem step_same_frame_gas_monotone:
-  outputTo_consistent s ∧ wf_state s ∧ step s = (r, s') ∧
+  outputTo_consistent s ∧ s.contexts ≠ [] ∧
+  EVERY (wf_context o FST) s.contexts ∧ step s = (r, s') ∧
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
 Proof
@@ -1118,7 +1119,7 @@ Proof
         match at the heads. *)
      BasicProvers.FULL_CASE_TAC >> gvs[]
   >> gvs[LEX_DEF]
-  >> gvs[wf_context_def, wf_state_def]
+  >> gvs[wf_context_def]
 QED
 
 Theorem run_within_frame_gas_monotone:
@@ -1131,7 +1132,8 @@ Proof
   >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
   >> gvs[run_within_frame_def]
   >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
-           same_frame_rel es (SND p) ∧ wf_state (SND p) ∧
+           same_frame_rel es (SND p) ∧
+           EVERY (wf_context o FST) (SND p).contexts ∧
            (FST (HD es.contexts)).gasUsed ≤
              (FST (HD (SND p).contexts)).gasUsed) (r, es')`
      suffices_by simp[]
@@ -1139,13 +1141,13 @@ Proof
   >> goal_assum (first_assum o mp_then Any mp_tac)
   >> simp[]
   >> conj_tac
-  >- simp[same_frame_rel_refl]
+  >- gvs[same_frame_rel_refl, wf_state_def]
   >> rpt gen_tac
   >> pairarg_tac >> simp[]
   >> strip_tac
   >> strip_tac
   >> Cases_on `step s''` >> simp[]
-  >> `same_frame_rel es s'' ∧ wf_state s'' ∧
+  >> `same_frame_rel es s'' ∧ EVERY (wf_context o FST) s''.contexts ∧
       (FST (HD es.contexts)).gasUsed ≤ (FST (HD s''.contexts)).gasUsed`
        by simp[]
   >> `outputTo_consistent s''`
@@ -1159,7 +1161,11 @@ Proof
        irule step_same_frame_gas_monotone
        >> goal_assum (first_assum o mp_then Any mp_tac)
        >> simp[])
-  >> `wf_state r'` by metis_tac[step_preserves_wf_state, SND]
+  >> `EVERY (wf_context o FST) r'.contexts` by (
+       mp_tac decreases_gas_cred_step
+       >> rewrite_tac[decreases_gas_cred_def]
+       >> disch_then(qspec_then`s''`mp_tac)
+       >> IF_CASES_TAC >> gvs[] )
   >> rpt conj_tac
   >- metis_tac[same_frame_rel_trans]
   >- simp[]
