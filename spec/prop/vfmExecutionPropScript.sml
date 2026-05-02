@@ -120,12 +120,15 @@ Definition stack_room_ok_def:
     EVERY (λc. LENGTH c.stack < stack_limit) (MAP FST (TL s.contexts))
 End
 
+Definition unused_gas_def:
+  unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
+End
+
 Definition gas_stack_ok_def:
   gas_stack_ok s ⇔
     ∀i. SUC i < LENGTH s.contexts ⇒
       (FST (EL (SUC i) s.contexts)).gasUsed ≥
-      (FST (EL i s.contexts)).msgParams.gasLimit -
-      (FST (EL i s.contexts)).gasUsed
+      unused_gas (MAP FST (TAKE (SUC i) s.contexts))
 End
 
 Definition wf_state_def:

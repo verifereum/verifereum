@@ -374,10 +374,6 @@ Proof
   \\ irule_at Any decreases_gas_get_current_context \\ rw []
 QED
 
-Definition unused_gas_def:
-  unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
-End
-
 Definition contexts_weight_def:
   contexts_weight n c = (unused_gas (MAP FST c) + n, LENGTH c)
 End

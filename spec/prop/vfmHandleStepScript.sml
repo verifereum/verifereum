@@ -946,7 +946,7 @@ Proof
   >> gvs[stack_room_ok_def, gas_stack_ok_def,
          outputTo_consistent_ctx_def,
          outputTo_consistent_stack_def]
-  >> Cases_on`t` >> gvs[]
+  >> Cases_on`t` >> gvs[unused_gas_def]
   >> TRY (
     Cases >> gvs[]
     >> TRY ( first_x_assum(qspec_then`0`mp_tac) >> simp[] >> NO_TAC)
@@ -979,7 +979,10 @@ Theorem handle_exception_pop_generic_gen:
     (s'.rollback = s.rollback ∨ s'.rollback = callee_rb) ∧
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
-      new_parent_ctx.msgParams = (FST parent).msgParams
+      new_parent_ctx.msgParams = (FST parent).msgParams ∧
+      new_parent_ctx.gasUsed ≥
+        (FST parent).gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed)
 Proof
   strip_tac
   >> Cases_on `parent`
@@ -1006,7 +1009,8 @@ Theorem handle_create_preserves_tl_and_snd_hd:
     s'.contexts ≠ [] ∧
     TL s'.contexts = TL s.contexts ∧
     SND (HD s'.contexts) = SND (HD s.contexts) ∧
-    (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams
+    (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
+    (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
 Proof
   rw[handle_create_def, bind_def, ignore_bind_def,
      get_return_data_def, get_output_to_def, get_current_context_def,
@@ -1078,7 +1082,10 @@ Theorem handle_step_pop_generic_gen:
           (lookup_account a callee_rb.accounts).storage)) ∧
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
-      new_parent_ctx.msgParams = (FST parent).msgParams
+      new_parent_ctx.msgParams = (FST parent).msgParams ∧
+      new_parent_ctx.gasUsed ≥
+        (FST parent).gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed)
 Proof
   strip_tac
   >> qhdtm_x_assum `handle_step` mp_tac
@@ -1116,6 +1123,9 @@ Theorem handle_step_pop_generic_gen_paired:
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
+      new_parent_ctx.gasUsed ≥
+        (FST parent).gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed) ∧
       ((toSet s.rollback.accesses.storageKeys ⊆
           toSet s'.rollback.accesses.storageKeys ∧
         (∀a. (lookup_account a s'.rollback.accounts).storage =
@@ -1302,7 +1312,7 @@ Theorem same_frame_rel_preserves_gas_stack_ok:
 Proof
   rw[gas_stack_ok_def, same_frame_rel_def] >>
   Cases_on`s.contexts` >- gvs[] >> fs[] >> BasicProvers.VAR_EQ_TAC >>
-  Cases_on`s'.contexts` >- gvs[] >> fs[] >>
+  Cases_on`s'.contexts` >- gvs[] >> fs[unused_gas_def] >>
   first_x_assum(qspec_then`i`mp_tac) >>
   Cases_on`i` >> simp[]
 QED
@@ -1343,7 +1353,7 @@ Proof
   >> gvs[consume_gas_def, bind_def, get_current_context_def, return_def,
          assert_def, set_current_context_def, update_accounts_def,
          set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
-         reraise_def]
+         reraise_def, unused_gas_def]
   >> Cases_on `i` >> gvs[]
   >> TRY(first_x_assum(qspec_then `0` mp_tac) >> rw[] >> NO_TAC)
   >> first_x_assum(qspec_then `SUC n` mp_tac) >> rw[]
