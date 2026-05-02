@@ -1740,7 +1740,8 @@ Theorem step_push_structure:
          toSet (if i = 0 then s.rollback
                 else SND (EL (i-1) s.contexts)).accesses.storageKeys ⊆
            toSet (SND (EL i s'.contexts)).accesses.storageKeys) ∧
-    (* saved parent stack room *)
+    (* saved parent and shifted-tail stack structure *)
+    MAP FST (TL (TL s'.contexts)) = MAP FST (TL s.contexts) ∧
     LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit ∧
     (* msgParams preservation at position 1 *)
     (LENGTH s.contexts ≥ 1 ⇒
@@ -2085,7 +2086,8 @@ Proof
   >> rename1 `step s = (r, s')`
   >> Cases_on `LENGTH s'.contexts = LENGTH s.contexts`
   >- (
-    `outputTo_consistent s` by metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent] >>
+    `outputTo_consistent s`
+      by metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent] >>
     `same_frame_rel s s'` by metis_tac[step_same_frame] >>
     metis_tac[same_frame_rel_preserves_stack_room_ok, wf_state_def])
   >> Cases_on `LENGTH s'.contexts > LENGTH s.contexts`
@@ -2102,9 +2104,61 @@ Proof
   >> (
     `LENGTH s'.contexts < LENGTH s.contexts` by decide_tac >>
     `outputTo_consistent_stack s` by gvs[wf_state_def] >>
+    drule step_pop_structure >> simp[] >>
+    impl_tac >- (strip_tac >> gvs[]) >>
+    strip_tac >>
+    gvs[stack_room_ok_def, wf_state_def] >>
+    Cases_on`s.contexts` >> gvs[]
+  )
+QED
+
+Theorem same_frame_rel_preserves_outputTo_consistent_stack:
+  same_frame_rel s s' ∧ outputTo_consistent_stack s ⇒
+  outputTo_consistent_stack s'
+Proof
+  rw[outputTo_consistent_stack_def, same_frame_rel_def]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `s'.contexts` >> gvs[]
+  >> gvs[outputTo_consistent_ctx_def]
+QED
+
+Theorem step_preserves_outputTo_consistent_stack:
+  wf_state s ⇒ outputTo_consistent_stack (SND (step s))
+Proof
+  strip_tac
+  >> Cases_on `step s` >> simp[]
+  >> rename1 `step s = (_, s')`
+  >> rename1 `step s = (r, s')`
+  >> Cases_on `LENGTH s'.contexts = LENGTH s.contexts`
+  >- (
+    `outputTo_consistent s`
+    by metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent] >>
+    `same_frame_rel s s'` by metis_tac[step_same_frame] >>
+    irule same_frame_rel_preserves_outputTo_consistent_stack >>
+    simp[] >> gvs[wf_state_def] >> metis_tac[])
+  >> Cases_on `LENGTH s'.contexts > LENGTH s.contexts`
+  >- (
+    drule step_push_structure >> impl_tac >- gvs[wf_state_def] >>
+    strip_tac >>
+    gvs[outputTo_consistent_stack_def, EVERY_MEM, MEM_EL] >>
+    conj_tac >- (strip_tac >> gvs[]) >>
+    rw[] >>
+    Cases_on `n` >> gvs[] >- (
+      Cases_on`s'.contexts` >> gvs[] ) >>
+    simp[ADD1, EL_MAP] >> gvs[ADD1] >>
+    first_x_assum irule >>
+    gvs[wf_state_def,outputTo_consistent_stack_def] >>
+    gvs[EVERY_EL, EL_MAP] )
+  >> (
+    `LENGTH s'.contexts < LENGTH s.contexts` by decide_tac >>
+    `outputTo_consistent_stack s` by gvs[wf_state_def] >>
+    gvs[wf_state_def] >>
     drule_all step_pop_structure >>
-    disch_then $ qx_choosel_then [`new_head`, `parent`, `rest`] assume_tac >>
-    gvs[stack_room_ok_def, wf_state_def])
+    Cases_on `s.contexts` >> gvs[] >>
+    Cases_on `t` >> gvs[] >>
+    Cases_on`s'.contexts` >> gvs[] >>
+    strip_tac >> gvs[outputTo_consistent_stack_def] >>
+    gvs[outputTo_consistent_ctx_def]
 QED
 
 Theorem step_preserves_gas_stack_ok:
@@ -2127,7 +2181,7 @@ Proof
   >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[])
   >- ( irule step_preserves_stack_room_ok \\ simp[] \\ gvs[wf_state_def])
   >- ( irule step_preserves_gas_stack_ok \\ simp[] \\ gvs[wf_state_def])
-  >- cheat (* outputTo_consistent_stack *)
+  >- ( irule step_preserves_outputTo_consistent_stack \\ simp[] \\ gvs[wf_state_def])
 QED
 
 (* -------------------------------------------------------------------------
@@ -2466,7 +2520,7 @@ Proof
   >> gvs[outputTo_consistent_stack_def]
   >> simp[storage_slot_preserved_def]
   >> gvs[wf_state_def, all_accounts_def]
-  >> gs[stack_room_ok_def, gas_stack_ok_def]
+  >> gs[stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def]
 QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots_initial:
