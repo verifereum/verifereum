@@ -2413,6 +2413,30 @@ Proof
 QED
 
 (* -------------------------------------------------------------------------
+ * Named facts about the pre-handler inner step.  The definition lives in
+ * vfmExecutionProp; these lemmas keep downstream proofs from re-abbreviating
+ * the inline monad from step_def.
+ * ------------------------------------------------------------------------- *)
+
+Theorem same_frame_or_grow_step_inner_named[simp]:
+  same_frame_or_grow step_inner
+Proof
+  simp[step_inner_def]
+QED
+
+Theorem decreases_gas_cred_step_inner:
+  decreases_gas_cred T 0 0 step_inner
+Proof
+  simp[step_inner_def]
+  >> irule decreases_gas_cred_bind_mono >> simp[]
+  >> qexistsl_tac [`T`, `F`] >> simp[]
+  >> gen_tac >> rw[]
+  >> CASE_TAC >> simp[]
+  >> irule decreases_gas_cred_ignore_bind_mono
+  >> qexistsl_tac [`F`, `T`] >> simp[]
+QED
+
+(* -------------------------------------------------------------------------
  * Push-structure lemma for step (Case +1 of run_call_inv_step).
  *
  * When step grows by +1 (push), the new contexts prepend a child context

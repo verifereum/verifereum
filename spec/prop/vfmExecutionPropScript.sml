@@ -37,6 +37,26 @@ QED
 
 Type execution = “:execution_state -> α execution_result”;
 
+Definition step_inner_def:
+  step_inner =
+    do
+      context <- get_current_context;
+      code <<- context.msgParams.code;
+      parsed <<- context.msgParams.parsed;
+      if LENGTH code ≤ context.pc
+      then step_inst Stop
+      else case FLOOKUP parsed context.pc of
+           | NONE => step_inst Invalid
+           | SOME op => do step_inst op; inc_pc_or_jump op od
+    od
+End
+
+Theorem step_eq_handle_step_inner:
+  step = handle step_inner handle_step
+Proof
+  rw[FUN_EQ_THM, step_def, step_inner_def]
+QED
+
 Theorem return_bind[simp]:
   bind (return x) f = f x
 Proof
