@@ -2048,6 +2048,9 @@ Theorem step_push_structure:
     MAP FST (TL (TL s'.contexts)) = MAP FST (TL s.contexts) ∧
     LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit ∧
     (FST (EL 1 s'.contexts)).gasUsed ≥ (FST (HD s.contexts)).gasUsed ∧
+    (FST (EL 1 s'.contexts)).gasUsed ≥
+      (FST (HD s'.contexts)).msgParams.gasLimit -
+      (FST (HD s'.contexts)).gasUsed ∧
     (* msgParams preservation at position 1 *)
     (LENGTH s.contexts ≥ 1 ⇒
        (FST (EL 1 s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams) ∧
@@ -2261,6 +2264,7 @@ Theorem step_pop_structure:
       s.contexts = HD s.contexts :: parent :: rest ∧
       s'.contexts = (new_head, SND parent) :: rest ∧
       new_head.msgParams = (FST parent).msgParams ∧
+      new_head.gasUsed ≥ (FST parent).gasUsed ∧
       ((toSet s.rollback.accesses.storageKeys ⊆
           toSet s'.rollback.accesses.storageKeys ∧
         (∀a. (lookup_account a s'.rollback.accounts).storage =
@@ -2468,6 +2472,23 @@ Proof
     gvs[outputTo_consistent_ctx_def]
 QED
 
+Theorem consume_gas_head_gas_ge:
+  consume_gas n s = (INL (), s') ∧ s.contexts ≠ [] ⇒
+  n ≤ (FST (HD s'.contexts)).gasUsed
+Proof
+  rw[consume_gas_def, bind_def, get_current_context_def, return_def,
+     fail_def, assert_def, set_current_context_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem call_gas_stipend_le_consumed:
+  (if 0 < value then call_stipend else 0) ≤ otherCost + memoryCost ∧
+  call_gas value gas gasLeft memoryCost otherCost = (dynamicGas, stipend) ⇒
+  stipend ≤ dynamicGas + memoryCost
+Proof
+  rw[call_gas_def]
+QED
+
 Theorem proceed_call_parent_gas_ok:
   proceed_call op sender address value argsOffset argsSize code stipend outputTo s = (r, s') ∧
   s.contexts ≠ [] ∧
@@ -2582,20 +2603,30 @@ Theorem step_push_parent_gas_ok:
     (FST (HD s'.contexts)).msgParams.gasLimit -
     (FST (HD s'.contexts)).gasUsed
 Proof
-  cheat (* TODO: same classification as step_push_parent_stack_room /
-           step_push_structure: whole-step growth is CALL or CREATE growth;
-           apply step_call_grow_parent_gas_ok or
-           step_create_grow_parent_gas_ok. *)
+  rpt strip_tac
+  >> drule_all step_push_structure
+  >> strip_tac
+  >> simp[]
 QED
 
 Theorem step_pop_preserves_gas_stack_ok:
   wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts < LENGTH s.contexts ⇒
   gas_stack_ok s'
 Proof
-  cheat (* TODO: strengthen/use step_pop_structure with
-           new_head.gasUsed ≥ (FST parent).gasUsed and
-           new_head.msgParams = (FST parent).msgParams; then old
-           gas_stack_ok s shifts over rest. *)
+  rpt strip_tac
+  >> `outputTo_consistent_stack s` by gvs[wf_state_def]
+  >> drule_all step_pop_structure
+  >> disch_then $ qx_choosel_then [`new_head`, `parent`, `rest`] assume_tac
+  >> gvs[gas_stack_ok_def, wf_state_def]
+  >> rw[]
+  >> Cases_on `i` >> gvs[]
+  >- (
+    first_x_assum (qspec_then `SUC 0` mp_tac)
+    >> Cases_on `s.contexts` >> gvs[]
+    >> Cases_on `t` >> gvs[] )
+  >> first_x_assum (qspec_then `SUC (SUC n)` mp_tac)
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `t` >> gvs[]
 QED
 
 Theorem step_preserves_gas_stack_ok:
