@@ -2007,6 +2007,17 @@ Proof
   >> Cases_on `s.contexts` >> gvs[]
 QED
 
+Theorem consume_gas_head_gas_add_ge:
+  consume_gas n s = (INL (), s') ∧ s.contexts ≠ [] ⇒
+    (FST (HD s.contexts)).gasUsed + n ≤
+    (FST (HD s'.contexts)).gasUsed
+Proof
+  rw[consume_gas_def, bind_def, get_current_context_def, return_def,
+     ignore_bind_def,
+     fail_def, assert_def, set_current_context_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
 Theorem call_gas_stipend_le_consumed:
   (if 0 < value then call_stipend else 0) ≤ otherCost + memoryCost ∧
   call_gas value gas gasLeft memoryCost otherCost = (dynamicGas, stipend) ⇒
@@ -2101,16 +2112,147 @@ QED
 
 Theorem step_call_grow_parent_gas_ok:
   wf_state s ∧ step_call op s = (r, s') ∧
+  is_call op ∧ (op ≠ Create ∧ op ≠ Create2) ∧
   s.contexts ≠ [] ∧ LENGTH s'.contexts > LENGTH s.contexts ⇒
     (FST (HD s.contexts)).gasUsed +
     ((FST (HD s'.contexts)).msgParams.gasLimit -
      (FST (HD s'.contexts)).gasUsed) ≤
     (FST (EL 1 s'.contexts)).gasUsed
 Proof
-  cheat (* TODO: mirror step_call_grow_parent_stack_room.  Peel to the
-           proceed_call branch; the second consume_gas/call_gas facts give
-           head.gasUsed ≥ stipend immediately before proceed_call, then apply
-           proceed_call_parent_gas_ok.  Non-proceed_call branches cannot grow. *)
+  simp[step_call_def] >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `pop_stack n`
+  >> qpat_x_assum `_ s = _` mp_tac
+  >> simp[Abbr`n`]
+  >> qmatch_goalsub_abbrev_tac `bind (pop_stack n) k s`
+  >> Cases_on `pop_stack n s` >> Cases_on `q` >> gvs[bind_def]
+  >- (
+    rename1 `pop_stack n s = (INL args, sp)`
+    >> `s.contexts ≠ [] ∧ sp.contexts ≠ [] ∧
+        (FST (HD s.contexts)).gasUsed = (FST (HD sp.contexts)).gasUsed ∧
+        LENGTH sp.contexts = LENGTH s.contexts` by (
+         qpat_x_assum `pop_stack n s = _` mp_tac
+         >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+              bind_def, return_def, assert_def, fail_def, set_current_context_def,
+              ignore_bind_def, AllCaseEqs()]
+         >> strip_tac >> gvs[])
+    >> simp[Abbr`k`]
+    >> strip_tac
+    >> pairarg_tac >> gvs[]
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ sp = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sp s2`
+    >> `s2.contexts ≠ [] ∧ LENGTH s2.contexts = LENGTH sp.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> simp[] >> strip_tac
+    >> rename1`same_frame_rel s2 s3`
+    >> `s3.contexts ≠ [] ∧ LENGTH s3.contexts = LENGTH s2.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s3 s4`
+    >> `s4.contexts ≠ [] ∧ LENGTH s4.contexts = LENGTH s3.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> impl_keep_tac
+    >- (CASE_TAC >> simp[] >> irule preserves_head_gas_mono_bind >> simp[])
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s4 s5`
+    >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s4.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> pairarg_tac >> gvs[]
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> pairarg_tac >> gvs[]
+    >> rename1`same_frame_rel s5 s6`
+    >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s5.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> gvs[ignore_bind_def]
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[]
+    >> qpat_x_assum`_ _ = (_,stipend)`(markerLib.ASSUME_NAMED_TAC"cg")
+    >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s6 s7`
+    >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH s6.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> qmatch_asmsub_abbrev_tac `consume_gas callCost s6 = _`
+    >> `((FST (HD s.contexts)).gasUsed + callCost ≤
+          (FST (HD s7.contexts)).gasUsed)` by (
+       qhdtm_x_assum`consume_gas`mp_tac >>
+       simp[consume_gas_def, bind_def,get_current_context_def,return_def] >>
+       simp[assert_def,ignore_bind_def,bind_def,CaseEq"bool",CaseEq"sum"] >>
+       simp[set_current_context_def,return_def] >> strip_tac >>
+       gvs[] )
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s7 s8`
+    >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s8 s9`
+    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s9 s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> gvs[Ntimes COND_RATOR 2]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
+    >> Cases_on`bbb` >> gs[]
+    >- (drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s0 sa`
+    >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s0.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sa sb`
+    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> gvs[COND_RATOR]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
+    >> Cases_on`bbb` >> gs[]
+    >- (drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
+    >> drule proceed_call_parent_gas_ok
+    >> disch_then irule
+    >> simp[]
+    >> qmatch_goalsub_abbrev_tac`stipend + spg <= sbg`
+    >> qpat_x_assum`_ + spg <= _`mp_tac
+    >> qmatch_goalsub_abbrev_tac`_ <= s7g`
+    >> `s7g <= sbg` by simp[]
+    >> `stipend <= callCost` suffices_by simp[]
+    >> qunabbrev_tac`callCost`
+    >> qmatch_asmsub_abbrev_tac`call_gas value gas gasLeft memoryCost`
+    >> `static_gas op = 0` by (
+      qhdtm_x_assum`is_call`mp_tac >>
+      Cases_on`op` >> EVAL_TAC >> gs[] )
+    >> irule call_gas_stipend_le_consumed
+    >> markerLib.LABEL_ASSUM"cg"assume_tac
+    >> gvs[]
+    >> goal_assum $ drule_at Any
+    >> Cases_on`0 < value` >> simp[]
+    >> EVAL_TAC >> rw[] )
+  >> (
+    qpat_x_assum `pop_stack n s = _` mp_tac
+    >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+         bind_def, return_def, assert_def, fail_def, set_current_context_def]
+    >> rw[] >> pop_assum mp_tac
+    >> simp[ignore_bind_def, bind_def, assert_def, set_current_context_def,
+            return_def, fail_def, AllCaseEqs()] >> rw[]
+    >> gvs[Abbr`k`] )
 QED
 
 Theorem step_create_grow_parent_gas_ok:
@@ -2121,10 +2263,153 @@ Theorem step_create_grow_parent_gas_ok:
      (FST (HD s'.contexts)).gasUsed) ≤
     (FST (EL 1 s'.contexts)).gasUsed
 Proof
-  cheat (* TODO: mirror step_create_grow_parent_stack_room.  Peel to the
-           proceed_create branch; the consume_gas cappedGas immediately before
-           assert_not_static gives head.gasUsed ≥ cappedGas, then apply
-           proceed_create_parent_gas_ok.  Non-proceed_create branches cannot grow. *)
+  simp[step_create_def] >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `pop_stack n`
+  >> qpat_x_assum `_ s = _` mp_tac
+  >> simp[Abbr`n`]
+  >> qmatch_goalsub_abbrev_tac `bind (pop_stack n) k s`
+  >> Cases_on `pop_stack n s` >> Cases_on `q` >> gvs[bind_def]
+  >- (
+    rename1 `pop_stack n s = (INL args, sp)`
+    >> `s.contexts ≠ [] ∧ sp.contexts ≠ [] ∧
+        (FST (HD s.contexts)).gasUsed ≤ (FST (HD sp.contexts)).gasUsed ∧
+        LENGTH sp.contexts = LENGTH s.contexts` by (
+         qpat_x_assum `pop_stack n s = _` mp_tac
+         >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+              bind_def, return_def, assert_def, fail_def, set_current_context_def,
+              ignore_bind_def, AllCaseEqs()]
+         >> strip_tac >> gvs[])
+    >> simp[Abbr`k`]
+    >> strip_tac
+    (* This is the same peel sequence as step_create_grow_parent_gas_monotone.
+       The only extra assertion is after the consume_gas cappedGas peel:
+       consume_gas_head_gas_add_ge gives oldGas + cappedGas <= current
+       head gas; subsequent prefix operations preserve/increase head gas via
+       bind_psf_phgm_grows_extract; proceed_create_parent_gas_ok discharges
+       the final pushed-state obligation. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ sp = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sp s2`
+    >> `s2.contexts ≠ [] ∧ LENGTH s2.contexts = LENGTH sp.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> gvs[ignore_bind_def]
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s2 s3`
+    >> `s3.contexts ≠ [] ∧ LENGTH s3.contexts = LENGTH s2.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s3 s4`
+    >> `s4.contexts ≠ [] ∧ LENGTH s4.contexts = LENGTH s3.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s4 s5`
+    >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s4.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s5 s6`
+    >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s5.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s6 s7`
+    >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH s6.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* assert code length *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s7 s8`
+    >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* access_address *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s8 s9`
+    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* get_gas_left *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s9 s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* consume_gas cappedGas: this is the key additive-reservation point. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[]
+    >> qmatch_asmsub_abbrev_tac `consume_gas cappedGas s2 = _`
+    >> `((FST (HD s2.contexts)).gasUsed + cappedGas ≤
+          (FST (HD s3.contexts)).gasUsed)` by (
+        irule consume_gas_head_gas_add_ge >> gvs[] )
+    >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s0 sa`
+    >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s0.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* assert_not_static *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sa sb`
+    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* set_return_data *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sb sc`
+    >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH sb.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* get_num_contexts *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sc sd`
+    >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sc.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* ensure_storage_in_domain *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sd se`
+    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sd.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> gvs[Ntimes COND_RATOR 2]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
+    >> qpat_x_assum`COND bbb _ _ = _`mp_tac
+    >> IF_CASES_TAC
+    >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
+    >> IF_CASES_TAC
+    >- (strip_tac >> drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists) >> simp[])
+    >> strip_tac
+    >> irule proceed_create_parent_gas_ok
+    >> goal_assum $ drule_at Any
+    >> simp[]
+    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
+    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
+    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
+    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
+    >> drule consume_gas_head_gas_add_ge
+    >> simp[])
+  >> (
+    qpat_x_assum `pop_stack n s = _` mp_tac
+    >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
+         bind_def, return_def, assert_def, fail_def, set_current_context_def]
+    >> rw[] >> pop_assum mp_tac
+    >> simp[ignore_bind_def, bind_def, assert_def, set_current_context_def,
+            return_def, fail_def, AllCaseEqs()] >> rw[]
+    >> gvs[Abbr`k`] )
 QED
 
 (* -------------------------------------------------------------------------
@@ -2313,7 +2598,9 @@ Proof
       >> drule step_call_grow_parent_gas_monotone
       >> simp[] >> strip_tac
       >> drule_at(Pat`step_call`)step_call_grow_parent_gas_ok
-      >> simp[] >> strip_tac
+      >> simp[]
+      >> impl_tac >- (rpt strip_tac >> gs[step_inst_def])
+      >> strip_tac >> gvs[]
       >> conj_tac >> Cases >> gvs[ADD1]
       >- ( Cases_on`n` >> gvs[] )
       >> gvs[outputTo_consistent_ctx_def]))
