@@ -52,6 +52,23 @@ Definition same_frame_or_grow_def:
       LENGTH s'.contexts ≥ LENGTH s.contexts + 1
 End
 
+Theorem same_frame_or_grow_length:
+  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ⇒
+    LENGTH s'.contexts ≥ LENGTH s.contexts
+Proof
+  rw[same_frame_or_grow_def]
+  >> res_tac
+  >> fs[same_frame_rel_def]
+  >> decide_tac
+QED
+
+Theorem same_frame_or_grow_eq_length:
+  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ∧
+    LENGTH s'.contexts = LENGTH s.contexts ⇒ same_frame_rel s s'
+Proof
+  rw[same_frame_or_grow_def] >> res_tac >> fs[same_frame_rel_def] >> decide_tac
+QED
+
 (* ---------------- Bridge from preserves_same_frame -------------- *)
 
 Theorem same_frame_or_grow_of_preserves[simp]:
@@ -496,6 +513,12 @@ Proof
   >> Cases_on `LENGTH x.msgParams.code ≤ x.pc` >> simp[]
   >> CASE_TAC >> simp[]
   >> irule same_frame_or_grow_ignore_bind >> simp[]
+QED
+
+Theorem same_frame_or_grow_step_inner_named[simp]:
+  same_frame_or_grow step_inner
+Proof
+  simp[step_inner_def]
 QED
 
 (* If step_inst returned INL with strictly larger contexts, the only

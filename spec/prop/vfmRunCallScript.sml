@@ -1137,16 +1137,6 @@ Proof
 
 QED
 
-Theorem same_frame_or_grow_length:
-  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ⇒
-    LENGTH s'.contexts ≥ LENGTH s.contexts
-Proof
-  rw[same_frame_or_grow_def]
-  >> res_tac
-  >> fs[same_frame_rel_def]
-  >> decide_tac
-QED
-
 (* -------------------------------------------------------------------------
  * Stack room for CALL/CREATE growth.
  * ------------------------------------------------------------------------- *)
@@ -2184,24 +2174,6 @@ QED
 
 (* Named facts about the pre-handler inner step. *)
 
-Theorem same_frame_or_grow_step_inner_named[simp]:
-  same_frame_or_grow step_inner
-Proof
-  simp[step_inner_def]
-QED
-
-Theorem decreases_gas_cred_step_inner:
-  decreases_gas_cred T 0 0 step_inner
-Proof
-  simp[step_inner_def]
-  >> irule decreases_gas_cred_bind_mono >> simp[]
-  >> qexistsl_tac [`T`, `F`] >> simp[]
-  >> gen_tac >> rw[]
-  >> CASE_TAC >> simp[]
-  >> irule decreases_gas_cred_ignore_bind_mono
-  >> qexistsl_tac [`F`, `T`] >> simp[]
-QED
-
 (* Full-step push structure: storage/access shape plus parent stack/gas facts. *)
 Theorem step_push_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
@@ -2475,13 +2447,6 @@ QED
 
 (* Full-step pop structure.  Rollback equality is weakened to storage equality
  * plus the matching accesses subset, because handle_create may change code. *)
-Theorem same_frame_or_grow_eq_length:
-  ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ∧
-    LENGTH s'.contexts = LENGTH s.contexts ⇒ same_frame_rel s s'
-Proof
-  rw[same_frame_or_grow_def] >> res_tac >> fs[same_frame_rel_def] >> decide_tac
-QED
-
 Theorem step_inst_same_frame_gas_monotone:
    step_inst op s = (q, s') ∧
    same_frame_rel s s' ∧

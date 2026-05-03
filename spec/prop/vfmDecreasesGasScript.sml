@@ -1852,6 +1852,18 @@ Proof
     \\ irule_at Any decreases_gas_consume_gas \\ rw [])
 QED
 
+Theorem decreases_gas_cred_step_inner:
+  decreases_gas_cred T 0 0 step_inner
+Proof
+  simp[step_inner_def]
+  >> irule decreases_gas_cred_bind_mono >> simp[]
+  >> qexistsl_tac [`T`, `F`] >> simp[]
+  >> gen_tac >> rw[]
+  >> CASE_TAC >> simp[]
+  >> irule decreases_gas_cred_ignore_bind_mono
+  >> qexistsl_tac [`F`, `T`] >> simp[]
+QED
+
 Definition pop_helper_def:
   pop_helper = do
     n <- get_num_contexts;
