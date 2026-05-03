@@ -2896,6 +2896,44 @@ Proof
   >- ( irule step_preserves_outputTo_consistent_stack \\ simp[] \\ gvs[wf_state_def])
 QED
 
+Theorem run_preserves_wf_state:
+  wf_state s ∧ run s = SOME (r, s') ⇒ wf_state s'
+Proof
+  rpt strip_tac
+  >> gvs[run_def]
+  >> `(λp. wf_state (SND p)) (r, s')` suffices_by simp[]
+  >> irule (MP_CANON OWHILE_INV_IND)
+  >> goal_assum $ drule_at Any
+  >> simp[]
+  >> qx_gen_tac`s''`
+  >> PairCases_on `s''`
+  >> simp[]
+  >> strip_tac
+  >> Cases_on `step s''1`
+  >> simp[]
+  >> drule step_preserves_wf_state
+  >> simp[]
+QED
+
+Theorem run_call_preserves_wf_state:
+  wf_state es ∧ run_call es = SOME (r, es') ⇒ wf_state es'
+Proof
+  rpt strip_tac
+  >> gvs[run_call_def]
+  >> `(λp. wf_state (SND p)) (r, es')` suffices_by simp[]
+  >> irule (MP_CANON OWHILE_INV_IND)
+  >> goal_assum $ drule_at Any
+  >> simp[]
+  >> qx_gen_tac`s`
+  >> PairCases_on `s`
+  >> simp[]
+  >> strip_tac
+  >> Cases_on `step s1`
+  >> simp[]
+  >> drule step_preserves_wf_state
+  >> simp[]
+QED
+
 (* Single-step preservation of run_call_inv, by length-change cases. *)
 
 Theorem run_call_inv_step:
