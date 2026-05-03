@@ -2677,6 +2677,77 @@ Proof
 QED
 
 (* -------------------------------------------------------------------------
+ * Factored pre-handler push structure.
+ *
+ * This is the reusable part of step_push_structure that concerns only the
+ * state produced by step_inner, before handle_step.  For now the INL-growth
+ * branch is obtained from the existing full-step push theorem; the INR-growth
+ * branch is the remaining piece to factor directly from the CALL-family part
+ * of the old proof.
+ * ------------------------------------------------------------------------- *)
+
+Theorem step_inner_push_structure:
+  wf_state s ∧ step_inner s = (r, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+    LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
+    MAP FST (TL (TL s'.contexts)) = MAP FST (TL s.contexts) ∧
+    LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit ∧
+    (FST (EL 1 s'.contexts)).gasUsed ≥
+      (FST (HD s.contexts)).gasUsed ∧
+    (FST (HD s.contexts)).gasUsed +
+      ((FST (HD s'.contexts)).msgParams.gasLimit -
+       (FST (HD s'.contexts)).gasUsed) ≤
+      (FST (EL 1 s'.contexts)).gasUsed ∧
+    (FST (EL 1 s'.contexts)).msgParams =
+      (FST (HD s.contexts)).msgParams
+Proof
+  strip_tac
+  >> Cases_on `r`
+  >- (
+    `step s = (INL x, s')` by simp[step_eq_handle_step_inner, handle_def]
+    >> drule step_push_structure
+    >> gvs[wf_state_def]
+    >> strip_tac
+    >> Cases_on`s.contexts` >> gvs[] )
+  (* Inner INR-growth can only be CALL-family. *)
+  >> gvs[step_inner_def, bind_def, get_current_context_def, COND_RATOR,
+         fail_def,return_def,CaseEq"bool",CaseEq"prod",
+         option_CASE_rator,CaseEq"option",ignore_bind_def]
+  >> TRY (drule step_inst_inr_grew_is_call_family >> simp[] >> NO_TAC)
+  >> mp_tac step_inst_preserves_nonempty_contexts
+  >> impl_keep_tac >- (strip_tac >> gvs[wf_state_def])
+  >> simp[Excl"step_inst_preserves_nonempty_contexts"] >> strip_tac
+  >> gvs[CaseEq"sum",CaseEq"prod"]
+  >- (
+    drule step_inst_inl_grew_is_call >> simp[] >>
+    mp_tac preserves_same_frame_inc_pc_or_jump >>
+    rewrite_tac[preserves_same_frame_def] >>
+    disch_then drule >> simp[] >>
+    ntac 2 strip_tac >> gvs[same_frame_rel_def] >>
+    gvs[inc_pc_or_jump_def,return_def] )
+  >> drule step_inst_inr_grew_is_call_family
+  >> simp[] >> disch_then(markerLib.ASSUME_NAMED_TAC"call")
+  >> `step_inst op s = step_call op s`
+       by (markerLib.LABEL_ASSUM"call"strip_assume_tac >> gvs[step_inst_def])
+  >> gvs[]
+  >> drule_then drule step_call_grows_by_exactly_one
+  >> simp[] >> strip_tac
+  >> drule_all step_call_push_structure
+  >> strip_tac
+  >> drule_at(Pat`step_call`) step_call_grow_parent_stack_room
+  >> Cases_on`s.contexts` >> fs[]
+  >> impl_keep_tac >- (gvs[wf_state_def])
+  >> strip_tac
+  >> drule step_call_grow_parent_gas_monotone
+  >> simp[] >> strip_tac
+  >> drule_at(Pat`step_call`) step_call_grow_parent_gas_ok
+  >> simp[]
+  >> impl_tac >- (markerLib.LABEL_ASSUM"call"strip_assume_tac >> simp[is_call_def])
+  >> strip_tac
+  >> Cases_on `s'.contexts` >> gvs[]
+QED
+
+(* -------------------------------------------------------------------------
  * Pop-structure lemma for step (Case −1 of run_call_inv_step).
  *
  * When step shrinks by 1 (pop), the resulting contexts structure is
