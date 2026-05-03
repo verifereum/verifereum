@@ -1,25 +1,6 @@
 (* ==========================================================================
- * vfmRunCallScript.sml
- *
- * Preservation theorems across a whole call (run_call). The headline theorem
- * is run_call_preserves_storage_outside_accessed_slots: the value of any
- * storage slot (a, k) not in the final accessed storageKeys is unchanged.
- *
- * Strategy: OWHILE_INV_IND over run_call with a 2-state invariant that
- * tracks:
- *   1. txParams equality between es and s.
- *   2. A per-slot storage invariant for every "active rollback" — the chain
- *      of rollbacks we could revert to, namely s.rollback plus the saved
- *      rollbacks of every context pushed on top of es.
- *
- * Using storageKeys (not addresses) is essential because SSTORE only
- * access-lists the slot (SK address key), not the address. The storageKeys
- * formulation exactly matches SSTORE's access behaviour.
- *
- * The saved-rollbacks clause is what makes the induction go through:
- * a revert transition replaces s.rollback with the saved rollback of the
- * popped head, but that was already known to satisfy the storage
- * invariant, so the invariant is preserved across reverts.
+ * run_call storage preservation: slots not in final storageKeys are unchanged.
+ * The invariant tracks txParams and rollback states reachable by revert.
  * ========================================================================== *)
 Theory vfmRunCall
 Ancestors
@@ -32,21 +13,9 @@ Ancestors
 Libs
   dep_rewrite BasicProvers
 
-(* -------------------------------------------------------------------------
- * Active rollbacks — the list of rollbacks we could "revert to" from a
- * descendant state s of es. The current s.rollback plus the saved
- * rollbacks of every context pushed from es-depth onward (inclusive
- * of the context at es-depth itself, so that a failure-pop at
- * exactly es-depth restores a tracked rollback).
- *
- * The TAKE excludes the LAST context's saved rollback: it can never be
- * restored as s.rollback during run_call (at depth 1, handle_exception
- * sees n ≤ 1 and does not pop), yet set_original in proceed_create
- * modifies it by replacing the CREATE target's account with
- * empty_account_state, potentially breaking storage_slot_preserved.
- * The MIN ensures we take enough for pop-restore tracking while never
- * including the LAST position.
- * ------------------------------------------------------------------------- *)
+(* Rollbacks that can become current by reverting during run_call.
+ * Exclude the final saved rollback: it is never restored, and CREATE may
+ * modify it via set_original. *)
 
 Definition active_rollbacks_def:
   active_rollbacks es_depth s =
@@ -56,13 +25,7 @@ Definition active_rollbacks_def:
                               (LENGTH s.contexts - 1)) s.contexts))
 End
 
-(* -------------------------------------------------------------------------
- * Per-context outputTo-consistency. Tracks the invariant that every
- * context's `outputTo = Code a` matches `callee = a`. `vfmSameFrame`'s
- * `outputTo_consistent s` only asserts this for the head; we need the
- * per-context version to survive pops (which expose position-1 as the
- * new head).
- * ------------------------------------------------------------------------- *)
+(* Per-context outputTo consistency, needed across pops. *)
 
 Theorem outputTo_consistent_stack_imp_consistent:
   outputTo_consistent_stack s ⇒ outputTo_consistent s
@@ -71,10 +34,7 @@ Proof
   >> Cases_on `s.contexts` >> gvs[outputTo_consistent_ctx_def]
 QED
 
-(* -------------------------------------------------------------------------
- * Per-slot storage preservation: slot (a, k) unchanged outside
- * access-listed storage keys.
- * ------------------------------------------------------------------------- *)
+(* Per-slot storage preservation outside access-listed storage keys. *)
 
 Definition storage_slot_preserved_def:
   storage_slot_preserved rb rb0 ⇔
@@ -114,111 +74,20 @@ Proof
   >> Cases_on`t` >> gvs[ADD1]
 QED
 
-(* -------------------------------------------------------------------------
- * Single-step preservation of run_call_inv.
- *
- * This is the technical core. Case analysis on step's effect:
- *   - Same-frame step: length preserved, same_frame_rel s s', active
- *     rollbacks preserved entry-by-entry (the tail is unchanged, and the
- *     head s'.rollback inherits by callee_local_changes + slot-level
- *     access-listing).
- *   - Push step: length grows, new active entry is s.rollback (mid-step,
- *     post-prefix). Handled via same_frame_or_grow structural facts.
- *   - Pop success: length shrinks (but stays ≥ es), active rollbacks
- *     shrinks; entries are preserved subsequences of the old.
- *   - Pop revert: s'.rollback replaced by saved rollback of popped head,
- *     which was already an active rollback entry satisfying the
- *     invariant.
- * ------------------------------------------------------------------------- *)
+(* Single-step preservation of run_call_inv: split on same-frame/push/pop. *)
 
 
-(* -------------------------------------------------------------------------
- * `step` preserves storage at any slot not access-listed in the final
- * state. This is the core content lemma for Case 0 (same-frame step)
- * of run_call_inv_step.
- *
- * Most opcodes: `cp_step_inst_non_call[simp]` gives full accounts
- * equality (storage preserved regardless of access-listing).
- *
- * Exceptions (non-trivial cases):
- *   - SStore non-transient: `step_sstore_gas_consumption` calls
- *     `access_slot (SK address key)` BEFORE `write_storage address
- *     key value`, so any modification at `(a, k)` has `(SK a k) ∈
- *     s'.storageKeys`.
- *   - SStore transient: `write_transient_storage` modifies
- *     `tStorage`, not accounts. Storage preserved.
- *   - Log n, SelfDestruct: no storage change (logs / balance only).
- *   - Call family / Create family without grow: abort_* paths which
- *     don't change accounts, or proceed_* with grow (covered below).
- *   - Any op with inner-grow-then-pop: handle_step's set_rollback
- *     restores the pushed_rb whose accounts = s.rollback.accounts
- *     (transfer_value only changes balance).
- * ------------------------------------------------------------------------- *)
+(* Same-frame step storage preservation outside final storageKeys. *)
 
-(* The theorem, specialised to the same-frame case (Case 0 of
-   run_call_inv_step). Works because:
-   - same_frame_rel gives callee_local_changes: storage at every
-     non-callee address is preserved unconditionally.
-   - At the callee address: the only step_inst that modifies callee
-     storage is step_sstore F (non-transient SSTORE), and
-     step_sstore_gas_consumption calls access_slot (SK callee key)
-     BEFORE write_storage. So any modification at (callee, k) adds
-     (SK callee k) to s'.rollback.accesses.storageKeys; contrapositive
-     gives preservation at unaccessed callee slots.
-   - Cases +1 and −1 of run_call_inv_step don't rely on this lemma
-     (they have their own structural arguments via step_push_structure
-     and step_pop_structure). *)
-(* Key auxiliary: if write_storage address key value runs starting
-   from state t, then the final state has (SK address key) in its
-   storageKeys. This is by definition — write_storage uses
-   update_accounts which only touches accounts, and storageKeys is in
-   rollback.accesses, which is not touched. So if storageKeys already
-   contained SK address key, it still does; if not, it still doesn't.
-   Actually: write_storage does NOT add to accesses.storageKeys. The
-   access-listing happens separately via access_slot in
-   step_sstore_gas_consumption. *)
-
-(* Direct proof: factor out the observation that for same-frame step,
-   if (SK callee key) is NOT in s'.storageKeys, then the SSTORE path
-   was not taken for that slot. *)
-
-(* The actual callee storage analysis: in step, the only primitive that
-   writes callee storage is write_storage callee key _ . This is only
-   called inside step_sstore F callee (via step_sstore_def). Before it,
-   step_sstore_gas_consumption calls access_slot (SK callee key),
-   which adds (SK callee key) to storageKeys. Afterwards (and in the
-   rest of the step), accesses only grow. So any storage change at
-   (callee, key) implies (SK callee key) ∈ s'.storageKeys. *)
+(* Same-frame case: non-callee storage is unchanged by callee_local_changes;
+ * callee storage can change only via SSTORE, which first access-lists the slot. *)
 
 
 
-(* =====================================================================
- * Pushed-rollback storage lemmas.
- *
- * When step_call / step_create grows contexts by +1, the saved
- * rollback at the new head (SND (HD s'.contexts)) has the same
- * .accounts.storage as s.rollback.accounts.storage.
- *
- * Proof sketch:
- *   - step_call/step_create run preserves_storage primitives until
- *     they reach proceed_call/proceed_create.
- *   - proceed_call/proceed_create:
- *       rollback <- get_rollback;       (* captures rb with same storage *)
- *       ... preserves_storage prefix ...
- *       push_context (context, rollback);
- *       (optional) dispatch_precompiles (preserves_rollback; doesn't touch SND HD)
- *   - After push_context, SND (HD s'.contexts) = rollback captured above,
- *     whose .accounts.storage equals s.rollback.accounts.storage.
- *   - The subsequent ops (set_current_context inside precompiles,
- *     consume_gas, set_return_data, finish) only touch FST (HD contexts)
- *     or s.rollback, never SND (HD contexts).
- * ===================================================================== *)
+(* Pushed rollback storage: when CALL/CREATE pushes, the new head's saved
+ * rollback has the old rollback's storage. *)
 
-(* Intermediate: proceed_call captures s.rollback as the pushed rollback.
-   Since get_rollback is the first thing that matters and nothing before
-   it touches storage, the captured rollback's .accounts.storage equals
-   s.rollback.accounts.storage. dispatch_precompiles afterwards is
-   preserves_same_frame, so SND (HD ·) is unchanged. *)
+(* proceed_call captures s.rollback as the pushed rollback. *)
 Theorem proceed_call_pushed_rb_storage:
   proceed_call op sender address value argsOffset argsSize code stipend
                 outputTo s = (r, s') ∧ s.contexts ≠ [] ∧
@@ -322,12 +191,7 @@ Proof
   >> rw[]
 QED
 
-(* proceed_call_push_structure: combined structural lemma for proceed_call.
-   When proceed_call pushes a new frame:
-   - TL is preserved (old contexts unchanged)
-   - Accesses are monotone
-   - The new context's outputTo equals the parameter outputTo
-   Note: outputTo_consistent follows at step_call level since outputTo = Memory ... *)
+(* proceed_call push structure. *)
 Theorem proceed_call_push_structure:
   proceed_call op sender address value argsOffset argsSize code stipend
                outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
@@ -345,8 +209,7 @@ Proof
   >> simp[ignore_bind_def, Once bind_def]
   >> TOP_CASE_TAC
   >> qmatch_asmsub_rename_tac `g s = (q, s1)`
-  (* g is either update_accounts (transfer_value ...) or return () —
-     both preserve contexts and accesses *)
+  (* g preserves contexts and accesses. *)
   >> `s1.contexts = s.contexts ∧
       toSet s.rollback.accesses.storageKeys ⊆ toSet s1.rollback.accesses.storageKeys`
       by (simp[Abbr`g`] >> gvs[COND_RATOR,AllCaseEqs(),update_accounts_def, return_def])
@@ -368,13 +231,13 @@ Proof
   >> rewrite_tac[Once bind_def]
   >> TOP_CASE_TAC
   >> drule push_context_effect >> strip_tac >> gvs[]
-  (* After push_context: TL = s1.contexts = s.contexts *)
+  (* After push_context, TL is the old contexts. *)
   >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
   >> reverse IF_CASES_TAC >> simp[return_def]
   >- ((* No precompile *)
       strip_tac >> gvs[Abbr`ctx`, initial_msg_params_def] >>
       gvs[SUBSET_DEF] )
-  (* Precompile: dispatch_precompiles is preserves_same_frame *)
+  (* Precompile dispatch is same-frame. *)
   >> strip_tac
   >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_, s')`
   >> `ss.contexts ≠ []` by simp[Abbr`ss`]
@@ -390,12 +253,7 @@ Proof
   >> gvs[Abbr`ss`]
 QED
 
-(* proceed_create_push_structure: combined structural lemma for proceed_create.
-   When proceed_create pushes a new frame:
-   - FST parts of TL are preserved (SND parts may change due to ensure_storage_in_domain)
-   - Accesses are monotone
-   - The new head context is outputTo_consistent (outputTo = Code address
-     and callee = address) *)
+(* proceed_create push structure. *)
 Theorem proceed_create_push_structure:
   proceed_create senderAddress address value code cappedGas s = (r, s') ∧
   s.contexts ≠ [] ⇒
@@ -429,47 +287,13 @@ Proof
   >> simp[set_last_accounts_def, MAP_SNOC, MAP_FRONT]
   >> qspec_then`MAP FST s.contexts`mp_tac SNOC_LAST_FRONT
   >> simp[]
-  (* SND (HD s'.contexts) = captured rollback = s.rollback (after increment_nonce,
-     which doesn't modify accesses), so accesses subset is reflexivity *)
+  (* SND HD is the captured rollback; nonce changes preserve accesses. *)
   >> gvs[SUBSET_DEF]
 QED
 
-(* Wrapper: step_call runs preserves_storage primitives (pop_stack, consume_gas,
-   memory_expansion, access_address, ...) until it reaches either an abort
-   branch (which does not grow) or proceed_call (which grows and is handled
-   by proceed_call_pushed_rb_storage above). For the grow case, the state
-   just before proceed_call has the same storage as s (by preserves_storage
-   of all the prefix ops), so proceed_call_pushed_rb_storage gives us what
-   we need. *)
-(* Helper principle: if a monad m is preserves_storage and
-   preserves_same_frame, and bind m f s = (r, s'), then we can
-   replace s by an intermediate s_mid — with same storage and
-   contexts as s — and reduce to proving the property for f at s_mid. *)
+(* CALL/CREATE wrappers: same-frame storage-preserving prefixes, then proceed_*. *)
 
-(* We use the following shape for step_call/step_create:
-
-     step_call = do ...preserves_storage_prefix... ;
-                    if cond1 then abort_call_value stipend
-                    else do ...preserves_storage_prefix'... ;
-                           if cond2 then abort_unuse stipend
-                           else proceed_call ... od od
-
-   The prefixes are preserves_storage + preserves_same_frame. The two
-   abort branches are preserves_same_frame (hence don't grow contexts).
-   Only proceed_call grows. *)
-
-(* -----------------------------------------------------------------
- * preserves_pushed_rb_storage: a monad m preserves the pushed rollback
- * storage at every address that was valid before m ran.
- *
- * Formally: if m s = (r, s') and LENGTH s'.contexts > LENGTH s.contexts
- * then the new top frame's saved rollback has the same .accounts.storage
- * as s.rollback.accounts.storage at every address.
- *
- * This lets us compose: a bind of two ops that each "preserves pushed rb
- * storage when growing" does so. A preserves_storage + preserves_same_frame
- * prefix IS `preserves_pushed_rb_storage` vacuously (it can't grow).
- * ----------------------------------------------------------------- *)
+(* Composable predicate: if m grows, the pushed rollback preserves storage. *)
 Definition preserves_pushed_rb_storage_def:
   preserves_pushed_rb_storage (m : α execution) ⇔
     ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ∧
@@ -478,8 +302,7 @@ Definition preserves_pushed_rb_storage_def:
           (lookup_account a s.rollback.accounts).storage
 End
 
-(* preserves_storage + preserves_same_frame ⇒ preserves_pushed_rb_storage
-   vacuously (same_frame rules out LENGTH growth). *)
+(* Same-frame prefixes cannot grow, so the pushed-rb property is vacuous. *)
 Theorem preserves_pushed_rb_storage_of_same_frame[simp]:
   preserves_same_frame m ⇒ preserves_pushed_rb_storage m
 Proof
@@ -487,9 +310,7 @@ Proof
   >> first_x_assum drule >> simp[same_frame_rel_def]
 QED
 
-(* bind composition: if g preserves_pushed_rb_storage AND
-   (preserves_storage g ∧ preserves_same_frame g), and f x
-   preserves_pushed_rb_storage for all x, then bind g f does. *)
+(* bind composition for pushed-rb storage. *)
 Theorem preserves_pushed_rb_storage_bind:
   preserves_storage g ∧ preserves_same_frame g ∧
   (∀x. preserves_pushed_rb_storage (f x)) ⇒
@@ -500,7 +321,7 @@ Proof
   >> fs[preserves_storage_def, preserves_same_frame_def]
   >> rpt (first_x_assum drule) >> simp[same_frame_rel_def] >> strip_tac
   >> rpt strip_tac
-  (* intermediate s_mid after g: same contexts, same storage. *)
+  (* s_mid has same contexts and storage as s. *)
   >> qmatch_asmsub_rename_tac `g s = (_, s_mid)`
   >> `s_mid.contexts ≠ []` by (Cases_on `s.contexts` >> Cases_on `s_mid.contexts` >> fs[])
   >> `LENGTH s'.contexts > LENGTH s_mid.contexts` by fs[]
@@ -630,11 +451,7 @@ Proof
             preserves_pushed_rb_storage_def]
 QED
 
-(* step_call_push_structure: when step_call grows, structural facts.
-   We peel prefix ops one by one using bind_psf_grows_extract, which gives
-   us same_frame_rel at each step. Composing transitively gives same_frame_rel s sm
-   where sm is the state just before proceed_call. Then proceed_call_push_structure
-   gives us TL s'.contexts = sm.contexts, from which we derive all conclusions. *)
+(* step_call growth structure: peel same-frame prefixes, then proceed_call. *)
 Theorem step_call_push_structure:
   step_call op s = (r, s') ∧ s.contexts ≠ [] ∧
   LENGTH s'.contexts > LENGTH s.contexts ⇒
@@ -771,13 +588,8 @@ Proof
   rewrite_tac[GSYM SNOC_APPEND] >> rw[]
 QED
 
-(* step_create_push_structure: structural facts when step_create grows.
-   We peel prefix ops using bind_psf_grows_extract to get same_frame_rel s sm.
-   proceed_create modifies LAST context's SND.accounts via set_original,
-   so we only claim accesses preservation (not storage equality) for per-position
-   SND facts. For the old head (position 1 in new stack), we additionally
-   claim storage equality for a ≠ callee, since set_original only modifies
-   the callee address. *)
+(* step_create growth structure.  set_original may alter the last saved
+ * rollback, so storage equality is limited to the needed non-callee case. *)
 Theorem step_create_push_structure:
   step_create two s = (r, s') ∧ s.contexts ≠ [] ∧
   LENGTH s'.contexts > LENGTH s.contexts ⇒
@@ -936,12 +748,7 @@ Proof
      a≠callee storage *)
   >> rewrite_tac[Ntimes CONJ_ASSOC 3]
   >> reverse conj_tac >- (
-    (* a ≠ callee ⇒ storage equality at position 1.
-       set_last_accounts only modifies the LAST element's .accounts.
-       When LENGTH se.contexts > 1, HD of TL is NOT the last, so unchanged.
-       When LENGTH se.contexts = 1, HD of TL IS the last, modified by
-       set_last_accounts (update_account address empty_account_state)
-       which doesn't touch a ≠ address. *)
+    (* Position-1 storage equality for non-callee addresses. *)
     qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac >>
     rewrite_tac[proceed_create_def] >>
     simp[ignore_bind_def, bind_def, update_accounts_def, return_def,
@@ -985,7 +792,7 @@ Proof
     Cases_on`t'` >- gvs[] >> simp[] >>
     Cases_on`se.contexts` >- gvs[] >>
     fs[]  )
-  (* Per-position accesses preservation: set_original only touches .accounts *)
+  (* set_original only touches .accounts. *)
   >> qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac
   >> simp[proceed_create_def]
   >> simp[ignore_bind_def, bind_def, update_accounts_def, return_def,
@@ -1034,16 +841,7 @@ Proof
   >> simp[ADD1, PRE_SUB1]
 QED
 
-(* Unfold step = handle inner handle_step. For the same_frame case,
-   we have four sub-cases to analyse:
-     (A) inner INL, no-grow → step s = inner s with s' = inner's s'.
-     (B) inner INR, no-grow → handle_step reraised, s' = inner's s'.
-     (C) inner INL, grew → contradicts same_frame (can't happen).
-     (D) inner INR, grew + handle_step popped.
-   Cases (A) and (B) reduce to step_inst behavior, where
-   step_inst_preserves_non_accessed_storage applies.
-   Case (C) is vacuous.
-   Case (D) requires push structure. *)
+(* Full step storage preservation in the same-frame case. *)
 Theorem step_preserves_non_accessed_storage:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent s ∧
@@ -1223,11 +1021,8 @@ Proof
          >> drule same_frame_rel_contexts_ne >> simp[] >> strip_tac
          >> reverse conj_tac >- goal_assum drule
          >> imp_res_tac same_frame_rel_contexts_ne)
-    >> (* step_inst op s = (INL x, r''), inc_pc_or_jump op r'' = (INR y, r').
-          Jump ops can fail with InvalidJumpDest. We handle this by first
-          using step_inst_preserves_non_accessed_storage on s → r''
-          (for non-call ops), then inc_pc_or_jump preserves rollback
-          (storage and accesses unchanged), so r' ≡ r'' on rollback. *)
+    >> (* INR from inc_pc_or_jump: use step_inst storage preservation, then
+          rollback preservation of inc_pc_or_jump. *)
        Cases_on `is_call op`
        >- ((* is_call op + step_inst INL + inc_pc_or_jump INR: impossible.
               For is_call op, inc_pc_or_jump op = return () which always
@@ -1318,26 +1113,12 @@ Proof
     rewrite_tac[preserves_storage_def] >>
     Cases_on`op` >> gvs[is_call_def, step_inst_def] >>
     rpt strip_tac >> first_x_assum drule >> rw[] ) >>
-  (* Now prove: storage s'.rollback @ a,k = storage r'.rollback @ a,k.
-     From handle_step_pop_generic_gen disjunction:
-       (A) ∀a. storage s'.rollback @ a = storage r'.rollback @ a, OR
-       (B) ∀a. storage s'.rollback @ a = storage r''.accounts @ a
-     where SND (HD r'.contexts) = r''.
-     For (A): direct.
-     For (B): use step_call_pushed_rb_storage (or step_create variant)
-     to get storage r''.accounts @ a = storage s.rollback @ a, then
-     chain via preserves_storage_step_call/create to relate s.rollback
-     to r'.rollback. *)
+  (* Relate s'.rollback storage to r'.rollback storage after handle_step. *)
   qpat_x_assum `_ ∧ _` strip_assume_tac
-  (* strip_assume_tac splits the conjunction AND the inner disjunction,
-     producing 2 subgoals — one per disjunct from handle_step_pop_generic_gen. *)
+  (* Split the handle_step_pop_generic_gen disjunction. *)
   >- ((* Disjunct A: ∀a. storage s'.rollback @ a = storage r'.rollback @ a. *)
       simp[] >> metis_tac[])
-  (* Disjunct B: ∀a. storage s'.rollback @ a = storage r''.accounts @ a.
-     Here r'' = SND (HD r'.contexts). Chain:
-       storage s'.rollback @ a = storage r''.accounts @ a (hypothesis)
-                             = storage s.rollback @ a  (step_call_pushed_rb_storage)
-                             = storage r'.rollback @ a (preserves_storage step_inst) *)
+  (* Disjunct B: chain through the pushed rollback storage. *)
   >> `(lookup_account a r''.accounts).storage =
       (lookup_account a s.rollback.accounts).storage` by (
        `LENGTH r'.contexts > LENGTH s.contexts` by simp[]
@@ -1353,13 +1134,7 @@ Proof
   >> `lookup_storage k (lookup_account a s'.rollback.accounts).storage =
       lookup_storage k (lookup_account a r''.accounts).storage` by simp[]
   >> simp[]
-  (*
- 6. Second disjunct needs a new helper: step_call_saved_rollback_preserves_storage / step_call_saved_rollback_preserves_storage_create — if is_call op ∧
- step_inst op s = (q, r') ∧ LENGTH r'.contexts = LENGTH s.contexts + 1, then the top saved rollback SND (HD r'.contexts) has the same storage as s.rollback at
- every (a,k). Proof: push_context stores the then-current rollback; all step_call/create primitives before push_context are preserves_storage, so rollback
- storage at push-time equals at entry; after push_context, further ops (none, or only reraise-like) don't touch SND (HD · contexts). Close by the same
- bind-decomposition pattern as preserves_storage_step_call, but tracking SND (HD (s'.contexts)) instead of s'.rollback.
- *)
+
 QED
 
 Theorem same_frame_or_grow_length:
@@ -2281,12 +2056,7 @@ Proof
          >> strip_tac >> gvs[])
     >> simp[Abbr`k`]
     >> strip_tac
-    (* This is the same peel sequence as step_create_grow_parent_gas_monotone.
-       The only extra assertion is after the consume_gas cappedGas peel:
-       consume_gas_head_gas_add_ge gives oldGas + cappedGas <= current
-       head gas; subsequent prefix operations preserve/increase head gas via
-       bind_psf_phgm_grows_extract; proceed_create_parent_gas_ok discharges
-       the final pushed-state obligation. *)
+    (* Same peel as gas monotonicity, with additive cappedGas reservation. *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ sp = (_,_)`kall_tac
     >> strip_tac >> gvs[]
@@ -2412,11 +2182,7 @@ Proof
     >> gvs[Abbr`k`] )
 QED
 
-(* -------------------------------------------------------------------------
- * Named facts about the pre-handler inner step.  The definition lives in
- * vfmExecutionProp; these lemmas keep downstream proofs from re-abbreviating
- * the inline monad from step_def.
- * ------------------------------------------------------------------------- *)
+(* Named facts about the pre-handler inner step. *)
 
 Theorem same_frame_or_grow_step_inner_named[simp]:
   same_frame_or_grow step_inner
@@ -2436,28 +2202,7 @@ Proof
   >> qexistsl_tac [`F`, `T`] >> simp[]
 QED
 
-(* -------------------------------------------------------------------------
- * Push-structure lemma for step (Case +1 of run_call_inv_step).
- *
- * When step grows by +1 (push), the new contexts prepend a child context
- * with a pushed rollback. The prior parent context may have been modified
- * (gasUsed/stack updated by consume_gas/pop_stack in the step_call prefix),
- * but its SND component (saved rollback) is unchanged and its .msgParams
- * is unchanged (modifications via set_current_context preserve both).
- *
- * The pushed rollback's .accounts.storage equals s.rollback.accounts.storage
- * (via step_call_pushed_rb_storage / step_create_pushed_rb_storage).
- * The new s'.rollback.accounts.storage also equals s.rollback.accounts.storage
- * (the only modifications during push prefix are transfer_value and
- * increment_nonce, both of which preserve storage).
- *
- * Accesses are monotone.
- *
- * Covers both:
- *   - INL-grow: plain proceed_call or proceed_create success (no precompile).
- *   - INR-grow: step_call INR-grew with vfm_abort e (handle_step reraised).
- *     (step_create never INR-grows, per step_create_inr_no_grow.)
- * ------------------------------------------------------------------------- *)
+(* Full-step push structure: storage/access shape plus parent stack/gas facts. *)
 Theorem step_push_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent_stack s ∧ wf_state s ∧
@@ -2468,13 +2213,7 @@ Theorem step_push_structure:
          (lookup_account a s.rollback.accounts).storage) ∧
     toSet s.rollback.accesses.storageKeys ⊆
       toSet s'.rollback.accesses.storageKeys ∧
-    (* Per-position storage facts for saved rollbacks in s'.contexts *)
-    (* Per-position storage: excludes i = LENGTH s.contexts (the old LAST
-       position) because set_original in proceed_create replaces the
-       callee account with empty_account_state, breaking ∀a storage
-       equality at that position for the CREATE case. The accesses-subset
-       clause still covers all positions since set_original only touches
-       .accounts, not .accesses. *)
+    (* saved rollback storage; CREATE's old-LAST exception is excluded *)
     (∀i. i < LENGTH s.contexts ⇒
          (∀a. (lookup_account a (SND (EL i s'.contexts)).accounts).storage =
               (lookup_account a (if i = 0 then s.rollback
@@ -2483,7 +2222,7 @@ Theorem step_push_structure:
          toSet (if i = 0 then s.rollback
                 else SND (EL (i-1) s.contexts)).accesses.storageKeys ⊆
            toSet (SND (EL i s'.contexts)).accesses.storageKeys) ∧
-    (* saved parent and shifted-tail stack structure *)
+    (* saved parent / shifted tail *)
     MAP FST (TL (TL s'.contexts)) = MAP FST (TL s.contexts) ∧
     LENGTH (FST (EL 1 s'.contexts)).stack < stack_limit ∧
     (FST (EL 1 s'.contexts)).gasUsed ≥ (FST (HD s.contexts)).gasUsed ∧
@@ -2491,12 +2230,12 @@ Theorem step_push_structure:
       ((FST (HD s'.contexts)).msgParams.gasLimit -
        (FST (HD s'.contexts)).gasUsed) ≤
       (FST (EL 1 s'.contexts)).gasUsed ∧
-    (* msgParams preservation at position 1 *)
+    (* parent msgParams *)
     (LENGTH s.contexts ≥ 1 ⇒
        (FST (EL 1 s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams) ∧
-    (* outputTo_consistent for the new child *)
+    (* new child outputTo consistency *)
     outputTo_consistent_ctx (FST (HD s'.contexts)) ∧
-    (* outputTo_consistent preserved for rest of stack *)
+    (* shifted outputTo consistency *)
     (∀i. i < LENGTH s.contexts ⇒
          outputTo_consistent_ctx (FST (EL i s.contexts)) ⇒
          outputTo_consistent_ctx (FST (EL (i+1) s'.contexts)))
@@ -2637,13 +2376,8 @@ Proof
        drule_all same_frame_or_grow_length >> simp[])
   >> strip_tac
   >> `r'.contexts ≠ []` by (strip_tac >> gvs[] >> Cases_on`s.contexts` >> gvs[])
-  (* For LENGTH s' > LENGTH s with inner INR, we derive a contradiction.
-     The inner INR-grew, so by step_inner_inr_grow_not_abort, ¬vfm_abort e.
-     With ¬vfm_abort e and LENGTH r' ≥ 2, handle_step_not_abort_pops says
-     handle_step shrinks by exactly 1: LENGTH s' + 1 = LENGTH r'.
-     By step_inner_grows_by_exactly_one, LENGTH r' = LENGTH s + 1.
-     So LENGTH s' + 1 = LENGTH s + 1, giving LENGTH s' = LENGTH s.
-     This contradicts LENGTH s' > LENGTH s. *)
+  (* Inner INR-grow cannot lead to full-step growth: non-abort handlers pop;
+     aborts reraise and preserve the inner length. *)
   >> `LENGTH s'.contexts ≤ LENGTH s.contexts` suffices_by gvs[]
   >> Cases_on `LENGTH r'.contexts = LENGTH s.contexts` >- (
        drule handle_step_shrinks_by_one >> simp[])
@@ -2676,15 +2410,7 @@ Proof
   qexistsl_tac[`F`,`T`] >> simp[]
 QED
 
-(* -------------------------------------------------------------------------
- * Factored pre-handler push structure.
- *
- * This is the reusable part of step_push_structure that concerns only the
- * state produced by step_inner, before handle_step.  For now the INL-growth
- * branch is obtained from the existing full-step push theorem; the INR-growth
- * branch is the remaining piece to factor directly from the CALL-family part
- * of the old proof.
- * ------------------------------------------------------------------------- *)
+(* Reusable pre-handler push structure for step_inner. *)
 
 Theorem step_inner_push_structure:
   wf_state s ∧ step_inner s = (r, s') ∧
@@ -2747,25 +2473,8 @@ Proof
   >> Cases_on `s'.contexts` >> gvs[]
 QED
 
-(* -------------------------------------------------------------------------
- * Pop-structure lemma for step (Case −1 of run_call_inv_step).
- *
- * When step shrinks by 1 (pop), the resulting contexts structure is
- * derived from s.contexts by dropping the head and possibly modifying the
- * new head's context fields (msgParams preserved). The new rollback is
- * either s.rollback (success pop) or SND (HD s.contexts) (failure pop).
- * In both cases, this rollback is already tracked by run_call_inv's
- * invariant on active_rollbacks.
- * ------------------------------------------------------------------------- *)
-(* Weakened from literal rollback equality to storage-pointwise
-   disjunction, because handle_create in the Code+NONE+success case
-   modifies rollback.accounts.code (but not .storage).
-
-   The conclusion pairs each storage disjunct with the matching accesses
-   subset:
-     - Reraise-like pop (disjunct A): s.rollback.accesses ⊆ s'.rollback.accesses.
-     - Failure pop (disjunct B): callee_rb.accesses ⊆ s'.rollback.accesses.
-   (A single universal `s.accesses ⊆ s'.accesses` would fail in disjunct B.) *)
+(* Full-step pop structure.  Rollback equality is weakened to storage equality
+ * plus the matching accesses subset, because handle_create may change code. *)
 Theorem same_frame_or_grow_eq_length:
   ∀m s r s'. same_frame_or_grow m ∧ m s = (r,s') ∧ s.contexts ≠ [] ∧
     LENGTH s'.contexts = LENGTH s.contexts ⇒ same_frame_rel s s'
@@ -3169,12 +2878,7 @@ Proof
   >- ( irule step_preserves_outputTo_consistent_stack \\ simp[] \\ gvs[wf_state_def])
 QED
 
-(* -------------------------------------------------------------------------
- * Single-step preservation of run_call_inv.
- *
- * Strategy: case on the length change. In each case, characterise
- * the previous invariant.
- * ------------------------------------------------------------------------- *)
+(* Single-step preservation of run_call_inv, by length-change cases. *)
 
 Theorem run_call_inv_step:
   ∀es s s' r.
@@ -3444,12 +3148,7 @@ Proof
   >> simp[]
 QED
 
-(* -------------------------------------------------------------------------
- * Named headline corollary: per-slot storage preservation.
- *
- * This is the primary statement — any storage slot (a, k) not in the final
- * accessed storageKeys set has its value unchanged from the initial state.
- * ------------------------------------------------------------------------- *)
+(* Headline corollary: untouched storageKeys imply unchanged storage slot. *)
 
 Theorem run_call_preserves_storage_outside_accessed_slots:
   ∀es r es'.
@@ -3481,13 +3180,7 @@ Proof
   >> rw[run_call_inv_def]
 QED
 
-(* ---------------------------------------------------------------------
- * Single-context entry corollary. At entry to run_call with a single
- * context (the standard top-level transaction case), most preconditions
- * are trivially satisfied: SND (HD es.contexts) = es.rollback makes
- * storage_slot_preserved reflexive, and initial_context gives
- * jumpDest = NONE.
- * --------------------------------------------------------------------- *)
+(* Single-context entry corollary for the standard top-level transaction. *)
 
 Theorem run_call_preserves_storage_outside_accessed_slots_single:
     outputTo_consistent_ctx ctx ∧
