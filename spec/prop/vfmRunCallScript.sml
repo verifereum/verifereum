@@ -1141,38 +1141,6 @@ QED
  * Stack room for CALL/CREATE growth.
  * ------------------------------------------------------------------------- *)
 
-Theorem bind_psf_phs_grows_extract:
-  preserves_same_frame g ∧ preserves_head_stack g ∧
-  bind g f s = (r, s') ∧ s.contexts ≠ [] ∧
-  LENGTH s'.contexts > LENGTH s.contexts ⇒
-  ∃x sm.
-    g s = (INL x, sm) ∧ same_frame_rel s sm ∧
-    (FST (HD sm.contexts)).stack = (FST (HD s.contexts)).stack ∧
-    f x sm = (r, s')
-Proof
-  strip_tac
-  >> drule_all bind_psf_grows_extract
-  >> strip_tac >> gvs[]
-  >> drule_all preserves_head_stack_imp
-  >> strip_tac >> gvs[]
-QED
-
-Theorem bind_psf_phgm_grows_extract:
-  preserves_same_frame g ∧ preserves_head_gas_mono g ∧
-  bind g f s = (r, s') ∧ s.contexts ≠ [] ∧
-  LENGTH s'.contexts > LENGTH s.contexts ⇒
-  ∃x sm.
-    g s = (INL x, sm) ∧ same_frame_rel s sm ∧
-    (FST (HD s.contexts)).gasUsed ≤ (FST (HD sm.contexts)).gasUsed ∧
-    f x sm = (r, s')
-Proof
-  strip_tac
-  >> drule_all bind_psf_grows_extract
-  >> strip_tac >> gvs[]
-  >> drule_all preserves_head_gas_mono_imp
-  >> strip_tac >> gvs[]
-QED
-
 Theorem step_call_grow_parent_stack_room:
   wf_context (FST (HD s.contexts)) ∧ step_call op s = (r, s') ∧
   s.contexts ≠ [] ∧ LENGTH s'.contexts > LENGTH s.contexts ⇒
@@ -1760,27 +1728,6 @@ Proof
     >> simp[ignore_bind_def, bind_def, assert_def, set_current_context_def,
             return_def, fail_def, AllCaseEqs()] >> rw[]
     >> gvs[Abbr`k`] )
-QED
-
-Theorem consume_gas_head_gas_ge:
-  consume_gas n s = (INL (), s') ∧ s.contexts ≠ [] ⇒
-  n ≤ (FST (HD s'.contexts)).gasUsed
-Proof
-  rw[consume_gas_def, bind_def, get_current_context_def, return_def,
-     ignore_bind_def,
-     fail_def, assert_def, set_current_context_def, AllCaseEqs()]
-  >> Cases_on `s.contexts` >> gvs[]
-QED
-
-Theorem consume_gas_head_gas_add_ge:
-  consume_gas n s = (INL (), s') ∧ s.contexts ≠ [] ⇒
-    (FST (HD s.contexts)).gasUsed + n ≤
-    (FST (HD s'.contexts)).gasUsed
-Proof
-  rw[consume_gas_def, bind_def, get_current_context_def, return_def,
-     ignore_bind_def,
-     fail_def, assert_def, set_current_context_def, AllCaseEqs()]
-  >> Cases_on `s.contexts` >> gvs[]
 QED
 
 Theorem call_gas_stipend_le_consumed:

@@ -12,6 +12,7 @@ Theory vfmHeadStack
 Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
   vfmState vfmContext vfmExecution vfmExecutionProp vfmPreserves
+  vfmSameFrame
 Libs
   BasicProvers
 
@@ -410,4 +411,20 @@ Theorem preserves_head_stack_imp:
 Proof
   rw[preserves_head_stack_def, preserves_def, head_stack_rel_def] >>
   first_x_assum drule >> rw[]
+QED
+
+Theorem bind_psf_phs_grows_extract:
+  preserves_same_frame g ∧ preserves_head_stack g ∧
+  bind g f s = (r, s') ∧ s.contexts ≠ [] ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+  ∃x sm.
+    g s = (INL x, sm) ∧ same_frame_rel s sm ∧
+    (FST (HD sm.contexts)).stack = (FST (HD s.contexts)).stack ∧
+    f x sm = (r, s')
+Proof
+  strip_tac
+  >> drule_all bind_psf_grows_extract
+  >> strip_tac >> gvs[]
+  >> drule_all preserves_head_stack_imp
+  >> strip_tac >> gvs[]
 QED
