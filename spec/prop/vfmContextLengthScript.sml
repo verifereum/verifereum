@@ -1,23 +1,5 @@
-(*
- * Context-stack length theorems for run and run_call.
- *
- * Headline results:
- *   - run starting at depth 1 returns to depth 1
- *   - run_call terminating with INR returns at the starting depth
- *
- * Both are under the assumption that no vfm_abort occurs (and a
- * stack-room property for post-pop push_stack, stated as
- * handle_exception_ge_2_inl).
- *
- * The key structural facts proved here:
- *   - handle_step at depth ≤ 1 preserves depth (existing: handle_step_preserves_length_1)
- *   - handle_step at depth ≥ 2 with ¬vfm_abort shrinks depth by 1 (existing: handle_step_not_abort_pops)
- *   - handle_step INR at depth ≥ 2 with ¬vfm_abort: depth = input − 1 (new)
- *   - step INR with ¬vfm_abort: depth = input or input − 1 (new)
- *   - step at depth ≥ 2 with ¬vfm_abort on INR always returns INL (new, depends on stack room)
- *   - run at depth 1 terminates at depth 1 (new)
- *   - run_call INR at starting depth (new)
- *)
+(* Context-stack length theorems for run and run_call.
+ * Non-abort termination exits at the relevant frame boundary. *)
 Theory vfmContextLength
 Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
@@ -28,12 +10,7 @@ Ancestors
 Libs
   BasicProvers dep_rewrite
 
-(* ================================================================= *)
-(* Part 1: handle_step length on INR outputs.                        *)
-(*                                                                   *)
-(* These are immediate corollaries of existing theorems in           *)
-(* vfmHandleStep.                                                    *)
-(* ================================================================= *)
+(* handle_step length on non-abort INR outputs. *)
 
 Theorem handle_step_inr_not_abort_length:
   handle_step e s = (INR e', s') ∧ s.contexts ≠ [] ∧ EVERY (wf_context o FST) s.contexts ∧ ¬vfm_abort e ⇒
@@ -72,12 +49,7 @@ Proof
     disj1_tac >> simp[])
 QED
 
-(* ================================================================= *)
-(* Part 2: step length on INR outputs with ¬vfm_abort.                *)
-(*                                                                     *)
-(* Composing handle_step's behaviour with the inner monad's           *)
-(* same-frame-or-grow length behaviour.                               *)
-(* ================================================================= *)
+(* step length on non-abort INR outputs. *)
 
 Theorem step_inr_not_abort_length:
   step s = (INR e, s') ∧ s.contexts ≠ [] ∧ EVERY (wf_context o FST) s.contexts ∧
@@ -143,26 +115,7 @@ Proof
     disj1_tac >> simp[])
 QED
 
-(* ================================================================= *)
-(* Part 3: handle_exception at depth ≥ 2 returns INL under wf_state  *)
-(*                                                                   *)
-(* Stack-room argument: a CALL/CREATE opcode consumes K ≥ 1 stack   *)
-(* items from the parent via pop_stack before push_context, and no   *)
-(* intervening operation modifies the stack.  So the saved parent    *)
-(* context has LENGTH stack ≤ stack_limit − K ≤ stack_limit − 1,    *)
-(* and post-pop push_stack (LENGTH stack < stack_limit) always      *)
-(* succeeds.  Similarly, unuse_gas calleeGasLeft succeeds because   *)
-(* calleeGasLeft ≤ parent.gasUsed (gas-allocation invariant).       *)
-(* This lemma is the linchpin for the depth-1 termination theorems.  *)
-(* ================================================================= *)
-
-(* ================================================================= *)
-(* Part 4: handle_step at depth ≥ 2 with ¬vfm_abort returns INL      *)
-(*                                                                   *)
-(* handle_create always returns INR, passing control to             *)
-(* handle_exception.  At depth ≥ 2, handle_exception returns INL     *)
-(* (Part 3).  So handle_step returns INL.                            *)
-(* ================================================================= *)
+(* At depth ≥ 2, non-abort handle_step returns INL. *)
 
 Theorem handle_step_not_abort_returns_inl:
   handle_step e s = (q, s') ∧ LENGTH s.contexts ≥ 2 ∧
@@ -188,16 +141,7 @@ Proof
   >> rw[]
 QED
 
-(* ================================================================= *)
-(* Part 5: step at depth ≥ 2 with ¬vfm_abort on the INR result       *)
-(* returns INL (i.e., step cannot return INR at depth ≥ 2 with       *)
-(* ¬vfm_abort).                                                      *)
-(*                                                                   *)
-(* This is the key compositional fact: at depth ≥ 2, a non-abort     *)
-(* exception is always handled by popping (handle_step returns INL   *)
-(* after handle_exception pops), so the OWHILE loop for run          *)
-(* continues. Termination can only happen at depth 1.                *)
-(* ================================================================= *)
+(* A step cannot return non-abort INR at depth ≥ 2. *)
 
 Theorem step_ge2_inr_is_abort:
   step s = (INR e, s') ∧ LENGTH s.contexts ≥ 2 ∧
@@ -232,7 +176,7 @@ Proof
            simp[Abbr`inner`, step_inner_def] >> goal_assum drule >> simp[])
   >> Cases_on `vfm_abort e_inner`
   >- (
-    (* vfm_abort: handle_step reraises → e' = e_inner, vfm_abort e = T, contradicts ¬vfm_abort e *)
+    (* aborts reraise, contradicting the final non-abort result *)
     `handle_step e_inner s_mid = (INR e_inner, s_mid)`
         by (gvs[handle_step_def, reraise_def])
     >> gvs[])
@@ -250,13 +194,7 @@ Proof
        >> gvs[])
 QED
 
-(* ================================================================= *)
-(* Part 6: run returns to depth 1 on non-abort termination.          *)
-(*                                                                   *)
-(* Under the ¬vfm_abort assumption, every exception at depth ≥ 2     *)
-(* is handled by popping (handle_step returns INL, so step returns   *)
-(* INL and OWHILE continues).  Termination can only happen at depth 1. *)
-(* ================================================================= *)
+(* run terminates at depth 1 under non-abort termination. *)
 
 Theorem run_contexts_length_1:
   run s = SOME (r, es') ∧ wf_state s ∧ (∀e. r = INR e ⇒ ¬vfm_abort e)
@@ -322,21 +260,7 @@ Proof
   >> gvs[outputTo_consistent_def,outputTo_consistent_ctx_def]
 QED
 
-(* ================================================================= *)
-(* Part 7: run_call exits at the starting-frame boundary.            *)
-(*                                                                   *)
-(* For es_length = 1: reduces to run_contexts_length_1 via         *)
-(* run_call_eq_run_single_context.                                   *)
-(*                                                                   *)
-(* For es_length ≥ 2: at any depth ≥ 2, step cannot return INR     *)
-(* with ¬vfm_abort (step_ge2_inr_is_abort).  So if run_call         *)
-(* terminates with INR e and ¬vfm_abort e, the depth at termination  *)
-(* must be < 2.  But the run_call OWHILE guard requires              *)
-(* LENGTH ≥ es_length ≥ 2 at every non-terminal iteration, so the    *)
-(* terminal state has LENGTH ≥ es_length ≥ 2.  Contradiction.       *)
-(* The theorem thus holds vacuously for es_length ≥ 2.  See also    *)
-(* run_call_inr_requires_abort_ge2 for the positive statement.       *)
-(* ================================================================= *)
+(* run_call exits at the starting-frame boundary. *)
 
 Theorem run_call_inr_length:
   wf_state es ∧ run_call es = SOME (INR e, es') ∧ ¬vfm_abort e ⇒
@@ -346,8 +270,7 @@ Proof
   >> `es.contexts ≠ []` by fs[wf_state_def]
   >> Cases_on `LENGTH es.contexts = 1`
   >- (
-    (* es_length = 1: use run_call_eq_run_single_context and
-       run_contexts_length_1 *)
+    (* singleton call is just run *)
     drule run_call_eq_run_single_context >> simp[]
     >> strip_tac
     >> `run es = SOME (INR e, es')` by fs[]
@@ -355,12 +278,7 @@ Proof
     >> goal_assum $ drule_at Any
     >> simp[] )
   >- (
-    (* es_length ≥ 2: holds vacuously.  At any depth ≥ 2, step cannot
-       return INR with ¬vfm_abort (step_ge2_inr_is_abort).  Since the
-       run_call guard requires LENGTH ≥ es_length ≥ 2 at every
-       non-terminal iteration, the terminal state has LENGTH ≥ 2.
-       But step returning INR with ¬vfm_abort at depth ≥ 2 is
-       impossible.  Contradiction. *)
+    (* depth ≥ 2 cannot terminate with non-abort INR *)
     spose_not_then assume_tac
     >> gvs[run_call_def]
     >> qabbrev_tac `n = LENGTH es.contexts`
@@ -437,8 +355,7 @@ Proof
   >> metis_tac[run_call_inr_length]
 QED
 
-(* Corollary: for es_length ≥ 2, run_call terminating with INR
-   requires vfm_abort (impossible otherwise). *)
+(* At starting depth ≥ 2, INR termination must be aborting. *)
 Theorem run_call_inr_requires_abort_ge2:
   LENGTH es.contexts ≥ 2 ∧ wf_state es ∧
   run_call es = SOME (INR e, es')
