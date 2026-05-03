@@ -59,27 +59,19 @@ Theorem step_inr_not_abort_length:
 Proof
   rpt strip_tac
   >> qhdtm_x_assum `step` mp_tac
-  >> simp[step_def, handle_def]
-  >> qmatch_goalsub_abbrev_tac `pair_CASE (inner s)`
-  >> Cases_on `inner s` >> Cases_on `q` >> gvs[]
-  >> rename1 `inner s = (INR e_inner, s_mid)`
+  >> simp[step_eq_handle_step_inner, handle_def]
+  >> Cases_on `step_inner s` >> Cases_on `q` >> gvs[]
+  >> rename1 `step_inner s = (INR e_inner, s_mid)`
   >> strip_tac
-  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
+  >> `same_frame_or_grow step_inner` by simp[]
   >> `s_mid.contexts ≠ []`
        by (strip_tac
            >> drule_all same_frame_or_grow_length >> simp[]
            >> Cases_on`s.contexts` >> gvs[])
-  >> `decreases_gas_cred T 0 0 inner`
-  by (
-    simp[Abbr`inner`] >>
-    irule decreases_gas_cred_bind_mono >> simp[] >>
-    qexistsl_tac[`T`,`F`] >> simp[] >> gen_tac >> rw[] >>
-    CASE_TAC >> simp[] >>
-    irule decreases_gas_cred_ignore_bind_mono >>
-    qexistsl_tac[`F`,`T`] >> simp[])
   >> `EVERY (wf_context o FST) s_mid.contexts`
-       by (gvs[decreases_gas_cred_def] >>
-           first_x_assum(qspec_then`s` mp_tac) >> rw[] )
+       by (mp_tac decreases_gas_cred_step_inner >>
+           gvs[decreases_gas_cred_def] >>
+           disch_then(qspec_then`s` mp_tac) >> rw[] )
   >> Cases_on `LENGTH s_mid.contexts = LENGTH s.contexts`
   >- (
     (* inner same-frame *)
@@ -98,15 +90,16 @@ Proof
     (* inner grew by exactly 1 *)
     `LENGTH s_mid.contexts = LENGTH s.contexts + 1`
         by (
-          qunabbrev_tac`inner` >>
+          qpat_x_assum `step_inner s = _` mp_tac >>
+          simp[step_inner_def] >> strip_tac >>
           drule_then drule step_inner_grows_by_exactly_one >>
           disch_then irule >>
-          drule_all same_frame_or_grow_length >>
-          decide_tac) >>
+          drule same_frame_or_grow_length >>
+          simp[step_inner_def] >> disch_then drule >> simp[]) >>
     `¬vfm_abort e_inner`
         by (irule step_inner_inr_grow_not_abort >>
-          qunabbrev_tac`inner` >> goal_assum drule >>
-          simp[] ) >>
+          qpat_x_assum `step_inner s = _` mp_tac >> simp[step_inner_def] >>
+          strip_tac >> goal_assum $ drule_at Any >> simp[] ) >>
     `LENGTH s_mid.contexts ≥ 2` by (
       Cases_on`s_mid.contexts` >> gvs[] >>
       Cases_on`s.contexts` >> gvs[] ) >>
@@ -150,30 +143,21 @@ Theorem step_ge2_inr_is_abort:
 Proof
   rpt strip_tac
   >> qhdtm_x_assum `step` mp_tac
-  >> simp[step_def, handle_def]
-  >> qmatch_goalsub_abbrev_tac `pair_CASE (inner s)`
-  >> Cases_on `inner s` >> Cases_on `q` >> gvs[]
-  >> rename1 `inner s = (INR e_inner, s_mid)`
+  >> simp[step_eq_handle_step_inner, handle_def]
+  >> Cases_on `step_inner s` >> Cases_on `q` >> gvs[]
+  >> rename1 `step_inner s = (INR e_inner, s_mid)`
   >> strip_tac
-  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
+  >> `same_frame_or_grow step_inner` by simp[]
   >> `s.contexts ≠ []` by (strip_tac >> gvs[])
   >> `s_mid.contexts ≠ []`
        by (strip_tac >> drule_all same_frame_or_grow_length >> simp[])
-  >> `decreases_gas_cred T 0 0 inner`
-  by (
-    simp[Abbr`inner`] >>
-    irule decreases_gas_cred_bind_mono >> simp[] >>
-    qexistsl_tac[`T`,`F`] >> simp[] >> gen_tac >> rw[] >>
-    CASE_TAC >> simp[] >>
-    irule decreases_gas_cred_ignore_bind_mono >>
-    qexistsl_tac[`F`,`T`] >> simp[])
   >> `EVERY (wf_context o FST) s_mid.contexts`
-       by (gvs[decreases_gas_cred_def] >>
-           first_x_assum(qspec_then`s` mp_tac) >> rw[] >>
+       by (mp_tac decreases_gas_cred_step_inner >>
+           gvs[decreases_gas_cred_def] >>
+           disch_then(qspec_then`s` mp_tac) >> rw[] >>
            gvs[wf_state_def] )
   >> `stack_room_ok s_mid ∧ gas_stack_ok s_mid`
-       by (irule step_inner_preserves_stack_room_gas_ok >>
-           simp[Abbr`inner`, step_inner_def] >> goal_assum drule >> simp[])
+       by (irule step_inner_preserves_stack_room_gas_ok >> metis_tac[])
   >> Cases_on `vfm_abort e_inner`
   >- (
     (* aborts reraise, contradicting the final non-abort result *)
@@ -187,8 +171,7 @@ Proof
       drule handle_step_not_abort_returns_inl >> simp[]
       >> `handle_step e_inner s_mid = (INR e, s')` by simp[]
       >> gvs[])
-    >> (* LENGTH s_mid < 2. But same_frame_or_grow inner means
-         LENGTH s_mid ≥ LENGTH s ≥ 2. Contradiction. *)
+    >> (* LENGTH s_mid ≥ LENGTH s ≥ 2, contradiction. *)
        `LENGTH s_mid.contexts ≥ LENGTH s.contexts`
            by (drule_all same_frame_or_grow_length >> simp[])
        >> gvs[])
