@@ -29,7 +29,7 @@ Theory vfmHandleStep
 Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
   vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmStaticCalls vfmStoragePredicates vfmSameFrame
+  vfmStaticCalls vfmStoragePredicates vfmSameFrame vfmDecreasesGas
 Libs
   BasicProvers
 
@@ -47,7 +47,7 @@ Theorem psf_handle_create:
 Proof
   rw[psf_def, handle_create_def, bind_def,
      get_return_data_def, get_output_to_def,
-     get_current_context_def, ok_state_def, return_def]
+     get_current_context_def, return_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ PairCases_on `h` \\ gvs[]
   \\ Cases_on `e`
@@ -61,7 +61,7 @@ Proof
       (* outputTo = Code c — install code at c *)
       gvs[ignore_bind_def, bind_def, assert_def, return_def,
           fail_def, AllCaseEqs(), consume_gas_def,
-          get_current_context_def, ok_state_def,
+          get_current_context_def,
           set_current_context_def, update_accounts_def,
           reraise_def]
       (* Each branch: either fail (refl), or consume_gas + update_accounts.
@@ -172,7 +172,7 @@ Proof
   (* Various branches: the prefix may be a consume_gas + set_return_data
      block or just return (); then n <- get_num_contexts; if n ≤ 1
      reraise else pop. The length hypothesis rules out the pop branch. *)
-  \\ gvs[get_gas_left_def, get_current_context_def, ok_state_def,
+  \\ gvs[get_gas_left_def, get_current_context_def,
          return_def, get_num_contexts_def, reraise_def, fail_def,
          consume_gas_def, set_return_data_def, set_current_context_def,
          get_return_data_def, get_output_to_def]
@@ -291,7 +291,7 @@ QED
      - Other fields preserved. *)
 (* Only describes the effect when the pop succeeded (q = INL ()). The
    failure case (q = INR (SOME Impossible)) happens when the callee
-   consumed more gas than the parent had — possible if ok_state is
+   consumed more gas than the parent had — possible if wf_state is
    not enforced. Callers rule this out separately. *)
 Theorem pop_and_incorporate_context_failure_effect:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
@@ -820,17 +820,17 @@ Proof
          get_gas_left_def,set_rollback_def]
 QED
 
-(* When LENGTH ≥ 2 and ok_state, handle_exception takes the pop branch and
+(* When LENGTH ≥ 2 and wf_state, handle_exception takes the pop branch and
    shrinks by exactly 1. The n ≤ 1 reraise branch is not taken, and the
-   prefix (consume_gas) succeeds because ok_state ensures gasUsed ≤ gasLimit. *)
+   prefix (consume_gas) succeeds because wf_state ensures gasUsed ≤ gasLimit. *)
 Theorem handle_exception_ge_2_pops:
-  ok_state s ∧ LENGTH s.contexts ≥ 2 ∧ handle_exception e s = (q, s') ⇒
-  LENGTH s'.contexts + 1 = LENGTH s.contexts
+  EVERY (wf_context o FST) s.contexts ∧ LENGTH s.contexts ≥ 2 ∧ handle_exception e s = (q, s') ⇒
+  LENGTH s'.contexts + 1 = LENGTH s.contexts (* ∧ ISL q *)
 Proof
   strip_tac
   >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
   >> `wf_context (FST (HD s.contexts))` by (
-       gvs[ok_state_def] >> Cases_on `s.contexts` >> gvs[])
+       Cases_on `s.contexts` >> gvs[EVERY_MEM])
   >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s.contexts)).msgParams.gasLimit`
        by gvs[wf_context_def]
   >> qhdtm_x_assum `handle_exception` mp_tac
@@ -859,6 +859,15 @@ Proof
   >> simp[get_output_to_def, bind_def, get_current_context_def,
           return_def, fail_def]
   >> Cases_on `pop_and_incorporate_context (e = NONE) sp` >> simp[]
+  >> `EVERY (wf_context o FST) sp.contexts`
+  by (
+    gvs[Abbr`prefix`,COND_RATOR,AllCaseEqs(),return_def] >>
+    gvs[bind_def,ignore_bind_def,AllCaseEqs()] >>
+    gvs[EVERY_MEM,consume_gas_def,get_gas_left_def,set_return_data_def,
+        get_current_context_def,set_current_context_def,bind_def,
+        return_def,fail_def,AllCaseEqs(),ignore_bind_def,assert_def] >>
+    Cases_on`s.contexts` >> gvs[] >>
+    gvs[wf_context_def] )
   >> Cases_on `q'` >> simp[]
   >- ((* INL case: pop succeeded, shrinks by exactly 1. *)
       `LENGTH r.contexts + 1 = LENGTH sp.contexts` by (
@@ -877,11 +886,16 @@ Proof
       >> simp[inc_pc_def, bind_def, get_current_context_def,
               ignore_bind_def, set_current_context_def]
       >> IF_CASES_TAC >> gvs[return_def, return_destination_CASE_rator]
-      >> rw[] >> gvs[AllCaseEqs(),bind_def,COND_RATOR]
+      >> strip_tac
       >> gvs[set_return_data_def,push_stack_def,write_memory_def,
              get_current_context_def,bind_def,return_def,fail_def,
              assert_def,pop_and_incorporate_context_def,AllCaseEqs(),
-             ignore_bind_def,set_current_context_def])
+             bind_def,ignore_bind_def,set_current_context_def, COND_RATOR,
+             push_logs_def, unuse_gas_def, update_gas_refund_def,
+             get_gas_left_def, pop_context_def, set_rollback_def]
+      >> Cases_on`t` >> gvs[]
+      >> gvs[EVERY_MEM, wf_context_def]
+  )
   (* INR case: pop failed. *)
   >> strip_tac >> gvs[]
   >> gvs[set_return_data_def,push_stack_def,write_memory_def,
@@ -910,20 +924,47 @@ Proof
   >> Cases_on `s.contexts` >> fs[]
 QED
 
-(* handle_create preserves ok_state: it doesn't modify stack, gasUsed, or
+(* handle_create preserves wf_state: it doesn't modify stack, gasUsed, or
    msgParams - only return_data/output_to/accounts. *)
-Theorem handle_create_preserves_ok_state:
-  ok_state s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s') ⇒
-  ok_state s'
+Theorem handle_create_preserves_wf_state:
+  wf_state s ∧ handle_create e s = (q, s') ⇒
+  wf_state s'
 Proof
   rw[handle_create_def, bind_def, ignore_bind_def,
      get_return_data_def, get_output_to_def, get_current_context_def,
      return_def, fail_def, reraise_def, consume_gas_def,
      update_accounts_def, assert_def, set_current_context_def,
-     ok_state_def, wf_context_def]
+     wf_state_def, all_accounts_def, wf_context_def]
   >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
          assert_def, get_current_context_def, set_current_context_def,
-         update_accounts_def, return_def, ok_state_def, wf_context_def,
+         update_accounts_def, return_def, wf_state_def, all_accounts_def, wf_context_def,
+         return_destination_CASE_rator, vfmTypesTheory.option_CASE_rator]
+  >> Cases_on `s.contexts` >> gvs[wf_context_def]
+  >> gvs[update_account_def, lookup_account_def, APPLY_UPDATE_THM,
+         wf_accounts_def] >> rw[] >>
+     gvs[wf_account_state_def, EVAL``max_code_size``]
+  >> gvs[stack_room_ok_def, gas_stack_ok_def,
+         outputTo_consistent_ctx_def,
+         outputTo_consistent_stack_def]
+  >> Cases_on`t` >> gvs[unused_gas_def]
+  >> TRY (
+    Cases >> gvs[]
+    >> TRY ( first_x_assum(qspec_then`0`mp_tac) >> simp[] >> NO_TAC)
+    >> first_x_assum(qspec_then`SUC n`mp_tac) >> simp[] )
+QED
+
+Theorem handle_create_preserves_wf_contexts:
+  EVERY (wf_context o FST) s.contexts ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s') ⇒
+  EVERY (wf_context o FST) s'.contexts
+Proof
+  rw[handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def,
+     wf_context_def]
+  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
+         assert_def, get_current_context_def, set_current_context_def,
+         update_accounts_def, return_def, wf_context_def,
          return_destination_CASE_rator, vfmTypesTheory.option_CASE_rator]
   >> Cases_on `s.contexts` >> gvs[wf_context_def]
 QED
@@ -938,7 +979,10 @@ Theorem handle_exception_pop_generic_gen:
     (s'.rollback = s.rollback ∨ s'.rollback = callee_rb) ∧
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
-      new_parent_ctx.msgParams = (FST parent).msgParams
+      new_parent_ctx.msgParams = (FST parent).msgParams ∧
+      new_parent_ctx.gasUsed ≥
+        (FST parent).gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed)
 Proof
   strip_tac
   >> Cases_on `parent`
@@ -965,7 +1009,8 @@ Theorem handle_create_preserves_tl_and_snd_hd:
     s'.contexts ≠ [] ∧
     TL s'.contexts = TL s.contexts ∧
     SND (HD s'.contexts) = SND (HD s.contexts) ∧
-    (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams
+    (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
+    (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
 Proof
   rw[handle_create_def, bind_def, ignore_bind_def,
      get_return_data_def, get_output_to_def, get_current_context_def,
@@ -1037,7 +1082,10 @@ Theorem handle_step_pop_generic_gen:
           (lookup_account a callee_rb.accounts).storage)) ∧
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
-      new_parent_ctx.msgParams = (FST parent).msgParams
+      new_parent_ctx.msgParams = (FST parent).msgParams ∧
+      new_parent_ctx.gasUsed ≥
+        (FST parent).gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed)
 Proof
   strip_tac
   >> qhdtm_x_assum `handle_step` mp_tac
@@ -1075,6 +1123,9 @@ Theorem handle_step_pop_generic_gen_paired:
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
+      new_parent_ctx.gasUsed ≥
+        (FST parent).gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed) ∧
       ((toSet s.rollback.accesses.storageKeys ⊆
           toSet s'.rollback.accesses.storageKeys ∧
         (∀a. (lookup_account a s'.rollback.accounts).storage =
@@ -1200,9 +1251,10 @@ Proof
   >> fs[]
 QED
 
-(* When ¬vfm_abort e, ok_state, and LENGTH ≥ 2, handle_step shrinks by exactly 1. *)
+(* When ¬vfm_abort e, wf_context on all contexts, and LENGTH ≥ 2,
+   handle_step shrinks by exactly 1. *)
 Theorem handle_step_not_abort_pops:
-  ok_state s ∧ ¬vfm_abort e ∧ LENGTH s.contexts ≥ 2 ∧
+  EVERY (wf_context o FST) s.contexts ∧ ¬vfm_abort e ∧ LENGTH s.contexts ≥ 2 ∧
   handle_step e s = (q, s') ⇒
   LENGTH s'.contexts + 1 = LENGTH s.contexts
 Proof
@@ -1216,9 +1268,243 @@ Proof
   >> drule_all handle_create_preserves_length
   >> strip_tac
   >> `LENGTH s1.contexts ≥ 2` by simp[]
-  (* Need ok_state s1 to apply handle_exception_ge_2_pops *)
-  >> `ok_state s1` by metis_tac[handle_create_preserves_ok_state]
+  (* Need EVERY (wf_context o FST) s1 to apply handle_exception_ge_2_pops *)
+  >> `EVERY (wf_context o FST) s1.contexts` by metis_tac[handle_create_preserves_wf_contexts]
   >> drule_all handle_exception_ge_2_pops
   >> simp[]
 QED
 
+
+(* ================================================================== *)
+(* Stack-room and gas-allocation invariant preservation               *)
+(*                                                                    *)
+(* stack_room_ok: saved parent contexts have stacks strictly shorter  *)
+(*   than stack_limit. Gas_stack_ok: each parent can absorb its       *)
+(*   child's remaining gas. Both follow from three structural cases:  *)
+(*   1. Same-frame (TL unchanged, gasUsed monotone)                   *)
+(*   2. Push (old head enters TL with pop_stack-shrunk stack and      *)
+(*      consume_gas-increased gasUsed ≥ child.gasLimit)               *)
+(*   3. Pop (handle_exception removes callee, parent.gasUsed grows)   *)
+(* ================================================================== *)
+
+(* --- Case 1: same_frame_rel preserves stack_room_ok --- *)
+
+Theorem same_frame_rel_preserves_stack_room_ok:
+  same_frame_rel s s' ∧ stack_room_ok s ⇒ stack_room_ok s'
+Proof
+  rw[stack_room_ok_def, same_frame_rel_def]
+QED
+
+(* --- Case 1: same_frame_rel preserves gas_stack_ok under           *)
+(* gasUsed monotonicity.                                              *)
+(*                                                                    *)
+(* Key: head's gasUsed never decreases in a same-frame step.         *)
+(* consume_gas always increases it; unuse_gas decreases it, but only  *)
+(* after consume_gas increased it by more (net positive). All other   *)
+(* same-frame ops leave gasUsed unchanged. Since gasLimit =          *)
+(* msgParams.gasLimit is preserved by same_frame_rel, the bound      *)
+(* gasLimit - gasUsed can only shrink, preserving the inequality.    *)
+
+Theorem same_frame_rel_preserves_gas_stack_ok:
+  same_frame_rel s s' ∧ gas_stack_ok s ∧
+  (FST (HD s'.contexts)).gasUsed ≥ (FST (HD s.contexts)).gasUsed
+  ⇒ gas_stack_ok s'
+Proof
+  rw[gas_stack_ok_def, same_frame_rel_def] >>
+  Cases_on`s.contexts` >- gvs[] >> fs[] >> BasicProvers.VAR_EQ_TAC >>
+  Cases_on`s'.contexts` >- gvs[] >> fs[unused_gas_def] >>
+  first_x_assum(qspec_then`i`mp_tac) >>
+  Cases_on`i` >> simp[]
+QED
+
+(* --- handle_create preserves both invariants (contexts structure    *)
+(* unchanged, only head.gasUsed/accounts modified) --- *)
+
+Theorem handle_create_preserves_stack_room_ok:
+  stack_room_ok s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s')
+  ⇒ stack_room_ok s'
+Proof
+  rw[stack_room_ok_def, handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def,
+     AllCaseEqs()] >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `(FST h).msgParams.outputTo` >> gvs[reraise_def]
+  >> Cases_on `e` >> gvs[reraise_def]
+  >> gvs[consume_gas_def, bind_def, get_current_context_def, return_def,
+         assert_def, set_current_context_def, update_accounts_def,
+         set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
+         reraise_def]
+QED
+
+Theorem handle_create_preserves_gas_stack_ok:
+  gas_stack_ok s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s')
+  ⇒ gas_stack_ok s'
+Proof
+  rw[gas_stack_ok_def, handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def,
+     AllCaseEqs()] >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `(FST h).msgParams.outputTo` >> gvs[reraise_def]
+  >> Cases_on `e` >> gvs[reraise_def]
+  >> gvs[consume_gas_def, bind_def, get_current_context_def, return_def,
+         assert_def, set_current_context_def, update_accounts_def,
+         set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
+         reraise_def, unused_gas_def]
+  >> Cases_on `i` >> gvs[]
+  >> TRY(first_x_assum(qspec_then `0` mp_tac) >> rw[] >> NO_TAC)
+  >> first_x_assum(qspec_then `SUC n` mp_tac) >> rw[]
+QED
+
+(* --- Linchpin: handle_exception at depth ≥ 2 returns INL under     *)
+(* wf_state.                                                          *)
+(*                                                                    *)
+(* Every sub-operation succeeds:                                      *)
+(*   - prefix (consume_gas gasLeft): gasLeft = callee.gasLimit -      *)
+(*     callee.gasUsed ≤ callee.gasLimit (from wf_context) ✓          *)
+(*   - n > 1: depth ≥ 2 ✓                                           *)
+(*   - pop_and_incorporate_context → unuse_gas calleeGasLeft:         *)
+(*     calleeGasLeft = callee.gasLimit - callee.gasUsed ≤             *)
+(*     parent.gasUsed (from gas_stack_ok) ✓                          *)
+(*   - push_stack: parent.stack < stack_limit (from stack_room_ok) ✓ *)
+(*   - inc_pc, set_return_data, write_memory: always succeed ✓       *)
+
+Theorem gas_stack_ok_parent_has_child_unused:
+  gas_stack_ok s ∧ LENGTH s.contexts ≥ 2 ⇒
+    (FST (EL 1 s.contexts)).gasUsed ≥
+    (FST (HD s.contexts)).msgParams.gasLimit -
+    (FST (HD s.contexts)).gasUsed
+Proof
+  rw[gas_stack_ok_def]
+  >> first_x_assum(qspec_then `0` mp_tac)
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `t` >> gvs[unused_gas_def]
+QED
+
+Theorem stack_room_ok_parent_stack:
+  stack_room_ok s ∧ LENGTH s.contexts ≥ 2 ⇒
+    LENGTH (FST (EL 1 s.contexts)).stack < stack_limit
+Proof
+  rw[stack_room_ok_def]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `t` >> gvs[]
+QED
+
+Theorem handle_exception_ge_2_inl:
+  EVERY (wf_context o FST) s.contexts ∧ stack_room_ok s ∧ gas_stack_ok s ∧
+  LENGTH s.contexts ≥ 2 ∧ handle_exception e s = (q, s') ⇒
+    ISL q
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
+  >> `wf_context (FST (HD s.contexts))` by (
+       Cases_on `s.contexts` >> gvs[EVERY_MEM])
+  >> `(FST (HD s.contexts)).gasUsed ≤
+      (FST (HD s.contexts)).msgParams.gasLimit` by gvs[wf_context_def]
+  >> `LENGTH (FST (EL 1 s.contexts)).stack < stack_limit`
+       by metis_tac[stack_room_ok_parent_stack]
+  >> `(FST (EL 1 s.contexts)).gasUsed ≥
+      (FST (HD s.contexts)).msgParams.gasLimit -
+      (FST (HD s.contexts)).gasUsed`
+       by metis_tac[gas_stack_ok_parent_has_child_unused]
+  >> qhdtm_x_assum `handle_exception` mp_tac
+  >> simp[handle_exception_def]
+  >> simp[ignore_bind_def, Once bind_def]
+  >> qmatch_goalsub_abbrev_tac `prefix s`
+  >> `∃r sp. prefix s = (INL r, sp) ∧
+        LENGTH sp.contexts = LENGTH s.contexts ∧
+        sp.contexts ≠ [] ∧
+        (FST (HD sp.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
+        (FST (HD sp.contexts)).gasUsed =
+          if ¬(e = NONE) ∧ e ≠ SOME Reverted then
+            (FST (HD s.contexts)).msgParams.gasLimit
+          else (FST (HD s.contexts)).gasUsed` by (
+       simp[Abbr`prefix`]
+       >> IF_CASES_TAC >> simp[return_def]
+       >> simp[bind_def, get_gas_left_def, get_current_context_def, return_def]
+       >> simp[consume_gas_def, bind_def, assert_def, return_def,
+               ignore_bind_def, get_current_context_def,
+               set_current_context_def]
+       >> simp[set_return_data_def, bind_def, get_current_context_def,
+               set_current_context_def, return_def]
+       >> Cases_on `s.contexts` >> gvs[wf_context_def])
+  >> gvs[]
+  >> simp[Once bind_def, get_num_contexts_def, return_def]
+  >> `¬(LENGTH sp.contexts ≤ 1)` by simp[]
+  >> simp[]
+  >> simp[Once bind_def]
+  >> simp[get_return_data_def, bind_def, get_current_context_def,
+          return_def, fail_def]
+  >> Cases_on `sp.contexts` >> gvs[]
+  >> simp[get_output_to_def, bind_def, get_current_context_def,
+          return_def, fail_def]
+  >> qmatch_goalsub_abbrev_tac `pop_and_incorporate_context success sp`
+  >> `ISL (FST (pop_and_incorporate_context success sp))` by (
+       simp[Abbr`success`, pop_and_incorporate_context_def, bind_def,
+            ignore_bind_def, get_gas_left_def, get_current_context_def,
+            return_def, pop_context_def, unuse_gas_def, assert_def,
+            set_current_context_def, fail_def]
+       >> Cases_on `sp.contexts` >> gvs[]
+       >> Cases_on `t` >> gvs[]
+       >> gvs[set_rollback_def, push_logs_def, update_gas_refund_def,
+              bind_def, return_def, ignore_bind_def]
+       >> qmatch_goalsub_abbrev_tac`COND nrv _ (_.gasUsed)` >>
+       gvs[gas_stack_ok_def, unused_gas_def] >>
+       Cases_on`s.contexts` >> gvs[] >>
+       qpat_x_assum`_.gasUsed = _`(assume_tac o SYM) >> gs[] >>
+       Cases_on`t` >> gvs[] >>
+       reverse(Cases_on`nrv`) >- (
+         qpat_x_assum`prefix _ = _`mp_tac >>
+         simp[return_def,Abbr`prefix`] >> strip_tac >>
+         BasicProvers.VAR_EQ_TAC >>
+         pop_assum mp_tac >> simp[] >> strip_tac >>
+         qpat_x_assum`_ = F`mp_tac >> fs[] >> gvs[] >>
+         Cases_on`e <> NONE` >> simp[set_rollback_def,return_def] >>
+         strip_tac >> gs[] >>
+         simp[bind_def,get_current_context_def,return_def] >>
+         simp[set_current_context_def,return_def] ) >>
+       gs[] >>
+       simp[set_rollback_def,return_def] )
+  >> Cases_on `pop_and_incorporate_context success sp` >> Cases_on `q'` >> gvs[]
+  >> simp[inc_pc_def, bind_def, get_current_context_def,
+          ignore_bind_def, set_current_context_def, return_def]
+  >> IF_CASES_TAC >> gvs[return_destination_CASE_rator, fail_def]
+  >- (rpt strip_tac >> gvs[] >>
+      Cases_on`LENGTH sp.contexts > 1` >- (
+        drule pop_and_incorporate_context_preserves >>
+        disch_then(qspec_then`success`mp_tac) >> simp[] ) >>
+      gvs[] )
+  >> Cases_on `h` >> gvs[]
+  >> Cases_on `t` >> gvs[]
+  >> Cases_on`s` >> gvs[]
+  >> `LENGTH (FST(HD r.contexts)).stack < stack_limit`
+  suffices_by (
+    strip_tac
+    >> TOP_CASE_TAC
+    >> gvs[set_return_data_def, push_stack_def, write_memory_def, COND_RATOR,
+           bind_def, get_current_context_def, return_def, fail_def,
+           assert_def, set_current_context_def, bind_def, ignore_bind_def] >>
+     rw[] >> rpt strip_tac >> gvs[] )
+  >> `TL sp.contexts = TL l ∧
+      (FST (HD r.contexts)).stack = (FST h).stack`
+     suffices_by (
+       rpt strip_tac >> gvs[] >>
+       Cases_on`l` >> gvs[] )
+  >> conj_asm2_tac >- (
+    gvs[Abbr`prefix`,COND_RATOR,CaseEq"bool"] >>
+    gs[return_def] >> rpt BasicProvers.VAR_EQ_TAC >> fs[] >>
+    rpt BasicProvers.VAR_EQ_TAC >>
+    Cases_on`l` >> gvs[] >>
+    gvs[bind_def,get_gas_left_def,get_current_context_def,return_def] >>
+    gvs[consume_gas_def,return_def,bind_def,get_current_context_def,
+        assert_def,ignore_bind_def,set_current_context_def,
+        set_return_data_def] ) >>
+  gvs[pop_and_incorporate_context_def] >>
+  gvs[bind_def,ignore_bind_def,get_gas_left_def,get_current_context_def,
+      return_def,assert_def,pop_context_def, unuse_gas_def,
+      AllCaseEqs(),set_current_context_def,set_rollback_def,
+      push_logs_def,return_def,update_gas_refund_def]
+QED

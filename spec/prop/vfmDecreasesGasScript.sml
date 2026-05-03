@@ -374,10 +374,6 @@ Proof
   \\ irule_at Any decreases_gas_get_current_context \\ rw []
 QED
 
-Definition unused_gas_def:
-  unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
-End
-
 Definition contexts_weight_def:
   contexts_weight n c = (unused_gas (MAP FST c) + n, LENGTH c)
 End
@@ -387,7 +383,8 @@ Definition decreases_gas_cred_def:
     ∀s. if s.contexts = []
       then (SND (m s)).contexts = []
       else (SND (m s)).contexts ≠ [] ∧
-        (ok_state s ⇒ ok_state (SND (m s))) ∧
+        (EVERY (wf_context o FST) s.contexts ⇒
+         EVERY (wf_context o FST) (SND (m s)).contexts) ∧
         let (p,q) = (contexts_weight n1 (SND (m s)).contexts,
                      contexts_weight n0 s.contexts) in
         if b ∧ ISL (FST (m s))
@@ -567,7 +564,7 @@ Proof
   simp [decreases_gas_def, decreases_gas_cred_def] \\ ntac 2 strip_tac
   \\ pop_assum (qspec_then `s` mp_tac)
   \\ Cases_on `s.contexts` \\ gs [] \\ TOP_CASE_TAC \\ strip_tac
-  \\ simp [ok_state_def, DISJ_IMP_THM, FORALL_AND_THM]
+  \\ simp [DISJ_IMP_THM, FORALL_AND_THM]
   \\ qhdtm_x_assum `COND` mp_tac
   \\ rw [contexts_weight_def, LEX_DEF, unused_gas_def]
 QED
@@ -634,7 +631,7 @@ Theorem decreases_gas_cred_consume_gas_debit_more:
   decreases_gas_cred b n1 0 (do consume_gas n; f od)
 Proof
   simp [decreases_gas_cred_def, consume_gas_def, bind_def, get_current_context_def,
-    decreases_gas_cred_def, ok_state_def, ignore_bind_def,
+    decreases_gas_cred_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ ntac 2 strip_tac
   \\ qmatch_goalsub_abbrev_tac `f s'`
@@ -1043,7 +1040,7 @@ Proof
     get_current_context_def]
   \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
   \\ first_x_assum (qspec_then `(FST h).msgParams.static` mp_tac)
-  \\ gvs [ok_state_def]
+  \\ gvs []
   \\ rw[]
   \\ gvs[wf_context_def]
 QED
@@ -1102,7 +1099,7 @@ Proof
   \\ qexistsl_tac [`λ_. T`, `0`, `F`, `F`] \\ rw []
   \\ rw [unuse_gas_def]
   \\ simp [decreases_gas_cred_def, consume_gas_def, bind_def, get_current_context_def,
-    decreases_gas_cred_def, ok_state_def, ignore_bind_def,
+    decreases_gas_cred_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ Cases_on `s.contexts` >- gs [] \\ rw [] \\ rw [] \\ gs []
@@ -1115,7 +1112,7 @@ Theorem decreases_gas_inc_pc[simp]:
 Proof
   rw [inc_pc_def]
   \\ simp [inc_pc_def, bind_def, get_current_context_def,
-    decreases_gas_def, ok_state_def, ignore_bind_def,
+    decreases_gas_def, ignore_bind_def,
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ TOP_CASE_TAC \\ gvs[]
@@ -1704,7 +1701,7 @@ Proof
   \\ rw[]
   >- (
     first_x_assum irule
-    \\ gs[ok_state_def, Abbr`ss`, EVERY_MEM, FORALL_PROD, set_last_accounts_def]
+    \\ gs[Abbr`ss`, EVERY_MEM, FORALL_PROD, set_last_accounts_def]
     \\ rw[] \\ first_x_assum irule
     \\ metis_tac[rich_listTheory.MEM_FRONT, list_CASES,
                  rich_listTheory.LAST_MEM, pair_CASES, FST, SND] )
@@ -1853,6 +1850,18 @@ Proof
     \\ irule_at Any decreases_gas_set_return_data)
   >- (irule decreases_gas_mono
     \\ irule_at Any decreases_gas_consume_gas \\ rw [])
+QED
+
+Theorem decreases_gas_cred_step_inner:
+  decreases_gas_cred T 0 0 step_inner
+Proof
+  simp[step_inner_def]
+  >> irule decreases_gas_cred_bind_mono >> simp[]
+  >> qexistsl_tac [`T`, `F`] >> simp[]
+  >> gen_tac >> rw[]
+  >> CASE_TAC >> simp[]
+  >> irule decreases_gas_cred_ignore_bind_mono
+  >> qexistsl_tac [`F`, `T`] >> simp[]
 QED
 
 Definition pop_helper_def:
@@ -2005,7 +2014,7 @@ Proof
       \\ simp[bind_def, decreases_gas_cred_def, get_gas_left_def,
               get_current_context_def, return_def, pop_context_def,
               unuse_gas_def, ignore_bind_def, fail_def, assert_def,
-              set_current_context_def, ok_state_def, get_num_contexts_def,
+              set_current_context_def, get_num_contexts_def,
               assert_def]
       \\ gen_tac
       \\ Cases_on`s.contexts` \\ gvs []
@@ -2160,18 +2169,4 @@ Proof
   \\ rw[Once run_within_frame_tr_def]
   \\ CASE_TAC \\ gs[]
   \\ rw[Once WhileTheory.OWHILE_THM]
-QED
-
-Theorem step_preserves_wf_state:
-  wf_state s ⇒ wf_state (SND (step s))
-Proof
-  mp_tac decreases_gas_cred_step
-  \\ mp_tac preserves_wf_accounts_step
-  \\ mp_tac (GEN_ALL limits_num_contexts_step)
-  \\ rewrite_tac[decreases_gas_cred_def, preserves_wf_accounts_def,
-                 limits_num_contexts_def]
-  \\ rw[wf_state_def]
-  >- ( first_x_assum(qspec_then`s`mp_tac) \\ rw[] )
-  >- ( `1026 = SUC 1025` by simp[] \\ metis_tac[LESS_EQ_IFF_LESS_SUC])
-  >- ( first_x_assum(qspec_then`s`mp_tac) \\ simp[ok_state_def])
 QED

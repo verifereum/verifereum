@@ -37,6 +37,26 @@ QED
 
 Type execution = “:execution_state -> α execution_result”;
 
+Definition step_inner_def:
+  step_inner =
+    do
+      context <- get_current_context;
+      code <<- context.msgParams.code;
+      parsed <<- context.msgParams.parsed;
+      if LENGTH code ≤ context.pc
+      then step_inst Stop
+      else case FLOOKUP parsed context.pc of
+           | NONE => step_inst Invalid
+           | SOME op => do step_inst op; inc_pc_or_jump op od
+    od
+End
+
+Theorem step_eq_handle_step_inner:
+  step = handle step_inner handle_step
+Proof
+  rw[FUN_EQ_THM, step_def, step_inner_def]
+QED
+
 Theorem return_bind[simp]:
   bind (return x) f = f x
 Proof
@@ -104,17 +124,42 @@ Definition all_accounts_def:
   s.rollback.accounts :: (MAP (λcr. (SND cr).accounts) s.contexts)
 End
 
+Definition outputTo_consistent_ctx_def:
+  outputTo_consistent_ctx c ⇔
+    ∀a. c.msgParams.outputTo = Code a ⇒ c.msgParams.callee = a
+End
+
+Definition outputTo_consistent_stack_def:
+  outputTo_consistent_stack s ⇔
+    s.contexts ≠ [] ∧
+    EVERY outputTo_consistent_ctx (MAP FST s.contexts)
+End
+
+Definition stack_room_ok_def:
+  stack_room_ok s ⇔
+    EVERY (λc. LENGTH c.stack < stack_limit) (MAP FST (TL s.contexts))
+End
+
+Definition unused_gas_def:
+  unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
+End
+
+Definition gas_stack_ok_def:
+  gas_stack_ok s ⇔
+    ∀i. SUC i < LENGTH s.contexts ⇒
+      (FST (EL (SUC i) s.contexts)).gasUsed ≥
+      unused_gas (MAP FST (TAKE (SUC i) s.contexts))
+End
+
 Definition wf_state_def:
   wf_state s ⇔
     s.contexts ≠ [] ∧
     LENGTH s.contexts ≤ SUC context_limit ∧
     EVERY (wf_context o FST) s.contexts ∧
-    EVERY wf_accounts (all_accounts s)
-End
-
-Definition ok_state_def:
-  ok_state s ⇔
-    EVERY (wf_context o FST) s.contexts
+    EVERY wf_accounts (all_accounts s) ∧
+    stack_room_ok s ∧
+    gas_stack_ok s ∧
+    outputTo_consistent_stack s
 End
 
 Theorem wf_initial_context[simp]:
@@ -171,6 +216,23 @@ Proof
   \\ gvs[APPLY_UPDATE_THM] \\ rw[]
 QED
 
+Theorem outputTo_consistent_ctx_initial_context:
+  (∀a. rd = Code a ⇒ a = callee) ⇒
+  outputTo_consistent_ctx (initial_context callee code st rd t)
+Proof
+  rw[outputTo_consistent_ctx_def, initial_context_def,
+     initial_msg_params_def]
+QED
+
+Theorem outputTo_consistent_ctx_apply_intrinsic_cost:
+  apply_intrinsic_cost x y c1 = SOME ctxt ∧
+  outputTo_consistent_ctx c1 ⇒
+  outputTo_consistent_ctx ctxt
+Proof
+  rw[apply_intrinsic_cost_def] >>
+  gvs[outputTo_consistent_ctx_def]
+QED
+
 Theorem wf_initial_state:
   wf_accounts a ∧ initial_state d st c h b a t = SOME s
   ⇒
@@ -186,6 +248,14 @@ Proof
   \\ conj_tac
   >- ( drule wf_context_apply_intrinsic_cost \\ simp[] )
   \\ simp[initial_rollback_def]
+  >> simp[gas_stack_ok_def, stack_room_ok_def]
+  >> simp[outputTo_consistent_stack_def]
+  >> reverse conj_tac
+  >- (
+    drule_at_then Any irule outputTo_consistent_ctx_apply_intrinsic_cost >>
+    irule outputTo_consistent_ctx_initial_context >>
+    Cases_on`t.to` >> simp[] >>
+    EVAL_TAC >> rw[] )
   \\ irule wf_accounts_process_authorizations
   \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
   \\ irule wf_accounts_pre_transaction_updates
@@ -1880,6 +1950,13 @@ Proof
   rw[abort_call_value_def] >> tac
 QED
 
+Theorem preserves_wf_accounts_set_rollback:
+  wf_accounts r.accounts ⇒
+  preserves_wf_accounts (set_rollback r)
+Proof
+  rw[set_rollback_def, preserves_wf_accounts_def, return_def, all_accounts_def]
+QED
+
 Theorem preserves_wf_accounts_push_context[simp]:
   wf_accounts (SND x).accounts ⇒
   preserves_wf_accounts (push_context x)
@@ -2038,6 +2115,19 @@ Theorem preserves_wf_accounts_dispatch_precompiles[simp]:
   preserves_wf_accounts (dispatch_precompiles x)
 Proof
   rw[dispatch_precompiles_def]
+QED
+
+Theorem preserves_wf_accounts_proceed_call[simp]:
+  preserves_wf_accounts (proceed_call op sender address value
+    argsOffset argsSize code stipend outputTo)
+Proof
+  simp[proceed_call_def]
+  >> irule preserves_wf_accounts_bind_pred
+  >> simp[]
+  >> qexists_tac `λrb. wf_accounts rb.accounts`
+  >> rw[proceed_call_def, get_rollback_def, return_def, all_accounts_def]
+  >> tac
+  >> gvs[]
 QED
 
 Theorem preserves_wf_accounts_step_call[simp]:
@@ -3371,7 +3461,7 @@ Theorem handle_create_INR:
 Proof
   simp[handle_create_def, bind_def,
           get_return_data_def, get_output_to_def,
-          get_current_context_def, ok_state_def, return_def]
+          get_current_context_def, return_def]
   >> Cases_on `s.contexts` >> gvs[fail_def]
   >> PairCases_on `h` >> gvs[]
   >> Cases_on `e` >> gvs[reraise_def]
