@@ -21,7 +21,7 @@
 Theory vfmContextLength
 Ancestors
   arithmetic combin list pair pred_set finite_set rich_list
-  vfmState vfmContext vfmExecution vfmExecutionProp
+  While vfmState vfmContext vfmExecution vfmExecutionProp
   vfmStaticCalls vfmTxParams vfmDomainSeparation vfmDecreasesGas
   vfmSameFrame vfmStepLength vfmMsdomainPreserved vfmHandleStep
   vfmRunWithinFrame vfmRunCall
@@ -199,84 +199,6 @@ QED
 (* continues. Termination can only happen at depth 1.                *)
 (* ================================================================= *)
 
-Theorem step_inner_same_frame_gas_monotone:
-  (do
-     context <- get_current_context;
-     code <<- context.msgParams.code;
-     parsed <<- context.msgParams.parsed;
-     if LENGTH code ≤ context.pc
-     then step_inst Stop
-     else case FLOOKUP parsed context.pc of
-          | NONE => step_inst Invalid
-          | SOME op => do step_inst op; inc_pc_or_jump op od
-   od) s = (r, s') ∧
-  same_frame_rel s s' ∧
-  EVERY (wf_context o FST) s.contexts ⇒
-    (FST (HD s.contexts)).gasUsed ≤
-    (FST (HD s'.contexts)).gasUsed
-Proof
-  rpt strip_tac
-  >> qmatch_asmsub_abbrev_tac `inner s = _`
-  >> `decreases_gas_cred T 0 0 inner` by (
-       simp[Abbr`inner`] >>
-       irule decreases_gas_cred_bind_mono >> simp[] >>
-       qexistsl_tac[`T`,`F`] >> simp[] >> gen_tac >> rw[] >>
-       CASE_TAC >> simp[] >>
-       irule decreases_gas_cred_ignore_bind_mono >>
-       qexistsl_tac[`F`,`T`] >> simp[])
-  >> pop_assum mp_tac
-  >> rewrite_tac[decreases_gas_cred_def]
-  >> disch_then(qspec_then `s` mp_tac)
-  >> IF_CASES_TAC >> gvs[same_frame_rel_def]
-  >> strip_tac
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `s'.contexts` >> gvs[]
-  >> gvs[contexts_weight_def, unused_gas_def, LEX_DEF, wf_context_def]
-  >> ntac 3 (pop_assum mp_tac) >> rw[]
-QED
-
-Theorem step_inner_preserves_stack_room_gas_ok:
-  wf_state s ∧
-  (do
-     context <- get_current_context;
-     code <<- context.msgParams.code;
-     parsed <<- context.msgParams.parsed;
-     if LENGTH code ≤ context.pc
-     then step_inst Stop
-     else case FLOOKUP parsed context.pc of
-          | NONE => step_inst Invalid
-          | SOME op => do step_inst op; inc_pc_or_jump op od
-   od) s = (r, s_mid) ⇒
-    stack_room_ok s_mid ∧ gas_stack_ok s_mid
-Proof
-  strip_tac
-  >> qmatch_asmsub_abbrev_tac `inner s = _`
-  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
-  >> `s.contexts ≠ []` by gvs[wf_state_def]
-  >> `LENGTH s_mid.contexts ≥ LENGTH s.contexts`
-       by (drule_all same_frame_or_grow_length >> simp[])
-  >> Cases_on `LENGTH s_mid.contexts = LENGTH s.contexts`
-  >- (
-    `same_frame_rel s s_mid` by
-      (drule_all same_frame_or_grow_eq_length >> simp[])
-    >> conj_tac
-    >- metis_tac[same_frame_rel_preserves_stack_room_ok, wf_state_def]
-    >> irule same_frame_rel_preserves_gas_stack_ok
-    >> goal_assum $ drule_at Any
-    >> gvs[wf_state_def]
-    >> simp[GREATER_EQ]
-    >> irule step_inner_same_frame_gas_monotone
-    >> simp[])
-  >> `LENGTH s_mid.contexts > LENGTH s.contexts` by decide_tac
-  (* Inner growth can only be CALL/CREATE-family.  This branch should mirror
-     the INL-grow half of step_push_structure, but the result state is s_mid
-     (before handle_step).  The existing step_call/step_create push/grow
-     facts are exactly the needed ingredients: shifted tail FST structure,
-     parent stack room, saved-parent gas monotonicity, and cumulative
-     parent-child gas reservation. *)
-  >> cheat
-QED
-
 Theorem step_ge2_inr_is_abort:
   step s = (INR e, s') ∧ LENGTH s.contexts ≥ 2 ∧
   wf_state s ∧ outputTo_consistent s ∧ ¬vfm_abort e ⇒
@@ -307,7 +229,7 @@ Proof
            gvs[wf_state_def] )
   >> `stack_room_ok s_mid ∧ gas_stack_ok s_mid`
        by (irule step_inner_preserves_stack_room_gas_ok >>
-           simp[Abbr`inner`] >> goal_assum drule >> simp[])
+           simp[Abbr`inner`, step_inner_def] >> goal_assum drule >> simp[])
   >> Cases_on `vfm_abort e_inner`
   >- (
     (* vfm_abort: handle_step reraises → e' = e_inner, vfm_abort e = T, contradicts ¬vfm_abort e *)
@@ -351,13 +273,36 @@ Proof
   >> simp[run_def]
   >> strip_tac >> gvs[]
   >> qmatch_asmsub_abbrev_tac`OWHILE G f s1 = SOME s2`
-  >> cheat (* TODO: OWHILE_INV_IND with invariant
-     LENGTH (SND p).contexts ≥ 1 ∧ wf_state (SND p) ∧ outputTo_consistent (SND p) ∧
-     (∀e. FST p = INR e ⇒ ¬vfm_abort e).
-     Preserved by step (decreases_gas_cred_step, step_preserves_nonempty_contexts,
-     same_frame_rel_preserves_outputTo_consistent).
-     At termination: FST result = INR e with ¬vfm_abort e,
-     LENGTH (SND result) ≥ 2 contradicts step_ge2_inr_is_abort. *)
+  >> `(λp. wf_state (SND p) ∧
+           ∀e. FST p = INR e ∧ ¬vfm_abort e ⇒
+               LENGTH (SND p).contexts = 1) s2` by (
+    irule (MP_CANON OWHILE_INV_IND)
+    >> goal_assum (first_assum o mp_then Any mp_tac)
+    >> simp[Abbr`s1`]
+    >> rpt gen_tac
+    >> PairCases_on `x` >> gvs[Abbr`G`, Abbr`f`]
+    >> Cases_on `step x1` >> simp[]
+    >> strip_tac
+    >> conj_tac >- (drule step_preserves_wf_state >> simp[])
+    >> rpt strip_tac >> gvs[]
+    >> rename1 `step x1 = (INR e, st')`
+    >> `x1.contexts ≠ []` by gvs[wf_state_def]
+    >> `outputTo_consistent x1`
+    by (
+        gvs[wf_state_def,outputTo_consistent_def] >>
+        gvs[outputTo_consistent_stack_def] >>
+        Cases_on`x1.contexts` >> gvs[outputTo_consistent_ctx_def] >>
+        strip_tac >> gvs[] )
+    >> Cases_on `LENGTH x1.contexts ≥ 2`
+    >- (drule step_ge2_inr_is_abort >> simp[])
+    >> `LENGTH x1.contexts = 1`
+    by (Cases_on `x1.contexts` >> gvs[] >> Cases_on `t` >> gvs[])
+    >> `wf_state st'` by (drule step_preserves_wf_state >> simp[])
+    >> drule step_inr_not_abort_length >> simp[]
+    >> gvs[wf_state_def])
+  >> gvs[Abbr`s2`, Abbr`G`]
+  >> drule OWHILE_ENDCOND
+  >> Cases_on `r` >> gvs[]
 QED
 
 (* Single-context convenience form: *)
@@ -417,19 +362,67 @@ Proof
        But step returning INR with ¬vfm_abort at depth ≥ 2 is
        impossible.  Contradiction. *)
     spose_not_then assume_tac
-    >> cheat (* TODO: OWHILE_INV_IND with invariant maintaining wf_state,
-       outputTo_consistent, and LENGTH ≥ es_length ≥ 2.  At termination,
-       INR e with ¬vfm_abort e at depth ≥ 2 contradicts
-       step_ge2_inr_is_abort. *)
-  )
+    >> gvs[run_call_def]
+    >> qabbrev_tac `n = LENGTH es.contexts`
+    >> `(λp. wf_state (SND p) ∧
+             ∀e. FST p = (INR e:unit + exception option) ∧
+                         ¬vfm_abort e ⇒ F) (INR e, es')` by (
+      irule (MP_CANON OWHILE_INV_IND)
+      >> qmatch_asmsub_abbrev_tac`OWHILE G f`
+      >> qexistsl_tac[`G`,`f`]
+      >> goal_assum $ drule_at Any
+      >> simp[]
+      >> rpt gen_tac
+      >> PairCases_on `x` >> gvs[Abbr`f`]
+      >> Cases_on `step x1` >> simp[]
+      >> strip_tac
+      >> conj_tac >- (drule step_preserves_wf_state >> simp[])
+      >> rpt strip_tac >> gvs[]
+      >> rename1 `step s1 = (INR e', st')`
+      >> drule step_ge2_inr_is_abort
+      >> simp[Abbr`n`] >> strip_tac >> gvs[Abbr`G`]
+      >- (Cases_on`es.contexts` >> gvs[] >> Cases_on`t` >> gvs[])
+      >> gvs[outputTo_consistent_def, wf_state_def, outputTo_consistent_stack_def]
+      >> Cases_on`s1.contexts` >> fs[]
+      >> gs[outputTo_consistent_ctx_def] )
+    >> gvs[] )
+QED
+
+Theorem step_length_not_drop_more_than_one:
+  wf_state s ∧ step s = (r, s') ⇒
+    LENGTH s.contexts ≤ LENGTH s'.contexts + 1
+Proof
+  rpt strip_tac
+  >> Cases_on `LENGTH s'.contexts < LENGTH s.contexts`
+  >- (
+    drule step_pop_structure
+    >> impl_tac >- gvs[wf_state_def]
+    >> strip_tac >> gvs[]
+    >> Cases_on`s.contexts` >> gvs[] )
+  >> decide_tac
 QED
 
 Theorem run_call_inl_length:
   wf_state es ∧ run_call es = SOME (INL (), es') ⇒
     LENGTH es'.contexts + 1 = LENGTH es.contexts
 Proof
-  cheat (* TODO: OWHILE_INV_IND proof; final INL stop means the last step
-           popped exactly one frame below the starting depth. *)
+  rpt strip_tac
+  >> gvs[run_call_def]
+  >> qabbrev_tac `n = LENGTH es.contexts`
+  >> `(λp. wf_state (SND p) ∧ n ≤ LENGTH (SND p).contexts + 1)
+        (INL () : unit + exception option, es')` by (
+    irule (MP_CANON OWHILE_INV_IND)
+    >> goal_assum $ drule_at Any
+    >> simp[Abbr`n`]
+    >> qx_gen_tac`s`
+    >> PairCases_on `s` >> simp[]
+    >> strip_tac
+    >> Cases_on `step s1` >> simp[]
+    >> conj_tac >- (drule step_preserves_wf_state >> simp[])
+    >> drule step_length_not_drop_more_than_one >> simp[])
+  >> gvs[Abbr`n`]
+  >> drule OWHILE_ENDCOND
+  >> simp[]
 QED
 
 Theorem run_call_length:
@@ -454,10 +447,25 @@ Proof
   rpt strip_tac
   >> CCONTR_TAC
   >> `¬vfm_abort e` by simp[]
-  >> (* By step_ge2_inr_is_abort, step at depth ≥ 2 with ¬vfm_abort
-       cannot return INR. So run_call cannot terminate with INR e
-       and ¬vfm_abort e when es_length ≥ 2. *)
-     cheat (* TODO: OWHILE_INV_IND proof *)
+  >> gvs[run_call_def]
+  >> `(λp. wf_state (SND p) ∧
+           ∀e. FST p = INR e ∧ ¬vfm_abort e ⇒ F)
+      (INR e : unit + exception option, es')` by (
+    irule (MP_CANON OWHILE_INV_IND)
+    >> goal_assum $ drule_at Any
+    >> simp[]
+    >> qx_gen_tac`s`
+    >> PairCases_on `s` >> gvs[]
+    >> Cases_on `step s1` >> simp[] >> strip_tac
+    >> conj_tac >- (drule step_preserves_wf_state >> simp[])
+    >> rpt strip_tac >> gvs[]
+    >> rename1 `step s1 = (INR e', st')`
+    >> drule step_ge2_inr_is_abort
+    >> simp[]
+    >> gvs[outputTo_consistent_def,wf_state_def,outputTo_consistent_stack_def]
+    >> Cases_on`s1.contexts` >> gvs[outputTo_consistent_ctx_def]
+    >> strip_tac >> gvs[] )
+  >> gvs[]
 QED
 
 (* Single-context convenience form: *)
