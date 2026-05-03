@@ -2775,6 +2775,112 @@ Proof
   >> strip_tac >> simp[]
 QED
 
+Theorem step_inner_same_frame_gas_monotone:
+  step_inner s = (r, s') ∧ same_frame_rel s s' ∧
+  EVERY (wf_context o FST) s.contexts ⇒
+    (FST (HD s.contexts)).gasUsed ≤
+    (FST (HD s'.contexts)).gasUsed
+Proof
+  rpt strip_tac
+  >> mp_tac decreases_gas_cred_step_inner
+  >> rewrite_tac[decreases_gas_cred_def]
+  >> disch_then(qspec_then `s` mp_tac)
+  >> IF_CASES_TAC >> gvs[same_frame_rel_def]
+  >> strip_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `s'.contexts` >> gvs[]
+  >> gvs[contexts_weight_def, unused_gas_def, LEX_DEF, wf_context_def]
+  >> ntac 3 (pop_assum mp_tac) >> rw[]
+QED
+
+Theorem inner_push_preserves_stack_room_ok:
+  wf_state s ∧ step_inner s = (r, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+    stack_room_ok s'
+Proof
+  rpt strip_tac
+  >> drule step_inner_push_structure
+  >> simp[] >> strip_tac
+  >> gvs[stack_room_ok_def, wf_state_def]
+  >> Cases_on `s'.contexts` >> gvs[]
+  >> Cases_on `t` >> gvs[]
+  >> rw[EVERY_MEM, MEM_MAP, PULL_EXISTS]
+  >> gvs[]
+QED
+
+Theorem inner_push_preserves_gas_stack_ok:
+  wf_state s ∧ step_inner s = (r, s') ∧
+  LENGTH s'.contexts > LENGTH s.contexts ⇒
+    gas_stack_ok s'
+Proof
+  rpt strip_tac
+  >> `gas_stack_ok s` by gvs[wf_state_def]
+  >> drule step_inner_push_structure >> simp[] >> strip_tac
+  >> Cases_on `s'.contexts` >> gvs[]
+  >> gvs[gas_stack_ok_def]
+  >> Cases_on `i` >> gvs[unused_gas_def] >> gvs[ADD1]
+  >> Cases_on `s.contexts` >> gvs[] >> Cases_on `t` >> gvs[]
+  >> gvs[LIST_EQ_REWRITE, EL_MAP] >> strip_tac
+  >> simp[EL_CONS, PRE_SUB1]
+  >> gvs[ADD1, MAP_TAKE, MAP_MAP_o, o_DEF]
+  >> last_x_assum(qspec_then `n` mp_tac) >> simp[EL_CONS, PRE_SUB1]
+  >> qmatch_goalsub_abbrev_tac `_ (_ + stl) ⇒ (_ ≥ (_ + (_ + stl1)))`
+  >> `stl1 = stl` by (
+       unabbrev_all_tac >> AP_TERM_TAC
+       >> simp[LIST_EQ_REWRITE, EL_TAKE, EL_MAP])
+  >> gvs[GREATER_EQ]
+  >> mp_tac decreases_gas_cred_step_inner
+  >> rewrite_tac[decreases_gas_cred_def]
+  >> disch_then(qspec_then `s` mp_tac) >> simp[]
+  >> IF_CASES_TAC >> gvs[wf_state_def]
+  >> strip_tac
+  >> Cases_on `s'.contexts` >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> gvs[wf_context_def]
+  >> first_assum(qspec_then `0` mp_tac)
+  >> impl_tac >- simp[] >> simp_tac(srw_ss())[EL_CONS]
+  >> strip_tac >> gvs[]
+  >> qpat_x_assum `$! _` mp_tac
+  >> first_assum(qspec_then `0` mp_tac)
+  >> simp_tac (srw_ss()++ARITH_ss) []
+  >> rpt strip_tac >> gvs[]
+  >> Cases_on `t` >> gvs[wf_context_def]
+  >> first_assum(qspec_then `1` mp_tac)
+  >> impl_tac >- simp[] >> simp_tac(srw_ss())[EL_CONS]
+  >> strip_tac >> gvs[]
+  >> qpat_x_assum `$! _` mp_tac
+  >> first_assum(qspec_then `1` mp_tac)
+  >> simp_tac (srw_ss()++ARITH_ss) []
+  >> rpt strip_tac >> gvs[]
+QED
+
+Theorem step_inner_preserves_stack_room_gas_ok:
+  wf_state s ∧ step_inner s = (r, s') ⇒
+    stack_room_ok s' ∧ gas_stack_ok s'
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> `LENGTH s'.contexts ≥ LENGTH s.contexts` by (
+       mp_tac same_frame_or_grow_step_inner_named
+       >> metis_tac[same_frame_or_grow_length])
+  >> Cases_on `LENGTH s'.contexts = LENGTH s.contexts`
+  >- (
+    `same_frame_rel s s'` by (
+       mp_tac same_frame_or_grow_step_inner_named
+       >> metis_tac[same_frame_or_grow_eq_length])
+    >> conj_tac
+    >- metis_tac[same_frame_rel_preserves_stack_room_ok, wf_state_def]
+    >> irule same_frame_rel_preserves_gas_stack_ok
+    >> goal_assum $ drule_at Any
+    >> gvs[wf_state_def]
+    >> simp[GREATER_EQ]
+    >> irule step_inner_same_frame_gas_monotone
+    >> simp[])
+  >> `LENGTH s'.contexts > LENGTH s.contexts` by decide_tac
+  >> metis_tac[inner_push_preserves_stack_room_ok
+              ,inner_push_preserves_gas_stack_ok]
+QED
+
 Theorem step_pop_preserves_gas_stack_ok:
   wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts < LENGTH s.contexts ⇒
   gas_stack_ok s'
