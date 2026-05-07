@@ -66,8 +66,6 @@ jobs:
           [overrides.HOLHoareTriple]
           path = "$HOLDIR/examples/machine-code/hoare-triple"
 
-          [build]
-          exclude = ["worktrees/*"]
           TOML
 
       - name: Run holbuild

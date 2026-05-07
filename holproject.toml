@@ -6,8 +6,21 @@ name = "verifereum"
 version = "prototype"
 
 [build]
-members = ["util", "spec", "prog", "examples"]
-exclude = ["*Theory.sml", "*Theory.sig"]
+members = [
+  "verifereumScript.sml",
+  "util",
+  "spec",
+  "prog",
+  "examples",
+  "tests/vfmTestAuxLib.sig",
+  "tests/vfmTestAuxLib.sml",
+  "tests/vfmTestDefLib.sig",
+  "tests/vfmTestDefLib.sml",
+  "tests/vfmTestResultLib.sig",
+  "tests/vfmTestResultLib.sml",
+  "tests/vfmTestRunScript.sml",
+]
+roots = ["verifereumScript.sml"]
 
 [dependencies.HOLKeccak]
 manifest = "holbuild-shims/keccak.holproject.toml"
@@ -20,6 +33,3 @@ manifest = "holbuild-shims/ripemd.holproject.toml"
 
 [dependencies.HOLHoareTriple]
 manifest = "holbuild-shims/hoare-triple.holproject.toml"
-
-[actions.wrappedEtherTheory]
-loads = ["finite_mapSyntax"]
