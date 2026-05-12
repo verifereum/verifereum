@@ -1,0 +1,14 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "verifereum"
+version = "0.1.0"
+
+[build]
+roots = ["verifereumScript.sml"]
+exclude = ["tests/defs/*", "tests/results/*"]
+
+[dependencies.holexamples]
+manifest = "holexamples.manifest.toml"
+path = "$HOLDIR" # set env var, or override in .holconfig.toml

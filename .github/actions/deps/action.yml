@@ -1,0 +1,68 @@
+name: 'Setup Dependencies'
+description: 'Sets up Poly/ML and HOL4'
+
+outputs:
+  deps-hash:
+    description: 'Hash of Poly/ML+HOL4 versions for cache keys'
+    value: ${{ steps.versions.outputs.deps-hash }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set dependency pins
+      shell: bash
+      run: |
+        echo "POLYML_TAG=v5.9.2" >> "$GITHUB_ENV"
+
+    - name: Get dependency versions
+      id: versions
+      shell: bash
+      run: |
+        polyml=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/${POLYML_TAG} | cut -f1)
+        hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1)
+        echo "polyml=$polyml" >> "$GITHUB_OUTPUT"
+        echo "hol4=$hol4" >> "$GITHUB_OUTPUT"
+        echo "deps-hash=$(echo "${polyml}${hol4}" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Poly/ML
+      uses: actions/cache@v4
+      id: cache-polyml
+      with:
+        path: ~/polyml-install
+        key: polyml-${{ runner.os }}-${{ steps.versions.outputs.polyml }}
+
+    - name: Build Poly/ML
+      if: steps.cache-polyml.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        git clone -b "${POLYML_TAG}" --depth 1 https://github.com/polyml/polyml.git
+        cd polyml
+        ./configure --prefix="$HOME/polyml-install"
+        make
+        make install
+
+    - name: Add Poly/ML to PATH
+      shell: bash
+      run: echo "$HOME/polyml-install/bin" >> "$GITHUB_PATH"
+
+    - name: Cache HOL4
+      uses: actions/cache@v4
+      id: cache-hol4
+      with:
+        path: ~/HOL
+        key: hol-${{ runner.os }}-${{ steps.versions.outputs.polyml }}-${{ steps.versions.outputs.hol4 }}
+
+    - name: Build HOL4
+      if: steps.cache-hol4.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
+        cd ~/HOL
+        poly < tools/smart-configure.sml
+        bin/build
+
+    - name: Add HOL to PATH and set HOLDIR
+      shell: bash
+      run: |
+        echo "$HOME/HOL/bin" >> "$GITHUB_PATH"
+        echo "HOLDIR=$HOME/HOL" >> "$GITHUB_ENV"

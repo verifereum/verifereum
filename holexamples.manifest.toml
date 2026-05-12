@@ -1,0 +1,12 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "holexamples"
+version = "0.1.0"
+
+[build]
+members = [
+  "examples/Crypto",
+  "examples/machine-code/hoare-triple"
+]
