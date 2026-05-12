@@ -3,33 +3,12 @@ schema = 1
 
 [project]
 name = "verifereum"
-version = "prototype"
+version = "0.1.0"
 
 [build]
-members = [
-  "verifereumScript.sml",
-  "util",
-  "spec",
-  "prog",
-  "examples",
-  "tests/vfmTestAuxLib.sig",
-  "tests/vfmTestAuxLib.sml",
-  "tests/vfmTestDefLib.sig",
-  "tests/vfmTestDefLib.sml",
-  "tests/vfmTestResultLib.sig",
-  "tests/vfmTestResultLib.sml",
-  "tests/vfmTestRunScript.sml",
-]
 roots = ["verifereumScript.sml"]
+exclude = ["tests/defs/*", "tests/results/*"]
 
-[dependencies.HOLKeccak]
-manifest = "holbuild-shims/keccak.holproject.toml"
-
-[dependencies.HOLCryptoSHA2]
-manifest = "holbuild-shims/sha2.holproject.toml"
-
-[dependencies.HOLCryptoRIPEMD]
-manifest = "holbuild-shims/ripemd.holproject.toml"
-
-[dependencies.HOLHoareTriple]
-manifest = "holbuild-shims/hoare-triple.holproject.toml"
+[dependencies.holexamples]
+manifest = "holexamples.manifest.toml"
+path = "$HOLDIR" # set env var, or override in .holconfig.toml
