@@ -47,27 +47,7 @@ jobs:
           git checkout --detach FETCH_HEAD
           make HOLDIR="$HOLDIR"
           echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"
-
-      - name: Write local holbuild overrides
-        run: |
-          cat > .holconfig.toml <<TOML
-          [overrides.HOLKeccak]
-          path = "$HOLDIR/examples/Crypto/Keccak"
-
-          [overrides.HOLCryptoSHA2]
-          path = "$HOLDIR/examples/Crypto/SHA-2"
-
-          [overrides.HOLCryptoRIPEMD]
-          path = "$HOLDIR/examples/Crypto/RIPEMD"
-
-          [overrides.HOLCryptoMD]
-          path = "$HOLDIR/examples/Crypto/MD"
-
-          [overrides.HOLHoareTriple]
-          path = "$HOLDIR/examples/machine-code/hoare-triple"
-
-          TOML
-
+      
       - name: Run holbuild
         env:
           TMPDIR: ${{ runner.temp }}
