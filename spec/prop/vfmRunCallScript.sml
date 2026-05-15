@@ -2660,17 +2660,16 @@ Proof
     simp[ADD1, EL_MAP] >> gvs[ADD1] >>
     first_x_assum irule >>
     gvs[wf_state_def,outputTo_consistent_stack_def] >>
-    gvs[EVERY_EL, EL_MAP] )
-  >> (
-    `LENGTH s'.contexts < LENGTH s.contexts` by decide_tac >>
-    `outputTo_consistent_stack s` by gvs[wf_state_def] >>
-    gvs[wf_state_def] >>
-    drule_all step_pop_structure >>
-    Cases_on `s.contexts` >> gvs[] >>
-    Cases_on `t` >> gvs[] >>
-    Cases_on`s'.contexts` >> gvs[] >>
-    strip_tac >> gvs[outputTo_consistent_stack_def] >>
-    gvs[outputTo_consistent_ctx_def]
+    gvs[EVERY_EL, EL_MAP] ) >>
+  `LENGTH s'.contexts < LENGTH s.contexts` by decide_tac >>
+  `outputTo_consistent_stack s` by gvs[wf_state_def] >>
+  gvs[wf_state_def] >>
+  drule_all step_pop_structure >>
+  Cases_on `s.contexts` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on`s'.contexts` >> gvs[] >>
+  strip_tac >> gvs[outputTo_consistent_stack_def] >>
+  gvs[outputTo_consistent_ctx_def]
 QED
 
 Theorem step_push_parent_gas_ok:
