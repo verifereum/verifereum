@@ -223,10 +223,7 @@ val cp_tac = fn defs =>
   rw[cp_def] >> rpt strip_tac
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
-  >> gvs (defs @ basic_defs)
-  >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def]);
-
-
+  >> gvs (AllCaseEqs()::defs @ basic_defs);
 
 (* Leaf cp facts *)
 Theorem cp_leaves[simp]:
