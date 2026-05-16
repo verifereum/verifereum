@@ -2442,8 +2442,8 @@ Proof
     \\ qmatch_abbrev_tac`lhs = _`
     \\ qmatch_goalsub_abbrev_tac`account_already_created la2`
     \\ qunabbrev_tac`lhs`
-    \\ `account_already_created la1 = account_already_created la2`
-    by (
+    \\ sg`account_already_created la1 = account_already_created la2`
+    >- (
       qmatch_asmsub_abbrev_tac`ensure_storage_in_domain toCreate`
       \\ gvs[Abbr`la1`, Abbr`la2`, account_already_created_def, lookup_account_def]
       \\ gvs[accounts_agree_modulo_storage_def, fIN_IN,

@@ -853,7 +853,13 @@ val () = cv_trans poly13_deg_def;
 Theorem poly13_deg_le_12:
   ∀p. poly13_deg p ≤ 12
 Proof
-  PairCases \\ rw [poly13_deg_def]
+  PairCases \\ simp_tac std_ss [poly13_deg_def] >> EVAL_TAC
+  >> IF_CASES_TAC >- rw[]
+  >> IF_CASES_TAC >- rw[]
+  >> IF_CASES_TAC >- rw[]
+  >> IF_CASES_TAC >- rw[]
+  >> IF_CASES_TAC >- rw[]
+  >> rw[]
 QED
 
 (* Inner loop j for truncated multiply-subtract:

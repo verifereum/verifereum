@@ -282,6 +282,18 @@ Definition static_gas_def[simp]:
   ∧ static_gas SelfDestruct   = 5000
 End
 
+Theorem list_helper[local]:
+  l1 ++ l2 = l3 ++ GENLIST (K x) n /\
+  LENGTH l1 = m ==>
+  TAKE m l3 ++ GENLIST (K x) (m - LENGTH (TAKE m l3)) = l1
+Proof
+  rw[LIST_EQ_REWRITE, LENGTH_TAKE_EQ, EL_APPEND_EQN, EL_TAKE]
+  >> rw[] >> CCONTR_TAC >> gvs[]
+  >- ( rename1`EL z l3` >> first_x_assum(qspec_then`z`mp_tac) >> rw[] )
+  >- ( rename1`EL z l3` >> first_x_assum(qspec_then`z`mp_tac) >> rw[] )
+  >- ( rename1`EL z l1` >> first_x_assum(qspec_then`z`mp_tac) >> rw[] )
+QED
+
 Theorem parse_opcode_cond_thm:
   parse_opcode (opcs: byte list) =
   case opcs of
@@ -444,21 +456,62 @@ Proof
   \\ simp_tac std_ss [CaseEq"list", CaseEq"bool", PULL_EXISTS]
   \\ CONJ_TAC
   >- (
-    Cases \\ simp_tac (srw_ss()) [
+    Cases \\ CONV_TAC(QUANT_CONV(LAND_CONV(SIMP_CONV (srw_ss()) [
       opcode_def, IS_PREFIX_APPEND, PULL_EXISTS,
       APPEND_EQ_CONS, REPLICATE_EQ_CONS
-    ]
-    >- srw_tac[DNF_ss][]
-    \\ rpt gen_tac
-    \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ]))
-    \\ strip_tac \\ gvs[take_pad_0_def, PAD_RIGHT]
-    \\ pop_assum mp_tac
-    \\ simp[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_REPLICATE, LENGTH_TAKE_EQ,
-            EL_TAKE, LENGTH_REPLICATE, GSYM AND_IMP_INTRO]
-    \\ rw[] \\ rw[]
-    \\ TRY(first_x_assum(qspec_then`x`mp_tac) \\ simp[] \\ NO_TAC)
-    \\ gvs[LENGTH_EQ_NUM_compute]
-    \\ first_x_assum(qspec_then`0`mp_tac) \\ simp[])
+    ])))
+    >>~[`_ ≤ 4`]
+    >>~[`_ ≤ 32`]
+    >>~[`_ < 16`]
+    >- (
+      rpt gen_tac
+      \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ]))
+      \\ strip_tac
+      >> rpt BasicProvers.VAR_EQ_TAC
+      >> rewrite_tac[theorem"opname_distinct", CONS_11, GSYM CONJ_ASSOC,
+                     NOT_CONS_NIL, NOT_NIL_CONS]
+      >> simp_tac bool_ss [] >>
+      rpt(pop_assum mp_tac) >> EVAL_TAC )
+    >- (
+      rpt gen_tac
+      \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ]))
+      \\ strip_tac
+      >> rpt BasicProvers.VAR_EQ_TAC
+      >> rewrite_tac[theorem"opname_distinct", CONS_11, GSYM CONJ_ASSOC,
+                     NOT_CONS_NIL, NOT_NIL_CONS]
+      >> simp_tac bool_ss [] >>
+      rpt(pop_assum mp_tac) >> EVAL_TAC )
+    >- (
+      rpt gen_tac
+      >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
+      >> rewrite_tac[theorem"opname_distinct", NOT_NIL_CONS, NOT_CONS_NIL, CONS_11]
+      >- (
+        qpat_x_assum`_ <= _`mp_tac >>
+        simp_tac(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ] >>
+        rpt strip_tac >> gs[] )
+      >> simp_tac std_ss []
+      >> qpat_x_assum`_ <= _`mp_tac >>
+      CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ])) >>
+      strip_tac >> asm_rewrite_tac[] >> EVAL_TAC >> gs[REPLICATE_GENLIST] >>
+      irule list_helper >> simp[] >> goal_assum drule )
+    >- (
+      rpt gen_tac
+      >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
+      >> rewrite_tac[theorem"opname_distinct", NOT_NIL_CONS, NOT_CONS_NIL, CONS_11]
+      >- (
+        qpat_x_assum`_ <= _`mp_tac >>
+        simp_tac(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ] >>
+        rpt strip_tac >> gs[] )
+      >> simp_tac std_ss []
+      >> qpat_x_assum`_ <= _`mp_tac >>
+      CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ])) >>
+      strip_tac >> asm_rewrite_tac[] >> EVAL_TAC >> gs[REPLICATE_GENLIST] >>
+      irule list_helper >> simp[] >> goal_assum drule )
+    >> rpt strip_tac
+    >> rpt BasicProvers.VAR_EQ_TAC
+    >> rewrite_tac[CONS_11, GSYM CONJ_ASSOC]
+    >> simp_tac bool_ss []
+    >> EVAL_TAC)
   \\ Cases_on ‘opcs’ \\ simp[wf_opname_def, opcode_def]
   >- (
     qexists_tac`Stop` \\ rw[opcode_def]
