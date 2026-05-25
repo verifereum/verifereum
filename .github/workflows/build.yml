@@ -44,10 +44,11 @@ jobs:
         run: poly -v
 
 
-      - name: Get latest HOL commit hash
+      - name: Get pinned HOL commit hash
         id: hol4-version
-        run:
-          echo "hash=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1 )" >> $GITHUB_OUTPUT
+        run: |
+          HOL4_REF=4c96b9aa25da4f9066a500c13a9abe03252e3bae
+          echo "hash=$HOL4_REF" >> $GITHUB_OUTPUT
 
       - name: Cache HOL4
         uses: actions/cache@v3
@@ -59,8 +60,10 @@ jobs:
       - name: Setup and Build HOL4
         if: steps.cache-hol4.outputs.cache-hit != 'true'
         run: |
-          git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git $HOME/HOL
+          HOL4_REF=4c96b9aa25da4f9066a500c13a9abe03252e3bae
+          git clone https://github.com/HOL-Theorem-Prover/HOL.git $HOME/HOL
           cd $HOME/HOL
+          git checkout --detach $HOL4_REF
           poly --script tools/smart-configure.sml
           bin/build
 

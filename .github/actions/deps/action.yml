@@ -13,13 +13,14 @@ runs:
       shell: bash
       run: |
         echo "POLYML_TAG=v5.9.2" >> "$GITHUB_ENV"
+        echo "HOL4_REF=4c96b9aa25da4f9066a500c13a9abe03252e3bae" >> "$GITHUB_ENV"
 
     - name: Get dependency versions
       id: versions
       shell: bash
       run: |
         polyml=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/${POLYML_TAG} | cut -f1)
-        hol4=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git master | cut -f1)
+        hol4=${HOL4_REF}
         echo "polyml=$polyml" >> "$GITHUB_OUTPUT"
         echo "hol4=$hol4" >> "$GITHUB_OUTPUT"
         echo "deps-hash=$(echo "${polyml}${hol4}" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
@@ -56,8 +57,9 @@ runs:
       if: steps.cache-hol4.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        git clone -b master https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
+        git clone https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
         cd ~/HOL
+        git checkout --detach ${HOL4_REF}
         poly < tools/smart-configure.sml
         bin/build
 
