@@ -2,11 +2,6 @@ name: holbuild
 
 on:
   workflow_dispatch:
-    inputs:
-      holbuild-ref:
-        description: "holbuild git ref to test"
-        required: false
-        default: "master"
   pull_request:
   merge_group:
 
@@ -16,7 +11,6 @@ concurrency:
 
 env:
   HOLBUILD_REPO: https://github.com/charles-cooper/holbuild.git
-  HOLBUILD_REF: ${{ inputs.holbuild-ref || 'master' }}
 
 jobs:
   build:
@@ -24,8 +18,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read holbuild pin
+        id: holbuild-pin
+        run: echo "holbuild-ref=$(tr -d '[:space:]' < PINS/holbuild.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Clone pinned holbuild
+        run: |
+          git clone "$HOLBUILD_REPO" "$HOME/holbuild"
+          cd "$HOME/holbuild"
+          git checkout --detach "${{ steps.holbuild-pin.outputs.holbuild-ref }}"
+
+      - name: Read HOL4 pin from holbuild
+        id: hol4-pin
+        run: echo "hol4-ref=$(tr -d '[:space:]' < $HOME/holbuild/PINS/hol.txt)" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/deps
         id: deps
+        with:
+          hol4-ref: ${{ steps.hol4-pin.outputs.hol4-ref }}
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
@@ -41,10 +51,7 @@ jobs:
 
       - name: Build holbuild
         run: |
-          git clone --depth 1 "$HOLBUILD_REPO" "$HOME/holbuild"
           cd "$HOME/holbuild"
-          git fetch --depth 1 origin "$HOLBUILD_REF"
-          git checkout --detach FETCH_HEAD
           make HOLDIR="$HOLDIR"
           echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"
       
