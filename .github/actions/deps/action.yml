@@ -1,6 +1,11 @@
 name: 'Setup Dependencies'
 description: 'Sets up Poly/ML and HOL4'
 
+inputs:
+  hol4-ref:
+    description: 'HOL4 git ref to use'
+    required: true
+
 outputs:
   deps-hash:
     description: 'Hash of Poly/ML+HOL4 versions for cache keys'
@@ -13,7 +18,7 @@ runs:
       shell: bash
       run: |
         echo "POLYML_TAG=v5.9.2" >> "$GITHUB_ENV"
-        echo "HOL4_REF=4c96b9aa25da4f9066a500c13a9abe03252e3bae" >> "$GITHUB_ENV"
+        echo "HOL4_REF=${{ inputs.hol4-ref }}" >> "$GITHUB_ENV"
 
     - name: Get dependency versions
       id: versions

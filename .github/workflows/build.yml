@@ -44,11 +44,19 @@ jobs:
         run: poly -v
 
 
-      - name: Get pinned HOL commit hash
-        id: hol4-version
+      - name: Get pinned holbuild commit hash
+        id: holbuild-version
+        run: echo "hash=$(tr -d '[:space:]' < PINS/holbuild.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned holbuild
         run: |
-          HOL4_REF=4c96b9aa25da4f9066a500c13a9abe03252e3bae
-          echo "hash=$HOL4_REF" >> $GITHUB_OUTPUT
+          git clone https://github.com/charles-cooper/holbuild.git "$HOME/holbuild"
+          cd "$HOME/holbuild"
+          git checkout --detach "${{ steps.holbuild-version.outputs.hash }}"
+
+      - name: Get pinned HOL commit hash from holbuild
+        id: hol4-version
+        run: echo "hash=$(tr -d '[:space:]' < $HOME/holbuild/PINS/hol.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Cache HOL4
         uses: actions/cache@v3
@@ -59,11 +67,12 @@ jobs:
 
       - name: Setup and Build HOL4
         if: steps.cache-hol4.outputs.cache-hit != 'true'
+        env:
+          HOL4_REF: ${{ steps.hol4-version.outputs.hash }}
         run: |
-          HOL4_REF=4c96b9aa25da4f9066a500c13a9abe03252e3bae
           git clone https://github.com/HOL-Theorem-Prover/HOL.git $HOME/HOL
           cd $HOME/HOL
-          git checkout --detach $HOL4_REF
+          git checkout --detach "$HOL4_REF"
           poly --script tools/smart-configure.sml
           bin/build
 
