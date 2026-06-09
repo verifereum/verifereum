@@ -44,19 +44,17 @@ jobs:
         run: poly -v
 
 
-      - name: Get pinned holbuild commit hash
-        id: holbuild-version
-        run: echo "hash=$(tr -d '[:space:]' < PINS/holbuild.txt)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout pinned holbuild
-        run: |
-          git clone https://github.com/charles-cooper/holbuild.git "$HOME/holbuild"
-          cd "$HOME/holbuild"
-          git checkout --detach "${{ steps.holbuild-version.outputs.hash }}"
-
-      - name: Get pinned HOL commit hash from holbuild
+      - name: Get pinned HOL commit hash from holproject.toml
         id: hol4-version
-        run: echo "hash=$(tr -d '[:space:]' < $HOME/holbuild/PINS/hol.txt)" >> "$GITHUB_OUTPUT"
+        run: |
+          hol4_ref="$(python3 - <<'PY'
+          import tomllib
+          with open("holproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          print(data["dependencies"]["hol"]["rev"])
+          PY
+          )"
+          echo "hash=$hol4_ref" >> "$GITHUB_OUTPUT"
 
       - name: Cache HOL4
         uses: actions/cache@v3

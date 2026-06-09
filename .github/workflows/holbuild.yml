@@ -11,6 +11,7 @@ concurrency:
 
 env:
   HOLBUILD_REPO: https://github.com/charles-cooper/holbuild.git
+  HOLBUILD_REF: 082af806154333b7d796fd4853cd24d38f1331e3
 
 jobs:
   build:
@@ -18,19 +19,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read holbuild pin
-        id: holbuild-pin
-        run: echo "holbuild-ref=$(tr -d '[:space:]' < PINS/holbuild.txt)" >> "$GITHUB_OUTPUT"
+      - name: Read HOL4 pin from holproject.toml
+        id: hol4-pin
+        run: |
+          hol4_ref="$(python3 - <<'PY'
+          import tomllib
+          with open("holproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          print(data["dependencies"]["hol"]["rev"])
+          PY
+          )"
+          echo "hol4-ref=$hol4_ref" >> "$GITHUB_OUTPUT"
 
       - name: Clone pinned holbuild
         run: |
           git clone "$HOLBUILD_REPO" "$HOME/holbuild"
           cd "$HOME/holbuild"
-          git checkout --detach "${{ steps.holbuild-pin.outputs.holbuild-ref }}"
-
-      - name: Read HOL4 pin from holbuild
-        id: hol4-pin
-        run: echo "hol4-ref=$(tr -d '[:space:]' < $HOME/holbuild/PINS/hol.txt)" >> "$GITHUB_OUTPUT"
+          git checkout --detach "$HOLBUILD_REF"
 
       - uses: ./.github/actions/deps
         id: deps
@@ -41,13 +46,14 @@ jobs:
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
 
       - name: Restore holbuild action cache
-        uses: actions/cache@v4
+        id: cache-holbuild
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/holbuild
-          key: holbuild-actions-${{ runner.os }}-${{ steps.deps.outputs.deps-hash }}-${{ github.sha }}
+          key: holbuild-v2-${{ runner.os }}-${{ env.HOLBUILD_REF }}-${{ steps.deps.outputs.deps-hash }}
           restore-keys: |
-            holbuild-actions-${{ runner.os }}-${{ steps.deps.outputs.deps-hash }}-
-            holbuild-actions-${{ runner.os }}-
+            holbuild-v2-${{ runner.os }}-${{ env.HOLBUILD_REF }}-
+            holbuild-v2-${{ runner.os }}-
 
       - name: Build holbuild
         run: |
@@ -55,11 +61,21 @@ jobs:
           make HOLDIR="$HOLDIR"
           echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"
       
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Save holbuild action cache after buildhol
+        if: steps.cache-holbuild.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/holbuild
+          key: holbuild-v2-${{ runner.os }}-${{ env.HOLBUILD_REF }}-${{ steps.deps.outputs.deps-hash }}
+
       - name: Run holbuild
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --holdir "$HOLDIR" -j"$(nproc)" build --skip-checkpoints --skip-goalfrag
+          holbuild -j"$(nproc)" build --skip-checkpoints --skip-goalfrag
 
       - name: Verify no successful-build checkpoints remain
         run: |
