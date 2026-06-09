@@ -11,7 +11,7 @@ concurrency:
 
 env:
   HOLBUILD_REPO: https://github.com/charles-cooper/holbuild.git
-  HOLBUILD_REF: 3c42f993e0a55334851edbadf6e1302753f5f414
+  HOLBUILD_REF: 082af806154333b7d796fd4853cd24d38f1331e3
 
 jobs:
   build:
