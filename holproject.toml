@@ -1,15 +1,20 @@
 [holbuild]
-schema = 1
+schema = 2
 
 [project]
 name = "verifereum"
-version = "0.1.0"
+version = "0.1.1"
 
 [build]
 roots = ["verifereumScript.sml"]
 exclude = ["tests/defs/*", "tests/results/*"]
 tactic_timeout = 30
 
+[dependencies.hol]
+git = "https://github.com/HOL-Theorem-Prover/HOL.git"
+rev = "bf0dec986904cecbd1a1c6bce62ccf1c256eaca1"
+
 [dependencies.holexamples]
+from = "hol"
+path = "."
 manifest = "holexamples.manifest.toml"
-path = "$HOLDIR" # set env var, or override in .holconfig.toml
