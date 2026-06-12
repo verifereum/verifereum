@@ -72,7 +72,7 @@ jobs:
           cd $HOME/HOL
           git checkout --detach "$HOL4_REF"
           poly --script tools/smart-configure.sml
-          bin/build
+          bin/build --no-helpdocs
 
       - name: Add HOL to PATH and export HOLDIR
         run: |
