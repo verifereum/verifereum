@@ -3,7 +3,7 @@ schema = 2
 
 [project]
 name = "verifereum"
-version = "0.1.1"
+version = "0.1.2"
 
 [build]
 roots = ["verifereumScript.sml"]
@@ -12,7 +12,7 @@ tactic_timeout = 30
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "bf0dec986904cecbd1a1c6bce62ccf1c256eaca1"
+rev = "9d7499d9bd45579524e6a8bb982571208b67a905"
 
 [dependencies.holexamples]
 from = "hol"
