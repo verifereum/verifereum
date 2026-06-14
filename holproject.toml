@@ -1,5 +1,6 @@
 [holbuild]
 schema = 2
+required_version = "0.6.0"
 
 [project]
 name = "verifereum"

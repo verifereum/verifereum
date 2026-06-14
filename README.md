@@ -45,48 +45,18 @@ verifereum/
 
 ## Getting Started
 
-Verifereum is developed in the [HOL4](https://hol-theorem-prover.org) theorem prover, which is written in Standard ML.
+Verifereum is developed in the [HOL4](https://hol-theorem-prover.org) theorem prover, which is written in Standard ML, and is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies. The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-### Option 1: Build from Source
+For a local build, install `holbuild` v0.6.0 and run:
 
-1. **Install Poly/ML** (you may prefer to use a packaged version if available)
+```bash
+holbuild buildhol
+holbuild -j"$(nproc)" build
+```
 
-    ```bash
-    curl -L https://github.com/polyml/polyml/archive/refs/heads/master.zip | bsdtar -xf -
-    cd polyml-master
-    ./configure --enable-intinf-as-int
-    make -j4
-    make install
-    cd ..
-    rm -r polyml-master
-    ```
+`holbuild buildhol` builds and caches the HOL toolchain and dependencies specified by `holproject.toml`.
 
-2. **Build HOL4**
-
-    ```bash
-    git clone -b master https://github.com/HOL-Theorem-Prover/HOL
-    cd HOL
-    poly --script tools/smart-configure.sml
-    bin/build
-    ```
-
-    Add to your `.bashrc`:
-    ```bash
-    export HOLDIR=<path-to-HOL>/HOL
-    export PATH=$HOLDIR/bin:$PATH
-    ```
-
-3. **Clone and Build Verifereum**
-
-    ```bash
-    git clone https://github.com/verifereum/verifereum
-    cd verifereum
-    Holmake
-    ```
-
-### Option 2: Use Docker
-
-See [docs/run-with-docker.md](docs/run-with-docker.md) for instructions on running with Docker.
+Plain `Holmake` remains supported as a secondary check when a compatible HOL4 installation is already available, and is also checked in CI.
 
 ## Contributing
 

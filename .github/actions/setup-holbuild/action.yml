@@ -1,0 +1,88 @@
+name: 'Setup holbuild'
+description: 'Checks out pinned holbuild, builds it, and adds it to PATH'
+
+inputs:
+  holbuild-repo:
+    required: false
+    default: 'https://github.com/charles-cooper/holbuild.git'
+    description: 'holbuild repository URL'
+  holbuild-ref:
+    required: true
+    description: 'holbuild git revision or tag to use'
+
+outputs:
+  holbuild-rev:
+    description: 'Resolved holbuild revision'
+    value: ${{ steps.version.outputs.holbuild-rev }}
+  hol-source-rev:
+    description: 'HOL source revision required to build holbuild'
+    value: ${{ steps.hol-source-pin.outputs.hol-source-rev }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache holbuild checkout/build
+      uses: actions/cache@v5
+      id: cache-holbuild
+      with:
+        path: ~/holbuild
+        key: holbuild-tool-${{ runner.os }}-${{ inputs.holbuild-ref }}
+
+    - name: Clone holbuild
+      shell: bash
+      run: |
+        if [ ! -d "$HOME/holbuild/.git" ]; then
+          git clone "${{ inputs.holbuild-repo }}" "$HOME/holbuild"
+        fi
+
+    - name: Checkout holbuild revision
+      shell: bash
+      run: |
+        cd "$HOME/holbuild"
+        git fetch origin "${{ inputs.holbuild-ref }}"
+        git checkout --detach "${{ inputs.holbuild-ref }}"
+
+    - name: Resolve holbuild revision
+      id: version
+      shell: bash
+      run: |
+        cd "$HOME/holbuild"
+        echo "holbuild-rev=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+    - name: Read HOL source pin
+      id: hol-source-pin
+      shell: bash
+      run: |
+        cd "$HOME/holbuild"
+        echo "hol-source-rev=$(tr -d '[:space:]' < PINS/hol.txt)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache HOL source checkout
+      uses: actions/cache@v5
+      id: cache-hol-source
+      with:
+        path: ~/HOL-source
+        key: holbuild-hol-source-${{ runner.os }}-${{ steps.hol-source-pin.outputs.hol-source-rev }}
+
+    - name: Clone HOL source
+      shell: bash
+      run: |
+        if [ ! -d "$HOME/HOL-source/.git" ]; then
+          git clone https://github.com/HOL-Theorem-Prover/HOL.git "$HOME/HOL-source"
+        fi
+
+    - name: Checkout HOL source revision
+      shell: bash
+      run: |
+        cd "$HOME/HOL-source"
+        git fetch origin "${{ steps.hol-source-pin.outputs.hol-source-rev }}"
+        git checkout --detach "${{ steps.hol-source-pin.outputs.hol-source-rev }}"
+
+    - name: Build holbuild
+      shell: bash
+      run: |
+        cd "$HOME/holbuild"
+        make HOL_SOURCE="$HOME/HOL-source"
+
+    - name: Add holbuild to PATH
+      shell: bash
+      run: echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"

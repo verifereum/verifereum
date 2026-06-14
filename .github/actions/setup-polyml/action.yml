@@ -1,0 +1,44 @@
+name: 'Setup Poly/ML'
+description: 'Builds/restores Poly/ML and adds it to PATH'
+
+inputs:
+  polyml-tag:
+    description: 'Poly/ML git tag to use'
+    required: false
+    default: 'v5.9.2'
+
+outputs:
+  polyml-rev:
+    description: 'Resolved Poly/ML git revision'
+    value: ${{ steps.version.outputs.polyml-rev }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve Poly/ML version
+      id: version
+      shell: bash
+      run: |
+        rev=$(git ls-remote https://github.com/polyml/polyml.git refs/tags/${{ inputs.polyml-tag }} | cut -f1)
+        echo "polyml-rev=$rev" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Poly/ML
+      uses: actions/cache@v5
+      id: cache-polyml
+      with:
+        path: ~/polyml-install
+        key: polyml-${{ runner.os }}-${{ steps.version.outputs.polyml-rev }}
+
+    - name: Build Poly/ML
+      if: steps.cache-polyml.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        git clone -b "${{ inputs.polyml-tag }}" --depth 1 https://github.com/polyml/polyml.git polyml
+        cd polyml
+        ./configure --prefix=$HOME/polyml-install
+        make
+        make install
+
+    - name: Add Poly/ML to PATH
+      shell: bash
+      run: echo "$HOME/polyml-install/bin" >> "$GITHUB_PATH"
