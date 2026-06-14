@@ -4,9 +4,9 @@
 [![Website](https://img.shields.io/badge/website-verifereum.org-brightgreen)](https://verifereum.org)
 [![Zulip](https://img.shields.io/badge/chat-Zulip-blue)](https://hol.zulipchat.com)
 
-**Prove functional correctness of Ethereum smart contracts in higher-order logic.**
+**A production-quality executable formal semantics of the Ethereum Virtual Machine in higher-order logic.**
 
-Verifereum is an open-source project that brings mathematical rigour to Ethereum smart contract verification. Using the [HOL4 theorem prover](https://hol-theorem-prover.org), we're building tools to prove the correctness of smart contracts and eliminate entire classes of vulnerabilities.
+Verifereum is an open-source project centred on a comprehensive formal semantics of the Ethereum Execution Layer's EVM, mechanised in the [HOL4 theorem prover](https://hol-theorem-prover.org). The semantics is executable by evaluation inside the logic and is designed as a foundation for smart contract verification, EVM program logics, and compiler verification targeting EVM bytecode.
 
 ## Why Verifereum?
 
@@ -16,10 +16,18 @@ Verifereum is an open-source project that brings mathematical rigour to Ethereum
 
 ## Current Status
 
-- Formal specification of EVM operations in HOL4
-- [Progress](https://verifereum.org/table.html) on passing the [Ethereum Execution Spec Tests (EEST)](https://eest.ethereum.org/main/consuming_tests/blockchain_test/)
-- Work-in-progress verification of [WETH contract](https://etherscan.io/address/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2#code) (see `examples/wrappedEtherScript.sml`)
-- [Vyper language semantics and compiler verification](https://github.com/verifereum/vyper-hol) underway
+Verifereum contains a complete, production-quality formal semantics of the EVM Execution Layer in HOL4. It targets the live Ethereum network's current fork (Osaka); the Consensus Layer is not currently in scope.
+
+The semantics is executable in the logic. This is not intended to be a fast EVM implementation, but it is how we run the conformance tests: Verifereum has approximately complete coverage of the [Ethereum Execution Spec Tests (EEST)](https://eest.ethereum.org/main/consuming_tests/blockchain_test/), with detailed status tracked on the [progress page](https://verifereum.org/table.html).
+
+Beyond executable specification and test-suite validation, the repository contains machine-checked theorems about the semantics. The proof library includes frame-style theorems showing that EVM execution only mutates storage, transient storage, code, and nonce in the accounts and slots it is allowed to touch, plus gas monotonicity theorems showing that consumed gas in a frame only increases through execution, including across CALL/CREATE structure. These results support program verification and program-logic developments for EVM bytecode.
+
+Other active directions include:
+
+- Program logic and proof infrastructure in `prog/`
+- Example and experimental contract-verification developments in `examples/`
+- Support for compiler verification targeting the EVM
+- The sister project [Vyper-HOL](https://github.com/verifereum/vyper-hol), developing Vyper semantics and compiler verification
 
 ## Project Structure
 
