@@ -7,11 +7,11 @@ header-includes:
 # Getting Started with [Verifereum](../)
 
 Welcome! We're excited you're interested in contributing to Verifereum.
-We're building tools for mathematical verification of Ethereum smart contracts, working closely with the HOL4 theorem prover community.
+We're developing a production-quality formal semantics of the Ethereum Virtual Machine and proof infrastructure for mathematical verification of smart contracts and compilers, working closely with the HOL4 theorem prover community.
 
 ## Current Project State
 
-Verifereum is in active early development. We're working on fundamental components like the EVM formalization while also exploring verification approaches for smart contracts. This is an exciting time to join as you can help shape the project's direction and core infrastructure.
+Verifereum's EVM semantics is a mature executable HOL4 formalisation of the Ethereum Execution Layer, with approximately complete EEST coverage. Active development focuses on maintaining live-fork coverage, improving execution performance, proving semantic properties, and building program- and compiler-verification infrastructure on top.
 
 ## Getting Set Up with HOL4
 
@@ -65,8 +65,8 @@ Verifereum and HOL4 are tightly integrated projects. We encourage contributing t
   - Join the HOL4 community discussions (in the same [Zulip](https://hol.zulipchat.com))
 
 - **Verifereum Contributions**
-  - Work on EVM formalization
-  - Develop verification techniques
+  - Maintain and extend the EVM semantics as Ethereum evolves
+  - Prove semantic properties and develop verification techniques
   - Create examples and documentation
   - Help shape the project roadmap
 
@@ -76,20 +76,25 @@ Learning either project helps with understanding the other!
 
 Here are some active areas where you can contribute:
 
-### EVM Formalization and Testing
-- Adding support for EVM precompiles
-  - Formalizing elliptic curve algebra for ecRecover
-  - Implementing other cryptographic primitives
-- Improving test coverage
+### EVM Semantics and Testing
+- Maintaining the executable semantics for the live Ethereum fork
+  - Tracking fork changes and EEST updates
+  - Investigating any remaining test-suite exceptions
+  - Maintaining crypto and precompile support
+- Improving execution by evaluation in logic
   - Speeding up slow test cases
-  - Adding tests from newer test suites
-  - Creating focused test cases for specific features
+  - Optimizing critical paths
+  - Creating focused tests for specific features
 
-### Verification Experiments
-- Manual verification of simple contracts (e.g., WETH)
-  - Understand current proof approaches
-  - Identify common patterns
-  - Document verification strategies
+### Semantic Theorems and Verification Experiments
+- Proving reusable properties of the EVM semantics
+  - Frame-style results for storage, accounts, and call contexts
+  - Gas monotonicity and resource reasoning
+  - Preservation and well-formedness invariants
+- Manual or semi-automated verification experiments
+  - Simple contract verifications and WETH-style case studies
+  - Identification of common proof patterns
+  - Documentation of verification strategies
 - Developing program logic for smart contracts
   - Create more abstract reasoning principles
   - Compare with direct semantic reasoning

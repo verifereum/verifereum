@@ -6,10 +6,9 @@ header-includes:
 
 # !["Verifereum logo"](verifereum-logo-big.svg "Verifereum")
 
-## Mathematically Verified Ethereum Smart Contracts
+## Formal Semantics of the Ethereum Virtual Machine in HOL4
 
-Verifereum is an open-source project that brings mathematical rigour to [Ethereum](https://ethereum.org) smart contract verification.
-Using the [HOL4 theorem prover](https://hol-theorem-prover.org), we're building tools to prove the correctness of smart contracts and eliminate entire classes of vulnerabilities.
+Verifereum is an open-source project centred on a comprehensive executable formal semantics of the [Ethereum](https://ethereum.org) Execution Layer's EVM, mechanised in the [HOL4 theorem prover](https://hol-theorem-prover.org). The semantics targets the live Ethereum network's current fork (Osaka) and serves as a foundation for smart contract verification, EVM program logics, and compiler verification targeting EVM bytecode.
 
 ### Why Verifereum Matters
 
@@ -21,11 +20,14 @@ Using the [HOL4 theorem prover](https://hol-theorem-prover.org), we're building 
 
 ## Project Status & Recent Achievements
 
-- Active development with regular commits to our [main repository](https://github.com/verifereum/verifereum)
-- Completed formal specification of most EVM operations in HOL4
-- Good [progress](table.html) on passing the [Ethereum Execution Spec Tests (EEST) suite](https://eest.ethereum.org/main/consuming_tests/blockchain_test/)
+- Complete, production-quality formal semantics of the EVM Execution Layer in HOL4
+- Scope focused on the live Ethereum network's current fork (Osaka); the Consensus Layer is not currently in scope
+- Executable semantics by evaluation inside the logic, used to run the conformance tests
+- Approximately complete [Ethereum Execution Spec Tests (EEST) suite](https://eest.ethereum.org/main/consuming_tests/blockchain_test/) coverage, with detailed status tracked on the [progress page](table.html)
+- Machine-checked semantic properties, including frame-style storage/account preservation theorems and gas monotonicity results
+- Program logic and contract-verification infrastructure under active development
+- Sister project for [Vyper](https://vyperlang.org) [semantics and compiler verification](https://github.com/verifereum/vyper-hol)
 - Hosted our first community event (Higher Order Log Cabin) in February 2025, bringing together researchers and developers
-- Working on [Vyper](https://vyperlang.org) [semantics formalisation](https://github.com/verifereum/vyper-hol)
 
 ## Get Involved
 
@@ -48,31 +50,32 @@ Start by reading our [Contributor Guide](/contribute) to learn how to set up you
 
 We're currently working on three main tracks:
 
-1. **EVM Base Layer**
-   - Refining our formal EVM specification
-   - Implementing precompiles (ecRecover, etc.)
-   - Optimizing execution in logic
-   - Ensuring test suite compliance
+1. **EVM Semantics and Conformance**
+   - Maintaining the executable HOL4 semantics for the live Ethereum fork
+   - Tracking fork changes and EEST updates
+   - Investigating any remaining test-suite exceptions
+   - Optimizing execution by evaluation in logic
 
-2. **Decompilation Pipeline**
-   - Building Hoare/Separation logic for EVM bytecode
-   - Creating verification examples
-   - Developing decompilation automation
+2. **Semantic Theorems and Program Logic**
+   - Proving frame-style properties for storage, accounts, and call contexts
+   - Developing gas and resource reasoning principles
+   - Building Hoare/separation logic for EVM bytecode
+   - Creating verification examples and proof automation
 
-3. **Vyper Verification**
-   - Formalizing Vyper semantics
-   - Implementing compiler frontend in logic
-   - Building verification infrastructure
+3. **Compiler Verification**
+   - Supporting EVM bytecode as a verified compiler target
+   - Developing Vyper semantics and compiler verification in the Vyper-HOL sister project
+   - Building reusable compiler-correctness infrastructure
 
 ## Technical Details
 
 ### Our Approach
 
-- **Foundation**: Formal model of the EVM in HOL4 (Higher-Order Logic)
+- **Foundation**: Executable formal semantics of the Ethereum Execution Layer's EVM in HOL4 (Higher-Order Logic)
 - **Methodology**: Operational semantics via definitional interpreter
-- **Validation**: Complete EVM test suite compliance
-- **Verification**: Program logic for smart contract correctness proofs
-- **Implementation**: Focus on decompilation and compiler verification
+- **Validation**: Approximately complete EEST coverage, with detailed status tracked publicly
+- **Verification**: Semantic theorems and program logic for smart contract correctness proofs
+- **Implementation**: Focus on proof-producing reasoning, decompilation, and compiler verification
 
 ### Collaboration Philosophy
 
