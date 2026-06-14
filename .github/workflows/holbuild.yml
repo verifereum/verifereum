@@ -10,8 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  HOLBUILD_REPO: https://github.com/charles-cooper/holbuild.git
-  HOLBUILD_REF: b534d283ab4817b77789a6b23399bdd3973e1403
+  HOLBUILD_REF: v0.6.0
 
 jobs:
   build:
@@ -19,63 +18,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read HOL4 pin from holproject.toml
-        id: hol4-pin
-        run: |
-          hol4_ref="$(python3 - <<'PY'
-          import tomllib
-          with open("holproject.toml", "rb") as f:
-              data = tomllib.load(f)
-          print(data["dependencies"]["hol"]["rev"])
-          PY
-          )"
-          echo "hol4-ref=$hol4_ref" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup-polyml
+        id: polyml
 
-      - name: Clone pinned holbuild
-        run: |
-          git clone "$HOLBUILD_REPO" "$HOME/holbuild"
-          cd "$HOME/holbuild"
-          git checkout --detach "$HOLBUILD_REF"
-
-      - uses: ./.github/actions/deps
-        id: deps
+      - uses: ./.github/actions/setup-holbuild
+        id: holbuild
         with:
-          hol4-ref: ${{ steps.hol4-pin.outputs.hol4-ref }}
+          holbuild-ref: ${{ env.HOLBUILD_REF }}
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
 
-      - name: Restore holbuild action cache
-        id: cache-holbuild
-        uses: actions/cache/restore@v4
+      - name: Compute holbuild cache keys
+        id: cache-key
+        run: |
+          base="holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ steps.holbuild.outputs.hol-source-rev }}-${{ hashFiles('holproject.toml', 'holexamples.manifest.toml') }}"
+          echo "toolchain-key=${base}-toolchain" >> "$GITHUB_OUTPUT"
+          echo "build-key=${base}-build" >> "$GITHUB_OUTPUT"
+
+      - name: Restore holbuild global cache
+        id: cache-holbuild-global
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/holbuild
-          key: holbuild-v2-${{ runner.os }}-${{ env.HOLBUILD_REF }}-${{ steps.deps.outputs.deps-hash }}
+          key: ${{ steps.cache-key.outputs.build-key }}
           restore-keys: |
-            holbuild-v2-${{ runner.os }}-${{ env.HOLBUILD_REF }}-
+            ${{ steps.cache-key.outputs.toolchain-key }}
+            holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-
+            holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-
             holbuild-v2-${{ runner.os }}-
 
-      - name: Build holbuild
-        run: |
-          cd "$HOME/holbuild"
-          make HOLDIR="$HOLDIR"
-          echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"
-      
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
 
-      - name: Save holbuild action cache after buildhol
-        if: steps.cache-holbuild.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+      - name: Save holbuild toolchain cache after buildhol
+        if: steps.cache-holbuild-global.outputs.cache-primary-key != steps.cache-key.outputs.build-key
+        uses: actions/cache/save@v5
+        continue-on-error: true
         with:
           path: ~/.cache/holbuild
-          key: holbuild-v2-${{ runner.os }}-${{ env.HOLBUILD_REF }}-${{ steps.deps.outputs.deps-hash }}
+          key: ${{ steps.cache-key.outputs.toolchain-key }}
 
-      - name: Run holbuild
+      - name: Build project with holbuild
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild -j"$(nproc)" build --skip-checkpoints --skip-goalfrag
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
+
+      - name: Save holbuild global cache after build
+        if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.build-key }}
 
       - name: Verify no successful-build checkpoints remain
         run: |
