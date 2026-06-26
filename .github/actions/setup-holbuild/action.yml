@@ -14,9 +14,6 @@ outputs:
   holbuild-rev:
     description: 'Resolved holbuild revision'
     value: ${{ steps.version.outputs.holbuild-rev }}
-  hol-source-rev:
-    description: 'HOL source revision required to build holbuild'
-    value: ${{ steps.hol-source-pin.outputs.hol-source-rev }}
 
 runs:
   using: 'composite'
@@ -49,39 +46,11 @@ runs:
         cd "$HOME/holbuild"
         echo "holbuild-rev=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-    - name: Read HOL source pin
-      id: hol-source-pin
-      shell: bash
-      run: |
-        cd "$HOME/holbuild"
-        echo "hol-source-rev=$(tr -d '[:space:]' < PINS/hol.txt)" >> "$GITHUB_OUTPUT"
-
-    - name: Cache HOL source checkout
-      uses: actions/cache@v5
-      id: cache-hol-source
-      with:
-        path: ~/HOL-source
-        key: holbuild-hol-source-${{ runner.os }}-${{ steps.hol-source-pin.outputs.hol-source-rev }}
-
-    - name: Clone HOL source
-      shell: bash
-      run: |
-        if [ ! -d "$HOME/HOL-source/.git" ]; then
-          git clone https://github.com/HOL-Theorem-Prover/HOL.git "$HOME/HOL-source"
-        fi
-
-    - name: Checkout HOL source revision
-      shell: bash
-      run: |
-        cd "$HOME/HOL-source"
-        git fetch origin "${{ steps.hol-source-pin.outputs.hol-source-rev }}"
-        git checkout --detach "${{ steps.hol-source-pin.outputs.hol-source-rev }}"
-
     - name: Build holbuild
       shell: bash
       run: |
         cd "$HOME/holbuild"
-        make HOL_SOURCE="$HOME/HOL-source"
+        make
 
     - name: Add holbuild to PATH
       shell: bash
