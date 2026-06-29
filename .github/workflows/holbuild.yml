@@ -98,4 +98,4 @@ jobs:
             ${{ env.HOLBUILD_TARGET }}.hbx.json
             ${{ env.HOLBUILD_TARGET }}.hbx.sha256
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90

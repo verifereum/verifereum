@@ -21,10 +21,12 @@ prebuilt holbuild archive for the top-level `verifereum` target.
    verifereum.hbx.sha256
    ```
 
-If the release workflow needs to be rerun, use the `Release artifacts` workflow
-with `workflow_dispatch` and provide the existing release tag. The workflow does
-not rebuild the archive; it downloads the matching `holbuild` workflow artifact
-for the release commit and uploads those exact files to the GitHub Release.
+The CI artifact is retained for 90 days. If the release workflow needs to be
+rerun after the artifact has expired, run the `holbuild` workflow manually for
+the release tag first, then rerun `Release artifacts` with `workflow_dispatch`
+and provide the existing release tag. The release workflow does not rebuild the
+archive; it downloads the matching `holbuild` workflow artifact for the release
+commit and uploads those exact files to the GitHub Release.
 
 ## Manual archive build
 
