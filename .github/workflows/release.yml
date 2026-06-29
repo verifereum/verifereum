@@ -1,0 +1,102 @@
+name: Release artifacts
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to build and upload assets for
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+env:
+  HOLBUILD_REF: v0.8.1
+  HOLBUILD_TARGET: verifereum
+
+jobs:
+  hbx:
+    name: Build holbuild archive
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+
+      - uses: ./.github/actions/setup-polyml
+        id: polyml
+
+      - uses: ./.github/actions/setup-holbuild
+        id: holbuild
+        with:
+          holbuild-ref: ${{ env.HOLBUILD_REF }}
+
+      - name: Configure holbuild cache
+        run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
+
+      - name: Compute holbuild cache keys
+        id: cache-key
+        run: |
+          toolchain_base="holbuild-v2-toolchain-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
+          build_base="holbuild-v2-release-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ hashFiles('holproject.toml', 'holexamples.manifest.toml') }}"
+          echo "toolchain-key=${toolchain_base}" >> "$GITHUB_OUTPUT"
+          echo "build-key=${build_base}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore holbuild global cache
+        id: cache-holbuild-global
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.build-key }}
+          restore-keys: |
+            ${{ steps.cache-key.outputs.toolchain-key }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Save holbuild toolchain cache after buildhol
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.toolchain-key }}
+
+      - name: Build project with holbuild
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: holbuild --verbose -j"$(nproc)" build "$HOLBUILD_TARGET"
+
+      - name: Export HBX archive
+        run: |
+          archive="$HOLBUILD_TARGET.hbx"
+          holbuild export \
+            -o "$archive" \
+            --metadata-out "$archive.json" \
+            "$HOLBUILD_TARGET"
+          sha256sum "$archive" > "$archive.sha256"
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          archive="$HOLBUILD_TARGET.hbx"
+          gh release upload "$RELEASE_TAG" \
+            "$archive" \
+            "$archive.json" \
+            "$archive.sha256" \
+            --clobber
+
+      - name: Save holbuild global cache after build
+        if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.build-key }}
