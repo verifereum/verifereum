@@ -6,11 +6,14 @@ prebuilt holbuild archive for the top-level `verifereum` target.
 ## Maintainer checklist
 
 1. Choose the release version and update `holproject.toml` if needed.
-2. Ensure CI is green for the commit being released.
-3. Create a tag and GitHub Release for that commit, using matching names such as
-   `v0.1.5`.
-4. Publishing the GitHub Release starts `.github/workflows/release.yml`, which
-   uploads:
+2. Ensure the `holbuild` workflow is green for the commit being released. It
+   should have uploaded an artifact named `verifereum-hbx-<commit-sha>`.
+3. Create a tag for that commit, using a name such as `v0.1.5`.
+4. If needed, run the `holbuild` workflow manually for the tag and wait for it
+   to upload `verifereum-hbx-<commit-sha>`.
+5. Create and publish the GitHub Release for the tag.
+6. Publishing the GitHub Release starts `.github/workflows/release.yml`, which
+   promotes the CI artifact to release assets:
 
    ```text
    verifereum.hbx
@@ -19,12 +22,14 @@ prebuilt holbuild archive for the top-level `verifereum` target.
    ```
 
 If the release workflow needs to be rerun, use the `Release artifacts` workflow
-with `workflow_dispatch` and provide the existing release tag.
+with `workflow_dispatch` and provide the existing release tag. The workflow does
+not rebuild the archive; it downloads the matching `holbuild` workflow artifact
+for the release commit and uploads those exact files to the GitHub Release.
 
 ## Manual archive build
 
-The workflow is the preferred release path. To build the same archive locally
-or from another CI system, use holbuild v0.8.1 or newer:
+The CI artifact is the preferred release source. To build the same archive
+locally or from another CI system, use holbuild v0.8.1 or newer:
 
 ```bash
 holbuild buildhol

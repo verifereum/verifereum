@@ -4,13 +4,16 @@ on:
   workflow_dispatch:
   pull_request:
   merge_group:
+  push:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 env:
-  HOLBUILD_REF: v0.8.0
+  HOLBUILD_REF: v0.8.1
+  HOLBUILD_TARGET: verifereum
+  HBX_ARTIFACT_NAME: verifereum-hbx-${{ github.sha }}
 
 jobs:
   build:
@@ -60,7 +63,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps "$HOLBUILD_TARGET"
 
       - name: Save holbuild global cache after build
         if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
@@ -76,3 +79,23 @@ jobs:
             find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
             exit 1
           fi
+
+      - name: Export HBX archive
+        run: |
+          archive="$HOLBUILD_TARGET.hbx"
+          holbuild export \
+            -o "$archive" \
+            --metadata-out "$archive.json" \
+            "$HOLBUILD_TARGET"
+          sha256sum "$archive" > "$archive.sha256"
+
+      - name: Upload HBX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.HBX_ARTIFACT_NAME }}
+          path: |
+            ${{ env.HOLBUILD_TARGET }}.hbx
+            ${{ env.HOLBUILD_TARGET }}.hbx.json
+            ${{ env.HOLBUILD_TARGET }}.hbx.sha256
+          if-no-files-found: error
+          retention-days: 30

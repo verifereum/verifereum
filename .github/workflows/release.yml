@@ -6,11 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing GitHub release tag to build and upload assets for
+        description: Existing GitHub release tag to promote artifacts for
         required: true
         type: string
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -18,85 +19,67 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  HOLBUILD_REF: v0.8.1
   HOLBUILD_TARGET: verifereum
+  HOLBUILD_WORKFLOW: holbuild.yml
 
 jobs:
-  hbx:
-    name: Build holbuild archive
+  promote-hbx:
+    name: Promote holbuild archive
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.release.tag_name || inputs.release_tag }}
 
-      - uses: ./.github/actions/setup-polyml
-        id: polyml
-
-      - uses: ./.github/actions/setup-holbuild
-        id: holbuild
-        with:
-          holbuild-ref: ${{ env.HOLBUILD_REF }}
-
-      - name: Configure holbuild cache
-        run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
-
-      - name: Compute holbuild cache keys
-        id: cache-key
+      - name: Resolve release ref
         run: |
-          toolchain_base="holbuild-v2-toolchain-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
-          build_base="holbuild-v2-release-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ hashFiles('holproject.toml', 'holexamples.manifest.toml') }}"
-          echo "toolchain-key=${toolchain_base}" >> "$GITHUB_OUTPUT"
-          echo "build-key=${build_base}" >> "$GITHUB_OUTPUT"
+          release_tag="${{ github.event.release.tag_name || inputs.release_tag }}"
+          release_sha="$(git rev-parse HEAD)"
+          artifact_name="$HOLBUILD_TARGET-hbx-$release_sha"
 
-      - name: Restore holbuild global cache
-        id: cache-holbuild-global
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.build-key }}
-          restore-keys: |
-            ${{ steps.cache-key.outputs.toolchain-key }}
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$release_sha" >> "$GITHUB_ENV"
+          echo "HBX_ARTIFACT_NAME=$artifact_name" >> "$GITHUB_ENV"
 
-      - name: Build schema-2 HOL toolchain
-        run: holbuild buildhol
-
-      - name: Save holbuild toolchain cache after buildhol
-        uses: actions/cache/save@v5
-        continue-on-error: true
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.toolchain-key }}
-
-      - name: Build project with holbuild
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: holbuild --verbose -j"$(nproc)" build "$HOLBUILD_TARGET"
-
-      - name: Export HBX archive
+      - name: Find matching holbuild run
         run: |
-          archive="$HOLBUILD_TARGET.hbx"
-          holbuild export \
-            -o "$archive" \
-            --metadata-out "$archive.json" \
-            "$HOLBUILD_TARGET"
-          sha256sum "$archive" > "$archive.sha256"
+          run_id="$(gh run list \
+            --workflow "$HOLBUILD_WORKFLOW" \
+            --commit "$RELEASE_SHA" \
+            --status success \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')"
+
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful $HOLBUILD_WORKFLOW run found for $RELEASE_SHA. Run holbuild for $RELEASE_TAG, wait for artifact $HBX_ARTIFACT_NAME, then rerun this workflow."
+            exit 1
+          fi
+
+          echo "HOLBUILD_RUN_ID=$run_id" >> "$GITHUB_ENV"
+
+      - name: Download HBX artifact
+        run: |
+          mkdir -p release-assets
+          gh run download "$HOLBUILD_RUN_ID" \
+            --name "$HBX_ARTIFACT_NAME" \
+            --dir release-assets
+
+          archive="release-assets/$HOLBUILD_TARGET.hbx"
+          metadata="$archive.json"
+          checksum="$archive.sha256"
+
+          test -f "$archive"
+          test -f "$metadata"
+          test -f "$checksum"
+          (cd release-assets && sha256sum -c "$HOLBUILD_TARGET.hbx.sha256")
 
       - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
-          archive="$HOLBUILD_TARGET.hbx"
+          archive="release-assets/$HOLBUILD_TARGET.hbx"
           gh release upload "$RELEASE_TAG" \
             "$archive" \
             "$archive.json" \
             "$archive.sha256" \
             --clobber
-
-      - name: Save holbuild global cache after build
-        if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.build-key }}
