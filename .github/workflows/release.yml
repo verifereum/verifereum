@@ -1,4 +1,4 @@
-name: Release artifacts
+name: Release artefacts
 
 on:
   release:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing GitHub release tag to promote artifacts for
+        description: Existing GitHub release tag to promote artefacts for
         required: true
         type: string
 
@@ -29,7 +29,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name || inputs.release_tag }}
 
@@ -37,11 +37,11 @@ jobs:
         run: |
           release_tag="${{ github.event.release.tag_name || inputs.release_tag }}"
           release_sha="$(git rev-parse HEAD)"
-          artifact_name="$HBX_BASENAME-hbx-$release_sha"
+          artefact_name="$HBX_BASENAME-hbx-$release_sha"
 
           echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
           echo "RELEASE_SHA=$release_sha" >> "$GITHUB_ENV"
-          echo "HBX_ARTIFACT_NAME=$artifact_name" >> "$GITHUB_ENV"
+          echo "HBX_ARTEFACT_NAME=$artefact_name" >> "$GITHUB_ENV"
 
       - name: Find matching holbuild run
         run: |
@@ -53,17 +53,17 @@ jobs:
             --jq '.[0].databaseId // empty')"
 
           if [ -z "$run_id" ]; then
-            echo "::error::No successful $HOLBUILD_WORKFLOW run found for $RELEASE_SHA. Run holbuild for $RELEASE_TAG, wait for artifact $HBX_ARTIFACT_NAME, then rerun this workflow."
+            echo "::error::No successful $HOLBUILD_WORKFLOW run found for $RELEASE_SHA. Run holbuild for $RELEASE_TAG, wait for artefact $HBX_ARTEFACT_NAME, then rerun this workflow."
             exit 1
           fi
 
           echo "HOLBUILD_RUN_ID=$run_id" >> "$GITHUB_ENV"
 
-      - name: Download HBX artifact
+      - name: Download HBX artefact
         run: |
           mkdir -p release-assets
           gh run download "$HOLBUILD_RUN_ID" \
-            --name "$HBX_ARTIFACT_NAME" \
+            --name "$HBX_ARTEFACT_NAME" \
             --dir release-assets
 
           archive="release-assets/$HBX_BASENAME.hbx"

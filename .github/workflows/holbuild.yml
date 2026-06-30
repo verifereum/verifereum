@@ -14,13 +14,13 @@ concurrency:
 env:
   HOLBUILD_REF: v0.8.1
   HBX_BASENAME: verifereum
-  HBX_ARTIFACT_NAME: verifereum-hbx-${{ github.sha }}
+  HBX_ARTEFACT_NAME: verifereum-hbx-${{ github.sha }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
@@ -43,7 +43,7 @@ jobs:
 
       - name: Restore holbuild global cache
         id: cache-holbuild-global
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.build-key }}
@@ -54,7 +54,7 @@ jobs:
         run: holbuild buildhol
 
       - name: Save holbuild toolchain cache after buildhol
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: ~/.cache/holbuild
@@ -68,7 +68,7 @@ jobs:
 
       - name: Save holbuild global cache after build
         if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.build-key }}
@@ -89,10 +89,10 @@ jobs:
             --metadata-out "$archive.json"
           sha256sum "$archive" > "$archive.sha256"
 
-      - name: Upload HBX artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload HBX artefact
+        uses: actions/upload-artifact@v7.0.1
         with:
-          name: ${{ env.HBX_ARTIFACT_NAME }}
+          name: ${{ env.HBX_ARTEFACT_NAME }}
           path: |
             ${{ env.HBX_BASENAME }}.hbx
             ${{ env.HBX_BASENAME }}.hbx.json

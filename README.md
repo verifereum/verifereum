@@ -66,7 +66,7 @@ holbuild -j"$(nproc)" build
 
 Plain `Holmake` remains supported as a secondary check when a compatible HOL4 installation is already available, and is also checked in CI.
 
-Release instructions, including the prebuilt holbuild archive artifact, are in [docs/release.md](docs/release.md).
+Release instructions, including the prebuilt holbuild archive artefact, are in [docs/release.md](docs/release.md).
 
 ## Contributing
 
