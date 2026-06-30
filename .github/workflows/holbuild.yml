@@ -13,7 +13,7 @@ concurrency:
 
 env:
   HOLBUILD_REF: v0.8.1
-  HOLBUILD_TARGET: verifereum
+  HBX_BASENAME: verifereum
   HBX_ARTIFACT_NAME: verifereum-hbx-${{ github.sha }}
 
 jobs:
@@ -64,7 +64,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps "$HOLBUILD_TARGET"
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
       - name: Save holbuild global cache after build
         if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
@@ -83,11 +83,10 @@ jobs:
 
       - name: Export HBX archive
         run: |
-          archive="$HOLBUILD_TARGET.hbx"
+          archive="$HBX_BASENAME.hbx"
           holbuild export \
             -o "$archive" \
-            --metadata-out "$archive.json" \
-            "$HOLBUILD_TARGET"
+            --metadata-out "$archive.json"
           sha256sum "$archive" > "$archive.sha256"
 
       - name: Upload HBX artifact
@@ -95,8 +94,8 @@ jobs:
         with:
           name: ${{ env.HBX_ARTIFACT_NAME }}
           path: |
-            ${{ env.HOLBUILD_TARGET }}.hbx
-            ${{ env.HOLBUILD_TARGET }}.hbx.json
-            ${{ env.HOLBUILD_TARGET }}.hbx.sha256
+            ${{ env.HBX_BASENAME }}.hbx
+            ${{ env.HBX_BASENAME }}.hbx.json
+            ${{ env.HBX_BASENAME }}.hbx.sha256
           if-no-files-found: error
           retention-days: 90

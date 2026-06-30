@@ -1,7 +1,7 @@
 # Release process
 
 Verifereum releases are GitHub Releases. Each release should include a
-prebuilt holbuild archive for the top-level `verifereum` target.
+prebuilt holbuild archive for the project default roots.
 
 ## Maintainer checklist
 
@@ -35,11 +35,10 @@ locally or from another CI system, use holbuild v0.8.1 or newer:
 
 ```bash
 holbuild buildhol
-holbuild -j"$(nproc)" build verifereum
+holbuild -j"$(nproc)" build
 holbuild export \
   -o verifereum.hbx \
-  --metadata-out verifereum.hbx.json \
-  verifereum
+  --metadata-out verifereum.hbx.json
 sha256sum verifereum.hbx > verifereum.hbx.sha256
 ```
 
@@ -61,5 +60,5 @@ gh release download vX.Y.Z \
   -p verifereum.hbx.sha256
 sha256sum -c verifereum.hbx.sha256
 holbuild import verifereum.hbx
-holbuild build verifereum
+holbuild build
 ```
