@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Towards a verified Vyper → EVM compiler in HOL4</title>
+    <link rel="stylesheet" href="index.css">
+  </head>
+  <body>
+    <main class="slide">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">EthProofs · 2-minute project status</p>
+          <h1>Towards a verified Vyper → EVM compiler in HOL4</h1>
+          <p class="subtitle">Vyper-HOL semantics + Verifereum EVM semantics · Sequent/Vyper collaboration</p>
+        </div>
+        <div class="logo-strip" aria-label="project logos">
+          <img src="assets/vyper-logo.svg" alt="Vyper">
+          <img src="assets/verifereum-logo.svg" alt="Verifereum">
+          <img src="assets/sequent-logo.svg" alt="Sequent">
+        </div>
+      </header>
+
+      <section class="content">
+        <section class="pipeline-card">
+          <h2>Compiler correctness stack</h2>
+          <div class="pipeline">
+            <div class="stage good">
+              <div class="stage-title">Vyper semantics</div>
+              <div class="stage-note">validated executable HOL4 interpreter</div>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="stage warn">
+              <div class="stage-title">Vyper → Venom lowering</div>
+              <div class="stage-note">definitions + theorem structure; core proof open</div>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="stage mid">
+              <div class="stage-title">Venom optimization passes</div>
+              <div class="stage-note">substantial pass proofs; generic pipeline framework closed</div>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="stage warn">
+              <div class="stage-title">Venom → asm → EVM bytecode</div>
+              <div class="stage-note">stack/asm/EVM simulation infra; top simulations open</div>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="stage good">
+              <div class="stage-title">Verifereum EVM semantics</div>
+              <div class="stage-note">production-quality executable target semantics</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="status-card">
+          <h2>Current status</h2>
+          <div class="status-grid">
+            <div class="status good">
+              <span class="badge">defined</span>
+              <strong>Vyper + EVM semantics</strong>
+              <p>Executable HOL4 semantics at both source and target levels; Vyper semantics ~69k LOC, no cheats. Also: Vyper program logic.</p>
+            </div>
+            <div class="status good">
+              <span class="badge">proved</span>
+              <strong>Validation + metatheory</strong>
+              <p>~3.7k Vyper test items replayed; EVM passes ~99% of EEST; Vyper type soundness; EVM gas + state-frame theorems.</p>
+            </div>
+            <div class="status mid">
+              <span class="badge">substantial</span>
+              <strong>Venom proof infrastructure</strong>
+              <p>Generic pipeline framework closed; 10/29 pass proof dirs closed; integration work remains.</p>
+            </div>
+            <div class="status warn">
+              <span class="badge">open</span>
+              <strong>End-to-end theorem</strong>
+              <p>Main gaps: lowering correctness, concrete optimization pipeline, and Venom→asm→EVM simulation.</p>
+            </div>
+          </div>
+
+          <div class="takeaway">
+            <span class="takeaway-label">Takeaway</span>
+            <p>The architecture and foundations are in place; the project is paused pending focused funding/contributors to close the central compiler-correctness obligations.</p>
+          </div>
+        </section>
+      </section>
+
+      <footer>
+        <span>Ramana Kumar</span>
+        <span class="links"><span>vyperlang.org</span><span>verifereum.org</span><span>sequent.inc</span></span>
+        <span>github.com/verifereum/vyper-hol</span>
+      </footer>
+    </main>
+  </body>
+</html>
