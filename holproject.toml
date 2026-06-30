@@ -1,10 +1,10 @@
 [holbuild]
 schema = 2
-minimum_version = "0.8.0"
+minimum_version = "0.8.1"
 
 [project]
 name = "verifereum"
-version = "0.1.4"
+version = "1.0.0"
 
 [build]
 roots = ["verifereumScript.sml"]
