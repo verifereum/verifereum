@@ -1,0 +1,85 @@
+name: Release artefacts
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to promote artefacts for
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+env:
+  HBX_BASENAME: verifereum
+  HOLBUILD_WORKFLOW: holbuild.yml
+
+jobs:
+  promote-hbx:
+    name: Promote holbuild archive
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+
+      - name: Resolve release ref
+        run: |
+          release_tag="${{ github.event.release.tag_name || inputs.release_tag }}"
+          release_sha="$(git rev-parse HEAD)"
+          artefact_name="$HBX_BASENAME-hbx-$release_sha"
+
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$release_sha" >> "$GITHUB_ENV"
+          echo "HBX_ARTEFACT_NAME=$artefact_name" >> "$GITHUB_ENV"
+
+      - name: Find matching holbuild run
+        run: |
+          run_id="$(gh run list \
+            --workflow "$HOLBUILD_WORKFLOW" \
+            --commit "$RELEASE_SHA" \
+            --status success \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')"
+
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful $HOLBUILD_WORKFLOW run found for $RELEASE_SHA. Run holbuild for $RELEASE_TAG, wait for artefact $HBX_ARTEFACT_NAME, then rerun this workflow."
+            exit 1
+          fi
+
+          echo "HOLBUILD_RUN_ID=$run_id" >> "$GITHUB_ENV"
+
+      - name: Download HBX artefact
+        run: |
+          mkdir -p release-assets
+          gh run download "$HOLBUILD_RUN_ID" \
+            --name "$HBX_ARTEFACT_NAME" \
+            --dir release-assets
+
+          archive="release-assets/$HBX_BASENAME.hbx"
+          metadata="$archive.json"
+          checksum="$archive.sha256"
+
+          test -f "$archive"
+          test -f "$metadata"
+          test -f "$checksum"
+          (cd release-assets && sha256sum -c "$HBX_BASENAME.hbx.sha256")
+
+      - name: Upload release assets
+        run: |
+          archive="release-assets/$HBX_BASENAME.hbx"
+          gh release upload "$RELEASE_TAG" \
+            "$archive" \
+            "$archive.json" \
+            "$archive.sha256" \
+            --clobber

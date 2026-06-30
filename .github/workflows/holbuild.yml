@@ -4,19 +4,23 @@ on:
   workflow_dispatch:
   pull_request:
   merge_group:
+  push:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 env:
-  HOLBUILD_REF: v0.8.0
+  HOLBUILD_REF: v0.8.1
+  HBX_BASENAME: verifereum
+  HBX_ARTEFACT_NAME: verifereum-hbx-${{ github.sha }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
@@ -39,7 +43,7 @@ jobs:
 
       - name: Restore holbuild global cache
         id: cache-holbuild-global
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.build-key }}
@@ -50,7 +54,7 @@ jobs:
         run: holbuild buildhol
 
       - name: Save holbuild toolchain cache after buildhol
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: ~/.cache/holbuild
@@ -64,7 +68,7 @@ jobs:
 
       - name: Save holbuild global cache after build
         if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.build-key }}
@@ -76,3 +80,22 @@ jobs:
             find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
             exit 1
           fi
+
+      - name: Export HBX archive
+        run: |
+          archive="$HBX_BASENAME.hbx"
+          holbuild export \
+            -o "$archive" \
+            --metadata-out "$archive.json"
+          sha256sum "$archive" > "$archive.sha256"
+
+      - name: Upload HBX artefact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ env.HBX_ARTEFACT_NAME }}
+          path: |
+            ${{ env.HBX_BASENAME }}.hbx
+            ${{ env.HBX_BASENAME }}.hbx.json
+            ${{ env.HBX_BASENAME }}.hbx.sha256
+          if-no-files-found: error
+          retention-days: 90
