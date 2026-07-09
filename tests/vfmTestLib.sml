@@ -31,7 +31,7 @@ structure vfmTestLib :> vfmTestLib = struct
       val () = system_or_fail "tar_stable" $
         String.concat ["tar -xzf ", stable_tarball]
       val () = system_or_fail "tar_develop" $
-        String.concat ["tar -xzf", develop_tarball]
+        String.concat ["tar -xzf ", develop_tarball]
       val out = TextIO.openOut version_file
       val () = TextIO.output(out, fixtures_version)
     in

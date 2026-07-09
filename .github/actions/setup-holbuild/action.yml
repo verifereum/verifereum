@@ -4,7 +4,7 @@ description: 'Checks out pinned holbuild, builds it, and adds it to PATH'
 inputs:
   holbuild-repo:
     required: false
-    default: 'https://github.com/charles-cooper/holbuild.git'
+    default: 'https://github.com/HOL-Theorem-Prover/holbuild.git'
     description: 'holbuild repository URL'
   holbuild-ref:
     required: true

@@ -12,7 +12,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  HOLBUILD_REF: v0.8.1
   HBX_BASENAME: verifereum
   HBX_ARTEFACT_NAME: verifereum-hbx-${{ github.sha }}
 
@@ -25,10 +24,22 @@ jobs:
       - uses: ./.github/actions/setup-polyml
         id: polyml
 
+      - name: Get minimum holbuild version from holproject.toml
+        id: holbuild-version
+        run: |
+          holbuild_ref="$(python3 - <<'PY'
+          import tomllib
+          with open("holproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          print("v" + data["holbuild"]["minimum_version"])
+          PY
+          )"
+          echo "ref=$holbuild_ref" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          holbuild-ref: ${{ env.HOLBUILD_REF }}
+          holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"

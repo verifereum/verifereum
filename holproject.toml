@@ -1,19 +1,19 @@
 [holbuild]
 schema = 2
-minimum_version = "0.8.1"
+minimum_version = "0.8.2"
 
 [project]
 name = "verifereum"
-version = "1.0.0"
+version = "1.0.1"
 
 [build]
 roots = ["verifereumScript.sml"]
-exclude = ["tests/defs/*", "tests/results/*"]
+exclude = ["tests/defs", "tests/results"]
 tactic_timeout = 30
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "1d9f33ad168d3823cc070223d83ea660d86dcb58"
+rev = "bf1d6b1a4f4f9dfae56705a3097d92fa106a2d01"
 
 [dependencies.holexamples]
 from = "hol"
