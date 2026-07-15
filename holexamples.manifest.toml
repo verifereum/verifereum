@@ -1,9 +1,9 @@
 [holbuild]
-schema = 2
+minimum_version = "0.10.0"
 
 [project]
 name = "holexamples"
-version = "0.1.1"
+version = "0.1.2"
 
 [build]
 members = [
