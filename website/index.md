@@ -20,6 +20,7 @@ Verifereum is an open-source project centred on a comprehensive executable forma
 
 ## Project Status & Recent Achievements
 
+- **Ethereum Security QF (July 2026):** Verifereum received $403 in donations and 1.085 ETH in matching funds in the [Ethereum Security QF round](https://forum.giveth.io/t/ethereum-security-qf-round-results-april-23-may-14-2026/2201). The funding will primarily support updating our formal EVM semantics for Glamsterdam, with remaining funds supporting infrastructure work such as [researching a proof-producing translation to CakeML](https://github.com/verifereum/verifereum/issues/14). Support associated with the round has also enabled significant progress in [Vyper-HOL](https://github.com/verifereum/vyper-hol). Thank you to all contributors, especially [The DAO Fund](https://x.com/TheDAOfund) and [Wintermute](https://x.com/wintermute_t) for their major donations.
 - Complete, production-quality formal semantics of the EVM Execution Layer in HOL4
 - Scope focused on the live Ethereum network's current fork (Osaka); the Consensus Layer is not currently in scope
 - Executable semantics by evaluation inside the logic, used to run the conformance tests
