@@ -12,7 +12,7 @@ tactic_timeout = 30
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "f18e6e7277c2648d40c2491d87f09083c909e6e9"
+rev = "1c4d5fa496d24296eee7e52a3837dddc83b980fe"
 
 [dependencies.holexamples]
 from = "hol"
