@@ -3,7 +3,7 @@ minimum_version = "0.10.3"
 
 [project]
 name = "verifereum"
-version = "1.0.3"
+version = "1.0.2"
 
 [build]
 roots = ["verifereumScript.sml"]
