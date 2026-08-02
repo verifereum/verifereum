@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.10.2"
+minimum_version = "0.10.3"
 
 [project]
 name = "verifereum"
@@ -12,7 +12,7 @@ tactic_timeout = 30
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "1c4d5fa496d24296eee7e52a3837dddc83b980fe"
+rev = "fac52534ceb43806d35b11f91dafd558266bcbb6"
 
 [dependencies.holexamples]
 from = "hol"
