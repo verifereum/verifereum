@@ -77,6 +77,15 @@ jobs:
         run: |
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
+      - name: Build test runner
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: holbuild executable runtests
+
+      - name: Check test runner
+        working-directory: tests
+        run: ./runtests.exe --help
+
       - name: Save holbuild global cache after build
         if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
