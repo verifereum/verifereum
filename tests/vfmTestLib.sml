@@ -1,6 +1,6 @@
 structure vfmTestLib :> vfmTestLib = struct
 
-  open HolKernel vfmTestAuxLib
+  open HolKernel vfmTestAuxLib vfmTestDefLib
 
   val fixtures_url_prefix = String.concat [
     "https://github.com/ethereum/execution-spec-tests/releases/download/v",
@@ -89,15 +89,19 @@ structure vfmTestLib :> vfmTestLib = struct
     (thyn, text)
   end
 
-  fun test_results_script_text thyn = let
-    val z = String.size thyn
-    val rthy = Substring.concat [
-                  Substring.full "vfmTest",
-                  Substring.substring(thyn, z-padding, padding)
-               ]
+  fun test_results_script_text index json_path = let
+    val sidx = padl padding #"0" $ Int.toString index
+    val thyn = test_defs_prefix ^ sidx
+    val rthy = "vfmTest" ^ sidx
+    val test_count = List.length $ json_path_to_tests json_path
+    val result_files = List.tabulate(test_count, fn test_number =>
+      String.concat ["result", sidx, "_", Int.toString test_number, ".nsv"])
+    val extra_outputs = String.concatWith ", " $
+      List.map (fn file => "\"" ^ file ^ "\"") result_files
     val text = String.concat [
       "Theory ", rthy, "[no_sig_docs]\nAncestors ",
       thyn, "\nLibs wordsLib vfmTestResultLib\n",
+      "val () = holbuild_extra_outputs [", extra_outputs, "];\n",
       "val thyn = \"", thyn, "\";\n",
       "val defs = get_result_defs thyn;\n",
       "val () = vfmTestLib.remove_nsv_files thyn;\n",
@@ -146,9 +150,8 @@ structure vfmTestLib :> vfmTestLib = struct
   end
 
   fun generate_test_results_scripts () = let
-    val scripts = collect_script_files "defs"
-    val thyns = List.map (trimr (String.size script_suffix)) scripts
-    val named_scripts = List.map test_results_script_text thyns
+    val json_paths = get_all_test_json_paths ()
+    val named_scripts = mapi test_results_script_text json_paths
   in
     List.app (write_script "results") named_scripts
   end

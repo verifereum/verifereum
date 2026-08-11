@@ -1,3 +1,6 @@
+(* Static annotation consumed by holbuild; a no-op when the script runs. *)
+fun holbuild_extra_outputs (_ : string list) = ()
+
 structure vfmTestResultLib :> vfmTestResultLib = struct
 
   open HolKernel boolLib bossLib vfmTestAuxLib cv_transLib
