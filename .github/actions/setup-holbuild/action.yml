@@ -23,7 +23,7 @@ runs:
       id: cache-holbuild
       with:
         path: ~/holbuild
-        key: holbuild-tool-${{ runner.os }}-${{ inputs.holbuild-ref }}
+        key: holbuild-tool-${{ runner.os }}-${{ runner.arch }}-${{ inputs.holbuild-ref }}
 
     - name: Clone holbuild
       shell: bash
