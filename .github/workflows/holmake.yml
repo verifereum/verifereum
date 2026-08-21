@@ -1,10 +1,18 @@
-name: Verifereum Theories Build
+name: holmake
 
 on:
   workflow_dispatch:
+  pull_request:
+  merge_group:
   push:
-    paths:
-    - '**'
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -12,7 +20,9 @@ jobs:
     steps:
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-polyml
 
@@ -32,12 +42,12 @@ jobs:
           )"
           echo "hash=$hol4_ref" >> "$GITHUB_OUTPUT"
 
-      - name: Cache HOL4
-        uses: actions/cache@v3
+      - name: Restore HOL4 cache
+        uses: actions/cache/restore@v6
         id: cache-hol4
         with:
           path: ~/HOL
-          key: hol-${{ runner.os }}-${{ steps.hol4-version.outputs.hash }}
+          key: hol-${{ runner.os }}-${{ runner.arch }}-${{ steps.hol4-version.outputs.hash }}
 
       - name: Setup and Build HOL4
         if: steps.cache-hol4.outputs.cache-hit != 'true'
@@ -49,6 +59,14 @@ jobs:
           git checkout --detach "$HOL4_REF"
           poly --script tools/smart-configure.sml
           bin/build --no-helpdocs
+
+      - name: Save HOL4 cache
+        if: steps.cache-hol4.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ~/HOL
+          key: hol-${{ runner.os }}-${{ runner.arch }}-${{ steps.hol4-version.outputs.hash }}
 
       - name: Add HOL to PATH and export HOLDIR
         run: |
