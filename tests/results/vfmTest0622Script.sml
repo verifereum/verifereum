@@ -1,6 +1,7 @@
 Theory vfmTest0622[no_sig_docs]
 Ancestors vfmTestDefs0622
 Libs wordsLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result0622_0.nsv", "result0622_1.nsv"];
 val thyn = "vfmTestDefs0622";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

@@ -1,6 +1,7 @@
 Theory vfmTest1044[no_sig_docs]
 Ancestors vfmTestDefs1044
 Libs wordsLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result1044_0.nsv"];
 val thyn = "vfmTestDefs1044";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

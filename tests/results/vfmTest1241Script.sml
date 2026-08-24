@@ -1,6 +1,7 @@
 Theory vfmTest1241[no_sig_docs]
 Ancestors vfmTestDefs1241
 Libs wordsLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result1241_0.nsv"];
 val thyn = "vfmTestDefs1241";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

@@ -1,6 +1,7 @@
 Theory vfmTest0420[no_sig_docs]
 Ancestors vfmTestDefs0420
 Libs wordsLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result0420_0.nsv"];
 val thyn = "vfmTestDefs0420";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

@@ -1,6 +1,7 @@
 Theory vfmTest0089[no_sig_docs]
 Ancestors vfmTestDefs0089
 Libs wordsLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result0089_0.nsv", "result0089_1.nsv"];
 val thyn = "vfmTestDefs0089";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

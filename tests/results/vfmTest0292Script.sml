@@ -1,6 +1,7 @@
 Theory vfmTest0292[no_sig_docs]
 Ancestors vfmTestDefs0292
 Libs wordsLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result0292_0.nsv", "result0292_1.nsv", "result0292_2.nsv", "result0292_3.nsv", "result0292_4.nsv", "result0292_5.nsv", "result0292_6.nsv", "result0292_7.nsv", "result0292_8.nsv", "result0292_9.nsv", "result0292_10.nsv", "result0292_11.nsv", "result0292_12.nsv", "result0292_13.nsv", "result0292_14.nsv", "result0292_15.nsv", "result0292_16.nsv", "result0292_17.nsv", "result0292_18.nsv", "result0292_19.nsv", "result0292_20.nsv", "result0292_21.nsv", "result0292_22.nsv", "result0292_23.nsv", "result0292_24.nsv", "result0292_25.nsv", "result0292_26.nsv", "result0292_27.nsv", "result0292_28.nsv", "result0292_29.nsv", "result0292_30.nsv", "result0292_31.nsv", "result0292_32.nsv", "result0292_33.nsv", "result0292_34.nsv", "result0292_35.nsv"];
 val thyn = "vfmTestDefs0292";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
