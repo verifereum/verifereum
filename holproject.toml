@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.11.1"
+minimum_version = "0.11.2"
 
 [project]
 name = "verifereum"
