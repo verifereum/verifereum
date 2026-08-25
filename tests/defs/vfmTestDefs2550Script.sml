@@ -1,4 +1,5 @@
 Theory vfmTestDefs2550[no_sig_docs]
 Libs vfmTestDefLib
-val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stZeroCallsRevert/ZeroValue_CALL_ToNonZeroBalance_OOGRevert.json";
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stZeroCallsRevert/ZeroValue_CALL_ToNonZeroBalance_OOGRevert.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stZeroCallsRevert/ZeroValue_CALL_ToNonZeroBalance_OOGRevert.json");
 val defs = mapi (define_test "2550") tests;

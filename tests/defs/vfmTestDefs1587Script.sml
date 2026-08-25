@@ -1,4 +1,5 @@
 Theory vfmTestDefs1587[no_sig_docs]
 Libs vfmTestDefLib
-val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stRandom/randomStatetest381.json";
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stRandom/randomStatetest381.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stRandom/randomStatetest381.json");
 val defs = mapi (define_test "1587") tests;
