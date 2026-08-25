@@ -94,7 +94,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val dep_path = OS.Path.concat(OS.Path.parentArc,
                      OS.Path.concat("fixtures", json_path))
     val text = String.concat [
-      "Theory ", thyn, "[no_sig_docs]\nLibs vfmTestDefLib\n",
+      "Theory ", thyn, "[no_sig_docs]\nLibs vfmTestAuxLib vfmTestDefLib\n",
       "val () = holbuild_extra_deps [\"", dep_path, "\"];\n",
       "val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path \"",
       json_path, "\");\n",
@@ -115,7 +115,7 @@ structure vfmTestLib :> vfmTestLib = struct
       List.map (fn file => "\"" ^ file ^ "\"") result_files
     val text = String.concat [
       "Theory ", rthy, "[no_sig_docs]\nAncestors ",
-      thyn, "\nLibs wordsLib vfmTestResultLib\n",
+      thyn, "\nLibs wordsLib vfmTestAuxLib vfmTestResultLib\n",
       "val () = holbuild_extra_outputs [", extra_outputs, "];\n",
       "val thyn = \"", thyn, "\";\n",
       "val defs = get_result_defs thyn;\n",

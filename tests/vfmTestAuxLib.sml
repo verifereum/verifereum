@@ -1,6 +1,10 @@
 structure vfmTestAuxLib :> vfmTestAuxLib = struct
   open HolKernel
 
+  (* Static annotations consumed by holbuild; no-ops when scripts run. *)
+  fun holbuild_extra_deps (_ : string list) = ()
+  fun holbuild_extra_outputs (_ : string list) = ()
+
   fun ss f = Substring.string o f o Substring.full
   fun trimr n = ss $ Substring.trimr n
   fun triml n = ss $ Substring.triml n

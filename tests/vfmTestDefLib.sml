@@ -1,6 +1,3 @@
-(* Static annotation consumed by holbuild; a no-op when the script runs. *)
-fun holbuild_extra_deps (_ : string list) = ()
-
 structure vfmTestDefLib :> vfmTestDefLib = struct
 
   open HolKernel boolLib bossLib JSONDecode wordsLib cv_transLib
