@@ -51,7 +51,7 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
     val csv_name = "result" ^ result_suffix ^ ".nsv"
     val test_name = fromHOLstring $ rhs $ concl $
                     fetch thyn $ test_prefix ^ "_name_def"
-    val out = TextIO.openOut csv_name
+    val out = TextIO.openOut (results_path csv_name)
     val () = TextIO.output(out,
       String.concatWith "\n" [test_name, result_str, time_str])
     val () = TextIO.output(out, "\n")
