@@ -1,4 +1,5 @@
 Theory vfmTestDefs0721[no_sig_docs]
-Libs vfmTestDefLib
-val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stCallDelegateCodesHomestead/callcallcallcode_001_SuicideEnd.json";
+Libs vfmTestAuxLib vfmTestDefLib
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stCallDelegateCodesHomestead/callcallcallcode_001_SuicideEnd.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stCallDelegateCodesHomestead/callcallcallcode_001_SuicideEnd.json");
 val defs = mapi (define_test "0721") tests;

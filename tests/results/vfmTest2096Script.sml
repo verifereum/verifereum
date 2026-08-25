@@ -1,6 +1,7 @@
 Theory vfmTest2096[no_sig_docs]
 Ancestors vfmTestDefs2096
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result2096_0.nsv", "result2096_1.nsv"];
 val thyn = "vfmTestDefs2096";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

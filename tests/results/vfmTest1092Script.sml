@@ -1,6 +1,7 @@
 Theory vfmTest1092[no_sig_docs]
 Ancestors vfmTestDefs1092
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result1092_0.nsv"];
 val thyn = "vfmTestDefs1092";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

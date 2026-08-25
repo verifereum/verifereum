@@ -1,4 +1,5 @@
 Theory vfmTestDefs0957[no_sig_docs]
-Libs vfmTestDefLib
-val tests = json_path_to_tests "../fixtures/blockchain_tests/static/state_tests/stEIP150singleCodeGasPrices/gasCostReturn.json";
+Libs vfmTestAuxLib vfmTestDefLib
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stEIP150singleCodeGasPrices/gasCostReturn.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stEIP150singleCodeGasPrices/gasCostReturn.json");
 val defs = mapi (define_test "0957") tests;

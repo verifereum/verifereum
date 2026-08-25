@@ -1,13 +1,13 @@
 structure vfmTestLib :> vfmTestLib = struct
 
-  open HolKernel vfmTestAuxLib
+  open HolKernel vfmTestAuxLib vfmTestDefLib
 
   val fixtures_url_prefix = String.concat [
     "https://github.com/ethereum/execution-spec-tests/releases/download/v",
     fixtures_version, "/" ]
   val stable_tarball = "fixtures_stable.tar.gz"
   val develop_tarball = "fixtures_develop.tar.gz"
-  val version_file = OS.Path.concat("fixtures", "version.txt")
+  val version_file = "version.txt"
 
   fun system_or_fail err s = let
     val st = OS.Process.system s
@@ -16,8 +16,16 @@ structure vfmTestLib :> vfmTestLib = struct
     else raise Fail err
   end
 
-  fun ensure_fixtures () =
-    if let val inp = TextIO.openIn version_file
+  fun in_dir path f = let
+    val old = OS.FileSys.getDir ()
+    val () = OS.FileSys.chDir path
+    val result = f () handle e => (OS.FileSys.chDir old; raise e)
+  in
+    result before OS.FileSys.chDir old
+  end
+
+  fun ensure_fixtures () = in_dir (test_root ()) (fn () =>
+    if let val inp = TextIO.openIn (fixtures_path version_file)
        in TextIO.inputAll inp = fixtures_version
           before TextIO.closeIn inp
        end handle Io _ => false
@@ -32,11 +40,11 @@ structure vfmTestLib :> vfmTestLib = struct
         String.concat ["tar -xzf ", stable_tarball]
       val () = system_or_fail "tar_develop" $
         String.concat ["tar -xzf ", develop_tarball]
-      val out = TextIO.openOut version_file
+      val out = TextIO.openOut (fixtures_path version_file)
       val () = TextIO.output(out, fixtures_version)
     in
       TextIO.closeOut out
-    end
+    end)
 
   fun collect_files suffix path (dirs, files) = let
     val ds = OS.FileSys.openDir path
@@ -68,10 +76,14 @@ structure vfmTestLib :> vfmTestLib = struct
     loop [start_path] []
   end
 
-  fun get_all_test_json_paths () =
-    "fixtures/blockchain_tests"
+  fun get_all_test_json_paths () = let
+    val fixtures = fixtures_path ""
+  in
+    fixtures_path "blockchain_tests"
     |> collect_json_files_rec
+    |> List.map (fn path => OS.Path.mkRelative {path=path, relativeTo=fixtures})
     |> sort string_less
+  end
 
   val padding = 4
   val test_defs_prefix = "vfmTestDefs"
@@ -79,25 +91,32 @@ structure vfmTestLib :> vfmTestLib = struct
   fun test_defs_script_text index json_path = let
     val sidx = padl padding #"0" $ Int.toString index
     val thyn = String.concat [test_defs_prefix, sidx]
-    val rpth = OS.Path.concat(OS.Path.parentArc, json_path)
+    val dep_path = OS.Path.concat(OS.Path.parentArc,
+                     OS.Path.concat("fixtures", json_path))
     val text = String.concat [
-      "Theory ", thyn, "[no_sig_docs]\nLibs vfmTestDefLib\n",
-      "val tests = json_path_to_tests \"", rpth, "\";\n",
+      "Theory ", thyn, "[no_sig_docs]\nLibs vfmTestAuxLib vfmTestDefLib\n",
+      "val () = holbuild_extra_deps [\"", dep_path, "\"];\n",
+      "val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path \"",
+      json_path, "\");\n",
       "val defs = mapi (define_test \"", sidx, "\") tests;\n"
     ]
   in
     (thyn, text)
   end
 
-  fun test_results_script_text thyn = let
-    val z = String.size thyn
-    val rthy = Substring.concat [
-                  Substring.full "vfmTest",
-                  Substring.substring(thyn, z-padding, padding)
-               ]
+  fun test_results_script_text index json_path = let
+    val sidx = padl padding #"0" $ Int.toString index
+    val thyn = test_defs_prefix ^ sidx
+    val rthy = "vfmTest" ^ sidx
+    val test_count = List.length $ json_path_to_tests $ fixtures_path json_path
+    val result_files = List.tabulate(test_count, fn test_number =>
+      String.concat ["result", sidx, "_", Int.toString test_number, ".nsv"])
+    val extra_outputs = String.concatWith ", " $
+      List.map (fn file => "\"" ^ file ^ "\"") result_files
     val text = String.concat [
       "Theory ", rthy, "[no_sig_docs]\nAncestors ",
-      thyn, "\nLibs wordsLib vfmTestResultLib\n",
+      thyn, "\nLibs wordsLib vfmTestAuxLib vfmTestResultLib\n",
+      "val () = holbuild_extra_outputs [", extra_outputs, "];\n",
       "val thyn = \"", thyn, "\";\n",
       "val defs = get_result_defs thyn;\n",
       "val () = vfmTestLib.remove_nsv_files thyn;\n",
@@ -109,8 +128,8 @@ structure vfmTestLib :> vfmTestLib = struct
 
   val script_suffix = "Script.sml"
 
-  fun write_script dir (thyn, text) = let
-    val path = OS.Path.concat(dir, thyn ^ script_suffix)
+  fun write_script path_for (thyn, text) = let
+    val path = path_for (thyn ^ script_suffix)
     val out = TextIO.openOut path
     val () = TextIO.output (out, text)
   in
@@ -121,7 +140,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val json_paths = get_all_test_json_paths ()
     val named_scripts = mapi test_defs_script_text json_paths
   in
-    List.app (write_script "defs") named_scripts
+    List.app (write_script defs_path) named_scripts
   end
 
   fun collect_script_files dir = let
@@ -138,19 +157,18 @@ structure vfmTestLib :> vfmTestLib = struct
                 Substring.substring(thyn, z-padding, padding),
                 Substring.full "_"
               ]
-    val (_, nsvs) = collect_files "nsv" "." ([], [])
-    val result_nsvs = List.filter (String.isPrefix pfx) $
-                      List.map (#file o OS.Path.splitDirFile) nsvs
+    val (_, nsvs) = collect_files "nsv" (results_path "") ([], [])
+    val result_nsvs = List.filter
+      (String.isPrefix pfx o #file o OS.Path.splitDirFile) nsvs
   in
     List.app OS.FileSys.remove result_nsvs
   end
 
   fun generate_test_results_scripts () = let
-    val scripts = collect_script_files "defs"
-    val thyns = List.map (trimr (String.size script_suffix)) scripts
-    val named_scripts = List.map test_results_script_text thyns
+    val json_paths = get_all_test_json_paths ()
+    val named_scripts = mapi test_results_script_text json_paths
   in
-    List.app (write_script "results") named_scripts
+    List.app (write_script results_path) named_scripts
   end
 
   type test_result = {
@@ -213,7 +231,7 @@ structure vfmTestLib :> vfmTestLib = struct
   end handle OS.SysErr _ => "unknown"
 
   fun write_test_results_table () = let
-    val dir = "results"
+    val dir = results_path ""
     val uname = system_output ("/usr/bin/uname", ["-nor"])
     val commit = system_output ("/usr/bin/git", ["rev-parse", "HEAD"])
     val out = TextIO.openOut (OS.Path.concat (dir, "table.html"))

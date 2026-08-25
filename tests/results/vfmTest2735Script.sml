@@ -1,6 +1,7 @@
 Theory vfmTest2735[no_sig_docs]
 Ancestors vfmTestDefs2735
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result2735_0.nsv", "result2735_1.nsv", "result2735_2.nsv", "result2735_3.nsv"];
 val thyn = "vfmTestDefs2735";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

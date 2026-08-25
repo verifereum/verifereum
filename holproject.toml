@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.10.3"
+minimum_version = "0.11.2"
 
 [project]
 name = "verifereum"
@@ -7,8 +7,10 @@ version = "1.0.2"
 
 [build]
 roots = ["verifereumScript.sml"]
-exclude = ["tests/defs", "tests/results"]
 tactic_timeout = 30
+
+[build.groups.tests]
+include = ["tests/defs", "tests/results"]
 
 [[executable]]
 name = "runtests"

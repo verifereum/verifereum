@@ -1,6 +1,7 @@
 Theory vfmTest1673[no_sig_docs]
 Ancestors vfmTestDefs1673
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result1673_0.nsv"];
 val thyn = "vfmTestDefs1673";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
