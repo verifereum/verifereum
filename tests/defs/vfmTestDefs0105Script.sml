@@ -1,5 +1,5 @@
 Theory vfmTestDefs0105[no_sig_docs]
-Libs vfmTestDefLib
+Libs vfmTestAuxLib vfmTestDefLib
 val () = holbuild_extra_deps ["../fixtures/blockchain_tests/cancun/eip6780_selfdestruct/test_self_destructing_initcode.json"];
 val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/cancun/eip6780_selfdestruct/test_self_destructing_initcode.json");
 val defs = mapi (define_test "0105") tests;

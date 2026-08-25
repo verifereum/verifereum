@@ -1,6 +1,6 @@
 Theory vfmTest2741[no_sig_docs]
 Ancestors vfmTestDefs2741
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
 val () = holbuild_extra_outputs ["result2741_0.nsv", "result2741_1.nsv", "result2741_2.nsv", "result2741_3.nsv"];
 val thyn = "vfmTestDefs2741";
 val defs = get_result_defs thyn;

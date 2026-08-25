@@ -1,5 +1,5 @@
 Theory vfmTestDefs1247[no_sig_docs]
-Libs vfmTestDefLib
+Libs vfmTestAuxLib vfmTestDefLib
 val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stPreCompiledContracts/precompsEIP2929Cancun.json"];
 val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stPreCompiledContracts/precompsEIP2929Cancun.json");
 val defs = mapi (define_test "1247") tests;

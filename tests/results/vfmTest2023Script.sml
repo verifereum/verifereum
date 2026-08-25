@@ -1,6 +1,6 @@
 Theory vfmTest2023[no_sig_docs]
 Ancestors vfmTestDefs2023
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
 val () = holbuild_extra_outputs ["result2023_0.nsv"];
 val thyn = "vfmTestDefs2023";
 val defs = get_result_defs thyn;

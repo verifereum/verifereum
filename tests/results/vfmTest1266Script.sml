@@ -1,6 +1,6 @@
 Theory vfmTest1266[no_sig_docs]
 Ancestors vfmTestDefs1266
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
 val () = holbuild_extra_outputs ["result1266_0.nsv"];
 val thyn = "vfmTestDefs1266";
 val defs = get_result_defs thyn;

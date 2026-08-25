@@ -1,6 +1,6 @@
 Theory vfmTest0936[no_sig_docs]
 Ancestors vfmTestDefs0936
-Libs wordsLib vfmTestResultLib
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
 val () = holbuild_extra_outputs ["result0936_0.nsv"];
 val thyn = "vfmTestDefs0936";
 val defs = get_result_defs thyn;
