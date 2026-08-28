@@ -318,9 +318,48 @@ Proof
   \\ rw[] \\ gvs[]
 QED
 
+Theorem chunk_stream_take_some:
+  ∀n css acc.
+    IS_SOME (chunk_stream_take n css acc) ⇔
+    n ≤ chunk_stream_length css
+Proof
+  Induct
+  \\ rw[chunk_stream_take_def, chunk_stream_length_eq]
+  \\ CASE_TAC
+  >- gvs[chunk_stream_uncons_none]
+  \\ PairCases_on`x` \\ gvs[]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[] \\ gvs[chunk_stream_length_eq]
+QED
+
 Definition chunk_stream_take_bytes_def:
   chunk_stream_take_bytes n css = chunk_stream_take n css []
 End
+
+Theorem chunk_stream_take_bytes_some:
+  IS_SOME (chunk_stream_take_bytes n css) ⇔
+  n ≤ chunk_stream_length css
+Proof
+  rw[chunk_stream_take_bytes_def, chunk_stream_take_some]
+QED
+
+Theorem chunk_stream_take_bytes_some_imp:
+  chunk_stream_take_bytes n css = SOME x ⇒
+  n ≤ chunk_stream_length css
+Proof
+  strip_tac >>
+  mp_tac chunk_stream_take_bytes_some >>
+  rw[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem chunk_stream_take_bytes_none_imp:
+  chunk_stream_take_bytes n css = NONE ⇒
+  n > chunk_stream_length css
+Proof
+  strip_tac >>
+  mp_tac chunk_stream_take_bytes_some >>
+  rw[optionTheory.IS_SOME_EXISTS]
+QED
 
 Theorem chunk_stream_take_bytes_correct:
   chunk_stream_take_bytes n css = SOME (bytes,rest) ⇒
@@ -330,6 +369,72 @@ Proof
   rw[chunk_stream_take_bytes_def]
   \\ drule chunk_stream_take_correct
   \\ rw[]
+QED
+
+val () = cv_auto_trans chunk_stream_uncons_def;
+val () = cv_auto_trans chunk_stream_drop_def;
+val () = cv_auto_trans chunk_stream_take_def;
+val () = cv_auto_trans chunk_stream_take_bytes_def;
+
+(* Read an RLP prefix from a chunk stream.  The caller supplies the number of
+   bytes available in its current RLP-list boundary, so this operation never
+   computes the length of the remaining byte stream. *)
+Definition rlp_decode_length_chunks_def:
+  rlp_decode_length_chunks length css =
+  case chunk_stream_uncons css of NONE => NONE | SOME (b,rest) =>
+  let prefix = w2n b in
+  if prefix ≤ 0x7f
+  then SOME (0, 1, T) else
+  let strLen = prefix - 0x80 in
+  if prefix ≤ 0xb7 then
+    if length > strLen then SOME (1, strLen, T) else NONE
+  else if prefix ≤ 0xbf then
+    let lenOfStrLen = prefix - 0xb7 in
+    case chunk_stream_take_bytes lenOfStrLen rest of NONE => NONE |
+      SOME (lengthBytes,_) =>
+      let strLen = num_of_be_bytes lengthBytes in
+      if length > lenOfStrLen + strLen
+      then SOME (1 + lenOfStrLen, strLen, T) else NONE
+  else
+  let listLen = prefix - 0xc0 in
+  if prefix ≤ 0xf7 then
+    if length > listLen then SOME (1, listLen, F) else NONE
+  else
+  let lenOfListLen = prefix - 0xf7 in
+  case chunk_stream_take_bytes lenOfListLen rest of NONE => NONE |
+    SOME (lengthBytes,_) =>
+    let listLen = num_of_be_bytes lengthBytes in
+    if prefix ≤ 0xff then
+      if length > lenOfListLen + listLen
+      then SOME (1 + lenOfListLen, listLen, F)
+      else NONE
+    else NONE
+End
+
+val () = cv_auto_trans rlp_decode_length_chunks_def;
+
+Theorem rlp_decode_length_chunks_correct:
+  length = chunk_stream_length css ⇒
+  rlp_decode_length_chunks length css =
+    rlp_decode_length (chunk_stream_bytes css)
+Proof
+  simp[rlp_decode_length_chunks_def, rlp_decode_length_def]
+  \\ Cases_on`chunk_stream_uncons css`
+  >- gvs[chunk_stream_uncons_none, chunk_stream_length_eq]
+  \\ PairCases_on`x`
+  \\ drule chunk_stream_uncons_correct
+  \\ strip_tac
+  \\ gvs[chunk_stream_length_eq]
+  \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 183) x1`
+  \\ TRY (PairCases_on`x`)
+  \\ imp_res_tac chunk_stream_take_bytes_none_imp
+  \\ gvs[chunk_stream_length_eq]
+  \\ rpt strip_tac
+  \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 247) x1`
+  \\ TRY (PairCases_on`x`)
+  \\ imp_res_tac chunk_stream_take_bytes_none_imp
+  \\ imp_res_tac chunk_stream_take_bytes_correct
+  \\ gvs[chunk_stream_length_eq]
 QED
 
 Definition rlp_decode_list_def:
