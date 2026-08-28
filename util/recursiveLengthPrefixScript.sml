@@ -211,6 +211,127 @@ Proof
   rw[rlp_decode_length_def]
 QED
 
+(*
+  A chunk stream is represented by a list of byte lists.  Its abstraction is
+  deliberately just FLAT: the chunk boundaries carry no logical meaning.
+  The executable operations below walk the chunk list without first constructing
+  the flattened byte list.  They form the refinement layer used by the
+  chunk-aware RLP decoder.
+*)
+Definition chunk_stream_bytes_def:
+  chunk_stream_bytes css = FLAT css
+End
+
+Definition chunk_stream_length_def:
+  chunk_stream_length css = SUM (MAP LENGTH css)
+End
+
+Theorem chunk_stream_length_eq:
+  chunk_stream_length css = LENGTH (chunk_stream_bytes css)
+Proof
+  rw[chunk_stream_length_def, chunk_stream_bytes_def, LENGTH_FLAT]
+QED
+
+Definition chunk_stream_uncons_def:
+  chunk_stream_uncons [] = NONE ∧
+  chunk_stream_uncons ([]::css) = chunk_stream_uncons css ∧
+  chunk_stream_uncons ((b::bs)::css) =
+    SOME (b, if bs = [] then css else bs::css)
+Termination
+  WF_REL_TAC ‘measure LENGTH’ >> rw[]
+End
+
+Theorem chunk_stream_uncons_correct:
+  !css b rest. chunk_stream_uncons css = SOME (b,rest) ⇒
+  chunk_stream_bytes css = b::chunk_stream_bytes rest
+Proof
+  ho_match_mp_tac chunk_stream_uncons_ind
+  \\ rw[Once chunk_stream_uncons_def, chunk_stream_bytes_def]
+  \\ gvs[]
+  \\ gvs[Once chunk_stream_uncons_def]
+QED
+
+Theorem chunk_stream_uncons_none:
+  !css. chunk_stream_uncons css = NONE ⇔ chunk_stream_bytes css = []
+Proof
+  ho_match_mp_tac chunk_stream_uncons_ind
+  \\ rw[Once chunk_stream_uncons_def, chunk_stream_bytes_def]
+  \\ gvs[]
+  \\ gvs[Once chunk_stream_uncons_def]
+QED
+
+Definition chunk_stream_drop_def:
+  chunk_stream_drop 0 css = SOME css ∧
+  chunk_stream_drop (SUC n) css =
+    case chunk_stream_uncons css of
+      NONE => NONE
+    | SOME (_,rest) => chunk_stream_drop n rest
+End
+
+Theorem chunk_stream_drop_correct:
+  ∀n css rest.
+    chunk_stream_drop n css = SOME rest ⇒
+    chunk_stream_bytes rest = DROP n (chunk_stream_bytes css)
+Proof
+  Induct
+  \\ rw[chunk_stream_drop_def]
+  \\ gvs[CaseEq"option",CaseEq"prod"]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[]
+  \\ gvs[]
+QED
+
+Theorem chunk_stream_drop_some:
+  ∀n css.
+    IS_SOME (chunk_stream_drop n css) ⇔
+    n ≤ chunk_stream_length css
+Proof
+  Induct
+  \\ rw[chunk_stream_drop_def, chunk_stream_length_eq]
+  \\ CASE_TAC
+  >- gvs[chunk_stream_uncons_none]
+  \\ PairCases_on`x` \\ gvs[]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[] \\ gvs[chunk_stream_length_eq]
+QED
+
+Definition chunk_stream_take_def:
+  chunk_stream_take 0 css acc = SOME (REVERSE acc,css) ∧
+  chunk_stream_take (SUC n) css acc =
+    case chunk_stream_uncons css of
+      NONE => NONE
+    | SOME (b,rest) => chunk_stream_take n rest (b::acc)
+End
+
+Theorem chunk_stream_take_correct:
+  ∀n css acc bytes rest.
+    chunk_stream_take n css acc = SOME (bytes,rest) ⇒
+    bytes = REVERSE acc ++ TAKE n (chunk_stream_bytes css) ∧
+    chunk_stream_bytes rest = DROP n (chunk_stream_bytes css)
+Proof
+  Induct
+  \\ rw[chunk_stream_take_def]
+  \\ gvs[CaseEq"option",CaseEq"prod"]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[]
+  \\ first_x_assum drule
+  \\ rw[] \\ gvs[]
+QED
+
+Definition chunk_stream_take_bytes_def:
+  chunk_stream_take_bytes n css = chunk_stream_take n css []
+End
+
+Theorem chunk_stream_take_bytes_correct:
+  chunk_stream_take_bytes n css = SOME (bytes,rest) ⇒
+  bytes = TAKE n (chunk_stream_bytes css) ∧
+  chunk_stream_bytes rest = DROP n (chunk_stream_bytes css)
+Proof
+  rw[chunk_stream_take_bytes_def]
+  \\ drule chunk_stream_take_correct
+  \\ rw[]
+QED
+
 Definition rlp_decode_list_def:
   rlp_decode_list bs =
     case rlp_decode_length bs
