@@ -1,6 +1,6 @@
 structure byteStringCacheLib :> byteStringCacheLib = struct
 
-  open HolKernel boolLib cv_transLib vfmTypesSyntax 
+  open HolKernel boolLib cv_transLib vfmTypesSyntax
 
   val bytestr_cache : (string, term) Redblackmap.dict ref =
     ref $ Redblackmap.mkDict String.compare
@@ -21,6 +21,28 @@ structure byteStringCacheLib :> byteStringCacheLib = struct
     val cache = Redblackmap.insert(!bytestr_cache, hex, const)
     val () = bytestr_cache := cache
   in const end
+  end
+
+  (* Keep each generated HOL string and deep embedding to a moderate size.
+     The unit is hexadecimal characters, so this represents 64 KiB of bytes. *)
+  val hex_chunk_size = 2 * 64 * 1024
+
+  fun cached_byte_chunks_from_hex str = let
+    val hex = if String.isPrefix "0x" str
+              then String.extract(str, 2, NONE) else str
+    val size = String.size hex
+    fun split offset acc =
+      if offset = size then List.rev acc
+      else let
+        val remaining = size - offset
+        val chunk_size = Int.min(hex_chunk_size, remaining)
+        val chunk = String.substring(hex, offset, chunk_size)
+      in
+        split (offset + chunk_size) (cached_bytes_from_hex chunk :: acc)
+      end
+    val chunks = split 0 []
+  in
+    listSyntax.mk_list(chunks, bytes_ty)
   end
 
 end
