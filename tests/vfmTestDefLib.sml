@@ -489,7 +489,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     prim_mk_const{Thy="vfmTestRun",Name="run_test"}
 
   val optional_block_ty = optionSyntax.mk_option block_ty
-  val invalid_block_ty = pairSyntax.mk_prod(bytes_ty, optional_block_ty)
+  val byte_chunks_ty = listSyntax.mk_list_type bytes_ty
+  val invalid_block_ty = pairSyntax.mk_prod(byte_chunks_ty, optional_block_ty)
   val expectException_ty = pairSyntax.mk_prod(string_ty, invalid_block_ty)
 
   fun is_invalid (Invalid _) = true | is_invalid _ = false
@@ -524,8 +525,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
     val g_rlp = #genesisRLP test
     val g_rlp_name = name_prefix ^ "_genesis_rlp"
-    val g_rlp_var = mk_var(g_rlp_name, bytes_ty)
-    val g_rlp_rhs = cached_bytes_from_hex g_rlp
+    val g_rlp_var = mk_var(g_rlp_name, byte_chunks_ty)
+    val g_rlp_rhs = cached_byte_chunks_from_hex g_rlp
     val g_rlp_def = new_definition(g_rlp_name ^ "_def",
                                    mk_eq(g_rlp_var, g_rlp_rhs))
     val g_rlp_const = lhs $ concl g_rlp_def
@@ -563,7 +564,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
         (optionSyntax.mk_option expectException_ty)
         (pairSyntax.lift_prod expectException_ty fromMLstring $
          pairSyntax.lift_prod invalid_block_ty
-           cached_bytes_from_hex
+           cached_byte_chunks_from_hex
            (optionSyntax.lift_option optional_block_ty mk_block_tm))
         expectException
 
@@ -574,10 +575,10 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val validBlocks_tm = listSyntax.mk_list(
       List.map mk_block_tm validBlocks, block_ty)
 
-    val rlps_tms = List.map (cached_bytes_from_hex o #rlp) validBlocks
+    val rlps_tms = List.map (cached_byte_chunks_from_hex o #rlp) validBlocks
     val rlps_name = name_prefix ^ "_rlps"
-    val rlps_var = mk_var(rlps_name, listSyntax.mk_list_type bytes_ty)
-    val rlps_rhs = listSyntax.mk_list(rlps_tms, bytes_ty)
+    val rlps_var = mk_var(rlps_name, listSyntax.mk_list_type byte_chunks_ty)
+    val rlps_rhs = listSyntax.mk_list(rlps_tms, byte_chunks_ty)
     val rlps_def = new_definition(rlps_name ^ "_def",
                                   mk_eq(rlps_var, rlps_rhs))
     val rlps_const = lhs $ concl rlps_def

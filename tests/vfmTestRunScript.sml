@@ -29,7 +29,7 @@ End
 Definition check_block_rlps_def:
   check_block_rlps [] [] = Passed ∧
   check_block_rlps (bs::bss) (blk::blks) = (
-  case OPTION_BIND (rlp_decode bs) block_from_rlp
+  case OPTION_BIND (rlp_decode_chunks bs) block_from_rlp
     of NONE => BlockDecodeFailure
      | SOME dcd => if dcd with hash := blk.hash <> blk
                    then BlockDecodeMismatch
@@ -63,7 +63,7 @@ Definition run_test_def:
     postState
     expectException
   =
-    case rlp_decode genesisRLP
+    case rlp_decode_chunks genesisRLP
     of NONE => GenesisBlockDecodeFailure |
     SOME rlp =>
     case block_from_rlp rlp
@@ -88,7 +88,7 @@ Definition run_test_def:
       if computedHash <> lastBlockHash then LastHashMismatch computedHash else
       if computedPostState <> postState then StateMismatch else Passed
     | SOME (msg, rlpbs, optblock) =>
-        case OPTION_BIND (rlp_decode rlpbs) block_from_rlp of NONE =>
+        case OPTION_BIND (rlp_decode_chunks rlpbs) block_from_rlp of NONE =>
           Passed (* TODO: check exception msg *)
         | SOME decoded =>
         case optblock of NONE => ExpectedException "block rlp decoding"

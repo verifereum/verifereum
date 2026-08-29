@@ -211,6 +211,255 @@ Proof
   rw[rlp_decode_length_def]
 QED
 
+(*
+  A chunk stream is represented by a list of byte lists.  Its abstraction is
+  deliberately just FLAT: the chunk boundaries carry no logical meaning.
+  The executable operations below walk the chunk list without first constructing
+  the flattened byte list.  They form the refinement layer used by the
+  chunk-aware RLP decoder.
+*)
+Definition chunk_stream_bytes_def:
+  chunk_stream_bytes css = FLAT css
+End
+
+Definition chunk_stream_length_def:
+  chunk_stream_length [] = 0 ∧
+  chunk_stream_length (bs::css) = LENGTH bs + chunk_stream_length css
+End
+
+val () = cv_auto_trans chunk_stream_length_def;
+
+Theorem chunk_stream_length_sum_map:
+  !css. chunk_stream_length css = SUM (MAP LENGTH css)
+Proof
+  Induct >> rw[chunk_stream_length_def]
+QED
+
+Theorem chunk_stream_length_eq:
+  chunk_stream_length css = LENGTH (chunk_stream_bytes css)
+Proof
+  rw[chunk_stream_length_sum_map, chunk_stream_bytes_def, LENGTH_FLAT]
+QED
+
+Definition chunk_stream_uncons_def:
+  chunk_stream_uncons [] = NONE ∧
+  chunk_stream_uncons ([]::css) = chunk_stream_uncons css ∧
+  chunk_stream_uncons ((b::bs)::css) =
+    SOME (b, if bs = [] then css else bs::css)
+Termination
+  WF_REL_TAC ‘measure LENGTH’ >> rw[]
+End
+
+Theorem chunk_stream_uncons_correct:
+  !css b rest. chunk_stream_uncons css = SOME (b,rest) ⇒
+  chunk_stream_bytes css = b::chunk_stream_bytes rest
+Proof
+  ho_match_mp_tac chunk_stream_uncons_ind
+  \\ rw[Once chunk_stream_uncons_def, chunk_stream_bytes_def]
+  \\ gvs[]
+  \\ gvs[Once chunk_stream_uncons_def]
+QED
+
+Theorem chunk_stream_uncons_none:
+  !css. chunk_stream_uncons css = NONE ⇔ chunk_stream_bytes css = []
+Proof
+  ho_match_mp_tac chunk_stream_uncons_ind
+  \\ rw[Once chunk_stream_uncons_def, chunk_stream_bytes_def]
+  \\ gvs[]
+  \\ gvs[Once chunk_stream_uncons_def]
+QED
+
+Definition chunk_stream_drop_def:
+  chunk_stream_drop 0 css = SOME css ∧
+  chunk_stream_drop (SUC n) css =
+    case chunk_stream_uncons css of
+      NONE => NONE
+    | SOME (_,rest) => chunk_stream_drop n rest
+End
+
+Theorem chunk_stream_drop_correct:
+  ∀n css rest.
+    chunk_stream_drop n css = SOME rest ⇒
+    chunk_stream_bytes rest = DROP n (chunk_stream_bytes css)
+Proof
+  Induct
+  \\ rw[chunk_stream_drop_def]
+  \\ gvs[CaseEq"option",CaseEq"prod"]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[]
+  \\ gvs[]
+QED
+
+Theorem chunk_stream_drop_some:
+  ∀n css.
+    IS_SOME (chunk_stream_drop n css) ⇔
+    n ≤ chunk_stream_length css
+Proof
+  Induct
+  \\ rw[chunk_stream_drop_def, chunk_stream_length_eq]
+  \\ CASE_TAC
+  >- gvs[chunk_stream_uncons_none]
+  \\ PairCases_on`x` \\ gvs[]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[] \\ gvs[chunk_stream_length_eq]
+QED
+
+Definition chunk_stream_take_def:
+  chunk_stream_take 0 css acc = SOME (REVERSE acc,css) ∧
+  chunk_stream_take (SUC n) css acc =
+    case chunk_stream_uncons css of
+      NONE => NONE
+    | SOME (b,rest) => chunk_stream_take n rest (b::acc)
+End
+
+Theorem chunk_stream_take_correct:
+  ∀n css acc bytes rest.
+    chunk_stream_take n css acc = SOME (bytes,rest) ⇒
+    bytes = REVERSE acc ++ TAKE n (chunk_stream_bytes css) ∧
+    chunk_stream_bytes rest = DROP n (chunk_stream_bytes css)
+Proof
+  Induct
+  \\ rw[chunk_stream_take_def]
+  \\ gvs[CaseEq"option",CaseEq"prod"]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[]
+  \\ first_x_assum drule
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem chunk_stream_take_some:
+  ∀n css acc.
+    IS_SOME (chunk_stream_take n css acc) ⇔
+    n ≤ chunk_stream_length css
+Proof
+  Induct
+  \\ rw[chunk_stream_take_def, chunk_stream_length_eq]
+  \\ CASE_TAC
+  >- gvs[chunk_stream_uncons_none]
+  \\ PairCases_on`x` \\ gvs[]
+  \\ drule chunk_stream_uncons_correct
+  \\ rw[] \\ gvs[chunk_stream_length_eq]
+QED
+
+Definition chunk_stream_take_bytes_def:
+  chunk_stream_take_bytes n css = chunk_stream_take n css []
+End
+
+Theorem chunk_stream_take_bytes_some:
+  IS_SOME (chunk_stream_take_bytes n css) ⇔
+  n ≤ chunk_stream_length css
+Proof
+  rw[chunk_stream_take_bytes_def, chunk_stream_take_some]
+QED
+
+Theorem chunk_stream_take_bytes_some_imp:
+  chunk_stream_take_bytes n css = SOME x ⇒
+  n ≤ chunk_stream_length css
+Proof
+  strip_tac >>
+  mp_tac chunk_stream_take_bytes_some >>
+  rw[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem chunk_stream_take_bytes_none_imp:
+  chunk_stream_take_bytes n css = NONE ⇒
+  n > chunk_stream_length css
+Proof
+  strip_tac >>
+  mp_tac chunk_stream_take_bytes_some >>
+  rw[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem chunk_stream_take_bytes_correct:
+  chunk_stream_take_bytes n css = SOME (bytes,rest) ⇒
+  bytes = TAKE n (chunk_stream_bytes css) ∧
+  chunk_stream_bytes rest = DROP n (chunk_stream_bytes css)
+Proof
+  rw[chunk_stream_take_bytes_def]
+  \\ drule chunk_stream_take_correct
+  \\ rw[]
+QED
+
+val () = cv_auto_trans chunk_stream_uncons_def;
+val () = cv_auto_trans chunk_stream_drop_def;
+val () = cv_auto_trans chunk_stream_take_def;
+val () = cv_auto_trans chunk_stream_take_bytes_def;
+
+(* Read an RLP prefix from a chunk stream.  The caller supplies the number of
+   bytes available in its current RLP-list boundary, so this operation never
+   computes the length of the remaining byte stream. *)
+Definition rlp_decode_length_chunks_def:
+  rlp_decode_length_chunks length css =
+  if length = 0 then NONE else
+  case chunk_stream_uncons css of NONE => NONE | SOME (b,rest) =>
+  let prefix = w2n b in
+  if prefix ≤ 0x7f
+  then SOME (0, 1, T) else
+  let strLen = prefix - 0x80 in
+  if prefix ≤ 0xb7 then
+    if length > strLen then SOME (1, strLen, T) else NONE
+  else if prefix ≤ 0xbf then
+    let lenOfStrLen = prefix - 0xb7 in
+    case chunk_stream_take_bytes lenOfStrLen rest of NONE => NONE |
+      SOME (lengthBytes,_) =>
+      let strLen = num_of_be_bytes lengthBytes in
+      if length > lenOfStrLen + strLen
+      then SOME (1 + lenOfStrLen, strLen, T) else NONE
+  else
+  let listLen = prefix - 0xc0 in
+  if prefix ≤ 0xf7 then
+    if length > listLen then SOME (1, listLen, F) else NONE
+  else
+  let lenOfListLen = prefix - 0xf7 in
+  case chunk_stream_take_bytes lenOfListLen rest of NONE => NONE |
+    SOME (lengthBytes,_) =>
+    let listLen = num_of_be_bytes lengthBytes in
+    if prefix ≤ 0xff then
+      if length > lenOfListLen + listLen
+      then SOME (1 + lenOfListLen, listLen, F)
+      else NONE
+    else NONE
+End
+
+val () = cv_auto_trans rlp_decode_length_chunks_def;
+
+Theorem rlp_decode_length_chunks_take_correct:
+  length ≤ chunk_stream_length css ⇒
+  rlp_decode_length_chunks length css =
+    rlp_decode_length (TAKE length (chunk_stream_bytes css))
+Proof
+  simp[rlp_decode_length_chunks_def, rlp_decode_length_def]
+  \\ Cases_on`length = 0` \\ gvs[]
+  \\ Cases_on`chunk_stream_uncons css`
+  >- gvs[chunk_stream_uncons_none, chunk_stream_length_eq]
+  \\ PairCases_on`x`
+  \\ drule chunk_stream_uncons_correct
+  \\ strip_tac
+  \\ gvs[chunk_stream_length_eq]
+  \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 183) x1`
+  \\ TRY (PairCases_on`x`)
+  \\ imp_res_tac chunk_stream_take_bytes_none_imp
+  \\ imp_res_tac chunk_stream_take_bytes_correct
+  \\ Cases_on`w2n x0 - 183 ≤ length - 1`
+  \\ gvs[chunk_stream_length_eq, TAKE_TAKE]
+  \\ rpt strip_tac
+  \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 247) x1`
+  \\ TRY (PairCases_on`x`)
+  \\ imp_res_tac chunk_stream_take_bytes_none_imp
+  \\ imp_res_tac chunk_stream_take_bytes_correct
+  \\ Cases_on`w2n x0 - 247 ≤ length - 1`
+  \\ gvs[chunk_stream_length_eq, TAKE_TAKE]
+QED
+
+Theorem rlp_decode_length_chunks_correct:
+  length = chunk_stream_length css ⇒
+  rlp_decode_length_chunks length css =
+    rlp_decode_length (chunk_stream_bytes css)
+Proof
+  strip_tac
+  \\ gvs[rlp_decode_length_chunks_take_correct, chunk_stream_length_eq]
+QED
+
 Definition rlp_decode_list_def:
   rlp_decode_list bs =
     case rlp_decode_length bs
@@ -342,6 +591,201 @@ End
 val () = rlp_decode_def
   |> SRULE [rlp_decode_list_eq_tr]
   |> cv_auto_trans;
+
+Theorem rlp_decode_length_chunks_offset_zero:
+  rlp_decode_length_chunks length css = SOME (0,len,isBS) ⇒
+  len = 1 ∧ isBS
+Proof
+  rw[rlp_decode_length_chunks_def]
+  \\ gvs[CaseEq"option",CaseEq"prod",CaseEq"bool"]
+QED
+
+Theorem rlp_decode_length_chunks_length_less_eq:
+  rlp_decode_length_chunks length css = SOME (offset,len,isBS) ⇒
+  offset + len ≤ length
+Proof
+  rw[rlp_decode_length_chunks_def]
+  \\ gvs[CaseEq"option",CaseEq"prod",CaseEq"bool"]
+QED
+
+(* The stream is shared by all nesting levels.  A stack frame records only
+   the number of bytes left after the current encoded list and the parent's
+   reverse accumulator; encoded list payloads are never copied. *)
+Definition rlp_decode_list_chunks_tr_def:
+  rlp_decode_list_chunks_tr css remaining ls stk =
+  case rlp_decode_length_chunks remaining css of
+    NONE => (
+      case stk of
+        [] => REVERSE ls
+      | ((parentRemaining,pls)::stk) =>
+          case chunk_stream_drop remaining css of
+            NONE => REVERSE ls
+          | SOME rest =>
+              rlp_decode_list_chunks_tr rest parentRemaining
+                ((RLPL (REVERSE ls))::pls) stk) |
+    SOME (offset,dataLen,isBS) =>
+      case chunk_stream_drop offset css of
+        NONE => REVERSE ls
+      | SOME data =>
+          if isBS then
+            case chunk_stream_take_bytes dataLen data of
+              NONE => REVERSE ls
+            | SOME (bytes,rest) =>
+                rlp_decode_list_chunks_tr rest
+                  (remaining - offset - dataLen) ((RLPB bytes)::ls) stk
+          else
+            rlp_decode_list_chunks_tr data dataLen []
+              ((remaining - offset - dataLen,ls)::stk)
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+    (λ(css,remaining,ls,stk).
+      (remaining + SUM (MAP FST stk),
+       LENGTH stk))’
+  \\ rw[]
+  \\ CCONTR_TAC >> gvs[]
+  >- ( drule rlp_decode_length_chunks_offset_zero >> rw[] )
+  \\ imp_res_tac rlp_decode_length_chunks_length_less_eq \\ gvs[]
+  \\ drule rlp_decode_length_chunks_offset_zero >> rw[]
+End
+
+val rlp_decode_list_chunks_tr_pre_def =
+  cv_auto_trans_pre "rlp_decode_list_chunks_tr_pre"
+    rlp_decode_list_chunks_tr_def;
+
+Theorem rlp_decode_list_chunks_tr_pre[cv_pre]:
+  !a b c d. rlp_decode_list_chunks_tr_pre a b c d
+Proof
+  ho_match_mp_tac rlp_decode_list_chunks_tr_ind >> rw[] >>
+  rw[Once rlp_decode_list_chunks_tr_pre_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Definition rlp_decode_list_chunks_def:
+  rlp_decode_list_chunks css =
+    rlp_decode_list_chunks_tr css (chunk_stream_length css) [] []
+End
+
+val () = cv_trans rlp_decode_list_chunks_def;
+
+Definition rlp_decode_chunks_def:
+  rlp_decode_chunks css =
+  case rlp_decode_list_chunks css of
+    [rlp] => SOME rlp
+  | _ => NONE
+End
+
+val () = cv_auto_trans rlp_decode_chunks_def;
+
+(* Reconstruct the list decoder's saved suffixes from the compact boundary
+   lengths used by the chunk decoder.  This function is used only in the
+   refinement proof. *)
+Definition chunk_decode_stack_def:
+  chunk_decode_stack bs remaining [] = [] ∧
+  chunk_decode_stack bs remaining ((parentRemaining,pls)::stk) =
+    let parent = DROP remaining bs in
+    (TAKE parentRemaining parent,pls)::
+      chunk_decode_stack parent parentRemaining stk
+End
+
+Theorem rlp_decode_list_chunks_tr_correct:
+  remaining + SUM (MAP FST stk) ≤ chunk_stream_length css ⇒
+  rlp_decode_list_chunks_tr css remaining ls stk =
+    rlp_decode_list_tr
+      (TAKE remaining (chunk_stream_bytes css)) ls
+      (chunk_decode_stack (chunk_stream_bytes css) remaining stk)
+Proof
+  qid_spec_tac`stk` \\ qid_spec_tac`ls`
+  \\ qid_spec_tac`remaining` \\ qid_spec_tac`css`
+  \\ recInduct rlp_decode_list_chunks_tr_ind
+  \\ rpt strip_tac
+  \\ `remaining ≤ chunk_stream_length css` by decide_tac
+  \\ `rlp_decode_length_chunks remaining css =
+      rlp_decode_length (TAKE remaining (chunk_stream_bytes css))`
+      by metis_tac[rlp_decode_length_chunks_take_correct]
+  \\ rewrite_tac[Once rlp_decode_list_chunks_tr_def,
+                   Once rlp_decode_list_tr_def]
+  \\ qpat_x_assum`rlp_decode_length_chunks _ _ = _`
+       (fn th => rewrite_tac[GSYM th])
+  \\ Cases_on`rlp_decode_length_chunks remaining css`
+  >- (
+    gvs[]
+    \\ Cases_on`stk`
+    >- simp[chunk_decode_stack_def]
+    \\ PairCases_on`h`
+    \\ simp[chunk_decode_stack_def]
+    \\ `IS_SOME (chunk_stream_drop remaining css)`
+        by gvs[chunk_stream_drop_some, chunk_stream_length_eq]
+    \\ Cases_on`chunk_stream_drop remaining css`
+    >- gvs[]
+    \\ imp_res_tac chunk_stream_drop_correct
+    \\ gvs[]
+    \\ qpat_x_assum`_ ⇒ rlp_decode_list_chunks_tr _ _ _ _ = _` irule
+    \\ gvs[chunk_stream_length_eq] )
+  \\ PairCases_on`x`
+  \\ gvs[]
+  \\ imp_res_tac rlp_decode_length_chunks_length_less_eq
+  \\ `IS_SOME (chunk_stream_drop x0 css)`
+      by gvs[chunk_stream_drop_some, chunk_stream_length_eq]
+  \\ Cases_on`chunk_stream_drop x0 css`
+  >- gvs[]
+  \\ imp_res_tac chunk_stream_drop_correct
+  \\ Cases_on`x2`
+  >- (
+    gvs[]
+    \\ `IS_SOME (chunk_stream_take_bytes x1 x)`
+        by gvs[chunk_stream_take_bytes_some, chunk_stream_length_eq,
+               LENGTH_DROP]
+    \\ Cases_on`chunk_stream_take_bytes x1 x`
+    >- gvs[]
+    \\ PairCases_on`x'`
+    \\ imp_res_tac chunk_stream_take_bytes_correct
+    \\ gvs[]
+    \\ `chunk_decode_stack
+          (DROP (x0 + x1) (chunk_stream_bytes css))
+          (remaining - (x0 + x1)) stk =
+        chunk_decode_stack (chunk_stream_bytes css) remaining stk`
+        by ( Cases_on`stk`
+             >- simp[chunk_decode_stack_def]
+             \\ PairCases_on`h`
+             \\ `remaining - (x0 + x1) + (x0 + x1) = remaining`
+                 by decide_tac
+             \\ simp[chunk_decode_stack_def]
+             \\ rewrite_tac[DROP_DROP_T]
+             \\ simp[] )
+    \\ gvs[chunk_stream_length_eq, DROP_DROP_T, TAKE_DROP,
+            TAKE_DROP_SWAP, TAKE_TAKE] )
+  \\ gvs[]
+  \\ `chunk_decode_stack
+        (DROP (x0 + x1) (chunk_stream_bytes css))
+        (remaining - (x0 + x1)) stk =
+      chunk_decode_stack (chunk_stream_bytes css) remaining stk`
+      by ( Cases_on`stk`
+             >- simp[chunk_decode_stack_def]
+             \\ PairCases_on`h`
+             \\ `remaining - (x0 + x1) + (x0 + x1) = remaining`
+                 by decide_tac
+             \\ simp[chunk_decode_stack_def]
+             \\ rewrite_tac[DROP_DROP_T]
+             \\ simp[] )
+  \\ gvs[chunk_decode_stack_def, chunk_stream_length_eq,
+          DROP_DROP_T, TAKE_DROP, TAKE_DROP_SWAP, TAKE_TAKE]
+QED
+
+Theorem rlp_decode_list_chunks_correct:
+  rlp_decode_list_chunks css =
+  rlp_decode_list (chunk_stream_bytes css)
+Proof
+  rw[rlp_decode_list_chunks_def, rlp_decode_list_eq_tr]
+  \\ simp[rlp_decode_list_chunks_tr_correct, chunk_stream_length_eq,
+           chunk_decode_stack_def]
+QED
+
+Theorem rlp_decode_chunks_correct:
+  rlp_decode_chunks css = rlp_decode (chunk_stream_bytes css)
+Proof
+  rw[rlp_decode_chunks_def, rlp_decode_def,
+     rlp_decode_list_chunks_correct]
+QED
 
 Theorem rlp_encode_list_map:
   ∀ls acc. rlp_encode_list_acc acc ls =
