@@ -223,13 +223,22 @@ Definition chunk_stream_bytes_def:
 End
 
 Definition chunk_stream_length_def:
-  chunk_stream_length css = SUM (MAP LENGTH css)
+  chunk_stream_length [] = 0 ∧
+  chunk_stream_length (bs::css) = LENGTH bs + chunk_stream_length css
 End
+
+val () = cv_auto_trans chunk_stream_length_def;
+
+Theorem chunk_stream_length_sum_map:
+  !css. chunk_stream_length css = SUM (MAP LENGTH css)
+Proof
+  Induct >> rw[chunk_stream_length_def]
+QED
 
 Theorem chunk_stream_length_eq:
   chunk_stream_length css = LENGTH (chunk_stream_bytes css)
 Proof
-  rw[chunk_stream_length_def, chunk_stream_bytes_def, LENGTH_FLAT]
+  rw[chunk_stream_length_sum_map, chunk_stream_bytes_def, LENGTH_FLAT]
 QED
 
 Definition chunk_stream_uncons_def:
@@ -381,6 +390,7 @@ val () = cv_auto_trans chunk_stream_take_bytes_def;
    computes the length of the remaining byte stream. *)
 Definition rlp_decode_length_chunks_def:
   rlp_decode_length_chunks length css =
+  if length = 0 then NONE else
   case chunk_stream_uncons css of NONE => NONE | SOME (b,rest) =>
   let prefix = w2n b in
   if prefix ≤ 0x7f
@@ -568,6 +578,90 @@ End
 val () = rlp_decode_def
   |> SRULE [rlp_decode_list_eq_tr]
   |> cv_auto_trans;
+
+Theorem rlp_decode_length_chunks_offset_zero:
+  rlp_decode_length_chunks length css = SOME (0,len,isBS) ⇒
+  len = 1 ∧ isBS
+Proof
+  rw[rlp_decode_length_chunks_def]
+  \\ gvs[CaseEq"option",CaseEq"prod",CaseEq"bool"]
+QED
+
+Theorem rlp_decode_length_chunks_length_less_eq:
+  rlp_decode_length_chunks length css = SOME (offset,len,isBS) ⇒
+  offset + len ≤ length
+Proof
+  rw[rlp_decode_length_chunks_def]
+  \\ gvs[CaseEq"option",CaseEq"prod",CaseEq"bool"]
+QED
+
+(* The stream is shared by all nesting levels.  A stack frame records only
+   the number of bytes left after the current encoded list and the parent's
+   reverse accumulator; encoded list payloads are never copied. *)
+Definition rlp_decode_list_chunks_tr_def:
+  rlp_decode_list_chunks_tr css remaining ls stk =
+  case rlp_decode_length_chunks remaining css of
+    NONE => (
+      case stk of
+        [] => REVERSE ls
+      | ((parentRemaining,pls)::stk) =>
+          case chunk_stream_drop remaining css of
+            NONE => REVERSE ls
+          | SOME rest =>
+              rlp_decode_list_chunks_tr rest parentRemaining
+                ((RLPL (REVERSE ls))::pls) stk) |
+    SOME (offset,dataLen,isBS) =>
+      case chunk_stream_drop offset css of
+        NONE => REVERSE ls
+      | SOME data =>
+          if isBS then
+            case chunk_stream_take_bytes dataLen data of
+              NONE => REVERSE ls
+            | SOME (bytes,rest) =>
+                rlp_decode_list_chunks_tr rest
+                  (remaining - offset - dataLen) ((RLPB bytes)::ls) stk
+          else
+            rlp_decode_list_chunks_tr data dataLen []
+              ((remaining - offset - dataLen,ls)::stk)
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+    (λ(css,remaining,ls,stk).
+      (remaining + SUM (MAP FST stk),
+       LENGTH stk))’
+  \\ rw[]
+  \\ CCONTR_TAC >> gvs[]
+  >- ( drule rlp_decode_length_chunks_offset_zero >> rw[] )
+  \\ imp_res_tac rlp_decode_length_chunks_length_less_eq \\ gvs[]
+  \\ drule rlp_decode_length_chunks_offset_zero >> rw[]
+End
+
+val rlp_decode_list_chunks_tr_pre_def =
+  cv_auto_trans_pre "rlp_decode_list_chunks_tr_pre"
+    rlp_decode_list_chunks_tr_def;
+
+Theorem rlp_decode_list_chunks_tr_pre[cv_pre]:
+  !a b c d. rlp_decode_list_chunks_tr_pre a b c d
+Proof
+  ho_match_mp_tac rlp_decode_list_chunks_tr_ind >> rw[] >>
+  rw[Once rlp_decode_list_chunks_tr_pre_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Definition rlp_decode_list_chunks_def:
+  rlp_decode_list_chunks css =
+    rlp_decode_list_chunks_tr css (chunk_stream_length css) [] []
+End
+
+val () = cv_trans rlp_decode_list_chunks_def;
+
+Definition rlp_decode_chunks_def:
+  rlp_decode_chunks css =
+  case rlp_decode_list_chunks css of
+    [rlp] => SOME rlp
+  | _ => NONE
+End
+
+val () = cv_auto_trans rlp_decode_chunks_def;
 
 Theorem rlp_encode_list_map:
   ∀ls acc. rlp_encode_list_acc acc ls =
