@@ -423,12 +423,13 @@ End
 
 val () = cv_auto_trans rlp_decode_length_chunks_def;
 
-Theorem rlp_decode_length_chunks_correct:
-  length = chunk_stream_length css ⇒
+Theorem rlp_decode_length_chunks_take_correct:
+  length ≤ chunk_stream_length css ⇒
   rlp_decode_length_chunks length css =
-    rlp_decode_length (chunk_stream_bytes css)
+    rlp_decode_length (TAKE length (chunk_stream_bytes css))
 Proof
   simp[rlp_decode_length_chunks_def, rlp_decode_length_def]
+  \\ Cases_on`length = 0` \\ gvs[]
   \\ Cases_on`chunk_stream_uncons css`
   >- gvs[chunk_stream_uncons_none, chunk_stream_length_eq]
   \\ PairCases_on`x`
@@ -438,13 +439,25 @@ Proof
   \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 183) x1`
   \\ TRY (PairCases_on`x`)
   \\ imp_res_tac chunk_stream_take_bytes_none_imp
-  \\ gvs[chunk_stream_length_eq]
+  \\ imp_res_tac chunk_stream_take_bytes_correct
+  \\ Cases_on`w2n x0 - 183 ≤ length - 1`
+  \\ gvs[chunk_stream_length_eq, TAKE_TAKE]
   \\ rpt strip_tac
   \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 247) x1`
   \\ TRY (PairCases_on`x`)
   \\ imp_res_tac chunk_stream_take_bytes_none_imp
   \\ imp_res_tac chunk_stream_take_bytes_correct
-  \\ gvs[chunk_stream_length_eq]
+  \\ Cases_on`w2n x0 - 247 ≤ length - 1`
+  \\ gvs[chunk_stream_length_eq, TAKE_TAKE]
+QED
+
+Theorem rlp_decode_length_chunks_correct:
+  length = chunk_stream_length css ⇒
+  rlp_decode_length_chunks length css =
+    rlp_decode_length (chunk_stream_bytes css)
+Proof
+  strip_tac
+  \\ gvs[rlp_decode_length_chunks_take_correct, chunk_stream_length_eq]
 QED
 
 Definition rlp_decode_list_def:
@@ -662,6 +675,117 @@ Definition rlp_decode_chunks_def:
 End
 
 val () = cv_auto_trans rlp_decode_chunks_def;
+
+(* Reconstruct the list decoder's saved suffixes from the compact boundary
+   lengths used by the chunk decoder.  This function is used only in the
+   refinement proof. *)
+Definition chunk_decode_stack_def:
+  chunk_decode_stack bs remaining [] = [] ∧
+  chunk_decode_stack bs remaining ((parentRemaining,pls)::stk) =
+    let parent = DROP remaining bs in
+    (TAKE parentRemaining parent,pls)::
+      chunk_decode_stack parent parentRemaining stk
+End
+
+Theorem rlp_decode_list_chunks_tr_correct:
+  remaining + SUM (MAP FST stk) ≤ chunk_stream_length css ⇒
+  rlp_decode_list_chunks_tr css remaining ls stk =
+    rlp_decode_list_tr
+      (TAKE remaining (chunk_stream_bytes css)) ls
+      (chunk_decode_stack (chunk_stream_bytes css) remaining stk)
+Proof
+  qid_spec_tac`stk` \\ qid_spec_tac`ls`
+  \\ qid_spec_tac`remaining` \\ qid_spec_tac`css`
+  \\ recInduct rlp_decode_list_chunks_tr_ind
+  \\ rpt strip_tac
+  \\ `remaining ≤ chunk_stream_length css` by decide_tac
+  \\ `rlp_decode_length_chunks remaining css =
+      rlp_decode_length (TAKE remaining (chunk_stream_bytes css))`
+      by metis_tac[rlp_decode_length_chunks_take_correct]
+  \\ rewrite_tac[Once rlp_decode_list_chunks_tr_def,
+                   Once rlp_decode_list_tr_def]
+  \\ qpat_x_assum`rlp_decode_length_chunks _ _ = _`
+       (fn th => rewrite_tac[GSYM th])
+  \\ Cases_on`rlp_decode_length_chunks remaining css`
+  >- (
+    gvs[]
+    \\ Cases_on`stk`
+    >- simp[chunk_decode_stack_def]
+    \\ PairCases_on`h`
+    \\ simp[chunk_decode_stack_def]
+    \\ `IS_SOME (chunk_stream_drop remaining css)`
+        by gvs[chunk_stream_drop_some, chunk_stream_length_eq]
+    \\ Cases_on`chunk_stream_drop remaining css`
+    >- gvs[]
+    \\ imp_res_tac chunk_stream_drop_correct
+    \\ gvs[]
+    \\ qpat_x_assum`_ ⇒ rlp_decode_list_chunks_tr _ _ _ _ = _` irule
+    \\ gvs[chunk_stream_length_eq] )
+  \\ PairCases_on`x`
+  \\ gvs[]
+  \\ imp_res_tac rlp_decode_length_chunks_length_less_eq
+  \\ `IS_SOME (chunk_stream_drop x0 css)`
+      by gvs[chunk_stream_drop_some, chunk_stream_length_eq]
+  \\ Cases_on`chunk_stream_drop x0 css`
+  >- gvs[]
+  \\ imp_res_tac chunk_stream_drop_correct
+  \\ Cases_on`x2`
+  >- (
+    gvs[]
+    \\ `IS_SOME (chunk_stream_take_bytes x1 x)`
+        by gvs[chunk_stream_take_bytes_some, chunk_stream_length_eq,
+               LENGTH_DROP]
+    \\ Cases_on`chunk_stream_take_bytes x1 x`
+    >- gvs[]
+    \\ PairCases_on`x'`
+    \\ imp_res_tac chunk_stream_take_bytes_correct
+    \\ gvs[]
+    \\ `chunk_decode_stack
+          (DROP (x0 + x1) (chunk_stream_bytes css))
+          (remaining - (x0 + x1)) stk =
+        chunk_decode_stack (chunk_stream_bytes css) remaining stk`
+        by ( Cases_on`stk`
+             >- simp[chunk_decode_stack_def]
+             \\ PairCases_on`h`
+             \\ `remaining - (x0 + x1) + (x0 + x1) = remaining`
+                 by decide_tac
+             \\ simp[chunk_decode_stack_def]
+             \\ rewrite_tac[DROP_DROP_T]
+             \\ simp[] )
+    \\ gvs[chunk_stream_length_eq, DROP_DROP_T, TAKE_DROP,
+            TAKE_DROP_SWAP, TAKE_TAKE] )
+  \\ gvs[]
+  \\ `chunk_decode_stack
+        (DROP (x0 + x1) (chunk_stream_bytes css))
+        (remaining - (x0 + x1)) stk =
+      chunk_decode_stack (chunk_stream_bytes css) remaining stk`
+      by ( Cases_on`stk`
+             >- simp[chunk_decode_stack_def]
+             \\ PairCases_on`h`
+             \\ `remaining - (x0 + x1) + (x0 + x1) = remaining`
+                 by decide_tac
+             \\ simp[chunk_decode_stack_def]
+             \\ rewrite_tac[DROP_DROP_T]
+             \\ simp[] )
+  \\ gvs[chunk_decode_stack_def, chunk_stream_length_eq,
+          DROP_DROP_T, TAKE_DROP, TAKE_DROP_SWAP, TAKE_TAKE]
+QED
+
+Theorem rlp_decode_list_chunks_correct:
+  rlp_decode_list_chunks css =
+  rlp_decode_list (chunk_stream_bytes css)
+Proof
+  rw[rlp_decode_list_chunks_def, rlp_decode_list_eq_tr]
+  \\ simp[rlp_decode_list_chunks_tr_correct, chunk_stream_length_eq,
+           chunk_decode_stack_def]
+QED
+
+Theorem rlp_decode_chunks_correct:
+  rlp_decode_chunks css = rlp_decode (chunk_stream_bytes css)
+Proof
+  rw[rlp_decode_chunks_def, rlp_decode_def,
+     rlp_decode_list_chunks_correct]
+QED
 
 Theorem rlp_encode_list_map:
   ∀ls acc. rlp_encode_list_acc acc ls =
