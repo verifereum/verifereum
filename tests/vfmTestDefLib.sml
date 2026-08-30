@@ -342,14 +342,104 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val empty_access_list_tm = mk_nil access_list_entry_ty
 
+  (* Large fixture lists are defined and translated in bounded segments.  The
+     aggregate retains the ordinary flat logical type, but its definition and
+     cv translation refer to the already-translated segment constants. *)
+  val structured_list_threshold = 256
+  val structured_list_chunk_size = 256
+
+  val structured_list_cache : (string, term) Redblackmap.dict ref =
+    ref $ Redblackmap.mkDict String.compare
+
+  fun split_list_chunks [] = []
+    | split_list_chunks xs = let
+        fun take 0 rest acc = (List.rev acc, rest)
+          | take _ [] acc = (List.rev acc, [])
+          | take n (x::rest) acc = take (n - 1) rest (x::acc)
+        val (chunk, rest) = take structured_list_chunk_size xs []
+      in
+        chunk :: split_list_chunks rest
+      end
+
+  fun mk_flat_tm element_ty chunks = let
+    val list_ty = listSyntax.mk_list_type element_ty
+    val lists_ty = listSyntax.mk_list_type list_ty
+    val flat_tm = mk_thy_const{Name="FLAT", Thy="list",
+                               Ty=lists_ty --> list_ty}
+  in
+    mk_comb(flat_tm, listSyntax.mk_list(chunks, list_ty))
+  end
+
+  fun cached_structured_list kind key element_ty deep rhs = let
+    val cache_key = kind ^ ":" ^ key
+  in
+    case Redblackmap.peek(!structured_list_cache, cache_key) of
+      SOME const => const
+    | NONE => let
+        val n = Redblackmap.numItems $ !structured_list_cache
+        val name = "structured_list_" ^ Int.toString n
+        val list_ty = listSyntax.mk_list_type element_ty
+        val var = mk_var(name, list_ty)
+        val def = new_definition(name ^ "_def", mk_eq(var, rhs))
+        val () = if deep
+                 then cv_trans_deep_embedding computeLib.EVAL_CONV def
+                 else cv_trans def
+        val const = lhs $ concl def
+        val cache = Redblackmap.insert(
+          !structured_list_cache, cache_key, const)
+        val () = structured_list_cache := cache
+      in
+        const
+      end
+  end
+
+  fun storage_keys_key keys = String.concatWith "," keys
+
+  fun mk_storage_keys_tm storageKeys =
+    if List.length storageKeys <= structured_list_threshold
+    then mk_list(List.map bytes32_from_hex storageKeys, bytes32_ty)
+    else let
+      val chunks = split_list_chunks storageKeys
+      fun mk_chunk keys =
+        cached_structured_list "storage_keys_chunk" (storage_keys_key keys)
+          bytes32_ty true
+          (mk_list(List.map bytes32_from_hex keys, bytes32_ty))
+      val chunk_tms = List.map mk_chunk chunks
+      val key = storage_keys_key storageKeys
+    in
+      cached_structured_list "storage_keys" key bytes32_ty false
+        (mk_flat_tm bytes32_ty chunk_tms)
+    end
+
   fun mk_access_list_entry_tm ({address, storageKeys}: access_list_entry) =
     TypeBase.mk_record(access_list_entry_ty, [
       ("account", address_from_hex address),
-      ("keys", mk_list (List.map bytes32_from_hex storageKeys, bytes32_ty))
+      ("keys", mk_storage_keys_tm storageKeys)
     ])
 
-  fun mk_access_list_tm ls = mk_list(List.map mk_access_list_entry_tm ls,
-                                     access_list_entry_ty)
+  fun access_list_entry_key ({address, storageKeys}: access_list_entry) =
+    address ^ ":" ^ storage_keys_key storageKeys
+
+  fun access_list_key entries =
+    String.concatWith ";" (List.map access_list_entry_key entries)
+
+  fun mk_access_list_tm entries =
+    if List.length entries <= structured_list_threshold
+    then mk_list(List.map mk_access_list_entry_tm entries,
+                 access_list_entry_ty)
+    else let
+      val chunks = split_list_chunks entries
+      fun mk_chunk entries =
+        cached_structured_list "access_list_chunk" (access_list_key entries)
+          access_list_entry_ty false
+          (mk_list(List.map mk_access_list_entry_tm entries,
+                   access_list_entry_ty))
+      val chunk_tms = List.map mk_chunk chunks
+      val key = access_list_key entries
+    in
+      cached_structured_list "access_list" key access_list_entry_ty false
+        (mk_flat_tm access_list_entry_ty chunk_tms)
+    end
 
   val authorization_ty =
     mk_thy_type{Thy="vfmTransaction",Tyop="authorization",Args=[]}
