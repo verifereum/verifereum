@@ -465,7 +465,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                 then optionSyntax.mk_none address_ty
                 else optionSyntax.mk_some (address_from_hex (#to tx))
     val from_tm = address_from_hex (#sender tx)
-    val data_tm = cached_bytes_from_hex $ #data tx
+    val data_tm = cached_flat_bytes_from_hex $ #data tx
     val nonce_tm = num_from_hex $ #nonce tx
     val value_tm = num_from_hex $ #value tx
     val gasLimit_tm = num_from_hex $ #gasLimit tx
