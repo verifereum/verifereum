@@ -38,9 +38,17 @@ structure byteStringCacheLib :> byteStringCacheLib = struct
         val chunk_size = Int.min(hex_chunk_size, remaining)
         val chunk = String.substring(hex, offset, chunk_size)
       in
-        split (offset + chunk_size) (cached_bytes_from_hex chunk :: acc)
+        split (offset + chunk_size) (chunk :: acc)
       end
-    val chunks = split 0 []
+    val chunk_strings = split 0 []
+    val () =
+      if List.all (fn chunk => String.size chunk mod 2 = 0) chunk_strings
+      then ()
+      else raise Fail "cached_byte_chunks_from_hex: partial-byte chunk"
+    val () =
+      if String.concat chunk_strings = hex then ()
+      else raise Fail "cached_byte_chunks_from_hex: reconstruction failed"
+    val chunks = List.map cached_bytes_from_hex chunk_strings
   in
     listSyntax.mk_list(chunks, bytes_ty)
   end
