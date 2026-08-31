@@ -26,15 +26,19 @@ structure byteStringCacheLib :> byteStringCacheLib = struct
   in const end
   end
 
-  (* Keep each generated HOL string and deep embedding to a moderate size.
-     The unit is hexadecimal characters, so this represents 8 KiB of bytes. *)
-  val hex_chunk_size = 2 * 8 * 1024
+  (* Ordinary inputs use larger chunks to limit per-constant overhead.  Very
+     large, repetitive values use smaller chunks so that local differences do
+     not prevent sharing of the surrounding content.  Sizes are hexadecimal
+     characters, hence twice the corresponding byte counts. *)
+  val regular_hex_chunk_size = 2 * 64 * 1024
+  val shared_hex_chunk_size = 2 * 8 * 1024
+  val large_hex_threshold = 2 * 1024 * 1024
 
   (* Small flat values do not benefit enough from an aggregate definition to
      justify its overhead. *)
   val flat_bytes_chunk_threshold = 2 * 64 * 1024
 
-  fun cached_byte_chunks_from_hex str = let
+  fun cached_byte_chunks_from_hex_with_size max_chunk_size str = let
     val hex = if String.isPrefix "0x" str
               then String.extract(str, 2, NONE) else str
     val size = String.size hex
@@ -42,7 +46,7 @@ structure byteStringCacheLib :> byteStringCacheLib = struct
       if offset = size then List.rev acc
       else let
         val remaining = size - offset
-        val chunk_size = Int.min(hex_chunk_size, remaining)
+        val chunk_size = Int.min(max_chunk_size, remaining)
         val chunk = String.substring(hex, offset, chunk_size)
       in
         split (offset + chunk_size) (chunk :: acc)
@@ -60,6 +64,16 @@ structure byteStringCacheLib :> byteStringCacheLib = struct
     listSyntax.mk_list(chunks, bytes_ty)
   end
 
+  fun cached_byte_chunks_from_hex str = let
+    val hex_size = String.size str -
+      (if String.isPrefix "0x" str then 2 else 0)
+    val chunk_size = if hex_size > large_hex_threshold
+                     then shared_hex_chunk_size
+                     else regular_hex_chunk_size
+  in
+    cached_byte_chunks_from_hex_with_size chunk_size str
+  end
+
   (* Preserve the ordinary flat byte-list type while keeping large source
      values compositional in their definitions and cv translations. *)
   fun cached_flat_bytes_from_hex str = let
@@ -75,7 +89,8 @@ structure byteStringCacheLib :> byteStringCacheLib = struct
           val n = Redblackmap.numItems $ !flat_bytestr_cache
           val name = "flat_bytestr_" ^ Int.toString n
           val var = mk_var(name, bytes_ty)
-          val chunks = cached_byte_chunks_from_hex hex
+          val chunks = cached_byte_chunks_from_hex_with_size
+            shared_hex_chunk_size hex
           val chunks_ty = listSyntax.mk_list_type bytes_ty
           val flat_tm = mk_thy_const{Name="FLAT", Thy="list",
                                      Ty=chunks_ty --> bytes_ty}
