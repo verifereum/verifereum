@@ -512,16 +512,16 @@ Definition transaction_from_rlp_def:
   else let bs = dest_RLPB rlp in
   if NULL bs then NONE else
   if HD bs = 1w then
-    case rlp_decode (TL bs) of NONE => NONE |
+    case rlp_decode_chunks [TL bs] of NONE => NONE |
     SOME rlp => transaction1_from_rlp rlp
   else if HD bs = 2w then
-    case rlp_decode (TL bs) of NONE => NONE |
+    case rlp_decode_chunks [TL bs] of NONE => NONE |
     SOME rlp => transaction2_from_rlp baseFee rlp
   else if HD bs = 3w then
-    case rlp_decode (TL bs) of NONE => NONE |
+    case rlp_decode_chunks [TL bs] of NONE => NONE |
     SOME rlp => transaction3_from_rlp baseFee rlp
   else if HD bs = 4w then
-    case rlp_decode (TL bs) of NONE => NONE |
+    case rlp_decode_chunks [TL bs] of NONE => NONE |
     SOME rlp => transaction4_from_rlp baseFee rlp
   else NONE
 End
