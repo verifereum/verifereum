@@ -3,7 +3,7 @@ minimum_version = "0.11.2"
 
 [project]
 name = "verifereum"
-version = "1.0.2"
+version = "1.0.3"
 
 [build]
 roots = ["verifereumScript.sml"]
@@ -19,7 +19,7 @@ objects = ["runtests"]
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "a390cbabd3a4521bab4ee20281e3e42933a8a3ae"
+rev = "e395eb6e69054ff6f7cef9d1107fd1a04dd5848f"
 
 [dependencies.holexamples]
 from = "hol"
