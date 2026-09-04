@@ -1,12 +1,11 @@
 structure vfmTestLib :> vfmTestLib = struct
 
-  open HolKernel vfmTestAuxLib vfmTestDefLib
+  open HolKernel JSONDecode vfmTestAuxLib vfmTestDefLib
 
   val fixtures_url_prefix = String.concat [
-    "https://github.com/ethereum/execution-spec-tests/releases/download/v",
+    "https://github.com/ethereum/execution-specs/releases/download/tests%40v",
     fixtures_version, "/" ]
-  val stable_tarball = "fixtures_stable.tar.gz"
-  val develop_tarball = "fixtures_develop.tar.gz"
+  val fixtures_tarball = "fixtures.tar.gz"
   val version_file = "version.txt"
 
   fun system_or_fail err s = let
@@ -31,15 +30,11 @@ structure vfmTestLib :> vfmTestLib = struct
        end handle Io _ => false
     then ()
     else let
-      val () = system_or_fail "curl_stable" $
-        String.concat["curl -LO ", fixtures_url_prefix ^ stable_tarball]
-      val () = system_or_fail "curl_develop" $
-        String.concat["curl -LO ", fixtures_url_prefix ^ develop_tarball]
+      val () = system_or_fail "curl_fixtures" $
+        String.concat["curl -fLO ", fixtures_url_prefix ^ fixtures_tarball]
       val () = system_or_fail "rm" "rm -fr fixtures"
-      val () = system_or_fail "tar_stable" $
-        String.concat ["tar -xzf ", stable_tarball]
-      val () = system_or_fail "tar_develop" $
-        String.concat ["tar -xzf ", develop_tarball]
+      val () = system_or_fail "tar_fixtures" $
+        String.concat ["tar -xzf ", fixtures_tarball]
       val out = TextIO.openOut (fixtures_path version_file)
       val () = TextIO.output(out, fixtures_version)
     in
@@ -76,14 +71,34 @@ structure vfmTestLib :> vfmTestLib = struct
     loop [start_path] []
   end
 
-  fun get_all_test_json_paths () = let
-    val fixtures = fixtures_path ""
-  in
-    fixtures_path "blockchain_tests"
-    |> collect_json_files_rec
-    |> List.map (fn path => OS.Path.mkRelative {path=path, relativeTo=fixtures})
+  val test_index_entry_decoder =
+    JSONDecode.map (fn (fork, format, json_path) =>
+      if fork = fork_name andalso format = "blockchain_test"
+      then SOME json_path
+      else NONE) $
+    tuple3 (field "fork" string,
+            field "format" string,
+            field "json_path" string)
+
+  val test_index_decoder =
+    field "test_cases" (array test_index_entry_decoder)
+
+  fun distinct_sorted [] = []
+    | distinct_sorted (x::xs) = let
+        fun loop _ [] = []
+          | loop previous (y::ys) =
+              if y = previous then loop previous ys
+              else y :: loop y ys
+      in
+        x :: loop x xs
+      end
+
+  fun get_all_test_json_paths () =
+    fixtures_path ".meta/index.json"
+    |> decodeFile test_index_decoder
+    |> List.mapPartial I
     |> sort string_less
-  end
+    |> distinct_sorted
 
   val padding = 4
   val test_defs_prefix = "vfmTestDefs"
