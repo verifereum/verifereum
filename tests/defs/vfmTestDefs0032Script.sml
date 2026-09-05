@@ -1,5 +1,5 @@
 Theory vfmTestDefs0032[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/cancun/eip4788_beacon_root/test_beacon_root_contract_timestamps.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/cancun/eip4788_beacon_root/test_beacon_root_contract_timestamps.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/byzantium/eip211_return_data/selfdestruct/selfdestruct_clears_return_data.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/byzantium/eip211_return_data/selfdestruct/selfdestruct_clears_return_data.json");
 val defs = mapi (define_test "0032") tests;

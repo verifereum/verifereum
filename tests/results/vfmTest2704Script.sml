@@ -1,8 +1,0 @@
-Theory vfmTest2704[no_sig_docs]
-Ancestors vfmTestDefs2704
-Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result2704_0.nsv", "result2704_1.nsv", "result2704_2.nsv"];
-val thyn = "vfmTestDefs2704";
-val defs = get_result_defs thyn;
-val () = vfmTestLib.remove_nsv_files thyn;
-val () = List.app (ignore o save_result_thm thyn) defs;
