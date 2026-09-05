@@ -1,5 +1,5 @@
 Theory vfmTestDefs2460[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stTimeConsuming/sstore_combinations_initial21_2_Paris.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stTimeConsuming/sstore_combinations_initial21_2_Paris.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/tangerine_whistle/eip150_operation_gas_costs/eip150_selfdestruct/selfdestruct_send_to_sender.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/tangerine_whistle/eip150_operation_gas_costs/eip150_selfdestruct/selfdestruct_send_to_sender.json");
 val defs = mapi (define_test "2460") tests;

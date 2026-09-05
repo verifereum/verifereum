@@ -1,5 +1,5 @@
 Theory vfmTestDefs2398[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stSystemOperationsTest/CallToNameRegistratorAddressTooBigLeft.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stSystemOperationsTest/CallToNameRegistratorAddressTooBigLeft.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip7702_set_code_tx/set_code_txs/set_code_to_account_deployed_in_same_tx.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip7702_set_code_tx/set_code_txs/set_code_to_account_deployed_in_same_tx.json");
 val defs = mapi (define_test "2398") tests;

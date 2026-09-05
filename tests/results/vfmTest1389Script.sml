@@ -1,7 +1,7 @@
 Theory vfmTest1389[no_sig_docs]
 Ancestors vfmTestDefs1389
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs [];
+val () = holbuild_extra_outputs ["result1389_0.nsv"];
 val thyn = "vfmTestDefs1389";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

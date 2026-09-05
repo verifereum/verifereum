@@ -1,5 +1,5 @@
 Theory vfmTestDefs0702[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stCallDelegateCodesCallCodeHomestead/callcodecallcode_11_SuicideEnd.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stCallDelegateCodesCallCodeHomestead/callcodecallcode_11_SuicideEnd.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stEIP150Specific/call_asks_more_gas_than_available/nested_frame_asks_more_gas_than_available.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stEIP150Specific/call_asks_more_gas_than_available/nested_frame_asks_more_gas_than_available.json");
 val defs = mapi (define_test "0702") tests;

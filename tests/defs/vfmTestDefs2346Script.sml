@@ -1,5 +1,5 @@
 Theory vfmTestDefs2346[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stStaticCall/static_callcodecallcodecall_ABCB_RECURSIVE.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stStaticCall/static_callcodecallcodecall_ABCB_RECURSIVE.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip7623_increase_calldata_cost/refunds/gas_refunds_from_data_floor.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip7623_increase_calldata_cost/refunds/gas_refunds_from_data_floor.json");
 val defs = mapi (define_test "2346") tests;
