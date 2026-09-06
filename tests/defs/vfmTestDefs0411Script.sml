@@ -1,5 +1,5 @@
 Theory vfmTestDefs0411[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/Cancun/stEIP4844_blobtransactions/opcodeBlobhashOutOfRange.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/Cancun/stEIP4844_blobtransactions/opcodeBlobhashOutOfRange.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCallCodes/callcodecallcallcode_101_ooge/callcodecallcallcode_101_ooge.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCallCodes/callcodecallcallcode_101_ooge/callcodecallcallcode_101_ooge.json");
 val defs = mapi (define_test "0411") tests;

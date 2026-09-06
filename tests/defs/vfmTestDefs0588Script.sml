@@ -1,5 +1,5 @@
 Theory vfmTestDefs0588[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stCallCodes/callcodecallcall_100_OOGMBefore.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stCallCodes/callcodecallcall_100_OOGMBefore.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCodeCopyTest/ext_code_copy_target_range_longer_than_code_tests/ext_code_copy_target_range_longer_than_code_tests.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCodeCopyTest/ext_code_copy_target_range_longer_than_code_tests/ext_code_copy_target_range_longer_than_code_tests.json");
 val defs = mapi (define_test "0588") tests;

@@ -1,5 +1,5 @@
 Theory vfmTestDefs0573[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stCallCodes/callcallcodecallcode_ABCB_RECURSIVE.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stCallCodes/callcallcodecallcode_ABCB_RECURSIVE.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCallDelegateCodesHomestead/callcodecallcode_11_suicide_end/callcodecallcode_11_suicide_end.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCallDelegateCodesHomestead/callcodecallcode_11_suicide_end/callcodecallcode_11_suicide_end.json");
 val defs = mapi (define_test "0573") tests;

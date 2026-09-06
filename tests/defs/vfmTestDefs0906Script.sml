@@ -1,5 +1,5 @@
 Theory vfmTestDefs0906[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/static/state_tests/stEIP150Specific/CallGoesOOGOnSecondLevel.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/static/state_tests/stEIP150Specific/CallGoesOOGOnSecondLevel.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stMemoryTest/mem0b_single_byte/mem0b_single_byte.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stMemoryTest/mem0b_single_byte/mem0b_single_byte.json");
 val defs = mapi (define_test "0906") tests;

@@ -1,7 +1,7 @@
 Theory vfmTest0870[no_sig_docs]
 Ancestors vfmTestDefs0870
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result0870_0.nsv"];
+val () = holbuild_extra_outputs ["result0870_0.nsv", "result0870_1.nsv"];
 val thyn = "vfmTestDefs0870";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

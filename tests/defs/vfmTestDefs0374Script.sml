@@ -1,5 +1,5 @@
 Theory vfmTestDefs0374[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/prague/eip7702_set_code_tx/test_set_code_using_chain_specific_id.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/prague/eip7702_set_code_tx/test_set_code_using_chain_specific_id.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCallCodes/callcallcallcode_001_suicide_middle/callcallcallcode_001_suicide_middle.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCallCodes/callcallcallcode_001_suicide_middle/callcallcallcode_001_suicide_middle.json");
 val defs = mapi (define_test "0374") tests;

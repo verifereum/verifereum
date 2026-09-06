@@ -1,7 +1,7 @@
 Theory vfmTest2462[no_sig_docs]
 Ancestors vfmTestDefs2462
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result2462_0.nsv"];
+val () = holbuild_extra_outputs ["result2462_0.nsv", "result2462_1.nsv", "result2462_2.nsv", "result2462_3.nsv", "result2462_4.nsv", "result2462_5.nsv", "result2462_6.nsv", "result2462_7.nsv", "result2462_8.nsv", "result2462_9.nsv", "result2462_10.nsv", "result2462_11.nsv", "result2462_12.nsv", "result2462_13.nsv", "result2462_14.nsv", "result2462_15.nsv", "result2462_16.nsv", "result2462_17.nsv", "result2462_18.nsv", "result2462_19.nsv", "result2462_20.nsv", "result2462_21.nsv", "result2462_22.nsv", "result2462_23.nsv", "result2462_24.nsv", "result2462_25.nsv", "result2462_26.nsv", "result2462_27.nsv", "result2462_28.nsv", "result2462_29.nsv", "result2462_30.nsv", "result2462_31.nsv", "result2462_32.nsv", "result2462_33.nsv", "result2462_34.nsv", "result2462_35.nsv", "result2462_36.nsv", "result2462_37.nsv", "result2462_38.nsv", "result2462_39.nsv", "result2462_40.nsv", "result2462_41.nsv", "result2462_42.nsv", "result2462_43.nsv", "result2462_44.nsv", "result2462_45.nsv", "result2462_46.nsv", "result2462_47.nsv", "result2462_48.nsv", "result2462_49.nsv", "result2462_50.nsv", "result2462_51.nsv", "result2462_52.nsv", "result2462_53.nsv", "result2462_54.nsv", "result2462_55.nsv", "result2462_56.nsv", "result2462_57.nsv", "result2462_58.nsv", "result2462_59.nsv", "result2462_60.nsv", "result2462_61.nsv", "result2462_62.nsv", "result2462_63.nsv"];
 val thyn = "vfmTestDefs2462";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
