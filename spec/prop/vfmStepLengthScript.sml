@@ -363,16 +363,6 @@ Proof
   >> irule psf_or_grow_ignore_bind >> simp[]
   >> qexists_tac `pco` >> simp[]
   >> conj_tac >- simp[assert_def]
-  >> irule psf_or_grow_ignore_bind >> simp[]
-  >> qexists_tac `pco` >> simp[]
-  >> conj_tac >- (
-    rpt strip_tac
-    >> qmatch_asmsub_abbrev_tac`access_address addr`
-    >> `preserves_same_frame (access_address addr)` by simp[]
-    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
-    >> disch_then drule >> rw[]
-    >> drule same_frame_rel_callee
-    >> gvs[Abbr`pco`])
   >> irule psf_or_grow_bind >> simp[] >>
   qexists_tac `λx s. pco s` >> simp[] >>
   conj_tac
@@ -424,6 +414,20 @@ Proof
     >> drule same_frame_rel_callee
     >> gvs[Abbr`pco`])
   >> gen_tac
+  >> irule psf_or_grow_cond >> conj_tac
+  >- (
+    (* abort_unuse branch: preserves_same_frame, trivially psf_or_grow *)
+    simp[])
+  >> irule psf_or_grow_ignore_bind >> simp[]
+  >> qexists_tac `pco` >> simp[]
+  >> conj_tac >- (
+    rpt strip_tac
+    >> qmatch_asmsub_abbrev_tac`access_address addr`
+    >> `preserves_same_frame (access_address addr)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
   >> irule psf_or_grow_ignore_bind >> simp[] >>
   qexists_tac `pco` >> simp[]
   >> conj_tac
@@ -435,10 +439,6 @@ Proof
     >> disch_then drule >> rw[]
     >> drule same_frame_rel_callee
     >> gvs[Abbr`pco`])
-  >> irule psf_or_grow_cond >> conj_tac
-  >- (
-    (* abort_unuse branch: preserves_same_frame, trivially psf_or_grow *)
-    simp[])
   >> irule psf_or_grow_cond >> conj_tac
   >- (
     (* abort_create_exists senderAddress: where senderAddress = head's callee *)
@@ -471,7 +471,8 @@ Theorem step_create_same_frame:
 Proof
   strip_tac
   >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> `same_frame_or_grow (step_create two)` by simp[]
+  >> `same_frame_or_grow (step_create two)` by
+       irule same_frame_or_grow_step_create
   >> pop_assum mp_tac >> rewrite_tac[same_frame_or_grow_def]
   >> disch_then drule >> rw[]
 QED
@@ -1033,17 +1034,18 @@ Proof
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
-  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
-  disch_then irule >> simp[] >>
-  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
-  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
-  disch_then irule >> simp[] >>
-  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   gvs[COND_RATOR,CaseEq"bool"]
   (* abort_unuse path: preserves_same_frame, can't grow *)
   >> TRY (
     drule_at(Pat`_ = (_,_)`)psf_imp_length_contexts_preserved >>
     simp[] >> NO_TAC ) >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  gvs[COND_RATOR,CaseEq"bool"] >>
   TRY (
     drule(REWRITE_RULE[length_preserves_def]
       length_preserves_abort_create_exists) >> gvs[] >> NO_TAC) >>

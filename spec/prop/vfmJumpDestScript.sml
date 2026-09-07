@@ -1667,6 +1667,14 @@ Proof
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  gvs[COND_RATOR] >>
+  qpat_x_assum`_ = (_,_)`mp_tac >>
+  IF_CASES_TAC >- (
+    strip_tac >>
+    drule(REWRITE_RULE[preserves_jumpDest_def]
+            preserves_jumpDest_abort_unuse) >>
+    rw[] ) >>
+  strip_tac >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1675,11 +1683,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[COND_RATOR] >>
   qpat_x_assum`_ = (_,_)`mp_tac >>
-  IF_CASES_TAC >- (
-    strip_tac >>
-    drule(REWRITE_RULE[preserves_jumpDest_def]
-            preserves_jumpDest_abort_unuse) >>
-    rw[] ) >>
   IF_CASES_TAC >- (
     strip_tac >>
     drule(REWRITE_RULE[preserves_jumpDest_def]

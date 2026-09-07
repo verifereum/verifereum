@@ -421,12 +421,12 @@ Proof
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
-  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> rpt (irule preserves_pushed_rb_storage_ignore_bind >> simp[])
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
-  >> rpt (irule preserves_pushed_rb_storage_ignore_bind >> simp[])
   >> irule preserves_pushed_rb_storage_cond >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_cond >> simp[]
 QED
 

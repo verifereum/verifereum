@@ -1561,9 +1561,12 @@ Proof
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_ignore_bind >> simp[] >>
+  irule preserves_storage_bind >> simp[] >> gen_tac >>
+  irule preserves_storage_ignore_bind >> simp[] >>
+  irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
-  rpt(irule preserves_storage_ignore_bind >> simp[])
+  irule preserves_storage_cond >> simp[]
 QED
 
 Theorem step_call_same_frame_preserves_storage:
