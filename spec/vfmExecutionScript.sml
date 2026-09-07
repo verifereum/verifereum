@@ -1057,6 +1057,7 @@ Definition step_self_destruct_def:
         update_account senderAddress (sender with balance := 0);
       add_to_delete senderAddress
     od else return ();
+    set_return_data [];
     finish
   od
 End
