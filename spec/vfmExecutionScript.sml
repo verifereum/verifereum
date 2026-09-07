@@ -1134,22 +1134,24 @@ Definition step_create_def:
                 then address_for_create2 senderAddress salt code
                 else address_for_create senderAddress nonce;
     assert (LENGTH code ≤ 2 * max_code_size) OutOfGas;
-    access_address address;
     gasLeft <- get_gas_left;
     cappedGas <<- gasLeft - gasLeft DIV 64;
     consume_gas cappedGas;
     assert_not_static;
     set_return_data [];
     sucDepth <- get_num_contexts;
-    ensure_storage_in_domain address;
-    toCreate <<- lookup_account address accounts;
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
        sucDepth > 1024
     then abort_unuse cappedGas
-    else if account_already_created toCreate
-    then abort_create_exists senderAddress
-    else proceed_create senderAddress address value code cappedGas
+    else do
+      access_address address;
+      ensure_storage_in_domain address;
+      toCreate <<- lookup_account address accounts;
+      if account_already_created toCreate
+      then abort_create_exists senderAddress
+      else proceed_create senderAddress address value code cappedGas
+    od
   od
 End
 
