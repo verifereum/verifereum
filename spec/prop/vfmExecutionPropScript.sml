@@ -2281,15 +2281,6 @@ Proof
   >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
   \\ qexists_tac`λs. accounts = s.rollback.accounts`
   \\ reverse conj_tac
-  >- (
-    rw[access_address_def, return_def, fail_def, domain_check_def]
-    \\ Cases_on`s.msdomain` \\ gs[]
-    \\ rw[set_domain_def, bind_def, ignore_bind_def, return_def] )
-  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
-  \\ reverse conj_tac
-  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
-  \\ qexists_tac`λs. accounts = s.rollback.accounts`
-  \\ reverse conj_tac
   >- rw[get_gas_left_def, return_def, get_current_context_def,
         bind_def, fail_def]
   \\ gen_tac
@@ -2327,6 +2318,18 @@ Proof
     rw[get_num_contexts_def, return_def, get_current_context_def, ignore_bind_def,
        bind_def, fail_def, assert_def, set_current_context_def, get_static_def])
   \\ gen_tac
+  \\ IF_CASES_TAC
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ simp[ignore_bind_def]
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- (
+    rw[access_address_def, return_def, fail_def, domain_check_def]
+    \\ Cases_on`s.msdomain` \\ gs[]
+    \\ rw[set_domain_def, bind_def, ignore_bind_def, return_def] )
   \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
   \\ reverse conj_tac
   >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
@@ -2336,8 +2339,6 @@ Proof
     rw[ensure_storage_in_domain_def, return_def, ignore_bind_def,
        bind_def, fail_def, assert_def, get_static_def, domain_check_def]
     \\ Cases_on`s.msdomain` \\ gs defs \\ rw[])
-  \\ IF_CASES_TAC
-  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
   \\ IF_CASES_TAC
   >- (
     simp[abort_create_exists_def]
@@ -3308,7 +3309,6 @@ Proof
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
-  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
@@ -3324,8 +3324,6 @@ Proof
   >- (
     irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[]
     \\ tac )
-  \\ simp[limits_num_contexts_reorder_ensure_storage]
-  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ irule limits_num_contexts_check
   \\ reverse conj_tac
   >- (
@@ -3336,6 +3334,8 @@ Proof
   \\ simp[Abbr`b4`]
   \\ `SUC n1 ≤ n` by gs[]
   \\ `n ≤ MIN (SUC n) 1026` by gs[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
   \\ IF_CASES_TAC
   >- (
     irule limits_num_contexts_mono

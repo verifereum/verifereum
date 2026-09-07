@@ -2772,22 +2772,20 @@ Theorem SPEC_Create_fail:
          addr = (if inst = Create2
                  then address_for_create2 p.callee salt code
                  else address_for_create p.callee sender.nonce) ∧
-         access_check d addr ∧
          LENGTH code ≤ 2 * max_code_size ∧
          gasLeft = p.gasLimit - g - gas ∧
          cappedGas = gasLeft - gasLeft DIV 64 ∧
          ¬p.static ∧
          (sender.balance < value ∨ SUC sender.nonce ≥ 2 ** 64 ∨
           SUC (LENGTH cs) > 1024) ∧
-         access_storage_check d addr ∧
          g + gas + cappedGas ≤ p.gasLimit))
   {(pc,inst)}
   (evm_Stack (b2w F :: DROP (if inst = Create2 then 4 else 3) ss) *
    evm_PC (SUC pc) *
    evm_GasUsed (g + gas) * evm_MsgParams p *
    evm_Exception (INL ()) * evm_ReturnData [] *
-   evm_Rollback (accesses_add addr rb) * evm_Memory em * evm_Contexts cs *
-   evm_Msdomain (msdomain_add_storage addr $ msdomain_add addr d))
+   evm_Rollback rb * evm_Memory em * evm_Contexts cs *
+   evm_Msdomain d)
 Proof
   qmatch_goalsub_abbrev_tac`~_ ∧ djs ∧ _`
   \\ qmatch_goalsub_abbrev_tac`em = _ ∧ is_create ∧ _`
@@ -2931,6 +2929,7 @@ Proof
          fail_def, assert_def, get_current_context_def,
          set_current_context_def, push_stack_def, inc_pc_def,
          inc_pc_or_jump_def]
+  \\ gvs[access_address_split, access_storage_split]
   \\ strip_tac
   \\ conj_tac >- simp[Abbr`cappedGas`,Abbr`gasLeft`]
   \\ conj_tac >-
@@ -3047,6 +3046,7 @@ Proof
          HD_TAKE, proceed_create_def,
          update_accounts_def, get_rollback_def, get_original_def,
          set_original_def, push_context_def, inc_pc_or_jump_def]
+  \\ gvs[access_address_split, access_storage_split]
   \\ strip_tac
   \\ conj_tac >- gvs[Abbr`cappedGas`,Abbr`gasLeft`]
   \\ conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]

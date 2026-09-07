@@ -1629,36 +1629,42 @@ Theorem step_create_lemma:
   do
     _ <- set_return_data [];
     sucDepth <- get_num_contexts;
-    _ <- ensure_storage_in_domain v4;
-    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else if b3 then m2 else
-    proceed_create senderAddress address value code cappedGas
+    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else do
+      _ <- access_address v4;
+      _ <- ensure_storage_in_domain v4;
+      if b3 then m2 else
+      proceed_create senderAddress address value code cappedGas
+    od
   od = do
     _ <- set_return_data [];
     sucDepth <- get_num_contexts;
-    _ <- ensure_storage_in_domain v4;
-    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else if b3 then m2 else do
-      _ <- update_accounts $ increment_nonce senderAddress;
-      subContextTx <<- <|
-          from     := senderAddress
-        ; to       := SOME address
-        ; value    := value
-        ; gasLimit := cappedGas
-        ; data     := []
-        (* unused: for concreteness *)
-        ; nonce := 0; gasPrice := 0; accessList := []
-        ; blobVersionedHashes := []
-        ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
-        ; authorizationList := []
-      |>;
-      rollback <- get_rollback;
-      original <- get_original;
-      set_original $ update_account address empty_account_state original;
-      _ <- update_accounts $
-        transfer_value senderAddress address value o
-        increment_nonce address;
-      _ <- get_static;
-      push_context $
-        (initial_context address code F (Code address) subContextTx, rollback)
+    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else do
+      _ <- access_address v4;
+      _ <- ensure_storage_in_domain v4;
+      if b3 then m2 else do
+        _ <- update_accounts $ increment_nonce senderAddress;
+        subContextTx <<- <|
+            from     := senderAddress
+          ; to       := SOME address
+          ; value    := value
+          ; gasLimit := cappedGas
+          ; data     := []
+          (* unused: for concreteness *)
+          ; nonce := 0; gasPrice := 0; accessList := []
+          ; blobVersionedHashes := []
+          ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+          ; authorizationList := []
+        |>;
+        rollback <- get_rollback;
+        original <- get_original;
+        set_original $ update_account address empty_account_state original;
+        _ <- update_accounts $
+          transfer_value senderAddress address value o
+          increment_nonce address;
+        _ <- get_static;
+        push_context $
+          (initial_context address code F (Code address) subContextTx, rollback)
+      od
     od
   od
 Proof
@@ -1743,7 +1749,6 @@ Proof
   \\ simp[ignore_bind_def]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ qpat_abbrev_tac `v4 = COND a b c`
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
   \\ simp[GSYM ignore_bind_def]
   \\ irule decreases_gas_cred_consume_gas_debit_more
@@ -1756,9 +1761,10 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ IF_CASES_TAC
   >- ( irule decreases_gas_cred_abort_unuse \\ simp[] )
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ IF_CASES_TAC
   >- (
     irule decreases_gas_imp \\ rw[]

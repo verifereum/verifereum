@@ -421,12 +421,12 @@ Proof
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
-  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> rpt (irule preserves_pushed_rb_storage_ignore_bind >> simp[])
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
-  >> rpt (irule preserves_pushed_rb_storage_ignore_bind >> simp[])
   >> irule preserves_pushed_rb_storage_cond >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_cond >> simp[]
 QED
 
@@ -668,42 +668,52 @@ Proof
   >> `same_frame_rel s s8` by metis_tac[same_frame_rel_trans]
   >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel access_address *)
+  (* Peel get_gas_left *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel s8 s9`
   >> `same_frame_rel s s9` by metis_tac[same_frame_rel_trans]
   >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel get_gas_left *)
+  (* Peel consume_gas (cappedGas) *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel s9 s0`
   >> `same_frame_rel s s0` by metis_tac[same_frame_rel_trans]
   >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel consume_gas (cappedGas) *)
+  (* Peel assert_not_static *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel s0 sa`
   >> `same_frame_rel s sa` by metis_tac[same_frame_rel_trans]
   >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel assert_not_static *)
+  (* Peel set_return_data *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel sa sb`
   >> `same_frame_rel s sb` by metis_tac[same_frame_rel_trans]
   >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel set_return_data *)
+  (* Peel get_num_contexts *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel sb sc`
   >> `same_frame_rel s sc` by metis_tac[same_frame_rel_trans]
   >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel get_num_contexts *)
+  (* Split the preliminary failure condition. *)
+  >> gvs[COND_RATOR]
+  >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
+  >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
+  >> IF_CASES_TAC
+  >- ((* abort_unuse: preserves_same_frame, can't grow *)
+      strip_tac >>
+      drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
+      >> simp[])
+  >> strip_tac
+  (* Peel access_address *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel sc sd`
@@ -717,15 +727,10 @@ Proof
   >> `same_frame_rel s se` by metis_tac[same_frame_rel_trans]
   >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Now at the conditional *)
-  >> gvs[Ntimes COND_RATOR 2]
+  (* Now at the collision conditional. *)
+  >> gvs[COND_RATOR]
   >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
   >> qpat_x_assum`COND bbb _ _ = _`mp_tac
-  >> IF_CASES_TAC
-  >- ((* abort_unuse: preserves_same_frame, can't grow *)
-      strip_tac >>
-      drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
-      >> simp[])
   >> IF_CASES_TAC
   >- ((* abort_create_exists: length_preserves, can't grow *)
       strip_tac >>
@@ -1362,20 +1367,12 @@ Proof
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s8.contexts)).stack < stack_limit` by gvs[]
-    (* Peel access_address *)
-    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 s9`
-    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> `LENGTH (FST (HD s9.contexts)).stack < stack_limit` by gvs[]
     (* Peel get_gas_left *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s9 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+    >> rename1`same_frame_rel s8 s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s0.contexts)).stack < stack_limit` by gvs[]
     (* Peel consume_gas (cappedGas) *)
@@ -1410,19 +1407,32 @@ Proof
     >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sc.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD sd.contexts)).stack < stack_limit` by gvs[]
+    (* Split the preliminary failure condition. *)
+    >> gvs[COND_RATOR]
+    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
+    >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
+    >> IF_CASES_TAC
+    >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
+    >> strip_tac
+    (* Peel access_address *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sd sx`
+    >> `sx.contexts ≠ [] ∧ LENGTH sx.contexts = LENGTH sd.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD sx.contexts)).stack < stack_limit` by gvs[]
     (* Peel ensure_storage_in_domain *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sd se`
-    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sd.contexts`
+    >> rename1`same_frame_rel sx se`
+    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sx.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD se.contexts)).stack < stack_limit` by gvs[]
-    >> gvs[Ntimes COND_RATOR 2]
+    >> gvs[COND_RATOR]
     >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> qpat_x_assum`COND bbb _ _ = _`mp_tac
-    >> IF_CASES_TAC
-    >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> IF_CASES_TAC
     >- (strip_tac >> drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists) >> simp[])
     >> strip_tac
@@ -1650,20 +1660,12 @@ Proof
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s8.contexts)).gasUsed` by decide_tac
-    (* access_address *)
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 s9`
-    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s9.contexts)).gasUsed` by decide_tac
     (* get_gas_left *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s9 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+    >> rename1`same_frame_rel s8 s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s0.contexts)).gasUsed` by decide_tac
     (* consume_gas cappedGas *)
@@ -1698,19 +1700,32 @@ Proof
     >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sc.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sd.contexts)).gasUsed` by decide_tac
+    (* Split the preliminary failure condition. *)
+    >> gvs[COND_RATOR]
+    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
+    >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
+    >> IF_CASES_TAC
+    >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
+    >> strip_tac
+    (* access_address *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sd sx`
+    >> `sx.contexts ≠ [] ∧ LENGTH sx.contexts = LENGTH sd.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sx.contexts)).gasUsed` by decide_tac
     (* ensure_storage_in_domain *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sd se`
-    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sd.contexts`
+    >> rename1`same_frame_rel sx se`
+    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sx.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD se.contexts)).gasUsed` by decide_tac
-    >> gvs[Ntimes COND_RATOR 2]
+    >> gvs[COND_RATOR]
     >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> qpat_x_assum`COND bbb _ _ = _`mp_tac
-    >> IF_CASES_TAC
-    >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> IF_CASES_TAC
     >- (strip_tac >> drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists) >> simp[])
     >> strip_tac
@@ -2038,19 +2053,12 @@ Proof
     >> rename1`same_frame_rel s7 s8`
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
-    (* access_address *)
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 s9`
-    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
     (* get_gas_left *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s9 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+    >> rename1`same_frame_rel s8 s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     (* consume_gas cappedGas: this is the key additive-reservation point. *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
@@ -2085,18 +2093,30 @@ Proof
     >> rename1`same_frame_rel sc sd`
     >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sc.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* Split the preliminary failure condition. *)
+    >> gvs[COND_RATOR]
+    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
+    >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
+    >> IF_CASES_TAC
+    >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
+    >> strip_tac
+    (* access_address *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sd sx`
+    >> `sx.contexts ≠ [] ∧ LENGTH sx.contexts = LENGTH sd.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
     (* ensure_storage_in_domain *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sd se`
-    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sd.contexts`
+    >> rename1`same_frame_rel sx se`
+    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sx.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> gvs[Ntimes COND_RATOR 2]
+    >> gvs[COND_RATOR]
     >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> qpat_x_assum`COND bbb _ _ = _`mp_tac
-    >> IF_CASES_TAC
-    >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> IF_CASES_TAC
     >- (strip_tac >> drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists) >> simp[])
     >> strip_tac

@@ -2438,6 +2438,7 @@ Proof
     \\ gvs[]
     \\ rpt (irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac)
     \\ IF_CASES_TAC \\ simp[]
+    \\ rpt (irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac)
     \\ qmatch_goalsub_abbrev_tac`account_already_created la1`
     \\ qmatch_abbrev_tac`lhs = _`
     \\ qmatch_goalsub_abbrev_tac`account_already_created la2`
@@ -2463,7 +2464,8 @@ Proof
       \\ `toCreate ∈ toSet d.addresses`
       by (
         gvs[access_address_def, return_def, fail_def, CaseEq"prod",
-            CaseEq"bool", fIN_IN, domain_check_def] )
+            CaseEq"bool", CaseEq"domain_mode", fIN_IN, domain_check_def,
+            set_domain_def, bind_def, ignore_bind_def] )
       \\ gs[])
     \\ gs[] )
   \\ gen_tac
@@ -3594,15 +3596,15 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ simp[ignore_bind_def]
-  \\ irule preserves_domain_has_callee_access_address_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_bind \\ simp[]
-  \\ qpat_abbrev_tac`b0 = COND _ _ _`
+  \\ qpat_abbrev_tac`address = COND x _ _`
   \\ IF_CASES_TAC >- rw[]
+  \\ irule preserves_domain_has_callee_access_address_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ IF_CASES_TAC >- rw[]
   \\ irule preserves_domain_has_callee_proceed_create
   \\ rw[]
@@ -3615,6 +3617,7 @@ Theorem step_inst_preserves_domain_has_callee[simp]:
 Proof
   Cases_on`op` \\ rw[step_inst_def]
   \\ TRY (irule preserves_domain_has_callee_ignore_bind \\ rw[])
+  \\ TRY (irule preserves_domain_has_callee_step_create \\ rw[])
   \\ TRY (irule preserves_domain_has_callee_step_copy_to_memory \\ rw[])
 QED
 
