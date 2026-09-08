@@ -153,6 +153,12 @@ Proof
   \\ CASE_TAC \\ gvs[]
 QED
 
+Definition valid_transaction_s_def:
+  valid_transaction_s s ⇔ 0 < s ∧ s ≤ secp256k1N DIV 2
+End
+
+val () = cv_auto_trans valid_transaction_s_def;
+
 Definition verify_tx_signature_def:
   verify_tx_signature (prefix_byte:word8) txLs yParityRlp rRlp sRlp =
   if ¬is_RLPB yParityRlp then NONE else
@@ -161,6 +167,7 @@ Definition verify_tx_signature_def:
   let r = num_of_be_bytes $ dest_RLPB rRlp in
   if ¬is_RLPB sRlp then NONE else
   let s = num_of_be_bytes $ dest_RLPB sRlp in
+  if ¬valid_transaction_s s then NONE else
   let hash = word_of_bytes T 0w $ Keccak_256_w64 $
     prefix_byte :: rlp_encode (RLPL txLs) in
   ecrecover hash (yParity + 27) r s
@@ -488,6 +495,7 @@ Definition transaction_from_rlp_def:
     let v = num_of_be_bytes $ dest_RLPB $ EL 6 ls in
     let r = num_of_be_bytes $ dest_RLPB $ EL 7 ls in
     let s = num_of_be_bytes $ dest_RLPB $ EL 8 ls in
+    if ¬valid_transaction_s s then NONE else
     let txLs = [nonce; gasPrice; gas; toRlp; value; data] in
     let (txLs, v) = if v = 27 ∨ v = 28 then (txLs, v)
                     else (txLs ++ (MAP rlp_number [1; 0; 0]), v - 10) in
