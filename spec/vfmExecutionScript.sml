@@ -1041,6 +1041,7 @@ Definition step_self_destruct_def:
     address <<- w2w $ EL 0 args;
     accessCost <- access_address address;
     senderAddress <- get_callee;
+    set_return_data [];
     accounts <- get_accounts;
     sender <<- lookup_account senderAddress accounts;
     balance <<- sender.balance;
@@ -1057,7 +1058,6 @@ Definition step_self_destruct_def:
         update_account senderAddress (sender with balance := 0);
       add_to_delete senderAddress
     od else return ();
-    set_return_data [];
     finish
   od
 End

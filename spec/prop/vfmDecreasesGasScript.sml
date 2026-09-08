@@ -1822,6 +1822,8 @@ Proof
   \\ irule_at Any decreases_gas_access_address_bind \\ rw []
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_callee \\ rw []
+  \\ irule_at Any decreases_gas_ignore_bind_right
+  \\ irule_at Any decreases_gas_set_return_data \\ rw []
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_accounts \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right
@@ -1832,19 +1834,11 @@ Proof
   \\ irule_at Any decreases_gas_update_accounts \\ rw []
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_original \\ simp [] \\ gen_tac
+  \\ irule_at Any decreases_gas_ignore_bind_right \\ reverse (rw [])
+  >- irule_at Any decreases_gas_return
   \\ irule_at Any decreases_gas_ignore_bind_right
-  \\ conj_tac
-  >- (Cases_on `account_empty (lookup_account x'' x)`
-      >- (simp []
-          \\ irule_at Any decreases_gas_ignore_bind_right
-          \\ irule_at Any decreases_gas_update_accounts \\ rw []
-          \\ irule_at Any decreases_gas_add_to_delete)
-      \\ simp []
-      \\ irule_at Any decreases_gas_return)
-  \\ irule_at Any decreases_gas_ignore_bind_right
-  \\ conj_tac
-  >- irule_at Any decreases_gas_set_return_data
-  \\ irule_at Any decreases_gas_finish
+  \\ irule_at Any decreases_gas_update_accounts \\ rw []
+  \\ irule_at Any decreases_gas_add_to_delete
 QED
 
 Theorem decreases_gas_get_current_code[simp]:

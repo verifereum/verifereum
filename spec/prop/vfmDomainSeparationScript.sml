@@ -1586,6 +1586,14 @@ Proof
   \\ simp[]
   \\ qx_gen_tac`senderAddress`
   \\ simp[]
+  \\ once_rewrite_tac[ignore_bind_def]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac
+  >- (rw[set_return_data_def, get_current_context_def, bind_def, return_def,
+         fail_def, set_current_context_def]
+      \\ Cases_on`s.contexts` \\ gvs[]
+      \\ Cases_on`h` \\ gvs[])
   \\ simp[SIMP_RULE(srw_ss())[LET_THM, AC ADD_ASSOC ADD_COMM]self_destruct_helper]
   \\ irule get_accounts_ignore_extra_domain_pred_bind
   \\ simp[]
@@ -2482,6 +2490,7 @@ Proof
   Cases_on`op` \\ rw[step_inst_def]
   \\ TRY (irule ignores_extra_domain_pred_imp \\ simp[] \\ tac \\ NO_TAC)
   \\ TRY $ irule step_self_balance_ignore_extra_domain
+  \\ TRY $ irule step_self_destruct_ignores_extra_domain
   \\ TRY $ irule step_create_ignores_extra_domain
   \\ TRY $ irule step_call_ignores_extra_domain
 QED
@@ -3164,6 +3173,7 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
@@ -3617,6 +3627,7 @@ Theorem step_inst_preserves_domain_has_callee[simp]:
 Proof
   Cases_on`op` \\ rw[step_inst_def]
   \\ TRY (irule preserves_domain_has_callee_ignore_bind \\ rw[])
+  \\ TRY (irule preserves_domain_has_callee_step_self_destruct \\ rw[])
   \\ TRY (irule preserves_domain_has_callee_step_create \\ rw[])
   \\ TRY (irule preserves_domain_has_callee_step_copy_to_memory \\ rw[])
 QED

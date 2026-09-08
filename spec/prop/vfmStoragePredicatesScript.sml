@@ -669,6 +669,11 @@ Proof
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
+  irule preserves_storage_ignore_bind >>
+  conj_tac
+  >- (rw[preserves_storage_def, set_return_data_def, get_current_context_def,
+         bind_def, return_def, fail_def, set_current_context_def] >>
+      gvs[AllCaseEqs()]) >>
   simp[preserves_storage_def, bind_def] >> rpt gen_tac >>
   simp[AllCaseEqs()] >> rpt strip_tac >> gvs[get_accounts_def, return_def] >>
   rename1`consume_gas n` >>
