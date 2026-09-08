@@ -153,6 +153,12 @@ Proof
   \\ CASE_TAC \\ gvs[]
 QED
 
+Definition valid_transaction_s_def:
+  valid_transaction_s s ⇔ 0 < s ∧ s ≤ secp256k1N DIV 2
+End
+
+val () = cv_auto_trans valid_transaction_s_def;
+
 Definition verify_tx_signature_def:
   verify_tx_signature (prefix_byte:word8) txLs yParityRlp rRlp sRlp =
   if ¬is_RLPB yParityRlp then NONE else
@@ -161,6 +167,7 @@ Definition verify_tx_signature_def:
   let r = num_of_be_bytes $ dest_RLPB rRlp in
   if ¬is_RLPB sRlp then NONE else
   let s = num_of_be_bytes $ dest_RLPB sRlp in
+  if ¬valid_transaction_s s then NONE else
   let hash = word_of_bytes T 0w $ Keccak_256_w64 $
     prefix_byte :: rlp_encode (RLPL txLs) in
   ecrecover hash (yParity + 27) r s
@@ -219,7 +226,8 @@ Definition transaction1_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 11 then NONE else
-  (* chain_id: U64 *)
+  let chainIdRlp = EL 0 ls in
+  if chainIdRlp ≠ rlp_number 1 then NONE else
   let nonceRlp = EL 1 ls in
   if ¬is_RLPB nonceRlp then NONE else
   let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
@@ -246,7 +254,7 @@ Definition transaction1_from_rlp_def:
   of NONE => NONE |
   SOME accessList =>
   let txLs = [
-    rlp_number 1; nonceRlp; gasPriceRlp; gasRlp; toRlp;
+    chainIdRlp; nonceRlp; gasPriceRlp; gasRlp; toRlp;
     valueRlp; dataRlp; accessListRlp ] in
   case verify_tx_signature 1w txLs (EL 8 ls) (EL 9 ls) (EL 10 ls)
   of NONE => NONE |
@@ -276,6 +284,7 @@ Theorem transaction1_from_rlp_pre[cv_pre]:
   transaction1_from_rlp_pre x
 Proof
   rw[transaction1_from_rlp_pre_def]
+  >> strip_tac >> gvs[]
 QED
 
 Definition transaction2_from_rlp_def:
@@ -283,10 +292,12 @@ Definition transaction2_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 12 then NONE else
+  let chainIdRlp = EL 0 ls in
+  if chainIdRlp ≠ rlp_number 1 then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   let txLs = [
-    rlp_number 1; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
+    chainIdRlp; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
     EL 5 ls; EL 6 ls; EL 7 ls; EL 8 ls ] in
   case verify_tx_signature 2w txLs (EL 9 ls) (EL 10 ls) (EL 11 ls)
   of NONE => NONE |
@@ -315,6 +326,7 @@ Theorem transaction2_from_rlp_pre[cv_pre]:
   transaction2_from_rlp_pre bf x
 Proof
   rw[transaction2_from_rlp_pre_def]
+  >> strip_tac >> gvs[]
 QED
 
 Definition transaction3_from_rlp_def:
@@ -322,6 +334,8 @@ Definition transaction3_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 14 then NONE else
+  let chainIdRlp = EL 0 ls in
+  if chainIdRlp ≠ rlp_number 1 then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   let maxBlobFeeRlp = EL 9 ls in
@@ -334,7 +348,7 @@ Definition transaction3_from_rlp_def:
   if ¬(EVERY is_RLPB blobHashes) then NONE else
   let blobHashes = MAP (word_of_bytes T 0w o dest_RLPB) blobHashes in
   let txLs = [
-    rlp_number 1; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
+    chainIdRlp; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
     EL 5 ls; EL 6 ls; EL 7 ls; EL 8 ls;
     maxBlobFeeRlp; blobHashesRlp ] in
   case verify_tx_signature 3w txLs (EL 11 ls) (EL 12 ls) (EL 13 ls)
@@ -364,6 +378,7 @@ Theorem transaction3_from_rlp_pre[cv_pre]:
   transaction3_from_rlp_pre bf x
 Proof
   rw[transaction3_from_rlp_pre_def]
+  >> strip_tac >> gvs[]
 QED
 
 Definition authorization_from_rlp_def:
@@ -430,6 +445,8 @@ Definition transaction4_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 13 then NONE else
+  let chainIdRlp = EL 0 ls in
+  if chainIdRlp ≠ rlp_number 1 then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   (* destination cannot be null in type 4 *)
@@ -442,7 +459,7 @@ Definition transaction4_from_rlp_def:
   of NONE => NONE |
   SOME authList =>
   let txLs = [
-    rlp_number 1; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
+    chainIdRlp; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
     EL 5 ls; EL 6 ls; EL 7 ls; EL 8 ls; authListRlp ] in
   case verify_tx_signature 4w txLs (EL 10 ls) (EL 11 ls) (EL 12 ls)
   of NONE => NONE |
@@ -471,6 +488,7 @@ Theorem transaction4_from_rlp_pre[cv_pre]:
   transaction4_from_rlp_pre bf x
 Proof
   rw[transaction4_from_rlp_pre_def]
+  >> strip_tac >> gvs[]
 QED
 
 Definition transaction_from_rlp_def:
@@ -488,6 +506,7 @@ Definition transaction_from_rlp_def:
     let v = num_of_be_bytes $ dest_RLPB $ EL 6 ls in
     let r = num_of_be_bytes $ dest_RLPB $ EL 7 ls in
     let s = num_of_be_bytes $ dest_RLPB $ EL 8 ls in
+    if ¬valid_transaction_s s then NONE else
     let txLs = [nonce; gasPrice; gas; toRlp; value; data] in
     let (txLs, v) = if v = 27 ∨ v = 28 then (txLs, v)
                     else (txLs ++ (MAP rlp_number [1; 0; 0]), v - 10) in
