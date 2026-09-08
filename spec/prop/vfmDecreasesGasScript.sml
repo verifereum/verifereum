@@ -1822,6 +1822,8 @@ Proof
   \\ irule_at Any decreases_gas_access_address_bind \\ rw []
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_callee \\ rw []
+  \\ irule_at Any decreases_gas_ignore_bind_right
+  \\ irule_at Any decreases_gas_set_return_data \\ rw []
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_accounts \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right
@@ -1856,6 +1858,7 @@ Proof
     \\ irule_at Any decreases_gas_set_return_data)
   >- (irule decreases_gas_mono
     \\ irule_at Any decreases_gas_consume_gas \\ rw [])
+  \\ irule decreases_gas_step_self_destruct
 QED
 
 Theorem decreases_gas_cred_step_inner:

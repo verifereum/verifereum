@@ -2236,6 +2236,7 @@ QED
      pop_stack 1                    -- preserves_same_frame
      access_address address         -- preserves_same_frame
      senderAddress <- get_callee;
+     set_return_data []             -- preserves_same_frame
      accounts <- get_accounts;
      consume_gas ...                -- preserves_same_frame
      assert_not_static              -- preserves_same_frame
@@ -2258,6 +2259,14 @@ Proof
   \\ irule psf_bind >> simp[]
   >> qexists_tac`K (K T)` >> simp[] >> gen_tac
   >> irule psf_bind_get_callee >> simp[] >> qx_gen_tac`callee`
+  >> irule psf_ignore_bind >> simp[]
+  >> qexists_tac`λs. callee = (FST (HD s.contexts)).msgParams.callee ∧
+                         s.contexts ≠ []`
+  >> conj_tac
+  >- (rw[set_return_data_def, get_current_context_def, bind_def, return_def,
+         fail_def, set_current_context_def]
+      >> Cases_on`s.contexts` >> gvs[]
+      >> Cases_on`h` >> gvs[])
   >> irule psf_bind_get_accounts >> simp[] >> qx_gen_tac`accounts`
   \\ irule psf_ignore_bind >> simp[]
   \\ qabbrev_tac`acc = lookup_account callee accounts`
