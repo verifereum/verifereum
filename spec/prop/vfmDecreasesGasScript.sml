@@ -2141,6 +2141,58 @@ Proof
   \\ rw[Once WhileTheory.OWHILE_THM]
 QED
 
+(* run_call_tr follows the same step sequence as run_tr.  If it stops
+   because the current frame returned, run_tr resumes from that state;
+   if it stops with an exception, run_tr has reached the same result. *)
+Theorem run_call_tr_imp_run_tr:
+  ∀n r s r' s'.
+    run_call_tr n (r, s) = (r', s') ⇒
+    case r' of
+    | INL () => run_tr (r, s) = run_tr (step s')
+    | INR e => run_tr (r, s) = (e, s')
+Proof
+  ho_match_mp_tac run_call_tr_ind
+  >> rpt gen_tac >> strip_tac
+  >> rpt gen_tac
+  >> simp[Once run_call_tr_def]
+  >> simp[AllCaseEqs()]
+  >> strip_tac >> gvs[]
+  \\ simp[Once run_tr_def]
+  >> CASE_TAC >> gvs[]
+  \\ simp[Once run_tr_def]
+QED
+
+Theorem run_call_imp_run:
+  run_call es = SOME (r, es') ⇒
+  case r of
+  | INL () => run es = run es'
+  | INR e => run es = SOME (INR e, es')
+Proof
+  strip_tac
+  \\ gvs[run_call_eq_tr]
+  >> Cases_on`step es` >> gvs[]
+  \\ drule run_call_tr_imp_run_tr
+  \\ Cases_on `r` \\ gvs[run_eq_tr]
+QED
+
+Theorem run_after_run_call:
+  run_call es = SOME (INL (), es') ⇒
+  run es = run es'
+Proof
+  strip_tac
+  \\ drule run_call_imp_run
+  \\ simp[]
+QED
+
+Theorem run_call_inr_imp_run:
+  run_call es = SOME (INR e, es') ⇒
+  run es = SOME (INR e, es')
+Proof
+  strip_tac
+  \\ drule run_call_imp_run
+  \\ simp[]
+QED
+
 Definition run_within_frame_tr_def:
   run_within_frame_tr n (r, s) =
     case r of
