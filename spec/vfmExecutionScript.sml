@@ -1887,9 +1887,9 @@ End
 Definition update_beacon_block_def:
   update_beacon_block prevHashes b (accounts: evm_accounts) =
   let beacon_addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
-  let buffer_length = 8191n in
-  let timestamp_idx = b.timeStamp MOD buffer_length in
-  let root_idx = timestamp_idx + buffer_length in
+  let beacon_buffer_length = 8191n in
+  let timestamp_idx = b.timeStamp MOD beacon_buffer_length in
+  let root_idx = timestamp_idx + beacon_buffer_length in
   let a = lookup_account beacon_addr accounts in
   let s0 = a.storage in
   let s1 = update_storage (n2w timestamp_idx) (n2w b.timeStamp) s0 in
@@ -1897,7 +1897,8 @@ Definition update_beacon_block_def:
   let accounts1 = update_account beacon_addr (a with storage := s2) accounts in
   if b.number = 0 ∨ prevHashes = [] then accounts1 else
   let blockhash_addr = 0x0000F90827F1C53a10cb7A02335B175320002935w in
-  let slot = (b.number - 1) MOD buffer_length in
+  let blockhash_buffer_length = 8192n in
+  let slot = (b.number - 1) MOD blockhash_buffer_length in
   let parent_hash = HD prevHashes in
   let a2 = lookup_account blockhash_addr accounts1 in
   let s3 = update_storage (n2w slot) parent_hash a2.storage in
