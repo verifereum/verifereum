@@ -19,7 +19,7 @@ objects = ["runtests"]
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "dc7c8919677fc57677a6b406a5d573fc0e605d8b"
+rev = "6e790ab5af08da2e4e39543bc10f4ceafb99faca"
 
 [dependencies.holexamples]
 from = "hol"
