@@ -1,7 +1,7 @@
 Theory vfmTestRun
-Ancestors pair sorting byte sum words cv_type
+Ancestors pair sorting byte sum words cv_type cv_std
   vfmTypes vfmExecution vfmState vfmContext
-  vfmOperation vfmCompute vfmBlockDecode
+  vfmOperation vfmCompute vfmBlockDecode vfmRoot
 Libs
   wordsLib permLib cv_transLib dep_rewrite
 
@@ -83,8 +83,11 @@ Proof
   \\ gvs[block_component_equality]
 QED
 
-Definition run_test_def:
-  run_test
+(* run_test with the genesis state root supplied by the caller, so a root
+   proved once can be shared by every test with the same pre-state. *)
+Definition run_test_with_root_def:
+  run_test_with_root
+    preStateRootBytes
     preState
     genesisRLP
     genesisBlock
@@ -100,8 +103,7 @@ Definition run_test_def:
     SOME decodedGenesisBlock =>
     if decodedGenesisBlock with hash := genesisBlock.hash <> genesisBlock
     then GenesisBlockDecodeMismatch
-    else let preStateRootBytes = state_root preState in
-    let preStateRoot = word_of_bytes T 0w preStateRootBytes in
+    else let preStateRoot = word_of_bytes T 0w preStateRootBytes in
     if preStateRoot ≠ genesisBlock.stateRoot
     then GenesisHeaderMismatch preStateRoot
     else run_test_blocks lastBlockHash postState
@@ -110,4 +112,115 @@ Definition run_test_def:
 End
 
 val () = cv_auto_trans $
-  REWRITE_RULE[GSYM word_of_bytes_be_def] run_test_def;
+  REWRITE_RULE[GSYM word_of_bytes_be_def] run_test_with_root_def;
+
+Definition run_test_def:
+  run_test
+    preState
+    genesisRLP
+    genesisBlock
+    blocks
+    lastBlockHash
+    postState
+  =
+    run_test_with_root (state_root preState)
+      preState genesisRLP genesisBlock blocks lastBlockHash postState
+End
+
+val () = cv_auto_trans run_test_def;
+
+(* state_root with storage roots and code hashes looked up in tables of
+   already-proved values. Each table entry only has to be correct, not
+   complete: a missing entry falls back to computing the value. *)
+
+Definition memo_storage_root_def:
+  memo_storage_root [] s = storage_root s ∧
+  memo_storage_root ((k,r)::t) s =
+    if k = s then (r:word8 list) else memo_storage_root t s
+End
+
+val () = cv_auto_trans memo_storage_root_def;
+
+Definition memo_code_hash_def:
+  memo_code_hash [] c = Keccak_256_w64 c ∧
+  memo_code_hash ((k,h)::t) c =
+    if k = c then (h:word8 list) else memo_code_hash t c
+End
+
+val () = cv_auto_trans memo_code_hash_def;
+
+Theorem memo_storage_root_thm:
+  EVERY (λ(k,r). storage_root k = r) t ⇒
+  memo_storage_root t s = storage_root s
+Proof
+  Induct_on`t` \\ simp[FORALL_PROD, memo_storage_root_def]
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem memo_code_hash_thm:
+  EVERY (λ(k,h). Keccak_256_w64 k = h) t ⇒
+  memo_code_hash t c = Keccak_256_w64 c
+Proof
+  Induct_on`t` \\ simp[FORALL_PROD, memo_code_hash_def]
+  \\ rw[] \\ gvs[]
+QED
+
+Definition encode_account_memo_def:
+  encode_account_memo st ct a = rlp_encode $ RLPL [
+    rlp_number a.nonce;
+    rlp_number a.balance;
+    RLPB $ memo_storage_root st a.storage;
+    RLPB $ memo_code_hash ct a.code
+  ]
+End
+
+Definition state_kvs_memo_def:
+  state_kvs_memo st ct [] acc = REVERSE acc ∧
+  state_kvs_memo st ct ((k,v)::ls) acc =
+  state_kvs_memo st ct ls
+    ((account_key $ n2w k, encode_account_memo st ct v)::acc)
+End
+
+val () = cv_auto_trans state_kvs_memo_def;
+
+Definition state_root_memo_def:
+  state_root_memo st ct (a: evm_accounts) =
+  trie_root_from_kvs $ state_kvs_memo st ct
+    (toAList (build_spt empty_account_state (dimword (:160)) a)) []
+End
+
+Definition cv_state_root_memo_def:
+  cv_state_root_memo st ct (a:cv) =
+  cv_trie_root_from_kvs $
+    cv_state_kvs_memo st ct (cv_toAList a) (cv$Num 0)
+End
+
+Theorem cv_state_root_memo_rep[cv_rep]:
+  from_list from_word $ state_root_memo st ct a =
+  cv_state_root_memo
+    (from_list (from_pair from_storage (from_list from_word)) st)
+    (from_list (from_pair (from_list from_word) (from_list from_word)) ct)
+    (from_evm_accounts a)
+Proof
+  simp[cv_state_root_memo_def, state_root_memo_def,
+       from_evm_accounts_def, Excl"SIZES_CONV",
+       vfmRootTheory.cv_trie_root_from_kvs_thm]
+  \\ qmatch_goalsub_abbrev_tac`from_sptree_sptree_spt _ t`
+  \\ simp[GSYM cv_toAList_thm]
+  \\ simp[theorem"cv_state_kvs_memo_thm" |> GSYM |> Q.GEN`acc`
+          |> Q.SPEC`[]` |> SIMP_RULE std_ss [from_list_def]]
+QED
+
+Theorem state_root_memo_thm:
+  EVERY (λ(k,r). storage_root k = r) st ∧
+  EVERY (λ(k,h). Keccak_256_w64 k = h) ct ⇒
+  ∀a. state_root_memo st ct a = state_root a
+Proof
+  rpt strip_tac
+  \\ `∀ls acc. state_kvs_memo st ct ls acc = state_kvs ls acc`
+  by (
+    Induct \\ simp[FORALL_PROD, state_kvs_memo_def, state_kvs_def]
+    \\ simp[encode_account_memo_def, encode_account_def,
+            memo_storage_root_thm, memo_code_hash_thm] )
+  \\ simp[state_root_memo_def, state_root_eqn]
+QED
