@@ -5,6 +5,22 @@ Ancestors
 Libs
   cv_transLib wordsLib
 
+(* EELS EMPTY_OMMER_HASH *)
+Definition empty_ommer_hash_def:
+  empty_ommer_hash : bytes32 =
+    0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347w
+End
+
+val () = cv_trans empty_ommer_hash_def;
+
+Theorem empty_ommer_hash_keccak:
+  word_to_bytes empty_ommer_hash T = Keccak_256_w64 (rlp_encode (RLPL []))
+Proof
+  CONV_TAC (RAND_CONV cv_eval)
+  \\ rw[empty_ommer_hash_def]
+  \\ EVAL_TAC
+QED
+
 Definition block_header_from_rlp_def:
   block_header_from_rlp rlp =
   if ¬is_RLPL rlp then NONE else
@@ -14,9 +30,10 @@ Definition block_header_from_rlp_def:
   let difficulty = dest_RLPB (EL  7 ls) in
   let extraData  = dest_RLPB (EL 12 ls) in
   let nonce      = dest_RLPB (EL 14 ls) in
-  (* post-merge header fields with fixed values (EELS validate_header) *)
-  if ommersHash ≠ Keccak_256_w64 (rlp_encode (RLPL [])) then NONE else
-  if num_of_be_bytes difficulty ≠ 0 then NONE else
+  (* post-merge header fields with fixed values (EELS validate_header);
+     the only canonical RLP encoding of the integer 0 is the empty string *)
+  if ommersHash ≠ word_to_bytes empty_ommer_hash T then NONE else
+  if difficulty ≠ [] then NONE else
   if LENGTH extraData > 32 then NONE else
   if nonce ≠ REPLICATE 8 0w then NONE else
   let coinbase   = dest_RLPB (EL  2 ls) in
@@ -78,7 +95,8 @@ End
 
 val block_header_from_rlp_pre_def =
   cv_auto_trans_pre "block_header_from_rlp_pre"
-  $ REWRITE_RULE[GSYM word_of_bytes_be_def] block_header_from_rlp_def;
+  $ REWRITE_RULE[GSYM word_of_bytes_be_def, GSYM word_to_bytes_be_def]
+    block_header_from_rlp_def;
 
 Theorem block_header_from_rlp_pre[cv_pre]:
   block_header_from_rlp_pre x
