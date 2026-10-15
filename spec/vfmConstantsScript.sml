@@ -138,6 +138,10 @@ Definition target_blob_gas_per_block_def:
   target_blob_gas_per_block = 786432n
 End
 
+Definition max_blobs_per_tx_def:
+  max_blobs_per_tx = 6n
+End
+
 Definition versioned_hash_version_kzg_def:
   versioned_hash_version_kzg: byte = 1w
 End
@@ -180,6 +184,10 @@ End
 
 Definition min_gas_limit_def:
   min_gas_limit = 5000n
+End
+
+Definition gas_limit_adjustment_factor_def:
+  gas_limit_adjustment_factor = 1024n
 End
 
 Definition base_fee_max_change_denominator_def:

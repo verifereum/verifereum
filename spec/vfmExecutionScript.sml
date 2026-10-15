@@ -2102,7 +2102,13 @@ Definition block_invalid_def:
     let requestsHash = compute_requests_hash deposits withdrawals consolidations in
     let expectedBaseFee = expected_base_fee p.baseFeePerGas p.gasLimit p.gasUsed in
     let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
+    let maxGasLimitDelta = p.gasLimit DIV gas_limit_adjustment_factor in
     ¬(min_gas_limit ≤ b.gasLimit ∧
+      b.gasLimit < p.gasLimit + maxGasLimitDelta ∧
+      p.gasLimit - maxGasLimitDelta < b.gasLimit ∧
+      b.gasUsed ≤ b.gasLimit ∧
+      b.timeStamp > p.timeStamp ∧
+      b.number = p.number + 1 ∧
       b.baseFeePerGas = expectedBaseFee ∧
       blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
@@ -2118,6 +2124,8 @@ Definition run_block_def:
     FOLDL
       (λx tx.
          OPTION_BIND x (λ(ls, a, dom).
+           if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.gasUsed) ls)
+           then NONE else
            OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
            run_transaction dom F chainId prevHashes b a tx))
       (SOME ([], update_beacon_block prevHashes b accounts, dom))
