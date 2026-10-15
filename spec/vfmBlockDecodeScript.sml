@@ -10,6 +10,15 @@ Definition block_header_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if ¬(LENGTH ls = 21 ∧ EVERY is_RLPB ls) then NONE else
+  let ommersHash = dest_RLPB (EL  1 ls) in
+  let difficulty = dest_RLPB (EL  7 ls) in
+  let extraData  = dest_RLPB (EL 12 ls) in
+  let nonce      = dest_RLPB (EL 14 ls) in
+  (* post-merge header fields with fixed values (EELS validate_header) *)
+  if ommersHash ≠ Keccak_256_w64 (rlp_encode (RLPL [])) then NONE else
+  if num_of_be_bytes difficulty ≠ 0 then NONE else
+  if LENGTH extraData > 32 then NONE else
+  if nonce ≠ REPLICATE 8 0w then NONE else
   let coinbase   = dest_RLPB (EL  2 ls) in
   let stateRoot  = dest_RLPB (EL  3 ls) in
   let number     = dest_RLPB (EL  8 ls) in
@@ -605,6 +614,7 @@ Definition block_from_rlp_def:
   let transactions = EL 1 ls in
   let ommers = EL 2 ls in
   let withdrawals = EL 3 ls in
+  if ommers ≠ RLPL [] then NONE else
   case block_header_from_rlp header of NONE => NONE |
   SOME blk =>
   if ¬is_RLPL transactions then NONE else
