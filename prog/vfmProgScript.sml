@@ -822,8 +822,7 @@ Definition compute_total_gas_used_def:
     let txGasUsed = compute_tx_gas_used txGasLimit ctxtGasLimit ctxtGasUsed in
     let storageRefund = ctxtAddRefund - ctxtSubRefund in
     let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
-    let tokens = call_data_tokens txData in
-    let floor_cost = base_cost + floor_call_data_cost * tokens in
+    let floor_cost = calldata_floor_cost txData in
       MAX (txGasUsed - gasRefund) floor_cost
 End
 

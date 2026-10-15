@@ -1026,7 +1026,10 @@ val () = run_transaction_def |> cv_auto_trans;
 Definition run_transactions_def:
   run_transactions d st c h b a rs [] = SOME (REVERSE rs, a, d) ∧
   run_transactions d st c h b a rs (tx::txs) =
-  if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.gasUsed) rs) then NONE else
+  if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.gasUsed) rs) ∨
+     (case tx.maxFeePerGas of SOME x => x | NONE => tx.gasPrice)
+       < b.baseFeePerGas
+  then NONE else
   case run_transaction d st c h b a tx of
   | NONE => NONE
   | SOME (r, a) => run_transactions r.domain st c h b a (r::rs) txs
@@ -1079,11 +1082,8 @@ Proof
   >- ( gs[OPTION_BIND_eq_case, UNCURRY, CaseEq"prod"]
        \\ CASE_TAC \\ gs[] \\ Cases_on`x` \\ gs[] )
   \\ qmatch_goalsub_abbrev_tac`FOLDL f`
-  >- (
-    disj1_tac
-    \\ rw[Abbr`f`]
-    \\ rpt (pop_assum kall_tac)
-    \\ Induct_on`ts` \\ rw[] )
+  \\ `∀ts. FOLDL f NONE ts = NONE` by (simp[Abbr`f`] \\ Induct \\ simp[])
+  \\ TRY (simp[] \\ NO_TAC)
   \\ qmatch_goalsub_abbrev_tac`OPTION_MAP _ rt`
   \\ Cases_on`rt`
   >- (

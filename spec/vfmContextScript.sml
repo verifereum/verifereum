@@ -349,6 +349,11 @@ Definition call_data_tokens_def:
   SUM (MAP (λb. if b = 0w then 1n else 4) data)
 End
 
+Definition calldata_floor_cost_def:
+  calldata_floor_cost data =
+  base_cost + floor_call_data_cost * call_data_tokens data
+End
+
 Definition intrinsic_cost_def:
   intrinsic_cost accessList authListLen p =
   let isCreate = is_code_dest p.outputTo in
@@ -393,8 +398,7 @@ Definition pre_transaction_updates_def:
          | _ => F) then NONE else
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
   if t.gasLimit > 2 ** 24 then NONE else
-  if t.gasLimit < base_cost + floor_call_data_cost * call_data_tokens t.data
-  then NONE else
+  if t.gasLimit < calldata_floor_cost t.data then NONE else
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
