@@ -188,6 +188,7 @@ Definition decode_eip1559_core_def:
   let maxFeeRlp = EL 3 ls in
   if ¬is_RLPB maxFeeRlp then NONE else
   let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
+  if maxFee < maxPrio then NONE else
   let gasRlp = EL 4 ls in
   if ¬is_RLPB gasRlp then NONE else
   let gas = num_of_be_bytes $ dest_RLPB gasRlp in
