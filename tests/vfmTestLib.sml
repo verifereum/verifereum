@@ -103,6 +103,17 @@ structure vfmTestLib :> vfmTestLib = struct
   val padding = 4
   val test_defs_prefix = "vfmTestDefs"
 
+  fun test_indices json_paths = let
+    val all_paths = get_all_test_json_paths ()
+    fun test_index json_path =
+      padl padding #"0" $ Int.toString $ index (equal json_path) all_paths
+      handle HOL_ERR _ => raise Fail $ String.concat [
+        "not among the ", fork_name,
+        " blockchain tests in fixtures/.meta/index.json: ", json_path ]
+  in
+    List.map test_index json_paths
+  end
+
   fun test_defs_script_text index json_path = let
     val sidx = padl padding #"0" $ Int.toString index
     val thyn = String.concat [test_defs_prefix, sidx]
