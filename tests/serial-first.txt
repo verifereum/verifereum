@@ -1,0 +1,13 @@
+# Tests that runtests.exe builds one at a time before the rest, because
+# building them in parallel with other tests can run out of memory.
+# One fixture json path (relative to fixtures/) per line.
+blockchain_tests/for_osaka/osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_addr.json
+blockchain_tests/for_osaka/osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_keys.json
+blockchain_tests/for_osaka/osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_logs.json
+blockchain_tests/for_osaka/osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_withdrawals.json
+blockchain_tests/for_osaka/osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_size_limit_boundary.json
+blockchain_tests/for_osaka/osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_rlp_size_at_limit_with_all_typed_transactions.json
+blockchain_tests/for_osaka/ported_static/stPreCompiledContracts/precomps_eip2929_cancun/precomps_eip2929_cancun.json
+blockchain_tests/for_osaka/prague/eip2537_bls_12_381_precompiles/bls12_g2msm/valid.json
+blockchain_tests/for_osaka/prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_4.json
+blockchain_tests/for_osaka/prague/eip7702_set_code_tx/gas/intrinsic_gas_cost.json

@@ -64,6 +64,8 @@ holbuild -j"$(nproc)" build
 
 `holbuild buildhol` builds and caches the HOL toolchain and dependencies specified by `holproject.toml`.
 
+Running the EEST conformance tests is described in [tests/README.md](tests/README.md).
+
 Plain `Holmake` remains supported as a secondary check when a compatible HOL4 installation is already available, and is also checked in CI.
 
 Release instructions, including the prebuilt holbuild archive artefact, are in [docs/release.md](docs/release.md).

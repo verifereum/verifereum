@@ -1,5 +1,5 @@
 Theory vfmTestDefs2324[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip2935_historical_block_hashes_from_state/block_hashes/invalid_history_contract_calls.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip2935_historical_block_hashes_from_state/block_hashes/invalid_history_contract_calls.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_0.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_0.json");
 val defs = mapi (define_test "2324") tests;

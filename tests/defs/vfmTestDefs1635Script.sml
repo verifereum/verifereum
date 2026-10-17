@@ -1,5 +1,5 @@
 Theory vfmTestDefs1635[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRevertTest/revert_depth_create_oog/revert_depth_create_oog.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRevertTest/revert_depth_create_oog/revert_depth_create_oog.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRevertTest/revert_precompiled_touch_nonce/revert_precompiled_touch_nonce.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRevertTest/revert_precompiled_touch_nonce/revert_precompiled_touch_nonce.json");
 val defs = mapi (define_test "1635") tests;

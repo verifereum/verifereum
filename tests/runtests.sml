@@ -3,12 +3,14 @@ open HolKernel GetOpt vfmTestLib
 val usage_header = String.concat [
   "runtests.exe [options] [<num> ...]\n",
   "Run Verifereum on the EEST suite. If numbers are provided,\n",
-  "only run those tests, otherwise run all tests. Options:"
+  "only run those tests, otherwise run all tests, building the tests\n",
+  "listed in serial-first.txt one at a time first. Options:"
 ]
 
 fun err s = TextIO.output(TextIO.stdErr, s)
 
 datatype options = Help | Results | NoResults | Generate | Fresh
+                 | NoSerialFirst
                  | Option of string | Limit of string | Backend of string
 fun destOption (Option s) = SOME s | destOption _ = NONE
 fun destLimit (Limit s) = SOME s | destLimit _ = NONE
@@ -35,6 +37,10 @@ val cline_options = [
    long = ["fresh"],
    desc = NoArg (K Fresh),
    help = "rerun selected tests instead of resuming"},
+  {short = "",
+   long = ["no-serial-first"],
+   desc = NoArg (K NoSerialFirst),
+   help = "do not build the tests in serial-first.txt first"},
   {short = "t",
    long = ["time"],
    desc = ReqArg (Limit, "secs"),
@@ -91,12 +97,19 @@ in
     " --keep-going", options, targets]
 end
 
-fun run_holbuild fresh limit options indices = let
-  val () = if command_available "holbuild" then ()
-           else raise Fail "selected backend is unavailable: holbuild"
+fun read_serial_first () = let
+  val inp = TextIO.openIn $ vfmTestAuxLib.test_path "serial-first.txt"
+  val lines = String.fields (equal #"\n") (TextIO.inputAll inp)
+  val () = TextIO.closeIn inp
+  val trim = Substring.string o Substring.dropl Char.isSpace o
+             Substring.dropr Char.isSpace o Substring.full
+in
+  List.filter (fn l => l <> "" andalso not (String.isPrefix "#" l)) $
+  List.map trim lines
+end
+
+fun holbuild_targets fresh limit options targets = let
   val options = String.concat (List.map command_arg options)
-  val targets = if List.null indices then all_result_targets ()
-                else List.map thyn indices
   val targets = String.concat (List.map command_arg targets)
   val force = if fresh then " --force=theory" else ""
 in
@@ -105,11 +118,36 @@ in
     force, options, targets]
 end
 
-fun run backend fresh limit options indices = let
+(* Building the memory-heavy tests in parallel with others can run out of
+   memory, so by default they are built one at a time before the rest. *)
+fun run_holbuild serial_first fresh limit options indices = let
+  val () = if command_available "holbuild" then ()
+           else raise Fail "selected backend is unavailable: holbuild"
+  val build = holbuild_targets fresh limit
+in
+  if not (List.null indices) then build options (List.map thyn indices)
+  else if not serial_first then build options (all_result_targets ())
+  else let
+    val serial = test_indices (read_serial_first ())
+    val serial_targets = List.map thyn serial
+    val rest = List.filter (fn t => not (mem t serial_targets))
+                 (all_result_targets ())
+    val st = if List.null serial then OS.Process.success
+             else (TextIO.print $ String.concat [
+                     "Building serial-first tests one at a time:",
+                     String.concat (List.map command_arg serial), "\n"];
+                   build (options @ ["-j1"]) serial_targets)
+  in
+    if OS.Process.isSuccess st then build options rest else st
+  end
+end
+
+fun run backend serial_first fresh limit options indices = let
   val () = ensure_fixtures ()
   val () = OS.FileSys.chDir "results"
   val st = case backend of
-             "holbuild" => run_holbuild fresh limit options indices
+             "holbuild" =>
+               run_holbuild serial_first fresh limit options indices
            | "holmake" => run_holmake fresh limit options indices
            | _ => raise Fail $ "unknown backend: " ^ backend
   val () = OS.FileSys.chDir OS.Path.parentArc
@@ -143,7 +181,9 @@ in
                   | backend::_ => backend
     val st = if List.exists (equal Results) options
              then OS.Process.success
-             else run backend (List.exists (equal Fresh) options)
+             else run backend
+               (not (List.exists (equal NoSerialFirst) options))
+               (List.exists (equal Fresh) options)
                (List.find (fn _ => true) (List.mapPartial destLimit options))
                (List.mapPartial destOption options)
                indices
