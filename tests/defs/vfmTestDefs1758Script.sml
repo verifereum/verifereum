@@ -1,5 +1,5 @@
 Theory vfmTestDefs1758[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stSpecialTest/gas_price0/gas_price0.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stSpecialTest/gas_price0/gas_price0.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stStackTests/stacksanity_swap/stacksanity_swap.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stStackTests/stacksanity_swap/stacksanity_swap.json");
 val defs = mapi (define_test "1758") tests;

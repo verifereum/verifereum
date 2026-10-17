@@ -1,7 +1,7 @@
 Theory vfmTest1666[no_sig_docs]
 Ancestors vfmTestDefs1666
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result1666_0.nsv"];
+val () = holbuild_extra_outputs ["result1666_0.nsv", "result1666_1.nsv", "result1666_2.nsv", "result1666_3.nsv", "result1666_4.nsv", "result1666_5.nsv", "result1666_6.nsv", "result1666_7.nsv", "result1666_8.nsv", "result1666_9.nsv", "result1666_10.nsv", "result1666_11.nsv", "result1666_12.nsv", "result1666_13.nsv", "result1666_14.nsv", "result1666_15.nsv", "result1666_16.nsv", "result1666_17.nsv", "result1666_18.nsv", "result1666_19.nsv"];
 val thyn = "vfmTestDefs1666";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
