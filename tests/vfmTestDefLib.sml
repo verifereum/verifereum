@@ -580,11 +580,23 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   val optional_block_ty = optionSyntax.mk_option block_ty
   val byte_chunks_ty = listSyntax.mk_list_type bytes_ty
-  val invalid_block_ty = pairSyntax.mk_prod(byte_chunks_ty, optional_block_ty)
-  val expectException_ty = pairSyntax.mk_prod(string_ty, invalid_block_ty)
 
-  fun is_invalid (Invalid _) = true | is_invalid _ = false
-  fun dest_block (Block b) = b
+  val test_block_ty =
+    mk_thy_type{Thy="vfmTestRun",Tyop="test_block",Args=[]}
+  val valid_block_tm =
+    prim_mk_const{Thy="vfmTestRun",Name="ValidBlock"}
+  val invalid_block_tm =
+    prim_mk_const{Thy="vfmTestRun",Name="InvalidBlock"}
+
+  fun mk_test_block_tm (Block block) =
+        list_mk_comb(valid_block_tm,
+          [mk_block_tm block, cached_byte_chunks_from_hex (#rlp block)])
+    | mk_test_block_tm (Invalid {expectException, rlp, rlp_decoded}) =
+        list_mk_comb(invalid_block_tm,
+          [fromMLstring expectException,
+           cached_byte_chunks_from_hex rlp,
+           optionSyntax.lift_option optional_block_ty mk_block_tm
+             rlp_decoded])
 
   fun mk_genesis_block (rlp: string) (h: block_header) : block =
     {rlp = rlp, blockHeader = h, blocknumber = #number h,
@@ -639,45 +651,12 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val last_hash_const = lhs $ concl last_hash_def
     val () = cv_trans_deep_embedding EVAL last_hash_def
 
-    val boris = #blocks test
-    val last_index = List.length boris - 1
-    val expectException =
-      if List.exists is_invalid boris
-      then if List.exists is_invalid (List.take(boris, last_index))
-           then raise Fail "invalid block not the last block"
-           else case List.nth(boris, last_index)
-                of Invalid {expectException, rlp, rlp_decoded} =>
-                   SOME (expectException, (rlp, rlp_decoded))
-      else NONE
-    val expectException_tm =
-      optionSyntax.lift_option
-        (optionSyntax.mk_option expectException_ty)
-        (pairSyntax.lift_prod expectException_ty fromMLstring $
-         pairSyntax.lift_prod invalid_block_ty
-           cached_byte_chunks_from_hex
-           (optionSyntax.lift_option optional_block_ty mk_block_tm))
-        expectException
-
-    val validBlocks = List.map dest_block (
-      if Option.isSome expectException
-      then List.take(boris, last_index)
-      else boris )
-    val validBlocks_tm = listSyntax.mk_list(
-      List.map mk_block_tm validBlocks, block_ty)
-
-    val rlps_tms = List.map (cached_byte_chunks_from_hex o #rlp) validBlocks
-    val rlps_name = name_prefix ^ "_rlps"
-    val rlps_var = mk_var(rlps_name, listSyntax.mk_list_type byte_chunks_ty)
-    val rlps_rhs = listSyntax.mk_list(rlps_tms, byte_chunks_ty)
-    val rlps_def = new_definition(rlps_name ^ "_def",
-                                  mk_eq(rlps_var, rlps_rhs))
-    val rlps_const = lhs $ concl rlps_def
-    val () = cv_trans rlps_def
-
     val blocks_name = name_prefix ^ "_blocks"
-    val blocks_var = mk_var(blocks_name, listSyntax.mk_list_type block_ty)
+    val blocks_var = mk_var(blocks_name, listSyntax.mk_list_type test_block_ty)
+    val blocks_rhs = listSyntax.mk_list(
+      List.map mk_test_block_tm (#blocks test), test_block_ty)
     val blocks_def = new_definition(blocks_name ^ "_def",
-                                    mk_eq(blocks_var, validBlocks_tm))
+                                    mk_eq(blocks_var, blocks_rhs))
     val blocks_const = lhs $ concl blocks_def
     val () = cv_trans blocks_def
 
@@ -685,8 +664,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val result_var = mk_var(result_name, test_result_ty)
     val result_rhs = list_mk_comb(run_test_tm, [
       pre_const, g_rlp_const, g_block_const,
-      blocks_const, rlps_const, last_hash_const, post_state_const,
-      expectException_tm])
+      blocks_const, last_hash_const, post_state_const])
     val result_def = new_definition(result_name ^ "_def",
                                     mk_eq(result_var, result_rhs))
   in
