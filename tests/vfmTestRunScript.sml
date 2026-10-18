@@ -54,6 +54,8 @@ Definition run_test_blocks_def:
     of NONE => (* TODO: check exception msg *)
        run_test_blocks lastBlockHash postState dom hashes parent state blocks
      | SOME decoded =>
+       (* fixtures omit rlp_decoded only for RLP_STRUCTURES_ENCODING, which
+          the decoder should have rejected *)
        case optblock of NONE => ExpectedException "block rlp decoding"
        | SOME invalidBlock =>
          if decoded with hash := invalidBlock.hash <> invalidBlock
