@@ -22,7 +22,7 @@ name = "runtests_unchecked"
 output = "tests/runtests_unchecked.exe"
 objects = ["runtests_unchecked"]
 
-[actions.vfmUncheckedML]
+[actions.vfmUncheckedFixtureLib]
 deps = ["vfmUncheckedEmitTheory"]
 
 [dependencies.hol]
