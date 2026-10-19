@@ -51,7 +51,10 @@ structure vfmTestLib :> vfmTestLib = struct
            in
              if OS.Path.ext file = SOME suffix
              then (dirs, pf::files)
-             else if OS.FileSys.isDir pf
+             (* Tests built in parallel publish their results into this
+                directory by renaming temporary files, so an entry can
+                vanish between readDir and isDir. *)
+             else if (OS.FileSys.isDir pf handle OS.SysErr _ => false)
              then (pf::dirs, files)
              else (dirs, files)
            end
