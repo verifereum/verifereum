@@ -17,6 +17,14 @@ name = "runtests"
 output = "tests/runtests.exe"
 objects = ["runtests"]
 
+[[executable]]
+name = "runtests_unchecked"
+output = "tests/runtests_unchecked.exe"
+objects = ["runtests_unchecked"]
+
+[actions.vfmUncheckedML]
+deps = ["vfmUncheckedEmitTheory"]
+
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
 rev = "652d1f0aad5cd537ed1e5d470ba3444e70ba470e"

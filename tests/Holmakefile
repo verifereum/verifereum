@@ -2,3 +2,9 @@ INCLUDES=../util ../spec ../spec/prop
 
 runtests.exe: runtests.uo
 	$(protect $(HOLDIR)/bin/hol) buildheap --exe=main -o $@ $<
+
+runtests_unchecked.exe: runtests_unchecked.uo
+	$(protect $(HOLDIR)/bin/hol) buildheap --exe=main -o $@ $<
+
+vfmUncheckedML.sml vfmUncheckedML.sig: vfmUncheckedEmitTheory.uo
+	test -f $@

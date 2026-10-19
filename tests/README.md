@@ -60,6 +60,53 @@ rerunning after an interruption continues where it stopped. Options:
 | `-r`, `--results` | only write `results/table.html` |
 | `-n`, `--noresults` | do not write `results/table.html` |
 
+## Unchecked native runner
+
+`runtests_unchecked.sml` runs the same fixture checks using EmitML-generated
+Standard ML, without building fixture theories or producing result theorems.
+The exporter uses the existing CV-translated equations of `run_test`, including
+their executable state representations; it does not reimplement EVM execution.
+The native runtime supplies arbitrary-precision CV arithmetic and the fixture
+adapter reuses the certified JSON parser without constructing HOL terms.
+
+Build from the repository root:
+
+```bash
+holbuild build vfmUncheckedEmitTheory
+holbuild executable runtests_unchecked
+cd tests
+./runtests_unchecked.exe -j8             # all fixtures
+./runtests_unchecked.exe -j2 0135 0138    # selected fixture indices
+./runtests_unchecked.exe -f -t300 0135   # rerun with a longer timeout
+```
+
+The first command creates the ignored `vfmUncheckedML.sml` and `.sig` files;
+run it before the first executable build in a clean checkout. Subsequent
+executable builds depend on the exporter so changes to the semantics regenerate
+the evaluator. Plain `Holmake runtests_unchecked.exe` from `tests/` also has
+generation rules.
+
+The runner supports `-h`, `-r`, `-n`, `-f`, `-t`, and `--no-serial-first` with
+the corresponding meanings above. Use `-j N` / `--jobs N` for worker concurrency
+(default 1). There is no build backend or per-fixture script generation, so
+`-b`, `-o`, and `-g` do not apply. Each fixture runs in a fresh worker process;
+the full-suite serial-first policy remains enabled by default.
+
+The per-case timeout covers native input encoding and execution, but not JSON
+parsing or worker startup. It defaults to 60 seconds and reads `VFM_TIME_LIMIT`
+when the executable runs; `-t` overrides it. Completed cases resume individually,
+including recorded timeouts. Use `-f` to rerun them after changing the limit.
+Cases are rerun when their result file predates the executable, fixture JSON,
+or fixture version file. Result files are published atomically.
+
+Both runners use the existing `results/resultNNNN_K.nsv` files and
+`results/table.html`, with the same format and reporting code. Results from one
+runner can therefore replace or be resumed by the other; use `-f` to force
+execution by the selected runner. Neither runner's successful exit status
+guarantees that every case passed: inspect the report for mismatches and timeouts.
+Parser errors, worker failures, and invalid command options cause the native
+runner to exit unsuccessfully.
+
 ## Serial-first tests
 
 A few tests use far more memory than the rest. Built in parallel alongside
