@@ -231,45 +231,60 @@ structure vfmTestLib :> vfmTestLib = struct
     ]
   end
 
+  (* the CSS class of a result; table.js hides rows by these classes *)
+  fun result_class result =
+    if result = "Passed" then "passed"
+    else if result = "Timeout" then "timeout"
+    else "fail"
+
   fun mk_test_result_row {name, result, seconds, index} = let
-    val success = result = "Passed"
     val result1 = String.translate (fn c =>
                     if c = #"|" then "!" else String.str c) $
                   String.concatWith " " $
                   String.tokens Char.isSpace result
-    val cls = if success then "passed"
-              else if result = "Timeout" then "timeout"
-              else "fail"
     val nametd = if is_modified_system name
                  then "<td class=modified-system>"
                  else "<td>"
   in
     String.concat [
-      "<tr><td><span class=", cls, ">", result1, "</span></td><td>",
-      seconds, "s</td>", nametd, name, "</td><td>", index,
-      "</td></tr>\n"
+      "<tr><td><span class=", result_class result, ">", result1,
+      "</span></td><td>", seconds, "s</td>", nametd, name, "</td><td>",
+      index, "</td></tr>\n"
     ]
   end
 
   fun by_name (r1: test_result) (r2: test_result) =
     string_less (#name r1) (#name r2)
 
+  (* the command's output without surrounding whitespace, or "unknown" when
+     the command cannot run or prints nothing (git outside a checkout) *)
   fun system_output (cmd, args) = let
     val proc = Unix.execute (cmd,args)
+    val output = TextIO.inputAll (Unix.textInstreamOf proc)
+    val () = ignore $ Unix.reap proc
+    val trimmed = Substring.string $ Substring.dropl Char.isSpace $
+                  Substring.dropr Char.isSpace $ Substring.full output
   in
-    TextIO.inputAll (Unix.textInstreamOf proc)
-    before ignore $ Unix.reap proc
+    if trimmed = "" then "unknown" else trimmed
   end handle OS.SysErr _ => "unknown"
 
   fun write_test_results_table () = let
     val dir = results_path ""
-    val uname = system_output ("/usr/bin/uname", ["-nor"])
+    val date = Date.fmt "%Y-%m-%d" (Date.fromTimeUniv (Time.now ()))
+    val arch = system_output ("/usr/bin/uname", ["-m"])
     val commit = system_output ("/usr/bin/git", ["rev-parse", "HEAD"])
+    val commit_html =
+      if commit = "unknown" then commit
+      else String.concat [
+        "<a href=https://github.com/verifereum/verifereum/commit/", commit,
+        ">", commit, "</a>"]
     val out = TextIO.openOut (OS.Path.concat (dir, "table.html"))
     val (_, nsvs) = collect_files "nsv" dir ([], [])
     val unsorted_data = List.map read_test_result_data nsvs
     val data = sort by_name unsorted_data
-    val pass_count = List.length (List.filter (equal "Passed" o #result) data)
+    fun count cls =
+      List.length (List.filter (equal cls o result_class o #result) data)
+    val pass_count = count "passed"
     val total_count = List.length data
     val percentage = Real.fmt (StringCvt.FIX (SOME 1)) $
       100.0 * (Real.fromInt pass_count / Real.fromInt total_count)
@@ -278,11 +293,13 @@ structure vfmTestLib :> vfmTestLib = struct
       "<link rel=stylesheet href=table.css />",
       "<script src=table.js></script></head>\n<body>"])
     val () = TextIO.output(out, String.concat [
-      "<p>", fork_name, " tests v", fixtures_version,
-      " @", commit, " on ", uname, "</p>\n<p>Successes: ",
-      Int.toString pass_count, "/",
-      Int.toString total_count,
-      " (", percentage, "%)</p>\n"])
+      "<p><a href=https://verifereum.org/>Verifereum</a> ", fork_name,
+      " tests v", fixtures_version, " @", commit_html,
+      ", table written ", date, " on ", arch, "</p>\n",
+      "<p>Passed: ", Int.toString pass_count, "/",
+      Int.toString total_count, " (", percentage, "%), timeout: ",
+      Int.toString (count "timeout"), ", fail: ",
+      Int.toString (count "fail"), "</p>\n"])
     val () = TextIO.output(out,
       "<table><thead><tr><th>Result</th><th>Time</th><th>Name</th><th>Index</th></tr></thead><tbody>\n")
     val () = List.app (curry TextIO.output out o mk_test_result_row) data
