@@ -21,6 +21,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v7
         with:
@@ -107,14 +108,18 @@ jobs:
         run: |
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
-      - name: Build test runner
+      - name: Build test runners
         env:
           TMPDIR: ${{ runner.temp }}
-        run: holbuild executable runtests
+        run: |
+          holbuild executable runtests
+          holbuild executable runtests_unchecked
 
-      - name: Check test runner
+      - name: Check test runners
         working-directory: tests
-        run: ./runtests.exe --help
+        run: |
+          ./runtests.exe --help
+          ./runtests_unchecked.exe --help
 
       - name: Save holbuild project snapshot
         if: always()
@@ -150,3 +155,68 @@ jobs:
             ${{ env.HBX_BASENAME }}.hbx.sha256
           if-no-files-found: error
           retention-days: 90
+
+      - name: Restore EEST fixtures
+        uses: actions/cache@v6
+        with:
+          path: tests/fixtures
+          key: eest-fixtures-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/vfmTestAuxLib.sml') }}
+
+      - name: Run complete EEST suite
+        working-directory: tests
+        run: |
+          /usr/bin/time \
+            -o "$RUNNER_TEMP/eest-time.txt" \
+            -f 'wall_seconds=%e\nuser_seconds=%U\nsystem_seconds=%S\nmax_rss_kb=%M' \
+            ./runtests_unchecked.exe -f -j"$(nproc)"
+
+      - name: Write EEST job summary
+        if: ${{ always() }}
+        run: |
+          python3 - <<'PY'
+          import collections
+          import os
+          from pathlib import Path
+
+          results = []
+          malformed = []
+          for path in sorted(Path("tests/results").glob("result*.nsv")):
+              fields = path.read_text().splitlines()
+              if len(fields) != 3:
+                  malformed.append(str(path))
+                  continue
+              try:
+                  seconds = float(fields[2])
+              except ValueError:
+                  malformed.append(str(path))
+                  continue
+              results.append((fields[1], seconds))
+
+          counts = collections.Counter(status for status, _ in results)
+          timing_path = Path(os.environ["RUNNER_TEMP"]) / "eest-time.txt"
+          timing = timing_path.read_text().strip() if timing_path.exists() else "unavailable"
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+              summary.write("## EEST conformance run\n\n")
+              summary.write(f"- Result files: **{len(results)}**\n")
+              summary.write(f"- Aggregate case time: **{sum(s for _, s in results):.2f}s**\n")
+              summary.write(f"- Malformed result files: **{len(malformed)}**\n\n")
+              summary.write("| Result | Cases |\n| --- | ---: |\n")
+              for status, count in sorted(counts.items()):
+                  summary.write(f"| {status} | {count} |\n")
+              summary.write("\n```text\n" + timing + "\n```\n")
+              if malformed:
+                  summary.write("\nMalformed files:\n\n")
+                  summary.writelines(f"- `{path}`\n" for path in malformed)
+          PY
+
+      - name: Upload EEST results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: eest-results-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            tests/results/result*.nsv
+            tests/results/table.html
+            ${{ runner.temp }}/eest-time.txt
+          if-no-files-found: warn
+          retention-days: 30
