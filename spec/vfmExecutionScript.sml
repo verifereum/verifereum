@@ -2122,8 +2122,9 @@ Definition block_invalid_def:
 End
 
 (* The header is checked before any transaction runs, as in EELS
-   state_transition: executing under an invalid header can diverge, e.g. the
-   blob base fee for a bogus excessBlobGas takes ~2^64 fake_exponential steps. *)
+   state_transition: executing under an invalid header can be infeasible, e.g.
+   the blob base fee for an excessBlobGas near 2^64 takes ~10^13
+   fake_exponential steps on ever larger numbers. *)
 Definition run_block_def:
   run_block dom chainId prevHashes parent accounts b =
   if header_invalid parent b then NONE else
