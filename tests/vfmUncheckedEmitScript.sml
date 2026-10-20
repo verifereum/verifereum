@@ -68,11 +68,18 @@ val exports = operations @ map #2 records;
 
 val roots = foldr (fn ((_, _, body, _), rest) => cvSyntax.mk_cv_pair (body, rest))
                   (cvSyntax.mk_cv_num (numSyntax.term_of_int 0)) exports;
-val equations = cv_transLib.cv_eqs_for roots;
-
 fun equation_const th = fst (strip_comb (lhs (concl (SPEC_ALL th))));
 fun constant_key c = let val {Thy, Name, ...} = dest_thy_const c
                     in Thy ^ "$" ^ Name end;
+val native_bitwise_names = ["cv_word_and", "cv_word_or", "cv_word_xor"];
+fun cv_prim_const name = prim_mk_const {Thy = "cv_prim", Name = name};
+val omitted_equation_keys =
+  map (constant_key o cv_prim_const)
+    (native_bitwise_names @ map (fn name => name ^ "_loop") native_bitwise_names);
+fun is_omitted_equation th =
+  List.exists (equal (constant_key (equation_const th))) omitted_equation_keys;
+val equations =
+  filter (not o is_omitted_equation) (cv_transLib.cv_eqs_for roots);
 val equation_table = mapi (fn i => fn th =>
   (constant_key (equation_const th), i)) equations;
 fun index_for c = List.find (fn (key, _) => key = constant_key c) equation_table;
@@ -138,6 +145,8 @@ val () = List.app (fn name => map_constant false name
    "cv_div", "cv_mod", "cv_lt", "cv_eq"];
 val () = List.app (fn name => map_constant true name
     (prim_mk_const {Thy = "cv", Name = name})) ["Num", "Pair"];
+val () = List.app (fn name => map_constant false name (cv_prim_const name))
+                  native_bitwise_names;
 
 (* A strict ML function for cv_if would evaluate both branches, including
    recursive calls in the unused branch.  Rewriting to HOL COND lets EmitML's

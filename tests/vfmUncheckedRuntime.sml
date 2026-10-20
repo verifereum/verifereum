@@ -37,6 +37,26 @@ structure vfmUncheckedRuntime = struct
     | cv_lt _ _ = zero
   fun cv_eq x y = if x = y then one else zero
 
+  (* The translated definitions inspect one bit per recursive call.  Keep their
+     total CV behavior for malformed Pair inputs, but use Poly/ML's arbitrary-
+     precision bitwise operations for the numeric path used by word values. *)
+  fun cv_word_and (Num a) (Num b) =
+        Num (Arbnum.fromLargeInt
+          (IntInf.andb (Arbnum.toLargeInt a, Arbnum.toLargeInt b)))
+    | cv_word_and _ _ = zero
+  fun cv_word_or (Num a) (Num b) =
+        Num (Arbnum.fromLargeInt
+          (IntInf.orb (Arbnum.toLargeInt a, Arbnum.toLargeInt b)))
+    | cv_word_or x (Pair _) = x
+    | cv_word_or (x as Pair _) (Num b) =
+        if b = Arbnum.zero then x else Num b
+  fun cv_word_xor (Num a) (Num b) =
+        Num (Arbnum.fromLargeInt
+          (IntInf.xorb (Arbnum.toLargeInt a, Arbnum.toLargeInt b)))
+    | cv_word_xor x (Pair _) = x
+    | cv_word_xor (x as Pair _) (Num b) =
+        if b = Arbnum.zero then x else Num b
+
   fun string_of_cv value =
     let
       fun chars (Num n) acc =

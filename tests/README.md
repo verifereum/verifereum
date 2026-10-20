@@ -66,8 +66,10 @@ rerunning after an interruption continues where it stopped. Options:
 Standard ML, without building fixture theories or producing result theorems.
 The exporter uses the existing CV-translated equations of `run_test`, including
 their executable state representations; it does not reimplement EVM execution.
-The native runtime supplies arbitrary-precision CV arithmetic and the fixture
-adapter reuses the certified JSON parser without constructing HOL terms.
+The native runtime supplies arbitrary-precision CV arithmetic and maps translated
+word AND, OR, and XOR operations to Poly/ML's arbitrary-precision primitives.
+The fixture adapter reuses the certified JSON parser without constructing HOL
+terms.
 
 Build from the repository root:
 
