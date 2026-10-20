@@ -3745,6 +3745,27 @@ Proof
   \\ metis_tac[]
 QED
 
+Theorem SPEC_Invalid_outermost:
+  SPEC EVM_MODEL
+    (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
+     cond (NULL cs ∧ ISL e))
+    {(pc,Invalid)}
+    (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Exception (INR (SOME InvalidOpcode)))
+Proof
+  start_tac
+  \\ gvs [step_inst_def,fail_def,bind_def,ignore_bind_def,
+          handle_step_def,vfm_abort_def,handle_def,handle_create_def,
+          get_return_data_def,get_output_to_def,reraise_def,
+          handle_exception_def,get_gas_left_def,consume_gas_def,
+          set_return_data_def,get_current_context_def,return_def,
+          set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
+          return_destination_case_elim]
+  \\ end_tac
+QED
+
 Theorem SPEC_Invalid: (* TODO: actually give a real spec here *)
   SPEC EVM_MODEL
   (evm_PC pc * cond F)

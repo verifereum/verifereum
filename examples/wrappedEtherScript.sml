@@ -484,8 +484,7 @@ fun inst_to_SPEC inst_tm =
          [SPEC_Return_inner |> Q.INST [‘inst’|->‘Revert’] |> REWRITE_RULE [],
           SPEC_Return_outermost |> Q.INST [‘inst’|->‘Revert’] |> REWRITE_RULE []]
        else if i_str = "Invalid" then
-         [SPEC_Return_inner |> Q.INST [‘inst’|->‘Invalid’] |> REWRITE_RULE [],
-          SPEC_Return_outermost |> Q.INST [‘inst’|->‘Invalid’] |> REWRITE_RULE []]
+         [SPEC_Invalid_outermost]
        else if i_str = "Call" then
          [SPEC_Call |> Q.INST [‘call_inst’|->‘Call’] |> REWRITE_RULE []]
        else if i_str = "StaticCall" then
