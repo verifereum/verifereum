@@ -1,143 +1,52 @@
 ---
 title: Contributing to Verifereum
+lang: en
+description: How to build Verifereum, set up an editor for HOL4, and find something to work on.
 header-includes:
     <link rel="icon" type="image/svg" href="./verifereum-logo-small.svg">
 ---
 
-# Getting Started with [Verifereum](../)
+# Contributing to [Verifereum](../)
 
-Welcome! We're excited you're interested in contributing to Verifereum.
-We're developing a production-quality formal semantics of the Ethereum Virtual Machine and proof infrastructure for mathematical verification of smart contracts and compilers, working closely with the HOL4 theorem prover community.
+Verifereum is an executable formal semantics of the Ethereum Virtual Machine in the [HOL4](https://hol-theorem-prover.org) theorem prover, with machine-checked theorems and a program logic built on it. Contributing means writing HOL4 definitions and proofs, or Standard ML for the tooling around them. This page covers getting a build, setting up an editor, and where help is welcome.
 
-## Current Project State
+## Building
 
-Verifereum's EVM semantics is a mature executable HOL4 formalisation of the Ethereum Execution Layer, with approximately complete EEST coverage. Active development focuses on maintaining live-fork coverage, improving execution performance, proving semantic properties, and building program- and compiler-verification infrastructure on top.
+Verifereum is built with [holbuild](https://github.com/charles-cooper/holbuild), which fetches and builds the pinned HOL4 version for you, so there is no HOL4 to install first; you need [Poly/ML](https://polyml.org) and git. The version of holbuild to install is `minimum_version` in [`holproject.toml`](https://github.com/verifereum/verifereum/blob/main/holproject.toml), which also pins HOL4 and the project's dependencies. Then, in a clone of the [repository](https://github.com/verifereum/verifereum):
 
-## Getting Set Up with HOL4
+```bash
+holbuild buildhol          # build the HOL4 toolchain (once)
+holbuild -j"$(nproc)" build
+```
 
-Verifereum is built on [HOL4](https://hol-theorem-prover.org), and contributing often involves working with both projects.
-Here's what you need to know about getting started with HOL4:
+The [README](https://github.com/verifereum/verifereum#getting-started) has the details, and the CI workflow in `.github/workflows/` is the exact build to compare against. Running the Ethereum conformance tests is a separate, many-hour job described in [`tests/README.md`](https://github.com/verifereum/verifereum/blob/main/tests/README.md).
 
-### Installation Options
+## Editor integration
 
-1. **Building from Source (Recommended)**
-   - There are detailed build instructions in the [Verifereum README](https://github.com/verifereum/verifereum?tab=readme-ov-file#getting-started)
-   - Install [Poly/ML](https://polyml.org) first
-   - Clone and build [HOL4](https://github.com/HOL-Theorem-Prover/HOL) from source
-   - This gives you the most up-to-date version and best performance
+HOL4 proofs are developed interactively, sending goals and tactics from the editor to a running HOL session. HOL4 ships modes for:
 
-2. **Package Managers**
-   - Available for some systems but may be outdated
-   - Can be useful for initial exploration
-   - Consider switching to source build later
+- Emacs: the most complete; see the [interaction guide](https://hol-theorem-prover.org/HOL-interaction.pdf).
+- Vim and Neovim: see the [README](https://github.com/HOL-Theorem-Prover/HOL/tree/develop/tools/editor-modes/vim).
+- Kakoune: see the [README](https://github.com/HOL-Theorem-Prover/HOL/tree/develop/tools/editor-modes/kak).
+- VS Code: the [hol4-vscode](https://github.com/HOL-Theorem-Prover/hol4-vscode) extension, still experimental.
 
-### Editor Integration
+Ask in the [Verifereum channel](https://hol.zulipchat.com/#narrow/channel/verifereum) on the HOL Zulip if setup gives you trouble; different approaches work better on different systems.
 
-HOL4 supports several development environments - choose what works best for you:
+## Where help is welcome
 
-1. **Emacs Mode**
-   - Traditional and feature-rich
-   - Extensive proof development support
-   - Steeper learning curve
-   - There is an [interaction guide](https://hol-theorem-prover.org/HOL-interaction.pdf)
+The [open issues](https://github.com/verifereum/verifereum/issues) are the current to-do list. The broad areas:
 
-2. **(Neo)vim Mode**
-   - Lightweight and efficient
-   - Good for those familiar with vim
-   - There is a [README](https://github.com/HOL-Theorem-Prover/HOL/tree/master/tools/editor-modes/vim) for getting started
+- Keeping the semantics current: each Ethereum fork changes the EVM, and the next one, Glamsterdam, is coming. Tracking the execution spec and the test suite releases is ongoing work.
+- Conformance test exceptions: the tests that don't pass yet are mostly timeouts in evaluation inside the logic. Making evaluation faster, or finding why a test is slow, moves the pass rate.
+- Theorems about the semantics: frame theorems, gas accounting, and invariants of execution, in `spec/prop/`. Many instructions and cases still lack them.
+- Program logic and verified contracts: the separation logic in `prog/` and the WETH example in `examples/` are the start. More examples are wanted, and the proof automation they call for.
+- Faster execution: a proof-producing translation of the semantics to [CakeML](https://cakeml.org) ([issue #14](https://github.com/verifereum/verifereum/issues/14)).
+- HOL4 itself: Verifereum stresses the prover, and improvements to HOL4's libraries and evaluation help everyone; its [issues](https://github.com/HOL-Theorem-Prover/HOL/issues) are open too.
 
-3. **VSCode Extension (Experimental)**
-   - Modern interface
-   - Still in development
-   - Good for those new to theorem proving
-   - The repository is [here](https://github.com/HOL-Theorem-Prover/hol4-vscode)
+If you are new to HOL4, start by building the project and stepping through an existing proof in your editor, then pick a small issue and say in Zulip that you are on it.
 
-Need help with installation? Ask in [Zulip](https://hol.zulipchat.com) Verifereum channel - different approaches work better for different systems and use cases.
+## Getting help
 
-## Contributing to Verifereum and HOL4
-
-Verifereum and HOL4 are tightly integrated projects. We encourage contributing to both:
-
-- **HOL4 Contributions**
-  - Improve the theorem prover infrastructure - see the [GitHub issues](https://github.com/HOL-Theorem-Prover/HOL/issues)
-  - Add useful tactics and libraries
-  - Fix bugs and enhance performance
-  - Join the HOL4 community discussions (in the same [Zulip](https://hol.zulipchat.com))
-
-- **Verifereum Contributions**
-  - Maintain and extend the EVM semantics as Ethereum evolves
-  - Prove semantic properties and develop verification techniques
-  - Create examples and documentation
-  - Help shape the project roadmap
-
-Learning either project helps with understanding the other!
-
-## Current Project Areas
-
-Here are some active areas where you can contribute:
-
-### EVM Semantics and Testing
-- Maintaining the executable semantics for the live Ethereum fork
-  - Tracking fork changes and EEST updates
-  - Investigating any remaining test-suite exceptions
-  - Maintaining crypto and precompile support
-- Improving execution by evaluation in logic
-  - Speeding up slow test cases
-  - Optimizing critical paths
-  - Creating focused tests for specific features
-
-### Semantic Theorems and Verification Experiments
-- Proving reusable properties of the EVM semantics
-  - Frame-style results for storage, accounts, and call contexts
-  - Gas monotonicity and resource reasoning
-  - Preservation and well-formedness invariants
-- Manual or semi-automated verification experiments
-  - Simple contract verifications and WETH-style case studies
-  - Identification of common proof patterns
-  - Documentation of verification strategies
-- Developing program logic for smart contracts
-  - Create more abstract reasoning principles
-  - Compare with direct semantic reasoning
-  - Build reusable verification components
-
-### Performance Improvements
-- CakeML integration for faster execution
-  - Using monadic translator for EVM semantics
-  - Optimizing critical paths
-  - Benchmarking and profiling
-
-### Documentation and Examples
-- Creating verification demos
-  - Simple contract verifications
-  - Bug-finding through proof attempts
-  - Tutorial materials
-
-## Getting Started
-
-1. **Join the Community**
-   - Introduce yourself in Zulip
-   - Share your interests and background
-   - Discuss potential contribution areas
-
-2. **Set Up Development Environment**
-   - Install HOL4 (see above)
-   - Clone Verifereum repository
-   - Try running existing proofs
-
-3. **Find Your Focus**
-   - Review current project areas
-   - Look at existing issues
-   - Discuss ideas in Zulip
-
-4. **Start Contributing**
-   - Begin with small improvements
-   - Work with others on larger projects
-   - Help develop the roadmap
-
-## Getting Help
-
-- Join our [Zulip](https://hol.zulipchat.com)
-- Contact [Ramana (xrchz)](https://github.com/xrchz)
-- Ask questions on [GitHub issues](https://github.com/verifereum/verifereum/issues)
-
-We're building a community of people interested in formal verification of Ethereum contracts. Whether you're experienced with theorem proving or just getting started, there are ways to contribute and learn together.
+- The [Verifereum channel](https://hol.zulipchat.com/#narrow/channel/verifereum) on the HOL Zulip, which is also where the HOL4 community is.
+- [GitHub issues](https://github.com/verifereum/verifereum/issues).
+- [Ramana (xrchz)](https://github.com/xrchz), who leads the project.

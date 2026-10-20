@@ -1,105 +1,53 @@
 ---
 title: Verifereum
+lang: en
+description: Verifereum is an executable formal semantics of the Ethereum Virtual Machine in the HOL4 theorem prover, validated against the Ethereum execution spec tests, with machine-checked theorems and a program logic for EVM bytecode.
 header-includes:
     <link rel="icon" type="image/svg" href="./verifereum-logo-small.svg">
 ---
 
 # !["Verifereum logo"](verifereum-logo-big.svg "Verifereum")
 
-## Formal Semantics of the Ethereum Virtual Machine in HOL4
+## Formal semantics of the Ethereum Virtual Machine in HOL4
 
-Verifereum is an open-source project centred on a comprehensive executable formal semantics of the [Ethereum](https://ethereum.org) Execution Layer's EVM, mechanised in the [HOL4 theorem prover](https://hol-theorem-prover.org). The semantics targets the live Ethereum network's current fork (Osaka) and serves as a foundation for smart contract verification, EVM program logics, and compiler verification targeting EVM bytecode.
+Verifereum is an executable formal semantics of the [Ethereum](https://ethereum.org) Execution Layer's EVM, mechanised in the [HOL4 theorem prover](https://hol-theorem-prover.org). The semantics runs inside the logic, which is how it is checked against Ethereum's conformance tests, and it is the foundation for machine-checked proofs about EVM bytecode: theorems about the semantics itself, a program logic for contracts, and compiler verification targeting the EVM. Audits find bugs; proofs rule out whole classes of them, and Ethereum's small, deterministic programs are a good fit for that.
 
-### Why Verifereum Matters
+## Status
 
-- **Beyond Traditional Auditing**: While audits can find bugs, mathematical verification proves the absence of entire classes of vulnerabilities
-- **High Stakes, Higher Standards**: With billions of dollars secured by smart contracts, formal verification offers the strongest security guarantees possible
-- **Perfect Fit**: Ethereum's deterministic execution model, where additionally code is expensive so applications are small, makes it an ideal candidate for formal verification
+The semantics targets the live fork, Osaka. It passes 17249 of the 17550 Osaka blockchain tests in [Ethereum Execution Spec Tests](https://steel.ethereum.foundation/docs/execution-specs/) v21.0.1 (98.3%); the [results table](table.html) lists every test. The remaining tests are mostly timeouts in our evaluation (the semantics is not built for speed), plus the tests that use modified system contracts.
 
-**[→ Learn how to contribute](/contribute)**
+## What's in the repository
 
-## Project Status & Recent Achievements
+The [repository](https://github.com/verifereum/verifereum) is GPLv3. It contains:
 
-- **Ethereum Security QF (July 2026):** Verifereum received $403 in donations and 1.085 ETH in matching funds in the [Ethereum Security QF round](https://forum.giveth.io/t/ethereum-security-qf-round-results-april-23-may-14-2026/2201). The funding will primarily support updating our formal EVM semantics for Glamsterdam, with remaining funds supporting infrastructure work such as [researching a proof-producing translation to CakeML](https://github.com/verifereum/verifereum/issues/14). Support associated with the round has also enabled significant progress in [Vyper-HOL](https://github.com/verifereum/vyper-hol). Thank you to all contributors, especially [The DAO Fund](https://x.com/TheDAOfund) and [Wintermute](https://x.com/wintermute_t) for their major donations.
-- Complete, production-quality formal semantics of the EVM Execution Layer in HOL4
-- Scope focused on the live Ethereum network's current fork (Osaka); the Consensus Layer is not currently in scope
-- Executable semantics by evaluation inside the logic, used to run the conformance tests
-- Approximately complete [Ethereum Execution Spec Tests (EEST) suite](https://eest.ethereum.org/main/consuming_tests/blockchain_test/) coverage, with detailed status tracked on the [progress page](table.html)
-- Machine-checked semantic properties, including frame-style storage/account preservation theorems and gas monotonicity results
-- Program logic and contract-verification infrastructure under active development
-- Sister project for [Vyper](https://vyperlang.org) [semantics and compiler verification](https://github.com/verifereum/vyper-hol)
-- Hosted our first community event (Higher Order Log Cabin) in February 2025, bringing together researchers and developers
+- The semantics, in `spec/`: EVM state (`vfmStateScript.sml`), operations (`vfmOperationScript.sml`), and execution (`vfmExecutionScript.sml`) as a definitional interpreter, with block and transaction processing.
+- Theorems about the semantics, in `spec/prop/`: frame theorems about what execution can touch, such as `cp_imp_storage_preserved` in `vfmStoragePredicatesScript.sml` and `static_not_code_preserved` in `vfmStaticCallsScript.sml`; the gas accounting theorems of `vfmDecreasesGasScript.sml`; and the `preserves` combinators of `vfmPreservesScript.sml` for proving invariants of the monadic semantics.
+- A program logic, in `prog/vfmProgScript.sml`: a separation-logic model of the EVM, with `EVM_SPEC_SEMANTICS` relating specifications to execution traces.
+- Examples, in `examples/`: the WETH contract (`wrappedEtherScript.sml`), with `deploy_result_correct` proving that deploying its bytecode produces the expected state.
+- Utilities, in `util/`: RLP, Merkle Patricia tries, the contract ABI, and the precompiles' cryptography (secp256k1, secp256r1, BN254, BLS12-381, Blake2f).
+- The test driver, in `tests/`, which fetches the EEST fixtures, runs them through the semantics, and writes the results table.
 
-## Get Involved
+## News
 
-We welcome contributors of all experience levels!
+- **July 2026:** Verifereum received $403 in donations and 1.085 ETH in matching funds in the [Ethereum Security QF round](https://forum.giveth.io/t/ethereum-security-qf-round-results-april-23-may-14-2026/2201). The funding will primarily support updating our formal EVM semantics for Glamsterdam, with remaining funds supporting infrastructure work such as [researching a proof-producing translation to CakeML](https://github.com/verifereum/verifereum/issues/14). Support associated with the round has also enabled significant progress in [Vyper-HOL](https://github.com/verifereum/vyper-hol). Thank you to all contributors, especially [The DAO Fund](https://x.com/TheDAOfund) and [Wintermute](https://x.com/wintermute_t) for their major donations.
+- **February 2025:** We hosted our first community event, Higher Order Log Cabin, bringing together researchers and developers.
 
-Start by reading our [Contributor Guide](/contribute) to learn how to set up your development environment and find your first project.
+## Talks
 
-### For Technical Contributors
+- [Towards a verified Vyper → EVM compiler in HOL4](talks/EthProofs2026/), EthProofs project status, June 2026.
+- [Verifereum update](talks/EVMTrack2025Q1/), EVM track call, March 2025.
+- [Verifereum](talks/HOL4Users2024/), HOL4 Users' Workshop, June 2024.
+- [Verifereum](talks/ETHDenver2024/), ETHDenver Lift Off, March 2024.
 
-1. **Join the Community**:
-   - Connect on [Zulip](https://hol.zulipchat.com) (join the Verifereum channel)
-   - Watch our [GitHub repository](https://github.com/verifereum/verifereum)
+## Get involved
 
-2. **Start Contributing**:
-   - Check out open [issues](https://github.com/verifereum/verifereum/issues)
-   - Contact [Ramana (xrchz)](https://github.com/xrchz) for project ideas
-   - Review our technical documentation below
+- Chat in the [Verifereum channel](https://hol.zulipchat.com/#narrow/channel/verifereum) on the HOL Zulip.
+- Pick up an [open issue](https://github.com/verifereum/verifereum/issues), or ask there.
+- Read the [contributor guide](/contribute) for how to build the project and where help is needed.
+- Donate on [Giveth](https://giveth.io/project/verifereum).
 
-### Technical Focus Areas
+## Related projects
 
-We're currently working on three main tracks:
-
-1. **EVM Semantics and Conformance**
-   - Maintaining the executable HOL4 semantics for the live Ethereum fork
-   - Tracking fork changes and EEST updates
-   - Investigating any remaining test-suite exceptions
-   - Optimizing execution by evaluation in logic
-
-2. **Semantic Theorems and Program Logic**
-   - Proving frame-style properties for storage, accounts, and call contexts
-   - Developing gas and resource reasoning principles
-   - Building Hoare/separation logic for EVM bytecode
-   - Creating verification examples and proof automation
-
-3. **Compiler Verification**
-   - Supporting EVM bytecode as a verified compiler target
-   - Developing Vyper semantics and compiler verification in the Vyper-HOL sister project
-   - Building reusable compiler-correctness infrastructure
-
-## Technical Details
-
-### Our Approach
-
-- **Foundation**: Executable formal semantics of the Ethereum Execution Layer's EVM in HOL4 (Higher-Order Logic)
-- **Methodology**: Operational semantics via definitional interpreter
-- **Validation**: Approximately complete EEST coverage, with detailed status tracked publicly
-- **Verification**: Semantic theorems and program logic for smart contract correctness proofs
-- **Implementation**: Focus on proof-producing reasoning, decompilation, and compiler verification
-
-### Collaboration Philosophy
-
-Verifereum is committed to open collaboration and [free software](https://fsf.org) principles.
-All our work remains accessible to everyone, and we welcome contributions at any level of experience or commitment.
-
-## Looking to Contribute?
-
-See our [detailed contributor guide](/contribute) to get started.
-
-We have opportunities for both technical and non-technical contributions:
-
-### Technical Roles
-- Formal specification development
-- HOL4 theorem proving
-- Proof automation infrastructure
-- Technical documentation
-- Example contract verification
-
-### Social Roles
-- Documentation improvement
-- Community building
-- Project management
-- Grant writing and fundraising
-
-Ready to start? Join our [Zulip](https://hol.zulipchat.com) and check out our [contributor guide](/contribute)!
+- [Vyper-HOL](https://github.com/verifereum/vyper-hol): a semantics for the [Vyper](https://vyperlang.org) language and verification of its compiler, built on Verifereum.
+- [Solidity-HOL](https://github.com/verifereum/solidity-hol): the beginnings of a Solidity semantics in HOL4.
+- [HOL4](https://hol-theorem-prover.org): the theorem prover everything here is written in.
