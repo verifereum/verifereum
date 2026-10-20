@@ -54,7 +54,9 @@ structure vfmTestLib :> vfmTestLib = struct
              (* Tests built in parallel publish their results into this
                 directory by renaming temporary files, so an entry can
                 vanish between readDir and isDir. *)
-             else if (OS.FileSys.isDir pf handle OS.SysErr _ => false)
+             else if (OS.FileSys.isDir pf
+                      handle e as OS.SysErr (_, err) =>
+                        if err = OS.syserror "ENOENT" then false else raise e)
              then (pf::dirs, files)
              else (dirs, files)
            end
