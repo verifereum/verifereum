@@ -53,7 +53,7 @@ verifereum/
 
 ## Getting Started
 
-Verifereum is developed in the [HOL4](https://hol-theorem-prover.org) theorem prover, which is written in Standard ML, and is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies. The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
+Verifereum is developed in the [HOL4](https://hol-theorem-prover.org) theorem prover, which is written in Standard ML, and is built with [`holbuild`](https://github.com/HOL-Theorem-Prover/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies. The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
 For a local build, install `holbuild` v0.11.2 or later (`minimum_version` in `holproject.toml`) and run:
 

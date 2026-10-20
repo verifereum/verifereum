@@ -14,14 +14,14 @@ Verifereum is an executable formal semantics of the [Ethereum](https://ethereum.
 
 ## Status
 
-The semantics targets the live fork, Osaka. It passes 17249 of the 17550 Osaka blockchain tests in [Ethereum Execution Spec Tests](https://steel.ethereum.foundation/docs/execution-specs/) v21.0.1 (98.3%); the [results table](table.html) lists every test. The remaining tests are mostly timeouts in our evaluation (the semantics is not built for speed), plus the tests that use modified system contracts.
+The semantics targets the live fork, Osaka. At the last full run it passed 17249 of the 17550 Osaka blockchain tests in the [Ethereum Execution Spec Tests (EEST)](https://steel.ethereum.foundation/docs/execution-specs/) v21.0.1 (98.3%); the [results table](table.html) lists every test and is where the current numbers are. The remaining tests are mostly timeouts in our evaluation (the semantics is not built for speed), plus the tests that use modified system contracts.
 
 ## What's in the repository
 
 The [repository](https://github.com/verifereum/verifereum) is GPLv3. It contains:
 
 - The semantics, in `spec/`: EVM state (`vfmStateScript.sml`), operations (`vfmOperationScript.sml`), and execution (`vfmExecutionScript.sml`) as a definitional interpreter, with block and transaction processing.
-- Theorems about the semantics, in `spec/prop/`: frame theorems about what execution can touch, such as `cp_imp_storage_preserved` in `vfmStoragePredicatesScript.sml` and `static_not_code_preserved` in `vfmStaticCallsScript.sml`; the gas accounting theorems of `vfmDecreasesGasScript.sml`; and the `preserves` combinators of `vfmPreservesScript.sml` for proving invariants of the monadic semantics.
+- Theorems about the semantics, in `spec/prop/`: frame theorems about what execution can touch, such as `run_call_preserves_storage_outside_accessed_slots` in `vfmRunCallScript.sml` (a storage slot a call never accesses is unchanged by it) and `run_static_preserves` in `vfmStaticCallsScript.sml` (a static call changes no account, transient storage, or deletion); the gas accounting theorems of `vfmDecreasesGasScript.sml`; and the `preserves` combinators of `vfmPreservesScript.sml` for proving invariants of the monadic semantics.
 - A program logic, in `prog/vfmProgScript.sml`: a separation-logic model of the EVM, with `EVM_SPEC_SEMANTICS` relating specifications to execution traces.
 - Examples, in `examples/`: the WETH contract (`wrappedEtherScript.sml`), with `deploy_result_correct` proving that deploying its bytecode produces the expected state.
 - Utilities, in `util/`: RLP, Merkle Patricia tries, the contract ABI, and the precompiles' cryptography (secp256k1, secp256r1, BN254, BLS12-381, Blake2f).

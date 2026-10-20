@@ -127,3 +127,5 @@ collection.
 3. Check that every path in `serial-first.txt` still exists in the new
    fixtures (a full run fails on one that does not), and update the index
    table above.
+4. After the full run, update the pass count and EEST version in the
+   Status section of `website/index.md` from the new `table.html`.

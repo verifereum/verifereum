@@ -256,14 +256,16 @@ structure vfmTestLib :> vfmTestLib = struct
   fun by_name (r1: test_result) (r2: test_result) =
     string_less (#name r1) (#name r2)
 
-  (* the command's output without surrounding whitespace *)
+  (* the command's output without surrounding whitespace, or "unknown" when
+     the command cannot run or prints nothing (git outside a checkout) *)
   fun system_output (cmd, args) = let
     val proc = Unix.execute (cmd,args)
     val output = TextIO.inputAll (Unix.textInstreamOf proc)
     val () = ignore $ Unix.reap proc
+    val trimmed = Substring.string $ Substring.dropl Char.isSpace $
+                  Substring.dropr Char.isSpace $ Substring.full output
   in
-    Substring.string $ Substring.dropl Char.isSpace $
-    Substring.dropr Char.isSpace $ Substring.full output
+    if trimmed = "" then "unknown" else trimmed
   end handle OS.SysErr _ => "unknown"
 
   fun write_test_results_table () = let
@@ -293,7 +295,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val () = TextIO.output(out, String.concat [
       "<p><a href=https://verifereum.org/>Verifereum</a> ", fork_name,
       " tests v", fixtures_version, " @", commit_html,
-      ", run on ", date, " (", arch, ")</p>\n",
+      ", table written ", date, " on ", arch, "</p>\n",
       "<p>Passed: ", Int.toString pass_count, "/",
       Int.toString total_count, " (", percentage, "%), timeout: ",
       Int.toString (count "timeout"), ", fail: ",
