@@ -2093,14 +2093,10 @@ Definition excess_blob_gas_def:
       else (parentExcessBlobGas + parentBlobGasUsed) - target_blob_gas_per_block
 End
 
-Definition block_invalid_def:
-  block_invalid p rs deposits withdrawals consolidations b ⇔
-    let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
-    let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
+Definition header_invalid_def:
+  header_invalid p b ⇔
     let excessBlobGas = excess_blob_gas p.excessBlobGas p.blobGasUsed p.baseFeePerGas in
-    let requestsHash = compute_requests_hash deposits withdrawals consolidations in
     let expectedBaseFee = expected_base_fee p.baseFeePerGas p.gasLimit p.gasUsed in
-    let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
     let maxGasLimitDelta = p.gasLimit DIV gas_limit_adjustment_factor in
     ¬(min_gas_limit ≤ b.gasLimit ∧
       b.gasLimit < p.gasLimit + maxGasLimitDelta ∧
@@ -2109,16 +2105,28 @@ Definition block_invalid_def:
       b.timeStamp > p.timeStamp ∧
       b.number = p.number + 1 ∧
       b.baseFeePerGas = expectedBaseFee ∧
-      blobGasUsed ≤ max_blob_gas_per_block ∧
+      excessBlobGas = b.excessBlobGas)
+End
+
+Definition block_invalid_def:
+  block_invalid rs deposits withdrawals consolidations b ⇔
+    let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
+    let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
+    let requestsHash = compute_requests_hash deposits withdrawals consolidations in
+    let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
+    ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
       gasUsed = b.gasUsed ∧
-      excessBlobGas = b.excessBlobGas ∧
       requestsHash = b.requestsHash ∧
       expectedWithdrawalsRoot = b.withdrawalsRoot)
 End
 
+(* The header is checked before any transaction runs, as in EELS
+   state_transition: executing under an invalid header can diverge, e.g. the
+   blob base fee for a bogus excessBlobGas takes ~2^64 fake_exponential steps. *)
 Definition run_block_def:
   run_block dom chainId prevHashes parent accounts b =
+  if header_invalid parent b then NONE else
   OPTION_BIND (
     FOLDL
       (λx tx.
@@ -2136,7 +2144,7 @@ Definition run_block_def:
     OPTION_BIND (extract_deposit_requests all_logs) (λdeposits.
       let (withdrawals, a1) = dequeue_withdrawal_requests a in
       let (consolidations, a2) = dequeue_consolidation_requests a1 in
-      if block_invalid parent rs deposits withdrawals consolidations b then NONE
+      if block_invalid rs deposits withdrawals consolidations b then NONE
       else
         OPTION_BIND (process_withdrawals b.withdrawals (a2, d))
           (λ(a, d). SOME (rs, a, d))))
