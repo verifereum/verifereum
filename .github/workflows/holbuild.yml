@@ -108,19 +108,6 @@ jobs:
         run: |
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
-      - name: Build test runners
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          holbuild executable runtests
-          holbuild executable runtests_unchecked
-
-      - name: Check test runners
-        working-directory: tests
-        run: |
-          ./runtests.exe --help
-          ./runtests_unchecked.exe --help
-
       - name: Save holbuild project snapshot
         if: always()
         uses: actions/cache/save@v6
@@ -155,6 +142,20 @@ jobs:
             ${{ env.HBX_BASENAME }}.hbx.sha256
           if-no-files-found: error
           retention-days: 90
+
+      - name: Build test runners
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          holbuild executable runtests
+          holbuild build --skip-checkpoints --skip-proof-steps vfmUncheckedEmitTheory
+          holbuild executable runtests_unchecked
+
+      - name: Check test runners
+        working-directory: tests
+        run: |
+          ./runtests.exe --help
+          ./runtests_unchecked.exe --help
 
       - name: Restore EEST fixtures
         uses: actions/cache@v6

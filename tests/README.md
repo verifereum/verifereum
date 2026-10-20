@@ -6,7 +6,7 @@ Verifereum is checked against the [Ethereum Execution Spec Tests
 HOL4, and the outcome of each test case is recorded. The current status is
 published on the [progress page](https://verifereum.org/table.html).
 
-A full run takes many hours, so the suite is not part of CI.
+The proof-producing runner takes many hours, so CI uses the unchecked native runner.
 
 ## Contents
 
@@ -108,6 +108,19 @@ execution by the selected runner. Neither runner's successful exit status
 guarantees that every case passed: inspect the report for mismatches and timeouts.
 Parser errors, worker failures, and invalid command options cause the native
 runner to exit unsuccessfully.
+
+### GitHub CI
+
+The `holbuild` GitHub Actions workflow builds `runtests_unchecked.exe` and runs
+the complete suite from a clean result set with one fixture worker per available
+CPU. The per-case timeout remains 60 seconds. Extracted fixtures are cached by
+platform and fixture-definition version to avoid downloading and unpacking the
+release on every run.
+
+Each run writes status counts and measured wall, user, system, and peak-memory
+figures to the GitHub job summary. The `eest-results-<commit>-<attempt>` artifact
+contains every `.nsv` result, `table.html`, and the timing file for 30 days.
+Expect approximately two to three hours on a standard GitHub-hosted runner.
 
 ## Serial-first tests
 
