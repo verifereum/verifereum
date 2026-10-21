@@ -1,7 +1,7 @@
 fixtures
 fixtures.tar.gz
 result*.nsv
-table.html
+table*.html
 runtests.exe
 runtests_unchecked.exe
 vfmUncheckedML.sml

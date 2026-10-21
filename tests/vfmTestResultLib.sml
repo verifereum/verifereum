@@ -50,7 +50,7 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
                     fetch thyn $ test_prefix ^ "_name_def"
     val out = TextIO.openOut csv_name
     val () = TextIO.output(out,
-      String.concatWith "\n" [test_name, result_str, time_str])
+      String.concatWith "\n" [test_name, result_str, time_str, "checked"])
     val () = TextIO.output(out, "\n")
     val () = TextIO.closeOut out
   in

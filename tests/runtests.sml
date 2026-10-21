@@ -12,9 +12,11 @@ fun err s = TextIO.output(TextIO.stdErr, s)
 datatype options = Help | Results | NoResults | Generate | Fresh
                  | NoSerialFirst
                  | Option of string | Limit of string | Backend of string
+                 | Table of string
 fun destOption (Option s) = SOME s | destOption _ = NONE
 fun destLimit (Limit s) = SOME s | destLimit _ = NONE
 fun destBackend (Backend s) = SOME s | destBackend _ = NONE
+fun destTable (Table s) = SOME s | destTable _ = NONE
 
 val cline_options = [
   {short = "h",
@@ -52,7 +54,11 @@ val cline_options = [
   {short = "b",
    long = ["backend"],
    desc = ReqArg (Backend, "holbuild|holmake"),
-   help = "select build backend (default: holbuild)"}
+   help = "select build backend (default: holbuild)"},
+  {short = "",
+   long = ["table"],
+   desc = ReqArg (Table, "file"),
+   help = "name of the results table in results/ (default: table.html)"}
 ]
 val cline_config = {
   argOrder = Permute,
@@ -189,6 +195,9 @@ in
     val backend = case List.mapPartial destBackend options of
                     [] => "holbuild"
                   | backend::_ => backend
+    val table = case List.mapPartial destTable options of
+                  [] => "table.html"
+                | table::_ => table
     val st = if List.exists (equal Results) options
              then OS.Process.success
              else run backend
@@ -201,8 +210,8 @@ in
     if OS.Process.isSuccess st
     then if List.exists (equal NoResults) options
          then ()
-         else write_test_results_table () before
-              TextIO.print "Results written to results/table.html\n"
+         else write_test_results_table table before
+              TextIO.print ("Results written to results/" ^ table ^ "\n")
     else die $ "runtests.exe: " ^ backend ^ " failed\n"
   end
 end handle e => die $ String.concat [exnName e, ": ", exnMessage e, "\n"]

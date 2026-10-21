@@ -57,8 +57,9 @@ rerunning after an interruption continues where it stopped. Options:
 | `-o opt`, `--option opt` | pass `opt` to the build backend, e.g. `-o -j8` (see also [Heap cap](#heap-cap)) |
 | `-b holbuild\|holmake`, `--backend` | build backend (default holbuild) |
 | `--no-serial-first` | build all tests together (see below) |
-| `-r`, `--results` | only write `results/table.html` |
-| `-n`, `--noresults` | do not write `results/table.html` |
+| `-r`, `--results` | only write the results table |
+| `-n`, `--noresults` | do not write the results table |
+| `--table file` | write the results table to `results/file` (default `table.html`) |
 
 ## Unchecked native runner
 
@@ -90,7 +91,7 @@ executable builds depend on the exporter so changes to the semantics regenerate
 the evaluator. Plain `Holmake runtests_unchecked.exe` from `tests/` also has
 generation rules.
 
-The runner supports `-h`, `-r`, `-n`, `-f`, `-t`, and `--no-serial-first` with
+The runner supports `-h`, `-r`, `-n`, `-f`, `-t`, `--table`, and `--no-serial-first` with
 the corresponding meanings above. Use `-j N` / `--jobs N` for worker concurrency
 (default 1). There is no build backend or per-fixture script generation, so
 `-b`, `-o`, and `-g` do not apply. Each fixture runs in a fresh worker process;
@@ -103,11 +104,12 @@ including recorded timeouts. Use `-f` to rerun them after changing the limit.
 Cases are rerun when their result file predates the executable, fixture JSON,
 or fixture version file. Result files are published atomically.
 
-Both runners use the existing `results/resultNNNN_K.nsv` files and
-`results/table.html`, with the same format and reporting code. Results from one
-runner can therefore replace or be resumed by the other; use `-f` to force
-execution by the selected runner. Neither runner's successful exit status
-guarantees that every case passed: inspect the report for mismatches and timeouts.
+Both runners write the same `results/resultNNNN_K.nsv` files and the same
+results table (see [Results](#results)), and each result records which runner
+produced it. Results from one runner can therefore replace or be resumed by the
+other; use `-f` to force execution by the selected runner. Neither runner's
+successful exit status guarantees that every case passed: inspect the report
+for mismatches and timeouts.
 Parser errors, worker failures, and invalid command options cause the native
 runner to exit unsuccessfully.
 
@@ -123,6 +125,31 @@ Each run writes status counts and measured wall, user, system, and peak-memory
 figures to the GitHub job summary. The `eest-results-<commit>-<attempt>` artifact
 contains every `.nsv` result, `table.html`, and the timing file for 30 days.
 Expect approximately two to three hours on a standard GitHub-hosted runner.
+
+## Results
+
+Each test case's result is a file `results/resultNNNN_K.nsv`, where `K` is the
+case's position in its fixture file. Its lines are the case's name, its result
+(`Passed`, `Timeout`, or what went wrong), the seconds it took, and the runner
+that produced it: `checked` for the results theories of `runtests.exe`,
+`unchecked` for `runtests_unchecked.exe`. Files written before runners recorded
+themselves have only the first three lines, and their runner is `unknown`. If
+you know a directory of them is all checked, label them so:
+
+```bash
+for f in results/result*.nsv; do [ "$(wc -l < "$f")" = 3 ] && echo checked >> "$f"; done
+```
+
+The results table lists every `.nsv` file in `results/` with its runner, and its
+header says whether the results are `checked`, `unchecked`, `unknown`, or mixed,
+with the count of each. It is written to `results/table.html`, or to another
+file there with `--table`, next to the `table.css` and `table.js` it uses. For
+checked and unchecked tables side by side, run `./runtests.exe`, which writes
+`table.html`, and then `./runtests_unchecked.exe -f --table
+table-unchecked.html`; `-f` makes the second runner rerun every case rather
+than resume from the first runner's results. The second run replaces the first
+runner's result files, so `table.html` can no longer be rewritten from them;
+copy `results/*.nsv` first if you need them again.
 
 ## Serial-first tests
 
