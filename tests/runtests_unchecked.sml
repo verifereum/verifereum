@@ -8,7 +8,7 @@ val usage_header = String.concat [
 ]
 
 datatype options = Help | Results | NoResults | Fresh | NoSerialFirst
-                 | Limit of string | Jobs of string
+                 | Limit of string | Jobs of string | Table of string
 
 val cline_options = [
   {short="h", long=["help"], desc=NoArg (K Help), help="only print help"},
@@ -23,7 +23,9 @@ val cline_options = [
   {short="t", long=["time"], desc=ReqArg (Limit, "secs"),
    help="time limit per case, including input encoding (default: VFM_TIME_LIMIT or 60)"},
   {short="j", long=["jobs"], desc=ReqArg (Jobs, "num"),
-   help="number of fixture worker processes (default: 1)"}
+   help="number of fixture worker processes (default: 1)"},
+  {short="", long=["table"], desc=ReqArg (Table, "file"),
+   help="name of the results table in results/ (default: table.html)"}
 ]
 
 val usage = usageInfo {header=usage_header, options=cline_options}
@@ -96,7 +98,7 @@ fun run_fixture fresh limit (index, path) = let
       val seconds = Time.fmt 2 (Time.now () - start)
       val temporary = file ^ ".tmp"
       val () = write_text temporary
-        (String.concatWith "\n" [name, result, seconds] ^ "\n")
+        (String.concatWith "\n" [name, result, seconds, "unchecked"] ^ "\n")
       val () = OS.FileSys.rename {old=temporary, new=file}
     in
       TextIO.print ("test_" ^ suffix ^ "_result = " ^ result ^
@@ -185,10 +187,12 @@ fun main_cli arguments = let
 in
   if List.exists (equal Help) options then TextIO.print usage
   else let
+    val table = case List.mapPartial (fn Table s => SOME s | _ => NONE) options of
+        [] => "table.html" | s::_ => s
     val success = List.exists (equal Results) options orelse run options indices
     val () = if List.exists (equal NoResults) options then ()
-             else (write_test_results_table ();
-                   TextIO.print "Results written to results/table.html\n")
+             else (write_test_results_table table;
+                   TextIO.print ("Results written to results/" ^ table ^ "\n"))
   in
     if success then () else raise Fail "one or more fixture workers failed"
   end

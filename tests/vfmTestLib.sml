@@ -206,19 +206,34 @@ structure vfmTestLib :> vfmTestLib = struct
     name: string,
     result: string,
     seconds: string,
+    runner: string,
     index: string
   }
 
+  (* A result file has the lines name, result, seconds, and optionally the
+     runner that produced it. The results theories write no runner line, so
+     a missing one means checked. *)
   fun read_test_result_data result_file : test_result = let
     val inp = TextIO.openIn result_file
     val lines = TextIO.inputAll inp
     val () = TextIO.closeIn inp
-    val [name, result, seconds] = String.tokens (equal #"\n") lines
+    val (name, result, seconds, runner) =
+      case String.tokens (equal #"\n") lines of
+        [name, result, seconds] => (name, result, seconds, "checked")
+      | [name, result, seconds, runner] =>
+          if runner = "checked" orelse runner = "unchecked"
+          then (name, result, seconds, runner)
+          else raise Fail $ String.concat [
+            result_file, ": unknown runner ", runner,
+            " (expected checked or unchecked)"]
+      | fields => raise Fail $ String.concat [
+          result_file, ": ", Int.toString (List.length fields),
+          " lines (expected name, result, seconds and optionally runner)"]
     val index = result_file |> OS.Path.splitDirFile |> #file
                             |> OS.Path.splitBaseExt |> #base
                             |> triml (String.size "result")
   in
-    {name=name, result=result, seconds=seconds, index=index}
+    {name=name, result=result, seconds=seconds, runner=runner, index=index}
   end
 
   fun is_modified_system name = let
@@ -237,7 +252,7 @@ structure vfmTestLib :> vfmTestLib = struct
     else if result = "Timeout" then "timeout"
     else "fail"
 
-  fun mk_test_result_row {name, result, seconds, index} = let
+  fun mk_test_result_row {name, result, seconds, runner, index} = let
     val result1 = String.translate (fn c =>
                     if c = #"|" then "!" else String.str c) $
                   String.concatWith " " $
@@ -249,7 +264,7 @@ structure vfmTestLib :> vfmTestLib = struct
     String.concat [
       "<tr><td><span class=", result_class result, ">", result1,
       "</span></td><td>", seconds, "s</td>", nametd, name, "</td><td>",
-      index, "</td></tr>\n"
+      index, "</td><td>", runner, "</td></tr>\n"
     ]
   end
 
@@ -268,7 +283,18 @@ structure vfmTestLib :> vfmTestLib = struct
     if trimmed = "" then "unknown" else trimmed
   end handle OS.SysErr _ => "unknown"
 
-  fun write_test_results_table () = let
+  (* The runner of a table: checked, unchecked, or mixed with the counts. *)
+  fun table_runner (data: test_result list) = let
+    val checked = List.length (List.filter (equal "checked" o #runner) data)
+    val unchecked = List.length data - checked
+  in
+    if unchecked = 0 then "checked"
+    else if checked = 0 then "unchecked"
+    else String.concat ["mixed (", Int.toString checked, " checked, ",
+                        Int.toString unchecked, " unchecked)"]
+  end
+
+  fun write_test_results_table table_file = let
     val dir = results_path ""
     val date = Date.fmt "%Y-%m-%d" (Date.fromTimeUniv (Time.now ()))
     val arch = system_output ("/usr/bin/uname", ["-m"])
@@ -278,10 +304,11 @@ structure vfmTestLib :> vfmTestLib = struct
       else String.concat [
         "<a href=https://github.com/verifereum/verifereum/commit/", commit,
         ">", commit, "</a>"]
-    val out = TextIO.openOut (OS.Path.concat (dir, "table.html"))
     val (_, nsvs) = collect_files "nsv" dir ([], [])
     val unsorted_data = List.map read_test_result_data nsvs
     val data = sort by_name unsorted_data
+    val runner = table_runner data
+    val out = TextIO.openOut (OS.Path.concat (dir, table_file))
     fun count cls =
       List.length (List.filter (equal cls o result_class o #result) data)
     val pass_count = count "passed"
@@ -289,7 +316,7 @@ structure vfmTestLib :> vfmTestLib = struct
     val percentage = Real.fmt (StringCvt.FIX (SOME 1)) $
       100.0 * (Real.fromInt pass_count / Real.fromInt total_count)
     val () = TextIO.output(out, String.concat [
-      "<html><head><title>Verifereum EEST Results</title>",
+      "<html><head><title>Verifereum EEST Results: ", runner, "</title>",
       "<link rel=stylesheet href=table.css />",
       "<script src=table.js></script></head>\n<body>"])
     val () = TextIO.output(out, String.concat [
@@ -299,9 +326,12 @@ structure vfmTestLib :> vfmTestLib = struct
       "<p>Passed: ", Int.toString pass_count, "/",
       Int.toString total_count, " (", percentage, "%), timeout: ",
       Int.toString (count "timeout"), ", fail: ",
-      Int.toString (count "fail"), "</p>\n"])
+      Int.toString (count "fail"), "</p>\n",
+      "<p>Runner: ", runner, ". Checked results are theorems proved in ",
+      "HOL4; unchecked results come from native code generated from the ",
+      "same definitions, without proof.</p>\n"])
     val () = TextIO.output(out,
-      "<table><thead><tr><th>Result</th><th>Time</th><th>Name</th><th>Index</th></tr></thead><tbody>\n")
+      "<table><thead><tr><th>Result</th><th>Time</th><th>Name</th><th>Index</th><th>Runner</th></tr></thead><tbody>\n")
     val () = List.app (curry TextIO.output out o mk_test_result_row) data
     val () = TextIO.output(out,
       "</tbody></table></body></html>")

@@ -9,6 +9,7 @@ signature vfmTestLib = sig
   val remove_nsv_files : string -> unit
   val generate_test_defs_scripts : unit -> unit
   val generate_test_results_scripts : unit -> unit
-  val write_test_results_table : unit -> unit
+  (* writes the table of the results in results/ to the named file there *)
+  val write_test_results_table : string -> unit
 
 end
