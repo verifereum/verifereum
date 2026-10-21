@@ -625,12 +625,6 @@ Proof
   \\ Cases_on`n` \\ gvs[]
 QED
 
-Theorem LENGTH_LE_length_geq:
-  LENGTH l ≤ n ⇔ ¬length_geq (SUC n) l
-Proof
-  rw[length_geq]
-QED
-
 (* Memory operations run on every instruction that touches memory, so the
    versions translated here avoid walking or copying all of memory when it
    does not grow. *)
@@ -930,11 +924,10 @@ val () = “handle_step e s” |>
     handle_step_def, bind_def, ignore_bind_def, COND_RATOR
   ] |> cv_auto_trans;
 
-(* The code-length check runs on every step: walk only to the pc. *)
 val () = “step s” |>
   SIMP_CONV std_ss [
     step_def, bind_def, ignore_bind_def, LET_RATOR,
-    COND_RATOR, option_CASE_rator, handle_def, LENGTH_LE_length_geq
+    COND_RATOR, option_CASE_rator, handle_def
   ] |> cv_auto_trans;
 
 val () = initial_access_sets_def
