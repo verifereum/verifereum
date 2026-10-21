@@ -3657,23 +3657,23 @@ Proof
     reverse conj_tac
     >- (
       irule ignores_extra_domain_imp_pred_bind \\ rw[]
-      >- irule step_inst_ignores_extra_domain
-      \\ simp[ignore_bind_def]
       \\ TOP_CASE_TAC
-      >- irule step_inst_ignores_extra_domain
-      \\ irule ignores_extra_domain_imp_pred_pred_bind \\ simp[]
-      \\ reverse conj_tac
-      >- (
-        reverse conj_asm2_tac
-        >- irule step_inst_ignores_extra_domain
-        \\ rw[]
-        \\ qmatch_asmsub_rename_tac`step_inst op`
-        \\ mp_tac step_inst_preserves_domain_has_callee
-        \\ rewrite_tac[preserves_domain_has_callee_def]
-        \\ disch_then(qspec_then`s`mp_tac)
-        \\ Cases_on`step_inst op s`
-        \\ rw[domain_has_callee_def] \\ gvs[])
-      \\ irule ignores_extra_domain_pred_imp \\ rw[] )
+      >~ [`step_inst Stop`] >- irule step_inst_ignores_extra_domain
+      >~ [`step_inst Invalid`] >- irule step_inst_ignores_extra_domain
+      \\ (simp[ignore_bind_def]
+          \\ irule ignores_extra_domain_imp_pred_pred_bind \\ simp[]
+          \\ reverse conj_tac
+          >- (
+            reverse conj_asm2_tac
+            >- irule step_inst_ignores_extra_domain
+            \\ rw[]
+            \\ qmatch_asmsub_rename_tac`step_inst op`
+            \\ mp_tac step_inst_preserves_domain_has_callee
+            \\ rewrite_tac[preserves_domain_has_callee_def]
+            \\ disch_then(qspec_then`s`mp_tac)
+            \\ Cases_on`step_inst op s`
+            \\ rw[domain_has_callee_def] \\ gvs[])
+          \\ irule ignores_extra_domain_pred_imp \\ rw[]) )
     \\ rw[]
     >- rw[handle_step_def, reraise_def]
     \\ irule ignores_extra_domain_pred_imp \\ rw[] )
@@ -3684,7 +3684,6 @@ Proof
     qunabbrev_tac`f`
     \\ irule preserves_domain_has_callee_get_current_context_bind
     \\ simp[] \\ qx_gen_tac`ss`
-    \\ IF_CASES_TAC >- rw[]
     \\ TOP_CASE_TAC >- rw[]
     \\ irule preserves_domain_has_callee_imp
     \\ irule preserves_domain_has_callee_ignore_bind \\ simp[])

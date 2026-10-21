@@ -2094,19 +2094,21 @@ QED
 Theorem step_inner_INL_preserves_all_jumpDest_NONE:
   (do
     context <- get_current_context;
-    if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
-    else
-      case FLOOKUP context.msgParams.parsed context.pc of
-        NONE => step_inst Invalid
-      | SOME op => do step_inst op; inc_pc_or_jump op od
+    case FLOOKUP context.msgParams.parsed context.pc of
+    | SOME op => do step_inst op; inc_pc_or_jump op od
+    | NONE =>
+        if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+        else step_inst Invalid
   od) s = (INL x, s') ∧ all_jumpDest_NONE s ⇒ all_jumpDest_NONE s'
 Proof
   rw[bind_def, AllCaseEqs(), get_current_context_def, return_def, fail_def] >>
-  gvs[COND_RATOR, AllCaseEqs()]
+  gvs[COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs()]
+  >~ [`step_inst Stop`]
   >- (
     drule_at(Pat`step_inst`)(REWRITE_RULE[preserves_all_jumpDest_NONE_def]
-      preserves_all_jumpDest_NONE_step_inst) >> rw[] ) >>
-  gvs[vfmTypesTheory.option_CASE_rator, AllCaseEqs()] >- (
+      preserves_all_jumpDest_NONE_step_inst) >> rw[] )
+  >~ [`step_inst Invalid`]
+  >- (
     drule_at(Pat`step_inst`)(REWRITE_RULE[preserves_all_jumpDest_NONE_def]
       preserves_all_jumpDest_NONE_step_inst) >> rw[] ) >>
   Cases_on `op = Jump`
@@ -2234,14 +2236,17 @@ Proof
                reraise_def,COND_RATOR,return_def,get_gas_left_def,
                get_current_context_def,fail_def] ) >>
   gvs[bind_def,AllCaseEqs(),get_current_context_def,return_def,fail_def] >>
-  gvs[COND_RATOR,AllCaseEqs()] >- (
+  gvs[COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs()]
+  >~ [`step_inst Stop`]
+  >- (
     drule_at(Pat`step_inst`)(
       REWRITE_RULE[preserves_all_jumpDest_NONE_def]
         preserves_all_jumpDest_NONE_step_inst) >>
     impl_tac >- gvs[] >>
     gvs[all_jumpDest_NONE_def] >>
-    Cases_on`s''.contexts` >> gvs[] ) >>
-  gvs[vfmTypesTheory.option_CASE_rator, AllCaseEqs()] >- (
+    Cases_on`s''.contexts` >> gvs[] )
+  >~ [`step_inst Invalid`]
+  >- (
     drule_at(Pat`step_inst`)(
       REWRITE_RULE[preserves_all_jumpDest_NONE_def]
         preserves_all_jumpDest_NONE_step_inst) >>

@@ -905,10 +905,11 @@ Theorem step_inner_inr_grow_not_abort:
   s.contexts ≠ [] ∧ outputTo_consistent s ∧
   (do
      context <- get_current_context;
-     if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
-     else case FLOOKUP context.msgParams.parsed context.pc of
-            NONE => step_inst Invalid
-          | SOME op => do step_inst op; inc_pc_or_jump op od
+     case FLOOKUP context.msgParams.parsed context.pc of
+     | SOME op => do step_inst op; inc_pc_or_jump op od
+     | NONE =>
+         if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+         else step_inst Invalid
    od) s = (INR e, s') ∧
   LENGTH s'.contexts > LENGTH s.contexts ⇒
   ¬vfm_abort e
@@ -918,10 +919,12 @@ Proof
          COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs(),
          ignore_bind_def]
   (* Stop case: preserves_same_frame, can't grow - contradiction *)
+  >~ [`step_inst Stop`]
   >- (`preserves_same_frame (step_inst Stop)` by simp[]
       >> imp_res_tac psf_imp_length_contexts_preserved
       >> gvs[])
   (* Invalid case: preserves_same_frame, can't grow - contradiction *)
+  >~ [`step_inst Invalid`]
   >- (`preserves_same_frame (step_inst Invalid)` by simp[]
       >> imp_res_tac psf_imp_length_contexts_preserved
       >> gvs[])
@@ -993,14 +996,16 @@ Proof
   >> simp[get_current_context_def, return_def, fail_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> strip_tac >> gvs[bind_def, get_current_context_def, return_def]
+  >> gvs[vfmTypesTheory.option_CASE_rator,CaseEq"option"]
   >> gvs[CaseEq"bool",COND_RATOR]
+  >~ [`step_inst Stop`]
   >- (
     (* step_inst Stop case: doesn't grow (preserves_same_frame).
        Contradicts the grow hypothesis. *)
     `preserves_same_frame (step_inst Stop)` by simp[]
     >> drule_then drule psf_imp_length_contexts_preserved
     >> simp[])
-  >> gvs[vfmTypesTheory.option_CASE_rator,CaseEq"option"]
+  >~ [`step_inst Invalid`]
   >- (
     (* step_inst Invalid case: doesn't grow. *)
     `preserves_same_frame (step_inst Invalid)` by simp[]
