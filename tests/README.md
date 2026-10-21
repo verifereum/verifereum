@@ -67,9 +67,9 @@ Standard ML, without building fixture theories or producing result theorems.
 The exporter uses the existing CV-translated equations of `run_test`, including
 their executable state representations; it does not reimplement EVM execution.
 The native runtime supplies arbitrary-precision CV arithmetic and maps translated
-word AND, OR, and XOR operations to Poly/ML's arbitrary-precision primitives.
-The fixture adapter reuses the certified JSON parser without constructing HOL
-terms.
+word AND, OR, XOR, and exponentiation operations to Poly/ML primitives. The
+exporter hoists generated numeral literals so each distinct value is parsed once.
+The fixture adapter reuses the certified JSON parser without constructing HOL terms.
 
 Build from the repository root:
 

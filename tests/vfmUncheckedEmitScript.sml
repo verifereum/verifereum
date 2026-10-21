@@ -73,7 +73,9 @@ fun constant_key c = let val {Thy, Name, ...} = dest_thy_const c
                     in Thy ^ "$" ^ Name end;
 val native_bitwise_names = ["cv_word_and", "cv_word_or", "cv_word_xor"];
 fun cv_prim_const name = prim_mk_const {Thy = "cv_prim", Name = name};
+val cv_exp_const = prim_mk_const {Thy = "cv", Name = "cv_exp"};
 val omitted_equation_keys =
+  constant_key cv_exp_const ::
   map (constant_key o cv_prim_const)
     (native_bitwise_names @ map (fn name => name ^ "_loop") native_bitwise_names);
 fun is_omitted_equation th =
@@ -147,6 +149,7 @@ val () = List.app (fn name => map_constant true name
     (prim_mk_const {Thy = "cv", Name = name})) ["Num", "Pair"];
 val () = List.app (fn name => map_constant false name (cv_prim_const name))
                   native_bitwise_names;
+val () = map_constant false "cv_exp" cv_exp_const;
 
 (* A strict ML function for cv_if would evaluate both branches, including
    recursive calls in the unused branch.  Rewriting to HOL COND lets EmitML's
@@ -208,3 +211,71 @@ val () = EmitML.emitML output_dir (module_name,
   List.concat (map public_record records) @
   [EmitML.MLSIG "val result_string : cv -> string\n",
    EmitML.MLSTRUCT result_source]);
+
+(* EmitML spells each numeral as a call to numML.fromString at its use site, so
+   the generated code reparses decimal strings on every call.  Bind each
+   distinct literal once at the top of the structure instead. *)
+fun hoist_numerals text = let
+  val n = size text
+  val cv_lits = ref ([] : (string * int) list)
+  val num_lits = ref ([] : (string * int) list)
+  (* Name literals by position: identifiers spelled with the digits of a
+     several-hundred-digit numeral are legal but upset holbuild's analyser. *)
+  fun note lits d =
+    case List.find (fn (d', _) => d' = d) (!lits) of
+      SOME (_, k) => Int.toString k
+    | NONE => let val k = length (!cv_lits) + length (!num_lits)
+              in lits := (d, k) :: !lits; Int.toString k end
+  fun at i prefix = String.isPrefix prefix (String.extract (text, i, SOME (Int.min (size prefix, n - i))))
+  fun digits_end j = if j < n andalso Char.isDigit (String.sub (text, j))
+                     then digits_end (j + 1) else j
+  fun space_end j = if j < n andalso Char.isSpace (String.sub (text, j))
+                    then space_end (j + 1) else j
+  (* The printer may break the line between fromString and its argument. *)
+  fun literal i prefix suffix = let
+    val quote = space_end (i + size prefix)
+    val start = quote + 1
+    val stop = digits_end start
+  in
+    if at quote "\"" andalso stop > start andalso at stop ("\"" ^ suffix)
+    then SOME (String.substring (text, start, stop - start), stop + 1 + size suffix)
+    else NONE
+  end
+  val named = [("Num(numML.ZERO)", "0"), ("Num(numML.ONE)", "1"), ("Num(numML.TWO)", "2")]
+  fun scan i acc =
+    if i >= n then String.concat (rev acc)
+    else case (if at i "Num((numML.fromString" then
+                 literal i "Num((numML.fromString" "))" else NONE) of
+        SOME (d, next) => scan next (("cvlit_" ^ note cv_lits d) :: acc)
+      | NONE =>
+    case List.find (fn (s, _) => at i s) named of
+        SOME (s, d) => scan (i + size s) (("cvlit_" ^ note cv_lits d) :: acc)
+      | NONE =>
+    case (if at i "(numML.fromString" then
+            literal i "(numML.fromString" ")" else NONE) of
+        SOME (d, next) => scan next (("numlit_" ^ note num_lits d) :: acc)
+      | NONE => scan (i + 1) (String.str (String.sub (text, i)) :: acc)
+  val body = scan 0 []
+  val decls = String.concat (
+    map (fn (d, k) => "  val numlit_" ^ Int.toString k ^
+                      " = numML.fromString \"" ^ d ^ "\"\n") (!num_lits) @
+    map (fn (d, k) => "  val cvlit_" ^ Int.toString k ^
+                      " = Num (numML.fromString \"" ^ d ^ "\")\n") (!cv_lits))
+  val anchor = "open vfmUncheckedRuntime\n"
+  val (before_anchor, after_anchor) = Substring.position anchor (Substring.full body)
+  val () = if Substring.isEmpty after_anchor
+           then raise Fail "unchecked export: no runtime open to hoist literals after"
+           else ()
+in
+  Substring.string before_anchor ^ anchor ^ decls ^
+  Substring.string (Substring.triml (size anchor) after_anchor)
+end;
+
+val generated_path = OS.Path.concat (output_dir, module_name ^ "ML.sml");
+val () = let
+  val input = TextIO.openIn generated_path
+  val text = TextIO.inputAll input before TextIO.closeIn input
+  val output = TextIO.openOut generated_path
+in
+  TextIO.output (output, hoist_numerals text) before TextIO.closeOut output
+end;

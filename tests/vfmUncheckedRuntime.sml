@@ -57,6 +57,18 @@ structure vfmUncheckedRuntime = struct
     | cv_word_xor (x as Pair _) (Num b) =
         if b = Arbnum.zero then x else Num b
 
+  (* cv_exp m n = Num (c2n m ** c2n n); the translated equation squares and
+     multiplies through the CV primitives one exponent bit at a time. *)
+  fun cv_exp x y = let
+    val b = number x and e = number y
+  in
+    if b = Arbnum.zero then (if e = Arbnum.zero then one else zero)
+    else if b = Arbnum.one then one
+    else if b = Arbnum.two andalso Arbnum.< (e, Arbnum.fromInt 0x1000000)
+    then Num (Arbnum.fromLargeInt (IntInf.<< (1, Word.fromLargeInt (Arbnum.toLargeInt e))))
+    else Num (Arbnum.pow (b, e))
+  end
+
   fun string_of_cv value =
     let
       fun chars (Num n) acc =
