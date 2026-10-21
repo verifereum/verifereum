@@ -100,7 +100,10 @@ The runner supports `-h`, `-r`, `-n`, `-f`, `-t`, `--table`, and `--no-serial-fi
 the corresponding meanings above. Use `-j N` / `--jobs N` for worker concurrency
 (default 1). There is no build backend or per-fixture script generation, so
 `-b`, `-o`, and `-g` do not apply. Each fixture runs in a fresh worker process;
-the full-suite serial-first policy remains enabled by default.
+the full-suite serial-first policy remains enabled by default. Workers run
+with `--gcthreads 1`: with Poly/ML 5.9.2's default parallel GC, the worker for
+the 25 MB `tx_gas_limit_cap_full_calldata.json` intermittently dies with `Run
+out of store` while parsing it.
 
 The per-case timeout covers native input encoding and execution, but not JSON
 parsing or worker startup. It defaults to 60 seconds and reads `VFM_TIME_LIMIT`

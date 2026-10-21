@@ -110,7 +110,10 @@ in
 end
 
 (* Poly/ML disables threads after fork.  Exec a fresh runtime before starting
-   the per-case timer; each process still owns exactly one fixture. *)
+   the per-case timer; each process still owns exactly one fixture.
+   Poly/ML 5.9.2's parallel GC can fail a multi-MB allocation while the heap
+   is still small (seen parsing a 25 MB fixture), so workers collect with one
+   GC thread.  The RTS removes --gcthreads from the arguments main sees. *)
 fun run_workers jobs fresh limit fixtures = let
   val executable = OS.FileSys.fullPath (CommandLine.name ())
   val active = ref ([] : Posix.Process.pid list)
@@ -122,7 +125,7 @@ fun run_workers jobs fresh limit fixtures = let
       SOME pid => active := pid :: !active
     | NONE =>
         (Posix.Process.exec (executable,
-           [executable, "--worker", Bool.toString fresh,
+           [executable, "--gcthreads", "1", "--worker", Bool.toString fresh,
             Time.toString limit, index, path])
          handle _ => Posix.Process.exit 0w1)
   end
