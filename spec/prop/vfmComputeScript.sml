@@ -1049,16 +1049,14 @@ QED
 
 val () = cv_auto_trans is_deposit_event_alt;
 
-val () = cv_auto_trans valid_excess_blob_gas_def;
-
-val () = cv_auto_trans $
-  REWRITE_RULE [GSYM word_of_bytes_be_def] block_invalid_after_execution_def;
+val () = cv_auto_trans header_invalid_def;
 
 val () = cv_auto_trans $
   REWRITE_RULE [GSYM word_of_bytes_be_def] block_invalid_def;
 
-Theorem run_block_unstaged_eq:
+Theorem run_block_eq:
   run_block d chainId h p a b =
+  if header_invalid p b then NONE else
   case
     run_transactions d F chainId h b
       (update_beacon_block h b a) [] b.transactions
@@ -1070,7 +1068,7 @@ Theorem run_block_unstaged_eq:
      | SOME deposits =>
          let (withdrawals, a1) = dequeue_withdrawal_requests a in
          let (consolidations, a2) = dequeue_consolidation_requests a1 in
-         (if block_invalid p rs deposits withdrawals consolidations b then NONE else
+         (if block_invalid rs deposits withdrawals consolidations b then NONE else
           case process_withdrawals b.withdrawals (a2, d) of
                NONE => NONE
              | SOME (a, d) => SOME (rs, a, d))
@@ -1101,34 +1099,6 @@ Proof
   \\ PairCases_on`q` \\ gvs[OPTION_BIND_eq_case]
   \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
   \\ Cases_on`x` \\ gs[]
-QED
-
-Theorem run_block_eq:
-  run_block d chainId h p a b =
-  if ¬valid_excess_blob_gas p b then NONE
-  else
-    case
-      run_transactions d F chainId h b
-        (update_beacon_block h b a) [] b.transactions
-    of NONE => NONE
-     | SOME (rs, a, d) =>
-       let all_logs = FLAT (MAP (λr. r.logs) rs) in
-       case extract_deposit_requests all_logs of
-         NONE => NONE
-       | SOME deposits =>
-           let (withdrawals, a1) = dequeue_withdrawal_requests a in
-           let (consolidations, a2) = dequeue_consolidation_requests a1 in
-           (if block_invalid_after_execution
-                 p rs deposits withdrawals consolidations b
-            then NONE
-            else
-              case process_withdrawals b.withdrawals (a2, d) of
-                   NONE => NONE
-                 | SOME (a, d) => SOME (rs, a, d))
-Proof
-  Cases_on `valid_excess_blob_gas p b`
-  \\ simp[run_block_unstaged_eq, block_invalid_staged]
-  \\ rpt CASE_TAC \\ simp[]
 QED
 
 val () = cv_auto_trans $ REWRITE_RULE [GSYM word_of_bytes_be_def]

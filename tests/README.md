@@ -54,7 +54,7 @@ rerunning after an interruption continues where it stopped. Options:
 | `-g`, `--generate` | only fetch the fixtures and regenerate `defs/` and `results/` |
 | `-f`, `--fresh` | rerun the selected tests instead of resuming |
 | `-t secs`, `--time secs` | time limit per test case (default 60, or `VFM_TIME_LIMIT`) |
-| `-o opt`, `--option opt` | pass `opt` to the build backend, e.g. `-o -j8` |
+| `-o opt`, `--option opt` | pass `opt` to the build backend, e.g. `-o -j8` (see also [Heap cap](#heap-cap)) |
 | `-b holbuild\|holmake`, `--backend` | build backend (default holbuild) |
 | `--no-serial-first` | build all tests together (see below) |
 | `-r`, `--results` | only write `results/table.html` |
@@ -165,6 +165,24 @@ about 10h. The slowest serial-first tests were `precomps_eip2929_cancun.json`
 `transaction_validity_type_4.json` (28 minutes). Some other tests are slow
 but not memory-heavy, so they are not in the list.
 
+## Heap cap
+
+Poly/ML grows a process's heap well past its live data when nothing caps
+it, so even built alone, one test can take all the machine's memory. With
+the holbuild backend, `./runtests.exe` therefore passes `--max-heap=24000`
+to holbuild, which caps the heap of each test it builds at 24000 MB. To use
+another cap, pass your own, e.g. `./runtests.exe -o --max-heap=32000`; `-o`
+takes a single argument, so use the `=` form.
+
+Use `--max-heap`, not `--maxheap`: holbuild's own Poly/ML runtime consumes
+`--maxheap`, which then caps holbuild rather than the tests
+([HOL-Theorem-Prover/holbuild#237](https://github.com/HOL-Theorem-Prover/holbuild/issues/237)).
+
+At 21.0.1, `intrinsic_gas_cost.json` grew past 55 GB without a cap, and
+built in about the same time with any cap from 16000 to 50000 MB. With
+8000 MB it made no progress in 18 minutes, spending its time in garbage
+collection.
+
 ## Updating to a new EEST release
 
 1. Set `fixtures_version` in `vfmTestAuxLib.sml` to the new release.
@@ -173,3 +191,5 @@ but not memory-heavy, so they are not in the list.
 3. Check that every path in `serial-first.txt` still exists in the new
    fixtures (a full run fails on one that does not), and update the index
    table above.
+4. After the full run, update the pass count and EEST version in the
+   Status section of `website/index.md` from the new `table.html`.

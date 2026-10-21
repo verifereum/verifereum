@@ -118,12 +118,22 @@ in
     force, options, targets]
 end
 
+(* Without a cap, Poly/ML lets a test's heap grow far past its live data,
+   enough for one large test to exhaust memory. holbuild's --maxheap caps
+   only holbuild itself; --max-heap reaches the children. *)
+val default_max_heap = "--max-heap=24000"
+
+fun with_max_heap options =
+  if List.exists (String.isPrefix "--max-heap") options then options
+  else options @ [default_max_heap]
+
 (* Building the memory-heavy tests in parallel with others can run out of
    memory, so by default they are built one at a time before the rest. *)
 fun run_holbuild serial_first fresh limit options indices = let
   val () = if command_available "holbuild" then ()
            else raise Fail "selected backend is unavailable: holbuild"
   val build = holbuild_targets fresh limit
+  val options = with_max_heap options
 in
   if not (List.null indices) then build options (List.map thyn indices)
   else if not serial_first then build options (all_result_targets ())
