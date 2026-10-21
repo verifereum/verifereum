@@ -197,3 +197,8 @@ End
 Definition elasticity_multiplier_def:
   elasticity_multiplier = 2n
 End
+
+(* EIP-7934: MAX_BLOCK_SIZE (10 MiB) - SAFETY_MARGIN (2 MiB) *)
+Definition max_rlp_block_size_def:
+  max_rlp_block_size = 8388608n
+End

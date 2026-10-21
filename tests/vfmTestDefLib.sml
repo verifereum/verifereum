@@ -528,8 +528,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("withdrawalAddress", address_from_hex address),
       ("withdrawalAmount", num_from_hex amount)])
 
-  fun mk_block_tm (block: block) = let
+  (* rlp is the block's RLP as hex; an invalid block's rlp_decoded may lack
+     its own copy *)
+  fun mk_block_tm rlp (block: block) = let
     val header = #blockHeader block
+    val rlp_hex_size = String.size rlp -
+      (if String.isPrefix "0x" rlp then 2 else 0)
+    val rlpSize_tm = term_of_int (rlp_hex_size div 2)
     val baseFeePerGas_tm = num_from_hex $ #baseFeePerGas header
     val excessBlobGas_tm = num_from_hex $ #excessBlobGas header
 
@@ -563,6 +568,7 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("gasLimit", gasLimit_tm),
       ("prevRandao", prevRandao_tm),
       ("hash", hash_tm),
+      ("rlpSize", rlpSize_tm),
       ("parentBeaconBlockRoot", parentBeaconBlockRoot_tm),
       ("requestsHash", requestsHash_tm),
       ("stateRoot", stateRoot_tm),
@@ -590,12 +596,13 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
   fun mk_test_block_tm (Block block) =
         list_mk_comb(valid_block_tm,
-          [mk_block_tm block, cached_byte_chunks_from_hex (#rlp block)])
+          [mk_block_tm (#rlp block) block,
+           cached_byte_chunks_from_hex (#rlp block)])
     | mk_test_block_tm (Invalid {expectException, rlp, rlp_decoded}) =
         list_mk_comb(invalid_block_tm,
           [fromMLstring expectException,
            cached_byte_chunks_from_hex rlp,
-           optionSyntax.lift_option optional_block_ty mk_block_tm
+           optionSyntax.lift_option optional_block_ty (mk_block_tm rlp)
              rlp_decoded])
 
   fun mk_genesis_block (rlp: string) (h: block_header) : block =
@@ -636,8 +643,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
 
     val g_block_name = name_prefix ^ "_genesis_block"
     val g_block_var = mk_var(g_block_name, block_ty)
-    val g_block_rhs = mk_block_tm $ mk_genesis_block g_rlp
-                                  $ #genesisBlockHeader test
+    val g_block_rhs = mk_block_tm g_rlp $ mk_genesis_block g_rlp
+                                        $ #genesisBlockHeader test
     val g_block_def = new_definition(g_block_name ^ "_def",
                                     mk_eq(g_block_var, g_block_rhs))
     val g_block_const = lhs $ concl g_block_def

@@ -794,6 +794,42 @@ Proof
   Induct \\ rw[rlp_encode_def]
 QED
 
+(* LENGTH (rlp_encode r) without building the encoding *)
+
+Definition rlp_prefix_length_def:
+  rlp_prefix_length n = if n < 56 then 1n else 1 + LENGTH (n2l 256 n)
+End
+
+Definition rlp_encode_length_def:
+  rlp_encode_length (RLPB bs) =
+    (case bs of [b] => if w2n b < 128 then 1 else 2
+     | _ => rlp_prefix_length (LENGTH bs) + LENGTH bs) ∧
+  rlp_encode_length (RLPL rs) =
+    (let n = rlp_encode_list_length 0 rs in rlp_prefix_length n + n) ∧
+  rlp_encode_list_length n [] = n ∧
+  rlp_encode_list_length n (x::xs) =
+    rlp_encode_list_length (n + rlp_encode_length x) xs
+End
+
+val () = cv_auto_trans rlp_encode_length_def;
+
+Theorem rlp_encode_length_thm:
+  (∀r. rlp_encode_length r = LENGTH (rlp_encode r)) ∧
+  (∀rs n. rlp_encode_list_length n rs =
+          n + SUM (MAP (λr. LENGTH (rlp_encode r)) rs))
+Proof
+  ho_match_mp_tac (TypeBase.induction_of “:rlp”)
+  \\ rw[rlp_encode_length_def]
+  >- (
+    rename1 `RLPB bs`
+    \\ `bs = [] ∨ (∃b. bs = [b]) ∨ ∃b c t. bs = b::c::t`
+    by (Cases_on `bs` \\ gvs[] \\ Cases_on `t` \\ gvs[])
+    \\ gvs[rlp_encode_def, rlp_bytes_def, rlp_prefix_length_def, LENGTH_n2l]
+    \\ rw[] \\ gvs[LENGTH_n2l] )
+  \\ rw[rlp_encode_def, rlp_encode_list_map, LENGTH_rlp_list,
+        rlp_prefix_length_def, LENGTH_FLAT, MAP_MAP_o, o_DEF, LENGTH_n2l]
+QED
+
 Theorem rlp_decode_length_append:
   rlp_decode_length b1 = SOME p ⇒
   rlp_decode_length (b1 ++ b2) = SOME p

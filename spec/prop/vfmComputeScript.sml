@@ -1056,6 +1056,7 @@ val () = cv_auto_trans $
 
 Theorem run_block_eq:
   run_block d chainId h p a b =
+  if b.rlpSize > max_rlp_block_size then NONE else
   if header_invalid p b then NONE else
   case
     run_transactions d F chainId h b
