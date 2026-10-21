@@ -69,6 +69,8 @@ their executable state representations; it does not reimplement EVM execution.
 The native runtime supplies arbitrary-precision CV arithmetic and maps translated
 word AND, OR, XOR, and exponentiation operations to Poly/ML primitives. The
 exporter hoists generated numeral literals so each distinct value is parsed once.
+The generated evaluator validates the parent-derived excess blob gas before
+transactions, so an invalid header cannot force evaluation of its blob base fee.
 The fixture adapter reuses the certified JSON parser without constructing HOL terms.
 
 Build from the repository root:

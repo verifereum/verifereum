@@ -2093,6 +2093,34 @@ Definition excess_blob_gas_def:
       else (parentExcessBlobGas + parentBlobGasUsed) - target_blob_gas_per_block
 End
 
+Definition valid_excess_blob_gas_def:
+  valid_excess_blob_gas p b ⇔
+    excess_blob_gas p.excessBlobGas p.blobGasUsed p.baseFeePerGas =
+      b.excessBlobGas
+End
+
+Definition block_invalid_after_execution_def:
+  block_invalid_after_execution p rs deposits withdrawals consolidations b ⇔
+    let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
+    let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
+    let requestsHash = compute_requests_hash deposits withdrawals consolidations in
+    let expectedBaseFee = expected_base_fee p.baseFeePerGas p.gasLimit p.gasUsed in
+    let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
+    let maxGasLimitDelta = p.gasLimit DIV gas_limit_adjustment_factor in
+    ¬(min_gas_limit ≤ b.gasLimit ∧
+      b.gasLimit < p.gasLimit + maxGasLimitDelta ∧
+      p.gasLimit - maxGasLimitDelta < b.gasLimit ∧
+      b.gasUsed ≤ b.gasLimit ∧
+      b.timeStamp > p.timeStamp ∧
+      b.number = p.number + 1 ∧
+      b.baseFeePerGas = expectedBaseFee ∧
+      blobGasUsed ≤ max_blob_gas_per_block ∧
+      blobGasUsed = b.blobGasUsed ∧
+      gasUsed = b.gasUsed ∧
+      requestsHash = b.requestsHash ∧
+      expectedWithdrawalsRoot = b.withdrawalsRoot)
+End
+
 Definition block_invalid_def:
   block_invalid p rs deposits withdrawals consolidations b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
@@ -2116,6 +2144,16 @@ Definition block_invalid_def:
       requestsHash = b.requestsHash ∧
       expectedWithdrawalsRoot = b.withdrawalsRoot)
 End
+
+Theorem block_invalid_staged:
+  block_invalid p rs deposits withdrawals consolidations b ⇔
+    ¬valid_excess_blob_gas p b ∨
+    block_invalid_after_execution p rs deposits withdrawals consolidations b
+Proof
+  simp[block_invalid_def, valid_excess_blob_gas_def,
+       block_invalid_after_execution_def]
+  \\ metis_tac[]
+QED
 
 Definition run_block_def:
   run_block dom chainId prevHashes parent accounts b =
