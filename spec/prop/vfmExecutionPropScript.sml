@@ -43,11 +43,12 @@ Definition step_inner_def:
       context <- get_current_context;
       code <<- context.msgParams.code;
       parsed <<- context.msgParams.parsed;
-      if LENGTH code ≤ context.pc
-      then step_inst Stop
-      else case FLOOKUP parsed context.pc of
-           | NONE => step_inst Invalid
-           | SOME op => do step_inst op; inc_pc_or_jump op od
+      case FLOOKUP parsed context.pc of
+      | SOME op => do step_inst op; inc_pc_or_jump op od
+      | NONE =>
+          if LENGTH code ≤ context.pc
+          then step_inst Stop
+          else step_inst Invalid
     od
 End
 
@@ -1204,11 +1205,12 @@ Theorem step_preserves_nonempty_contexts:
 Proof
   strip_tac \\ simp[step_def, handle_def]
   \\ Cases_on `(do context <- get_current_context;
-                  if LENGTH context.msgParams.code ≤ context.pc
-                  then step_inst Stop
-                  else case FLOOKUP context.msgParams.parsed context.pc of
-                         NONE => step_inst Invalid
-                       | SOME op => do step_inst op; inc_pc_or_jump op od
+                  case FLOOKUP context.msgParams.parsed context.pc of
+                  | SOME op => do step_inst op; inc_pc_or_jump op od
+                  | NONE =>
+                      if LENGTH context.msgParams.code ≤ context.pc
+                      then step_inst Stop
+                      else step_inst Invalid
                 od) s`
   \\ Cases_on `q` \\ simp[]
   >- (
@@ -3422,9 +3424,9 @@ Proof
   \\ reverse conj_tac
   >- (
     irule limits_num_contexts_bind_same \\ rw[]
-    >- ( irule limits_num_contexts_step_inst \\ rw[] )
     \\ CASE_TAC \\ rw[]
-    >- ( irule limits_num_contexts_step_inst \\ rw[] )
+    >~ [`step_inst Stop`] >- ( irule limits_num_contexts_step_inst \\ rw[] )
+    >~ [`step_inst Invalid`] >- ( irule limits_num_contexts_step_inst \\ rw[] )
     \\ irule limits_num_contexts_ignore_bind_same \\ rw[]
     \\ TRY ( irule limits_num_contexts_step_inst \\ rw[] )
     \\ rw[inc_pc_or_jump_def]

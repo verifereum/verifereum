@@ -503,16 +503,15 @@ Theorem same_frame_or_grow_step_inner[simp]:
   same_frame_or_grow
     (do
        context <- get_current_context;
-       if LENGTH context.msgParams.code ≤ context.pc
-       then step_inst Stop
-       else case FLOOKUP context.msgParams.parsed context.pc of
-              NONE => step_inst Invalid
-            | SOME op => do step_inst op; inc_pc_or_jump op od
+       case FLOOKUP context.msgParams.parsed context.pc of
+       | SOME op => do step_inst op; inc_pc_or_jump op od
+       | NONE =>
+           if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+           else step_inst Invalid
      od)
 Proof
   irule same_frame_or_grow_bind >> simp[] >> gen_tac
-  >> Cases_on `LENGTH x.msgParams.code ≤ x.pc` >> simp[]
-  >> CASE_TAC >> simp[]
+  >> CASE_TAC >> rw[]
   >> irule same_frame_or_grow_ignore_bind >> simp[]
 QED
 
@@ -1059,10 +1058,11 @@ Theorem step_inner_grows_by_exactly_one:
   s.contexts ≠ [] ∧
   (do
      context <- get_current_context;
-     if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
-     else case FLOOKUP context.msgParams.parsed context.pc of
-            NONE => step_inst Invalid
-          | SOME op => do step_inst op; inc_pc_or_jump op od
+     case FLOOKUP context.msgParams.parsed context.pc of
+     | SOME op => do step_inst op; inc_pc_or_jump op od
+     | NONE =>
+         if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+         else step_inst Invalid
    od) s = (r, s') ∧
   LENGTH s'.contexts > LENGTH s.contexts ⇒
   LENGTH s'.contexts = LENGTH s.contexts + 1
@@ -1072,9 +1072,11 @@ Proof
          COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs(),
          ignore_bind_def]
   (* Stop case: preserves_same_frame, can't grow *)
+  >~ [`step_inst Stop`]
   >- (`preserves_same_frame (step_inst Stop)` by simp[]
       >> imp_res_tac psf_imp_length_contexts_preserved >> gvs[])
   (* Invalid case: preserves_same_frame, can't grow *)
+  >~ [`step_inst Invalid`]
   >- (`preserves_same_frame (step_inst Invalid)` by simp[]
       >> imp_res_tac psf_imp_length_contexts_preserved >> gvs[])
   (* SOME op case *)

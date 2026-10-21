@@ -956,10 +956,11 @@ Theorem inner_preserves_static_inv:
   static_inv a0 t0 d0 l0 s /\ s.contexts <> [] ==>
   !r s'. (do
     ctxt <- get_current_context;
-    if LENGTH ctxt.msgParams.code <= ctxt.pc then step_inst Stop
-    else case FLOOKUP ctxt.msgParams.parsed ctxt.pc of
-           NONE => step_inst Invalid
-         | SOME op => do step_inst op; inc_pc_or_jump op od
+    case FLOOKUP ctxt.msgParams.parsed ctxt.pc of
+    | SOME op => do step_inst op; inc_pc_or_jump op od
+    | NONE =>
+        if LENGTH ctxt.msgParams.code <= ctxt.pc then step_inst Stop
+        else step_inst Invalid
   od) s = (r, s') ==>
   static_inv a0 t0 d0 l0 s'
 Proof
@@ -967,11 +968,11 @@ Proof
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h`
   >> gvs[bind_def, get_current_context_def, return_def]
-  >> Cases_on `LENGTH h0.msgParams.code <= h0.pc` >> gvs[]
-  >- (`cp (step_inst Stop)` by simp[]
-      >> metis_tac[cp_preserves_static_inv_pair])
   >> Cases_on `FLOOKUP h0.msgParams.parsed h0.pc` >> gvs[]
-  >- (`cp (step_inst Invalid)` by simp[]
+  >- (Cases_on `LENGTH h0.msgParams.code <= h0.pc` >> gvs[]
+      >- (`cp (step_inst Stop)` by simp[]
+          >> metis_tac[cp_preserves_static_inv_pair])
+      >> `cp (step_inst Invalid)` by simp[]
       >> metis_tac[cp_preserves_static_inv_pair])
   >> gvs[ignore_bind_def, bind_def]
   >> `static_inv a0 t0 d0 l0 (SND (step_inst x s))`
@@ -990,10 +991,11 @@ Proof
        ctxt <- get_current_context;
        code <<- ctxt.msgParams.code;
        parsed <<- ctxt.msgParams.parsed;
-       if LENGTH code <= ctxt.pc then step_inst Stop
-       else case FLOOKUP parsed ctxt.pc of
-              NONE => step_inst Invalid
-            | SOME op => do step_inst op; inc_pc_or_jump op od od)
+       case FLOOKUP parsed ctxt.pc of
+       | SOME op => do step_inst op; inc_pc_or_jump op od
+       | NONE =>
+           if LENGTH code <= ctxt.pc then step_inst Stop
+           else step_inst Invalid od)
        handle_step s0`
      by simp[step_def]
   >> pop_assum (fn th => REWRITE_TAC[th])
@@ -1735,22 +1737,23 @@ QED
 Theorem inner_preserves_snc_pair[local]:
   snc s ∧ s.contexts = h::t ∧
   (do context <- get_current_context;
-      if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
-      else case FLOOKUP context.msgParams.parsed context.pc of
-             NONE => step_inst Invalid
-           | SOME op => do step_inst op; inc_pc_or_jump op od
+      case FLOOKUP context.msgParams.parsed context.pc of
+      | SOME op => do step_inst op; inc_pc_or_jump op od
+      | NONE =>
+          if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+          else step_inst Invalid
   od) s = (r, s1) ⇒
   snc s1 ∧ s1.contexts ≠ []
 Proof
   strip_tac
   \\ gvs[bind_def, get_current_context_def, return_def]
   \\ PairCases_on `h` \\ gvs[]
-  \\ Cases_on `LENGTH h0.msgParams.code ≤ h0.pc` \\ gvs[]
-  >- (`cp (step_inst Stop)` by simp[]
-      \\ `s.contexts ≠ []` by simp[]
-      \\ drule_all cp_sne_pair \\ simp[])
   \\ Cases_on `FLOOKUP h0.msgParams.parsed h0.pc` \\ gvs[]
-  >- (`cp (step_inst Invalid)` by simp[]
+  >- (Cases_on `LENGTH h0.msgParams.code ≤ h0.pc` \\ gvs[]
+      >- (`cp (step_inst Stop)` by simp[]
+          \\ `s.contexts ≠ []` by simp[]
+          \\ drule_all cp_sne_pair \\ simp[])
+      \\ `cp (step_inst Invalid)` by simp[]
       \\ `s.contexts ≠ []` by simp[]
       \\ drule_all cp_sne_pair \\ simp[])
   \\ gvs[ignore_bind_def, bind_def]
@@ -1772,10 +1775,11 @@ Proof
   \\ simp[step_def, handle_def]
   \\ `∃r s1. (do
         context <- get_current_context;
-        if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
-        else case FLOOKUP context.msgParams.parsed context.pc of
-               NONE => step_inst Invalid
-             | SOME op => do step_inst op; inc_pc_or_jump op od
+        case FLOOKUP context.msgParams.parsed context.pc of
+        | SOME op => do step_inst op; inc_pc_or_jump op od
+        | NONE =>
+            if LENGTH context.msgParams.code ≤ context.pc then step_inst Stop
+            else step_inst Invalid
       od : unit execution) s = (r, s1)` by metis_tac[pairTheory.PAIR]
   \\ gvs[]
   \\ Cases_on `r` \\ gvs[]

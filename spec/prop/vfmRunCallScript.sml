@@ -888,18 +888,11 @@ Proof
     >> simp[bind_def, ignore_bind_def]
     >> simp[get_current_context_def, return_def, fail_def]
     >> Cases_on `s.contexts` >> gvs[]
-    >> Cases_on `LENGTH (FST h).msgParams.code ≤ (FST h).pc` >> gvs[]
-    >- (
-      (* Stop case. *)
-      strip_tac
-      >> drule step_inst_preserves_non_accessed_storage
-      >> simp[is_call_def]
-      >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
-      >> simp[])
     >> Cases_on `FLOOKUP (FST h).msgParams.parsed (FST h).pc` >> gvs[]
     >- (
-      (* Invalid case. *)
-      strip_tac
+      (* Stop and Invalid cases. *)
+      Cases_on `LENGTH (FST h).msgParams.code ≤ (FST h).pc` >> gvs[]
+      >> strip_tac
       >> drule step_inst_preserves_non_accessed_storage
       >> simp[is_call_def]
       >> disch_then (qspecl_then [`(FST h).msgParams.callee`, `k`] mp_tac)
@@ -941,8 +934,10 @@ Proof
   strip_tac >- (
     qpat_x_assum`inner _ = _`mp_tac >>
     simp[Abbr`inner`, bind_def,AllCaseEqs()] >>
-    simp[get_current_context_def, return_def, COND_RATOR, AllCaseEqs()] >>
-    strip_tac >- (
+    simp[get_current_context_def, return_def, option_CASE_rator, COND_RATOR,
+         AllCaseEqs()] >>
+    rpt strip_tac
+    >~ [`step_inst Stop`] >- (
       drule step_inst_preserves_non_accessed_storage >>
       simp[is_call_def] >>
       disch_then(qspecl_then[`a`,`k`]mp_tac) >>
@@ -958,11 +953,10 @@ Proof
         gvs[same_frame_rel_def] >>
         gvs[outputTo_consistent_def] ) >>
       reverse conj_tac >- goal_assum drule >>
-      fs[same_frame_rel_def] ) >>
-    gvs[AllCaseEqs(),option_CASE_rator] >- (
+      fs[same_frame_rel_def] )
+    >~ [`step_inst Invalid`] >- (
       drule step_inst_preserves_non_accessed_storage >>
       simp[is_call_def] >>
-      qmatch_goalsub_abbrev_tac`lookup_account a` >>
       disch_then(qspecl_then[`a`,`k`]mp_tac) >>
       impl_keep_tac >- (
         gvs[step_inst_def, bind_def, ignore_bind_def,
@@ -1077,13 +1071,14 @@ Proof
           >> imp_res_tac same_frame_rel_contexts_ne) >>
   `LENGTH s'.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def] >>
   gvs[Abbr`inner`,bind_def,AllCaseEqs(),get_current_context_def,return_def] >>
-  gvs[COND_RATOR,AllCaseEqs()] >- (
+  gvs[option_CASE_rator,COND_RATOR,AllCaseEqs()]
+  >~ [`step_inst Stop`] >- (
     `¬is_call Stop` by simp[is_call_def] >>
     drule preserves_same_frame_step_inst_not_call >>
     rewrite_tac[preserves_same_frame_def] >>
     disch_then drule >> simp[] >>
-    simp[same_frame_rel_def] ) >>
-  gvs[option_CASE_rator,AllCaseEqs()] >- (
+    simp[same_frame_rel_def] )
+  >~ [`step_inst Invalid`] >- (
     `¬is_call Invalid` by simp[is_call_def] >>
     drule preserves_same_frame_step_inst_not_call >>
     rewrite_tac[preserves_same_frame_def] >>
@@ -2191,15 +2186,16 @@ Proof
     (* inner = get_ctx; step_inst; inc_pc_or_jump *)
     >> gvs[Abbr`inner`, bind_def,AllCaseEqs()]
     >> gvs[get_current_context_def, return_def, fail_def, bind_def]
+    >> gvs[option_CASE_rator,CaseEq"option"]
     >> gvs[COND_RATOR, CaseEq"bool"]
-    (* Case: code ≤ pc, step_inst Stop *)
+    (* Case: NONE, code ≤ pc, step_inst Stop *)
+    >~ [`step_inst Stop`]
     >- (
       `preserves_same_frame (step_inst Stop)` by simp[]
       >> drule_all psf_imp_length_contexts_preserved
       >> simp[])
-    (* Case: FLOOKUP *)
-    >> gvs[option_CASE_rator,CaseEq"option"]
     (* NONE: step_inst Invalid *)
+    >~ [`step_inst Invalid`]
     >- (
       `preserves_same_frame (step_inst Invalid)` by simp[]
       >> drule_all psf_imp_length_contexts_preserved
@@ -2516,8 +2512,8 @@ Proof
       disch_then (qx_choosel_then [`new_head`] strip_assume_tac) >>
       gvs[lookup_storage_def, FUN_EQ_THM] >>
       gvs[SUBSET_DEF,same_frame_rel_def] )
-    >> gvs[COND_RATOR,AllCaseEqs()]
     >> gvs[option_CASE_rator, AllCaseEqs()]
+    >> gvs[COND_RATOR,AllCaseEqs()]
     >> gvs[ignore_bind_def,bind_def,AllCaseEqs()]
     >> drule inc_pc_or_jump_inr_eq >> rw[] )
   >> gvs[handle_step_def]
@@ -2528,10 +2524,10 @@ Proof
   >> gvs[bind_def, get_current_context_def, return_def]
   >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD r'.contexts)).gasUsed`
   by (
+    gvs[CaseEq"option",option_CASE_rator,ignore_bind_def] >>
     gvs[COND_RATOR,CaseEq"bool"]
-    >- metis_tac[step_inst_same_frame_gas_monotone] >>
-    gvs[CaseEq"option",option_CASE_rator,ignore_bind_def]
-    >- metis_tac[step_inst_same_frame_gas_monotone] >>
+    >~ [`step_inst Stop`] >- metis_tac[step_inst_same_frame_gas_monotone]
+    >~ [`step_inst Invalid`] >- metis_tac[step_inst_same_frame_gas_monotone] >>
     reverse(gvs[bind_def,AllCaseEqs()])
     >- metis_tac[step_inst_same_frame_gas_monotone] >>
     drule inc_pc_or_jump_inr_eq >> simp[] >> strip_tac >> gvs[] >>
@@ -2584,8 +2580,8 @@ Proof
       gvs[] >>
       drule step_inst_inr_preserves_storage >>
       simp[lookup_storage_def, FUN_EQ_THM] ) >>
-    gvs[COND_RATOR,AllCaseEqs()] >>
     gvs[option_CASE_rator,AllCaseEqs()] >>
+    gvs[COND_RATOR,AllCaseEqs()] >>
     gvs[ignore_bind_def,bind_def,AllCaseEqs()] >>
     drule inc_pc_or_jump_inr_eq >> rw[]) >>
   Cases_on`s.contexts` >> fs[] >>

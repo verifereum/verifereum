@@ -1753,12 +1753,12 @@ Definition step_def:
     context <- get_current_context;
     code <<- context.msgParams.code;
     parsed <<- context.msgParams.parsed;
-    if LENGTH code ≤ context.pc
-    then step_inst Stop else
-    do case FLOOKUP parsed context.pc of
-      | NONE => step_inst Invalid
-      | SOME op => do step_inst op; inc_pc_or_jump op od
-    od
+    case FLOOKUP parsed context.pc of
+    | SOME op => do step_inst op; inc_pc_or_jump op od
+    | NONE =>
+        if LENGTH code ≤ context.pc
+        then step_inst Stop
+        else step_inst Invalid
   od handle_step
 End
 

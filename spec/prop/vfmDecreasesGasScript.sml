@@ -2058,7 +2058,7 @@ Proof
     irule_at Any decreases_gas_imp \\ rw []
     \\ irule_at Any decreases_gas_get_current_context  )
   \\ rw[]
-  \\ CASE_TAC >- rw[]
+  \\ CASE_TAC \\ rw[]
   \\ irule_at Any decreases_gas_cred_ignore_bind_mono
   \\ irule_at Any decreases_gas_cred_step_inst
   \\ rw[]
