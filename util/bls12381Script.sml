@@ -1527,11 +1527,10 @@ Definition verify_kzg_proof_def:
     (* X - z*G2 *)
     z_g2 = g2_mul g2_gen z;
     x_minus_z = g2_add kzg_setup_g2 (g2_neg z_g2);
-    (* Compute pairings *)
-    pairing1 = pairing (g2_neg g2_gen) p_minus_y;
-    pairing2 = pairing x_minus_z proof;
-    (* Product should equal 1 *)
-    product = poly12_mul pairing1 pairing2
+    (* Product of the pairings, with one final exponentiation for both *)
+    miller1 = miller_loop (g2_neg g2_gen) p_minus_y;
+    miller2 = miller_loop x_minus_z proof;
+    product = final_exponentiation (poly12_mul miller1 miller2)
   in product = poly12_one
 End
 
@@ -2212,11 +2211,19 @@ End
 
 val () = cv_trans pairing_pairs_in_subgroup_def;
 
-(* Compute product of pairings - note: pairing takes G2 first, then G1 *)
+(* Product of Miller loops - note: miller_loop takes G2 first, then G1 *)
+Definition multi_miller_loop_def:
+  multi_miller_loop [] = poly12_one ∧
+  multi_miller_loop ((p1, p2)::rest) =
+    poly12_mul (miller_loop p2 p1) (multi_miller_loop rest)
+End
+
+val () = cv_trans multi_miller_loop_def;
+
+(* Product of pairings. The final exponentiation distributes over the
+   product, so it is applied once rather than once per pair. *)
 Definition multi_pairing_def:
-  multi_pairing [] = poly12_one ∧
-  multi_pairing ((p1, p2)::rest) =
-    poly12_mul (pairing p2 p1) (multi_pairing rest)
+  multi_pairing pairs = final_exponentiation (multi_miller_loop pairs)
 End
 
 val () = cv_trans multi_pairing_def;
