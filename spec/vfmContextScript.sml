@@ -150,6 +150,7 @@ Datatype:
    ; gasLimit              : num
    ; prevRandao            : bytes32
    ; hash                  : bytes32
+   ; rlpSize               : num (* length of the block's RLP encoding *)
    ; parentBeaconBlockRoot : bytes32
    ; requestsHash          : bytes32
    ; stateRoot             : bytes32

@@ -157,7 +157,9 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
     ML.withdrawal {withdrawalIndex = num index, validatorIndex = num validatorIndex,
                    withdrawalAddress = address key, withdrawalAmount = num amount}
 
-  fun block (value : Fixture.block) = let
+  (* rlp is the block's RLP as hex; an invalid block's rlp_decoded may lack
+     its own copy *)
+  fun block rlp (value : Fixture.block) = let
     val header = #blockHeader value
     val base_fee = Arbnum.fromHexString (#baseFeePerGas header)
   in
@@ -172,6 +174,7 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
       gasLimit = num (#gasLimit header),
       prevRandao = bytes32 (#mixHash header),
       hash = bytes32 (#hash header),
+      rlpSize = ML.Num (Arbnum.fromInt ((String.size rlp - hex_start rlp) div 2)),
       parentBeaconBlockRoot = bytes32 (#parentBeaconBlockRoot header),
       requestsHash = bytes32 (#requestsHash header),
       stateRoot = bytes32 (#stateRoot header),
@@ -182,10 +185,10 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
   end
 
   fun test_block (Fixture.Block value) =
-        ML.valid_block (block value) (byte_chunks (#rlp value))
+        ML.valid_block (block (#rlp value) value) (byte_chunks (#rlp value))
     | test_block (Fixture.Invalid {expectException, rlp, rlp_decoded}) =
         ML.invalid_block (string_cv expectException) (byte_chunks rlp)
-          (option_cv block rlp_decoded)
+          (option_cv (block rlp) rlp_decoded)
 
   fun run (test : Fixture.test) () = let
     val header = #genesisBlockHeader test
@@ -196,7 +199,7 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
   in
     ML.result_string
       (ML.run_test (accounts (#pre test)) (byte_chunks (#genesisRLP test))
-        (block genesis) (list_cv test_block (#blocks test))
+        (block (#genesisRLP test) genesis) (list_cv test_block (#blocks test))
         (bytes32 (#lastblockhash test)) (accounts (#post test)))
   end
 

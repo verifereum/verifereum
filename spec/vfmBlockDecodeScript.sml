@@ -88,6 +88,7 @@ Definition block_header_from_rlp_def:
      ; withdrawalsRoot := word_of_bytes T 0w withdrawalsRoot
      (* not in header *)
      ; hash          := 0w
+     ; rlpSize       := 0
      ; transactions  := []
      ; withdrawals   := []
      |>
@@ -647,12 +648,14 @@ Definition block_from_rlp_def:
     blk with <|
       transactions := transactions
     ; withdrawals := withdrawals
+    ; rlpSize := LENGTH (rlp_encode rlp)
     |>
 End
 
 val block_from_rlp_pre_def = block_from_rlp_def
   |> SRULE [GSYM OPT_MMAP_withdrawal_from_rlp_eq,
-               GSYM OPT_MMAP_transaction_from_rlp_eq]
+               GSYM OPT_MMAP_transaction_from_rlp_eq,
+               GSYM (CONJUNCT1 rlp_encode_length_thm)]
   |> cv_auto_trans_pre "block_from_rlp_pre";
 
 Theorem block_from_rlp_pre[cv_pre]:

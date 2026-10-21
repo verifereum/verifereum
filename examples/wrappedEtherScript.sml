@@ -274,6 +274,7 @@ Definition deploy_block_def:
   ; gasLimit := 7967026
   ; prevRandao := 0w (* fake *)
   ; hash := 0xd6e5f60d6b2367e74cd2aa520dbeb104826c3932eb482cc16e7f7ef5f8f74799w
+  ; rlpSize := 0 (* fake *)
   ; parentBeaconBlockRoot := 0w (* fake *)
   ; stateRoot := 0xb94a65da26a6c94c90376eb814d4f6f3c87d5b4ca515b1293b74a172be755245w
   ; transactions := [deploy_tx] (* not true, many others *)
