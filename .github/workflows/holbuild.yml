@@ -183,7 +183,7 @@ jobs:
           malformed = []
           for path in sorted(Path("tests/results").glob("result*.nsv")):
               fields = path.read_text().splitlines()
-              if len(fields) != 3:
+              if len(fields) not in (3, 4) or fields[3:] not in ([], ["checked"], ["unchecked"]):
                   malformed.append(str(path))
                   continue
               try:
