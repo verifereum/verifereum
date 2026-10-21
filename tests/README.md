@@ -61,6 +61,11 @@ rerunning after an interruption continues where it stopped. Options:
 | `-n`, `--noresults` | do not write the results table |
 | `--table file` | write the results table to `results/file` (default `table.html`) |
 
+Each distinct genesis state root in a fixture file is proved once and reused
+by every case that shares it. The time limit applies separately to proving a
+root and to evaluating each case; a root that times out makes every case
+sharing it a `Timeout`.
+
 ## Unchecked native runner
 
 `runtests_unchecked.sml` runs the same fixture checks using EmitML-generated
