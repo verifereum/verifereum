@@ -210,16 +210,16 @@ structure vfmTestLib :> vfmTestLib = struct
     index: string
   }
 
-  (* A result file has the lines name, result, seconds, and optionally the
-     runner that produced it. The results theories write no runner line, so
-     a missing one means checked. *)
+  (* A result file has the lines name, result, seconds, and the runner that
+     produced it. Files written before runners recorded themselves have no
+     runner line; their runner is unknown. *)
   fun read_test_result_data result_file : test_result = let
     val inp = TextIO.openIn result_file
     val lines = TextIO.inputAll inp
     val () = TextIO.closeIn inp
     val (name, result, seconds, runner) =
       case String.tokens (equal #"\n") lines of
-        [name, result, seconds] => (name, result, seconds, "checked")
+        [name, result, seconds] => (name, result, seconds, "unknown")
       | [name, result, seconds, runner] =>
           if runner = "checked" orelse runner = "unchecked"
           then (name, result, seconds, runner)
@@ -283,15 +283,19 @@ structure vfmTestLib :> vfmTestLib = struct
     if trimmed = "" then "unknown" else trimmed
   end handle OS.SysErr _ => "unknown"
 
-  (* The runner of a table: checked, unchecked, or mixed with the counts. *)
+  (* The runner of a table's results, or mixed with the count of each. *)
   fun table_runner (data: test_result list) = let
-    val checked = List.length (List.filter (equal "checked" o #runner) data)
-    val unchecked = List.length data - checked
+    fun count runner = List.length (List.filter (equal runner o #runner) data)
+    val counts = List.filter (fn (_, n) => n > 0) $
+      List.map (fn runner => (runner, count runner))
+        ["checked", "unchecked", "unknown"]
   in
-    if unchecked = 0 then "checked"
-    else if checked = 0 then "unchecked"
-    else String.concat ["mixed (", Int.toString checked, " checked, ",
-                        Int.toString unchecked, " unchecked)"]
+    case counts of
+      [] => "none"
+    | [(runner, _)] => runner
+    | _ => String.concat ["mixed (", String.concatWith ", " $
+             List.map (fn (runner, n) => Int.toString n ^ " " ^ runner)
+               counts, ")"]
   end
 
   fun write_test_results_table table_file = let
@@ -329,7 +333,8 @@ structure vfmTestLib :> vfmTestLib = struct
       Int.toString (count "fail"), "</p>\n",
       "<p>Runner: ", runner, ". Checked results are theorems proved in ",
       "HOL4; unchecked results come from native code generated from the ",
-      "same definitions, without proof.</p>\n"])
+      "same definitions, without proof; unknown results predate the ",
+      "recording of the runner.</p>\n"])
     val () = TextIO.output(out,
       "<table><thead><tr><th>Result</th><th>Time</th><th>Name</th><th>Index</th><th>Runner</th></tr></thead><tbody>\n")
     val () = List.app (curry TextIO.output out o mk_test_result_row) data

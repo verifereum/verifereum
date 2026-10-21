@@ -131,18 +131,25 @@ Expect approximately two to three hours on a standard GitHub-hosted runner.
 Each test case's result is a file `results/resultNNNN_K.nsv`, where `K` is the
 case's position in its fixture file. Its lines are the case's name, its result
 (`Passed`, `Timeout`, or what went wrong), the seconds it took, and the runner
-that produced it: `unchecked` for `runtests_unchecked.exe`. The results theories
-of `runtests.exe` write only the first three lines, and a file without a fourth
-line is `checked`.
+that produced it: `checked` for the results theories of `runtests.exe`,
+`unchecked` for `runtests_unchecked.exe`. Files written before runners recorded
+themselves have only the first three lines, and their runner is `unknown`. If
+you know a directory of them is all checked, label them so:
+
+```bash
+for f in results/result*.nsv; do [ "$(wc -l < "$f")" = 3 ] && echo checked >> "$f"; done
+```
 
 The results table lists every `.nsv` file in `results/` with its runner, and its
-header says whether the results are `checked`, `unchecked`, or mixed, with the
-count of each. It is written to `results/table.html`, or to another file there
-with `--table`, next to the `table.css` and `table.js` it uses. For checked
-and unchecked tables side by side, run `./runtests.exe`, which writes
+header says whether the results are `checked`, `unchecked`, `unknown`, or mixed,
+with the count of each. It is written to `results/table.html`, or to another
+file there with `--table`, next to the `table.css` and `table.js` it uses. For
+checked and unchecked tables side by side, run `./runtests.exe`, which writes
 `table.html`, and then `./runtests_unchecked.exe -f --table
 table-unchecked.html`; `-f` makes the second runner rerun every case rather
-than resume from the first runner's results.
+than resume from the first runner's results. The second run replaces the first
+runner's result files, so `table.html` can no longer be rewritten from them;
+copy `results/*.nsv` first if you need them again.
 
 ## Serial-first tests
 
