@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.11.2"
+minimum_version = "0.11.5"
 
 [project]
 name = "verifereum"
@@ -16,6 +16,14 @@ include = ["tests/defs", "tests/results"]
 name = "runtests"
 output = "tests/runtests.exe"
 objects = ["runtests"]
+
+[[executable]]
+name = "runtests_unchecked"
+output = "tests/runtests_unchecked.exe"
+objects = ["runtests_unchecked"]
+
+[actions.vfmUncheckedFixtureLib]
+deps = ["vfmUncheckedEmitTheory"]
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"

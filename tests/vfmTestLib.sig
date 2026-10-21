@@ -1,6 +1,7 @@
 signature vfmTestLib = sig
 
   val ensure_fixtures : unit -> unit
+  val get_all_test_json_paths : unit -> string list
   (* index strings, as in test theory names, of the given fixture json paths *)
   val test_indices : string list -> string list
   val system_or_fail : string -> string -> unit

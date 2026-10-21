@@ -6,7 +6,7 @@ Verifereum is checked against the [Ethereum Execution Spec Tests
 HOL4, and the outcome of each test case is recorded. The current status is
 published on the [progress page](https://verifereum.org/table.html).
 
-A full run takes many hours, so the suite is not part of CI.
+The proof-producing runner takes many hours, so CI uses the unchecked native runner.
 
 ## Contents
 
@@ -59,6 +59,70 @@ rerunning after an interruption continues where it stopped. Options:
 | `--no-serial-first` | build all tests together (see below) |
 | `-r`, `--results` | only write `results/table.html` |
 | `-n`, `--noresults` | do not write `results/table.html` |
+
+## Unchecked native runner
+
+`runtests_unchecked.sml` runs the same fixture checks using EmitML-generated
+Standard ML, without building fixture theories or producing result theorems.
+The exporter uses the existing CV-translated equations of `run_test`, including
+their executable state representations; it does not reimplement EVM execution.
+The native runtime supplies arbitrary-precision CV arithmetic and maps translated
+word AND, OR, XOR, and exponentiation operations to Poly/ML primitives. The
+exporter hoists generated numeral literals so each distinct value is parsed once.
+The generated evaluator validates the parent-derived excess blob gas before
+transactions, so an invalid header cannot force evaluation of its blob base fee.
+The fixture adapter reuses the certified JSON parser without constructing HOL terms.
+
+Build from the repository root:
+
+```bash
+holbuild build vfmUncheckedEmitTheory
+holbuild executable runtests_unchecked
+cd tests
+./runtests_unchecked.exe -j8             # all fixtures
+./runtests_unchecked.exe -j2 0135 0138    # selected fixture indices
+./runtests_unchecked.exe -f -t300 0135   # rerun with a longer timeout
+```
+
+The first command creates the ignored `vfmUncheckedML.sml` and `.sig` files;
+run it before the first executable build in a clean checkout. Subsequent
+executable builds depend on the exporter so changes to the semantics regenerate
+the evaluator. Plain `Holmake runtests_unchecked.exe` from `tests/` also has
+generation rules.
+
+The runner supports `-h`, `-r`, `-n`, `-f`, `-t`, and `--no-serial-first` with
+the corresponding meanings above. Use `-j N` / `--jobs N` for worker concurrency
+(default 1). There is no build backend or per-fixture script generation, so
+`-b`, `-o`, and `-g` do not apply. Each fixture runs in a fresh worker process;
+the full-suite serial-first policy remains enabled by default.
+
+The per-case timeout covers native input encoding and execution, but not JSON
+parsing or worker startup. It defaults to 60 seconds and reads `VFM_TIME_LIMIT`
+when the executable runs; `-t` overrides it. Completed cases resume individually,
+including recorded timeouts. Use `-f` to rerun them after changing the limit.
+Cases are rerun when their result file predates the executable, fixture JSON,
+or fixture version file. Result files are published atomically.
+
+Both runners use the existing `results/resultNNNN_K.nsv` files and
+`results/table.html`, with the same format and reporting code. Results from one
+runner can therefore replace or be resumed by the other; use `-f` to force
+execution by the selected runner. Neither runner's successful exit status
+guarantees that every case passed: inspect the report for mismatches and timeouts.
+Parser errors, worker failures, and invalid command options cause the native
+runner to exit unsuccessfully.
+
+### GitHub CI
+
+The `holbuild` GitHub Actions workflow builds `runtests_unchecked.exe` and runs
+the complete suite from a clean result set with one fixture worker per available
+CPU. The per-case timeout remains 60 seconds. Extracted fixtures are cached by
+platform and fixture-definition version to avoid downloading and unpacking the
+release on every run.
+
+Each run writes status counts and measured wall, user, system, and peak-memory
+figures to the GitHub job summary. The `eest-results-<commit>-<attempt>` artifact
+contains every `.nsv` result, `table.html`, and the timing file for 30 days.
+Expect approximately two to three hours on a standard GitHub-hosted runner.
 
 ## Serial-first tests
 
