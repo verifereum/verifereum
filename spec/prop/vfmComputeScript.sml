@@ -606,14 +606,76 @@ QED
 
 val from_to_memory_expansion_info = from_to_thm_for “:memory_expansion_info”;
 
+(* n ≤ LENGTH l, walking at most n elements of l *)
+Definition length_geq_def:
+  length_geq (n:num) l =
+  if n = 0 then T else
+  case l of [] => F | _::t => length_geq (n - 1) t
+End
+
+val () = cv_auto_trans length_geq_def;
+
+Theorem length_geq:
+  ∀n l. length_geq n l ⇔ n ≤ LENGTH l
+Proof
+  recInduct length_geq_ind
+  \\ rw[]
+  \\ rw[Once length_geq_def]
+  \\ CASE_TAC \\ gvs[]
+  \\ Cases_on`n` \\ gvs[]
+QED
+
+Theorem LENGTH_LE_length_geq:
+  LENGTH l ≤ n ⇔ ¬length_geq (SUC n) l
+Proof
+  rw[length_geq]
+QED
+
+(* Memory operations run on every instruction that touches memory, so the
+   versions translated here avoid walking or copying all of memory when it
+   does not grow. *)
+
+Theorem memory_expansion_info_eq:
+  memory_expansion_info off sz = do
+    context <- get_current_context;
+    newMinSize <<- if 0 < sz then word_size (off + sz) * 32 else 0;
+    if length_geq newMinSize context.memory then
+      return <| cost := 0; expand_by := 0 |>
+    else let oldSize = LENGTH context.memory in
+      return <| cost := memory_expansion_cost oldSize newMinSize
+              ; expand_by := newMinSize - oldSize |>
+  od
+Proof
+  rw[FUN_EQ_THM, memory_expansion_info_def, bind_def, length_geq,
+     memory_expansion_cost_def, MAX_DEF]
+  \\ CASE_TAC \\ CASE_TAC \\ rw[] \\ gvs[]
+QED
+
+Theorem expand_memory_eq:
+  expand_memory n = do
+    context <- get_current_context;
+    if n = 0 then return () else
+    set_current_context $ context with memory := context.memory ++ REPLICATE n 0w
+  od
+Proof
+  simp[FUN_EQ_THM] \\ qx_gen_tac`s`
+  \\ rw[expand_memory_def, bind_def, get_current_context_def,
+        set_current_context_def, return_def]
+  \\ Cases_on`s.contexts` \\ gvs[fail_def]
+  \\ Cases_on`h`
+  \\ rw[return_def, set_current_context_def,
+        execution_state_component_equality, context_component_equality]
+QED
+
 val () = “memory_expansion_info x y s” |>
   SIMP_CONV std_ss [
-    memory_expansion_info_def, bind_def, ignore_bind_def, LET_RATOR
+    memory_expansion_info_eq, bind_def, ignore_bind_def, LET_RATOR,
+    COND_RATOR
   ] |> cv_auto_trans;
 
 val () = “expand_memory x s” |>
   SIMP_CONV std_ss [
-    expand_memory_def, bind_def, ignore_bind_def
+    expand_memory_eq, bind_def, ignore_bind_def, COND_RATOR
   ] |> cv_auto_trans;
 
 val () = “read_memory x y s” |>
@@ -868,10 +930,11 @@ val () = “handle_step e s” |>
     handle_step_def, bind_def, ignore_bind_def, COND_RATOR
   ] |> cv_auto_trans;
 
+(* The code-length check runs on every step: walk only to the pc. *)
 val () = “step s” |>
   SIMP_CONV std_ss [
     step_def, bind_def, ignore_bind_def, LET_RATOR,
-    COND_RATOR, option_CASE_rator, handle_def
+    COND_RATOR, option_CASE_rator, handle_def, LENGTH_LE_length_geq
   ] |> cv_auto_trans;
 
 val () = initial_access_sets_def
