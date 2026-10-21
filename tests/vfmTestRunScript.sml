@@ -133,35 +133,35 @@ val () = cv_auto_trans run_test_def;
    already-proved values. Each table entry only has to be correct, not
    complete: a missing entry falls back to computing the value. *)
 
-Definition memo_storage_root_def:
-  memo_storage_root [] s = storage_root s ∧
-  memo_storage_root ((k,r)::t) s =
-    if k = s then (r:word8 list) else memo_storage_root t s
+Definition storage_root_memo_def:
+  storage_root_memo [] s = storage_root s ∧
+  storage_root_memo ((k,r)::t) s =
+    if k = s then (r:word8 list) else storage_root_memo t s
 End
 
-val () = cv_auto_trans memo_storage_root_def;
+val () = cv_auto_trans storage_root_memo_def;
 
-Definition memo_code_hash_def:
-  memo_code_hash [] c = Keccak_256_w64 c ∧
-  memo_code_hash ((k,h)::t) c =
-    if k = c then (h:word8 list) else memo_code_hash t c
+Definition code_hash_memo_def:
+  code_hash_memo [] c = Keccak_256_w64 c ∧
+  code_hash_memo ((k,h)::t) c =
+    if k = c then (h:word8 list) else code_hash_memo t c
 End
 
-val () = cv_auto_trans memo_code_hash_def;
+val () = cv_auto_trans code_hash_memo_def;
 
-Theorem memo_storage_root_thm:
+Theorem storage_root_memo_thm:
   EVERY (λ(k,r). storage_root k = r) t ⇒
-  memo_storage_root t s = storage_root s
+  storage_root_memo t s = storage_root s
 Proof
-  Induct_on`t` \\ simp[FORALL_PROD, memo_storage_root_def]
+  Induct_on`t` \\ simp[FORALL_PROD, storage_root_memo_def]
   \\ rw[] \\ gvs[]
 QED
 
-Theorem memo_code_hash_thm:
+Theorem code_hash_memo_thm:
   EVERY (λ(k,h). Keccak_256_w64 k = h) t ⇒
-  memo_code_hash t c = Keccak_256_w64 c
+  code_hash_memo t c = Keccak_256_w64 c
 Proof
-  Induct_on`t` \\ simp[FORALL_PROD, memo_code_hash_def]
+  Induct_on`t` \\ simp[FORALL_PROD, code_hash_memo_def]
   \\ rw[] \\ gvs[]
 QED
 
@@ -169,8 +169,8 @@ Definition encode_account_memo_def:
   encode_account_memo st ct a = rlp_encode $ RLPL [
     rlp_number a.nonce;
     rlp_number a.balance;
-    RLPB $ memo_storage_root st a.storage;
-    RLPB $ memo_code_hash ct a.code
+    RLPB $ storage_root_memo st a.storage;
+    RLPB $ code_hash_memo ct a.code
   ]
 End
 
@@ -221,6 +221,6 @@ Proof
   by (
     Induct \\ simp[FORALL_PROD, state_kvs_memo_def, state_kvs_def]
     \\ simp[encode_account_memo_def, encode_account_def,
-            memo_storage_root_thm, memo_code_hash_thm] )
+            storage_root_memo_thm, code_hash_memo_thm] )
   \\ simp[state_root_memo_def, state_root_eqn]
 QED

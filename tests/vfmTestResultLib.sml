@@ -95,15 +95,27 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
           (cached state_root_cache prove accounts)
   end
 
+  (* The root gets its own time limit, so whether a test passes does not
+     depend on whether an earlier test already proved its root. A timed-out
+     root leaves the caches as they were, so every test sharing it times out
+     alike. *)
+  fun timed_state_root_thm pre_def = let
+    val saved = (!storage_root_cache, !code_hash_cache)
+  in
+    Timeout.apply time_limit state_root_thm pre_def
+    handle e as Timeout.TIMEOUT _ =>
+      (storage_root_cache := #1 saved; code_hash_cache := #2 saved; raise e)
+  end
+
   fun eval_rhs thyn result_def = let
     val pre = hd $ #2 $ strip_comb $ rhs $ concl result_def
     val pre_def = fetch thyn (#1 (dest_const pre) ^ "_def")
-    val root = state_root_thm pre_def
+    val root = timed_state_root_thm pre_def
   in
-    CONV_RULE (RAND_CONV (
+    Timeout.apply time_limit (CONV_RULE (RAND_CONV (
       REWR_CONV run_test_def THENC
       PURE_ONCE_REWRITE_CONV [root] THENC
-      cv_eval)) result_def
+      cv_eval))) result_def
   end
 
   fun test_result_to_string tm =
@@ -129,7 +141,7 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
       String.concat ["Evaluating ", result_name,
                      " for up to ", Time.fmt 0 time_limit, "s" ]
     val start_time = Time.now()
-    val result_eval = Timeout.apply time_limit (eval_rhs thyn) result_def
+    val result_eval = eval_rhs thyn result_def
                       handle Timeout.TIMEOUT _ => TRUTH
     val end_time = Time.now()
     val result_str = mk_result_string $ concl result_eval
