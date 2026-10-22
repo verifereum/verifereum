@@ -202,9 +202,10 @@ Definition buffer_extend_def:
 End
 
 (* bytes written over the buffer starting at offset, after extending it
-   with zeros if it is too short *)
+   with zeros if it is too short; writing no bytes changes nothing *)
 Definition buffer_write_def:
   buffer_write offset bytes b =
+  if bytes = [] then b else
   let n = LENGTH bytes in
   let b = buffer_extend (offset + n - b.len) b in
   b with words := write_bytes b.words offset n bytes
@@ -562,12 +563,19 @@ Proof
   rw[buffer_extend_def, buffer_length_def]
 QED
 
+Theorem buffer_write_nil[simp]:
+  buffer_write offset [] b = b
+Proof
+  rw[buffer_write_def]
+QED
+
 Theorem buffer_to_list_write:
+  bs ≠ [] ⇒
   buffer_to_list (buffer_write offset bs b) =
   TAKE offset (PAD_RIGHT 0w offset (buffer_to_list b)) ++ bs ++
   DROP (offset + LENGTH bs) (buffer_to_list b)
 Proof
-  simp[buffer_length_def]
+  strip_tac \\ simp[buffer_length_def]
   \\ qabbrev_tac ‘b' = buffer_extend (offset + LENGTH bs - b.len) b’
   \\ ‘buffer_to_list b' =
       buffer_to_list b ++ REPLICATE (offset + LENGTH bs - b.len) 0w’
@@ -585,18 +593,20 @@ QED
 
 Theorem buffer_length_write[simp]:
   buffer_length (buffer_write offset bs b) =
-  MAX (buffer_length b) (offset + LENGTH bs)
+  if bs = [] then buffer_length b
+  else MAX (buffer_length b) (offset + LENGTH bs)
 Proof
   rw[buffer_write_def, buffer_extend_def, buffer_length_def, MAX_DEF]
 QED
 
 Theorem buffer_to_list_write_le:
-  offset ≤ buffer_length b ⇒
+  (bs ≠ [] ⇒ offset ≤ buffer_length b) ⇒
   buffer_to_list (buffer_write offset bs b) =
   TAKE offset (buffer_to_list b) ++ bs ++
   DROP (offset + LENGTH bs) (buffer_to_list b)
 Proof
-  rw[buffer_to_list_write, PAD_RIGHT]
+  Cases_on ‘bs = []’ >- simp[TAKE_DROP]
+  \\ rw[buffer_to_list_write, PAD_RIGHT]
   \\ ‘offset − buffer_length b = 0’ by simp[] \\ simp[]
 QED
 
@@ -702,8 +712,10 @@ Theorem buffer_of_list_fields[local]:
   (buffer_of_list bs).len = LENGTH bs ∧
   (buffer_of_list bs).words = write_bytes LN 0 (LENGTH bs) bs
 Proof
-  rw[buffer_of_list_def, buffer_write_def, buffer_extend_def,
-     empty_buffer_def, zero_bytes_def, clear_words_LN]
+  Cases_on ‘bs = []’
+  >- rw[buffer_of_list_def, empty_buffer_def, Once write_bytes_def]
+  \\ rw[buffer_of_list_def, buffer_write_def, buffer_extend_def,
+        empty_buffer_def, zero_bytes_def, clear_words_LN]
 QED
 
 Theorem byte_at_LN[local]:
