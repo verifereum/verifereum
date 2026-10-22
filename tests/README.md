@@ -114,7 +114,7 @@ blocks' header `gasUsed`, each capped at the block's `gasLimit` because an
 invalid block can claim any amount; an invalid block without `rlp_decoded`
 counts nothing. `--gas-rate 0` turns this off. When a case gets more than the
 minimum, its output line ends with the limit it got, as in
-`(349.74s, limit 645s)`; the result file records only the seconds taken.
+`(256.55s, limit 645s)`; the result file records only the seconds taken.
 
 The default rate leaves headroom below the slowest rate GitHub's runners
 showed on a heavy case. The EIP-6110 deposit cases are the slowest per gas,
