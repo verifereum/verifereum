@@ -1,7 +1,7 @@
 Theory wrappedEther
 Ancestors
   arithmetic byte list rich_list combin
-  vfmOperation vfmConstants vfmState vfmExecution vfmCompute
+  vfmOperation vfmConstants vfmState vfmExecution vfmCompute vfmBuffer
   set_sep prog vfmProg
 Libs
   cv_transLib wordsLib blastLib helperLib
@@ -26,7 +26,7 @@ val MULT_32_word_size_128 =
   cv_eval “32 * word_size 128”
 
 Theorem memory_cost_change:
-  (LENGTH m2 = LENGTH m1) ∧
+  (buffer_length m2 = buffer_length m1) ∧
   (o2 + z2 = o1 + z1) ∧
   ((z2 = 0) = (z1 = 0))
   ⇒
@@ -60,19 +60,20 @@ Theorem memory_cost_write_more_32_32:
   LENGTH l1 = 32
   ⇒
   memory_cost m1 0 32 +
-  (memory_cost (l1 ++ (DROP 32 m1)) 32 32 + rest) =
+  (memory_cost (buffer_write 0 l1 m1) 32 32 + rest) =
   memory_cost m1 0 (32 + 32) + rest
 Proof
   rw[memory_cost_def] \\ gvs[]
   \\ rw[memory_expansion_cost_def]
   \\ rw[word_size_def]
-  \\ Cases_on`32 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ Cases_on`32 < buffer_length m1` \\ gvs[MAX_DEF]
   \\ rw[iffRL SUB_EQ_0] \\ gvs[]
   >- (
       `memory_cost 32 ≤ memory_cost 64` by simp[memory_cost_mono_leq]
-   \\ `memory_cost (LENGTH m1) ≤ memory_cost 32` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (buffer_length m1) ≤ memory_cost 32`
+        by simp[memory_cost_mono_leq]
    \\ intLib.COOPER_TAC)
-  \\ `LENGTH m1 = 32` by simp[]
+  \\ `buffer_length m1 = 32` by simp[]
   \\ gvs[]
 QED
 
@@ -80,19 +81,20 @@ Theorem memory_cost_write_more_64_32:
   LENGTH l1 = 64
   ⇒
   memory_cost m1 0 64 +
-  (memory_cost (l1 ++ (DROP 64 m1)) 64 32 + rest) =
+  (memory_cost (buffer_write 0 l1 m1) 64 32 + rest) =
   memory_cost m1 0 (64 + 32) + rest
 Proof
   rw[memory_cost_def] \\ gvs[]
   \\ rw[memory_expansion_cost_def]
   \\ rw[word_size_def]
-  \\ Cases_on`64 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ Cases_on`64 < buffer_length m1` \\ gvs[MAX_DEF]
   \\ rw[iffRL SUB_EQ_0] \\ gvs[]
   >- (
       `memory_cost 64 ≤ memory_cost 96` by simp[memory_cost_mono_leq]
-   \\ `memory_cost (LENGTH m1) ≤ memory_cost 64` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (buffer_length m1) ≤ memory_cost 64`
+        by simp[memory_cost_mono_leq]
    \\ intLib.COOPER_TAC)
-  \\ `LENGTH m1 = 64` by simp[]
+  \\ `buffer_length m1 = 64` by simp[]
   \\ gvs[]
 QED
 
@@ -100,19 +102,20 @@ Theorem memory_cost_write_more_96_32:
   LENGTH l1 = 96
   ⇒
   memory_cost m1 0 96 +
-  (memory_cost (l1 ++ (DROP 96 m1)) 96 32 + rest) =
+  (memory_cost (buffer_write 0 l1 m1) 96 32 + rest) =
   memory_cost m1 0 (96 + 32) + rest
 Proof
   rw[memory_cost_def] \\ gvs[]
   \\ rw[memory_expansion_cost_def]
   \\ rw[word_size_def]
-  \\ Cases_on`96 < LENGTH m1` \\ gvs[MAX_DEF]
+  \\ Cases_on`96 < buffer_length m1` \\ gvs[MAX_DEF]
   \\ rw[iffRL SUB_EQ_0] \\ gvs[]
   >- (
       `memory_cost 96 ≤ memory_cost 128` by simp[memory_cost_mono_leq]
-   \\ `memory_cost (LENGTH m1) ≤ memory_cost 96` by simp[memory_cost_mono_leq]
+   \\ `memory_cost (buffer_length m1) ≤ memory_cost 96`
+        by simp[memory_cost_mono_leq]
    \\ intLib.COOPER_TAC)
-  \\ `LENGTH m1 = 96` by simp[]
+  \\ `buffer_length m1 = 96` by simp[]
   \\ gvs[]
 QED
 
@@ -129,9 +132,9 @@ Proof
 QED
 
 Theorem expanded_memory_leq:
-  32 * word_size (a + b) ≤ LENGTH m ⇒ expanded_memory m a b = m
+  32 * word_size (a + b) ≤ buffer_length m ⇒ expanded_memory m a b = m
 Proof
-  rw[expanded_memory_def, memory_expand_by_def]
+  rw[expanded_memory_def, memory_expand_by_def, MAX_DEF]
 QED
 
 Definition balance_slot_key_def:
@@ -936,10 +939,10 @@ val DROP_64_expanded_32_32 =
 (* TODO: generalise? *)
 Theorem DROP_64_expanded_memory_append_64_32:
   LENGTH l1 = 64 ⇒
-  DROP 64 (expanded_memory (l1 ++ l2) 64 32) =
-  expanded_memory l2 0 32
+  DROP 64 (buffer_to_list (expanded_memory (buffer_of_list (l1 ++ l2)) 64 32)) =
+  buffer_to_list (expanded_memory (buffer_of_list l2) 0 32)
 Proof
-  rw[expanded_memory_def, DROP_APPEND,
+  rw[expanded_memory_def, buffer_to_list_extend, DROP_APPEND,
      DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
   \\ AP_THM_TAC \\ AP_TERM_TAC
   \\ rw[memory_expand_by_def, LEFT_ADD_DISTRIB, word_size_def]
@@ -947,16 +950,15 @@ Proof
 QED
 
 Theorem LENGTH_TAKE_64_expanded_memory_64_32[simp]:
-  LENGTH (TAKE 64 (expanded_memory m 64 32)) = 64
+  LENGTH (TAKE 64 (buffer_to_list (expanded_memory m 64 32))) = 64
 Proof
-  irule LENGTH_TAKE
-  \\ irule LESS_EQ_TRANS
-  \\ qexists_tac`32 * word_size (64 + 32)`
-  \\ rw[LENGTH_expanded_memory_geq, MULT_32_word_size_96]
+  `32 * word_size (64 + 32) ≤ buffer_length (expanded_memory m 64 32)`
+    by (irule LENGTH_expanded_memory_geq \\ simp[])
+  \\ fs[MULT_32_word_size_96, LENGTH_TAKE_EQ]
 QED
 
 Theorem Keccak256_gas_balance_slot_word_0_64:
-  Keccak256_gas (balance_slot_word a ++ m) 0 64 = 42
+  Keccak256_gas (buffer_of_list (balance_slot_word a ++ m)) 0 64 = 42
 Proof
   rw[Keccak256_gas_def]
   \\ CONV_TAC(PATH_CONV"lrlr"cv_eval)
@@ -972,7 +974,7 @@ Proof
   blastLib.BBLAST_TAC
 QED
 
-val no_data = ASSUME “(p:message_parameters).data = []”
+val no_data = ASSUME “buffer_to_list (p:message_parameters).data = []”
 
 Triviality conj_repeat:
   ((a ∧ a ∧ b) = (a ∧ b)) ∧
