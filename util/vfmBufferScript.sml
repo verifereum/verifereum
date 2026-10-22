@@ -66,6 +66,13 @@ Termination
   \\ irule (DECIDE “a < 32n ⇒ 0 < 32 − a”) \\ simp[]
 End
 
+(* old with its c bytes from byte j on replaced by the first c bytes of bs *)
+Definition splice_bytes_def:
+  splice_bytes (old:num) (j:num) (c:num) (bs:byte list) =
+  old MOD 256 ** j + 256 ** j * num_of_bytes (TAKE c bs)
+  + 256 ** (j + c) * (old DIV 256 ** (j + c))
+End
+
 (* write the first n bytes of bs starting at byte offset *)
 Definition write_bytes_def:
   write_bytes ws (offset:num) (n:num) (bs:byte list) =
@@ -73,10 +80,8 @@ Definition write_bytes_def:
   let i = offset DIV 32 in
   let j = offset MOD 32 in
   let c = MIN n (32 - j) in
-  let old = word_at ws i in
-  let new = old MOD 256 ** j + 256 ** j * num_of_bytes (TAKE c bs)
-            + 256 ** (j + c) * (old DIV 256 ** (j + c)) in
-    write_bytes (set_word ws i new) (offset + c) (n - c) (DROP c bs)
+    write_bytes (set_word ws i (splice_bytes (word_at ws i) j c bs))
+      (offset + c) (n - c) (DROP c bs)
 Termination
   WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
   \\ irule (DECIDE “a < 32n ⇒ 0 < 32 − a”) \\ simp[]
@@ -109,16 +114,47 @@ Definition read_word_def:
   else lo
 End
 
-(* add the words of the n bytes starting at offset to acc, from word q on *)
+(* word q of the n bytes starting at byte offset *)
+Definition out_word_def:
+  out_word ws (offset:num) (n:num) (q:num) =
+  read_word ws (offset + 32 * q) (MIN 32 (n - 32 * q))
+End
+
+Definition put_word_def:
+  put_word ws offset n q acc =
+  let v = out_word ws offset n q in
+  if v = 0 then acc else insert q v acc
+End
+
+(* add words q to q + k - 1 of the n bytes starting at offset to acc *)
 Definition sub_words_def:
-  sub_words ws (offset:num) (n:num) (q:num) acc =
-  if n = 0 then acc else
-  let c = MIN n 32 in
-  let v = read_word ws offset c in
-  sub_words ws (offset + c) (n - c) (q + 1)
-    (if v = 0 then acc else insert q v acc)
-Termination
-  WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
+  sub_words ws offset n q (k:num) acc =
+  if k = 0 then acc
+  else sub_words ws offset n (q + 1) (k - 1) (put_word ws offset n q acc)
+End
+
+(* the same for the words that can be nonzero, given the stored words kvs:
+   stored word i holds bytes of words i - offset DIV 32 - 1 and
+   i - offset DIV 32 *)
+Definition sparse_words_def:
+  sparse_words ws offset n [] acc = acc ∧
+  sparse_words ws offset n ((i:num,v:num)::kvs) acc =
+  let i0 = offset DIV 32 in
+  let acc = if i0 < i then put_word ws offset n (i - i0 - 1) acc else acc in
+  let acc = if i0 ≤ i then put_word ws offset n (i - i0) acc else acc in
+    sparse_words ws offset n kvs acc
+End
+
+(* the number of values stored in t if it is at most k, and otherwise some
+   number above k, found without visiting many more than k values *)
+Definition size_upto_def:
+  size_upto LN (k:num) = 0n ∧
+  size_upto (LS _) k = 1 ∧
+  size_upto (BN l r) k =
+    (let a = size_upto l k in if k < a then a else a + size_upto r (k - a)) ∧
+  size_upto (BS l _ r) k =
+    (let a = size_upto l k + 1 in
+     if k < a then a else a + size_upto r (k - a))
 End
 
 Definition empty_buffer_def:
@@ -133,25 +169,29 @@ Definition buffer_to_list_def:
   buffer_to_list b = read_bytes b.words 0 b.len []
 End
 
-(* size bytes starting at offset, zero past the end *)
+(* sz bytes starting at offset, zero past the end *)
 Definition buffer_read_def:
-  buffer_read offset size b =
-  let n = MIN size (b.len - offset) in
-  read_bytes b.words offset n (REPLICATE (size - n) (0w:byte))
+  buffer_read offset sz b =
+  let n = MIN sz (b.len - offset) in
+  read_bytes b.words offset n (REPLICATE (sz - n) (0w:byte))
 End
 
-(* at most size bytes starting at offset, stopping at the end *)
+(* at most sz bytes starting at offset, stopping at the end *)
 Definition buffer_take_def:
-  buffer_take offset size b =
-  read_bytes b.words offset (MIN size (b.len - offset)) []
+  buffer_take offset sz b =
+  read_bytes b.words offset (MIN sz (b.len - offset)) []
 End
 
-(* at most size bytes starting at offset, stopping at the end, as a
-   buffer *)
+(* at most sz bytes starting at offset, stopping at the end, as a buffer;
+   the words are found from the stored words when there are few of those *)
 Definition buffer_sub_def:
-  buffer_sub offset size b =
-  let n = MIN size (b.len - offset) in
-  <| len := n; words := sub_words b.words offset n 0 LN |>
+  buffer_sub offset sz b =
+  let n = MIN sz (b.len - offset) in
+  let k = (n + 31) DIV 32 in
+  <| len := n;
+     words := if size_upto b.words k ≤ k
+              then sparse_words b.words offset n (toAList b.words) LN
+              else sub_words b.words offset n 0 k LN |>
 End
 
 (* n zero bytes added at the end *)
@@ -342,6 +382,36 @@ Proof
   rpt gen_tac \\ strip_tac \\ conj_tac \\ strip_tac \\ intLib.ARITH_TAC
 QED
 
+Theorem byte_of_splice_bytes:
+  c ≤ LENGTH bs ⇒
+  byte_of (splice_bytes old j c bs) k =
+  if j ≤ k ∧ k < j + c then EL (k - j) bs else byte_of old k
+Proof
+  strip_tac
+  \\ ‘num_of_bytes (TAKE c bs) < 256 ** c’
+       by (qspec_then ‘TAKE c bs’ mp_tac num_of_bytes_lt \\ simp[])
+  \\ ‘old MOD 256 ** j < 256 ** j’ by simp[]
+  \\ ‘splice_bytes old j c bs = old MOD 256 ** j + 256 ** j *
+        (num_of_bytes (TAKE c bs) + 256 ** c * (old DIV 256 ** (j + c)))’
+       by simp[splice_bytes_def, EXP_ADD, LEFT_ADD_DISTRIB]
+  \\ pop_assum SUBST1_TAC
+  \\ DEP_REWRITE_TAC[byte_of_add_mul] \\ simp[]
+  \\ rw[byte_of_num_of_bytes, byte_of_MOD, byte_of_DIV, EL_TAKE]
+  \\ gvs[]
+QED
+
+Theorem byte_at_splice[local]:
+  c ≤ LENGTH bs ∧ c ≤ 32 − offset MOD 32 ∧ p DIV 32 = offset DIV 32 ⇒
+  byte_of (splice_bytes (word_at ws (offset DIV 32)) (offset MOD 32) c bs)
+    (p MOD 32) =
+  if offset ≤ p ∧ p < offset + c then EL (p - offset) bs else byte_at ws p
+Proof
+  strip_tac
+  \\ drule_then (qspec_then ‘p’ mp_tac) write_bytes_arith
+  \\ asm_rewrite_tac[] \\ strip_tac
+  \\ simp[byte_of_splice_bytes, byte_at_def]
+QED
+
 Theorem write_bytes_byte_at:
   ∀ws offset n bs p.
     n ≤ LENGTH bs ⇒
@@ -355,34 +425,17 @@ Proof
   \\ ‘c ≤ n ∧ c ≤ 32 - offset MOD 32 ∧ 0 < c’
        by (simp[Abbr‘c’, MIN_DEF] \\ rw[]
            \\ ‘offset MOD 32 < 32’ by simp[] \\ simp[])
+  \\ ‘c ≤ LENGTH bs’ by simp[]
   \\ simp[byte_at_set_word]
-  \\ qmatch_goalsub_abbrev_tac ‘byte_of new’
-  \\ ‘∀k. byte_of new k =
-          if offset MOD 32 ≤ k ∧ k < offset MOD 32 + c
-          then EL (k - offset MOD 32) bs
-          else byte_of (word_at ws (offset DIV 32)) k’
-       by (qabbrev_tac ‘j = offset MOD 32’
-           \\ qabbrev_tac ‘old = word_at ws (offset DIV 32)’
-           \\ ‘num_of_bytes (TAKE c bs) < 256 ** c’
-                by (qspec_then ‘TAKE c bs’ mp_tac num_of_bytes_lt \\ simp[])
-           \\ ‘old MOD 256 ** j < 256 ** j’ by simp[]
-           \\ ‘new = old MOD 256 ** j + 256 ** j *
-                 (num_of_bytes (TAKE c bs) +
-                  256 ** c * (old DIV 256 ** (j + c)))’
-                by simp[Abbr‘new’, EXP_ADD, LEFT_ADD_DISTRIB]
-           \\ pop_assum SUBST1_TAC \\ gen_tac
-           \\ DEP_REWRITE_TAC[byte_of_add_mul] \\ simp[]
-           \\ rw[byte_of_num_of_bytes, byte_of_MOD, byte_of_DIV, EL_TAKE]
-           \\ gvs[])
   \\ qpat_x_assum ‘∀p. byte_at (write_bytes _ _ _ _) _ = _’
        (fn th => rewrite_tac[th])
-  \\ simp[byte_at_set_word]
-  \\ Cases_on ‘offset + c ≤ p ∧ p < offset + n’
+  \\ simp[byte_at_set_word, byte_at_splice]
+  \\ Cases_on ‘c + offset ≤ p ∧ p < n + offset’
   >- gvs[EL_DROP]
+  \\ Cases_on ‘p DIV 32 = offset DIV 32’
+  >- (asm_rewrite_tac[] \\ rw[] \\ gvs[])
   \\ drule_then (qspec_then ‘p’ strip_assume_tac) write_bytes_arith
-  \\ Cases_on ‘p DIV 32 = offset DIV 32’ \\ gvs[]
-  >- (rw[] \\ gvs[byte_at_def])
-  \\ rw[] \\ gvs[byte_at_def]
+  \\ asm_rewrite_tac[] \\ rw[] \\ gvs[]
 QED
 
 Theorem word_at_clear_words:
@@ -447,54 +500,6 @@ Proof
   \\ simp[byte_of_MOD, byte_of_DIV, byte_at_same_word]
 QED
 
-Theorem sub_words_arith[local]:
-  ∀q p n c offset. c = MIN n 32 ∧ n ≠ 0 ⇒
-   (32 * (q + 1) ≤ p ∧ p < 32 * (q + 1) + (n − c) ⇒
-    32 * q ≤ p ∧ p < 32 * q + n ∧
-    offset + c + (p − 32 * (q + 1)) = offset + (p − 32 * q)) ∧
-   (¬(32 * (q + 1) ≤ p ∧ p < 32 * (q + 1) + (n − c)) ⇒
-    (p DIV 32 = q ⇒
-     32 * q ≤ p ∧ (p < 32 * q + n ⇔ p MOD 32 < c) ∧
-     p − 32 * q = p MOD 32) ∧
-    (p DIV 32 ≠ q ⇒ ¬(32 * q ≤ p ∧ p < 32 * q + n)))
-Proof
-  rpt gen_tac \\ strip_tac \\ gvs[MIN_DEF]
-  \\ rpt conj_tac \\ rpt strip_tac \\ intLib.ARITH_TAC
-QED
-
-Theorem sub_words_byte_at:
-  ∀ws offset n q acc p.
-    (∀i. q ≤ i ⇒ word_at acc i = 0) ⇒
-    byte_at (sub_words ws offset n q acc) p =
-    if 32 * q ≤ p ∧ p < 32 * q + n then byte_at ws (offset + (p - 32 * q))
-    else byte_at acc p
-Proof
-  ho_match_mp_tac sub_words_ind \\ rpt strip_tac
-  \\ simp[Once sub_words_def] \\ IF_CASES_TAC \\ gvs[]
-  \\ qmatch_goalsub_abbrev_tac ‘read_word ws offset c’
-  \\ qmatch_goalsub_abbrev_tac ‘sub_words ws _ _ _ acc'’
-  \\ ‘c ≤ 32 ∧ 0 < c’ by simp[Abbr‘c’]
-  \\ ‘∀i. word_at acc' i =
-          if i = q then read_word ws offset c else word_at acc i’
-       by (rw[Abbr‘acc'’, word_at_def, lookup_insert] \\ gvs[word_at_def])
-  \\ ‘∀i. q + 1 ≤ i ⇒ word_at acc' i = 0’ by simp[]
-  \\ first_x_assum drule \\ disch_then (fn th => rewrite_tac[th])
-  \\ qspecl_then [‘q’,‘p’,‘n’,‘c’,‘offset’] mp_tac sub_words_arith
-  \\ impl_tac >- simp[Abbr‘c’]
-  \\ strip_tac
-  \\ Cases_on ‘32 * (q + 1) ≤ p ∧ p < 32 * (q + 1) + (n − c)’
-  >- gvs[]
-  \\ asm_rewrite_tac[]
-  \\ simp[byte_at_def]
-  \\ Cases_on ‘p DIV 32 = q’ \\ gvs[byte_of_read_word]
-  \\ rw[] \\ gvs[] \\ simp[byte_at_def]
-  \\ ‘offset + p − 32 * (p DIV 32) = offset + p MOD 32’
-       by (qpat_x_assum ‘32 * _ ≤ p’ mp_tac
-           \\ qpat_x_assum ‘p − _ = _’ mp_tac
-           \\ rpt (pop_assum kall_tac) \\ intLib.ARITH_TAC)
-  \\ simp[]
-QED
-
 Theorem buffer_to_list_GENLIST:
   buffer_to_list b = GENLIST (byte_at b.words) b.len
 Proof
@@ -536,17 +541,6 @@ Proof
   rw[buffer_length_def, buffer_to_list_GENLIST, buffer_take_def, read_bytes_GENLIST,
      LIST_EQ_REWRITE, DROP_GENLIST, EL_TAKE, MIN_DEF, LENGTH_TAKE_EQ]
   \\ gvs[buffer_length_def]
-QED
-
-Theorem buffer_to_list_sub:
-  buffer_to_list (buffer_sub offset sz b) =
-  TAKE sz (DROP offset (buffer_to_list b))
-Proof
-  rw[buffer_length_def, buffer_to_list_GENLIST, buffer_sub_def, LIST_EQ_REWRITE, DROP_GENLIST,
-     EL_TAKE, LENGTH_TAKE_EQ]
-  \\ DEP_REWRITE_TAC[sub_words_byte_at]
-  \\ simp[word_at_def, lookup_def]
-  \\ gvs[buffer_length_def, MIN_DEF] \\ rw[] \\ gvs[buffer_length_def]
 QED
 
 Theorem buffer_length_sub[simp]:
@@ -618,6 +612,255 @@ Proof
   rw[buffer_of_list_def]
 QED
 
+(* buffer_sub builds the same words as buffer_of_list does: a word is
+   stored iff it is nonzero, and has no bytes beyond its 32 *)
+
+Definition good_words_def:
+  good_words ws ⇔
+    wf ws ∧
+    ∀i. lookup i ws ≠ SOME 0 ∧ ∀k. 32 ≤ k ⇒ byte_of (word_at ws i) k = 0w
+End
+
+Theorem num_digits_eq:
+  ∀x y. (∀k. byte_of x k = byte_of y k) ⇒ x = y
+Proof
+  ‘∀s x y. x + y = s ∧ (∀k. byte_of x k = byte_of y k) ⇒ x = y’
+    suffices_by metis_tac[]
+  \\ completeInduct_on ‘s’ \\ rw[]
+  \\ Cases_on ‘x + y = 0’ >- gvs[]
+  \\ ‘∀z k. byte_of (z DIV 256) k = byte_of z (k + 1)’
+       by (rpt gen_tac \\ qspecl_then [‘1’,‘k’,‘z’] mp_tac byte_of_DIV
+           \\ simp[])
+  \\ ‘x DIV 256 + y DIV 256 < x + y’
+       by (qpat_x_assum ‘x + y ≠ 0’ mp_tac \\ rpt (pop_assum kall_tac)
+           \\ intLib.ARITH_TAC)
+  \\ ‘x DIV 256 = y DIV 256’
+       by (first_x_assum drule \\ disch_then irule \\ simp[])
+  \\ ‘x MOD 256 = y MOD 256’
+       by (qpat_x_assum ‘∀k. byte_of x k = _’ (qspec_then ‘0’ mp_tac)
+           \\ rpt (pop_assum kall_tac) \\ simp[byte_of_def])
+  \\ metis_tac[DIVISION, DECIDE “0 < 256n”]
+QED
+
+Theorem word_at_byte_at:
+  k < 32 ⇒ byte_of (word_at ws i) k = byte_at ws (32 * i + k)
+Proof
+  rw[byte_at_def, LESS_DIV_EQ_ZERO]
+QED
+
+Theorem good_words_eq:
+  good_words ws1 ∧ good_words ws2 ∧ (∀p. byte_at ws1 p = byte_at ws2 p) ⇒
+  ws1 = ws2
+Proof
+  rw[good_words_def]
+  \\ ‘∀i. word_at ws1 i = word_at ws2 i’
+       by (gen_tac \\ irule num_digits_eq \\ gen_tac
+           \\ Cases_on ‘k < 32’ \\ gvs[NOT_LESS, word_at_byte_at])
+  \\ DEP_REWRITE_TAC[spt_eq_thm] \\ rw[]
+  \\ first_x_assum (qspec_then ‘n’ mp_tac)
+  \\ simp[word_at_def]
+  \\ Cases_on ‘lookup n ws1’ \\ Cases_on ‘lookup n ws2’ \\ gvs[]
+  \\ metis_tac[]
+QED
+
+Theorem good_words_LN:
+  good_words LN
+Proof
+  rw[good_words_def, word_at_def, lookup_def, wf_def]
+QED
+
+Theorem good_words_set_word:
+  good_words ws ∧ (∀k. 32 ≤ k ⇒ byte_of x k = 0w) ⇒
+  good_words (set_word ws i x)
+Proof
+  rw[good_words_def, word_at_set_word] \\ gvs[]
+  \\ rw[set_word_def, wf_insert, wf_delete, lookup_insert, lookup_delete]
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem good_words_write_bytes:
+  ∀ws offset n bs.
+    good_words ws ∧ n ≤ LENGTH bs ⇒ good_words (write_bytes ws offset n bs)
+Proof
+  ho_match_mp_tac write_bytes_ind \\ rpt strip_tac
+  \\ simp[Once write_bytes_def] \\ IF_CASES_TAC \\ gvs[]
+  \\ qmatch_goalsub_abbrev_tac ‘DROP c bs’
+  \\ ‘c ≤ n ∧ c ≤ 32 - offset MOD 32’ by simp[Abbr‘c’]
+  \\ first_x_assum irule \\ simp[]
+  \\ irule good_words_set_word \\ simp[byte_of_splice_bytes]
+  \\ fs[good_words_def]
+QED
+
+Theorem clear_words_LN[local]:
+  ∀ws i k. ws = LN ⇒ clear_words ws i k = LN
+Proof
+  ho_match_mp_tac clear_words_ind \\ rw[]
+  \\ rw[Once clear_words_def, delete_def]
+QED
+
+Theorem buffer_of_list_fields[local]:
+  (buffer_of_list bs).len = LENGTH bs ∧
+  (buffer_of_list bs).words = write_bytes LN 0 (LENGTH bs) bs
+Proof
+  rw[buffer_of_list_def, buffer_write_def, buffer_extend_def,
+     empty_buffer_def, zero_bytes_def, clear_words_LN]
+QED
+
+Theorem byte_at_LN[local]:
+  byte_at LN p = 0w
+Proof
+  rw[byte_at_def, word_at_def, lookup_def]
+QED
+
+Theorem div_32_add[local]:
+  (offset + 32 * j) DIV 32 = offset DIV 32 + j ∧
+  (32 * j + offset) DIV 32 = offset DIV 32 + j ∧
+  (offset + 32 * j) MOD 32 = offset MOD 32 ∧
+  (32 * j + offset) MOD 32 = offset MOD 32
+Proof
+  intLib.ARITH_TAC
+QED
+
+Theorem out_word_nonzero:
+  out_word ws offset n j ≠ 0 ⇒
+  (∃v. lookup (offset DIV 32 + j) ws = SOME v) ∨
+  (∃v. lookup (offset DIV 32 + j + 1) ws = SOME v)
+Proof
+  CCONTR_TAC \\ gvs[]
+  \\ Cases_on ‘lookup (offset DIV 32 + j) ws’ \\ gvs[]
+  \\ Cases_on ‘lookup (offset DIV 32 + j + 1) ws’ \\ gvs[]
+  \\ gvs[out_word_def, read_word_def, div_32_add, word_at_def]
+QED
+
+Theorem lookup_put_word:
+  lookup j (put_word ws offset n q acc) =
+  if j = q ∧ out_word ws offset n q ≠ 0 then SOME (out_word ws offset n q)
+  else lookup j acc
+Proof
+  rw[put_word_def, lookup_insert] \\ gvs[]
+QED
+
+Theorem wf_put_word:
+  wf acc ⇒ wf (put_word ws offset n q acc)
+Proof
+  rw[put_word_def, wf_insert]
+QED
+
+Theorem lookup_sub_words:
+  ∀ws offset n q k acc j.
+    lookup j (sub_words ws offset n q k acc) =
+    if q ≤ j ∧ j < q + k ∧ out_word ws offset n j ≠ 0
+    then SOME (out_word ws offset n j) else lookup j acc
+Proof
+  ho_match_mp_tac sub_words_ind \\ rw[]
+  \\ rw[Once sub_words_def, lookup_put_word] \\ gvs[]
+  \\ rw[lookup_put_word] \\ gvs[]
+  \\ ‘j = q’ by simp[] \\ gvs[]
+QED
+
+Theorem wf_sub_words:
+  ∀ws offset n q k acc. wf acc ⇒ wf (sub_words ws offset n q k acc)
+Proof
+  ho_match_mp_tac sub_words_ind \\ rw[]
+  \\ rw[Once sub_words_def, wf_put_word]
+QED
+
+Theorem lookup_sparse_words:
+  ∀kvs acc j.
+    lookup j (sparse_words ws offset n kvs acc) =
+    if out_word ws offset n j ≠ 0 ∧
+       (MEM (offset DIV 32 + j) (MAP FST kvs) ∨
+        MEM (offset DIV 32 + j + 1) (MAP FST kvs))
+    then SOME (out_word ws offset n j) else lookup j acc
+Proof
+  Induct >- rw[sparse_words_def]
+  \\ Cases \\ rw[sparse_words_def, lookup_put_word] \\ gvs[]
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem wf_sparse_words:
+  ∀kvs acc. wf acc ⇒ wf (sparse_words ws offset n kvs acc)
+Proof
+  Induct >- rw[sparse_words_def]
+  \\ Cases \\ rw[sparse_words_def, wf_put_word]
+QED
+
+Theorem out_word_past_end[local]:
+  n ≤ 32 * j ⇒ out_word ws offset n j = 0
+Proof
+  strip_tac \\ ‘n − 32 * j = 0’ by simp[]
+  \\ rw[out_word_def, read_word_def]
+QED
+
+Theorem div_32_le[local]:
+  (m + 31) DIV 32 ≤ j ⇒ m ≤ 32 * j
+Proof
+  intLib.ARITH_TAC
+QED
+
+Theorem lookup_buffer_sub:
+  lookup j (buffer_sub offset sz b).words =
+  let w = out_word b.words offset (MIN sz (b.len - offset)) j in
+  if w ≠ 0 then SOME w else NONE
+Proof
+  rw[buffer_sub_def, lookup_sub_words, lookup_sparse_words, lookup_def]
+  \\ gvs[MEM_MAP, pairTheory.EXISTS_PROD, MEM_toAList]
+  >- (drule out_word_nonzero \\ simp[])
+  \\ CCONTR_TAC \\ gvs[NOT_LESS]
+  \\ drule div_32_le \\ strip_tac
+  \\ drule_then assume_tac out_word_past_end \\ gvs[]
+QED
+
+Theorem p_split[local]:
+  offset + 32 * (p DIV 32) + p MOD 32 = offset + p ∧
+  (p MOD 32 < MIN 32 (n − 32 * (p DIV 32)) ⇔ p < n)
+Proof
+  simp[MIN_DEF] \\ rw[] \\ intLib.ARITH_TAC
+QED
+
+Theorem byte_at_buffer_sub:
+  byte_at (buffer_sub offset sz b).words p =
+  if p < MIN sz (b.len - offset) then byte_at b.words (offset + p) else 0w
+Proof
+  qabbrev_tac ‘n = MIN sz (b.len - offset)’
+  \\ ‘word_at (buffer_sub offset sz b).words (p DIV 32) =
+      out_word b.words offset n (p DIV 32)’
+       by (simp[word_at_def, lookup_buffer_sub] \\ rw[])
+  \\ CONV_TAC (LHS_CONV (REWR_CONV byte_at_def))
+  \\ pop_assum SUBST1_TAC
+  \\ rewrite_tac[out_word_def]
+  \\ DEP_REWRITE_TAC[byte_of_read_word]
+  \\ rewrite_tac[p_split]
+  \\ simp[]
+QED
+
+Theorem good_words_buffer_sub:
+  good_words (buffer_sub offset sz b).words
+Proof
+  rw[good_words_def, lookup_buffer_sub]
+  >- rw[buffer_sub_def, wf_sub_words, wf_sparse_words, wf_def]
+  \\ simp[word_at_def, lookup_buffer_sub] \\ rw[]
+  \\ simp[out_word_def, byte_of_read_word]
+QED
+
+Theorem buffer_of_list_take:
+  buffer_of_list (buffer_take offset sz b) = buffer_sub offset sz b
+Proof
+  rw[theorem "buffer_component_equality", buffer_of_list_fields]
+  >- simp[buffer_sub_def, buffer_take_def, read_bytes_GENLIST]
+  \\ irule good_words_eq
+  \\ simp[good_words_buffer_sub, good_words_write_bytes, good_words_LN]
+  \\ simp[write_bytes_byte_at, byte_at_LN, byte_at_buffer_sub]
+  \\ simp[buffer_take_def, read_bytes_GENLIST, EL_GENLIST]
+QED
+
+Theorem buffer_to_list_sub:
+  buffer_to_list (buffer_sub offset sz b) =
+  TAKE sz (DROP offset (buffer_to_list b))
+Proof
+  rw[GSYM buffer_of_list_take, buffer_take_to_list]
+QED
+
 (* cv translation *)
 
 Theorem MOD_32_lt[local]:
@@ -642,20 +885,17 @@ val () = cv_auto_trans word_at_def;
 val () = cv_auto_trans set_word_def;
 val () = cv_auto_trans_rec read_bytes_def
   (cv_measure_tac ‘measure (cv$c2n o FST o SND o SND)’);
+val () = cv_auto_trans splice_bytes_def;
 val () = cv_auto_trans_rec write_bytes_def
   (cv_measure_tac ‘measure (cv$c2n o FST o SND o SND)’);
 val () = cv_auto_trans clear_words_def;
 val () = cv_auto_trans zero_bytes_def;
 val () = cv_auto_trans read_word_def;
-val sub_words_pre_def = cv_auto_trans_pre_rec "sub_words_pre"
-  sub_words_def (cv_measure_tac ‘measure (cv$c2n o FST o SND o SND)’);
-
-Theorem sub_words_pre[cv_pre]:
-  ∀ws offset n q acc. sub_words_pre ws offset n q acc
-Proof
-  ho_match_mp_tac sub_words_ind \\ rw[]
-  \\ rw[Once sub_words_pre_def]
-QED
+val () = cv_auto_trans out_word_def;
+val () = cv_auto_trans put_word_def;
+val () = cv_auto_trans sub_words_def;
+val () = cv_auto_trans sparse_words_def;
+val () = cv_auto_trans size_upto_def;
 val () = cv_auto_trans empty_buffer_def;
 val () = cv_auto_trans buffer_length_def;
 val () = cv_auto_trans buffer_to_list_def;

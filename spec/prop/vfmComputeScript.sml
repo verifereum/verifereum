@@ -653,6 +653,19 @@ val () = “read_memory x y s” |>
     read_memory_def, bind_def
   ] |> cv_auto_trans;
 
+(* the memory a call passes as call data, as a buffer: used for calls *)
+Definition read_memory_sub_def:
+  read_memory_sub offset size = do
+    context <- get_current_context;
+    return $ buffer_sub offset size context.memory
+  od
+End
+
+val () = “read_memory_sub x y s” |>
+  SIMP_CONV std_ss [
+    read_memory_sub_def, bind_def
+  ] |> cv_auto_trans;
+
 val () = “write_memory x y s” |>
   SIMP_CONV std_ss [
     write_memory_def, bind_def, LET_RATOR
@@ -843,9 +856,50 @@ val () = “dispatch_precompiles a s” |>
     dispatch_precompiles_def, COND_RATOR
   ] |> cv_auto_trans;
 
+(* a call copies its call data from memory without going through a list *)
+Theorem proceed_call_eq:
+  proceed_call op sender address value argsOffset argsSize code stipend
+    outputTo = do
+    rollback <- get_rollback;
+    data <- read_memory_sub argsOffset argsSize;
+    if op ≠ CallCode ∧ 0 < value then
+      update_accounts $ transfer_value sender address value
+    else return ();
+    caller <- get_caller;
+    callValue <- get_value;
+    callee <<- if op = CallCode ∨ op = DelegateCall
+               then sender else address;
+    subContextTx <<- <|
+        from     := if op = DelegateCall then caller else sender
+      ; to       := SOME callee
+      ; value    := if op = DelegateCall then callValue else value
+      ; gasLimit := stipend
+      ; data     := []
+      ; nonce := 0; gasPrice := 0; accessList := []
+      ; blobVersionedHashes := []
+      ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+      ; authorizationList := []
+    |>;
+    static <- get_static;
+    subStatic <<- (op = StaticCall ∨ static);
+    context <<- initial_context callee code subStatic outputTo subContextTx;
+    context <<- context with msgParams := context.msgParams with data := data;
+    push_context (context, rollback);
+    if fIN address precompile_addresses
+    then dispatch_precompiles address
+    else return ()
+  od
+Proof
+  rw[FUN_EQ_THM, proceed_call_def, read_memory_def, read_memory_sub_def,
+     bind_def, ignore_bind_def]
+  \\ rpt (CASE_TAC \\ gvs[return_def])
+  \\ gvs[initial_context_def, initial_msg_params_def,
+         vfmBufferTheory.buffer_of_list_take]
+QED
+
 val () = “proceed_call a b c d e f g h i s” |>
   SIMP_CONV std_ss [
-    proceed_call_def, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR
+    proceed_call_eq, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR
   ] |> cv_auto_trans;
 
 val th = tt step_call_def;
