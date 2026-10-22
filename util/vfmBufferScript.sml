@@ -268,7 +268,8 @@ Proof
       \\ gvs[] \\ rw[byte_of_def]
       \\ ‘(a + b * 256 ** (k + SUC d)) DIV 256 ** k =
           256 * (256 ** d * b) + a DIV 256 ** k’
-           by (‘a + b * 256 ** (k + SUC d) = (256 * (256 ** d * b)) * 256 ** k + a’
+           by (‘a + b * 256 ** (k + SUC d) =
+                  (256 * (256 ** d * b)) * 256 ** k + a’
                  by simp[EXP_ADD, EXP]
                \\ pop_assum SUBST1_TAC \\ simp[ADD_DIV_ADD_DIV])
       \\ pop_assum SUBST1_TAC
@@ -529,18 +530,20 @@ QED
 Theorem buffer_read_to_list:
   buffer_read offset sz b = take_pad_0 sz (DROP offset (buffer_to_list b))
 Proof
-  rw[buffer_length_def, buffer_to_list_GENLIST, buffer_read_def, read_bytes_GENLIST,
-     take_pad_0_def, LIST_EQ_REWRITE, PAD_RIGHT, EL_APPEND_EQN,
-     DROP_GENLIST, EL_TAKE, EL_REPLICATE, MIN_DEF]
-  \\ gvs[buffer_length_def, EL_APPEND_EQN, EL_TAKE, EL_REPLICATE, EL_GENLIST, LENGTH_TAKE_EQ]
+  rw[buffer_length_def, buffer_to_list_GENLIST, buffer_read_def,
+     read_bytes_GENLIST, take_pad_0_def, LIST_EQ_REWRITE, PAD_RIGHT,
+     EL_APPEND_EQN, DROP_GENLIST, EL_TAKE, EL_REPLICATE, MIN_DEF]
+  \\ gvs[buffer_length_def, EL_APPEND_EQN, EL_TAKE, EL_REPLICATE, EL_GENLIST,
+         LENGTH_TAKE_EQ]
   \\ rw[] \\ gvs[buffer_length_def]
 QED
 
 Theorem buffer_take_to_list:
   buffer_take offset sz b = TAKE sz (DROP offset (buffer_to_list b))
 Proof
-  rw[buffer_length_def, buffer_to_list_GENLIST, buffer_take_def, read_bytes_GENLIST,
-     LIST_EQ_REWRITE, DROP_GENLIST, EL_TAKE, MIN_DEF, LENGTH_TAKE_EQ]
+  rw[buffer_length_def, buffer_to_list_GENLIST, buffer_take_def,
+     read_bytes_GENLIST, LIST_EQ_REWRITE, DROP_GENLIST, EL_TAKE, MIN_DEF,
+     LENGTH_TAKE_EQ]
   \\ gvs[buffer_length_def]
 QED
 
@@ -553,8 +556,14 @@ QED
 Theorem buffer_to_list_extend:
   buffer_to_list (buffer_extend n b) = buffer_to_list b ++ REPLICATE n 0w
 Proof
-  rw[buffer_length_def, buffer_extend_def, buffer_to_list_GENLIST, LIST_EQ_REWRITE,
-     EL_APPEND_EQN, EL_REPLICATE, zero_bytes_byte_at]
+  rw[buffer_length_def, buffer_extend_def, buffer_to_list_GENLIST,
+     LIST_EQ_REWRITE, EL_APPEND_EQN, EL_REPLICATE, zero_bytes_byte_at]
+QED
+
+Theorem buffer_extend_0[simp]:
+  buffer_extend 0 b = b
+Proof
+  rw[buffer_extend_def]
 QED
 
 Theorem buffer_length_extend[simp]:
@@ -885,8 +894,7 @@ fun cv_measure_tac q =
   WF_REL_TAC q
   \\ rpt strip_tac \\ Cases_on ‘cv_n’ \\ TRY (Cases_on ‘cv_offset’)
   \\ gvs[cvTheory.c2b_def, cv_primTheory.cv_min_def]
-  \\ rpt (pop_assum mp_tac) \\ rw[] \\ gvs[MOD_32_lt]
-  \\ TRY intLib.ARITH_TAC;
+  \\ rpt (pop_assum mp_tac) \\ rw[] \\ gvs[MOD_32_lt];
 
 val () = cv_auto_trans_rec small_bytes_of_num_def
   (cv_measure_tac ‘measure (cv$c2n o FST)’);

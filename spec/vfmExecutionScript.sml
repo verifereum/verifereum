@@ -1590,7 +1590,8 @@ Definition step_inst_def:
   ∧ step_inst Caller = step_msgParams Caller (λc. w2w c.caller)
   ∧ step_inst CallValue = step_msgParams CallValue (λc. n2w c.value)
   ∧ step_inst CallDataLoad = step_call_data_load
-  ∧ step_inst CallDataSize = step_msgParams CallDataSize (λc. n2w (buffer_length c.data))
+  ∧ step_inst CallDataSize =
+      step_msgParams CallDataSize (λc. n2w (buffer_length c.data))
   ∧ step_inst CallDataCopy =
       step_copy_to_memory CallDataCopy (SOME get_call_data)
   ∧ step_inst CodeSize = step_msgParams CodeSize (λc. n2w (LENGTH c.code))
