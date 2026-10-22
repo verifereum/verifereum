@@ -97,7 +97,7 @@ the evaluator. Plain `Holmake runtests_unchecked.exe` from `tests/` also has
 generation rules.
 
 The runner supports `-h`, `-r`, `-n`, `-f`, `-t`, `--table`, and `--no-serial-first` with
-the corresponding meanings above. Use `-j N` / `--jobs N` for worker concurrency
+the corresponding meanings above, and `--gas-rate` (see below). Use `-j N` / `--jobs N` for worker concurrency
 (default 1). There is no build backend or per-fixture script generation, so
 `-b`, `-o`, and `-g` do not apply. Each fixture runs in a fresh worker process;
 the full-suite serial-first policy remains enabled by default. Workers run
@@ -106,9 +106,28 @@ the 25 MB `tx_gas_limit_cap_full_calldata.json` intermittently dies with `Run
 out of store` while parsing it.
 
 The per-case timeout covers native input encoding and execution, but not JSON
-parsing or worker startup. It defaults to 60 seconds and reads `VFM_TIME_LIMIT`
-when the executable runs; `-t` overrides it. Completed cases resume individually,
-including recorded timeouts. Use `-f` to rerun them after changing the limit.
+parsing or worker startup. Its minimum defaults to 60 seconds and reads
+`VFM_TIME_LIMIT` when the executable runs; `-t` overrides it. A case that uses
+a lot of gas gets more: its limit is its gas divided by `--gas-rate` (gas per
+second, default 300000) when that is longer. A case's gas is the sum of its
+blocks' header `gasUsed`, each capped at the block's `gasLimit` because an
+invalid block can claim any amount; an invalid block without `rlp_decoded`
+counts nothing. `--gas-rate 0` turns this off. When a case gets more than the
+minimum, its output line ends with the limit it got, as in
+`(256.55s, limit 645s)`; the result file records only the seconds taken.
+
+The default rate leaves headroom below the slowest rate GitHub's runners
+showed on a heavy case. The EIP-6110 deposit cases are the slowest per gas,
+at 510k to 700k gas per second over two CI runs whose runners differed in
+speed by about a third: the `many_deposits_from_contract` case (11.8M gas)
+took 16.8 and 23.1 seconds, and `deposit_high_count` (194M gas) took 350
+seconds on the slower runner. Most cases near the block gas limit run several
+times faster. At this rate a case needs more than 18M gas to get more than 60
+seconds, which 14 of the 17550 cases in fixtures 21.0.1 have, so a case that
+is slow for reasons other than gas still times out at the minimum.
+
+Completed cases resume individually, including recorded timeouts. Use `-f` to
+rerun them after changing the limit.
 Cases are rerun when their result file predates the executable, fixture JSON,
 or fixture version file. Result files are published atomically.
 
@@ -125,7 +144,7 @@ runner to exit unsuccessfully.
 
 The `holbuild` GitHub Actions workflow builds `runtests_unchecked.exe` and runs
 the complete suite from a clean result set with one fixture worker per available
-CPU. The per-case timeout remains 60 seconds. Extracted fixtures are cached by
+CPU, with the default time limits. Extracted fixtures are cached by
 platform and fixture-definition version to avoid downloading and unpacking the
 release on every run.
 

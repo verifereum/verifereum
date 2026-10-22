@@ -8,7 +8,12 @@ val usage_header = String.concat [
 ]
 
 datatype options = Help | Results | NoResults | Fresh | NoSerialFirst
-                 | Limit of string | Jobs of string | Table of string
+                 | Limit of string | GasRate of string | Jobs of string
+                 | Table of string
+
+(* Below the slowest rate GitHub's runners showed on a heavy case; see
+   tests/README.md. *)
+val default_gas_rate = 300000
 
 val cline_options = [
   {short="h", long=["help"], desc=NoArg (K Help), help="only print help"},
@@ -21,7 +26,11 @@ val cline_options = [
   {short="", long=["no-serial-first"], desc=NoArg (K NoSerialFirst),
    help="schedule all fixtures together"},
   {short="t", long=["time"], desc=ReqArg (Limit, "secs"),
-   help="time limit per case, including input encoding (default: VFM_TIME_LIMIT or 60)"},
+   help="minimum time limit per case, including input encoding (default: VFM_TIME_LIMIT or 60)"},
+  {short="", long=["gas-rate"], desc=ReqArg (GasRate, "gas"),
+   help=String.concat ["raise a case's time limit to its gas divided by this ",
+                       "many gas per second; 0 turns this off (default: ",
+                       Int.toString default_gas_rate, ")"]},
   {short="j", long=["jobs"], desc=ReqArg (Jobs, "num"),
    help="number of fixture worker processes (default: 1)"},
   {short="", long=["table"], desc=ReqArg (Table, "file"),
@@ -75,14 +84,25 @@ in
                                       then xs else x::xs) [] selected)
 end
 
-fun run_fixture fresh limit (index, path) = let
+(* A case using much gas gets more time than the minimum limit, so heavy but
+   correct cases finish, while a slow case with little gas still times out. *)
+fun case_limit limit gas_rate gas =
+  if gas_rate = 0 then limit
+  else let
+    val scaled = Time.fromSeconds (Arbnum.toLargeInt gas div Int.toLarge gas_rate)
+  in
+    if Time.>(scaled, limit) then scaled else limit
+  end
+
+fun run_fixture fresh limit gas_rate (index, path) = let
   val cases = vfmUncheckedFixtureLib.json_path_to_tests (fixtures_path path)
   val newest_input = List.foldl
     (fn (t, latest) => if Time.>(t, latest) then t else latest)
     Time.zeroTime (List.map OS.FileSys.modTime
       [CommandLine.name (), fixtures_path path, fixtures_path "version.txt"])
-  fun run_case (number, (name, evaluate)) = let
+  fun run_case (number, {name, gas, evaluate}) = let
     val suffix = index ^ "_" ^ Int.toString number
+    val limit_used = case_limit limit gas_rate gas
     val file = results_path ("result" ^ suffix ^ ".nsv")
   in
     if not fresh andalso
@@ -93,7 +113,7 @@ fun run_fixture fresh limit (index, path) = let
                    handle OS.SysErr _ => false)
                then OS.FileSys.remove file else ()
       val start = Time.now ()
-      val result = Timeout.apply limit evaluate ()
+      val result = Timeout.apply limit_used evaluate ()
                    handle Timeout.TIMEOUT _ => "Timeout"
       val seconds = Time.fmt 2 (Time.now () - start)
       val temporary = file ^ ".tmp"
@@ -101,8 +121,10 @@ fun run_fixture fresh limit (index, path) = let
         (String.concatWith "\n" [name, result, seconds, "unchecked"] ^ "\n")
       val () = OS.FileSys.rename {old=temporary, new=file}
     in
-      TextIO.print ("test_" ^ suffix ^ "_result = " ^ result ^
-                    " (" ^ seconds ^ "s)\n")
+      TextIO.print ("test_" ^ suffix ^ "_result = " ^ result ^ " (" ^ seconds ^
+                    (if Time.>(limit_used, limit)
+                     then "s, limit " ^ Time.fmt 0 limit_used ^ "s)\n"
+                     else "s)\n"))
     end
   end
 in
@@ -114,7 +136,7 @@ end
    Poly/ML 5.9.2's parallel GC can fail a multi-MB allocation while the heap
    is still small (seen parsing a 25 MB fixture), so workers collect with one
    GC thread.  The RTS removes --gcthreads from the arguments main sees. *)
-fun run_workers jobs fresh limit fixtures = let
+fun run_workers jobs fresh limit gas_rate fixtures = let
   val executable = OS.FileSys.fullPath (CommandLine.name ())
   val active = ref ([] : Posix.Process.pid list)
   fun spawn (index, path) = let
@@ -126,7 +148,7 @@ fun run_workers jobs fresh limit fixtures = let
     | NONE =>
         (Posix.Process.exec (executable,
            [executable, "--gcthreads", "1", "--worker", Bool.toString fresh,
-            Time.toString limit, index, path])
+            Time.toString limit, Int.toString gas_rate, index, path])
          handle _ => Posix.Process.exit 0w1)
   end
   fun reap () = let
@@ -163,6 +185,11 @@ fun run options indices = let
     | s::_ => Time.fromSeconds (Int.toLarge (positive_integer "time limit" s))
   val () = if Time.>(limit, Time.zeroTime) then ()
            else raise Fail "time limit must be positive"
+  val gas_rate =
+    case List.mapPartial (fn GasRate s => SOME s | _ => NONE) options of
+      [] => default_gas_rate
+    | "0"::_ => 0
+    | s::_ => positive_integer "gas rate" s
   val () = ensure_fixtures ()
   val fixtures = selected_fixtures (get_all_test_json_paths ()) indices
   val (serial, rest) =
@@ -173,8 +200,8 @@ fun run options indices = let
       fun heavy (index, _) = List.exists (equal index) serial_indices
     in (List.filter heavy fixtures, List.filter (not o heavy) fixtures) end
 in
-  if run_workers 1 fresh limit serial
-  then run_workers jobs fresh limit rest
+  if run_workers 1 fresh limit gas_rate serial
+  then run_workers jobs fresh limit gas_rate rest
   else false
 end
 
@@ -203,9 +230,9 @@ end
 
 fun main () =
   (case CommandLine.arguments () of
-     ["--worker", fresh, seconds, index, path] =>
+     ["--worker", fresh, seconds, gas_rate, index, path] =>
        (run_fixture (fresh = "true") (Option.valOf (Time.fromString seconds))
-          (index, path)
+          (Option.valOf (Int.fromString gas_rate)) (index, path)
         handle e => raise Fail (index ^ ": " ^ General.exnMessage e))
    | arguments => main_cli arguments)
   handle e => die ("runtests_unchecked.exe: " ^ General.exnMessage e ^ "\n")
