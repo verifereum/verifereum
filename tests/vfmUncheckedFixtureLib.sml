@@ -203,6 +203,22 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
         (bytes32 (#lastblockhash test)) (accounts (#post test)))
   end
 
+  (* Invalid blocks can claim any gasUsed, so each block counts at most its
+     gasLimit; an invalid block without rlp_decoded counts nothing. *)
+  fun header_gas ({gasUsed, gasLimit, ...} : Fixture.block_header) =
+    Arbnum.min (Arbnum.fromHexString gasUsed, Arbnum.fromHexString gasLimit)
+
+  fun block_gas (Fixture.Block value) = header_gas (#blockHeader value)
+    | block_gas (Fixture.Invalid {rlp_decoded, ...}) =
+        case rlp_decoded of
+          SOME value => header_gas (#blockHeader value)
+        | NONE => Arbnum.zero
+
   fun json_path_to_tests path =
-    List.map (fn test => (#name test, run test)) (Fixture.json_path_to_tests path)
+    List.map (fn test => {
+        name = #name test,
+        gas = List.foldl (fn (b, total) => Arbnum.+ (block_gas b, total))
+                Arbnum.zero (#blocks test),
+        evaluate = run test
+      }) (Fixture.json_path_to_tests path)
 end
