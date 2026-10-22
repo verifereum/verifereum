@@ -4,20 +4,8 @@ Ancestors
 Libs
   cv_transLib intLib wordsLib dep_rewrite
 
-(* A byte list with constant-time length and logarithmic-time access, used
-   for memory and call data so that executing the semantics does not copy
-   long lists.  The operations below are characterised by what they do to
-   buffer_to_list (see the list equations at the end), so proofs can treat a
-   buffer as the byte list it stands for.
-
-   Bytes are grouped into 32-byte words: word i holds bytes 32 * i to
-   32 * i + 31, byte 32 * i + j being digit j of the word in base 256.  Zero
-   words need not be stored.  Bytes at or past len are not part of the list;
-   the operations that lengthen the buffer zero them first. *)
-
-Datatype:
-  buffer = <| len : num; words : num num_map |>
-End
+(* Numbers as base-256 digits, least significant first.  Nothing in this
+   section is about buffers: it extends byteTheory and could move there. *)
 
 (* bytes_of_num_acc n x acc is byteTheory's bytes_of_num n x ++ acc
    (bytes_of_num_acc_eq), computed by splitting x into 7-byte pieces first
@@ -39,27 +27,6 @@ Termination
   WF_REL_TAC ‘measure FST’
 End
 
-Definition word_at_def:
-  word_at ws (i:num) = case lookup i ws of NONE => 0n | SOME w => w
-End
-
-Definition set_word_def:
-  set_word ws i (x:num) = if x = 0 then delete i ws else insert i x ws
-End
-
-(* n bytes starting at byte offset, followed by acc *)
-Definition read_bytes_def:
-  read_bytes ws (offset:num) (n:num) (acc:byte list) =
-  if n = 0 then acc else
-  let j = offset MOD 32 in
-  let c = MIN n (32 - j) in
-  bytes_of_num_acc c (word_at ws (offset DIV 32) DIV 256 ** j)
-    (read_bytes ws (offset + c) (n - c) acc)
-Termination
-  WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
-  \\ irule (DECIDE “a < 32n ⇒ 0 < 32 − a”) \\ simp[]
-End
-
 (* old with its c bytes from byte j on replaced by the first c bytes of bs *)
 Definition splice_bytes_def:
   splice_bytes (old:num) (j:num) (c:num) (bs:byte list) =
@@ -67,156 +34,8 @@ Definition splice_bytes_def:
   + 256 ** (j + c) * (old DIV 256 ** (j + c))
 End
 
-(* write the first n bytes of bs starting at byte offset *)
-Definition write_bytes_def:
-  write_bytes ws (offset:num) (n:num) (bs:byte list) =
-  if n = 0 then ws else
-  let i = offset DIV 32 in
-  let j = offset MOD 32 in
-  let c = MIN n (32 - j) in
-    write_bytes (set_word ws i (splice_bytes (word_at ws i) j c bs))
-      (offset + c) (n - c) (DROP c bs)
-Termination
-  WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
-  \\ irule (DECIDE “a < 32n ⇒ 0 < 32 − a”) \\ simp[]
-End
-
-(* delete k words starting at word i *)
-Definition clear_words_def:
-  clear_words ws (i:num) (k:num) =
-  if k = 0 then ws else clear_words (delete i ws) (i + 1) (k - 1)
-End
-
-(* zero the bytes from byte p up to byte q *)
-Definition zero_bytes_def:
-  zero_bytes ws (p:num) (q:num) =
-  let i = p DIV 32 in
-  let ws = if p MOD 32 = 0 then ws
-           else set_word ws i (word_at ws i MOD 256 ** (p MOD 32)) in
-  let first = (p + 31) DIV 32 in
-    clear_words ws first ((q + 31) DIV 32 - first)
-End
-
-(* the number formed by the c bytes (c ≤ 32) starting at byte offset *)
-Definition read_word_def:
-  read_word ws (offset:num) (c:num) =
-  let i = offset DIV 32 in
-  let j = offset MOD 32 in
-  let k = MIN c (32 - j) in
-  let lo = (word_at ws i DIV 256 ** j) MOD 256 ** k in
-  if k < c then lo + 256 ** k * (word_at ws (i + 1) MOD 256 ** (c - k))
-  else lo
-End
-
-(* word q of the n bytes starting at byte offset *)
-Definition out_word_def:
-  out_word ws (offset:num) (n:num) (q:num) =
-  read_word ws (offset + 32 * q) (MIN 32 (n - 32 * q))
-End
-
-Definition put_word_def:
-  put_word ws offset n q acc =
-  let v = out_word ws offset n q in
-  if v = 0 then acc else insert q v acc
-End
-
-(* add words q to q + k - 1 of the n bytes starting at offset to acc *)
-Definition sub_words_def:
-  sub_words ws offset n q (k:num) acc =
-  if k = 0 then acc
-  else sub_words ws offset n (q + 1) (k - 1) (put_word ws offset n q acc)
-End
-
-(* the same for the words that can be nonzero, given the stored words kvs:
-   stored word i holds bytes of words i - offset DIV 32 - 1 and
-   i - offset DIV 32 *)
-Definition sparse_words_def:
-  sparse_words ws offset n [] acc = acc ∧
-  sparse_words ws offset n ((i:num,v:num)::kvs) acc =
-  let i0 = offset DIV 32 in
-  let acc = if i0 < i then put_word ws offset n (i - i0 - 1) acc else acc in
-  let acc = if i0 ≤ i then put_word ws offset n (i - i0) acc else acc in
-    sparse_words ws offset n kvs acc
-End
-
-(* the number of values stored in t if it is at most k, and otherwise some
-   number above k, found without visiting many more than k values *)
-Definition size_upto_def:
-  size_upto LN (k:num) = 0n ∧
-  size_upto (LS _) k = 1 ∧
-  size_upto (BN l r) k =
-    (let a = size_upto l k in if k < a then a else a + size_upto r (k - a)) ∧
-  size_upto (BS l _ r) k =
-    (let a = size_upto l k + 1 in
-     if k < a then a else a + size_upto r (k - a))
-End
-
-Definition empty_buffer_def:
-  empty_buffer = <| len := 0; words := LN |>
-End
-
-Definition buffer_length_def:
-  buffer_length b = b.len
-End
-
-Definition buffer_to_list_def:
-  buffer_to_list b = read_bytes b.words 0 b.len []
-End
-
-(* sz bytes starting at offset, zero past the end *)
-Definition buffer_read_def:
-  buffer_read offset sz b =
-  let n = MIN sz (b.len - offset) in
-  read_bytes b.words offset n (REPLICATE (sz - n) (0w:byte))
-End
-
-(* at most sz bytes starting at offset, stopping at the end *)
-Definition buffer_take_def:
-  buffer_take offset sz b =
-  read_bytes b.words offset (MIN sz (b.len - offset)) []
-End
-
-(* at most sz bytes starting at offset, stopping at the end, as a buffer;
-   the words are found from the stored words when there are few of those *)
-Definition buffer_sub_def:
-  buffer_sub offset sz b =
-  let n = MIN sz (b.len - offset) in
-  let k = (n + 31) DIV 32 in
-  <| len := n;
-     words := if size_upto b.words k ≤ k
-              then sparse_words b.words offset n (toAList b.words) LN
-              else sub_words b.words offset n 0 k LN |>
-End
-
-(* n zero bytes added at the end *)
-Definition buffer_extend_def:
-  buffer_extend n b =
-  if n = 0 then b else
-  <| len := b.len + n; words := zero_bytes b.words b.len (b.len + n) |>
-End
-
-(* bytes written over the buffer starting at offset, after extending it
-   with zeros if it is too short; writing no bytes changes nothing *)
-Definition buffer_write_def:
-  buffer_write offset bytes b =
-  if bytes = [] then b else
-  let n = LENGTH bytes in
-  let b = buffer_extend (offset + n - b.len) b in
-  b with words := write_bytes b.words offset n bytes
-End
-
-Definition buffer_of_list_def:
-  buffer_of_list bytes = buffer_write 0 bytes empty_buffer
-End
-
-(* Correctness: the list equations *)
-
 Definition byte_of_def:
   byte_of (x:num) (k:num) = (n2w ((x DIV 256 ** k) MOD 256) : byte)
-End
-
-Definition byte_at_def:
-  byte_at ws (p:num) = byte_of (word_at ws (p DIV 32)) (p MOD 32)
 End
 
 Theorem small_bytes_of_num_GENLIST:
@@ -345,6 +164,233 @@ Proof
   \\ Cases_on ‘k’ \\ gvs[byte_of_def]
 QED
 
+Theorem byte_of_splice_bytes:
+  c ≤ LENGTH bs ⇒
+  byte_of (splice_bytes old j c bs) k =
+  if j ≤ k ∧ k < j + c then EL (k - j) bs else byte_of old k
+Proof
+  strip_tac
+  \\ ‘num_of_bytes (TAKE c bs) < 256 ** c’
+       by (qspec_then ‘TAKE c bs’ mp_tac num_of_bytes_lt \\ simp[])
+  \\ ‘old MOD 256 ** j < 256 ** j’ by simp[]
+  \\ ‘splice_bytes old j c bs = old MOD 256 ** j + 256 ** j *
+        (num_of_bytes (TAKE c bs) + 256 ** c * (old DIV 256 ** (j + c)))’
+       by simp[splice_bytes_def, EXP_ADD, LEFT_ADD_DISTRIB]
+  \\ pop_assum SUBST1_TAC
+  \\ DEP_REWRITE_TAC[byte_of_add_mul] \\ simp[]
+  \\ rw[byte_of_num_of_bytes, byte_of_MOD, byte_of_DIV, EL_TAKE]
+  \\ gvs[]
+QED
+
+Theorem num_digits_eq:
+  ∀x y. (∀k. byte_of x k = byte_of y k) ⇒ x = y
+Proof
+  ‘∀s x y. x + y = s ∧ (∀k. byte_of x k = byte_of y k) ⇒ x = y’
+    suffices_by metis_tac[]
+  \\ completeInduct_on ‘s’ \\ rw[]
+  \\ Cases_on ‘x + y = 0’ >- gvs[]
+  \\ ‘∀z k. byte_of (z DIV 256) k = byte_of z (k + 1)’
+       by (rpt gen_tac \\ qspecl_then [‘1’,‘k’,‘z’] mp_tac byte_of_DIV
+           \\ simp[])
+  \\ ‘x DIV 256 + y DIV 256 < x + y’
+       by (qpat_x_assum ‘x + y ≠ 0’ mp_tac \\ rpt (pop_assum kall_tac)
+           \\ intLib.ARITH_TAC)
+  \\ ‘x DIV 256 = y DIV 256’
+       by (first_x_assum drule \\ disch_then irule \\ simp[])
+  \\ ‘x MOD 256 = y MOD 256’
+       by (qpat_x_assum ‘∀k. byte_of x k = _’ (qspec_then ‘0’ mp_tac)
+           \\ rpt (pop_assum kall_tac) \\ simp[byte_of_def])
+  \\ metis_tac[DIVISION, DECIDE “0 < 256n”]
+QED
+
+(* A bounded size for sptrees: could move to sptreeTheory. *)
+
+(* the number of values stored in t if it is at most k, and otherwise some
+   number above k, found without visiting many more than k values *)
+Definition size_upto_def:
+  size_upto LN (k:num) = 0n ∧
+  size_upto (LS _) k = 1 ∧
+  size_upto (BN l r) k =
+    (let a = size_upto l k in if k < a then a else a + size_upto r (k - a)) ∧
+  size_upto (BS l _ r) k =
+    (let a = size_upto l k + 1 in
+     if k < a then a else a + size_upto r (k - a))
+End
+
+(* Buffers *)
+
+(* A byte list with constant-time length and logarithmic-time access, used
+   for memory and call data so that executing the semantics does not copy
+   long lists.  The operations below are characterised by what they do to
+   buffer_to_list (see the list equations at the end), so proofs can treat a
+   buffer as the byte list it stands for.
+
+   Bytes are grouped into 32-byte words: word i holds bytes 32 * i to
+   32 * i + 31, byte 32 * i + j being digit j of the word in base 256.  Zero
+   words need not be stored.  Bytes at or past len are not part of the list;
+   the operations that lengthen the buffer zero them first. *)
+
+Datatype:
+  buffer = <| len : num; words : num num_map |>
+End
+
+Definition word_at_def:
+  word_at ws (i:num) = case lookup i ws of NONE => 0n | SOME w => w
+End
+
+Definition set_word_def:
+  set_word ws i (x:num) = if x = 0 then delete i ws else insert i x ws
+End
+
+(* n bytes starting at byte offset, followed by acc *)
+Definition read_bytes_def:
+  read_bytes ws (offset:num) (n:num) (acc:byte list) =
+  if n = 0 then acc else
+  let j = offset MOD 32 in
+  let c = MIN n (32 - j) in
+  bytes_of_num_acc c (word_at ws (offset DIV 32) DIV 256 ** j)
+    (read_bytes ws (offset + c) (n - c) acc)
+Termination
+  WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
+  \\ irule (DECIDE “a < 32n ⇒ 0 < 32 − a”) \\ simp[]
+End
+
+(* write the first n bytes of bs starting at byte offset *)
+Definition write_bytes_def:
+  write_bytes ws (offset:num) (n:num) (bs:byte list) =
+  if n = 0 then ws else
+  let i = offset DIV 32 in
+  let j = offset MOD 32 in
+  let c = MIN n (32 - j) in
+    write_bytes (set_word ws i (splice_bytes (word_at ws i) j c bs))
+      (offset + c) (n - c) (DROP c bs)
+Termination
+  WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
+  \\ irule (DECIDE “a < 32n ⇒ 0 < 32 − a”) \\ simp[]
+End
+
+(* delete k words starting at word i *)
+Definition clear_words_def:
+  clear_words ws (i:num) (k:num) =
+  if k = 0 then ws else clear_words (delete i ws) (i + 1) (k - 1)
+End
+
+(* zero the bytes from byte p up to byte q *)
+Definition zero_bytes_def:
+  zero_bytes ws (p:num) (q:num) =
+  let i = p DIV 32 in
+  let ws = if p MOD 32 = 0 then ws
+           else set_word ws i (word_at ws i MOD 256 ** (p MOD 32)) in
+  let first = (p + 31) DIV 32 in
+    clear_words ws first ((q + 31) DIV 32 - first)
+End
+
+(* the number formed by the c bytes (c ≤ 32) starting at byte offset *)
+Definition read_word_def:
+  read_word ws (offset:num) (c:num) =
+  let i = offset DIV 32 in
+  let j = offset MOD 32 in
+  let k = MIN c (32 - j) in
+  let lo = (word_at ws i DIV 256 ** j) MOD 256 ** k in
+  if k < c then lo + 256 ** k * (word_at ws (i + 1) MOD 256 ** (c - k))
+  else lo
+End
+
+(* word q of the n bytes starting at byte offset *)
+Definition out_word_def:
+  out_word ws (offset:num) (n:num) (q:num) =
+  read_word ws (offset + 32 * q) (MIN 32 (n - 32 * q))
+End
+
+Definition put_word_def:
+  put_word ws offset n q acc =
+  let v = out_word ws offset n q in
+  if v = 0 then acc else insert q v acc
+End
+
+(* add words q to q + k - 1 of the n bytes starting at offset to acc *)
+Definition sub_words_def:
+  sub_words ws offset n q (k:num) acc =
+  if k = 0 then acc
+  else sub_words ws offset n (q + 1) (k - 1) (put_word ws offset n q acc)
+End
+
+(* the same for the words that can be nonzero, given the stored words kvs:
+   stored word i holds bytes of words i - offset DIV 32 - 1 and
+   i - offset DIV 32 *)
+Definition sparse_words_def:
+  sparse_words ws offset n [] acc = acc ∧
+  sparse_words ws offset n ((i:num,v:num)::kvs) acc =
+  let i0 = offset DIV 32 in
+  let acc = if i0 < i then put_word ws offset n (i - i0 - 1) acc else acc in
+  let acc = if i0 ≤ i then put_word ws offset n (i - i0) acc else acc in
+    sparse_words ws offset n kvs acc
+End
+
+Definition empty_buffer_def:
+  empty_buffer = <| len := 0; words := LN |>
+End
+
+Definition buffer_length_def:
+  buffer_length b = b.len
+End
+
+Definition buffer_to_list_def:
+  buffer_to_list b = read_bytes b.words 0 b.len []
+End
+
+(* sz bytes starting at offset, zero past the end *)
+Definition buffer_read_def:
+  buffer_read offset sz b =
+  let n = MIN sz (b.len - offset) in
+  read_bytes b.words offset n (REPLICATE (sz - n) (0w:byte))
+End
+
+(* at most sz bytes starting at offset, stopping at the end *)
+Definition buffer_take_def:
+  buffer_take offset sz b =
+  read_bytes b.words offset (MIN sz (b.len - offset)) []
+End
+
+(* at most sz bytes starting at offset, stopping at the end, as a buffer;
+   the words are found from the stored words when there are few of those *)
+Definition buffer_sub_def:
+  buffer_sub offset sz b =
+  let n = MIN sz (b.len - offset) in
+  let k = (n + 31) DIV 32 in
+  <| len := n;
+     words := if size_upto b.words k ≤ k
+              then sparse_words b.words offset n (toAList b.words) LN
+              else sub_words b.words offset n 0 k LN |>
+End
+
+(* n zero bytes added at the end *)
+Definition buffer_extend_def:
+  buffer_extend n b =
+  if n = 0 then b else
+  <| len := b.len + n; words := zero_bytes b.words b.len (b.len + n) |>
+End
+
+(* bytes written over the buffer starting at offset, after extending it
+   with zeros if it is too short; writing no bytes changes nothing *)
+Definition buffer_write_def:
+  buffer_write offset bytes b =
+  if bytes = [] then b else
+  let n = LENGTH bytes in
+  let b = buffer_extend (offset + n - b.len) b in
+  b with words := write_bytes b.words offset n bytes
+End
+
+Definition buffer_of_list_def:
+  buffer_of_list bytes = buffer_write 0 bytes empty_buffer
+End
+
+(* Correctness: the list equations *)
+
+Definition byte_at_def:
+  byte_at ws (p:num) = byte_of (word_at ws (p DIV 32)) (p MOD 32)
+End
+
 Theorem word_at_set_word:
   word_at (set_word ws i x) j = if j = i then x else word_at ws j
 Proof
@@ -387,24 +433,6 @@ Theorem write_bytes_arith[local]:
     (p DIV 32 ≠ offset DIV 32 ⇒ ¬(offset ≤ p ∧ p < offset + c))
 Proof
   rpt gen_tac \\ strip_tac \\ conj_tac \\ strip_tac \\ intLib.ARITH_TAC
-QED
-
-Theorem byte_of_splice_bytes:
-  c ≤ LENGTH bs ⇒
-  byte_of (splice_bytes old j c bs) k =
-  if j ≤ k ∧ k < j + c then EL (k - j) bs else byte_of old k
-Proof
-  strip_tac
-  \\ ‘num_of_bytes (TAKE c bs) < 256 ** c’
-       by (qspec_then ‘TAKE c bs’ mp_tac num_of_bytes_lt \\ simp[])
-  \\ ‘old MOD 256 ** j < 256 ** j’ by simp[]
-  \\ ‘splice_bytes old j c bs = old MOD 256 ** j + 256 ** j *
-        (num_of_bytes (TAKE c bs) + 256 ** c * (old DIV 256 ** (j + c)))’
-       by simp[splice_bytes_def, EXP_ADD, LEFT_ADD_DISTRIB]
-  \\ pop_assum SUBST1_TAC
-  \\ DEP_REWRITE_TAC[byte_of_add_mul] \\ simp[]
-  \\ rw[byte_of_num_of_bytes, byte_of_MOD, byte_of_DIV, EL_TAKE]
-  \\ gvs[]
 QED
 
 Theorem byte_at_splice[local]:
@@ -656,27 +684,6 @@ Definition good_words_def:
     ∀i. lookup i ws ≠ SOME 0 ∧ ∀k. 32 ≤ k ⇒ byte_of (word_at ws i) k = 0w
 End
 
-Theorem num_digits_eq:
-  ∀x y. (∀k. byte_of x k = byte_of y k) ⇒ x = y
-Proof
-  ‘∀s x y. x + y = s ∧ (∀k. byte_of x k = byte_of y k) ⇒ x = y’
-    suffices_by metis_tac[]
-  \\ completeInduct_on ‘s’ \\ rw[]
-  \\ Cases_on ‘x + y = 0’ >- gvs[]
-  \\ ‘∀z k. byte_of (z DIV 256) k = byte_of z (k + 1)’
-       by (rpt gen_tac \\ qspecl_then [‘1’,‘k’,‘z’] mp_tac byte_of_DIV
-           \\ simp[])
-  \\ ‘x DIV 256 + y DIV 256 < x + y’
-       by (qpat_x_assum ‘x + y ≠ 0’ mp_tac \\ rpt (pop_assum kall_tac)
-           \\ intLib.ARITH_TAC)
-  \\ ‘x DIV 256 = y DIV 256’
-       by (first_x_assum drule \\ disch_then irule \\ simp[])
-  \\ ‘x MOD 256 = y MOD 256’
-       by (qpat_x_assum ‘∀k. byte_of x k = _’ (qspec_then ‘0’ mp_tac)
-           \\ rpt (pop_assum kall_tac) \\ simp[byte_of_def])
-  \\ metis_tac[DIVISION, DECIDE “0 < 256n”]
-QED
-
 Theorem word_at_byte_at:
   k < 32 ⇒ byte_of (word_at ws i) k = byte_at ws (32 * i + k)
 Proof
@@ -912,15 +919,19 @@ fun cv_measure_tac q =
   \\ gvs[cvTheory.c2b_def, cv_primTheory.cv_min_def]
   \\ rpt (pop_assum mp_tac) \\ rw[] \\ gvs[MOD_32_lt];
 
+(* the generic sections *)
 val () = cv_auto_trans_rec small_bytes_of_num_def
   (cv_measure_tac ‘measure (cv$c2n o FST)’);
 val () = cv_auto_trans_rec bytes_of_num_acc_def
   (cv_measure_tac ‘measure (cv$c2n o FST)’);
+val () = cv_auto_trans splice_bytes_def;
+val () = cv_auto_trans size_upto_def;
+
+(* buffers *)
 val () = cv_auto_trans word_at_def;
 val () = cv_auto_trans set_word_def;
 val () = cv_auto_trans_rec read_bytes_def
   (cv_measure_tac ‘measure (cv$c2n o FST o SND o SND)’);
-val () = cv_auto_trans splice_bytes_def;
 val () = cv_auto_trans_rec write_bytes_def
   (cv_measure_tac ‘measure (cv$c2n o FST o SND o SND)’);
 val () = cv_auto_trans clear_words_def;
@@ -930,7 +941,6 @@ val () = cv_auto_trans out_word_def;
 val () = cv_auto_trans put_word_def;
 val () = cv_auto_trans sub_words_def;
 val () = cv_auto_trans sparse_words_def;
-val () = cv_auto_trans size_upto_def;
 val () = cv_auto_trans empty_buffer_def;
 val () = cv_auto_trans buffer_length_def;
 val () = cv_auto_trans buffer_to_list_def;
