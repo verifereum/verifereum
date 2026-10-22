@@ -1,6 +1,6 @@
 Theory vfmBuffer
 Ancestors
-  arithmetic list rich_list words sptree vfmTypes
+  arithmetic list rich_list words byte sptree vfmTypes
 Libs
   cv_transLib intLib wordsLib dep_rewrite
 
@@ -19,9 +19,9 @@ Datatype:
   buffer = <| len : num; words : num num_map |>
 End
 
-(* the first n bytes of x, least significant first, followed by acc; x is
-   split into 7-byte pieces first so that the byte loop runs on small
-   numbers *)
+(* bytes_of_num_acc n x acc is byteTheory's bytes_of_num n x ++ acc
+   (bytes_of_num_acc_eq), computed by splitting x into 7-byte pieces first
+   so that the byte loop, small_bytes_of_num, runs on small numbers *)
 Definition small_bytes_of_num_def:
   small_bytes_of_num (n:num) (x:num) (acc:byte list) =
   if n = 0 then acc
@@ -30,19 +30,13 @@ Termination
   WF_REL_TAC ‘measure FST’
 End
 
-Definition bytes_of_num_def:
-  bytes_of_num (n:num) (x:num) (acc:byte list) =
+Definition bytes_of_num_acc_def:
+  bytes_of_num_acc (n:num) (x:num) (acc:byte list) =
   if n ≤ 7 then small_bytes_of_num n x acc
   else small_bytes_of_num 7 (x MOD 2 ** 56)
-         (bytes_of_num (n - 7) (x DIV 2 ** 56) acc)
+         (bytes_of_num_acc (n - 7) (x DIV 2 ** 56) acc)
 Termination
   WF_REL_TAC ‘measure FST’
-End
-
-(* the number whose base-256 digits, least significant first, are bs *)
-Definition num_of_bytes_def:
-  num_of_bytes [] = 0n ∧
-  num_of_bytes ((b:byte)::bs) = w2n b + 256 * num_of_bytes bs
 End
 
 Definition word_at_def:
@@ -59,7 +53,7 @@ Definition read_bytes_def:
   if n = 0 then acc else
   let j = offset MOD 32 in
   let c = MIN n (32 - j) in
-  bytes_of_num c (word_at ws (offset DIV 32) DIV 256 ** j)
+  bytes_of_num_acc c (word_at ws (offset DIV 32) DIV 256 ** j)
     (read_bytes ws (offset + c) (n - c) acc)
 Termination
   WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
@@ -302,21 +296,32 @@ Proof
   \\ rw[GENLIST_FUN_EQ, byte_of_MOD, byte_of_DIV]
 QED
 
-Theorem bytes_of_num_GENLIST:
-  ∀n x acc. bytes_of_num n x acc = GENLIST (byte_of x) n ++ acc
+Theorem bytes_of_num_acc_GENLIST:
+  ∀n x acc. bytes_of_num_acc n x acc = GENLIST (byte_of x) n ++ acc
 Proof
-  ho_match_mp_tac bytes_of_num_ind \\ rpt strip_tac
+  ho_match_mp_tac bytes_of_num_acc_ind \\ rpt strip_tac
   \\ Cases_on ‘n ≤ 7’
-  >- (once_rewrite_tac[bytes_of_num_def]
+  >- (once_rewrite_tac[bytes_of_num_acc_def]
       \\ asm_rewrite_tac[small_bytes_of_num_GENLIST])
   \\ first_x_assum drule \\ strip_tac
   \\ ‘(2:num) ** 56 = 256 ** 7’ by simp[]
-  \\ once_rewrite_tac[bytes_of_num_def]
+  \\ once_rewrite_tac[bytes_of_num_acc_def]
   \\ asm_rewrite_tac[small_bytes_of_num_GENLIST]
   \\ ‘n = (n - 7) + 7’ by simp[]
   \\ qpat_x_assum ‘n = _’
        (fn th => CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [th])))
   \\ rewrite_tac[GENLIST_byte_of_split, APPEND_ASSOC]
+QED
+
+Theorem bytes_of_num_acc_eq:
+  bytes_of_num_acc n x acc = bytes_of_num n x ++ acc
+Proof
+  ‘bytes_of_num n x = GENLIST (byte_of x) n’ suffices_by
+    simp[bytes_of_num_acc_GENLIST]
+  \\ rw[LIST_EQ_REWRITE, EL_bytes_of_num, byte_of_def]
+  \\ qspec_then ‘x DIV 256 ** x'’ mp_tac
+       (INST_TYPE [alpha |-> “:8”] n2w_mod)
+  \\ simp[dimword_8]
 QED
 
 Theorem num_of_bytes_lt:
@@ -360,12 +365,12 @@ Theorem read_bytes_GENLIST:
 Proof
   ho_match_mp_tac read_bytes_ind \\ rpt strip_tac
   \\ simp[Once read_bytes_def] \\ IF_CASES_TAC \\ gvs[]
-  \\ qmatch_goalsub_abbrev_tac ‘bytes_of_num c’
+  \\ qmatch_goalsub_abbrev_tac ‘bytes_of_num_acc c’
   \\ ‘c ≤ n ∧ c ≤ 32 - offset MOD 32’ by simp[Abbr‘c’]
   \\ ‘n = (n - c) + c’ by simp[]
   \\ qpat_x_assum ‘n = _’
        (fn th => CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [th])))
-  \\ rewrite_tac[bytes_of_num_GENLIST, GENLIST_APPEND, APPEND_ASSOC]
+  \\ rewrite_tac[bytes_of_num_acc_GENLIST, GENLIST_APPEND, APPEND_ASSOC]
   \\ DEP_REWRITE_TAC[APPEND_LENGTH_EQ]
   \\ simp[GENLIST_FUN_EQ, byte_of_DIV, byte_at_def] \\ rw[]
   \\ ‘(offset + k) DIV 32 = offset DIV 32 ∧
@@ -909,9 +914,8 @@ fun cv_measure_tac q =
 
 val () = cv_auto_trans_rec small_bytes_of_num_def
   (cv_measure_tac ‘measure (cv$c2n o FST)’);
-val () = cv_auto_trans_rec bytes_of_num_def
+val () = cv_auto_trans_rec bytes_of_num_acc_def
   (cv_measure_tac ‘measure (cv$c2n o FST)’);
-val () = cv_auto_trans num_of_bytes_def;
 val () = cv_auto_trans word_at_def;
 val () = cv_auto_trans set_word_def;
 val () = cv_auto_trans_rec read_bytes_def
