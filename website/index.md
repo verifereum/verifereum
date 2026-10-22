@@ -14,7 +14,7 @@ Verifereum is an executable formal semantics of the [Ethereum](https://ethereum.
 
 ## Status
 
-The semantics targets the live fork, Osaka. At the last full run it passed 17249 of the 17550 Osaka blockchain tests in the [Ethereum Execution Spec Tests (EEST)](https://steel.ethereum.foundation/docs/execution-specs/) v21.0.1 (98.3%); the [results table](table.html) lists every test and is where the current numbers are. The remaining tests are mostly timeouts in our evaluation (the semantics is not built for speed), plus the tests that use modified system contracts.
+The semantics targets the live fork, Osaka, and is tested against the 17550 Osaka blockchain tests in the [Ethereum Execution Spec Tests (EEST)](https://steel.ethereum.foundation/docs/execution-specs/) v21.0.1. The tests run in two ways. The checked runner evaluates each test inside the logic, so every result is a theorem; a full run takes hours, and the last one passed @CHECKED@ of them ([checked results](table.html)). The unchecked runner compiles the same definitions to native code and runs them without proof, which takes about half an hour on CI; it passed 17530 of them, 99.9% ([unchecked results](table-unchecked.html)). The 20 tests it fails all involve the EIP-7002 and EIP-7251 request contracts, which the semantics models instead of executing their code, so it can't follow the tests that modify, break or deploy them ([issue #177](https://github.com/verifereum/verifereum/issues/177)).
 
 ## What's in the repository
 
