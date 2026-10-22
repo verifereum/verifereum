@@ -1,7 +1,8 @@
 Theory vfmProg
 Ancestors
   vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas vfmState vfmRunCall
-  vfmTypes prog words set_sep pred_set pair list arithmetic option finite_map combin
+  vfmTypes vfmBuffer
+  prog words set_sep pred_set pair list arithmetic option finite_map combin
 Libs
   wordsLib intLib
 
@@ -11,7 +12,7 @@ Libs
 
 Datatype:
   evm_el = Stack      (bytes32 list)                     (* from top context *)
-         | Memory     (byte list)
+         | Memory     buffer   (* compared as a buffer: see vfmBuffer *)
          | PC         num
          | JumpDest   (num option)
          | ReturnData (byte list)
@@ -341,8 +342,8 @@ Theorem STAR_evm2set:
   ((evm_Logs l * p) (evm2set_on dom s) ⇔
    (l = (FST (HD (SND s).contexts)).logs) ∧
    HasLogs ∈ dom ∧ p (evm2set_on (dom DELETE HasLogs) s)) ∧
-  ((evm_Memory rd * p) (evm2set_on dom s) ⇔
-   (rd = (FST (HD (SND s).contexts)).memory) /\
+  ((evm_Memory mem * p) (evm2set_on dom s) ⇔
+   (mem = (FST (HD (SND s).contexts)).memory) /\
    HasMemory ∈ dom /\ p (evm2set_on (dom DELETE HasMemory) s)) /\
   ((evm_Rollback rb * p) (evm2set_on dom s) ⇔
    (rb = (SND s).rollback) /\
@@ -1127,8 +1128,8 @@ Proof
 QED
 
 Definition memory_cost_def:
-  memory_cost (m: word8 list) offset size =
-  memory_expansion_cost (LENGTH m)
+  memory_cost (m: buffer) offset size =
+  memory_expansion_cost (buffer_length m)
     (if 0 < size then word_size (offset + size) * 32 else 0)
 End
 
@@ -1140,7 +1141,7 @@ Proof
 QED
 
 Theorem memory_cost_none_zero:
-  32 * word_size (a + b) ≤ LENGTH m ⇒
+  32 * word_size (a + b) ≤ buffer_length m ⇒
   memory_cost m a b = 0
 Proof
   rw[memory_cost_def, memory_expansion_cost_def]
@@ -1148,14 +1149,14 @@ Proof
 QED
 
 Definition memory_expand_by_def:
-  memory_expand_by (m: word8 list) offset size =
-  MAX (LENGTH m) (if 0 < size then word_size (offset + size) * 32 else 0)
-  - (LENGTH m)
+  memory_expand_by (m: buffer) offset size =
+  MAX (buffer_length m) (if 0 < size then word_size (offset + size) * 32 else 0)
+  - (buffer_length m)
 End
 
 Definition expanded_memory_def:
-  expanded_memory (m: word8 list) offset size =
-  m ++ REPLICATE (memory_expand_by m offset size) 0w
+  expanded_memory (m: buffer) offset size =
+  buffer_extend (memory_expand_by m offset size) m
 End
 
 Theorem memory_expansion_info_split:
@@ -1184,23 +1185,25 @@ Proof
 QED
 
 Theorem TAKE_expanded_memory_leq[simp]:
-  n ≤ LENGTH m ⇒
-  TAKE n (expanded_memory m offset sz) = TAKE n m
+  n ≤ buffer_length m ⇒
+  TAKE n (buffer_to_list (expanded_memory m offset sz)) =
+  TAKE n (buffer_to_list m)
 Proof
-  rw[expanded_memory_def, TAKE_APPEND1]
+  rw[expanded_memory_def, buffer_to_list_extend, TAKE_APPEND1]
 QED
 
 Theorem DROP_size_expanded_memory:
   32 * word_size (offset + sz) ≤ n ⇒
-  DROP n (expanded_memory m offset sz) = DROP n m
+  DROP n (buffer_to_list (expanded_memory m offset sz)) =
+  DROP n (buffer_to_list m)
 Proof
-  rw[expanded_memory_def, DROP_APPEND]
+  rw[expanded_memory_def, buffer_to_list_extend, DROP_APPEND]
   \\ gvs[memory_expand_by_def, word_size_def]
 QED
 
 Theorem LENGTH_expanded_memory_geq:
-  (sz = 0 ⇒ 32 * word_size off ≤ LENGTH m) ⇒
-  32 * word_size (off + sz) ≤ LENGTH (expanded_memory m off sz)
+  (sz = 0 ⇒ 32 * word_size off ≤ buffer_length m) ⇒
+  32 * word_size (off + sz) ≤ buffer_length (expanded_memory m off sz)
 Proof
   Cases_on`sz = 0` \\ gvs[]
   \\ rw[expanded_memory_def, memory_expand_by_def]
@@ -1333,8 +1336,7 @@ QED
 
 Definition MCopy_write_def:
   MCopy_write em offset sourceOffset sz =
-  TAKE offset em ++ TAKE sz (DROP sourceOffset em) ++
-  DROP (offset + sz) (em:word8 list)
+  buffer_write offset (buffer_take sourceOffset sz em) em
 End
 
 val return_destination_tyinfo = Option.valOf $
@@ -1421,27 +1423,7 @@ val binop_tac =
   \\ TRY(qmatch_assum_abbrev_tac`(ad,sd) = sstore_refund_updates x y z`
          \\ Cases_on`sstore_refund_updates x y z` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`MCopy_write`
-         \\ conj_tac
-         >- (
-           simp[MCopy_write_def]
-           \\ qmatch_goalsub_abbrev_tac`DROP _ ls`
-           \\ rewrite_tac[LENGTH_TAKE_EQ]
-           \\ IF_CASES_TAC >- rw[]
-           \\ Q.SUBGOAL_THEN `xOffset + xSize ≤ LENGTH ls` assume_tac
-           >- (
-             simp[Abbr`ls`, word_size_def, MAX_DEF]
-             \\ rw[]
-             >- COOPER_TAC
-             \\ pop_assum mp_tac \\ rw[]
-             >- COOPER_TAC
-             \\ gvs[max_expansion_range_def]
-             \\ Cases_on `HD t = 0w` \\ gvs[]
-             \\ qpat_x_assum`_ = (_,_)`mp_tac
-             \\ rw[])
-           \\ qpat_x_assum`_ = (_,_)`mp_tac
-           \\ rw[max_expansion_range_def]
-           \\ pop_assum mp_tac \\ rw[]
-           \\ gvs[]))
+         \\ conj_tac >- simp[MCopy_write_def])
   \\ (conj_tac >-
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
@@ -1937,7 +1919,7 @@ Theorem SPEC_Keccak256:
          em = expanded_memory m offset sz))
   {(pc,Keccak256)}
   (evm_Stack (word_of_bytes T 0w (Keccak_256_w64 $
-               TAKE sz (DROP offset em)) :: DROP 2 ss) *
+               buffer_take offset sz em) :: DROP 2 ss) *
    evm_JumpDest j * evm_Exception e * evm_Memory em *
    evm_PC (pc + LENGTH (opcode Keccak256)) *
    evm_GasUsed (g + Keccak256_gas m offset sz) * evm_MsgParams p)
@@ -2026,7 +2008,7 @@ Theorem SPEC_CallDataLoad:
          g + static_gas CallDataLoad ≤ p.gasLimit))
   {(pc,CallDataLoad)}
   (evm_Stack (word_of_bytes F 0w (REVERSE $ take_pad_0 32 $
-              DROP (w2n (HD ss)) p.data) :: TL ss) *
+              DROP (w2n (HD ss)) (buffer_to_list p.data)) :: TL ss) *
    evm_JumpDest j * evm_Exception e *
    evm_PC (pc + LENGTH (opcode CallDataLoad)) *
    evm_GasUsed (g + static_gas CallDataLoad) * evm_MsgParams p)
@@ -2040,7 +2022,7 @@ Theorem SPEC_CallDataSize:
    cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
          g + static_gas CallDataSize ≤ p.gasLimit))
   {(pc,CallDataSize)}
-  (evm_Stack (n2w (LENGTH p.data) :: ss) *
+  (evm_Stack (n2w (buffer_length p.data) :: ss) *
    evm_JumpDest j * evm_Exception e *
    evm_PC (pc + LENGTH (opcode CallDataSize)) *
    evm_GasUsed (g + static_gas CallDataSize) * evm_MsgParams p)
@@ -2058,9 +2040,9 @@ Theorem SPEC_CallDataCopy:
   {(pc,CallDataCopy)}
   (evm_Stack (DROP 3 ss) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE offset em ++
-               take_pad_0 sz (DROP (w2n (EL 1 ss)) p.data) ++
-               DROP (offset + sz) em) *
+   evm_Memory (buffer_write offset
+                 (take_pad_0 sz (DROP (w2n (EL 1 ss)) (buffer_to_list p.data)))
+                 em) *
    evm_PC (pc + LENGTH (opcode CallDataCopy)) *
    evm_GasUsed (g + CallDataCopy_gas m offset sz) * evm_MsgParams p)
 Proof binop_tac
@@ -2091,9 +2073,8 @@ Theorem SPEC_CodeCopy:
   {(pc,CodeCopy)}
   (evm_Stack (DROP 3 ss) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE offset em ++
-               take_pad_0 sz (DROP (w2n (EL 1 ss)) p.code) ++
-               DROP (offset + sz) em) *
+   evm_Memory (buffer_write offset
+                 (take_pad_0 sz (DROP (w2n (EL 1 ss)) p.code)) em) *
    evm_PC (pc + LENGTH (opcode CodeCopy)) *
    evm_GasUsed (g + CodeCopy_gas m offset sz) * evm_MsgParams p)
 Proof binop_tac
@@ -2142,10 +2123,8 @@ Theorem SPEC_ExtCodeCopy:
   {(pc,ExtCodeCopy)}
   (evm_Stack (DROP 4 ss) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE offset em ++
-               take_pad_0 sz (DROP (w2n (EL 2 ss))
-                 (lookup_account a rb.accounts).code) ++
-               DROP (offset + sz) em) *
+   evm_Memory (buffer_write offset (take_pad_0 sz (DROP (w2n (EL 2 ss))
+                 (lookup_account a rb.accounts).code)) em) *
    evm_PC (pc + LENGTH (opcode ExtCodeCopy)) *
    evm_Rollback (accesses_add a rb) *
    evm_Msdomain (msdomain_add a d) *
@@ -2181,9 +2160,7 @@ Theorem SPEC_ReturnDataCopy:
   {(pc,ReturnDataCopy)}
   (evm_Stack (DROP 3 ss) *
    evm_ReturnData rd * evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE offset em ++
-               take_pad_0 sz (DROP sourceOffset rd) ++
-               DROP (offset + sz) em) *
+   evm_Memory (buffer_write offset (take_pad_0 sz (DROP sourceOffset rd)) em) *
    evm_PC (pc + LENGTH (opcode ReturnDataCopy)) *
    evm_GasUsed (g + ReturnDataCopy_gas m offset sz) * evm_MsgParams p)
 Proof binop_tac
@@ -2395,7 +2372,7 @@ Theorem SPEC_MLoad:
          g + static_gas MLoad + memory_cost m offset 32 ≤ p.gasLimit ∧
          em = expanded_memory m offset 32))
   {(pc,MLoad)}
-  (evm_Stack (word_of_bytes F 0w (REVERSE (TAKE 32 (DROP offset em)))
+  (evm_Stack (word_of_bytes F 0w (REVERSE (buffer_take offset 32 em))
               :: TL ss) *
    evm_JumpDest j * evm_Exception e * evm_Memory em *
    evm_PC (pc + LENGTH (opcode MLoad)) *
@@ -2417,7 +2394,7 @@ Theorem SPEC_MStore:
   (evm_Stack (DROP 2 ss) *
    evm_PC (pc + LENGTH (opcode MStore)) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE offset em ++ bytes ++ DROP (offset + LENGTH bytes) em) *
+   evm_Memory (buffer_write offset bytes em) *
    evm_GasUsed (g + static_gas MStore + memory_cost m offset 32) *
    evm_MsgParams p)
 Proof binop_tac
@@ -2436,7 +2413,7 @@ Theorem SPEC_MStore8:
   (evm_Stack (DROP 2 ss) *
    evm_PC (pc + LENGTH (opcode MStore8)) *
    evm_JumpDest j * evm_Exception e *
-   evm_Memory (TAKE offset em ++ bytes ++ DROP (offset + LENGTH bytes) em) *
+   evm_Memory (buffer_write offset bytes em) *
    evm_GasUsed (g + static_gas MStore8 + memory_cost m offset 1) *
    evm_MsgParams p)
 Proof binop_tac
@@ -2585,7 +2562,7 @@ Theorem SPEC_MSize:
      cond (LENGTH ss < stack_limit  ∧ j = NONE ∧ ISL e ∧
            g + static_gas MSize ≤ p.gasLimit))
     {(pc,MSize)}
-    (evm_Stack (n2w (LENGTH m) :: ss) *
+    (evm_Stack (n2w (buffer_length m) :: ss) *
      evm_JumpDest j * evm_Exception e * evm_Memory m *
      evm_PC (pc + LENGTH (opcode MSize)) *
      evm_GasUsed (g + static_gas MSize) * evm_MsgParams p)
@@ -2737,7 +2714,7 @@ Theorem SPEC_Log:
          j = NONE ∧ ISL e ∧
          ~p.static ∧
          ev = <|logger := p.callee; topics := TAKE n (DROP 2 ss);
-                data := TAKE sz (DROP offset em)|> ∧
+                data := buffer_take offset sz em|> ∧
          dynamicGas = log_topic_cost * n + log_data_cost * sz +
                       memory_cost m offset sz ∧
          g + static_gas (Log n) + dynamicGas ≤ p.gasLimit ∧
@@ -2766,7 +2743,7 @@ Theorem SPEC_Create_fail:
                (if inst = Create2 then
                 keccak256_per_word_cost * (word_size sz) else 0) +
                memory_cost m offset sz ∧
-         code = TAKE sz (DROP offset em) ∧
+         code = buffer_take offset sz em ∧
          sender = lookup_account p.callee rb.accounts ∧
          addr = (if inst = Create2
                  then address_for_create2 p.callee salt code
@@ -2858,7 +2835,7 @@ Theorem SPEC_Create_fail_created:
                (if inst = Create2 then
                 keccak256_per_word_cost * (word_size sz) else 0) +
                memory_cost m offset sz ∧
-         code = TAKE sz (DROP offset em) ∧
+         code = buffer_take offset sz em ∧
          sender = lookup_account p.callee rb.accounts ∧
          addr = (if inst = Create2
                  then address_for_create2 p.callee salt code
@@ -2954,7 +2931,7 @@ Theorem SPEC_Create:
                (if inst = Create2 then
                 keccak256_per_word_cost * (word_size sz) else 0) +
                memory_cost m offset sz ∧
-         code = TAKE sz (DROP offset em) ∧
+         code = buffer_take offset sz em ∧
          sender = lookup_account p.callee rb.accounts ∧
          addr = (if inst = Create2
                  then address_for_create2 p.callee salt code
@@ -2992,7 +2969,7 @@ Theorem SPEC_Create:
    evm_Exception (INL ()) * evm_ReturnData [] *
    evm_Rollback (caller_rb with accounts updated_by
                  (transfer_value p.callee addr value o increment_nonce addr)) *
-   evm_Memory [] *
+   evm_Memory empty_buffer *
    evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
    evm_hide_Parsed (all_pcs DIFF FDOM new_parsed) *
@@ -3336,7 +3313,7 @@ Theorem SPEC_Call:
          sender = lookup_account p.callee rb.accounts ∧
          value ≤ sender.balance ∧
          LENGTH cs < 1024 ∧
-         data = TAKE (argsSize) (DROP argsOffset em) ∧
+         data = buffer_take argsOffset argsSize em ∧
          callee = (if call_inst = CallCode ∨ call_inst = DelegateCall
                    then p.callee else addr) ∧
          tx = <|from := if call_inst = DelegateCall then p.caller else p.callee;
@@ -3357,7 +3334,7 @@ Theorem SPEC_Call:
    evm_MsgParams (initial_msg_params callee calleeCode
                   (call_inst = StaticCall ∨ p.static)
                   (Memory <|offset := retOffset; size := retSize|>) tx) *
-   evm_Memory [] *
+   evm_Memory empty_buffer *
    evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
    evm_JumpDest NONE *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
@@ -3498,7 +3475,7 @@ Theorem SPEC_Return_outermost:
          sz = w2n (EL 1 ss) ∧
          (inst = Return ∨ inst = Revert) ∧
          em = expanded_memory m offset sz ∧
-         data = TAKE sz (DROP offset em) ∧
+         data = buffer_take offset sz em ∧
          gasCost = static_gas inst + memory_cost m offset sz + codeCost ∧
          returnCode = (inst = Return ∧ is_code_dest p.outputTo) ∧
          (if returnCode then
@@ -3606,7 +3583,7 @@ Theorem SPEC_Return_inner:
          returnCode = (inst = Return ∧ is_code_dest p.outputTo) ∧
          caller = FST (HD cs) ∧
          em = expanded_memory m offset sz ∧
-         data = TAKE sz (DROP offset em) ∧
+         data = buffer_take offset sz em ∧
          gasCost = static_gas inst + memory_cost m offset sz + codeCost ∧
          all_pcs = (FDOM caller.msgParams.parsed ∪ FDOM p.parsed) ∧
          g + gasCost ≤ p.gasLimit ∧
@@ -3621,8 +3598,7 @@ Theorem SPEC_Return_inner:
                  Code addr => (if inst = Return then w2w addr else b2w F)
                | _ => b2w (inst = Return))::caller.stack) *
    evm_Memory (case p.outputTo of Code _ => caller.memory | Memory r =>
-               TAKE r.offset caller.memory ++ (TAKE r.size data) ++
-               DROP (r.offset + LENGTH (TAKE r.size data)) caller.memory) *
+               buffer_write r.offset (TAKE r.size data) caller.memory) *
    evm_PC (SUC caller.pc) *
    evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
    CODE_POOL EVM_INSTR {(pc,inst) |
@@ -3684,14 +3660,14 @@ Proof
          return_def,set_current_context_def,read_memory_def,set_return_data_def]
   \\ strip_tac
   \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
-  \\ `memory_expansion_cost (LENGTH m)
+  \\ `memory_expansion_cost (buffer_length m)
       (if 0 < sz then 32 * word_size (offset + sz) else 0) =
       memory_cost m offset sz` by gvs[memory_cost_def,memory_expand_by_def]
   \\ `p.gasLimit ≤ g + gasCost + caller.gasUsed`
      by gvs[Abbr`gasCost`,Abbr`calleeGasLeft`]
   \\ gs[EL_TAKE,HD_TAKE]
-  \\ qmatch_asmsub_abbrev_tac`m ++ ex`
-  \\ `m ++ ex = expanded_memory m offset sz` by
+  \\ qmatch_asmsub_abbrev_tac`buffer_extend ex m`
+  \\ `buffer_extend ex m = expanded_memory m offset sz` by
      gvs[expanded_memory_def, memory_expand_by_def]
   \\ gs[Abbr`ex`]
   \\ pop_assum kall_tac

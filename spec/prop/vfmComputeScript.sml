@@ -442,6 +442,19 @@ val () = “get_call_data s” |>
   SIMP_CONV std_ss [get_call_data_def, bind_def]
   |> cv_auto_trans;
 
+(* the size bytes of call data starting at offset, without converting all
+   of the call data to a list: used for CALLDATALOAD and CALLDATACOPY *)
+Definition read_call_data_def:
+  read_call_data offset size = do
+    context <- get_current_context;
+    return $ buffer_read offset size context.msgParams.data
+  od
+End
+
+val () = “read_call_data x y s” |>
+  SIMP_CONV std_ss [read_call_data_def, bind_def]
+  |> cv_auto_trans;
+
 val () = “set_jump_dest j s” |>
   SIMP_CONV std_ss [set_jump_dest_def, bind_def]
   |> cv_auto_trans;
@@ -625,56 +638,32 @@ Proof
   \\ Cases_on`n` \\ gvs[]
 QED
 
-(* Memory operations run on every instruction that touches memory, so the
-   versions translated here avoid walking or copying all of memory when it
-   does not grow. *)
-
-Theorem memory_expansion_info_eq:
-  memory_expansion_info off sz = do
-    context <- get_current_context;
-    newMinSize <<- if 0 < sz then word_size (off + sz) * 32 else 0;
-    if length_geq newMinSize context.memory then
-      return <| cost := 0; expand_by := 0 |>
-    else let oldSize = LENGTH context.memory in
-      return <| cost := memory_expansion_cost oldSize newMinSize
-              ; expand_by := newMinSize - oldSize |>
-  od
-Proof
-  rw[FUN_EQ_THM, memory_expansion_info_def, bind_def, length_geq,
-     memory_expansion_cost_def, MAX_DEF]
-  \\ CASE_TAC \\ CASE_TAC \\ rw[] \\ gvs[]
-QED
-
-Theorem expand_memory_eq:
-  expand_memory n = do
-    context <- get_current_context;
-    if n = 0 then return () else
-    set_current_context $ context with memory := context.memory ++ REPLICATE n 0w
-  od
-Proof
-  simp[FUN_EQ_THM] \\ qx_gen_tac`s`
-  \\ rw[expand_memory_def, bind_def, get_current_context_def,
-        set_current_context_def, return_def]
-  \\ Cases_on`s.contexts` \\ gvs[fail_def]
-  \\ Cases_on`h`
-  \\ rw[return_def, set_current_context_def,
-        execution_state_component_equality, context_component_equality]
-QED
-
 val () = “memory_expansion_info x y s” |>
   SIMP_CONV std_ss [
-    memory_expansion_info_eq, bind_def, ignore_bind_def, LET_RATOR,
-    COND_RATOR
+    memory_expansion_info_def, bind_def, ignore_bind_def, LET_RATOR
   ] |> cv_auto_trans;
 
 val () = “expand_memory x s” |>
   SIMP_CONV std_ss [
-    expand_memory_eq, bind_def, ignore_bind_def, COND_RATOR
+    expand_memory_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
 val () = “read_memory x y s” |>
   SIMP_CONV std_ss [
     read_memory_def, bind_def
+  ] |> cv_auto_trans;
+
+(* the memory a call passes as call data, as a buffer: used for calls *)
+Definition read_memory_sub_def:
+  read_memory_sub offset size = do
+    context <- get_current_context;
+    return $ buffer_sub offset size context.memory
+  od
+End
+
+val () = “read_memory_sub x y s” |>
+  SIMP_CONV std_ss [
+    read_memory_sub_def, bind_def
   ] |> cv_auto_trans;
 
 val () = “write_memory x y s” |>
@@ -805,7 +794,22 @@ val th = tt step_sload_def;
 val th = tf step_sstore_gas_consumption_def;
 val th = tt step_sstore_def;
 val th = tt step_balance_def;
-val th = tt step_call_data_load_def;
+Theorem step_call_data_load_eq:
+  step_call_data_load = do
+    args <- pop_stack 1;
+    index <<- w2n $ EL 0 args;
+    consume_gas $ static_gas CallDataLoad;
+    bytes <- read_call_data index 32;
+    push_stack $ word_of_bytes F 0w (REVERSE bytes)
+  od
+Proof
+  rw[FUN_EQ_THM, step_call_data_load_def, get_call_data_def,
+     read_call_data_def, vfmBufferTheory.buffer_read_to_list,
+     bind_def, ignore_bind_def]
+  \\ rpt (CASE_TAC \\ gvs[return_def])
+QED
+
+val th = tt step_call_data_load_eq;
 val th = tt step_return_data_copy_def;
 val th = tt step_ext_code_size_def;
 val th = tt step_ext_code_copy_def;
@@ -852,15 +856,75 @@ val () = “dispatch_precompiles a s” |>
     dispatch_precompiles_def, COND_RATOR
   ] |> cv_auto_trans;
 
+(* a call copies its call data from memory without going through a list *)
+Theorem proceed_call_eq:
+  proceed_call op sender address value argsOffset argsSize code stipend
+    outputTo = do
+    rollback <- get_rollback;
+    data <- read_memory_sub argsOffset argsSize;
+    if op ≠ CallCode ∧ 0 < value then
+      update_accounts $ transfer_value sender address value
+    else return ();
+    caller <- get_caller;
+    callValue <- get_value;
+    callee <<- if op = CallCode ∨ op = DelegateCall
+               then sender else address;
+    subContextTx <<- <|
+        from     := if op = DelegateCall then caller else sender
+      ; to       := SOME callee
+      ; value    := if op = DelegateCall then callValue else value
+      ; gasLimit := stipend
+      ; data     := []
+      ; nonce := 0; gasPrice := 0; accessList := []
+      ; blobVersionedHashes := []
+      ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+      ; authorizationList := []
+    |>;
+    static <- get_static;
+    subStatic <<- (op = StaticCall ∨ static);
+    context <<- initial_context callee code subStatic outputTo subContextTx;
+    context <<- context with msgParams := context.msgParams with data := data;
+    push_context (context, rollback);
+    if fIN address precompile_addresses
+    then dispatch_precompiles address
+    else return ()
+  od
+Proof
+  rw[FUN_EQ_THM, proceed_call_def, read_memory_def, read_memory_sub_def,
+     bind_def, ignore_bind_def]
+  \\ rpt (CASE_TAC \\ gvs[return_def])
+  \\ gvs[initial_context_def, initial_msg_params_def,
+         vfmBufferTheory.buffer_of_list_take]
+QED
+
 val () = “proceed_call a b c d e f g h i s” |>
   SIMP_CONV std_ss [
-    proceed_call_def, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR
+    proceed_call_eq, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR
   ] |> cv_auto_trans;
 
 val th = tt step_call_def;
 
+(* CALLDATACOPY reads only the copied range of the call data *)
+Theorem copy_to_memory_call_data:
+  copy_to_memory gas offset sourceOffset sz (SOME get_call_data) = do
+    minimumWordSize <<- word_size sz;
+    mx <- memory_expansion_info offset sz;
+    dynamicGas <<- memory_copy_cost * minimumWordSize + mx.cost;
+    consume_gas $ gas + dynamicGas;
+    bytes <- read_call_data sourceOffset sz;
+    expand_memory mx.expand_by;
+    write_memory offset bytes
+  od
+Proof
+  rw[FUN_EQ_THM, copy_to_memory_def, get_call_data_def, read_call_data_def,
+     vfmBufferTheory.buffer_read_to_list, bind_def, ignore_bind_def]
+  \\ rpt (CASE_TAC \\ gvs[return_def])
+QED
+
 val step_inst_pre_def = step_inst_def |>
   ONCE_REWRITE_RULE[FUN_EQ_THM] |>
+  SIMP_RULE std_ss [step_copy_to_memory_def] |>
+  REWRITE_RULE [copy_to_memory_call_data] |>
   SIMP_RULE std_ss [
     step_monop_def,
     step_binop_def,

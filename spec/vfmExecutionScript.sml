@@ -413,7 +413,7 @@ End
 Definition get_call_data_def:
   get_call_data = do
     context <- get_current_context;
-    return $ context.msgParams.data
+    return $ buffer_to_list context.msgParams.data
   od
 End
 
@@ -548,7 +548,7 @@ End
 Definition memory_expansion_info_def:
   memory_expansion_info offset size = do
     context <- get_current_context;
-    oldSize <<- LENGTH context.memory;
+    oldSize <<- buffer_length context.memory;
     newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
     return $
       <| cost := memory_expansion_cost oldSize newMinSize
@@ -560,25 +560,22 @@ Definition expand_memory_def:
   expand_memory expand_by = do
     context <- get_current_context;
     set_current_context $
-    context with memory := context.memory ++ REPLICATE expand_by 0w
+    context with memory := buffer_extend expand_by context.memory
   od
 End
 
 Definition read_memory_def:
   read_memory offset size = do
     context <- get_current_context;
-    return $ TAKE size (DROP offset context.memory)
+    return $ buffer_take offset size context.memory
   od
 End
 
 Definition write_memory_def:
   write_memory byteIndex bytes = do
     context <- get_current_context;
-    memory <<- context.memory;
     set_current_context $
-      context with memory :=
-        TAKE byteIndex memory ++ bytes
-        ++ DROP (byteIndex + LENGTH bytes) memory
+      context with memory := buffer_write byteIndex bytes context.memory
   od
 End
 
@@ -1593,7 +1590,8 @@ Definition step_inst_def:
   ∧ step_inst Caller = step_msgParams Caller (λc. w2w c.caller)
   ∧ step_inst CallValue = step_msgParams CallValue (λc. n2w c.value)
   ∧ step_inst CallDataLoad = step_call_data_load
-  ∧ step_inst CallDataSize = step_msgParams CallDataSize (λc. n2w (LENGTH c.data))
+  ∧ step_inst CallDataSize =
+      step_msgParams CallDataSize (λc. n2w (buffer_length c.data))
   ∧ step_inst CallDataCopy =
       step_copy_to_memory CallDataCopy (SOME get_call_data)
   ∧ step_inst CodeSize = step_msgParams CodeSize (λc. n2w (LENGTH c.code))
@@ -1625,7 +1623,7 @@ Definition step_inst_def:
   ∧ step_inst Jump = step_jump
   ∧ step_inst JumpI = step_jumpi
   ∧ step_inst PC = step_context PC (λc. n2w c.pc)
-  ∧ step_inst MSize = step_context MSize (λc. n2w $ LENGTH c.memory)
+  ∧ step_inst MSize = step_context MSize (λc. n2w $ buffer_length c.memory)
   ∧ step_inst Gas = step_context Gas
                       (λc. n2w $ c.msgParams.gasLimit - c.gasUsed)
   ∧ step_inst TLoad = step_sload T
