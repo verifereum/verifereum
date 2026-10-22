@@ -7,26 +7,6 @@ Libs
 (* Numbers as base-256 digits, least significant first.  Nothing in this
    section is about buffers: it extends byteTheory and could move there. *)
 
-(* bytes_of_num_acc n x acc is byteTheory's bytes_of_num n x ++ acc
-   (bytes_of_num_acc_eq), computed by splitting x into 7-byte pieces first
-   so that the byte loop, small_bytes_of_num, runs on small numbers *)
-Definition small_bytes_of_num_def:
-  small_bytes_of_num (n:num) (x:num) (acc:byte list) =
-  if n = 0 then acc
-  else n2w (x MOD 256) :: small_bytes_of_num (n - 1) (x DIV 256) acc
-Termination
-  WF_REL_TAC ‘measure FST’
-End
-
-Definition bytes_of_num_acc_def:
-  bytes_of_num_acc (n:num) (x:num) (acc:byte list) =
-  if n ≤ 7 then small_bytes_of_num n x acc
-  else small_bytes_of_num 7 (x MOD 2 ** 56)
-         (bytes_of_num_acc (n - 7) (x DIV 2 ** 56) acc)
-Termination
-  WF_REL_TAC ‘measure FST’
-End
-
 (* old with its c bytes from byte j on replaced by the first c bytes of bs *)
 Definition splice_bytes_def:
   splice_bytes (old:num) (j:num) (c:num) (bs:byte list) =
@@ -34,18 +14,10 @@ Definition splice_bytes_def:
   + 256 ** (j + c) * (old DIV 256 ** (j + c))
 End
 
+(* digit k of x in base 256 *)
 Definition byte_of_def:
   byte_of (x:num) (k:num) = (n2w ((x DIV 256 ** k) MOD 256) : byte)
 End
-
-Theorem small_bytes_of_num_GENLIST:
-  ∀n x acc. small_bytes_of_num n x acc = GENLIST (byte_of x) n ++ acc
-Proof
-  ho_match_mp_tac small_bytes_of_num_ind \\ rw[]
-  \\ rw[Once small_bytes_of_num_def]
-  \\ Cases_on ‘n’ \\ gvs[GENLIST_CONS]
-  \\ rw[byte_of_def, LIST_EQ_REWRITE, EXP, DIV_DIV_DIV_MULT]
-QED
 
 Theorem byte_of_MOD:
   ∀m k x. byte_of (x MOD 256 ** m) k = if k < m then byte_of x k else 0w
@@ -105,39 +77,10 @@ Proof
   metis_tac[byte_of_add_mul, ADD_COMM]
 QED
 
-Theorem GENLIST_byte_of_split:
-  ∀x m n. GENLIST (byte_of x) (n + m) =
-          GENLIST (byte_of (x MOD 256 ** m)) m ++
-          GENLIST (byte_of (x DIV 256 ** m)) n
+Theorem bytes_of_num_GENLIST:
+  bytes_of_num n x = GENLIST (byte_of x) n
 Proof
-  rw[GENLIST_APPEND]
-  \\ DEP_REWRITE_TAC[APPEND_LENGTH_EQ] \\ simp[]
-  \\ rw[GENLIST_FUN_EQ, byte_of_MOD, byte_of_DIV]
-QED
-
-Theorem bytes_of_num_acc_GENLIST:
-  ∀n x acc. bytes_of_num_acc n x acc = GENLIST (byte_of x) n ++ acc
-Proof
-  ho_match_mp_tac bytes_of_num_acc_ind \\ rpt strip_tac
-  \\ Cases_on ‘n ≤ 7’
-  >- (once_rewrite_tac[bytes_of_num_acc_def]
-      \\ asm_rewrite_tac[small_bytes_of_num_GENLIST])
-  \\ first_x_assum drule \\ strip_tac
-  \\ ‘(2:num) ** 56 = 256 ** 7’ by simp[]
-  \\ once_rewrite_tac[bytes_of_num_acc_def]
-  \\ asm_rewrite_tac[small_bytes_of_num_GENLIST]
-  \\ ‘n = (n - 7) + 7’ by simp[]
-  \\ qpat_x_assum ‘n = _’
-       (fn th => CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [th])))
-  \\ rewrite_tac[GENLIST_byte_of_split, APPEND_ASSOC]
-QED
-
-Theorem bytes_of_num_acc_eq:
-  bytes_of_num_acc n x acc = bytes_of_num n x ++ acc
-Proof
-  ‘bytes_of_num n x = GENLIST (byte_of x) n’ suffices_by
-    simp[bytes_of_num_acc_GENLIST]
-  \\ rw[LIST_EQ_REWRITE, EL_bytes_of_num, byte_of_def]
+  rw[LIST_EQ_REWRITE, EL_bytes_of_num, byte_of_def]
   \\ qspec_then ‘x DIV 256 ** x'’ mp_tac
        (INST_TYPE [alpha |-> “:8”] n2w_mod)
   \\ simp[dimword_8]
@@ -248,8 +191,8 @@ Definition read_bytes_def:
   if n = 0 then acc else
   let j = offset MOD 32 in
   let c = MIN n (32 - j) in
-  bytes_of_num_acc c (word_at ws (offset DIV 32) DIV 256 ** j)
-    (read_bytes ws (offset + c) (n - c) acc)
+  bytes_of_num c (word_at ws (offset DIV 32) DIV 256 ** j) ++
+  read_bytes ws (offset + c) (n - c) acc
 Termination
   WF_REL_TAC ‘measure (FST o SND o SND)’ \\ rw[MIN_DEF]
   \\ irule (DECIDE “a < 32n ⇒ 0 < 32 − a”) \\ simp[]
@@ -411,12 +354,12 @@ Theorem read_bytes_GENLIST:
 Proof
   ho_match_mp_tac read_bytes_ind \\ rpt strip_tac
   \\ simp[Once read_bytes_def] \\ IF_CASES_TAC \\ gvs[]
-  \\ qmatch_goalsub_abbrev_tac ‘bytes_of_num_acc c’
+  \\ qmatch_goalsub_abbrev_tac ‘bytes_of_num c’
   \\ ‘c ≤ n ∧ c ≤ 32 - offset MOD 32’ by simp[Abbr‘c’]
   \\ ‘n = (n - c) + c’ by simp[]
   \\ qpat_x_assum ‘n = _’
        (fn th => CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [th])))
-  \\ rewrite_tac[bytes_of_num_acc_GENLIST, GENLIST_APPEND, APPEND_ASSOC]
+  \\ rewrite_tac[bytes_of_num_GENLIST, GENLIST_APPEND, APPEND_ASSOC]
   \\ DEP_REWRITE_TAC[APPEND_LENGTH_EQ]
   \\ simp[GENLIST_FUN_EQ, byte_of_DIV, byte_at_def] \\ rw[]
   \\ ‘(offset + k) DIV 32 = offset DIV 32 ∧
@@ -920,10 +863,6 @@ fun cv_measure_tac q =
   \\ rpt (pop_assum mp_tac) \\ rw[] \\ gvs[MOD_32_lt];
 
 (* the generic sections *)
-val () = cv_auto_trans_rec small_bytes_of_num_def
-  (cv_measure_tac ‘measure (cv$c2n o FST)’);
-val () = cv_auto_trans_rec bytes_of_num_acc_def
-  (cv_measure_tac ‘measure (cv$c2n o FST)’);
 val () = cv_auto_trans splice_bytes_def;
 val () = cv_auto_trans size_upto_def;
 
