@@ -831,8 +831,27 @@ val () = “proceed_call a b c d e f g h i s” |>
 
 val th = tt step_call_def;
 
+(* CALLDATACOPY reads only the copied range of the call data *)
+Theorem copy_to_memory_call_data:
+  copy_to_memory gas offset sourceOffset sz (SOME get_call_data) = do
+    minimumWordSize <<- word_size sz;
+    mx <- memory_expansion_info offset sz;
+    dynamicGas <<- memory_copy_cost * minimumWordSize + mx.cost;
+    consume_gas $ gas + dynamicGas;
+    bytes <- read_call_data sourceOffset sz;
+    expand_memory mx.expand_by;
+    write_memory offset bytes
+  od
+Proof
+  rw[FUN_EQ_THM, copy_to_memory_def, get_call_data_def, read_call_data_def,
+     vfmBufferTheory.buffer_read_take_pad_0, bind_def, ignore_bind_def]
+  \\ rpt (CASE_TAC \\ gvs[return_def])
+QED
+
 val step_inst_pre_def = step_inst_def |>
   ONCE_REWRITE_RULE[FUN_EQ_THM] |>
+  SIMP_RULE std_ss [step_copy_to_memory_def] |>
+  REWRITE_RULE [copy_to_memory_call_data] |>
   SIMP_RULE std_ss [
     step_monop_def,
     step_binop_def,
