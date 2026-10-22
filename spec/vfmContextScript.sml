@@ -2,7 +2,7 @@ Theory vfmContext
 Ancestors
   list rich_list
   secp256k1
-  vfmTypes vfmConstants vfmOperation vfmState vfmTransaction
+  vfmTypes vfmBuffer vfmConstants vfmOperation vfmState vfmTransaction
 
 Datatype:
   transaction_parameters =
@@ -77,7 +77,7 @@ Datatype:
    ; parsed    : num |-> opname
    ; value     : num
    ; gasLimit  : num
-   ; data      : byte list
+   ; data      : buffer
    ; static    : bool
    ; outputTo  : return_destination
    |>
@@ -86,7 +86,7 @@ End
 Datatype:
   context =
   <| stack      : bytes32 list
-   ; memory     : byte list
+   ; memory     : buffer
    ; pc         : num
    ; jumpDest   : num option
    ; returnData : byte list
@@ -200,7 +200,7 @@ Definition initial_msg_params_def:
    ; code      := code
    ; parsed    := parse_code 0 FEMPTY code
    ; value     := t.value
-   ; data      := if t.to = NONE then [] else t.data
+   ; data      := buffer_of_list (if t.to = NONE then [] else t.data)
    ; gasLimit  := t.gasLimit
    ; static    := static
    ; outputTo  := rd
@@ -245,7 +245,7 @@ End
 Definition initial_context_def:
   initial_context callee code static rd t =
   <| stack      := []
-   ; memory     := []
+   ; memory     := empty_buffer
    ; pc         := 0
    ; jumpDest   := NONE
    ; returnData := []
@@ -259,7 +259,7 @@ End
 
 Theorem initial_context_simp[simp]:
   (initial_context fr c s rd t).stack = [] ∧
-  (initial_context fr c s rd t).memory = [] ∧
+  (initial_context fr c s rd t).memory = empty_buffer ∧
   (initial_context fr c s rd t).pc = 0 ∧
   (initial_context fr c s rd t).jumpDest = NONE ∧
   (initial_context fr c s rd t).returnData = [] ∧
@@ -358,7 +358,7 @@ End
 Definition intrinsic_cost_def:
   intrinsic_cost accessList authListLen p =
   let isCreate = is_code_dest p.outputTo in
-  let data = if isCreate then p.code else p.data in
+  let data = if isCreate then p.code else buffer_to_list p.data in
     base_cost
     + SUM (MAP (λb. call_data_cost (b = 0w)) data)
     + (if isCreate

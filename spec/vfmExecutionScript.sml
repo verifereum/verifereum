@@ -413,7 +413,14 @@ End
 Definition get_call_data_def:
   get_call_data = do
     context <- get_current_context;
-    return $ context.msgParams.data
+    return $ buffer_to_list context.msgParams.data
+  od
+End
+
+Definition read_call_data_def:
+  read_call_data offset size = do
+    context <- get_current_context;
+    return $ buffer_read offset size context.msgParams.data
   od
 End
 
@@ -548,7 +555,7 @@ End
 Definition memory_expansion_info_def:
   memory_expansion_info offset size = do
     context <- get_current_context;
-    oldSize <<- LENGTH context.memory;
+    oldSize <<- buffer_length context.memory;
     newMinSize <<- if 0 < size then word_size (offset + size) * 32 else 0;
     return $
       <| cost := memory_expansion_cost oldSize newMinSize
@@ -560,25 +567,29 @@ Definition expand_memory_def:
   expand_memory expand_by = do
     context <- get_current_context;
     set_current_context $
-    context with memory := context.memory ++ REPLICATE expand_by 0w
+    context with memory := buffer_extend expand_by context.memory
   od
 End
 
 Definition read_memory_def:
   read_memory offset size = do
     context <- get_current_context;
-    return $ TAKE size (DROP offset context.memory)
+    return $ buffer_read offset size context.memory
+  od
+End
+
+Definition read_memory_buffer_def:
+  read_memory_buffer offset size = do
+    context <- get_current_context;
+    return $ buffer_sub offset size context.memory
   od
 End
 
 Definition write_memory_def:
   write_memory byteIndex bytes = do
     context <- get_current_context;
-    memory <<- context.memory;
     set_current_context $
-      context with memory :=
-        TAKE byteIndex memory ++ bytes
-        ++ DROP (byteIndex + LENGTH bytes) memory
+      context with memory := buffer_write byteIndex bytes context.memory
   od
 End
 
@@ -812,8 +823,7 @@ Definition step_call_data_load_def:
     args <- pop_stack 1;
     index <<- w2n $ EL 0 args;
     consume_gas $ static_gas CallDataLoad;
-    callData <- get_call_data;
-    bytes <<- take_pad_0 32 (DROP index callData);
+    bytes <- read_call_data index 32;
     push_stack $ word_of_bytes F 0w (REVERSE bytes)
   od
 End
@@ -1480,7 +1490,7 @@ Definition proceed_call_def:
     argsOffset argsSize code stipend
     outputTo = do
     rollback <- get_rollback;
-    data <- read_memory argsOffset argsSize;
+    data <- read_memory_buffer argsOffset argsSize;
     if op ≠ CallCode (* otherwise to := sender *) ∧ 0 < value then
       update_accounts $ transfer_value sender address value
     else return ();
@@ -1493,7 +1503,7 @@ Definition proceed_call_def:
       ; to       := SOME callee
       ; value    := if op = DelegateCall then callValue else value
       ; gasLimit := stipend
-      ; data     := data
+      ; data     := []
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
@@ -1503,7 +1513,8 @@ Definition proceed_call_def:
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
     context <<- initial_context callee code subStatic outputTo subContextTx;
-    push_context (context, rollback);
+    push_context
+      (context with msgParams updated_by (λp. p with data := data), rollback);
     if fIN address precompile_addresses
     then dispatch_precompiles address
     else return ()
@@ -1593,7 +1604,7 @@ Definition step_inst_def:
   ∧ step_inst Caller = step_msgParams Caller (λc. w2w c.caller)
   ∧ step_inst CallValue = step_msgParams CallValue (λc. n2w c.value)
   ∧ step_inst CallDataLoad = step_call_data_load
-  ∧ step_inst CallDataSize = step_msgParams CallDataSize (λc. n2w (LENGTH c.data))
+  ∧ step_inst CallDataSize = step_msgParams CallDataSize (λc. n2w (buffer_length c.data))
   ∧ step_inst CallDataCopy =
       step_copy_to_memory CallDataCopy (SOME get_call_data)
   ∧ step_inst CodeSize = step_msgParams CodeSize (λc. n2w (LENGTH c.code))
@@ -1625,7 +1636,7 @@ Definition step_inst_def:
   ∧ step_inst Jump = step_jump
   ∧ step_inst JumpI = step_jumpi
   ∧ step_inst PC = step_context PC (λc. n2w c.pc)
-  ∧ step_inst MSize = step_context MSize (λc. n2w $ LENGTH c.memory)
+  ∧ step_inst MSize = step_context MSize (λc. n2w $ buffer_length c.memory)
   ∧ step_inst Gas = step_context Gas
                       (λc. n2w $ c.msgParams.gasLimit - c.gasUsed)
   ∧ step_inst TLoad = step_sload T

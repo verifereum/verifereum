@@ -442,6 +442,10 @@ val () = “get_call_data s” |>
   SIMP_CONV std_ss [get_call_data_def, bind_def]
   |> cv_auto_trans;
 
+val () = “read_call_data x y s” |>
+  SIMP_CONV std_ss [read_call_data_def, bind_def]
+  |> cv_auto_trans;
+
 val () = “set_jump_dest j s” |>
   SIMP_CONV std_ss [set_jump_dest_def, bind_def]
   |> cv_auto_trans;
@@ -625,56 +629,24 @@ Proof
   \\ Cases_on`n` \\ gvs[]
 QED
 
-(* Memory operations run on every instruction that touches memory, so the
-   versions translated here avoid walking or copying all of memory when it
-   does not grow. *)
-
-Theorem memory_expansion_info_eq:
-  memory_expansion_info off sz = do
-    context <- get_current_context;
-    newMinSize <<- if 0 < sz then word_size (off + sz) * 32 else 0;
-    if length_geq newMinSize context.memory then
-      return <| cost := 0; expand_by := 0 |>
-    else let oldSize = LENGTH context.memory in
-      return <| cost := memory_expansion_cost oldSize newMinSize
-              ; expand_by := newMinSize - oldSize |>
-  od
-Proof
-  rw[FUN_EQ_THM, memory_expansion_info_def, bind_def, length_geq,
-     memory_expansion_cost_def, MAX_DEF]
-  \\ CASE_TAC \\ CASE_TAC \\ rw[] \\ gvs[]
-QED
-
-Theorem expand_memory_eq:
-  expand_memory n = do
-    context <- get_current_context;
-    if n = 0 then return () else
-    set_current_context $ context with memory := context.memory ++ REPLICATE n 0w
-  od
-Proof
-  simp[FUN_EQ_THM] \\ qx_gen_tac`s`
-  \\ rw[expand_memory_def, bind_def, get_current_context_def,
-        set_current_context_def, return_def]
-  \\ Cases_on`s.contexts` \\ gvs[fail_def]
-  \\ Cases_on`h`
-  \\ rw[return_def, set_current_context_def,
-        execution_state_component_equality, context_component_equality]
-QED
-
 val () = “memory_expansion_info x y s” |>
   SIMP_CONV std_ss [
-    memory_expansion_info_eq, bind_def, ignore_bind_def, LET_RATOR,
-    COND_RATOR
+    memory_expansion_info_def, bind_def, ignore_bind_def, LET_RATOR
   ] |> cv_auto_trans;
 
 val () = “expand_memory x s” |>
   SIMP_CONV std_ss [
-    expand_memory_eq, bind_def, ignore_bind_def, COND_RATOR
+    expand_memory_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
 val () = “read_memory x y s” |>
   SIMP_CONV std_ss [
     read_memory_def, bind_def
+  ] |> cv_auto_trans;
+
+val () = “read_memory_buffer x y s” |>
+  SIMP_CONV std_ss [
+    read_memory_buffer_def, bind_def
   ] |> cv_auto_trans;
 
 val () = “write_memory x y s” |>
