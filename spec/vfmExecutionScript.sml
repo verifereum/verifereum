@@ -574,7 +574,7 @@ End
 Definition read_memory_def:
   read_memory offset size = do
     context <- get_current_context;
-    return $ buffer_read offset size context.memory
+    return $ buffer_take offset size context.memory
   od
 End
 

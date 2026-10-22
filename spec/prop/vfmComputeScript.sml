@@ -844,7 +844,7 @@ Theorem copy_to_memory_call_data:
   od
 Proof
   rw[FUN_EQ_THM, copy_to_memory_def, get_call_data_def, read_call_data_def,
-     vfmBufferTheory.buffer_read_take_pad_0, bind_def, ignore_bind_def]
+     vfmBufferTheory.buffer_read_to_list, bind_def, ignore_bind_def]
   \\ rpt (CASE_TAC \\ gvs[return_def])
 QED
 
