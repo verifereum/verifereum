@@ -23,7 +23,7 @@ structure vfmTestLib :> vfmTestLib = struct
     result before OS.FileSys.chDir old
   end
 
-  fun ensure_fixtures () = in_dir (test_root ()) (fn () =>
+  fun fetch_fixtures () = in_dir (test_root ()) (fn () =>
     if let val inp = TextIO.openIn (fixtures_path version_file)
        in TextIO.inputAll inp = fixtures_version
           before TextIO.closeIn inp
@@ -40,6 +40,20 @@ structure vfmTestLib :> vfmTestLib = struct
     in
       TextIO.closeOut out
     end)
+
+  (* A project manifest in the fixtures directory makes HOL's project
+     discovery and holbuild's source scan skip the fixtures' tens of
+     thousands of directories, which otherwise end up on the loadPath of
+     every theory process. It is written on every run, so checkouts whose
+     fixtures are already current get it too. *)
+  fun write_fixtures_manifest () = let
+    val out = TextIO.openOut (fixtures_path "holproject.toml")
+    val () = TextIO.output(out, "[project]\nname = \"eest-fixtures\"\n")
+  in
+    TextIO.closeOut out
+  end
+
+  fun ensure_fixtures () = (fetch_fixtures (); write_fixtures_manifest ())
 
   fun collect_files suffix path (dirs, files) = let
     val ds = OS.FileSys.openDir path
