@@ -12,7 +12,7 @@ Libs
 
 Datatype:
   evm_el = Stack      (bytes32 list)                     (* from top context *)
-         | Memory     buffer
+         | Memory     buffer   (* compared as a buffer: see vfmBuffer *)
          | PC         num
          | JumpDest   (num option)
          | ReturnData (byte list)

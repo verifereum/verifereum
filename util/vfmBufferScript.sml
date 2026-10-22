@@ -634,6 +634,17 @@ QED
 (* buffer_sub builds the same words as buffer_of_list does: a word is
    stored iff it is nonzero, and has no bytes beyond its 32 *)
 
+(* Equality of buffers is equality of representations: two buffers with
+   the same buffer_to_list can differ, e.g. by storing a zero word.  The
+   buffers the semantics builds are canonical, though: their words are
+   good_words, and no byte at or past len is nonzero.  Not yet done: define
+   that invariant, show that empty_buffer has it and that buffer_extend,
+   buffer_write and buffer_sub keep it, and prove from good_words_eq that
+   a buffer with it equals buffer_of_list (buffer_to_list b).  Equality of
+   such buffers is then equality of their lists, so a proof can state
+   memory as buffer_of_list of a list instead of a term built from
+   buffer_write and buffer_extend. *)
+
 Definition good_words_def:
   good_words ws ⇔
     wf ws ∧
