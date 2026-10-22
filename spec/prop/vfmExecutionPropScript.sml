@@ -589,12 +589,6 @@ Proof
   rw[get_call_data_def] \\ preserves_nonempty_tac
 QED
 
-Theorem read_call_data_preserves_nonempty_contexts[simp]:
-  s.contexts ≠ [] ⇒ (SND (read_call_data off sz s)).contexts ≠ []
-Proof
-  rw[read_call_data_def] \\ preserves_nonempty_tac
-QED
-
 Theorem get_current_code_preserves_nonempty_contexts[simp]:
   s.contexts ≠ [] ⇒ (SND (get_current_code s)).contexts ≠ []
 Proof
@@ -811,12 +805,6 @@ Theorem read_memory_preserves_nonempty_contexts[simp]:
   s.contexts ≠ [] ⇒ (SND (read_memory off sz s)).contexts ≠ []
 Proof
   rw[read_memory_def] \\ preserves_nonempty_tac
-QED
-
-Theorem read_memory_buffer_preserves_nonempty_contexts[simp]:
-  s.contexts ≠ [] ⇒ (SND (read_memory_buffer off sz s)).contexts ≠ []
-Proof
-  rw[read_memory_buffer_def] \\ preserves_nonempty_tac
 QED
 
 Theorem proceed_call_preserves_nonempty_contexts[simp]:
@@ -1461,13 +1449,6 @@ Proof
   \\ irule preserves_wf_accounts_bind \\ rw[]
 QED
 
-Theorem preserves_wf_accounts_read_memory_buffer[simp]:
-  preserves_wf_accounts (read_memory_buffer c e)
-Proof
-  rw[read_memory_buffer_def]
-  \\ irule preserves_wf_accounts_bind \\ rw[]
-QED
-
 Theorem preserves_wf_accounts_expand_memory[simp]:
   preserves_wf_accounts (expand_memory c)
 Proof
@@ -1551,13 +1532,6 @@ Theorem preserves_wf_accounts_get_call_data[simp]:
   preserves_wf_accounts get_call_data
 Proof
   rw[get_call_data_def]
-  \\ irule preserves_wf_accounts_bind \\ rw[]
-QED
-
-Theorem preserves_wf_accounts_read_call_data[simp]:
-  preserves_wf_accounts (read_call_data off sz)
-Proof
-  rw[read_call_data_def]
   \\ irule preserves_wf_accounts_bind \\ rw[]
 QED
 
@@ -2670,12 +2644,6 @@ Proof
   rw[read_memory_def] \\ tac
 QED
 
-Theorem limits_num_contexts_read_memory_buffer[simp]:
-  limits_num_contexts n n (read_memory_buffer c e)
-Proof
-  rw[read_memory_buffer_def] \\ tac
-QED
-
 Theorem limits_num_contexts_expand_memory[simp]:
   limits_num_contexts n n (expand_memory c)
 Proof
@@ -2749,12 +2717,6 @@ Theorem limits_num_contexts_get_call_data[simp]:
   limits_num_contexts n n get_call_data
 Proof
   rw[get_call_data_def] \\ tac
-QED
-
-Theorem limits_num_contexts_read_call_data[simp]:
-  limits_num_contexts n n (read_call_data off sz)
-Proof
-  rw[read_call_data_def] \\ tac
 QED
 
 Theorem limits_num_contexts_step_call_data_load[simp]:

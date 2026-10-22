@@ -277,14 +277,6 @@ Proof
   \\ irule_at Any decreases_gas_get_current_context \\ rw []
 QED
 
-Theorem decreases_gas_read_memory_buffer[simp]:
-  decreases_gas F (read_memory_buffer off sz)
-Proof
-  rw [read_memory_buffer_def]
-  \\ irule decreases_gas_bind_right
-  \\ irule_at Any decreases_gas_get_current_context \\ rw []
-QED
-
 Theorem decreases_gas_push_logs[simp]:
   decreases_gas F (push_logs logs)
 Proof
@@ -749,14 +741,6 @@ Theorem decreases_gas_get_call_data[simp]:
   decreases_gas F get_call_data
 Proof
   rw [get_call_data_def]
-  \\ irule_at Any decreases_gas_bind_false
-  \\ irule_at Any decreases_gas_get_current_context \\ rw []
-QED
-
-Theorem decreases_gas_read_call_data[simp]:
-  decreases_gas F (read_call_data off sz)
-Proof
-  rw [read_call_data_def]
   \\ irule_at Any decreases_gas_bind_false
   \\ irule_at Any decreases_gas_get_current_context \\ rw []
 QED
@@ -1308,7 +1292,7 @@ Proof
   \\ irule_at Any decreases_gas_pop_stack \\ rw []
   \\ irule decreases_gas_consume_gas_bind \\ rw []
   \\ irule_at Any decreases_gas_bind_false
-  \\ irule_at Any decreases_gas_read_call_data \\ rw []
+  \\ irule_at Any decreases_gas_get_call_data \\ rw []
 QED
 
 Theorem decreases_gas_write_memory[simp]:

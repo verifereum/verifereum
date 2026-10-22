@@ -417,13 +417,6 @@ Definition get_call_data_def:
   od
 End
 
-Definition read_call_data_def:
-  read_call_data offset size = do
-    context <- get_current_context;
-    return $ buffer_read offset size context.msgParams.data
-  od
-End
-
 Definition set_jump_dest_def:
   set_jump_dest jumpDest = do
     context <- get_current_context;
@@ -575,13 +568,6 @@ Definition read_memory_def:
   read_memory offset size = do
     context <- get_current_context;
     return $ buffer_take offset size context.memory
-  od
-End
-
-Definition read_memory_buffer_def:
-  read_memory_buffer offset size = do
-    context <- get_current_context;
-    return $ buffer_sub offset size context.memory
   od
 End
 
@@ -823,7 +809,8 @@ Definition step_call_data_load_def:
     args <- pop_stack 1;
     index <<- w2n $ EL 0 args;
     consume_gas $ static_gas CallDataLoad;
-    bytes <- read_call_data index 32;
+    callData <- get_call_data;
+    bytes <<- take_pad_0 32 (DROP index callData);
     push_stack $ word_of_bytes F 0w (REVERSE bytes)
   od
 End
@@ -1490,7 +1477,7 @@ Definition proceed_call_def:
     argsOffset argsSize code stipend
     outputTo = do
     rollback <- get_rollback;
-    data <- read_memory_buffer argsOffset argsSize;
+    data <- read_memory argsOffset argsSize;
     if op ≠ CallCode (* otherwise to := sender *) ∧ 0 < value then
       update_accounts $ transfer_value sender address value
     else return ();
@@ -1503,7 +1490,7 @@ Definition proceed_call_def:
       ; to       := SOME callee
       ; value    := if op = DelegateCall then callValue else value
       ; gasLimit := stipend
-      ; data     := []
+      ; data     := data
       (* unused: for concreteness *)
       ; nonce := 0; gasPrice := 0; accessList := []
       ; blobVersionedHashes := []
@@ -1513,8 +1500,7 @@ Definition proceed_call_def:
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
     context <<- initial_context callee code subStatic outputTo subContextTx;
-    push_context
-      (context with msgParams updated_by (λp. p with data := data), rollback);
+    push_context (context, rollback);
     if fIN address precompile_addresses
     then dispatch_precompiles address
     else return ()

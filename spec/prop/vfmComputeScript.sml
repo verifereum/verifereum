@@ -442,6 +442,15 @@ val () = “get_call_data s” |>
   SIMP_CONV std_ss [get_call_data_def, bind_def]
   |> cv_auto_trans;
 
+(* the size bytes of call data starting at offset, without converting all
+   of the call data to a list: used for CALLDATALOAD and CALLDATACOPY *)
+Definition read_call_data_def:
+  read_call_data offset size = do
+    context <- get_current_context;
+    return $ buffer_read offset size context.msgParams.data
+  od
+End
+
 val () = “read_call_data x y s” |>
   SIMP_CONV std_ss [read_call_data_def, bind_def]
   |> cv_auto_trans;
@@ -644,11 +653,6 @@ val () = “read_memory x y s” |>
     read_memory_def, bind_def
   ] |> cv_auto_trans;
 
-val () = “read_memory_buffer x y s” |>
-  SIMP_CONV std_ss [
-    read_memory_buffer_def, bind_def
-  ] |> cv_auto_trans;
-
 val () = “write_memory x y s” |>
   SIMP_CONV std_ss [
     write_memory_def, bind_def, LET_RATOR
@@ -777,7 +781,22 @@ val th = tt step_sload_def;
 val th = tf step_sstore_gas_consumption_def;
 val th = tt step_sstore_def;
 val th = tt step_balance_def;
-val th = tt step_call_data_load_def;
+Theorem step_call_data_load_eq:
+  step_call_data_load = do
+    args <- pop_stack 1;
+    index <<- w2n $ EL 0 args;
+    consume_gas $ static_gas CallDataLoad;
+    bytes <- read_call_data index 32;
+    push_stack $ word_of_bytes F 0w (REVERSE bytes)
+  od
+Proof
+  rw[FUN_EQ_THM, step_call_data_load_def, get_call_data_def,
+     read_call_data_def, vfmBufferTheory.buffer_read_to_list,
+     bind_def, ignore_bind_def]
+  \\ rpt (CASE_TAC \\ gvs[return_def])
+QED
+
+val th = tt step_call_data_load_eq;
 val th = tt step_return_data_copy_def;
 val th = tt step_ext_code_size_def;
 val th = tt step_ext_code_copy_def;
