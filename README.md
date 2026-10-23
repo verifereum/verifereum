@@ -18,7 +18,7 @@ Verifereum is an open-source project centred on a comprehensive formal semantics
 
 Verifereum contains a complete, production-quality formal semantics of the EVM Execution Layer in HOL4. It targets the live Ethereum network's current fork (Osaka); the Consensus Layer is not currently in scope.
 
-The semantics is executable in the logic. This is not intended to be a fast EVM implementation, but it is how we run the conformance tests: Verifereum has approximately complete coverage of the [Ethereum Execution Spec Tests (EEST)](https://eest.ethereum.org/main/consuming_tests/blockchain_test/), with detailed status tracked on the [progress page](https://verifereum.org/table.html).
+The semantics is executable in the logic. This is not intended to be a fast EVM implementation, but it is how we run the conformance tests: Verifereum has approximately complete coverage of the [Ethereum Execution Spec Tests (EEST)](https://eest.ethereum.org/main/consuming_tests/blockchain_test/), with per-test results for the [checked runner](https://verifereum.org/table.html) (evaluation inside the logic) and the [unchecked runner](https://verifereum.org/table-unchecked.html) (native code, no proofs).
 
 Beyond executable specification and test-suite validation, the repository contains machine-checked theorems about the semantics. The proof library includes frame-style theorems showing that EVM execution only mutates storage, transient storage, code, and nonce in the accounts and slots it is allowed to touch, plus gas monotonicity theorems showing that consumed gas in a frame only increases through execution, including across CALL/CREATE structure. These results support program verification and program-logic developments for EVM bytecode.
 

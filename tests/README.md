@@ -3,8 +3,9 @@
 Verifereum is checked against the [Ethereum Execution Spec Tests
 (EEST)](https://github.com/ethereum/execution-specs): every Osaka
 `blockchain_test` fixture is run through the executable semantics inside
-HOL4, and the outcome of each test case is recorded. The current status is
-published on the [progress page](https://verifereum.org/table.html).
+HOL4, and the outcome of each test case is recorded. Results are published
+for both runners: [checked](https://verifereum.org/table.html) and
+[unchecked](https://verifereum.org/table-unchecked.html).
 
 The proof-producing runner takes many hours, so CI uses the unchecked native runner.
 

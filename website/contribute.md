@@ -37,7 +37,7 @@ Ask in the [Verifereum channel](https://hol.zulipchat.com/#narrow/channel/verife
 The [open issues](https://github.com/verifereum/verifereum/issues) are the current to-do list. The broad areas:
 
 - Keeping the semantics current: each Ethereum fork changes the EVM, and the next one, Glamsterdam, is coming. Tracking the execution spec and the test suite releases is ongoing work.
-- Conformance test exceptions: the tests that don't pass yet are mostly timeouts in evaluation inside the logic. Making evaluation faster, or finding why a test is slow, moves the pass rate.
+- Conformance test exceptions: the tests that don't pass yet are timeouts in evaluation inside the logic (the checked runner), and the tests that modify the EIP-7002 and EIP-7251 request contracts, which the semantics models instead of executing ([issue #177](https://github.com/verifereum/verifereum/issues/177)). Making evaluation faster, or finding why a test is slow, moves the checked pass rate.
 - Theorems about the semantics: frame theorems, gas accounting, and invariants of execution, in `spec/prop/`. Many instructions and cases still lack them.
 - Program logic and verified contracts: the separation logic in `prog/` and the WETH example in `examples/` are the start. More examples are wanted, and the proof automation they call for.
 - Faster execution: a proof-producing translation of the semantics to [CakeML](https://cakeml.org) ([issue #14](https://github.com/verifereum/verifereum/issues/14)).
