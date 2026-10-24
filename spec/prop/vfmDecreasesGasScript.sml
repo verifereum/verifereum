@@ -1703,32 +1703,10 @@ Theorem decreases_gas_cred_bind_set_original[simp]:
   decreases_gas_cred F n1 n2 f ⇒
   decreases_gas_cred F n1 n2 (ignore_bind (set_original a) f)
 Proof
-  rw[decreases_gas_cred_def, ignore_bind_def, bind_def, set_original_def]
-  \\ rw[return_def, fail_def]
-  \\ Cases_on`s.contexts = []` \\ gvs[SNOC_APPEND]
-  \\ qmatch_goalsub_abbrev_tac`f ss`
-  \\ `ss.contexts ≠ []`
-  by ( strip_tac \\ gvs[Abbr`ss`, set_last_accounts_def] )
-  \\ first_x_assum (qspec_then`ss`mp_tac)
-  \\ rw[]
-  >- (
-    first_x_assum irule
-    \\ gs[Abbr`ss`, EVERY_MEM, FORALL_PROD, set_last_accounts_def]
-    \\ rw[] \\ first_x_assum irule
-    \\ metis_tac[rich_listTheory.MEM_FRONT, list_CASES,
-                 rich_listTheory.LAST_MEM, pair_CASES, FST, SND] )
-  \\ irule transitive_LE_LEX_LE
-  \\ goal_assum drule
-  \\ qmatch_goalsub_abbrev_tac`_ x1 x2`
-  \\ `x1 = x2`
-  by (
-    unabbrev_all_tac
-    \\ reverse $ rw[contexts_weight_def, rich_listTheory.LENGTH_FRONT, PRE_SUB1,
-                    set_last_accounts_def]
-    >- (Cases_on`LENGTH s.contexts` \\ gs[])
-    \\ qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES
-    \\ gs[SNOC_APPEND] )
-  \\ rw[LEX_DEF, UNCURRY]
+  rw[decreases_gas_cred_def, ignore_bind_def, bind_def, set_original_def,
+     return_def, fail_def]
+  \\ first_x_assum (qspec_then `s with originalAccounts := a` mp_tac)
+  \\ Cases_on `s.contexts = []` \\ simp[]
 QED
 
 Theorem decreases_gas_cred_step_create[simp]:

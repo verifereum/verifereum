@@ -55,6 +55,210 @@ Libs
 val _ = Parse.hide "add"
 val _ = Parse.hide "from"
 
+(* Projection rules keep original-account reasoning independent of frames. *)
+Theorem original_bind[local]:
+  (!s. (SND (g s)).originalAccounts = s.originalAccounts) /\
+  (!x s. (SND (f x s)).originalAccounts = s.originalAccounts) ==>
+  !s. (SND (bind g f s)).originalAccounts = s.originalAccounts
+Proof
+  rpt strip_tac >> Cases_on `g s` >> Cases_on `q`
+  >> gvs[bind_def] >> metis_tac[SND]
+QED
+
+Theorem original_ignore_bind[local]:
+  (!s. (SND (g s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (f s)).originalAccounts = s.originalAccounts) ==>
+  !s. (SND (ignore_bind g f s)).originalAccounts = s.originalAccounts
+Proof
+  strip_tac >> rewrite_tac[ignore_bind_def]
+  >> irule original_bind >> simp[]
+QED
+
+Theorem original_handle[local]:
+  (!s. (SND (g s)).originalAccounts = s.originalAccounts) /\
+  (!e s. (SND (f e s)).originalAccounts = s.originalAccounts) ==>
+  !s. (SND (handle g f s)).originalAccounts = s.originalAccounts
+Proof
+  rpt strip_tac >> Cases_on `g s` >> Cases_on `q`
+  >> gvs[handle_def] >> metis_tac[SND]
+QED
+
+Theorem original_cond[local]:
+  (!s. (SND (m s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (n s)).originalAccounts = s.originalAccounts) ==>
+  !s. (SND ((if b then m else n) s)).originalAccounts = s.originalAccounts
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+Theorem original_primitives[local]:
+  (!x s. (SND (return x s)).originalAccounts = s.originalAccounts) /\
+  (!e s. (SND (fail e s)).originalAccounts = s.originalAccounts) /\
+  (!e s. (SND (reraise e s)).originalAccounts = s.originalAccounts) /\
+  (!b e s. (SND (assert b e s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_current_context s)).originalAccounts = s.originalAccounts) /\
+  (!c s. (SND (set_current_context c s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_num_contexts s)).originalAccounts = s.originalAccounts) /\
+  (!cr s. (SND (push_context cr s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (pop_context s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_accounts s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_rollback s)).originalAccounts = s.originalAccounts) /\
+  (!rb s. (SND (set_rollback rb s)).originalAccounts = s.originalAccounts) /\
+  (!f s. (SND (update_accounts f s)).originalAccounts = s.originalAccounts) /\
+  (!d s. (SND (set_domain d s)).originalAccounts = s.originalAccounts)
+Proof
+  simp[return_def, fail_def, reraise_def, assert_def,
+       get_current_context_def, set_current_context_def,
+       get_num_contexts_def, push_context_def, pop_context_def,
+       get_accounts_def, get_rollback_def, set_rollback_def,
+       update_accounts_def, set_domain_def, COND_RATOR, COND_RAND]
+QED
+
+val original_tac = rpt
+  (FIRST [irule original_bind, irule original_ignore_bind,
+          irule original_cond, irule original_handle]
+   >> rpt conj_tac >> rpt gen_tac >> simp[original_primitives]);
+
+Theorem original_context_wrappers[local]:
+  (!s. (SND (get_gas_left s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_callee s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_caller s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_value s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_static s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_return_data s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (get_output_to s)).originalAccounts = s.originalAccounts) /\
+  (!d s. (SND (set_return_data d s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (consume_gas n s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (unuse_gas n s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (pop_stack n s)).originalAccounts = s.originalAccounts) /\
+  (!v s. (SND (push_stack v s)).originalAccounts = s.originalAccounts) /\
+  (!ls s. (SND (push_logs ls s)).originalAccounts = s.originalAccounts) /\
+  (!ad sd s. (SND (update_gas_refund (ad,sd) s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (inc_pc s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (expand_memory n s)).originalAccounts = s.originalAccounts) /\
+  (!a n s. (SND (read_memory a n s)).originalAccounts = s.originalAccounts) /\
+  (!a bs s. (SND (write_memory a bs s)).originalAccounts = s.originalAccounts) /\
+  (!a n s. (SND (memory_expansion_info a n s)).originalAccounts = s.originalAccounts)
+Proof
+  rpt conj_tac >> rpt gen_tac
+  >> rewrite_tac[get_gas_left_def, get_callee_def, get_caller_def,
+       get_value_def, get_static_def, get_return_data_def, get_output_to_def,
+       set_return_data_def, consume_gas_def, unuse_gas_def, pop_stack_def,
+       push_stack_def, push_logs_def, update_gas_refund_def, inc_pc_def,
+       expand_memory_def, read_memory_def, write_memory_def,
+       memory_expansion_info_def, LET_THM]
+  >> original_tac
+QED
+
+Theorem original_pop_and_incorporate[local]:
+  !s. (SND (pop_and_incorporate_context success s)).originalAccounts = s.originalAccounts
+Proof
+  gen_tac >> rewrite_tac[pop_and_incorporate_context_def, LET_THM]
+  >> original_tac >> simp[original_context_wrappers, original_primitives]
+QED
+
+Theorem original_push_dispatch[local]:
+  !s. (SND (ignore_bind (push_context cr) (dispatch_precompiles a) s)).originalAccounts = s.originalAccounts
+Proof
+  simp[ignore_bind_def, bind_def, push_context_def, return_def]
+  >> gen_tac
+  >> qspec_then `a` mp_tac (GEN_ALL cp_dispatch_precompiles)
+  >> pure_rewrite_tac[cp_def]
+  >> disch_then (qspec_then `s with contexts updated_by CONS cr` mp_tac)
+  >> Cases_on `dispatch_precompiles a (s with contexts updated_by CONS cr)`
+  >> simp[]
+QED
+
+Theorem original_access_address[local]:
+  !s. (SND (access_address a s)).originalAccounts = s.originalAccounts
+Proof
+  gen_tac >> Cases_on `s.msdomain`
+  >> simp[access_address_def, domain_check_def, set_domain_def,
+          ignore_bind_def, bind_def, return_def, fail_def, LET_THM,
+          COND_RAND, COND_RATOR]
+QED
+
+Theorem original_call_wrappers[local]:
+  (!s. (SND (assert_not_static s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (abort_unuse n s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (abort_call_value n s)).originalAccounts = s.originalAccounts)
+Proof
+  rpt conj_tac >> rpt gen_tac
+  >> rewrite_tac[assert_not_static_def, abort_unuse_def, abort_call_value_def]
+  >> original_tac >> simp[original_context_wrappers, original_primitives]
+QED
+
+Theorem original_handle_create[local]:
+  !s. (SND (handle_create e s)).originalAccounts = s.originalAccounts
+Proof
+  gen_tac >> rewrite_tac[handle_create_def, LET_THM]
+  >> original_tac >> simp[original_context_wrappers, original_primitives]
+  >> Cases_on `e` >> Cases_on `x'` >> simp[] >> original_tac
+  >> simp[original_context_wrappers, original_primitives]
+QED
+
+Theorem original_handle_exception[local]:
+  !s. (SND (handle_exception e s)).originalAccounts = s.originalAccounts
+Proof
+  gen_tac >> simp[handle_exception_def, LET_THM]
+  >> irule original_ignore_bind >> conj_tac
+  >- (Cases_on `e = NONE` >> Cases_on `e = SOME Reverted`
+      >> simp[original_primitives] >> original_tac
+      >> simp[original_context_wrappers])
+  >> original_tac
+  >> simp[original_context_wrappers, original_primitives, original_pop_and_incorporate]
+  >> Cases_on `x'` >> simp[] >> original_tac
+  >> simp[original_context_wrappers, original_primitives]
+QED
+
+Theorem handle_step_original_accounts[local]:
+  handle_step e s = (r,t) ==> t.originalAccounts = s.originalAccounts
+Proof
+  `!s. (SND (handle_step e s)).originalAccounts = s.originalAccounts`
+    suffices_by metis_tac[SND]
+  >> gen_tac >> rewrite_tac[handle_step_def] >> original_tac
+  >> simp[original_primitives, original_handle_create, original_handle_exception]
+QED
+
+Theorem original_proceed_call[local]:
+  !s. (SND (proceed_call op sender address value ao az code stipend ot s)).originalAccounts = s.originalAccounts
+Proof
+  gen_tac >> simp[proceed_call_def, LET_THM]
+  >> Cases_on `fIN address precompile_addresses` >> simp[]
+  >> rpt (FIRST [irule original_push_dispatch, irule original_bind,
+                 irule original_ignore_bind, irule original_cond]
+          >> rpt conj_tac >> rpt gen_tac
+          >> simp[original_context_wrappers, original_primitives])
+QED
+
+Theorem original_step_call[local]:
+  !s. (SND (step_call op s)).originalAccounts = s.originalAccounts
+Proof
+  gen_tac >> simp[step_call_def, LET_THM]
+  >> original_tac
+  >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers, original_proceed_call]
+  >> pairarg_tac >> simp[] >> original_tac
+  >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers, original_proceed_call]
+  >- (pairarg_tac >> simp[] >> original_tac
+      >> simp[original_context_wrappers, original_primitives]
+      >> pairarg_tac >> simp[] >> original_tac
+      >> simp[original_context_wrappers, original_primitives,
+              original_call_wrappers, original_proceed_call])
+  >> qmatch_goalsub_abbrev_tac `get_delegate ac.code`
+  >> Cases_on `get_delegate ac.code`
+  >> simp[original_primitives] >> original_tac
+  >> simp[original_access_address]
+QED
+
+Theorem step_call_original_accounts[local]:
+  step_call op s = (r,t) ==> t.originalAccounts = s.originalAccounts
+Proof
+  metis_tac[original_step_call, SND]
+QED
+
+
 
 (* ================================================================ *)
 (* Framework: INR-grow structure witness.                             *)
@@ -831,6 +1035,8 @@ Theorem step_call_handle_step_inr_grow_same_frame:
   same_frame_rel s s'
 Proof
   strip_tac
+  >> `s'.originalAccounts = s.originalAccounts`
+       by metis_tac[step_call_original_accounts, handle_step_original_accounts]
   (* Step 1: Extract structure from step_call_inr_grow_structure. *)
   >> drule_all step_call_inr_grow_structure
   >> strip_tac
@@ -859,6 +1065,7 @@ Proof
        by metis_tac[SND_handle_step_msdomain, SND]
   >> `msdomain_compatible sp.msdomain s'.msdomain` by simp[]
   >> `s.txParams = sp.txParams` by fs[same_frame_rel_def]
+  >> `s.originalAccounts = sp.originalAccounts` by fs[same_frame_rel_def]
   >> Cases_on `e = NONE`
   >- (  (* Success case: e = NONE. Use _gen variant which handles
            q = INR post-pop finalization failures too. *)
@@ -874,9 +1081,8 @@ Proof
        >> `same_frame_rel sp s'` by (
             simp[same_frame_rel_def]
             >> rpt conj_tac
-            >> TRY (fs[] >> NO_TAC)
-            >> fs[]
-            >> TRY (fs[rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC)
+            >> fs[rich_listTheory.IS_PREFIX_APPEND]
+            >> fs[same_frame_rel_def]
             >> decide_tac)
        >> metis_tac[same_frame_rel_trans])
   (* Failure case: e ≠ NONE. Use _gen variant. Need e ≠ SOME Reverted,

@@ -1237,7 +1237,7 @@ Proof
   >> gvs[AllCaseEqs()]
 QED
 
-(* set_original modifies the last context's saved rollback, not the
+(* set_original modifies the separate original-account map, not the
    outer rollback field. So preserves_rollback holds trivially. *)
 Theorem preserves_rollback_set_original[simp]:
   preserves_rollback (set_original a)
