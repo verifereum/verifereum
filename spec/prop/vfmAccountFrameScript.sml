@@ -161,13 +161,31 @@ Theorem step_push_new_frame:
                   s.rollback.accounts).code of
           NONE => (lookup_account (FST (HD s'.contexts)).msgParams.callee
                      s.rollback.accounts).code
-        | SOME d => (lookup_account d s.rollback.accounts).code) ∨
+        | SOME d => (lookup_account d s.rollback.accounts).code) ∧
+     (FST (HD s'.contexts)).msgParams.caller =
+       (FST (HD s.contexts)).msgParams.callee ∧
+     (FST (HD s'.contexts)).msgParams.value ≤
+       (lookup_account (FST (HD s.contexts)).msgParams.callee
+          s.rollback.accounts).balance ∧
+     s'.rollback.accounts =
+       transfer_value (FST (HD s.contexts)).msgParams.callee
+         (FST (HD s'.contexts)).msgParams.callee
+         (FST (HD s'.contexts)).msgParams.value s.rollback.accounts ∧
+     s'.rollback.tStorage = s.rollback.tStorage ∨
      rd = Code (FST (HD s'.contexts)).msgParams.callee ∧
      ¬account_already_created
         (lookup_account (FST (HD s'.contexts)).msgParams.callee
            s.rollback.accounts)) ∧
     (static ⇒ (∃mr. rd = Memory mr) ∧
               (SND (HD s'.contexts)).accounts = s'.rollback.accounts)
+Proof
+  cheat
+QED
+
+(* Domain collection mode is never left. *)
+Theorem step_preserves_collect:
+  (∃d. s.msdomain = Collect d) ∧ step s = (r, s') ⇒
+  ∃d. s'.msdomain = Collect d
 Proof
   cheat
 QED
