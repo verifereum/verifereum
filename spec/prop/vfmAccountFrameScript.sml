@@ -361,6 +361,117 @@ Proof
   >> simp[] >> first_assum ACCEPT_TAC
 QED
 
+Theorem account_prefix_step_call[local]:
+  (∀s s'. Q s ∧ cp_rel s s' ⇒ Q s') ∧
+  (∀s. Q s ⇒ s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.static) ∧
+  (∀op sender address value ao az code stipend mr.
+    value = 0 ∨ op = CallCode ⇒
+    ∀s. Q s ⇒ Q (SND (proceed_call op sender address value ao az code stipend (Memory mr) s))) ⇒
+  ∀s. Q s ⇒ Q (SND (step_call op s))
+Proof
+  strip_tac >> simp[step_call_def, LET_THM]
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> rpt conj_tac
+  >- (first_assum ACCEPT_TAC)
+  >> gen_tac >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> rpt conj_tac
+  >- (first_assum ACCEPT_TAC)
+  >> gen_tac
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> rpt conj_tac
+  >- (first_assum ACCEPT_TAC)
+  >> gen_tac
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> rpt conj_tac
+  >- (first_assum ACCEPT_TAC)
+  >> gen_tac
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> rpt conj_tac
+  >- (first_assum ACCEPT_TAC)
+  >> gen_tac >> PairCases_on `x` >> simp[]
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> rpt conj_tac
+  >- (first_assum ACCEPT_TAC)
+  >> gen_tac >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac account_prefix_ignore_bind_cp
+  >> simp[] >> rpt conj_tac
+  >- (first_assum ACCEPT_TAC)
+  >> ho_match_mp_tac account_prefix_conditional_guard
+  >> conj_tac >- (first_assum ACCEPT_TAC)
+  >> strip_tac
+  >> ho_match_mp_tac account_prefix_ignore_bind_cp
+  >> simp[] >> conj_tac >- (first_assum ACCEPT_TAC)
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> conj_tac >- (first_assum ACCEPT_TAC)
+  >> gen_tac >> IF_CASES_TAC
+  >- (ho_match_mp_tac account_prefix_cp >> simp[SF ETA_ss] >> first_assum ACCEPT_TAC)
+  >> ho_match_mp_tac account_prefix_ignore_bind_cp
+  >> simp[] >> conj_tac >- (first_assum ACCEPT_TAC)
+  >> ho_match_mp_tac account_prefix_bind_cp
+  >> simp[] >> conj_tac >- (first_assum ACCEPT_TAC)
+  >> gen_tac >> IF_CASES_TAC
+  >- (ho_match_mp_tac account_prefix_cp >> simp[SF ETA_ss] >> first_assum ACCEPT_TAC)
+  >> first_x_assum ho_match_mp_tac
+  >> Cases_on `op` >> gvs[call_has_value_def]
+QED
+
+Theorem static_prefix_cp_rel[local]:
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ∧ cp_rel s s' ⇒
+  (0 < n ∧ n ≤ LENGTH s'.contexts ∧ s'.rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s'.contexts - n + 1) s'.contexts))
+Proof
+  rw[cp_rel_def]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> Cases_on `LENGTH t + 2 - n` >> gvs[]
+QED
+
+Theorem static_prefix_head[local]:
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
+  s.contexts ≠ [] ∧ (FST (HD s.contexts)).msgParams.static
+Proof
+  Cases_on `s.contexts` >- (strip_tac >> gvs[])
+  >> PairCases_on `h` >> simp[] >> strip_tac
+  >> `LENGTH t + 2 - n = SUC (LENGTH t + 1 - n)` by decide_tac
+  >> gvs[]
+QED
+
+Theorem step_call_preserves_static_prefix[local]:
+  ∀s.
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
+  (0 < n ∧ n ≤ LENGTH (SND (step_call op s)).contexts ∧
+   (SND (step_call op s)).rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH (SND (step_call op s)).contexts - n + 1)
+       (SND (step_call op s)).contexts))
+Proof
+  match_mp_tac (BETA_RULE (Q.INST [`Q` |->
+    `λs. 0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+      EVERY (λ(c,rb). c.msgParams.static ∧
+        (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+        (TAKE (LENGTH s.contexts - n + 1) s.contexts)`]
+    account_prefix_step_call))
+  >> rpt conj_tac
+  >- (rpt strip_tac >> drule_all static_prefix_cp_rel >> simp[])
+  >- (rpt strip_tac >> drule_all static_prefix_head >> simp[])
+  >> rpt gen_tac >> disch_tac
+  >> match_mp_tac proceed_call_preserves_static_prefix >> simp[]
+QED
+
 (* A static frame changes no account: SSTORE, CREATE, SELFDESTRUCT and
  * value-carrying CALL fail in it, and the frames it calls are static too.
  * Its saved rollback must agree on accounts, since a failure restores it. *)
