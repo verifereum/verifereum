@@ -240,6 +240,8 @@ Theorem run_call_account_frame:
   (∀e r e'.
      (FST (HD e.contexts)).msgParams.callee = a ∧
      wf_state e ∧ P (lookup_account a e.rollback.accounts) ∧
+     (2 ≤ LENGTH e.contexts ⇒
+        P (lookup_account a (SND (HD e.contexts)).accounts)) ∧
      (e = es ∨
       ∃s u. run_call_reaches es s ∧
             LENGTH es.contexts ≤ LENGTH s.contexts ∧
