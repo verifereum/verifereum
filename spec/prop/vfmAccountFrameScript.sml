@@ -326,6 +326,41 @@ Proof
   >> pop_assum SUBST1_TAC >> simp[]
 QED
 
+Theorem account_prefix_cp[local]:
+  (∀s s'. Q s ∧ cp_rel s s' ⇒ Q s') ∧
+  (∀s. Q s ⇒ s.contexts ≠ []) ∧ cp m ⇒
+  ∀s. Q s ⇒ Q (SND (m s))
+Proof
+  rw[cp_def]
+  >> `s.contexts ≠ []` by metis_tac[]
+  >> Cases_on `m s` >> gvs[]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> first_x_assum irule
+  >> qexists_tac `s` >> simp[cp_rel_def]
+QED
+
+Theorem account_prefix_bind_cp[local]:
+  (∀s s'. Q s ∧ cp_rel s s' ⇒ Q s') ∧
+  (∀s. Q s ⇒ s.contexts ≠ []) ∧ cp g ∧
+  (∀x s. Q s ⇒ Q (SND (f x s))) ⇒
+  ∀s. Q s ⇒ Q (SND (bind g f s))
+Proof
+  strip_tac >> ho_match_mp_tac account_prefix_bind
+  >> simp[] >> ho_match_mp_tac account_prefix_cp
+  >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem account_prefix_ignore_bind_cp[local]:
+  (∀s s'. Q s ∧ cp_rel s s' ⇒ Q s') ∧
+  (∀s. Q s ⇒ s.contexts ≠ []) ∧ cp g ∧
+  (∀s. Q s ⇒ Q (SND (f s))) ⇒
+  ∀s. Q s ⇒ Q (SND (ignore_bind g f s))
+Proof
+  strip_tac >> ho_match_mp_tac account_prefix_ignore_bind
+  >> simp[] >> ho_match_mp_tac account_prefix_cp
+  >> simp[] >> first_assum ACCEPT_TAC
+QED
+
 (* A static frame changes no account: SSTORE, CREATE, SELFDESTRUCT and
  * value-carrying CALL fail in it, and the frames it calls are static too.
  * Its saved rollback must agree on accounts, since a failure restores it. *)
