@@ -1555,6 +1555,708 @@ Proof
   \\ strip_tac \\ gvs[]
 QED
 
+(* ----------------------------------------------------------------------------- *)
+(* Exceptional halts                                                             *)
+(* ----------------------------------------------------------------------------- *)
+
+(* An exception other than Revert consumes all of the context's remaining gas
+   and clears the return data. In the outermost context execution then stops
+   with the exception; in an inner context the callee is popped, its state
+   changes are rolled back, and the caller resumes with 0 pushed.
+
+   The rules below that hold for a family of instructions take the shape of
+   the instruction's semantics as a hypothesis, e.g. that it starts by popping
+   n arguments. Each is discharged for a concrete instruction by unfolding
+   step_inst_def and its step_* definition. *)
+
+fun exn_outer_tac ths =
+  start_tac
+  \\ gvs (ths @ [pop_stack_def,fail_def,bind_def,ignore_bind_def,
+          handle_step_def,vfm_abort_def,handle_def,handle_create_def,
+          get_return_data_def,get_output_to_def,reraise_def,
+          handle_exception_def,get_gas_left_def,consume_gas_def,
+          set_return_data_def,get_current_context_def,return_def,
+          set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
+          return_destination_case_elim])
+  \\ end_tac
+
+fun exn_inner_tac ths =
+  irule IMP_EVM_SPEC \\ rpt strip_tac
+  \\ rewrite_tac [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
+                  EMPTY_evm2set,STAR_evm_hide_Parsed, STAR_CODE_POOL_evm2set]
+  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
+  \\ reverse $ Cases_on ‘b’ >- simp[]
+  \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
+  \\ last_x_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
+                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
+  \\ gvs[]
+  \\ drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, wf_context_def, SF CONJ_ss]
+  \\ `¬(SUC (LENGTH (TL (SND r).contexts)) ≤ 1)` by (
+       Cases_on`TL (SND r).contexts` \\ gvs[])
+  \\ rpt (qpat_x_assum`SOME _ = _`(assume_tac o SYM))
+  \\ rpt (qpat_x_assum`_ = step_inst _`(assume_tac o SYM))
+  \\ gvs (ths @ [pop_stack_def,fail_def,bind_def,ignore_bind_def,
+         handle_step_def,vfm_abort_def,handle_def,handle_create_def,
+         get_return_data_def,get_output_to_def,reraise_def,
+         get_current_context_def,return_def,set_current_context_def,
+         assert_def,consume_gas_def,return_destination_case_rator])
+  \\ qmatch_assum_rename_tac`wf_state r2`
+  \\ `(FST (HD r2.contexts)).msgParams.parsed =
+      parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
+     by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
+  \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
+  \\ Cases_on`p.outputTo`
+  \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
+         inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
+         bind_def,ignore_bind_def,return_def,get_current_context_def,
+         set_current_context_def,assert_def,get_return_data_def,
+         get_output_to_def,set_return_data_def,get_gas_left_def,
+         consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
+         set_rollback_def]
+  \\ (rpt (conj_tac >- (
+        gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
+        TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
+             \\ simp[] \\ NO_TAC)
+        \\ metis_tac[NOT_SOME_NONE])))
+  \\ (conj_tac >-
+       (qpat_x_assum ‘_ = {}’ mp_tac
+        \\ simp[EXTENSION,Abbr`all_pcs`] \\ rw [EQ_IMP_THM]
+        \\ gvs[SUBSET_DEF,PULL_EXISTS]
+        \\ last_x_assum(qspec_then`x`mp_tac)
+        \\ simp[]
+        \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
+        \\ metis_tac[option_CASES]))
+  \\ irule UPDATE_evm2set_without
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
+  \\ ntac 2 strip_tac
+  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP, Abbr`all_pcs`]
+  \\ qmatch_assum_rename_tac`HasParsed pc2 ∉ dom`
+  \\ first_x_assum(qspec_then`pc2`mp_tac)
+  \\ simp[]
+  \\ strip_tac \\ gvs[]
+
+Theorem SPEC_StackUnderflow_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ LENGTH ss < n ∧
+           ∃k. step_inst inst = bind (pop_stack n) k))
+    {(pc,inst)}
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Exception (INR (SOME StackUnderflow)))
+Proof
+  exn_outer_tac []
+QED
+
+Theorem SPEC_OutOfGas_pop_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ n ≤ LENGTH ss ∧
+           p.gasLimit < g + cost (TAKE n ss) ∧
+           ∃k. step_inst inst =
+               bind (pop_stack n)
+                 (λargs. ignore_bind (consume_gas (cost args)) (k args))))
+    {(pc,inst)}
+    (evm_Stack (DROP n ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Exception (INR (SOME OutOfGas)))
+Proof
+  exn_outer_tac []
+QED
+
+Theorem SPEC_OutOfGas_outermost:
+  SPEC EVM_MODEL
+    (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ p.gasLimit < g + c ∧
+           ∃k. step_inst inst = ignore_bind (consume_gas c) k))
+    {(pc,inst)}
+    (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Exception (INR (SOME OutOfGas)))
+Proof
+  exn_outer_tac []
+QED
+
+Theorem SPEC_StackOverflow_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ LENGTH ss = stack_limit ∧
+           g + c ≤ p.gasLimit ∧
+           ∃k. step_inst inst = ignore_bind (consume_gas c) k ∧
+               ∀s. s.contexts ≠ [] ∧
+                   LENGTH (FST (HD s.contexts)).stack = stack_limit ⇒
+                   k s = (INR (SOME StackOverflow), s)))
+    {(pc,inst)}
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Exception (INR (SOME StackOverflow)))
+Proof
+  exn_outer_tac []
+QED
+
+Theorem SPEC_StackUnderflow_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc inst *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         LENGTH ss < n ∧
+         ∃k. step_inst inst = bind (pop_stack n) k))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac []
+QED
+
+Theorem SPEC_OutOfGas_pop_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc inst *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         n ≤ LENGTH ss ∧ p.gasLimit < g + cost (TAKE n ss) ∧
+         ∃k. step_inst inst =
+             bind (pop_stack n)
+               (λargs. ignore_bind (consume_gas (cost args)) (k args))))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac []
+QED
+
+Theorem SPEC_OutOfGas_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc inst *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         p.gasLimit < g + c ∧
+         ∃k. step_inst inst = ignore_bind (consume_gas c) k))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac []
+QED
+
+Theorem SPEC_StackOverflow_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc inst *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         LENGTH ss = stack_limit ∧ g + c ≤ p.gasLimit ∧
+         ∃k. step_inst inst = ignore_bind (consume_gas c) k ∧
+             ∀s. s.contexts ≠ [] ∧
+                 LENGTH (FST (HD s.contexts)).stack = stack_limit ⇒
+                 k s = (INR (SOME StackOverflow), s)))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac []
+QED
+
+Triviality one_le_LENGTH:
+  1 ≤ LENGTH l ⇔ l ≠ []
+Proof
+  Cases_on`l` \\ simp[]
+QED
+
+Theorem SPEC_InvalidJumpDest_Jump_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_JumpDest j * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧
+           g + static_gas Jump ≤ p.gasLimit ∧
+           ¬(w2n (HD ss) < LENGTH p.code ∧
+             FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest)))
+    {(pc,Jump)}
+    (evm_Stack (TL ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_JumpDest (SOME (w2n (HD ss))) *
+     evm_Exception (INR (SOME InvalidJumpDest)))
+Proof
+  exn_outer_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                 NOT_NIL_EQ_LENGTH_NOT_0,SF CONJ_ss]
+QED
+
+Theorem SPEC_InvalidJumpDest_JumpI_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_JumpDest j * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ 2 ≤ LENGTH ss ∧ EL 1 ss ≠ 0w ∧
+           g + static_gas JumpI ≤ p.gasLimit ∧
+           ¬(w2n (HD ss) < LENGTH p.code ∧
+             FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest)))
+    {(pc,JumpI)}
+    (evm_Stack (DROP 2 ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_JumpDest (SOME (w2n (HD ss))) *
+     evm_Exception (INR (SOME InvalidJumpDest)))
+Proof
+  exn_outer_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                 NOT_NIL_EQ_LENGTH_NOT_0,SF CONJ_ss]
+QED
+
+Theorem SPEC_OutOfBoundsRead_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Memory m * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ 3 ≤ LENGTH ss ∧
+           offset = w2n (EL 0 ss) ∧ sz = w2n (EL 2 ss) ∧
+           sourceOffset = w2n (EL 1 ss) ∧
+           LENGTH rd < sourceOffset + sz ∧
+           g + ReturnDataCopy_gas m offset sz ≤ p.gasLimit))
+    {(pc,ReturnDataCopy)}
+    (evm_Stack (DROP 3 ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] * evm_Memory m *
+     evm_Exception (INR (SOME OutOfBoundsRead)))
+Proof
+  exn_outer_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                 memory_expansion_info_def,get_return_data_check_def,
+                 ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+QED
+
+Theorem SPEC_InvalidJumpDest_Jump_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc Jump *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         ss ≠ [] ∧ g + static_gas Jump ≤ p.gasLimit ∧
+         ¬(w2n (HD ss) < LENGTH p.code ∧
+           FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest)))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                 one_le_LENGTH,SF CONJ_ss]
+QED
+
+Theorem SPEC_InvalidJumpDest_JumpI_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc JumpI *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         2 ≤ LENGTH ss ∧ EL 1 ss ≠ 0w ∧
+         g + static_gas JumpI ≤ p.gasLimit ∧
+         ¬(w2n (HD ss) < LENGTH p.code ∧
+           FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest)))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                 SF CONJ_ss]
+QED
+
+Theorem SPEC_OutOfBoundsRead_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc ReturnDataCopy *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         3 ≤ LENGTH ss ∧
+         offset = w2n (EL 0 ss) ∧ sz = w2n (EL 2 ss) ∧
+         sourceOffset = w2n (EL 1 ss) ∧
+         LENGTH rd < sourceOffset + sz ∧
+         g + ReturnDataCopy_gas m offset sz ≤ p.gasLimit))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                 memory_expansion_info_def,get_return_data_check_def,
+                 ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+QED
+
+Theorem SPEC_WriteInStaticContext_TStore_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ 2 ≤ LENGTH ss ∧ p.static ∧
+           g + warm_access_cost ≤ p.gasLimit))
+    {(pc,TStore)}
+    (evm_Stack (DROP 2 ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Exception (INR (SOME WriteInStaticContext)))
+Proof
+  exn_outer_tac [step_inst_def,step_sstore_def,assert_not_static_def,
+                 get_static_def,get_callee_def]
+QED
+
+Theorem SPEC_WriteInStaticContext_Log_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Memory m * evm_Exception e *
+     cond (NULL cs ∧ ISL e ∧ 2 + n ≤ LENGTH ss ∧ p.static ∧
+           offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
+           dynamicGas = log_topic_cost * n + log_data_cost * sz +
+                        memory_cost m offset sz ∧
+           g + static_gas (Log n) + dynamicGas ≤ p.gasLimit))
+    {(pc,Log n)}
+    (evm_Stack (DROP (2 + n) ss) * evm_PC pc * evm_MsgParams p *
+     evm_Contexts cs * evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Memory (expanded_memory m offset sz) *
+     evm_Exception (INR (SOME WriteInStaticContext)))
+Proof
+  exn_outer_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                 expand_memory_def,memory_cost_def,expanded_memory_def,
+                 memory_expand_by_def,EL_TAKE,HD_TAKE,assert_not_static_def,
+                 get_static_def,get_callee_def]
+QED
+
+Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
+  SPEC EVM_MODEL
+    (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
+     evm_Rollback rb * evm_Msdomain d *
+     cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧ p.static ∧
+           addr = w2w (HD ss) ∧ access_check d addr ∧
+           sender = lookup_account p.callee rb.accounts ∧
+           transferCost = (if 0 < sender.balance ∧
+                              account_empty (lookup_account addr rb.accounts)
+                           then self_destruct_new_account_cost else 0) ∧
+           g + static_gas SelfDestruct + zero_warm (access_cost rb addr) +
+           transferCost ≤ p.gasLimit))
+    {(pc,SelfDestruct)}
+    (evm_Stack (TL ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Exception (INR (SOME WriteInStaticContext)) *
+     evm_Rollback (accesses_add addr rb) * evm_Msdomain (msdomain_add addr d))
+Proof
+  exn_outer_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                 set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                 assert_not_static_def,get_static_def,get_callee_def,
+                 GSYM rich_listTheory.TAIL_BY_DROP,SUB_ADD]
+QED
+
+Theorem SPEC_WriteInStaticContext_TStore_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc TStore *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         2 ≤ LENGTH ss ∧ p.static ∧
+         g + warm_access_cost ≤ p.gasLimit))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,get_callee_def]
+QED
+
+Theorem SPEC_WriteInStaticContext_Log_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc (Log n) *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         2 + n ≤ LENGTH ss ∧ p.static ∧
+         offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
+         dynamicGas = log_topic_cost * n + log_data_cost * sz +
+                      memory_cost m offset sz ∧
+         g + static_gas (Log n) + dynamicGas ≤ p.gasLimit))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                 expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                 assert_not_static_def,get_static_def,get_callee_def,
+                 Abbr`dynamicGas`]
+QED
+
+Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Msdomain d *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc SelfDestruct *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         ss ≠ [] ∧ p.static ∧
+         addr = w2w (HD ss) ∧ access_check d addr ∧
+         sender = lookup_account p.callee rb.accounts ∧
+         transferCost = (if 0 < sender.balance ∧
+                            account_empty (lookup_account addr rb.accounts)
+                         then self_destruct_new_account_cost else 0) ∧
+         g + static_gas SelfDestruct + zero_warm (access_cost rb addr) +
+         transferCost ≤ p.gasLimit))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Msdomain (msdomain_add addr d) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  exn_inner_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                 set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                 assert_not_static_def,get_static_def,get_callee_def]
+QED
+
+(* Non-vacuity witnesses: concrete opcodes meet the shape hypotheses of the
+   generic exceptional-halt rules above. *)
+
+Theorem witness_StackUnderflow_Add:
+  ∃k. step_inst Add = bind (pop_stack 2) k
+Proof
+  simp[step_inst_def,step_binop_def]
+  \\ irule_at Any EQ_REFL
+QED
+
+Theorem witness_OutOfGas_pop_Add:
+  ∃cost k. step_inst Add =
+           bind (pop_stack 2)
+             (λargs. ignore_bind (consume_gas (cost args)) (k args))
+Proof
+  simp[step_inst_def,step_binop_def]
+  \\ qexistsl_tac[`K (static_gas Add)`,
+                  `λargs. push_stack (word_add (EL 0 args) (EL 1 args))`]
+  \\ simp[]
+QED
+
+Theorem witness_OutOfGas_Push:
+  ∃k. step_inst (Push n ws) = ignore_bind (consume_gas (static_gas (Push n ws))) k
+Proof
+  simp[step_inst_def,step_push_def]
+  \\ irule_at Any EQ_REFL
+QED
+
+Theorem witness_StackOverflow_Push:
+  ∃k. step_inst (Push n ws) =
+      ignore_bind (consume_gas (static_gas (Push n ws))) k ∧
+      ∀s. s.contexts ≠ [] ∧
+          LENGTH (FST (HD s.contexts)).stack = stack_limit ⇒
+          k s = (INR (SOME StackOverflow), s)
+Proof
+  qexists_tac`push_stack (word_of_bytes F 0w (REVERSE ws))`
+  \\ rw[step_inst_def,step_push_def,push_stack_def,bind_def,ignore_bind_def,
+        get_current_context_def,return_def,assert_def]
+QED
+
 Theorem SPEC_Add:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
