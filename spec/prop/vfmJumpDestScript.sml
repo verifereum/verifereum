@@ -405,6 +405,12 @@ Proof
   >> Cases_on `s.contexts` >> gvs[]
 QED
 
+Theorem preserves_all_jumpDest_NONE_update_gas_refund_any[simp]:
+  preserves_all_jumpDest_NONE (update_gas_refund updates)
+Proof
+  Cases_on `updates` >> simp[]
+QED
+
 Theorem preserves_all_jumpDest_NONE_expand_memory[simp]:
   preserves_all_jumpDest_NONE (expand_memory n)
 Proof
@@ -917,6 +923,12 @@ Proof
   rw[preserves_jumpDest_def, update_gas_refund_def, bind_def,
      get_current_context_def, set_current_context_def,
      return_def, fail_def, AllCaseEqs()] >> gvs[]
+QED
+
+Theorem preserves_jumpDest_update_gas_refund_any[simp]:
+  preserves_jumpDest (update_gas_refund updates)
+Proof
+  Cases_on `updates` >> simp[]
 QED
 
 (* Derived: expand_memory preserves jumpDest *)

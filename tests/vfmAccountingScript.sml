@@ -1,6 +1,6 @@
 Theory vfmAccounting
-Ancestors vfmCompute
-Libs cv_transLib
+Ancestors vfmCompute vfmExecution
+Libs cv_transLib wordsLib
 
 (* These reference equations freeze the inline calculations and effect order
    before extraction. Equality is checked for all inputs, including failures. *)
@@ -88,8 +88,14 @@ QED
 Theorem transaction_accounting_equiv:
   post_transaction_accounting = transaction_accounting_inline
 Proof
-  simp[FUN_EQ_THM, post_transaction_accounting_def,
-       transaction_accounting_inline_def, transaction_gas_accounting_def]
+  SIMP_TAC pure_ss [FUN_EQ_THM] >>
+  map_every qx_gen_tac [`blk`, `tx`, `result`, `acc`, `t`] >>
+  Cases_on `NULL t.contexts \/ ~NULL (TL t.contexts)` >>
+  ASM_SIMP_TAC pure_ss [post_transaction_accounting_def,
+    transaction_accounting_inline_def, transaction_gas_accounting_def,
+    LET_THM, COND_CLAUSES, pairTheory.pair_case_thm,
+    pairTheory.UNCURRY_DEF] >>
+  REFL_TAC
 QED
 
 (* Clean/dirty slots, clearing, undoing a clear and restoring original values. *)

@@ -244,6 +244,12 @@ Proof
      ensure_storage_in_domain_def]
 QED
 
+Theorem cp_update_gas_refund[simp]:
+  cp (update_gas_refund updates)
+Proof
+  Cases_on `updates` >> simp[]
+QED
+
 (* Getters are cp (they just read state) *)
 Theorem cp_getters[simp]:
   cp get_tx_params ∧ cp get_accounts ∧ cp get_rollback ∧
