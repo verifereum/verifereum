@@ -143,7 +143,83 @@ Proof
   >- (spose_not_then assume_tac >>
       rename1 `¬(j ≤ n)` >>
       `n < j` by decide_tac >> metis_tac[])
-  >> irule OWHILE_from_finite_trace >> simp[]
+  >- (irule OWHILE_from_finite_trace >> metis_tac[])
+  >> metis_tac[]
+QED
+
+Theorem run_call_finite_trace:
+  run_call es = SOME (r, es') ⇒
+  ∃n. FUNPOW (step o SND) n (INL (), es) = (r, es') ∧
+      ¬(ISL r ∧ LENGTH es.contexts ≤ LENGTH es'.contexts) ∧
+      ∀k. k < n ⇒
+        ISL (FST (FUNPOW (step o SND) k (INL (), es))) ∧
+        LENGTH es.contexts ≤
+          LENGTH (SND (FUNPOW (step o SND) k (INL (), es))).contexts
+Proof
+  rw[run_call_def]
+  >> drule OWHILE_finite_trace
+  >> strip_tac >> qexists_tac `n` >> gvs[GREATER_EQ]
+  >> rpt strip_tac
+  >> first_x_assum drule
+  >> pairarg_tac >> simp[GREATER_EQ]
+QED
+
+Theorem run_call_trace_reaches:
+  ∀n. (∀k. k < n ⇒
+          ISL (FST (FUNPOW (step o SND) k (INL (), es))) ∧
+          LENGTH es.contexts ≤
+            LENGTH (SND (FUNPOW (step o SND) k (INL (), es))).contexts) ∧
+      ISL (FST (FUNPOW (step o SND) n (INL (), es))) ⇒
+      run_call_reaches es (SND (FUNPOW (step o SND) n (INL (), es)))
+Proof
+  Induct >- simp[]
+  >> strip_tac
+  >> `ISL (FST (FUNPOW (step o SND) n (INL (), es))) ∧
+      LENGTH es.contexts ≤
+        LENGTH (SND (FUNPOW (step o SND) n (INL (), es))).contexts`
+       by (first_x_assum (qspec_then `n` mp_tac) >> simp[])
+  >> `run_call_reaches es (SND (FUNPOW (step o SND) n (INL (), es)))`
+       by (first_x_assum irule >> simp[] >> rpt strip_tac >>
+           first_x_assum irule >> decide_tac)
+  >> gvs[FUNPOW_SUC]
+  >> qmatch_goalsub_abbrev_tac `step s`
+  >> `LENGTH es.contexts ≤ LENGTH s.contexts`
+       by (first_x_assum (qspec_then `n` mp_tac) >> simp[Abbr`s`])
+  >> Cases_on `step s` >> gvs[]
+  >> Cases_on `q` >> gvs[]
+  >> irule run_call_reaches_step >> metis_tac[]
+QED
+
+Theorem run_call_nested_trace:
+  d ≤ LENGTH e.contexts ∧
+  ¬(λ(r,s). ISL r ∧ d ≤ LENGTH s.contexts)
+      (FUNPOW (step o SND) n (INL (), e)) ⇒
+  ∃m. m ≤ n ∧
+      run_call e = SOME (FUNPOW (step o SND) m (INL (), e)) ∧
+      ¬(λ(r,s). ISL r ∧ LENGTH e.contexts ≤ LENGTH s.contexts)
+        (FUNPOW (step o SND) m (INL (), e)) ∧
+      (∀k. k < m ⇒
+        (λ(r,s). ISL r ∧ LENGTH e.contexts ≤ LENGTH s.contexts)
+          (FUNPOW (step o SND) k (INL (), e)))
+Proof
+  strip_tac >> simp[run_call_def, GREATER_EQ]
+  >> irule OWHILE_nested_trace
+  >> qexists_tac `λ(r,s). ISL r ∧ d ≤ LENGTH s.contexts`
+  >> simp[FORALL_PROD] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem OWHILE_trace_continuation:
+  (∀k. k < n ⇒ G (FUNPOW f k x)) ∧ m ≤ n ⇒
+  OWHILE G f x = OWHILE G f (FUNPOW f m x)
+Proof
+  strip_tac >> irule OWHILE_RTC
+  >> `∀j. j ≤ n ⇒ RTC (λx y. G x ∧ f x = y) x (FUNPOW f j x)`
+       suffices_by metis_tac[]
+  >> Induct >- simp[]
+  >> strip_tac >> simp[FUNPOW_SUC]
+  >> irule (CONJUNCT2 (SPEC_ALL RTC_RULES_RIGHT1))
+  >> qexists_tac `FUNPOW f j x`
+  >> simp[]
 QED
 
 (* -------------------------------------------------------------------------
