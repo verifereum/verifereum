@@ -39,14 +39,20 @@ theorem for each basic block and each way out of it. Every theorem is
 proved from the `vfmProgTheory` rules by `SPEC_REFL`, `SPEC_FRAME`,
 `SPEC_COMPOSE` and `SPEC_MOVE_COND`, so the library adds nothing to the
 trusted base: a bug in it produces a failed summary, never a false
-theorem.
+theorem. It could still produce a vacuous one, whose precondition no
+state satisfies; the composition step refuses the framings known to do
+that (below).
 
-A block starts at pc 0, at a JUMPDEST, after a JUMPI, after a CALL-class
-instruction, or at an extra pc given as a hint. It runs to its
+A block starts at pc 0, at a JUMPDEST, after a JUMPI, at and after a
+CALL-class instruction, or at an extra pc given as a hint. It runs to its
 terminator (JUMP, JUMPI, STOP, RETURN, REVERT, INVALID, SELFDESTRUCT, or
 a CALL-class instruction) or up to the next block start. A terminator
 with several rules gives one summary per rule: a JUMPI block gives a
-`take` summary and a `skip` summary.
+`take` summary and a `skip` summary. A CALL-class instruction is a block
+of its own: its rule hides every parsed pc but its own, so a block with
+more code before the call would claim those pcs twice and its summary
+would be vacuous. STOP, RETURN and REVERT summaries use the rules for
+the outermost frame, so their `C` includes `NULL cs`.
 
 A summary for a block at pc `n` that reads `d` stack slots and leaves `k`
 has this shape:
@@ -75,26 +81,41 @@ SPEC EVM_MODEL
   block does need the gas. `drop_gas` instead hides the gas used in the
   post.
 
-Next to each theorem, `summarize_code` returns a `block_summary` record
-read off the theorem: the entry pc, the exit (a JUMP and its target, a
-JUMPI taken or not, a fall-through, a halt, or a call), `d` and `k`, the
-entry and exit stacks, `C`, `G`, and the ordered effects, one per
-instruction that changed a resource other than the stack, pc, gas used
-and jump-dest. `block_summary_to_string` prints it. A block that can't be
-summarized gives a `Failed` outcome with the pc, instruction and reason;
-a variant whose conditions simplify to false (a JUMPI whose condition is
-decided) gives `Infeasible`.
+Next to each theorem, `summarize_code` returns a `block_summary` record:
+the entry pc, the exit (a JUMP and its target, a JUMPI taken or not, a
+fall-through, a halt, or a call), `d` and `k`, the entry and exit stacks,
+`C`, `G`, and the ordered effects, one per instruction and resource it
+changed other than the stack, pc, gas used and jump-dest.
+`block_summary_to_string` prints it. The record is for reading, not
+checked against the theorem: the effects are taken before the final
+simplification, so their form can differ from the post's.
+
+A block that can't be summarized gives a `Failed` outcome with the pc,
+instruction and reason. A variant where a rule's side condition
+simplifies to false gives `Infeasible`. That is a JUMPI whose condition
+is decided, but also a jump to a pc that is not a JUMPDEST: the EVM does
+run that block, and halts with an exception, which the rules don't
+describe. So `Infeasible` means no rule applies, not that the block is
+unreachable.
 
 `compose_blocks` composes summaries along a path: each summary's
 precondition is instantiated from the previous post, so constant jump
-targets are resolved and the jump-dest checks discharged.
+targets are resolved and the jump-dest checks discharged. When a block
+reads deeper than the previous one leaves visible, the previous `rest`
+is widened to `s(d)::...::rest`. It refuses two compositions whose
+precondition would be unsatisfiable: a resource that the previous post
+hides and the next block reads (so `drop_gas` goes on the last summary
+only), and a CALL-class summary after other code.
 
 ## Rules
 
 The rules come from a table keyed by the opcode constructor's name. By
-default a name maps to `vfmProgTheory`'s `SPEC_<name>`; JUMPI, the
-halting instructions and the CALL-class instructions have explicit
-entries. A rule is matched against the instruction by its code (or its
+default a name maps to `vfmProgTheory`'s `SPEC_<name>`. JUMPI, STOP,
+RETURN, REVERT, INVALID and the CALL-class instructions have explicit
+entries; CREATE and CREATE2 use the successful-creation rule
+`SPEC_Create` only. INVALID has no rule (`SPEC_Invalid` is a placeholder
+with a false precondition), and neither has SELFDESTRUCT yet, so blocks
+ending in them fail with "no rule". A rule is matched against the instruction by its code (or its
 `evm_Parsed` assertion), so parameterised rules need no special
 handling. `add_rules` and `set_rules` add or replace the rules for an
 opcode, which is how new rules (another SELFDESTRUCT or CREATE rule, a
@@ -102,13 +123,18 @@ rule for a nested call) plug in without changing the library.
 
 ## Hints
 
-The library finds block starts from the code alone. A compiler knows
-more: the Solidity compiler's `--asm-json` output and Vyper's assembly
-output label every jump target and every function entry, including
-targets that are only reached through computed jumps. Those pcs go in
-`config.hints`, and each becomes a block start. Hints can only add
-starts, and every summary is still proved, so a wrong hint costs a
-smaller block, never soundness.
+The library finds block starts from the code alone. Every jump target
+is a JUMPDEST (the jump rules require one), so jump targets are found
+already; what the code alone can't say is where code ends and data
+begins, or where a reader wants a block split. A compiler knows: the
+Solidity compiler's `--asm-json` output and Vyper's assembly output
+label the code's sections, the data and the metadata, and every function
+entry. The pcs to split at go in `config.hints`, and each becomes a
+block start; a hint that is not an instruction's pc (inside PUSH data,
+past the end) is ignored. Hints can only add starts, and every summary
+is still proved, so a wrong hint costs a smaller block, never
+soundness. Hints can't yet remove the data at the end of the code
+(below).
 
 ## Example
 
@@ -122,6 +148,11 @@ val weth_config : evmDecompLib.config =
    hints = [], simps = [mask_and_w2w]}
 val weth_outcomes = evmDecompLib.summarize_code weth_config
 ```
+
+The 109 blocks give 147 summaries and no failures. Five of the blocks,
+from pc 3101 on, are in the metadata appended to the code, whose bytes
+happen to parse as instructions (a DELEGATECALL and two STATICCALLs
+among them); their summaries are true but describe data.
 
 `simps` are extra rewrites for the contract's terms. They run after
 every instruction, so they must be cheap: WETH's memory-buffer lemmas

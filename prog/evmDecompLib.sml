@@ -6,14 +6,18 @@
    composed from the per-instruction rules of vfmProgTheory. Nothing here is
    trusted: every summary is proved by SPEC_REFL, SPEC_FRAME, SPEC_COMPOSE and
    SPEC_MOVE_COND from those rules, so a wrong hint or a bug in the composer
-   gives a failed summary, never a wrong theorem.
+   gives a failed summary, never a wrong theorem. What a bug can give is a
+   vacuous one, whose precondition no state satisfies; compose refuses the
+   two ways known to produce that (see compose).
 
-   Blocks. A block starts at pc 0, at a JUMPDEST, after a JUMPI, after a
-   CALL-class instruction, or at a pc in config.hints. It runs to its
-   terminator (JUMP, JUMPI, STOP, RETURN, REVERT, INVALID, SELFDESTRUCT,
+   Blocks. A block starts at pc 0, at a JUMPDEST, after a JUMPI, at and
+   after a CALL-class instruction, or at a pc in config.hints. It runs to
+   its terminator (JUMP, JUMPI, STOP, RETURN, REVERT, INVALID, SELFDESTRUCT,
    CALL, CALLCODE, DELEGATECALL, STATICCALL, CREATE, CREATE2), or up to the
    next block start, whichever comes first. A terminator with several rules
-   gives one summary per rule: JUMPI gives "take" and "skip".
+   gives one summary per rule: JUMPI gives "take" and "skip". A CALL-class
+   instruction is a block of its own because its rule hides every other
+   parsed pc, which the code of a longer block would also claim.
 
    Summary format. For a block at pc n with d stack slots read and k left:
 
@@ -38,10 +42,12 @@
      does need the gas); drop_gas instead hides the gas used in the post, so
      that summaries can be read without the gas arithmetic.
 
-   Next to each theorem, summarize_block returns a block_summary record read
-   off the theorem: entry pc, exit kind and target, d, k, entry and exit
-   stack terms, C, G, and the ordered list of effects (each instruction's
-   change to a resource other than the stack, pc, gas used and jump-dest).
+   Next to each theorem, summarize_block returns a block_summary record:
+   entry pc, exit kind and target, d, k, entry and exit stack terms, C, G,
+   and the ordered list of effects (one per instruction and resource it
+   changes, other than the stack, pc, gas used and jump-dest). The record
+   is not checked: the effects are read off the per-step theorems, before
+   the final simplification, so they may differ in form from the post.
 
    Simplification. After each instruction the new stack values, effects and
    conditions are simplified with srw_ss, a few list/word lemmas and
@@ -125,11 +131,12 @@ fun block_starts cfg =
   let
     val insts = instructions cfg
     val pcs = map fst insts
-    fun starts_after (pc, inst) =
-      if mem (opname inst) ("JumpI" :: call_class)
-      then [pc + inst_length inst] else []
+    fun starts_of (pc, inst) =
+      if opname inst = "JumpI" then [pc + inst_length inst]
+      else if mem (opname inst) call_class then [pc, pc + inst_length inst]
+      else []
     val jumpdests = map fst (filter (fn (_, i) => opname i = "JumpDest") insts)
-    val all = 0 :: jumpdests @ List.concat (map starts_after insts)
+    val all = 0 :: jumpdests @ List.concat (map starts_of insts)
               @ #hints cfg
   in
     Listsort.sort Int.compare (mk_set (filter (fn n => mem n pcs) all))
@@ -221,10 +228,15 @@ val () = set_rules "JumpI" [("take", SPEC_JumpI_take),
 val () = set_rules "Stop" [("outermost", SPEC_Stop_outermost)]
 val () = set_rules "Return" [("outermost", SPEC_Return_outermost)]
 val () = set_rules "Revert" [("outermost", SPEC_Return_outermost)]
-(* SPEC_Invalid is a placeholder with precondition F *)
+(* SPEC_Invalid is a placeholder with precondition F; there is no SELFDESTRUCT
+   rule yet either, so blocks ending in these fail with "no rule" *)
 val () = set_rules "Invalid" []
 val () = app (fn n => set_rules n [("call", SPEC_Call)])
              ["Call", "CallCode", "DelegateCall", "StaticCall"]
+(* the successful creation, entering the init code; SPEC_Create_fail and
+   SPEC_Create_fail_created, which continue in the caller, are not used *)
+val () = app (fn n => set_rules n [("create", SPEC_Create)])
+             ["Create", "Create2"]
 
 (* ------------------------------------------------------------------------
    Term helpers
@@ -467,7 +479,7 @@ fun inst_at (pc, inst) rule =
         | NONE => raise ERR "inst_at" "rule without code"
   in INST_TY_TERM (match_term pat target) rule end
 
-(* instantiate the rule's precondition against the current post *)
+(* a stack term x0::...::x(n-1)::r as ([x0, ..., x(n-1)], r) *)
 fun strip_stack tm =
   if listSyntax.is_cons tm then
     let val (h, t) = listSyntax.dest_cons tm
@@ -566,16 +578,38 @@ fun star_eq tm1 tm2 =
       EQT_ELIM (SIMP_CONV bool_ss [AC STAR_ASSOC STAR_COMM] (mk_eq (tm1, tm2)))
   end
 
+(* the resource a part asserts: f for f x and for ~f *)
+fun resource a =
+  if same_const (head a) “SEP_HIDE” then rand a else head a
+  handle HOL_ERR _ => head a
+
 (* SPEC x P C1 Q and SPEC x R C2 S with Q and R agreeing on shared
-   resources: frame each with what the other has, compose *)
+   resources: frame each with what the other has, compose. Two framings
+   would give a precondition no state satisfies, and are refused: framing
+   onto th a resource that only its post hides (after drop_gas), and
+   framing a rule that hides parsed pcs (a CALL-class rule) onto code,
+   whose pcs that rule's evm_hide_Parsed would claim a second time. *)
 fun compose th r =
   let
     val qs = stars (post_of th)
     val rs = stars (pre_of r)
     fun missing xs ys =
-      filter (fn y => not (List.exists (fn x => aconv (head x) (head y)) xs)) ys
+      filter (fn y => not (List.exists (fn x => aconv (resource x) (resource y))
+                             xs)) ys
     val add_th = missing qs rs
     val add_r = missing rs qs
+    fun hidden a = same_const (head a) “SEP_HIDE” handle HOL_ERR _ => false
+    val _ = case List.find (fn q => hidden q andalso
+                              List.exists (fn a => aconv (resource a)
+                                                         (resource q)) rs) qs of
+              SOME q => raise ERR "compose"
+                          (term_to_string q ^ " is hidden but read next")
+            | NONE => ()
+    val _ = if List.exists (fn a => head_name a = "evm_hide_Parsed") add_th
+               andalso not (pred_setSyntax.is_empty (code_of th))
+            then raise ERR "compose"
+                   "a rule hiding parsed pcs cannot follow other instructions"
+            else ()
     fun frame th [] = th
       | frame th xs = SPEC (list_mk_star xs assertion_ty)
                            (MATCH_MP SPEC_FRAME th)
@@ -594,8 +628,6 @@ fun compose th r =
 val stack_tm = “evm_Stack”
 val pc_tm = “evm_PC”
 val gas_tm = “evm_GasUsed”
-val jumpdest_tm = “evm_JumpDest”
-val msgparams_tm = “evm_MsgParams”
 val gaslimit_pat = “(p : message_parameters).gasLimit”
 val untracked = ["evm_Stack", "evm_PC", "evm_GasUsed", "evm_JumpDest"]
 
@@ -611,12 +643,9 @@ fun initial_th entry stack =
                             mk_comb (pc_tm, numSyntax.term_of_int entry)]
                            assertion_ty
     val empty = pred_setSyntax.mk_empty
-                  (type_of (code_of SPEC_Add) |> pred_setSyntax.dest_set_type
-                   handle HOL_ERR _ => hd (snd (dest_type
-                                         (type_of (code_of SPEC_Add)))))
+                  (pred_setSyntax.dest_set_type (type_of (code_of SPEC_Add)))
   in ISPECL [EVM_MODEL_tm, pre, empty] SPEC_REFL end
 
-(* one instruction: instantiate the rule, discharge what it can, compose *)
 (* compose a rule (after prep) onto th: instantiate its precondition from
    th's post, discharge what it can, compose, simplify the post *)
 fun apply_rule cfg cf prep rule th =
@@ -771,10 +800,12 @@ fun exit_of label (pc, inst) th =
 fun hyp_order seen th =
   filter (fn h => not (tmem h seen)) (rev (hyp th))
 
-fun stack_rest th =
-  case List.find (fn a => head_name a = "evm_Stack") (stars (pre_of th)) of
-    SOME a => snd (strip_stack (rand a))
-  | NONE => raise ERR "stack_rest" "no evm_Stack"
+fun stack_of parts =
+  case List.find (fn a => head_name a = "evm_Stack") parts of
+    SOME a => strip_stack (rand a)
+  | NONE => raise ERR "stack_of" "no evm_Stack"
+
+fun stack_rest th = snd (stack_of (stars (pre_of th)))
 
 (* collapse the bounds and move the hypotheses into cond C * cond G, in the
    order they first appeared (seen) *)
@@ -793,15 +824,45 @@ fun close_conds seen th =
             else raise ERR "close_conds" "hypotheses left"
   in (th2, cnd, gas) end
 
-fun compose_blocks cfg ths =
+(* when r reads deeper than th leaves visible, th's rest becomes
+   s(d)::...::rest, extending its entry stack s0::...::s(d-1)::rest *)
+fun widen_stack th r =
+  let
+    val (es, tl) = stack_of (stars (post_of th))
+    val (ss, _) = stack_of (stars (pre_of r))
+    val n = length ss - length es
+  in
+    if n <= 0 orelse not (is_var tl) then []
+    else
+      let
+        val d = length (fst (stack_of (stars (pre_of th))))
+        fun fresh (i, avoid) =
+          variant avoid (mk_var ("s" ^ Int.toString (d + i), bytes32_ty))
+        val xs = rev (foldl (fn (i, xs) => fresh (i, xs @ thm_frees th) :: xs)
+                            [] (List.tabulate (n, I)))
+      in [tl |-> foldr listSyntax.mk_cons tl xs] end
+  end
+
+fun compose_blocks cfg [] = raise ERR "compose_blocks" "no summaries"
+  | compose_blocks cfg (th :: ths) =
   let
     val cf = mk_code_facts cfg
-    val th0 = undisch_conds (hd ths)
-    fun go (r, (th, seen)) =
-      let val th' = apply_rule cfg cf I r th
+    val th0 = undisch_conds th
+    fun go ((i, r), (th, seen)) =
+      let
+        val theta = widen_stack th r
+        val seen = map (subst theta) seen
+        val th' = apply_rule cfg cf I r (INST theta th)
+                  handle HOL_ERR e =>
+                    raise ERR "compose_blocks"
+                      ("summary " ^ Int.toString i ^ ": " ^
+                       top_function_of e ^ ": " ^ message_of e)
       in (th', seen @ hyp_order seen th') end
-    val (th, seen) = foldl go (th0, hyp_order [] th0) (tl ths)
+    val numbered = ListPair.zip (List.tabulate (length ths, fn i => i + 1), ths)
+    val (th, seen) = foldl go (th0, hyp_order [] th0) numbered
   in #1 (close_conds seen (polish cfg cf th)) end
+  handle Infeasible_cond c =>
+    raise ERR "compose_blocks" (term_to_string c ^ " is false on this path")
 
 fun summarize_variant cfg cf entry insts d =
   let
@@ -821,6 +882,9 @@ fun summarize_variant cfg cf entry insts d =
     val (th_body, effs, seen) = foldl run (initial_th entry stack, [], []) body
     val variants = rules_for tinst
     val _ = if List.null variants then raise Stuck (tpc, tinst, "no rule")
+            else if length variants > 1 andalso
+                    not (mem (opname tinst) terminators)
+            then raise Stuck (tpc, tinst, "several rules for a non-terminator")
             else ()
     fun finish (label, rule) =
       let
@@ -929,7 +993,8 @@ fun block_summary_to_string (s : block_summary) =
 
 fun outcome_to_string (Summary (s, _)) = block_summary_to_string s
   | outcome_to_string (Infeasible {entry, variant, cond}) =
-      "block " ^ Int.toString entry ^ " [" ^ variant ^ "]: infeasible, " ^
+      "block " ^ Int.toString entry ^
+      (if variant = "" then "" else " [" ^ variant ^ "]") ^ ": infeasible, " ^
       tm_str cond ^ " is false\n"
   | outcome_to_string (Failed {entry, variant, pc, inst, reason}) =
       "block " ^ Int.toString entry ^

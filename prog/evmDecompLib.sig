@@ -31,12 +31,17 @@ sig
   type failure = {entry : int, variant : string, pc : int, inst : term,
                   reason : string}
 
+  (* Infeasible: a side condition of a rule on the way simplifies to false,
+     so no rule describes the run. That is a decided JUMPI condition, but
+     also a jump to a pc that is not a JUMPDEST, which the EVM runs and
+     halts with an exception: the rules describe non-exceptional steps. *)
   datatype outcome = Summary of block_summary * thm
                    | Infeasible of {entry : int, variant : string,
                                     cond : term}
                    | Failed of failure
 
-  (* the rule table: opcode constructor name |-> (label, SPEC theorem) *)
+  (* the rule table: opcode constructor name |-> (label, SPEC theorem);
+     several rules for one opcode only for a terminator, one summary each *)
   val rules_for : term -> (string * thm) list
   val set_rules : string -> (string * thm) list -> unit
   val add_rules : string -> (string * thm) list -> unit
@@ -49,7 +54,12 @@ sig
   val summarize_code : config -> outcome list
   val summaries : outcome list -> (block_summary * thm) list
 
+  (* the summaries of a path, composed; each block's entry is instantiated
+     from the previous exit, widening the previous stack when a block reads
+     deeper than the previous one leaves visible *)
   val compose_blocks : config -> thm list -> thm
+  (* hides the gas used in the post; compose_blocks refuses a hidden
+     resource that a later summary reads, so only for the last summary *)
   val drop_gas : thm -> thm
 
   val exit_to_string : exit -> string
