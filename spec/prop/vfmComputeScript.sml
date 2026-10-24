@@ -892,7 +892,7 @@ Theorem proceed_call_eq:
 Proof
   rw[FUN_EQ_THM, proceed_call_def, read_memory_def, read_memory_sub_def,
      bind_def, ignore_bind_def]
-  \\ rpt (CASE_TAC \\ gvs[return_def])
+  \\ rpt (BasicProvers.PURE_CASE_TAC \\ gvs[return_def])
   \\ gvs[initial_context_def, initial_msg_params_def,
          vfmBufferTheory.buffer_of_list_take]
 QED
