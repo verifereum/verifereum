@@ -14,7 +14,7 @@ Theory vfmAccountFrame
 Ancestors
   combin pair option list rich_list relation While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmSameFrame vfmRunWithinFrame vfmRunCall
+  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls vfmPreserves
 Libs
   BasicProvers
 
@@ -121,6 +121,209 @@ Proof
   >> drule_all step_same_frame
   >> rw[same_frame_rel_def, callee_local_changes_def,
         foreign_account_change_def]
+QED
+
+Theorem call_prefix_refl:
+  s.contexts ≠ [] ⇒
+  cp_rel s s ∧ s.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  simp[cp_rel_refl]
+QED
+
+Theorem call_prefix_trans:
+  (cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) ∧
+  (cp_rel t u ∧ u.rollback.accesses.storageKeys = t.rollback.accesses.storageKeys) ⇒
+  cp_rel s u ∧ u.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  metis_tac[cp_rel_trans]
+QED
+
+Theorem call_prefix_contexts:
+  cp_rel s t ∧ s.contexts ≠ [] ⇒
+  t.contexts ≠ [] ∧ LENGTH t.contexts = LENGTH s.contexts
+Proof
+  rw[cp_rel_def] >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem bind_call_prefix_grows_extract:
+  (cp_rel s0 s ∧ s.rollback.accesses.storageKeys = s0.rollback.accesses.storageKeys) ∧
+  s0.contexts ≠ [] ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) g ∧
+  bind g f s = (r,t) ∧ LENGTH s0.contexts < LENGTH t.contexts ⇒
+  ∃x u. g s = (INL x,u) ∧
+    (cp_rel s0 u ∧ u.rollback.accesses.storageKeys = s0.rollback.accesses.storageKeys) ∧
+    f x u = (r,t)
+Proof
+  rw[preserves_when_def, bind_def]
+  >> gvs[AllCaseEqs()]
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> imp_res_tac call_prefix_contexts
+  >> gvs[]
+  >- (irule cp_rel_trans >> qexists_tac `s` >> simp[])
+  >> strip_tac >> gvs[]
+QED
+
+Theorem call_prefix_of_cp_keys:
+  cp m ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) m ⇒
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) m
+Proof
+  rw[cp_eq_preserves_when, preserves_when_def] >> metis_tac[]
+QED
+
+Theorem call_prefix_keys_leaves:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (pop_stack n) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (memory_expansion_info off sz) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (consume_gas gas) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) assert_not_static ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (expand_memory ext) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (set_return_data data)
+Proof
+  rw[preserves_when_def, pop_stack_def, memory_expansion_info_def,
+     consume_gas_def, assert_not_static_def, expand_memory_def,
+     set_return_data_def, get_static_def, get_current_context_def,
+     set_current_context_def, bind_def, ignore_bind_def, return_def,
+     assert_def, fail_def]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem call_prefix_keys_access_address:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (access_address a)
+Proof
+  rw[preserves_when_def, access_address_def, domain_check_def,
+     set_domain_def, ignore_bind_def, bind_def, return_def, fail_def]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem call_prefix_keys_getters:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_accounts ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_gas_left ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_callee ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_num_contexts ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (return x)
+Proof
+  rw[preserves_when_def, get_accounts_def, get_gas_left_def,
+     get_callee_def, get_num_contexts_def, get_current_context_def,
+     bind_def, return_def, fail_def] >> gvs[AllCaseEqs()]
+QED
+
+Theorem call_prefix_bind:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) g ∧
+  (∀x. preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (f x)) ⇒
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (bind g f)
+Proof
+  strip_tac >> irule preserves_when_bind >> simp[]
+  >> metis_tac[call_prefix_trans, call_prefix_contexts]
+QED
+
+Theorem call_prefix_ignore_bind:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) g ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) f ⇒
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (ignore_bind g f)
+Proof
+  simp[ignore_bind_def] >> strip_tac >> irule call_prefix_bind >> simp[]
+QED
+Theorem call_prefix_leaves:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (pop_stack n) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (memory_expansion_info off sz) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (consume_gas gas) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) assert_not_static ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (expand_memory ext) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (set_return_data data) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (access_address a) ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_accounts ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_gas_left ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_callee ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_num_contexts ∧
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (return x)
+Proof
+  rpt conj_tac >> irule call_prefix_of_cp_keys
+  >> simp[call_prefix_keys_leaves, call_prefix_keys_access_address,
+          call_prefix_keys_getters]
+QED
+
+Theorem call_prefix_delegate_selection:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys)
+    (case get_delegate acc.code of
+       NONE => return (acc.code, 0)
+     | SOME d => do
+         cost <- access_address d;
+         return ((lookup_account d accounts).code, cost)
+       od)
+Proof
+  Cases_on `get_delegate acc.code` >> simp[call_prefix_leaves]
+  >> irule call_prefix_bind >> simp[call_prefix_leaves]
+QED
+
+
+Theorem proceed_call_saved_rollback:
+  proceed_call op sender address value ao az code gas rd s = (r, s') ∧
+  s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
+  SND (HD s'.contexts) = s.rollback ∧
+  s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+QED
+
+Theorem proceed_call_nonprecompile_frame:
+  proceed_call op sender address value ao az code gas rd s = (r, s') ∧
+  s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
+  ∃static t.
+    FST (HD s'.contexts) =
+      initial_context (if op = CallCode ∨ op = DelegateCall then sender else address)
+        code static rd t ∧
+    s'.rollback.accounts =
+      (if op ≠ CallCode ∧ 0 < value then
+         transfer_value sender address value s.rollback.accounts
+       else s.rollback.accounts)
+Proof
+  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+  >> metis_tac[]
 QED
 
 (* A push copies the stack below, except that CREATE's set_original may
