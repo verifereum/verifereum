@@ -3459,6 +3459,728 @@ Proof
   \\ metis_tac[]
 QED
 
+Theorem call_gas_cost_covers_stipend:
+  call_gas value gas gasLeft mCost
+    (accessCost + (if 0 < value then call_value_cost else 0) + cCost + dCost) =
+      (dynamicGas,stipend) ==>
+  stipend <= staticCost + dynamicGas + mCost
+Proof
+  strip_tac >>
+  `stipend <= dynamicGas + mCost` suffices_by decide_tac >>
+  irule call_gas_stipend_le_consumed >>
+  goal_assum (drule_at Any) >>
+  Cases_on `0 < value` >> simp[call_value_cost_def, call_stipend_def]
+QED
+
+Theorem call_stack_after_pop_has_room:
+  LENGTH ss <= stack_limit /\ 6 + vOff <= LENGTH ss ==>
+  LENGTH (DROP (6 + vOff) ss) < stack_limit
+Proof
+  simp[LENGTH_DROP] >> decide_tac
+QED
+
+Theorem call_static_check_success:
+  s.contexts = (ctxt,cb)::cs /\ ctxt.msgParams = p /\
+  (0 < (value:num) ==> ~p.static) ==>
+  (if op = Call /\ 0 < value then assert_not_static else return ()) s =
+    (INL (),s)
+Proof
+  strip_tac >> Cases_on `op = Call /\ 0 < value` >>
+  simp[assert_not_static_def, get_static_def, get_current_context_def,
+       assert_def, bind_def, return_def]
+QED
+
+Theorem step_call_prepared:
+  s.contexts = (caller,cb)::cs /\ s.rollback = rb /\ s.msdomain = d /\
+  caller.stack = ss /\ caller.msgParams = p /\
+  caller.memory = m /\ caller.gasUsed = g /\
+  6 + vOff <= LENGTH ss /\
+  vOff = (if call_has_value op then 1 else 0) /\
+  gas = w2n (EL 0 ss) /\ addr = w2w (EL 1 ss) /\
+  value = (if 0 < vOff then w2n (EL 2 ss) else 0) /\
+  argsOffset = w2n (EL (vOff + 2) ss) /\
+  argsSize = w2n (EL (vOff + 3) ss) /\
+  retOffset = w2n (EL (vOff + 4) ss) /\
+  retSize = w2n (EL (vOff + 5) ss) /\
+  max_expansion_range (argsOffset,argsSize) (retOffset,retSize) = (offset,sz) /\
+  em = expanded_memory m offset sz /\ access_check d addr /\
+  toAccount = lookup_account addr rb.accounts /\
+  vCost = (if 0 < value then call_value_cost else 0) /\
+  cCost = (if op = Call /\ 0 < value /\ account_empty toAccount
+           then new_account_cost else 0) /\
+  delegate_check toAccount.code (msdomain_add addr d)
+    (accesses_add addr rb) dCost newRb newDom /\
+  calleeCode = (case get_delegate toAccount.code of
+    NONE => toAccount.code | SOME del => (lookup_account del rb.accounts).code) /\
+  mCost = memory_cost m offset sz /\
+  call_gas value gas (p.gasLimit - g) mCost
+    (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas,stipend) /\
+  gasCost = static_gas op + dynamicGas + mCost /\
+  g + gasCost <= p.gasLimit /\
+  (0 < value ==> ~p.static) /\
+  value <= (lookup_account p.callee rb.accounts).balance /\ LENGTH cs < 1024 ==>
+  step_call op s =
+  proceed_call op p.callee addr value argsOffset argsSize calleeCode stipend
+    (Memory <|offset := retOffset; size := retSize|>)
+    (s with <|rollback := newRb; msdomain := newDom;
+      contexts := (caller with <|stack := DROP (6 + vOff) ss;
+        memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs|>)
+Proof
+  strip_tac >>
+  `vOff <= 1` by (Cases_on `call_has_value op` >> simp[]) >>
+  `0 < 6 + vOff /\ 1 < 6 + vOff /\ 2 < 6 + vOff /\
+   vOff + 2 < 6 + vOff /\ vOff + 3 < 6 + vOff /\
+   vOff + 4 < 6 + vOff /\ vOff + 5 < 6 + vOff` by decide_tac >>
+  pure_rewrite_tac[step_call_def] >>
+  qpat_assum `vOff = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  pure_rewrite_tac[LET_THM, pop_stack_def, bind_def, ignore_bind_def,
+    get_current_context_def] >>
+  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `caller.stack = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `6 + vOff <= _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [assert_def, return_def, bind_def,
+    ignore_bind_def, set_current_context_def] >>
+  pure_rewrite_tac[get_current_context_def] >>
+  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [return_def] >>
+  qpat_assum `caller.stack = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `6 + vOff <= _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [return_def] >>
+  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  simp_tac (srw_ss()) [EL_TAKE, arithmeticTheory.ADD_COMM,
+    DECIDE ``!n:num. 0 < 6 + n /\ 1 < 6 + n /\ 2 < 6 + n /\
+      2 + n < 6 + n /\ 3 + n < 6 + n /\ 4 + n < 6 + n /\ 5 + n < 6 + n``] >>
+  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
+    [`gas = _`, `addr = _`, `value = _`, `argsOffset = _`, `argsSize = _`,
+     `retOffset = _`, `retSize = _`] >>
+  qpat_assum `max_expansion_range _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  simp_tac (srw_ss()) [HD_TAKE, DECIDE ``!n:num. 0 < n + 6``] >>
+  qpat_assum `gas = _` (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE[EL] th)]) >>
+  simp_tac (srw_ss()) [memory_expansion_info_def, bind_def, LET_THM,
+    get_current_context_def, return_def] >>
+  qpat_assum `caller.memory = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `mCost = _` (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE[memory_cost_def] th)]) >>
+  pure_rewrite_tac[bind_def] >>
+  qpat_assum `access_check _ _` (fn th =>
+    simp_tac (srw_ss()) [access_address_split, th]) >>
+  qpat_assum `s.rollback = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `s.msdomain = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `access_check _ _` (fn th =>
+    qpat_assum `s.msdomain = _` (fn td =>
+    qpat_assum `s.rollback = _` (fn tr =>
+      simp_tac (srw_ss()) [access_address_split, th, td, tr,
+        get_accounts_def, return_def]))) >>
+  qpat_assum `toAccount = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
+    [`vCost = _`, `cCost = _`] >>
+  qpat_x_assum `delegate_check _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[delegate_check_def] >>
+  Cases_on `get_delegate toAccount.code` >>
+  pure_rewrite_tac[option_CLAUSES] >> BETA_TAC >> strip_tac >>
+  qpat_assum `s.rollback = _` (fn tr =>
+    qpat_assum `s.msdomain = _` (fn td =>
+    simp_tac (srw_ss()) [access_address_split, tr, td,
+      return_def, bind_def])) >>
+  qpat_assum `access_check _ _` (fn th =>
+    qpat_assum `s.rollback = _` (fn tr =>
+    qpat_assum `s.msdomain = _` (fn td =>
+      simp_tac (srw_ss()) [access_address_split, th, tr, td,
+        return_def, bind_def]))) >>
+  qpat_assum `caller.msgParams = _` (fn tp =>
+    qpat_assum `caller.gasUsed = _` (fn tg =>
+    simp_tac (srw_ss()) [get_gas_left_def, get_current_context_def,
+      bind_def, return_def, tp, tg])) >>
+  qpat_assum `call_gas _ _ _ _ _ = _` (fn th =>
+    qpat_assum `dCost = _` (fn td =>
+      simp_tac (srw_ss()) [SIMP_RULE (srw_ss()) [td,
+        AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] th,
+        AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
+  qpat_assum `gasCost = _` (fn th => pure_rewrite_tac
+    [GSYM (SIMP_RULE (srw_ss())
+      [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] th)]) >>
+  qpat_assum `g + gasCost <= _` (fn tb =>
+    qpat_assum `caller.msgParams = _` (fn tp =>
+    qpat_assum `caller.gasUsed = _` (fn tg =>
+    simp_tac (srw_ss()) [consume_gas_def, LET_THM, get_current_context_def,
+      bind_def, ignore_bind_def, return_def, assert_def,
+      set_current_context_def, tp, tg, tb]))) >>
+  qmatch_goalsub_abbrev_tac
+    `(if op = Call /\ 0 < value then assert_not_static else return ()) st` >>
+  `(if op = Call /\ 0 < value then assert_not_static else return ()) st =
+    (INL (),st)` by
+    (irule call_static_check_success >>
+     simp[Abbr `st`] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `(if _ then _ else _) st = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [Abbr `st`] >>
+  qpat_assum `caller.memory = _` (fn tm =>
+    qpat_assum `caller.msgParams = _` (fn tp =>
+    simp_tac (srw_ss()) [expand_memory_def, get_current_context_def,
+      set_current_context_def, get_callee_def, bind_def, return_def, tm, tp])) >>
+  `~((lookup_account p.callee rb.accounts).balance < value)` by decide_tac >>
+  `~(1024 < SUC (LENGTH cs))` by decide_tac >>
+  qpat_assum `~(_ < value)` (fn tb =>
+    qpat_assum `~(1024 < _)` (fn td =>
+    simp_tac (srw_ss()) [tb, td, LET_THM, set_return_data_def, get_num_contexts_def,
+      get_current_context_def, set_current_context_def, bind_def, return_def])) >>
+  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[th]))
+    [`newRb = _`, `newDom = _`, `s.rollback = _`, `s.msdomain = _`,
+     `calleeCode = _`, `em = _`] >>
+  simp_tac (srw_ss()) [expanded_memory_def, memory_expand_by_def] >>
+  qpat_assum `~(1024 < _)` (fn td =>
+    simp_tac (srw_ss()) [arithmeticTheory.GREATER_DEF, td]) >>
+  AP_TERM_TAC >>
+  qpat_assum `s.rollback = _` (fn tr =>
+    qpat_assum `s.msdomain = _` (fn td =>
+    simp_tac (srw_ss()) [execution_state_component_equality, tr, td]))
+QED
+
+Theorem bind_eq_inr:
+  bind g k s = (INR e,t) <=>
+  (g s = (INR e,t) \/
+   ?x u. g s = (INL x,u) /\ k x u = (INR e,t))
+Proof
+  Cases_on `g s` >> Cases_on `q` >> simp[bind_def]
+QED
+
+Theorem precompile_identity_inr_type_transport[local]:
+  ((precompile_identity s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_identity s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_identity_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def]
+QED
+
+Theorem precompile_ecrecover_inr_type_transport[local]:
+  ((precompile_ecrecover s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_ecrecover s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_ecrecover_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >>
+  CASE_TAC >> simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_sha2_256_inr_type_transport[local]:
+  ((precompile_sha2_256 s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_sha2_256 s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_sha2_256_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def]
+QED
+
+Theorem precompile_modexp_inr_type_transport[local]:
+  ((precompile_modexp s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_modexp s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_modexp_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def]
+QED
+
+Theorem precompile_ripemd_160_inr_type_transport[local]:
+  ((precompile_ripemd_160 s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_ripemd_160 s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_ripemd_160_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_ecadd_inr_type_transport[local]:
+  ((precompile_ecadd s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_ecadd s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_ecadd_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def] >>
+  PairCases_on `x` >> simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_ecmul_inr_type_transport[local]:
+  ((precompile_ecmul s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_ecmul s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_ecmul_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def] >>
+  PairCases_on `x` >> simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_ecpairing_inr_type_transport[local]:
+  ((precompile_ecpairing s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_ecpairing s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_ecpairing_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> IF_CASES_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def] >>
+  CASE_TAC >> simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_blake2f_inr_type_transport[local]:
+  ((precompile_blake2f s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_blake2f s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_blake2f_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> IF_CASES_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def] >>
+  cong_tac (SOME 8) >> IF_CASES_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_point_eval_inr_type_transport[local]:
+  ((precompile_point_eval s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_point_eval s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_point_eval_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 12) >> IF_CASES_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def] >>
+  cong_tac (SOME 12) >>
+  rpt (CASE_TAC >> simp[bind_eq_inr, finish_def, fail_def])
+QED
+
+Theorem precompile_bls_g1add_inr_type_transport[local]:
+  ((precompile_bls_g1add s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_bls_g1add s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_bls_g1add_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_bls_g1msm_inr_type_transport[local]:
+  ((precompile_bls_g1msm s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_bls_g1msm s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_bls_g1msm_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_bls_g2add_inr_type_transport[local]:
+  ((precompile_bls_g2add s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_bls_g2add s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_bls_g2add_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_bls_g2msm_inr_type_transport[local]:
+  ((precompile_bls_g2msm s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_bls_g2msm s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_bls_g2msm_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_bls_pairing_inr_type_transport[local]:
+  ((precompile_bls_pairing s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_bls_pairing s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_bls_pairing_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_bls_map_fp_to_g1_inr_type_transport[local]:
+  ((precompile_bls_map_fp_to_g1 s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_bls_map_fp_to_g1 s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_bls_map_fp_to_g1_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_bls_map_fp2_to_g2_inr_type_transport[local]:
+  ((precompile_bls_map_fp2_to_g2 s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_bls_map_fp2_to_g2 s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_bls_map_fp2_to_g2_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> CASE_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem precompile_p256verify_inr_type_transport[local]:
+  ((precompile_p256verify s : 'a execution_result) = (INR ex,t)) <=>
+  ((precompile_p256verify s : 'b execution_result) = (INR ex,t))
+Proof
+  simp[precompile_p256verify_def, ignore_bind_def, bind_eq_inr,
+       finish_def, fail_def] >>
+  cong_tac (SOME 8) >> IF_CASES_TAC >>
+  simp[bind_eq_inr, finish_def, fail_def] >>
+  IF_CASES_TAC >> simp[bind_eq_inr, finish_def, fail_def]
+QED
+
+Theorem dispatch_precompiles_inr_type_transport:
+  ((dispatch_precompiles addr s : 'a execution_result) = (INR ex,t)) <=>
+  ((dispatch_precompiles addr s : 'b execution_result) = (INR ex,t))
+Proof
+  pure_rewrite_tac[dispatch_precompiles_def] >>
+  rpt (IF_CASES_TAC >> asm_rewrite_tac[]) >>
+  simp[fail_def] >>
+  MAP_FIRST MATCH_ACCEPT_TAC [precompile_ecrecover_inr_type_transport,
+    precompile_sha2_256_inr_type_transport,
+    precompile_ripemd_160_inr_type_transport,
+    precompile_identity_inr_type_transport,
+    precompile_modexp_inr_type_transport,
+    precompile_ecadd_inr_type_transport,
+    precompile_ecmul_inr_type_transport,
+    precompile_ecpairing_inr_type_transport,
+    precompile_blake2f_inr_type_transport,
+    precompile_point_eval_inr_type_transport,
+    precompile_bls_g1add_inr_type_transport,
+    precompile_bls_g1msm_inr_type_transport,
+    precompile_bls_g2add_inr_type_transport,
+    precompile_bls_g2msm_inr_type_transport,
+    precompile_bls_pairing_inr_type_transport,
+    precompile_bls_map_fp_to_g1_inr_type_transport,
+    precompile_bls_map_fp2_to_g2_inr_type_transport,
+    precompile_p256verify_inr_type_transport]
+QED
+
+Theorem dispatch_precompiles_inr_to_unit:
+  ((dispatch_precompiles addr s : 'a execution_result) = (INR ex,t)) ==>
+  ((dispatch_precompiles addr s : unit execution_result) = (INR ex,t))
+Proof
+  metis_tac[dispatch_precompiles_inr_type_transport]
+QED
+
+Theorem proceed_call_precompile_success:
+  s.contexts = (parent,prb)::rest /\ s.rollback = rb /\
+  parent.msgParams.callee = sender /\
+  data = buffer_take argsOffset argsSize parent.memory /\
+  fIN addr precompile_addresses /\
+  (!s ctxt crb rest.
+    s.contexts = (ctxt,crb)::rest /\
+    ctxt.msgParams.data = buffer_of_list data /\
+    ctxt.msgParams.gasLimit = stipend /\
+    ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
+    dispatch_precompiles addr s =
+      (INR NONE, s with contexts :=
+        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
+  ?c. c.msgParams.outputTo = outputTo /\
+      c.msgParams.gasLimit = stipend /\ c.gasUsed = pg /\
+      c.returnData = out /\ c.logs = [] /\
+      c.addRefund = 0 /\ c.subRefund = 0 /\
+      proceed_call op sender addr value argsOffset argsSize code stipend outputTo s =
+        (INR NONE, s with <|
+          rollback := rb with accounts updated_by
+            (if op <> CallCode /\ 0 < value
+             then transfer_value sender addr value else I);
+          contexts := (c,rb)::(parent,prb)::rest |> )
+Proof
+  strip_tac >>
+  Cases_on `op <> CallCode /\ 0 < value` >>
+  simp[proceed_call_def, get_rollback_def, read_memory_def,
+       update_accounts_def, get_caller_def, get_value_def, get_static_def,
+       get_current_context_def, push_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `CONS (ctxt,rb)` >>
+  qmatch_goalsub_abbrev_tac `dispatch_precompiles addr ds` >>
+  `ds.contexts = (ctxt,rb)::(parent,prb)::rest` by simp[Abbr `ds`] >>
+  `ctxt.msgParams.data = buffer_of_list data /\
+   ctxt.msgParams.gasLimit = stipend /\ ctxt.gasUsed = 0 /\
+   ctxt.returnData = []` by
+    simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def] >>
+  qpat_x_assum `!s ctxt crb rest. _` drule_all >>
+  disch_then (mp_tac o MATCH_MP dispatch_precompiles_inr_to_unit) >>
+  disch_then SUBST1_TAC >>
+  qexists_tac `ctxt with <|gasUsed := pg; returnData := out|>` >>
+  simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def,
+       Abbr `ds`, execution_state_component_equality,
+       rollback_state_component_equality]
+QED
+
+Theorem handle_step_success_memory_exact:
+  s.contexts = (c,crb)::(parent,prb)::rest /\
+  c.msgParams.outputTo = Memory mr /\
+  c.logs = [] /\ c.addRefund = 0 /\ c.subRefund = 0 /\
+  c.msgParams.gasLimit - c.gasUsed <= parent.gasUsed /\
+  LENGTH parent.stack < stack_limit ==>
+  handle_step NONE s =
+    (INL (), s with contexts :=
+      (parent with <|
+         gasUsed := parent.gasUsed - (c.msgParams.gasLimit - c.gasUsed);
+         pc := parent.pc + 1; returnData := c.returnData;
+         stack := 1w::parent.stack;
+         memory := buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory
+       |>,prb)::rest)
+Proof
+  strip_tac >>
+  simp[handle_step_def, handle_create_def, handle_exception_def,
+       pop_and_incorporate_context_def, get_gas_left_def,
+       get_return_data_def, get_output_to_def, get_num_contexts_def,
+       pop_context_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
+       inc_pc_def, set_return_data_def, push_stack_def, write_memory_def,
+       get_current_context_def, set_current_context_def,
+       handle_def, reraise_def, bind_def, ignore_bind_def, return_def,
+       assert_def, stack_limit_def,
+       execution_state_component_equality, context_component_equality]
+QED
+
+Theorem step_precompile_success_exact:
+  wf_state s /\ s.contexts = (caller,cb)::cs /\
+  s.rollback = rb /\ s.msdomain = d /\
+  caller.stack = ss /\ caller.msgParams = p /\ caller.pc = pc /\
+  caller.memory = m /\ caller.gasUsed = g /\
+  FLOOKUP p.parsed pc = SOME op /\
+  6 + vOff <= LENGTH ss /\
+  vOff = (if call_has_value op then 1 else 0) /\
+  gas = w2n (EL 0 ss) /\ addr = w2w (EL 1 ss) /\
+  value = (if 0 < vOff then w2n (EL 2 ss) else 0) /\
+  argsOffset = w2n (EL (vOff + 2) ss) /\
+  argsSize = w2n (EL (vOff + 3) ss) /\
+  retOffset = w2n (EL (vOff + 4) ss) /\
+  retSize = w2n (EL (vOff + 5) ss) /\
+  max_expansion_range (argsOffset,argsSize) (retOffset,retSize) = (offset,sz) /\
+  em = expanded_memory m offset sz /\ access_check d addr /\
+  toAccount = lookup_account addr rb.accounts /\
+  vCost = (if 0 < value then call_value_cost else 0) /\
+  cCost = (if op = Call /\ 0 < value /\ account_empty toAccount
+           then new_account_cost else 0) /\
+  delegate_check toAccount.code (msdomain_add addr d)
+    (accesses_add addr rb) dCost newRb newDom /\
+  mCost = memory_cost m offset sz /\
+  call_gas value gas (p.gasLimit - g) mCost
+    (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas,stipend) /\
+  gasCost = static_gas op + dynamicGas + mCost /\
+  g + gasCost <= p.gasLimit /\
+  is_call op /\ op <> Create /\ op <> Create2 /\
+  (0 < value ==> ~p.static) /\
+  value <= (lookup_account p.callee rb.accounts).balance /\ LENGTH cs < 1024 /\
+  data = buffer_take argsOffset argsSize em /\
+  fIN addr precompile_addresses /\ pg <= stipend /\
+  (!s ctxt crb rest.
+    s.contexts = (ctxt,crb)::rest /\
+    ctxt.msgParams.data = buffer_of_list data /\
+    ctxt.msgParams.gasLimit = stipend /\
+    ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
+    dispatch_precompiles addr s =
+      (INR NONE, s with contexts :=
+        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
+  step s =
+    (INL (),s with <|
+      rollback := newRb with accounts updated_by
+        (if op <> CallCode /\ 0 < value
+         then transfer_value p.callee addr value else I);
+      msdomain := newDom;
+      contexts := (caller with <|
+        stack := 1w::DROP (6 + vOff) ss; pc := pc + 1;
+        gasUsed := g + gasCost - (stipend - pg);
+        memory := buffer_write retOffset (TAKE retSize out) em;
+        returnData := out|>,cb)::cs|>)
+Proof
+  strip_tac >>
+  `LENGTH ss <= stack_limit` by
+    (qpat_x_assum `wf_state s` mp_tac >>
+     simp[wf_state_def, wf_context_def]) >>
+  `LENGTH (DROP (6 + vOff) ss) < stack_limit` by
+    (irule call_stack_after_pop_has_room >> simp[]) >>
+  `stipend <= gasCost` by
+    (qpat_assum `gasCost = _` (fn th => pure_rewrite_tac[th]) >>
+     irule call_gas_cost_covers_stipend >>
+     qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `vCost = _` (fn th => pure_rewrite_tac[th]) >>
+     strip_tac >> goal_assum (drule_at Any)) >>
+  drule_all (PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES] (Q.INST
+    [`calleeCode` |-> `case get_delegate toAccount.code of
+      NONE => toAccount.code | SOME del => (lookup_account del rb.accounts).code`]
+    step_call_prepared)) >>
+  strip_tac >>
+  qpat_assum `step_call op s = _` (fn th =>
+    qmatch_abbrev_tac `step s = final` >>
+    qpat_assum `step_call op s = _` (fn th =>
+      qmatch_asmsub_abbrev_tac `proceed_call op _ _ _ _ _ code _ _ prepared`)) >>
+  `prepared.contexts = (caller with <|stack := DROP (6 + vOff) ss;
+    memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs` by
+    simp[Abbr `prepared`] >>
+  `prepared.rollback = newRb` by simp[Abbr `prepared`] >>
+  `(caller with <|stack := DROP (6 + vOff) ss;
+    memory := em; gasUsed := g + gasCost; returnData := []|>).msgParams.callee = p.callee` by simp[] >>
+  `data = buffer_take argsOffset argsSize
+    (caller with <|stack := DROP (6 + vOff) ss;
+    memory := em; gasUsed := g + gasCost; returnData := []|>).memory` by simp[] >>
+  drule_all (Q.INST [`op` |-> `op`, `value` |-> `value`,
+    `code` |-> `code`, `outputTo` |-> `Memory <|offset := retOffset; size := retSize|>`]
+    proceed_call_precompile_success) >>
+  disch_then (qspecl_then [`value`, `retSize`, `retOffset`, `op`, `code`] strip_assume_tac) >>
+  qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` (fn th =>
+    qpat_x_assum `step_call op s = _` (assume_tac o REWRITE_RULE [th])) >>
+  qmatch_asmsub_abbrev_tac `step_call op s = (INR NONE, returned)` >>
+  `returned.contexts = (c,newRb)::
+    (caller with <|stack := DROP (6 + vOff) ss;
+     memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs` by
+    simp[Abbr `returned`] >>
+  drule (Q.INST [`s` |-> `returned`] handle_step_success_memory_exact) >>
+  simp[] >>
+  (impl_tac >- (fs[stack_limit_def] >> decide_tac)) >>
+  disch_then (assume_tac o REWRITE_RULE []) >>
+  `step_inst op = step_call op` by
+    (map_every (fn q => qpat_x_assum q mp_tac)
+       [`op <> Create`, `op <> Create2`, `is_call op`] >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `op` >> simp[is_call_def, step_inst_def]) >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def, return_def, get_current_context_def] >>
+  simp[Abbr `final`, Abbr `returned`, Abbr `prepared`,
+       execution_state_component_equality, context_component_equality]
+QED
+
+(* A call to a precompile runs the precompile and returns to the caller in
+   the same step. The rule takes the precompile's behaviour as a hypothesis:
+   started on a fresh context holding the call data, it succeeds (finish),
+   having used pg gas and produced output out, and changes nothing else. *)
+
+(* Why it holds (a trace of the one step):
+   - step_call pops the arguments, charges gasCost, expands memory to em and
+     calls proceed_call exactly as in SPEC_Call (same hypotheses).
+   - proceed_call pushes (initial_context callee calleeCode ... (Memory ...)
+     tx, newRb) and, since fIN addr precompile_addresses, runs
+     dispatch_precompiles addr on that state. The new context has
+     msgParams.data = buffer_of_list data, gasLimit = stipend, gasUsed = 0 and
+     returnData = [], so the hypothesis applies and the result is INR NONE.
+   - step_inst raised, so inc_pc_or_jump does not run; handle_step NONE goes
+     through handle_create (outputTo is Memory, so no effect) to
+     handle_exception NONE. There are 2 + LENGTH cs contexts, so it pops the
+     callee with success = T: unuse_gas (stipend - pg) (stipend ≤ gasCost by
+     call_gas_def, so the assert holds), push_logs [], update_gas_refund
+     (0,0), no rollback reset; then inc_pc, set_return_data out, push_stack
+     1w (the stack fits: wf_state gives LENGTH ss ≤ stack_limit and 6 values
+     were popped) and write_memory retOffset (TAKE retSize out). *)
+
+Theorem SPEC_Call_precompile:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
+   evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
+   evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   cond (6 + vOff ≤ LENGTH ss ∧
+         vOff = (if call_has_value call_inst then 1 else 0) ∧
+         ISL e ∧
+         gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧
+         value = (if 0 < vOff then w2n (EL 2 ss) else 0) ∧
+         argsOffset = w2n (EL (vOff + 2) ss) ∧
+         argsSize = w2n (EL (vOff + 3) ss) ∧
+         retOffset = w2n (EL (vOff + 4) ss) ∧
+         retSize = w2n (EL (vOff + 5) ss) ∧
+         max_expansion_range (argsOffset, argsSize) (retOffset, retSize) = (offset, sz) ∧
+         em = expanded_memory m offset sz ∧
+         access_check d addr ∧
+         toAccount = lookup_account addr rb.accounts ∧
+         vCost = (if 0 < value then call_value_cost else 0) ∧
+         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
+                  then new_account_cost else 0) ∧
+         delegate_check toAccount.code
+           (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
+         mCost = memory_cost m offset sz ∧
+         call_gas value gas (p.gasLimit - g) mCost
+           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, stipend) ∧
+         gasCost = static_gas call_inst + dynamicGas + mCost ∧
+         g + gasCost ≤ p.gasLimit ∧
+         is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
+         (0 < value ⇒ ¬p.static) ∧
+         sender = lookup_account p.callee rb.accounts ∧
+         value ≤ sender.balance ∧
+         LENGTH cs < 1024 ∧
+         data = buffer_take argsOffset argsSize em ∧
+         fIN addr precompile_addresses ∧
+         pg ≤ stipend ∧
+         (∀s ctxt crb rest.
+            s.contexts = (ctxt,crb)::rest ∧
+            ctxt.msgParams.data = buffer_of_list data ∧
+            ctxt.msgParams.gasLimit = stipend ∧
+            ctxt.gasUsed = 0 ∧ ctxt.returnData = [] ⇒
+            dispatch_precompiles addr s =
+            (INR NONE,
+             s with contexts :=
+               (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest))))
+  {(pc,call_inst)}
+  (evm_Stack (1w :: DROP (6 + vOff) ss) * evm_PC (pc + 1) *
+   evm_GasUsed (g + gasCost - (stipend - pg)) * evm_MsgParams p *
+   evm_Memory (buffer_write retOffset (TAKE retSize out) em) *
+   evm_Rollback (newRb with accounts updated_by
+                 (if call_inst ≠ CallCode ∧ 0 < value
+                  then transfer_value p.callee addr value
+                  else I)) *
+   evm_Msdomain newDom * evm_ReturnData out *
+   evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
+   evm_AddRefund ar * evm_SubRefund sr * evm_Logs l)
+Proof
+  irule IMP_EVM_SPEC >> rpt strip_tac >>
+  rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, STAR_CODE_POOL_evm2set] >>
+  qmatch_goalsub_abbrev_tac `b ==> _` >>
+  reverse (Cases_on `b`) >- simp[] >>
+  pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  full_simp_tac pure_ss [CODE_POOL_evm2set] >>
+  `~ISR (FST s)` by
+    (qpat_x_assum `ISL e` mp_tac >> simp[] >>
+     Cases_on `FST s` >> simp[]) >>
+  `(SND s).contexts =
+    (FST (HD (SND s).contexts), SND (HD (SND s).contexts))::cs` by
+    (Cases_on `(SND s).contexts` >> fs[wf_state_def]) >>
+  rename1 `evm2set_without dom r = _` >>
+  mp_tac (Q.INST [`s` |-> `SND (r : (unit + exception option) # execution_state)`,
+    `caller` |-> `FST (HD (SND (r : (unit + exception option) # execution_state)).contexts)`, `op` |-> `call_inst`]
+    step_precompile_success_exact) >>
+  (impl_tac >- gvs[]) >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `step (SND r) = result` >>
+  `wf_state (SND result)` by
+    (qpat_x_assum `step (SND r) = result` (fn th =>
+       pure_rewrite_tac[GSYM th]) >>
+     irule step_preserves_wf_state >> simp[]) >>
+  qexists_tac `result` >>
+  simp[] >>
+  conj_tac >-
+    (simp[Abbr `result`] >>
+     Cases_on `FST r` >> gvs[]) >>
+  sym_tac >> irule UPDATE_evm2set_without >>
+  gvs[Abbr `result`]
+QED
+
+Theorem witness_precompile_identity:
+  fIN (4w:address) precompile_addresses ∧
+  (pg = 15 + 3 * word_size (LENGTH data) ∧ pg ≤ stipend ⇒
+   ∀s ctxt crb rest.
+     s.contexts = (ctxt,crb)::rest ∧
+     ctxt.msgParams.data = buffer_of_list data ∧
+     ctxt.msgParams.gasLimit = stipend ∧
+     ctxt.gasUsed = 0 ∧ ctxt.returnData = [] ⇒
+     dispatch_precompiles 4w s =
+     (INR NONE,
+      s with contexts :=
+        (ctxt with <|gasUsed := pg; returnData := data|>,crb)::rest))
+Proof
+  conj_tac >- (
+    EVAL_TAC
+    \\ qmatch_goalsub_abbrev_tac`fset_REP (fset_ABS L)`
+    \\ `set (fset_REP (fset_ABS L)) = set L`
+         by metis_tac[finite_setTheory.fset_ABS_11,
+                      finite_setTheory.fset_ABS_REP,
+                      finite_setTheory.fsequiv_def]
+    \\ pop_assum SUBST1_TAC \\ simp[Abbr`L`])
+  \\ rw[dispatch_precompiles_def,precompile_identity_def,get_call_data_def,
+        bind_def,ignore_bind_def,get_current_context_def,return_def,
+        consume_gas_def,assert_def,set_current_context_def,
+        set_return_data_def,finish_def]
+QED
+
 Theorem SPEC_Return_outermost:
   SPEC EVM_MODEL
   (evm_Stack ss *
