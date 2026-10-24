@@ -290,6 +290,103 @@ Proof
   >> irule call_prefix_bind >> simp[call_prefix_leaves]
 QED
 
+Theorem call_prefix_delegate_code_selection:
+  preserves_when (λs. s.contexts ≠ [])
+    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys)
+    (case get_delegate bytecode of
+       NONE => return (bytecode, 0)
+     | SOME d => do
+         cost <- access_address d;
+         return ((lookup_account d accounts).code, cost)
+       od)
+Proof
+  Cases_on `get_delegate bytecode` >> simp[call_prefix_leaves]
+  >> irule call_prefix_bind >> simp[call_prefix_leaves]
+QED
+
+Theorem step_call_reaches_proceed_call:
+  step_call op s = (r,s') ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH s'.contexts ⇒
+  ∃u sender address value ao az code gas mr.
+    cp_rel s u ∧ u.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∧
+    proceed_call op sender address value ao az code gas (Memory mr) u = (r,s') ∧
+    sender = (FST (HD s.contexts)).msgParams.callee ∧
+    value ≤ (lookup_account sender s.rollback.accounts).balance ∧
+    code = (case get_delegate (lookup_account address s.rollback.accounts).code of
+      NONE => (lookup_account address s.rollback.accounts).code
+    | SOME d => (lookup_account d s.rollback.accounts).code) ∧
+    (¬call_has_value op ⇒ value = 0) ∧
+    (op = Call ∧ 0 < value ⇒ ¬(FST (HD s.contexts)).msgParams.static)
+Proof
+  let
+    val peel =
+      drule_at (Pat `bind`) bind_call_prefix_grows_extract
+      >> simp[call_prefix_leaves]
+      >> disch_then (qspec_then `s` mp_tac) >> simp[]
+      >> qpat_x_assum `bind _ _ _ = _` kall_tac
+      >> strip_tac >> gvs[]
+  in
+  simp[step_call_def] >> strip_tac
+  >> `cp_rel s s ∧ s.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys`
+    by simp[call_prefix_refl]
+  >> peel >> pairarg_tac >> gvs[]
+  >> qmatch_asmsub_abbrev_tac `proceed_call op _ address value ao az _ _ rd`
+  >> peel
+  >> peel
+  >> `u''.rollback.accounts = s.rollback.accounts` by gvs[cp_rel_def]
+  >> gvs[get_accounts_def, Once bind_def, return_def]
+  >> drule_at (Pat `bind`) bind_call_prefix_grows_extract
+  >> disch_then (qspec_then `s` mp_tac) >> simp[]
+  >> (impl_tac >- irule call_prefix_delegate_code_selection)
+  >> qpat_x_assum `bind _ _ _ = _` kall_tac
+  >> strip_tac >> gvs[] >> pairarg_tac >> gvs[]
+  >> `code = (case get_delegate (lookup_account address s.rollback.accounts).code of
+       NONE => (lookup_account address s.rollback.accounts).code
+     | SOME d => (lookup_account d s.rollback.accounts).code)`
+    by (Cases_on `get_delegate (lookup_account address s.rollback.accounts).code`
+        >> gvs[bind_def, return_def, AllCaseEqs()])
+  >> peel >> pairarg_tac >> gvs[ignore_bind_def]
+  >> qpat_x_assum `pop_stack _ _ = _` kall_tac
+  >> qpat_x_assum `memory_expansion_info _ _ _ = _` kall_tac
+  >> qpat_x_assum `access_address _ _ = _` kall_tac
+  >> qpat_x_assum `(case _ of NONE => _ | SOME _ => _) _ = _` kall_tac
+  >> qpat_x_assum `get_gas_left _ = _` kall_tac
+  >> qpat_x_assum `call_gas _ _ _ _ _ = _` kall_tac
+  >> peel
+  >> drule_at (Pat `bind`) bind_call_prefix_grows_extract
+  >> simp[] >> disch_then (qspec_then `s` mp_tac) >> simp[]
+  >> (impl_tac >- (Cases_on `op = Call ∧ 0 < value` >> simp[call_prefix_leaves]))
+  >> qpat_x_assum `bind _ _ _ = _` kall_tac
+  >> strip_tac >> gvs[]
+  >> `op = Call ∧ 0 < value ⇒ ¬(FST (HD s.contexts)).msgParams.static`
+    by (strip_tac
+        >> gvs[assert_not_static_def, get_static_def, get_current_context_def,
+               bind_def, assert_def, return_def, fail_def, cp_rel_def, AllCaseEqs()])
+  >> peel
+  >> peel
+  >> rename1 `get_callee beforeSender = (INL sender,afterSender)`
+  >> `sender = (FST (HD s.contexts)).msgParams.callee`
+    by gvs[get_callee_def, get_current_context_def, bind_def, return_def,
+           fail_def, cp_rel_def, AllCaseEqs()]
+  >> gvs[COND_RATOR]
+  >> Cases_on `(lookup_account (FST (HD s.contexts)).msgParams.callee
+                 s.rollback.accounts).balance < value` >> gvs[]
+  >- (drule_at (Pat `_ = (_,s')`) psf_imp_length_contexts_preserved
+      >> simp[] >> imp_res_tac call_prefix_contexts >> gvs[])
+  >> peel
+  >> peel >> gvs[COND_RATOR]
+  >> rename1 `get_num_contexts depthState = (INL depth,entry)`
+  >> Cases_on `depth > 1024` >> gvs[]
+  >- (drule_at (Pat `_ = (_,s')`) psf_imp_length_contexts_preserved
+      >> simp[] >> imp_res_tac call_prefix_contexts >> gvs[])
+  >> qexistsl_tac [`entry`, `address`, `value`, `ao`, `az`, `stipend`]
+  >> simp[] >> gvs[Abbr `rd`]
+  >> qexists_tac `<|offset := w2n (EL ((if call_has_value op then 1 else 0) + 4) x);
+                   size := w2n (EL ((if call_has_value op then 1 else 0) + 5) x)|>`
+  >> simp[] >> simp[Abbr `value`]
+  end
+QED
+
 
 Theorem proceed_call_saved_rollback:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
