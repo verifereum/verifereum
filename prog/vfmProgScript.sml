@@ -3875,7 +3875,7 @@ Proof
   \\ strip_tac \\ gvs[]
 QED
 
-Theorem SPEC_Invalid: (* TODO: actually give a real spec here *)
+Theorem SPEC_Invalid: (* placeholder; see SPEC_Invalid_outermost and SPEC_Invalid_inner *)
   SPEC EVM_MODEL
   (evm_PC pc * cond F)
   {(pc,Invalid)}
