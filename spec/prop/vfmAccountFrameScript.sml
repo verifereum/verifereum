@@ -14,7 +14,7 @@ Theory vfmAccountFrame
 Ancestors
   combin pair option list rich_list relation While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmSameFrame vfmRunWithinFrame vfmRunCall
+  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStoragePredicates vfmPreserves vfmHandleStep
 Libs
   BasicProvers
 
@@ -105,6 +105,374 @@ QED
 (* -------------------------------------------------------------------------
  * Per-step effect on accounts other than the current callee.
  * ------------------------------------------------------------------------- *)
+
+(* Equality of the storage-key projection composes independently of all
+ * other rollback fields. *)
+Theorem rollback_preserves_storage_keys[local]:
+  preserves_rollback m ⇒
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) m
+Proof
+  rw[preserves_rollback_def, preserves_def] >> metis_tac[]
+QED
+
+Theorem storage_keys_bind[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) g ∧
+  (∀x. preserves (λs t. t.rollback.accesses.storageKeys =
+                          s.rollback.accesses.storageKeys) (f x)) ⇒
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (bind g f)
+Proof
+  strip_tac >> irule preserves_bind >> simp[]
+QED
+
+Theorem storage_keys_ignore_bind[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) g ∧
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) f ⇒
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (ignore_bind g f)
+Proof
+  strip_tac >> irule preserves_ignore_bind >> simp[]
+QED
+
+Theorem access_address_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (access_address a)
+Proof
+  rw[preserves_def, access_address_def, domain_check_def,
+     set_domain_def, ignore_bind_def, bind_def, return_def, fail_def,
+     AllCaseEqs()] >> gvs[]
+QED
+
+Theorem access_slot_foreign_storage_key[local]:
+  x ≠ SK y k ⇒
+  preserves (λs t. fIN (SK y k) t.rollback.accesses.storageKeys ⇒
+                   fIN (SK y k) s.rollback.accesses.storageKeys)
+            (access_slot x)
+Proof
+  rw[preserves_def, access_slot_def, domain_check_def,
+     set_domain_def, ignore_bind_def, bind_def, return_def, fail_def,
+     AllCaseEqs()] >> gvs[finite_setTheory.fIN_IN,
+                            finite_setTheory.toSet_fINSERT]
+QED
+
+Theorem update_accounts_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (update_accounts f)
+Proof
+  rw[preserves_def, update_accounts_def, return_def]
+QED
+
+Theorem set_tStorage_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (set_tStorage x)
+Proof
+  rw[preserves_def, set_tStorage_def, return_def]
+QED
+
+Theorem storage_keys_copy_to_memory[local]:
+  (∀f. src = SOME f ⇒ preserves_rollback f) ⇒
+  preserves_rollback (copy_to_memory gas off srcOff sz src)
+Proof
+  Cases_on `src`
+  >- (rw[copy_to_memory_def] >> pairarg_tac >> simp[write_memory_def])
+  >> rw[copy_to_memory_def, write_memory_def]
+  >> irule preserves_rollback_bind >> rw[]
+  >> irule preserves_rollback_ignore_bind >> rw[]
+  >> irule preserves_rollback_bind >> rw[]
+QED
+
+Theorem storage_keys_readers_rollback[local]:
+  preserves_rollback get_tx_params ∧
+  preserves_rollback get_current_code ∧
+  preserves_rollback (get_code a) ∧
+  preserves_rollback (get_return_data_check off sz) ∧
+  preserves_rollback (write_memory off bytes)
+Proof
+  rpt conj_tac
+  >- rw[preserves_rollback_def, get_tx_params_def, return_def]
+  >> rw[get_current_code_def, get_code_def,
+        get_return_data_check_def, write_memory_def]
+  >> irule preserves_rollback_bind >> rw[]
+QED
+
+Theorem step_inst_plain_storage_keys[local]:
+  op ≠ SLoad ∧ op ≠ SStore ∧ op ≠ TLoad ∧ op ≠ TStore ∧
+  op ≠ SelfDestruct ∧ ¬is_call op ⇒
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (step_inst op)
+Proof
+  Cases_on `op` >> simp[is_call_def, step_inst_def]
+  >> rpt strip_tac
+  >> simp[step_binop_def, step_monop_def, step_modop_def,
+          step_exp_def, step_keccak256_def, step_msgParams_def,
+          step_txParams_def, step_context_def, step_balance_def,
+          step_call_data_load_def, step_copy_to_memory_def,
+          step_ext_code_size_def, step_ext_code_copy_def,
+          step_ext_code_hash_def, step_return_data_copy_def,
+          step_block_hash_def, step_self_balance_def, step_blob_hash_def,
+          step_pop_def, step_mload_def, step_mstore_def,
+          step_push_def, step_dup_def, step_swap_def,
+          storage_keys_bind, storage_keys_ignore_bind,
+          access_address_storage_keys, rollback_preserves_storage_keys,
+          storage_keys_copy_to_memory]
+  >> rpt (FIRST [irule storage_keys_bind,
+                 irule storage_keys_ignore_bind] >>
+          rw[access_address_storage_keys, rollback_preserves_storage_keys,
+             storage_keys_copy_to_memory])
+  >> irule rollback_preserves_storage_keys
+  >> simp[storage_keys_copy_to_memory, storage_keys_readers_rollback,
+          GSYM step_inst_def, step_inst_Log_preserves_rollback]
+QED
+
+Theorem proceed_call_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys)
+    (proceed_call op sender address value argsOffset argsSize code stipend outputTo)
+Proof
+  simp[proceed_call_def]
+  >> rpt (FIRST [irule storage_keys_bind,
+                 irule storage_keys_ignore_bind, irule preserves_cond] >>
+          rw[rollback_preserves_storage_keys, update_accounts_storage_keys])
+QED
+
+Theorem proceed_create_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys)
+    (proceed_create sender address value code cappedGas)
+Proof
+  simp[proceed_create_def]
+  >> rpt (FIRST [irule storage_keys_bind,
+                 irule storage_keys_ignore_bind] >>
+          rw[rollback_preserves_storage_keys, update_accounts_storage_keys])
+QED
+
+Theorem step_create_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (step_create two)
+Proof
+  simp[step_create_def, abort_create_exists_def]
+  >> rpt (FIRST [irule storage_keys_bind,
+                 irule storage_keys_ignore_bind, irule preserves_cond] >>
+          rw[rollback_preserves_storage_keys, update_accounts_storage_keys,
+             access_address_storage_keys, proceed_create_storage_keys])
+QED
+
+Theorem step_call_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (step_call op)
+Proof
+  simp[step_call_def]
+  >> irule storage_keys_bind >> simp[rollback_preserves_storage_keys]
+  >> qx_gen_tac `args` >> pairarg_tac >> simp[]
+  >> irule storage_keys_bind >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> irule storage_keys_bind >> simp[access_address_storage_keys] >> gen_tac
+  >> irule storage_keys_bind >> simp[rollback_preserves_storage_keys]
+  >> qx_gen_tac `accounts`
+  >> irule storage_keys_bind
+  >> reverse conj_tac
+  >- (Cases_on `get_delegate (lookup_account (w2w (EL 1 args)) accounts).code`
+      >> simp[rollback_preserves_storage_keys]
+      >> irule storage_keys_bind
+      >> rw[access_address_storage_keys, rollback_preserves_storage_keys])
+  >> Cases >> simp[]
+  >> irule storage_keys_bind >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> rpt (FIRST [irule storage_keys_bind,
+                 irule storage_keys_ignore_bind, irule preserves_cond] >>
+          rw[rollback_preserves_storage_keys, proceed_call_storage_keys])
+QED
+
+Theorem add_to_delete_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) (add_to_delete a)
+Proof
+  rw[preserves_def, add_to_delete_def, return_def]
+QED
+
+Theorem step_self_destruct_storage_keys[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) step_self_destruct
+Proof
+  simp[step_self_destruct_def]
+  >> rpt (FIRST [irule storage_keys_bind,
+                 irule storage_keys_ignore_bind, irule preserves_cond] >>
+          rw[rollback_preserves_storage_keys, update_accounts_storage_keys,
+             access_address_storage_keys, add_to_delete_storage_keys])
+QED
+
+Theorem storage_key_backward_from_eq[local]:
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) m ⇒
+  preserves (λs t. fIN z t.rollback.accesses.storageKeys ⇒
+                   fIN z s.rollback.accesses.storageKeys) m
+Proof
+  rw[preserves_def] >> metis_tac[]
+QED
+
+Theorem storage_key_backward_bind[local]:
+  preserves (λs t. fIN z t.rollback.accesses.storageKeys ⇒
+                   fIN z s.rollback.accesses.storageKeys) g ∧
+  (∀x. preserves (λs t. fIN z t.rollback.accesses.storageKeys ⇒
+                          fIN z s.rollback.accesses.storageKeys) (f x)) ⇒
+  preserves (λs t. fIN z t.rollback.accesses.storageKeys ⇒
+                   fIN z s.rollback.accesses.storageKeys) (bind g f)
+Proof
+  strip_tac >> irule preserves_bind >> simp[] >> metis_tac[]
+QED
+
+Theorem storage_key_backward_ignore_bind[local]:
+  preserves (λs t. fIN z t.rollback.accesses.storageKeys ⇒
+                   fIN z s.rollback.accesses.storageKeys) g ∧
+  preserves (λs t. fIN z t.rollback.accesses.storageKeys ⇒
+                   fIN z s.rollback.accesses.storageKeys) f ⇒
+  preserves (λs t. fIN z t.rollback.accesses.storageKeys ⇒
+                   fIN z s.rollback.accesses.storageKeys) (ignore_bind g f)
+Proof
+  strip_tac >> irule preserves_ignore_bind >> simp[] >> metis_tac[]
+QED
+
+Theorem sstore_gas_foreign_storage_key[local]:
+  address ≠ y ⇒
+  preserves (λs t. fIN (SK y k) t.rollback.accesses.storageKeys ⇒
+                   fIN (SK y k) s.rollback.accesses.storageKeys)
+    (step_sstore_gas_consumption address key value)
+Proof
+  strip_tac >> simp[step_sstore_gas_consumption_def]
+  >> rpt (FIRST [irule storage_key_backward_bind,
+                 irule storage_key_backward_ignore_bind] >>
+          rw[storage_key_backward_from_eq, rollback_preserves_storage_keys,
+             access_slot_foreign_storage_key])
+QED
+
+Theorem step_sload_foreign_storage_key[local]:
+  s.contexts ≠ [] ∧ step_sload transient s = (r,t) ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ∧
+  fIN (SK y k) t.rollback.accesses.storageKeys ⇒
+  fIN (SK y k) s.rollback.accesses.storageKeys
+Proof
+  Cases_on `transient` >>
+  rw[step_sload_def, bind_def, ignore_bind_def,
+     pop_stack_def, get_callee_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def, assert_def,
+     consume_gas_def, get_tStorage_def, get_accounts_def,
+     push_stack_def, AllCaseEqs()]
+  >> gvs[AllCaseEqs()]
+  >> drule_at (Pat `access_slot _ _ = _`)
+       (SRULE[preserves_def] access_slot_foreign_storage_key)
+  >> simp[]
+QED
+
+Theorem step_sstore_foreign_storage_key[local]:
+  s.contexts ≠ [] ∧ step_sstore transient s = (r,t) ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ∧
+  fIN (SK y k) t.rollback.accesses.storageKeys ⇒
+  fIN (SK y k) s.rollback.accesses.storageKeys
+Proof
+  Cases_on `transient` >>
+  rw[step_sstore_def, bind_def, ignore_bind_def,
+     pop_stack_def, get_callee_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def, assert_def,
+     consume_gas_def, assert_not_static_def, get_static_def,
+     write_storage_def, write_transient_storage_def,
+     get_tStorage_def, set_tStorage_def, update_accounts_def, AllCaseEqs()]
+  >> gvs[AllCaseEqs()]
+  >> drule_at (Pat `step_sstore_gas_consumption _ _ _ _ = _`)
+       (SRULE[preserves_def] sstore_gas_foreign_storage_key)
+  >> simp[]
+QED
+
+Theorem step_inst_foreign_storage_key[local]:
+  s.contexts ≠ [] ∧ step_inst op s = (r,t) ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ∧
+  fIN (SK y k) t.rollback.accesses.storageKeys ⇒
+  fIN (SK y k) s.rollback.accesses.storageKeys
+Proof
+  Cases_on `op = SLoad ∨ op = TLoad`
+  >- (strip_tac >> gvs[step_inst_def] >>
+      metis_tac[step_sload_foreign_storage_key])
+  >> Cases_on `op = SStore ∨ op = TStore`
+  >- (strip_tac >> gvs[step_inst_def] >>
+      metis_tac[step_sstore_foreign_storage_key])
+  >> strip_tac
+  >> `preserves (λs t. t.rollback.accesses.storageKeys =
+                       s.rollback.accesses.storageKeys) (step_inst op)` by
+    (Cases_on `op = SelfDestruct`
+     >- simp[step_inst_def, step_self_destruct_storage_keys]
+     >> Cases_on `is_call op`
+     >- (Cases_on `op` >> gvs[is_call_def, step_inst_def,
+                             step_call_storage_keys, step_create_storage_keys])
+     >> irule step_inst_plain_storage_keys >> gvs[])
+  >> gvs[preserves_def] >> metis_tac[]
+QED
+
+Theorem step_inner_foreign_storage_key[local]:
+  wf_state s ∧ step_inner s = (r,t) ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ∧
+  fIN (SK y k) t.rollback.accesses.storageKeys ⇒
+  fIN (SK y k) s.rollback.accesses.storageKeys
+Proof
+  rw[step_inner_def, bind_def, ignore_bind_def, get_current_context_def,
+     return_def, fail_def, AllCaseEqs()]
+  >> gvs[AllCaseEqs()]
+  >> Cases_on `FLOOKUP (FST (HD s.contexts)).msgParams.parsed
+                       (FST (HD s.contexts)).pc`
+  >- (gvs[COND_RATOR, AllCaseEqs()] >>
+      metis_tac[step_inst_foreign_storage_key])
+  >> gvs[bind_def, AllCaseEqs()]
+  >> metis_tac[step_inst_foreign_storage_key,
+       REWRITE_RULE[preserves_rollback_def]
+         preserves_rollback_inc_pc_or_jump]
+QED
+
+Theorem handle_exception_storage_keys[local]:
+  s.contexts ≠ [] ∧ handle_exception e s = (r,t) ⇒
+  t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∨
+  (LENGTH t.contexts < LENGTH s.contexts ∧
+   t.rollback.accesses.storageKeys =
+     (SND (HD s.contexts)).accesses.storageKeys)
+Proof
+  Cases_on `s.contexts` >> simp[]
+  >> PairCases_on `h`
+  >> Cases_on `t'` >> gvs[]
+  >> Cases_on `h0.msgParams.outputTo`
+  >> Cases_on `e = NONE`
+  >> Cases_on `e = SOME Reverted` >> gvs[]
+  >> rw[handle_exception_def, bind_def, ignore_bind_def,
+        get_gas_left_def, get_current_context_def, return_def,
+        consume_gas_def, set_return_data_def, set_current_context_def,
+        get_num_contexts_def, get_return_data_def, get_output_to_def,
+        reraise_def, assert_def, fail_def,
+        inc_pc_def, push_stack_def, write_memory_def,
+        pop_and_incorporate_context_def, pop_context_def,
+        set_rollback_def, unuse_gas_def,
+        update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem handle_step_storage_keys[local]:
+  s.contexts ≠ [] ∧ handle_step e s = (r,t) ⇒
+  t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∨
+  (LENGTH t.contexts < LENGTH s.contexts ∧
+   t.rollback.accesses.storageKeys =
+     (SND (HD s.contexts)).accesses.storageKeys)
+Proof
+  strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[])
+  >> simp[handle_def]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[] >> strip_tac
+  >> drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac
+  >> drule_all handle_create_preserves_length >> strip_tac
+  >> drule handle_create_preserves_accesses >> strip_tac
+  >> drule_all handle_exception_storage_keys >> strip_tac >> gvs[]
+QED
 
 Theorem step_same_frame_foreign:
   wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts = LENGTH s.contexts ⇒
