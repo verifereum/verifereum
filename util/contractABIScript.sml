@@ -211,18 +211,6 @@ QED
 val () = cv_auto_trans $
   REWRITE_RULE [GSYM word_to_bytes_be_def] enc_number_def;
 
-Theorem abi_value1_size_map[simp]:
-  abi_value1_size vs = list_size abi_value_size vs
-Proof
-  Induct_on`vs` \\ rw[abi_value_size_def, list_size_def]
-QED
-
-Theorem abi_type1_size_map[simp]:
-  abi_type1_size vs = list_size abi_type_size vs
-Proof
-  Induct_on`vs` \\ rw[abi_type_size_def, list_size_def]
-QED
-
 Definition enc_def[simp]:
   enc (Tuple ts) (ListV vs) = (
     let hl = head_lengths ts 0 in
