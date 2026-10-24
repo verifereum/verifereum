@@ -728,7 +728,7 @@ Theorem post_transaction_accounting_success:
 Proof
   qmatch_goalsub_abbrev_tac`FST pta`
   \\ pop_assum mp_tac
-  \\ rewrite_tac[post_transaction_accounting_def]
+  \\ rewrite_tac[post_transaction_accounting_def, transaction_gas_accounting_def]
   \\ qmatch_goalsub_abbrev_tac`_ ⇒ conc`
   \\ BasicProvers.LET_ELIM_TAC
   \\ gvs[Abbr`conc`, NULL_EQ, Abbr`pta`,Abbr`tr`]
@@ -759,6 +759,29 @@ Theorem lookup_account_update_account_same:
   lookup_account addr (update_account addr v acc) = v
 Proof
   rw[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+Theorem lookup_account_two_credits:
+  lookup_account addr
+    (update_account recipient
+      ((lookup_account recipient
+        (update_account sender
+          ((lookup_account sender accounts) with balance updated_by $+ refund)
+          accounts)) with balance updated_by $+ fee)
+      (update_account sender
+        ((lookup_account sender accounts) with balance updated_by $+ refund)
+        accounts)) =
+    (lookup_account addr accounts) with balance :=
+      (lookup_account addr accounts).balance +
+      (if addr = sender then refund else 0) +
+      (if addr = recipient then fee else 0)
+Proof
+  Cases_on `sender = recipient`
+  >> Cases_on `addr = sender`
+  >> Cases_on `addr = recipient`
+  >> gvs[lookup_account_update_account_same,
+         lookup_account_update_account_other, LET_THM]
+  >> simp[account_state_component_equality, AC ADD_ASSOC ADD_COMM]
 QED
 
 (* Lemma: lookup_account is preserved by process_deletions for non-deleted addresses *)
@@ -800,11 +823,10 @@ Theorem post_transaction_accounting_accounts:
   lookup_account addr (SND (post_transaction_accounting blk tx NONE acc t)) =
   lookup_account addr t.rollback.accounts
 Proof
-  rewrite_tac[post_transaction_accounting_def]
-  \\ BasicProvers.LET_ELIM_TAC
-  \\ gvs[]
-  \\ simp[Abbr`newAccounts`, lookup_account_update_account_other]
-  \\ simp[Abbr`accounts`, lookup_account_process_deletions_other]
+  strip_tac
+  \\ simp[post_transaction_accounting_def, transaction_gas_accounting_def, LET_THM,
+          lookup_account_process_deletions_other,
+          lookup_account_update_account_other]
 QED
 
 (* Helper definitions for gas accounting in bridging theorem *)
@@ -845,6 +867,35 @@ Definition compute_transaction_fee_def:
       totalGasUsed * priorityFeePerGas
 End
 
+Theorem post_transaction_accounting_success_lookup:
+  ~NULL t.contexts /\ NULL (TL t.contexts) ==>
+  lookup_account addr (SND (post_transaction_accounting blk tx NONE acc t)) =
+  if MEM addr t.rollback.toDelete then empty_account_state else
+  (lookup_account addr t.rollback.accounts) with balance :=
+    (lookup_account addr t.rollback.accounts).balance +
+    (if addr = tx.from then
+       compute_refund_ether tx.gasLimit tx.gasPrice tx.data
+         (FST (HD t.contexts)).msgParams.gasLimit
+         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
+         (FST (HD t.contexts)).subRefund t.txParams.authRefund
+     else 0) +
+    (if addr = blk.coinBase then
+       compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas tx.data
+         (FST (HD t.contexts)).msgParams.gasLimit
+         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
+         (FST (HD t.contexts)).subRefund t.txParams.authRefund
+     else 0)
+Proof
+  strip_tac
+  >> simp[post_transaction_accounting_def, transaction_gas_accounting_def]
+  >> Cases_on `MEM addr t.rollback.toDelete`
+  >> simp[lookup_account_process_deletions_deleted,
+          lookup_account_process_deletions_other, lookup_account_two_credits,
+          compute_refund_ether_def, compute_transaction_fee_def,
+          compute_total_gas_used_def, compute_tx_gas_used_def,
+          compute_gas_left_def]
+QED
+
 (* Main bridging theorem: connects SPEC to run_transaction for message calls *)
 Theorem SPEC_to_run_transaction:
   (* SPEC preconditions *)
@@ -873,27 +924,21 @@ Theorem SPEC_to_run_transaction:
     result.result = NONE ∧
     result.output = returnData ∧
     result.logs = logs ∧
-    (* Full account specification *)
-    (let acc_del = process_deletions rb.toDelete rb.accounts;
-         sender = lookup_account tx.from acc_del;
-         coinbase = lookup_account blk.coinBase acc_del;
-         refundEther = compute_refund_ether tx.gasLimit tx.gasPrice tx.data
-                         msgParams.gasLimit gasUsed addRefund subRefund
-                         txParams.authRefund;
-         transactionFee = compute_transaction_fee tx.gasLimit tx.gasPrice
-                            blk.baseFeePerGas tx.data msgParams.gasLimit gasUsed
-                            addRefund subRefund txParams.authRefund
-     in
-       (* tx.from gets refund added to balance *)
-       lookup_account tx.from accounts' =
-         sender with balance := sender.balance + refundEther ∧
-       (* blk.coinBase gets fee added (when different from tx.from) *)
-       (tx.from ≠ blk.coinBase ⇒
-         lookup_account blk.coinBase accounts' =
-           coinbase with balance := coinbase.balance + transactionFee) ∧
-       (* All other addresses: same as after deletions *)
-       (∀addr. addr ≠ tx.from ∧ addr ≠ blk.coinBase ⇒
-         lookup_account addr accounts' = lookup_account addr acc_del))
+    (* Fees accumulate at aliased addresses; successful deletions happen last. *)
+    (∀addr.
+       lookup_account addr accounts' =
+       if MEM addr rb.toDelete then empty_account_state else
+       (lookup_account addr rb.accounts) with balance :=
+         (lookup_account addr rb.accounts).balance +
+         (if addr = tx.from then
+            compute_refund_ether tx.gasLimit tx.gasPrice tx.data
+              msgParams.gasLimit gasUsed addRefund subRefund txParams.authRefund
+          else 0) +
+         (if addr = blk.coinBase then
+            compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
+              tx.data msgParams.gasLimit gasUsed addRefund subRefund
+              txParams.authRefund
+          else 0))
 Proof
   strip_tac
   \\ simp[run_transaction_def]
@@ -901,7 +946,7 @@ Proof
       SOME (INR (s.rollback.accounts, s', NONE))`
        by (imp_res_tac run_create_call >> gvs[])
   \\ simp[]
-  \\ sg `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
+  \\ sg `?rs2. run s' = SOME rs2 /\ Q (evm2set rs2)`
   >- (irule run_from_SPEC
       \\ conj_tac
       >- (qexists_tac `evm_ReturnData returnData * evm_Logs logs *
@@ -910,44 +955,35 @@ Proof
             evm_SubRefund subRefund * evm_TxParams txParams * R`
           \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
       >- (qexists_tac `P` \\ simp[]))
-  >- (gvs[]
-      \\ sg `FST rs2 = INR NONE`
-      >- (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
-          \\ simp[evm2set_def]
-          \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
-          \\ simp[])
-      >- (Cases_on `rs2` \\ gvs[]
-          \\ sg `r.contexts <> []`
-          >- (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
-              \\ `(s with rollback updated_by _).contexts = s.contexts` by simp[]
-              \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
-          >- (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
-              \\ simp[evm2set_def, STAR_evm2set]
-              \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
-              \\ simp[]
-              \\ strip_tac
-              \\ Cases_on `post_transaction_accounting blk tx NONE
-                           s.rollback.accounts r`
-              \\ qexistsl_tac [`q`, `r''`]
-              \\ simp[]
-              \\ `~(NULL r.contexts \/ ~NULL (TL r.contexts))` by gvs[NULL_EQ]
-              \\ qabbrev_tac `ctxt = FST (HD r.contexts)`
-              \\ qabbrev_tac `acc_del = process_deletions
-                              r.rollback.toDelete r.rollback.accounts`
-              \\ qpat_x_assum `post_transaction_accounting _ _ _ _ _ = _`
-                   (strip_assume_tac o
-                    ONCE_REWRITE_RULE[post_transaction_accounting_def])
-              \\ gvs[compute_refund_ether_def, compute_transaction_fee_def,
-                     compute_total_gas_used_def, compute_tx_gas_used_def,
-                     compute_gas_left_def]
-              \\ simp[lookup_account_update_account_same,
-                      lookup_account_update_account_other]
-              \\ Cases_on `lookup_account tx.from acc_del`
-              \\ simp[]
-              \\ rw[]
-              >- simp[vfmStateTheory.recordtype_account_state_seldef_balance_fupd_def]
-              >- (Cases_on `lookup_account blk.coinBase acc_del`
-                  \\ simp[vfmStateTheory.recordtype_account_state_seldef_balance_fupd_def]))))
+  \\ gvs[]
+  \\ `FST rs2 = INR NONE` by
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+      \\ simp[evm2set_def]
+      \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+      \\ simp[])
+  \\ Cases_on `rs2` \\ gvs[]
+  \\ `r.contexts <> []` by
+     (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+      \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ simp[evm2set_def, STAR_evm2set]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+  \\ strip_tac
+  \\ qexistsl_tac
+       [`FST (post_transaction_accounting blk tx NONE s.rollback.accounts r)`,
+        `SND (post_transaction_accounting blk tx NONE s.rollback.accounts r)`]
+  \\ `~NULL r.contexts /\ NULL (TL r.contexts)` by simp[NULL_EQ]
+  \\ drule_all post_transaction_accounting_success
+  \\ disch_then (qspecl_then [`tx`, `blk`, `s.rollback.accounts`] strip_assume_tac)
+  \\ simp[]
+  \\ gen_tac
+  \\ drule_all post_transaction_accounting_success_lookup
+  \\ disch_then (qspecl_then [`tx`, `blk`, `addr`, `s.rollback.accounts`] mp_tac)
+  \\ disch_then SUBST1_TAC
+  \\ AP_TERM_TAC
+  \\ qmatch_goalsub_abbrev_tac `_ with balance := balance + refund + fee`
+  \\ simp[NoAsms, account_state_component_equality, AC ADD_ASSOC ADD_COMM]
 QED
 
 (*-------------------------------------------------------------------------------*
