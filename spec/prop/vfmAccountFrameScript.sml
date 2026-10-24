@@ -326,6 +326,78 @@ Proof
   >> metis_tac[]
 QED
 
+Theorem proceed_call_nonprecompile_message:
+  proceed_call op sender address value ao az code gas rd s = (r, s') ∧
+  s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
+  r = INL () ∧ s'.rollback.tStorage = s.rollback.tStorage ∧
+  ∃tx.
+    FST (HD s'.contexts) =
+      initial_context (if op = CallCode ∨ op = DelegateCall then sender else address)
+        code (op = StaticCall ∨ (FST (HD s.contexts)).msgParams.static) rd tx ∧
+    tx.from = (if op = DelegateCall then (FST (HD s.contexts)).msgParams.caller else sender) ∧
+    tx.value = (if op = DelegateCall then (FST (HD s.contexts)).msgParams.value else value)
+Proof
+  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+  >> qmatch_goalsub_abbrev_tac `initial_context _ _ _ _ calltx`
+  >> qexists_tac `calltx` >> simp[Abbr `calltx`]
+  >> Cases_on `op = DelegateCall` >> simp[]
+QED
+
+Theorem terminal_bind:
+  (∀x s. ISR (FST (f x s))) ⇒ ISR (FST (bind g f s))
+Proof
+  rw[bind_def] >> Cases_on `g s` >> Cases_on `q` >> gvs[]
+QED
+
+Theorem terminal_ignore_bind:
+  (∀s. ISR (FST (f s))) ⇒ ISR (FST (ignore_bind g f s))
+Proof
+  simp[ignore_bind_def] >> strip_tac >> irule terminal_bind >> simp[]
+QED
+
+Theorem dispatch_precompiles_terminal:
+  ISR (FST (dispatch_precompiles a s))
+Proof
+  rw[dispatch_precompiles_def]
+  >> simp[precompile_ecrecover_def, precompile_sha2_256_def,
+          precompile_ripemd_160_def, precompile_identity_def,
+          precompile_modexp_def, precompile_ecadd_def,
+          precompile_ecmul_def, precompile_ecpairing_def,
+          precompile_blake2f_def, precompile_point_eval_def,
+          precompile_bls_g1add_def, precompile_bls_g1msm_def,
+          precompile_bls_g2add_def, precompile_bls_g2msm_def,
+          precompile_bls_pairing_def, precompile_bls_map_fp_to_g1_def,
+          precompile_bls_map_fp2_to_g2_def, precompile_p256verify_def,
+          fail_def]
+  >> rpt (FIRST [irule terminal_bind >> rpt gen_tac,
+                 irule terminal_ignore_bind >> gen_tac,
+                 CHANGED_TAC (simp[finish_def, fail_def]),
+                 BasicProvers.PURE_CASE_TAC])
+QED
+
+Theorem proceed_call_inl_nonprecompile:
+  proceed_call op sender address value ao az code gas rd s = (INL (), s') ∧
+  s.contexts ≠ [] ⇒ ¬fIN address precompile_addresses
+Proof
+  strip_tac >> strip_tac
+  >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed`
+  >> `ISR (FST ((dispatch_precompiles address : unit execution) pushed))`
+       by simp[dispatch_precompiles_terminal]
+  >> qpat_x_assum `ISR _` mp_tac
+  >> qpat_x_assum `dispatch_precompiles _ _ = _` (fn th => simp[th, sumTheory.ISR])
+QED
+
 (* A push copies the stack below, except that CREATE's set_original may
  * change the last saved rollback.  Only the callee's nonce and the created
  * account's nonce change, and the latter only when it is not yet created. *)
