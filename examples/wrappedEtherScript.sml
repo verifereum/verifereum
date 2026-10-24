@@ -5,7 +5,7 @@ Ancestors
   set_sep prog vfmProg
 Libs
   cv_transLib wordsLib blastLib helperLib
-  intLib
+  intLib evmDecompLib
 
 Theorem NOT_LENGTH_ADD_LEQ:
   ¬(LENGTH ls + n ≤ n) ⇔ ls ≠ []
@@ -449,509 +449,9 @@ Theorem parsed_contract_code_eq =
 fun evc tm = tm |> REWRITE_CONV[parsed_contract_code_eq]
                 |> CONV_RULE (RAND_CONV EVAL)
 
-val insts =
-  parsed_contract_code_eq
-  |> concl |> find_terms (finite_mapSyntax.is_fupdate)
-  |> map (fn tm => pairSyntax.dest_pair (rand tm))
-  |> map (fn (n,tm) => (numSyntax.int_of_term n, tm))
-  |> sort (fn (n,_) => fn (m,_) => n <= m)
-
-local
-  val SPEC_PushG = SPEC_Push |> Q.GENL[`n`,`bs`];
-  val SPEC_DupG = SPEC_Dup |> Q.GEN`n`
-  val SPEC_SwapG = SPEC_Swap |> Q.GEN`n`
-  val SPEC_LogG = SPEC_Log |> Q.GEN`n`
-in
-  fun mk_SPEC_Push n bs = SPECL[n,bs] SPEC_PushG
-  fun mk_SPEC_Dup n = SPEC n SPEC_DupG
-  fun mk_SPEC_Swap n = SPEC n SPEC_SwapG
-  fun mk_SPEC_Log n = SPEC n SPEC_LogG
-end
-
-fun print_code insts = let
-  fun term_to_line tm = let
-    val t = term_to_string tm
-            |> String.translate (fn c => if c = #"\n" then "" else implode [c])
-    in if String.size t < 40 then t else
-         String.substring(t,0,40) ^ ".." end
-  fun print_line (n,tm) =
-    print ("  " ^ Int.toString n ^ ": " ^ term_to_line tm ^ "\n")
-  val _ = print "\n\n"
-  val _ = List.app print_line insts
-  val _ = print "\n"
-  in () end
-
-(*
-print_code (List.take (insts, 60))
-*)
-
-val inst_tm = “Pop”
-val inst_tm = “JumpI”
-
-fun inst_to_SPEC inst_tm =
-  if is_comb inst_tm then let
-    val (f,xs) = strip_comb inst_tm
-    val f_str = f |> dest_const |> fst
-    in if f_str = "Push" then [mk_SPEC_Push (el 1 xs) (el 2 xs)] else
-       if f_str = "Dup" then [mk_SPEC_Dup (el 1 xs)] else
-       if f_str = "Swap" then [mk_SPEC_Swap (el 1 xs)] else
-       if f_str = "Log" then [mk_SPEC_Log (el 1 xs)] else
-         failwith ("inst_to_SPEC for " ^ f_str) end
-  else let
-    val i_str = inst_tm |> dest_const |> fst
-    in if i_str = "JumpI" then [SPEC_JumpI_skip, SPEC_JumpI_take]
-       else if i_str = "Stop" then [SPEC_Stop_inner, SPEC_Stop_outermost]
-       else if i_str = "Return" then
-         [SPEC_Return_inner |> Q.INST [‘inst’|->‘Return’] |> REWRITE_RULE [],
-          SPEC_Return_outermost |> Q.INST [‘inst’|->‘Return’] |> REWRITE_RULE []]
-       else if i_str = "Revert" then
-         [SPEC_Return_inner |> Q.INST [‘inst’|->‘Revert’] |> REWRITE_RULE [],
-          SPEC_Return_outermost |> Q.INST [‘inst’|->‘Revert’] |> REWRITE_RULE []]
-       else if i_str = "Invalid" then
-         [SPEC_Return_inner |> Q.INST [‘inst’|->‘Invalid’] |> REWRITE_RULE [],
-          SPEC_Return_outermost |> Q.INST [‘inst’|->‘Invalid’] |> REWRITE_RULE []]
-       else if i_str = "Call" then
-         [SPEC_Call |> Q.INST [‘call_inst’|->‘Call’] |> REWRITE_RULE []]
-       else if i_str = "StaticCall" then
-         [SPEC_Call |> Q.INST [‘call_inst’|->‘StaticCall’] |> REWRITE_RULE []]
-       else if i_str = "DelegateCall" then
-         [SPEC_Call |> Q.INST [‘call_inst’|->‘DelegateCall’] |> REWRITE_RULE []]
-       else [fetch "vfmProg" ("SPEC_" ^ i_str)] end;
-
-Definition evm_line_def:
-  evm_line (n:num) b = b:bool
-End
-
-Definition len_opcode_def:
-  len_opcode (Push n []) = 1:num ∧
-  len_opcode (Push n (x::xs)) = 1 + len_opcode (Push n xs) ∧
-  len_opcode _ = 1
-End
-
-Theorem LENGTH_opcode_eq_len_opcode:
-  ∀c. LENGTH (opcode c) = len_opcode c
-Proof
-  Cases \\ EVAL_TAC \\ rename [‘Push _ l’]
-  \\ Induct_on ‘l’ \\ gvs [len_opcode_def]
-QED
-
-Theorem to_evm_line:
-  ∀n. (b ⇒ c) ⇔ (evm_line n b ⇒ c)
-Proof
-  gvs [evm_line_def]
-QED
-
-Theorem SPEC_EVM_MODEL_empty:
-  SPEC EVM_MODEL emp {} emp
-Proof
-  gvs [SPEC_REFL]
-QED
-
-(* general tooling *)
-
-val word_of_bytes_conv = REWR_CONV (SRULE [FUN_EQ_THM] (GSYM word_of_bytes_le_def)) THENC cv_eval;
-val word_to_bytes_conv = REWR_CONV (GSYM word_to_bytes_le_def) THENC cv_eval;
-
-val word_of_bytes_pat = “word_of_bytes F (0w : 'a word) _”;
-val word_of_bytes_ss = simpLib.conv_ss
-   { name = "word_of_bytes_ss",
-     trace = 3,
-     key = SOME ([],word_of_bytes_pat),
-     conv = K (K word_of_bytes_conv) };
-
-val word_to_bytes_pat = “word_to_bytes (w : 'a word) F”;
-val word_to_bytes_ss = simpLib.conv_ss
-   { name = "word_to_bytes_ss",
-     trace = 3,
-     key = SOME ([],word_to_bytes_pat),
-     conv = K (K word_to_bytes_conv) };
-
-(* -- *)
-
-val pc_var = mk_var("pc",numSyntax.num);
-val evm_PC_pat = “evm_PC _”;
-val evm_PC_tm = rator evm_PC_pat;
-val static_gas_pat = “static_gas _”;
-val word_of_bytes_pat = “word_of_bytes _ _ _”;
+val word_of_bytes_conv =
+  REWR_CONV (SRULE [FUN_EQ_THM] (GSYM word_of_bytes_le_def)) THENC cv_eval;
 val evm_domain_ty = “:evm_el set set”;
-
-fun compute_static_gas th = let
-  val tms = find_terms (can (match_term static_gas_pat)) (concl th)
-  val lems = map (QCONV (SCONV [static_gas_def])) tms
-  in ONCE_REWRITE_RULE lems th end
-
-fun compute_word_of_bytes th = let
-  val tms = find_terms (can (match_term word_of_bytes_pat)) (concl th)
-  fun f tm =
-    (REWRITE_CONV [GSYM word_of_bytes_le_def] THENC cv_eval) tm
-    handle HOL_ERR _ => QCONV ALL_CONV tm
-  val lems = map f tms
-  in ONCE_REWRITE_RULE lems th end
-
-(*
-  val n = 88
-val th = hd thms
-*)
-
-fun prepare n th = let
-  val prefix = "v" ^ int_to_string n ^ "_"
-  val th1 = th |> PURE_REWRITE_RULE [SPEC_MOVE_COND]
-               |> compute_static_gas
-               |> compute_word_of_bytes
-               |> UNDISCH_ALL
-  val (_,pre,_,post) = th1 |> concl |> dest_spec
-  fun add_prime v = let
-    val (v,ty) = dest_var v
-    in mk_var(v ^ "_new", ty) end
-  val part_names = list_dest dest_star pre
-                     |> map (fn tm => dest_comb tm)
-  val parts = list_dest dest_star post
-  (*
-  val p = hd parts
-  *)
-  fun update_one p = let
-    val (a,e) = dest_comb p
-    val v = snd (first (aconv a o fst) part_names)
-    in
-      if aconv a evm_PC_tm then (p,[]) else
-      if aconv e v then (p,[]) else let
-      val v' = add_prime v
-      val new_eq = mk_eq(v',e)
-      in (mk_comb(a,v'), [new_eq]) end
-    end handle HOL_ERR _ => (p,[])
-  fun update_all [] = ([],[])
-    | update_all (p::ps) = let
-        val (p,aux1) = update_one p
-        val (ps,aux2) = update_all ps
-        in (p::ps, aux1 @ aux2) end
-  val (ps,aux) = update_all parts
-  val new_post = list_mk_star ps evm_domain_ty
-  val new_assums = list_mk_conj aux
-  val goal = mk_imp(new_assums, mk_eq(post,new_post))
-  val lemma = prove(goal,rpt strip_tac \\ asm_rewrite_tac [])
-  fun D th = if is_imp (concl th) then th else DISCH T th
-  val th2 = th1 |> CONV_RULE (RAND_CONV (REWR_CONV (UNDISCH lemma)))
-  val th3 = th2 |> DISCH new_assums |> DISCH_ALL
-                |> REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC]
-  val vs = free_vars (concl th3)
-  (* val prefix = "_0_" *)
-  fun add_prefix prefix v = mk_var(prefix ^ fst (dest_var v), type_of v)
-  val s = map (fn v => v |-> add_prefix prefix v) vs
-  val th4 = INST s th3
-  val th5 = DISCH_ALL th4
-  val lem = SPEC (numSyntax.term_of_int n) to_evm_line
-  val res = CONV_RULE (REWR_CONV lem) th5 |> UNDISCH
-            handle HOL_ERR e => th5
-  in res end
-
-fun set_pc n spec_th = let
-  val lem = spec_th |> INST [pc_var |-> numSyntax.term_of_int n]
-                    |> REWRITE_RULE [LENGTH_opcode_eq_len_opcode,len_opcode_def]
-  val tms = find_terms (can (match_term evm_PC_pat)) (concl lem)
-  val lems = map (QCONV (RAND_CONV (SCONV []))) tms
-  in lem |> ONCE_REWRITE_RULE lems end
-
-fun final_pc th = let
-  val (_,pre,_,post) = th |> concl |> dest_spec
-  val parts = list_dest dest_star post
-  val tm = first (can (match_term evm_PC_pat)) parts
-  val n = tm |> rand |> numSyntax.int_of_term
-  in SOME n end handle HOL_ERR _ => NONE;
-
-(*
-val am = 179
-val atm = “Push 2 [4w; 64w]”;
-val m = 182
-val tm = “Jump”
-
-val th0 = set_pc 179 (hd (inst_to_SPEC “Push 2 [4w; 64w]”));
-val th1 = set_pc 182 (hd (inst_to_SPEC “Jump”));
-*)
-
-fun maybe_fuse (m,tm,thms) aux =
-  if aconv tm “Jump” orelse aconv tm “JumpI” then
-    (let
-       val (th1,_) = hd thms
-       val (am,atm,_) = hd aux
-       fun simp_pc_val th = let
-         val tms = find_terms (can (match_term evm_PC_pat)) (concl th)
-         val tms = map rand tms
-         val lems = map (QCONV (TRY_CONV cv_eval)) tms
-         in ONCE_REWRITE_RULE lems th end
-       val th0s = map (compute_word_of_bytes o set_pc am) (inst_to_SPEC atm)
-       val th1s = map (compute_word_of_bytes o set_pc m) (inst_to_SPEC tm)
-       fun f (th0,th1) = let
-         val th2 = SPEC_COMPOSE_RULE [th0, th1]
-                     |> REWRITE_RULE [GSYM STAR_ASSOC]
-                     |> REWRITE_RULE [HD,TL,NOT_CONS_NIL,SEP_CLAUSES]
-                     |> REWRITE_RULE [STAR_ASSOC,GSYM CONJ_ASSOC]
-                     |> simp_pc_val
-         val pc2 = final_pc th2
-         val _ = assert Option.isSome pc2
-         in (th2, pc2) end
-       val ys = flatten (map (fn th0 => map (fn th1 => f (th0,th1)) th1s) th0s)
-       val zs = map (fn (th,t) => (prepare am th, t)) ys
-     in (am, atm, zs) :: tl aux end
-       handle HOL_ERR _ => (m,tm,thms) :: aux
-            | Empty => (m,tm,thms) :: aux)
-  else (m,tm,thms) :: aux
-
-fun prepare_spec [] aux = rev aux
-  | prepare_spec ((m, tm) :: xs) aux = let
-      val thms = map (set_pc m) (inst_to_SPEC tm)
-      val thms = map (prepare m) thms
-      val thms = map (fn th => (th, final_pc th)) thms
-      in prepare_spec xs (maybe_fuse (m, tm, thms) aux) end
-      handle HOL_ERR e => failwith ("prepare_spec " ^ term_to_string tm);
-
-fun alookup3 a [] = NONE
-  | alookup3 a ((x,y,z)::xs) = if a = x then SOME (y,z) else alookup3 a xs;
-
-val JumpDest_tm = “vfmOperation$JumpDest”
-
-
-
-(*
-val (pc,th,steps,path) = (175, SPEC_EVM_MODEL_empty, xs, [])
-val (pc,th,steps,path) = (184, SPEC_EVM_MODEL_empty, xs, [])
-val th = SPEC_EVM_MODEL_empty
-val pc = 0
-*)
-fun compose_from pc th steps path =
-  case alookup3 pc steps of NONE => [(th,path,SOME pc)] | SOME (inst_tm,spec_thms) =>
-  if aconv inst_tm JumpDest_tm andalso path <> [] then [(th,path,SOME pc)] else let
-  fun comp (th_n,dest) = let
-    val th1 = SPEC_COMPOSE_RULE [th,th_n]
-    in case dest of
-         NONE => [(th1,pc::path,dest)]
-       | SOME new_pc =>
-           if new_pc = pc then [(th1,pc::path,dest)]
-           else compose_from new_pc th1 steps (pc::path) end
-  in flatten (map comp spec_thms) end
-
-Theorem IMP_EQ_T_lemma:
-  (b ⇒ c) ⇒ (b ⇒ c = T)
-Proof
-  fs []
-QED
-
-Theorem merge_with_evm_line:
-  (p ⇒ evm_line n q ⇒ r) ⇒
-  (evm_line n (p ∧ q) ⇒ r)
-Proof
-  gvs [evm_line_def]
-QED
-
-Theorem evm_line_T:
-  evm_line n T = T ∧
-  evm_line n F = F
-Proof
-  gvs [evm_line_def]
-QED
-
-Theorem b2w_eq_simp:
-  (b2w b = 0w ⇔ ~b) ∧
-  (b2w b = 1w ⇔ b)
-Proof
-  Cases_on ‘b’ \\ gvs []
-QED
-
-val leq_gas_limit_pat = “m ≤ (p:message_parameters).gasLimit”
-val lt_stack_limit_pat = “m < vfmConstants$stack_limit”
-
-Definition insert_bytes_def:
-  insert_bytes byteIndex bytes memory =
-    TAKE byteIndex memory ⧺ bytes ⧺
-    DROP (byteIndex + LENGTH bytes) memory
-End
-
-Theorem to_insert_bytes:
-  ∀byteIndex memory bytes.
-    TAKE byteIndex memory ⧺ bytes ⧺
-    DROP (byteIndex + LENGTH bytes) memory =
-    insert_bytes byteIndex bytes memory ∧
-    TAKE byteIndex memory ⧺ bytes ⧺
-    DROP (LENGTH bytes + byteIndex) memory =
-    insert_bytes byteIndex bytes memory
-Proof
-  gvs [insert_bytes_def]
-QED
-
-val evm_MsgParams_pat = “evm_MsgParams p”;
-val message_parameters_var = rand evm_MsgParams_pat;
-val parsed_field = “^message_parameters_var.parsed”
-val code_field = “^message_parameters_var.code”
-
-(*
-val xs = prepare_spec insts []
-val (th,path,dest) = el 5 (compose_from 0 SPEC_EVM_MODEL_empty xs [])
-*)
-
-fun process_path (th,path,(dest : int option)) = let
-  val hs = hyp th
-  fun dest_evm_list tm = let
-    val (f,tms) = strip_comb tm
-    val (s,ty) = dest_const f
-    val _ = s = "evm_line" orelse failwith "not evm_line"
-    val _ = length tms = 2 orelse failwith "not evm_line"
-    in (numSyntax.int_of_term (hd tms), last tms) end
-  val hs2 = map (fn tm => (fst (dest_evm_list tm), tm)) hs
-  val hs3 = map (C assoc hs2) path
-  val th3 = foldl (fn (tm,th) => DISCH tm th) th hs3
-            |> PURE_REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC,to_insert_bytes]
-  val cnjs_count = length hs3
-  (* tidy up assumptions *)
-  val fixed_vars = th3 |> concl |> dest_imp |> snd |> rator |> free_vars
-  (* inline stack updates *)
-  fun get_conj_at i th = let
-    val (assms,_) = dest_imp (concl th)
-    in el i (strip_conj assms) end
-(*
-val th = th3
-val i = 1
-*)
-  val tidy_up_conv = SIMP_CONV (std_ss++  (* TODO: remove redundant rewrites *)
-                                ARITH_ss++
-                                word_of_bytes_ss++
-                                word_to_bytes_ss++
-                                listSimps.LIST_ss)
-                               [LENGTH,DROP_compute,wordsTheory.w2n_n2w,
-                                EVAL “dimword(:256)”,EVAL “dimindex(:256)”,
-                                cj 1 EL_restricted,ADD1,
-                                EL_simp_restricted,HD,TL_DEF,
-                                numeralTheory.numeral_suc,
-                                numeralTheory.numeral_pre]
-(*
-  apply_conv_at_conj 5 (UNBETA_CONV “a”) “a ∧ b ∧ c ∧ d”
-*)
-  fun apply_conv_at_conj i c tm =
-    if not (is_conj tm) then
-      if i = 1 then c tm else ALL_CONV tm
-    else
-      if i = 1 then
-        (RATOR_CONV o RAND_CONV) c tm
-      else
-        RAND_CONV (apply_conv_at_conj (i-1) c) tm;
-  (* inlining *)
-  fun is_inline_const tm =
-    if is_const tm then true else
-    if numSyntax.is_numeral tm then true else
-    if optionSyntax.is_some tm then is_inline_const (rand tm) else
-    if sumSyntax.is_inl tm then is_inline_const (rand tm) else
-    if sumSyntax.is_inr tm then is_inline_const (rand tm) else
-    if wordsSyntax.is_word_literal tm then true else let
-      val (xs,ty) = listSyntax.dest_list tm
-      in List.all is_inline_const xs end
-    handle HOL_ERR _ => false;
-  fun is_eq_to_inline tm = let
-    val (l,r) = dest_eq tm
-    val l_s = fst (dest_var l)
-    in String.isSuffix "_ss_new" l_s orelse
-       String.isSuffix "_g_new" l_s orelse
-       String.isSuffix "_j_new" l_s orelse
-       is_inline_const r end
-    handle HOL_ERR _ => false;
-(*
-val th = th3
-*)
-  fun inline_all_at i th = let
-    val tidy_up_thm = let
-      val c1 = apply_conv_at_conj i tidy_up_conv
-      in CONV_RULE (QCONV ((RATOR_CONV o RAND_CONV) c1)) end
-    val th = tidy_up_thm th
-    fun simplify th = let
-      val cnjs = strip_conj (rand (get_conj_at i th))
-      val ins = filter is_eq_to_inline cnjs |> map dest_eq
-                |> filter (fn (l,r) => not (op_mem aconv l fixed_vars))
-                |> map (fn (l,r) => l |-> r)
-      in if List.null ins then NONE else
-           SOME (INST [hd ins] th |> tidy_up_thm) end
-    fun simplify_loop th =
-      case simplify th of
-        NONE => th
-      | SOME th1 => simplify_loop th1
-    in simplify_loop th end
-  fun do_all i k th =
-    if i <= k then
-      do_all (i+1) k (inline_all_at i th)
-    else th
-(*
-  val res = do_all 1 3 th3
-*)
-  val res = do_all 1 cnjs_count th3
-  (* local utils *)
-  fun decide_imp tm1 tm2 = DECIDE (mk_imp (tm1,tm2));
-  fun find_max max_so_far [] = max_so_far
-    | find_max max_so_far (tm::tms) =
-        if can (decide_imp max_so_far) tm then
-          find_max max_so_far tms
-        else find_max tm tms;
-  (* tidy up gas limits *)
-  val th4 = let
-    val last_gas_limit_tms =
-          find_terms (can $ match_term leq_gas_limit_pat) (get_conj_at cnjs_count res)
-    val max_gas_limit_tm = find_max (hd last_gas_limit_tms) (tl last_gas_limit_tms)
-    fun prove_gas_limits_conv tm =
-      if can (match_term leq_gas_limit_pat) tm then
-        (MATCH_MP IMP_EQ_T_lemma (decide_imp max_gas_limit_tm tm) |> UNDISCH
-         handle HOL_ERR _ => ALL_CONV tm)
-      else if is_comb tm then
-        (RATOR_CONV prove_gas_limits_conv THENC RAND_CONV prove_gas_limits_conv) tm
-      else if is_abs tm then
-        (ABS_CONV prove_gas_limits_conv) tm
-      else ALL_CONV tm
-    in CONV_RULE prove_gas_limits_conv res end
-    handle Empty => res
-  (* tidy up stack limits *)
-  val th5 = let
-    val stack_limit_tms =
-          find_terms (can $ match_term lt_stack_limit_pat) (concl th4)
-    val max_stack_limit_tm = find_max (hd stack_limit_tms) (tl stack_limit_tms)
-    fun prove_stack_limits_conv tm =
-      if can (match_term lt_stack_limit_pat) tm then
-        (MATCH_MP IMP_EQ_T_lemma (decide_imp max_stack_limit_tm tm) |> UNDISCH
-         handle HOL_ERR _ => ALL_CONV tm)
-      else ALL_CONV tm
-    in CONV_RULE (DEPTH_CONV prove_stack_limits_conv) th4
-              |> REWRITE_RULE [] end handle Empty => th4
-  (* assume contract_code and parsed_contract_code *)
-  val (_,p,_,_) = th5 |> concl |> dest_imp |> snd |> dest_spec
-  val param_var = find_term (can $ match_term evm_MsgParams_pat) p |> rand
-  val parsed_acc = parsed_field |> subst [message_parameters_var |-> param_var]
-  val code_acc = code_field |> subst [message_parameters_var |-> param_var]
-  val code_abbrev_tm = contract_code_eq |> concl |> dest_eq |> fst
-  val parsed_abbrev_tm = parsed_contract_code_eq |> concl |> dest_eq |> fst
-  val asm1 = mk_eq(code_acc, code_abbrev_tm)
-  val asm2 = mk_eq(parsed_acc, parsed_abbrev_tm)
-  val th5 = REWRITE_RULE [ASSUME asm1, ASSUME asm2] th5
-  (* tidy up conjuncts that are true from the start and throughout *)
-  val cnjs1 = get_conj_at 1 th5 |> rand |> strip_conj
-  val thms = map (fn tm => MATCH_MP IMP_EQ_T_lemma
-                                    (DISCH_ALL (ASSUME tm)) |> UNDISCH) cnjs1
-  val th6 = REWRITE_RULE thms th5
-            |> PURE_REWRITE_RULE [GSYM AND_IMP_INTRO]
-  fun insert_evm_line (p,th) = DISCH p th |> MATCH_MP merge_with_evm_line
-  val th7 = foldr insert_evm_line th6 (hyp th6)
-            |> REWRITE_RULE [AND_IMP_INTRO, GSYM CONJ_ASSOC, evm_line_T, b2w_eq_simp]
-  (* simplify LENGTH contract_code and FLOOKUP parsed_contract_code *)
-  val n_tm = mk_var("n",numSyntax.num)
-  val pat1 = numSyntax.mk_less(n_tm,listSyntax.mk_length code_abbrev_tm)
-  val pat2 = finite_mapSyntax.mk_flookup(parsed_abbrev_tm,n_tm)
-  val tms1 = find_terms (can $ match_term pat1) (concl th7)
-  val tms2 = find_terms (can $ match_term pat2) (concl th7)
-             |> filter (fn tm => List.null (free_vars tm))
-  val c = REWRITE_CONV [parsed_contract_code_eq, contract_code_eq] THENC EVAL
-  val lems = map c (tms1 @ tms2)
-  val th8 = REWRITE_RULE lems th7
-  in th8 end
-
-fun path_thms_for ps insts = let
-  val xs = prepare_spec insts []
-  in map (fn p => (p, map process_path (compose_from p SPEC_EVM_MODEL_empty xs []))) ps end
-
-(*
-val res = time (path_thms_for [0]) insts;
-*)
 
 (* ---------------------------------------------------------------- *)
 
@@ -1510,6 +1010,113 @@ Theorem SPEC_fallback =
   MP SPEC_fallback_code_lemma SPEC_fallback_code_cond
   |> ONCE_REWRITE_RULE[GSYM SPEC_CODE]
   |> REWRITE_RULE[FST_SND_SND_EVM_MODEL]
+
+(* ---------------------------------------------------------------- *)
+(* Block summaries of the whole runtime code, by evmDecompLib (see
+   prog/README.md), and the fallback path recomposed from them. *)
+
+val weth_config : evmDecompLib.config =
+  {code_eq = contract_code_eq, parsed_eq = parsed_contract_code_eq,
+   hints = [], simps = [mask_and_w2w]}
+
+val weth_outcomes = evmDecompLib.summarize_code weth_config
+
+(* no hints needed: every block and exit is summarized *)
+val weth_summaries =
+  let val ss = evmDecompLib.summaries weth_outcomes in
+    if length ss = length weth_outcomes then ss
+    else raise mk_HOL_ERR "wrappedEtherScript" "weth_summaries"
+                 (String.concatWith "\n"
+                    (map evmDecompLib.outcome_to_string weth_outcomes))
+  end
+
+(* stored as weth_block_<entry pc>[_<variant>], e.g. weth_block_0_take *)
+val () = List.app (fn (s : evmDecompLib.block_summary, th) =>
+  ignore (save_thm ("weth_block_" ^ Int.toString (#entry s) ^
+                    (if #variant s = "" then "" else "_" ^ #variant s), th)))
+  weth_summaries
+
+fun weth_summary entry is_exit =
+  case List.find (fn (s : evmDecompLib.block_summary, _) =>
+                    #entry s = entry andalso is_exit (#exit s))
+                 weth_summaries of
+    SOME (_, th) => th
+  | NONE => raise mk_HOL_ERR "wrappedEtherScript" "weth_summary"
+                    (Int.toString entry)
+
+(* The memory lemmas are used only when composing a path: in the
+   simpset of every block they make the large blocks (1403, 2255) run for
+   minutes, where the whole code takes seconds without them.
+   memory_cost_offset_to_0 is instantiated at the offset WETH uses: as a
+   rewrite it loops, its right-hand side matching it again. *)
+val memory_cost_64_32 =
+  Q.SPECL [`64`,`32`] (Q.GENL [`off`,`sz`] memory_cost_offset_to_0)
+  |> SIMP_RULE arith_ss []
+
+val weth_path_config : evmDecompLib.config =
+  {code_eq = contract_code_eq, parsed_eq = parsed_contract_code_eq,
+   hints = [], simps = buffer_simps @ [mask_and_w2w, memory_cost_64_32]}
+
+(* calldata shorter than 4 bytes: dispatch (0) jumps to 175, which jumps to
+   the deposit code (1088), which returns to 183 *)
+val SPEC_fallback_blocks_composed =
+  evmDecompLib.compose_blocks weth_path_config
+    [weth_summary 0 (fn evmDecompLib.JumpITaken _ => true | _ => false),
+     weth_summary 175 (K true),
+     weth_summary 1088 (K true)]
+  |> SRULE [GSYM balance_slot_word_eq, GSYM balance_slot_key_eq]
+
+Theorem memory_cost_0_128[local]:
+  memory_cost m 0 128 =
+  memory_cost m 0 96 + memory_cost (expanded_memory m 64 32) 96 32
+Proof
+  `memory_cost m 0 96 + (memory_cost (expanded_memory m 64 32) 96 32 + 0) =
+   memory_cost m 0 (96 + 32) + 0`
+    by (irule memory_cost_add
+        \\ simp[buffer_length_expanded_memory, MULT_32_word_size_96]
+        \\ rw[MAX_DEF])
+  \\ fs[]
+QED
+
+(* SPEC_fallback's instance: no pending exception, no pending jump, the
+   stack called ss *)
+val SPEC_fallback_blocks_inst =
+  let
+    val th = SPEC_fallback_blocks_composed
+    fun var_named n =
+      valOf (List.find (fn v => fst (dest_var v) = n) (thm_frees th))
+    val e = var_named "e" and j = var_named "j" and rest = var_named "rest"
+  in
+    INST [e |-> sumSyntax.mk_inl (“()”, snd (sumSyntax.dest_sum (type_of e))),
+          j |-> optionSyntax.mk_none (optionSyntax.dest_option (type_of j)),
+          rest |-> mk_var ("ss", type_of rest)] th
+  end
+
+(* the path composed from the block summaries gives the hand-composed
+   SPEC_fallback *)
+Theorem SPEC_fallback_blocks:
+  ^(concl SPEC_fallback)
+Proof
+  ONCE_REWRITE_TAC [GSYM FST_SND_SND_EVM_MODEL]
+  \\ REWRITE_TAC [SPEC_CODE, SPEC_MOVE_COND]
+  \\ strip_tac
+  \\ mp_tac (MATCH_MP SPEC_SUBSET_CODE SPEC_fallback_blocks_inst
+             |> SPEC “fmap_entries parsed_contract_code”)
+  \\ impl_tac
+  >- (rewrite_tac[pred_setTheory.SUBSET_DEF] \\ Cases
+      \\ rewrite_tac[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY,
+                     pairTheory.PAIR_EQ]
+      \\ strip_tac \\ rpt BasicProvers.VAR_EQ_TAC
+      \\ simp[fmap_entries_def] \\ CONV_TAC evc)
+  \\ REWRITE_TAC [SPEC_MOVE_COND]
+  \\ impl_tac
+  >- (qpat_x_assum ‘(_,_,_) = _’ (assume_tac o SYM)
+      \\ fs[memory_cost_0_128])
+  \\ impl_tac >- simp[LESS_MOD]
+  \\ qpat_x_assum ‘(_,_,_) = _’ (fn th => rewrite_tac [SYM th])
+  \\ rewrite_tac [pairTheory.FST, pairTheory.SND, memory_cost_0_128]
+  \\ simp_tac std_ss [AC STAR_ASSOC STAR_COMM, AC ADD_ASSOC ADD_COMM]
+QED
 
 (*
 evc “FLOOKUP parsed_contract_code 0”
