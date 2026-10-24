@@ -351,6 +351,52 @@ QED
  * discharged by run_call_static_frame.
  * ------------------------------------------------------------------------- *)
 
+Theorem active_rollbacks_initial:
+  Q es.rollback ∧
+  (2 ≤ LENGTH es.contexts ⇒ Q (SND (HD es.contexts))) ⇒
+  EVERY Q (active_rollbacks (LENGTH es.contexts) es)
+Proof
+  rw[active_rollbacks_def]
+  >> Cases_on `es.contexts` >> gvs[]
+  >> Cases_on `t` >> gvs[MIN_DEF]
+  >> rw[] >> gvs[]
+  >> `LENGTH t' = 0` by decide_tac >> gvs[]
+QED
+
+Theorem active_rollbacks_same_stack:
+  LENGTH t.contexts = LENGTH s.contexts ∧
+  TL t.contexts = TL s.contexts ∧
+  SND (HD t.contexts) = SND (HD s.contexts) ⇒
+  TL (active_rollbacks d t) = TL (active_rollbacks d s)
+Proof
+  strip_tac >> simp[active_rollbacks_def]
+  >> Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
+  >> qmatch_goalsub_abbrev_tac `TAKE k (h::t')`
+  >> Cases_on `k` >> simp[]
+QED
+
+Theorem step_same_frame_account_invariant:
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts = LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> drule_all step_same_frame_foreign >> strip_tac
+  >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
+       by (irule active_rollbacks_same_stack >> simp[])
+  >> `P (lookup_account a s.rollback.accounts)`
+       by gvs[active_rollbacks_def]
+  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
+  >> `EVERY (λrb. P (lookup_account a rb.accounts))
+            (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
+  >> `EVERY (λrb. P (lookup_account a rb.accounts))
+            (TL (active_rollbacks d t))` by metis_tac[]
+  >> gvs[active_rollbacks_def]
+QED
+
 Theorem run_call_account_frame:
   wf_state es ∧
   (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
