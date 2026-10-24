@@ -800,11 +800,10 @@ Theorem post_transaction_accounting_accounts:
   lookup_account addr (SND (post_transaction_accounting blk tx NONE acc t)) =
   lookup_account addr t.rollback.accounts
 Proof
-  rewrite_tac[post_transaction_accounting_def]
-  \\ BasicProvers.LET_ELIM_TAC
-  \\ gvs[]
-  \\ simp[Abbr`newAccounts`, lookup_account_update_account_other]
-  \\ simp[Abbr`accounts`, lookup_account_process_deletions_other]
+  strip_tac
+  \\ simp[post_transaction_accounting_def, LET_THM,
+          lookup_account_process_deletions_other,
+          lookup_account_update_account_other]
 QED
 
 (* Helper definitions for gas accounting in bridging theorem *)
