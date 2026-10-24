@@ -12,7 +12,7 @@
  * ========================================================================== *)
 Theory vfmAccountFrame
 Ancestors
-  combin pair option list rich_list relation While
+  combin pair option list rich_list relation arithmetic While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
   vfmSameFrame vfmRunWithinFrame vfmRunCall
 Libs
@@ -100,6 +100,50 @@ Proof
   ho_match_mp_tac RTC_INDUCT
   >> rw[]
   >> simp[Once OWHILE_THM]
+QED
+
+Theorem OWHILE_finite_trace:
+  OWHILE G f x = SOME y ⇒
+  ∃n. FUNPOW f n x = y ∧ ¬G y ∧
+      ∀k. k < n ⇒ G (FUNPOW f k x)
+Proof
+  rw[OWHILE_def]
+  >> qexists_tac `LEAST n. ¬G (FUNPOW f n x)`
+  >> numLib.LEAST_ELIM_TAC >> metis_tac[]
+QED
+
+Theorem OWHILE_from_finite_trace:
+  ∀n x. ¬G (FUNPOW f n x) ∧
+    (∀k. k < n ⇒ G (FUNPOW f k x)) ⇒
+    OWHILE G f x = SOME (FUNPOW f n x)
+Proof
+  Induct >> rw[]
+  >- simp[Once OWHILE_THM]
+  >> `G x` by (first_x_assum (qspec_then `0` mp_tac) >> simp[])
+  >> simp[Once OWHILE_THM]
+  >> fs[FUNPOW]
+  >> first_x_assum irule >> simp[]
+  >> rpt strip_tac
+  >> first_x_assum (qspec_then `SUC k` mp_tac)
+  >> simp[FUNPOW]
+QED
+
+Theorem OWHILE_nested_trace:
+  (∀z. H z ⇒ G z) ∧ ¬G (FUNPOW f n x) ⇒
+  ∃m. m ≤ n ∧
+      OWHILE H f x = SOME (FUNPOW f m x) ∧
+      ¬H (FUNPOW f m x) ∧
+      (∀k. k < m ⇒ H (FUNPOW f k x))
+Proof
+  strip_tac
+  >> qexists_tac `LEAST m. ¬H (FUNPOW f m x)`
+  >> numLib.LEAST_ELIM_TAC
+  >> conj_tac >- metis_tac[]
+  >> rpt strip_tac
+  >- (spose_not_then assume_tac >>
+      rename1 `¬(j ≤ n)` >>
+      `n < j` by decide_tac >> metis_tac[])
+  >> irule OWHILE_from_finite_trace >> simp[]
 QED
 
 (* -------------------------------------------------------------------------
@@ -240,6 +284,8 @@ Theorem run_call_account_frame:
   (∀e r e'.
      (FST (HD e.contexts)).msgParams.callee = a ∧
      wf_state e ∧ P (lookup_account a e.rollback.accounts) ∧
+     (2 ≤ LENGTH e.contexts ⇒
+        P (lookup_account a (SND (HD e.contexts)).accounts)) ∧
      (e = es ∨
       ∃s u. run_call_reaches es s ∧
             LENGTH es.contexts ≤ LENGTH s.contexts ∧
