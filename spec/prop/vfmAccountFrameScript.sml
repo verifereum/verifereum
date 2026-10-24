@@ -14,7 +14,7 @@ Theory vfmAccountFrame
 Ancestors
   combin pair option list rich_list relation While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmSameFrame vfmRunWithinFrame vfmRunCall
+  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls
 Libs
   BasicProvers
 
@@ -204,6 +204,126 @@ Theorem step_pop_foreign:
                                 (lookup_account y s'.rollback.accounts))
 Proof
   cheat
+QED
+
+Theorem cp_preserves_account_prefix[local]:
+  cp m ∧ s.contexts ≠ [] ∧
+  s.rollback.accounts = A ∧
+  EVERY (λ(c,rb). P c.msgParams rb) (TAKE k s.contexts) ∧
+  m s = (r,s') ⇒
+  s'.rollback.accounts = A ∧
+  LENGTH s'.contexts = LENGTH s.contexts ∧
+  EVERY (λ(c,rb). P c.msgParams rb) (TAKE k s'.contexts)
+Proof
+  rw[cp_def]
+  >> first_x_assum drule
+  >> disch_then drule >> strip_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> Cases_on `k` >> gvs[]
+QED
+
+Theorem account_prefix_bind[local]:
+  (∀s. Q s ⇒ Q (SND (g s))) ∧
+  (∀x s. Q s ⇒ Q (SND (f x s))) ⇒
+  ∀s. Q s ⇒ Q (SND (bind g f s))
+Proof
+  rpt strip_tac
+  >> simp[bind_def]
+  >> Cases_on `g s` >> Cases_on `q` >> gvs[]
+  >> metis_tac[SND]
+QED
+
+Theorem account_prefix_ignore_bind[local]:
+  (∀s. Q s ⇒ Q (SND (g s))) ∧
+  (∀s. Q s ⇒ Q (SND (f s))) ⇒
+  ∀s. Q s ⇒ Q (SND (ignore_bind g f s))
+Proof
+  strip_tac >> rewrite_tac[ignore_bind_def]
+  >> ho_match_mp_tac account_prefix_bind >> simp[]
+QED
+
+Theorem account_prefix_static_guard[local]:
+  (∀s. Q s ⇒ s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.static) ⇒
+  ∀s. Q s ⇒ Q (SND (ignore_bind assert_not_static f s))
+Proof
+  rpt strip_tac
+  >> `s.contexts ≠ [] ∧ (FST (HD s.contexts)).msgParams.static`
+    by metis_tac[]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> drule_all assert_not_static_static
+  >> simp[ignore_bind_def, bind_def]
+QED
+
+Theorem account_prefix_conditional_guard[local]:
+  (∀s. Q s ⇒ s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.static) ∧
+  (¬b ⇒ ∀s. Q s ⇒ Q (SND (f s))) ⇒
+  ∀s. Q s ⇒
+    Q (SND (ignore_bind (if b then assert_not_static else return ()) f s))
+Proof
+  Cases_on `b`
+  >- (simp[] >> MATCH_ACCEPT_TAC account_prefix_static_guard)
+  >> simp[ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem cp_preserves_static_prefix[local]:
+  cp m ⇒ ∀s.
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
+  (0 < n ∧ n ≤ LENGTH (SND (m s)).contexts ∧
+   (SND (m s)).rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH (SND (m s)).contexts - n + 1) (SND (m s)).contexts))
+Proof
+  rw[cp_def]
+  >> `s.contexts ≠ []` by (strip_tac >> gvs[])
+  >> Cases_on `m s` >> gvs[]
+  >> first_x_assum drule >> disch_then drule >> strip_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> Cases_on `LENGTH t + 2 - n` >> gvs[]
+QED
+
+Theorem proceed_call_preserves_static_prefix[local]:
+  value = 0 ∨ op = CallCode ⇒ ∀s.
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
+  (0 < n ∧
+   n ≤ LENGTH (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).contexts ∧
+   (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).rollback.accounts = A ∧
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).contexts - n + 1)
+       (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).contexts))
+Proof
+  strip_tac >> gen_tac >> disch_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> `LENGTH t + 2 - n = SUC (LENGTH t + 1 - n)` by decide_tac
+  >> gvs[]
+  >> simp[proceed_call_def, bind_def, ignore_bind_def, return_def,
+          get_rollback_def, read_memory_def,
+          get_caller_def, get_value_def, get_static_def,
+          get_current_context_def, push_context_def,
+          initial_context_def, initial_msg_params_def]
+  >> qmatch_goalsub_abbrev_tac `SND (f pushed)`
+  >> `cp f` by simp[Abbr `f`]
+  >> `pushed.contexts ≠ []` by simp[Abbr `pushed`]
+  >> Cases_on `f pushed` >> gvs[]
+  >> qpat_x_assum `cp f` mp_tac >> rewrite_tac[cp_def]
+  >> disch_then drule >> disch_then drule >> strip_tac
+  >> gvs[Abbr `pushed`]
+  >> qpat_x_assum `EVERY _ _` mp_tac
+  >> `SUC (SUC (LENGTH t)) - (n + 1) = SUC (LENGTH t) - n` by decide_tac
+  >> pop_assum SUBST1_TAC >> simp[]
 QED
 
 (* A static frame changes no account: SSTORE, CREATE, SELFDESTRUCT and
