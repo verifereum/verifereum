@@ -1809,17 +1809,16 @@ Definition post_transaction_accounting_def:
   let refundEther = (tx.gasLimit - totalGasUsed) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
   let transactionFee = totalGasUsed * priorityFeePerGas in
-  let accounts = if result = NONE
-                 then process_deletions t.rollback.toDelete t.rollback.accounts
-                 else acc in
+  let accounts = if result = NONE then t.rollback.accounts else acc in
   let sender = lookup_account tx.from accounts in
+  let accounts = update_account tx.from
+    (sender with balance updated_by $+ refundEther) accounts in
   let feeRecipient = lookup_account blk.coinBase accounts in
-  let newAccounts =
-    update_account tx.from
-      (sender with balance updated_by $+ refundEther) $
-    update_account blk.coinBase
-      (feeRecipient with balance updated_by $+ transactionFee)
-    accounts in
+  let accounts = update_account blk.coinBase
+    (feeRecipient with balance updated_by $+ transactionFee) accounts in
+  let newAccounts = if result = NONE
+                    then process_deletions t.rollback.toDelete accounts
+                    else accounts in
   let logs = if result = NONE then logs else [] in
   let tr = <| gasUsed := totalGasUsed;
               logs := logs;
