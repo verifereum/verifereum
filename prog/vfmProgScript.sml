@@ -1274,31 +1274,6 @@ Definition ExtCodeHash_gas_def:
     static_gas ExtCodeHash + access_cost rb a
 End
 
-Definition sstore_refund_updates_def:
-  sstore_refund_updates originalValue currentValue (value:bytes32) =
-     if currentValue ≠ value then
-       let storageSetRefund =
-         if originalValue = value then
-           if originalValue = 0w then
-             storage_set_cost - warm_access_cost
-           else storage_update_cost - cold_sload_cost - warm_access_cost
-         else 0
-       in if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w
-          then (storageSetRefund + storage_clear_refund,0)
-          else if originalValue ≠ 0w ∧ currentValue = 0w
-          then (storageSetRefund,storage_clear_refund)
-          else (storageSetRefund,0)
-     else (0,0)
-End
-
-Definition sstore_base_gas_def:
-  sstore_base_gas originalValue currentValue (value:bytes32) =
-    if originalValue = currentValue ∧ currentValue ≠ value
-    then if originalValue = 0w then storage_set_cost
-    else storage_update_cost - cold_sload_cost
-    else warm_access_cost
-End
-
 Definition SStore_gas_def:
   SStore_gas original rb address key value = let
     accounts = rb.accounts;
@@ -1386,9 +1361,7 @@ val binop_tac =
           step_log_def,push_logs_def,
           get_code_def,step_sstore_def,step_push_def,step_dup_def,
           step_swap_def,assert_not_static_def,get_static_def,
-          step_sstore_gas_consumption_def
-            |> SRULE [GSYM sstore_refund_updates_def,
-                      GSYM sstore_base_gas_def],
+          step_sstore_gas_consumption_def,
           update_gas_refund_def
             |> oneline |> SRULE[pair_CASE_def],
           SStore_gas_def, UNCURRY, LAST_CONS_cond,
