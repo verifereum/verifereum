@@ -340,3 +340,24 @@ Theorem run_call_storage_key_added:
 Proof
   cheat
 QED
+
+(* -------------------------------------------------------------------------
+ * Deletions.  SELFDESTRUCT schedules its callee for deletion only if the
+ * callee is empty in the original accounts (the LAST saved rollback),
+ * which only a CREATE at that address changes.  A CREATE needs the address
+ * not yet created, which an account with a nonce or code never becomes
+ * again within run_call.
+ * ------------------------------------------------------------------------- *)
+
+Theorem run_call_to_delete:
+  wf_state es ∧
+  run_call es = SOME (r, es') ∧
+  MEM a es'.rollback.toDelete ⇒
+  MEM a es.rollback.toDelete ∨
+  (2 ≤ LENGTH es.contexts ∧ MEM a (SND (HD es.contexts)).toDelete) ∨
+  account_empty (lookup_account a (SND (LAST es.contexts)).accounts) ∨
+  (lookup_account a es.rollback.accounts).nonce = 0 ∧
+  NULL (lookup_account a es.rollback.accounts).code
+Proof
+  cheat
+QED
