@@ -35,13 +35,6 @@ Proof
   rw[vfmProgTheory.memory_cost_def]
 QED
 
-Theorem memory_cost_buffer_write:
-  off + LENGTH bs ≤ buffer_length m ⇒
-  memory_cost (buffer_write off bs m) i n = memory_cost m i n
-Proof
-  rw[memory_cost_def] \\ gvs[MAX_DEF]
-QED
-
 Theorem word_size_mono_leq:
   b1 ≤ b2 ⇒ word_size b1 ≤ word_size b2
 Proof
@@ -1031,13 +1024,6 @@ Proof
   \\ pop_assum (mp_tac o Q.AP_TERM `LENGTH`) \\ simp[]
 QED
 
-Theorem word_of_bytes_word_to_bytes_bytes32:
-  word_of_bytes be 0w (word_to_bytes (w:bytes32) be) = w
-Proof
-  irule word_of_bytes_word_to_bytes
-  \\ rw[dividesTheory.divides_def] \\ qexists_tac `32` \\ simp[]
-QED
-
 Theorem Keccak256_gas_0_64:
   64 ≤ buffer_length m ⇒ Keccak256_gas m 0 64 = 42
 Proof
@@ -1055,7 +1041,7 @@ val balance_slot_key_eq =
 val buffer_simps = [
   buffer_take_write_same, buffer_take_write_after, buffer_take_write_before,
   buffer_take_expanded_memory, buffer_length_expanded_memory,
-  word_to_bytes_bytes32_NIL, word_of_bytes_word_to_bytes_bytes32,
+  word_to_bytes_bytes32_NIL,
   buffer_take_split |> Q.INST[`n1` |-> `32`, `n2` |-> `32`]
                     |> SIMP_RULE arith_ss [],
   MAX_LE, expanded_memory_leq, memory_cost_none_zero,
@@ -1211,6 +1197,7 @@ val th = spec14
 val prefix = "v0_"
 *)
 
+(* Unused exploration helpers, kept for reference.
 fun prepare prefix th = let
   val th1 = th |> REWRITE_RULE [SPEC_MOVE_COND] |> UNDISCH_ALL
   val (_,pre,_,post) = th1 |> concl |> dest_spec
@@ -1257,6 +1244,7 @@ fun prepare_list thms = let
 val res =
   [spec10,spec11,spec12,spec13,spec14,spec15,spec16,spec17]
   |> prepare_list |> SPEC_COMPOSE_RULE;
+*)
 
 (* --- *)
 
@@ -1595,9 +1583,10 @@ evc “FLOOKUP parsed_contract_code 183”
 evc “FLOOKUP parsed_contract_code 184”
 *)
 
-(* TODO: false as stated, so left unproved: the fallback deposits on calldata
-   that starts with no selector, e.g. empty calldata (see SPEC_fallback),
-   and such a call succeeds; it needs a restatement first. *)
+(* TODO: false as stated, so left unproved: calldata with no known selector
+   (empty, under 4 bytes, or an unknown selector) falls through to the
+   fallback, which deposits and succeeds (see SPEC_fallback); it needs a
+   restatement first. *)
 (*
 Theorem call_follows_abi_4bytes:
   tx.to = SOME addr ∧

@@ -1148,6 +1148,13 @@ Proof
   \\ rw[MAX_DEF]
 QED
 
+Theorem memory_cost_buffer_write:
+  off + LENGTH bs ≤ buffer_length m ⇒
+  memory_cost (buffer_write off bs m) i n = memory_cost m i n
+Proof
+  rw[memory_cost_def] \\ gvs[MAX_DEF]
+QED
+
 Definition memory_expand_by_def:
   memory_expand_by (m: buffer) offset size =
   MAX (buffer_length m) (if 0 < size then word_size (offset + size) * 32 else 0)
