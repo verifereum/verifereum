@@ -3472,14 +3472,14 @@ Proof
   Cases_on `0 < value` >> simp[call_value_cost_def, call_stipend_def]
 QED
 
-Theorem call_stack_after_pop_has_room:
+Theorem call_stack_after_pop_has_room[local]:
   LENGTH ss <= stack_limit /\ 6 + vOff <= LENGTH ss ==>
   LENGTH (DROP (6 + vOff) ss) < stack_limit
 Proof
   simp[LENGTH_DROP] >> decide_tac
 QED
 
-Theorem call_static_check_success:
+Theorem call_static_check_success[local]:
   s.contexts = (ctxt,cb)::cs /\ ctxt.msgParams = p /\
   (0 < (value:num) ==> ~p.static) ==>
   (if op = Call /\ 0 < value then assert_not_static else return ()) s =
@@ -3638,230 +3638,6 @@ Proof
     simp_tac (srw_ss()) [execution_state_component_equality, tr, td]))
 QED
 
-Theorem bind_eq_inr:
-  bind g k s = (INR e,t) <=>
-  (g s = (INR e,t) \/
-   ?x u. g s = (INL x,u) /\ k x u = (INR e,t))
-Proof
-  Cases_on `g s` >> Cases_on `q` >> simp[bind_def]
-QED
-
-Theorem precompile_identity_inr_type_transport[local]:
-  ((precompile_identity s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_identity s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_identity_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def]
-QED
-
-Theorem precompile_ecrecover_inr_type_transport[local]:
-  ((precompile_ecrecover s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_ecrecover s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_ecrecover_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >>
-  CASE_TAC >> simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_sha2_256_inr_type_transport[local]:
-  ((precompile_sha2_256 s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_sha2_256 s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_sha2_256_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def]
-QED
-
-Theorem precompile_modexp_inr_type_transport[local]:
-  ((precompile_modexp s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_modexp s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_modexp_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def]
-QED
-
-Theorem precompile_ripemd_160_inr_type_transport[local]:
-  ((precompile_ripemd_160 s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_ripemd_160 s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_ripemd_160_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_ecadd_inr_type_transport[local]:
-  ((precompile_ecadd s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_ecadd s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_ecadd_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def] >>
-  PairCases_on `x` >> simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_ecmul_inr_type_transport[local]:
-  ((precompile_ecmul s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_ecmul s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_ecmul_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def] >>
-  PairCases_on `x` >> simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_ecpairing_inr_type_transport[local]:
-  ((precompile_ecpairing s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_ecpairing s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_ecpairing_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> IF_CASES_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def] >>
-  CASE_TAC >> simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_blake2f_inr_type_transport[local]:
-  ((precompile_blake2f s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_blake2f s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_blake2f_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> IF_CASES_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def] >>
-  cong_tac (SOME 8) >> IF_CASES_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_point_eval_inr_type_transport[local]:
-  ((precompile_point_eval s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_point_eval s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_point_eval_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 12) >> IF_CASES_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def] >>
-  cong_tac (SOME 12) >>
-  rpt (CASE_TAC >> simp[bind_eq_inr, finish_def, fail_def])
-QED
-
-Theorem precompile_bls_g1add_inr_type_transport[local]:
-  ((precompile_bls_g1add s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_bls_g1add s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_bls_g1add_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_bls_g1msm_inr_type_transport[local]:
-  ((precompile_bls_g1msm s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_bls_g1msm s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_bls_g1msm_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_bls_g2add_inr_type_transport[local]:
-  ((precompile_bls_g2add s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_bls_g2add s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_bls_g2add_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_bls_g2msm_inr_type_transport[local]:
-  ((precompile_bls_g2msm s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_bls_g2msm s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_bls_g2msm_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_bls_pairing_inr_type_transport[local]:
-  ((precompile_bls_pairing s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_bls_pairing s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_bls_pairing_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_bls_map_fp_to_g1_inr_type_transport[local]:
-  ((precompile_bls_map_fp_to_g1 s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_bls_map_fp_to_g1 s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_bls_map_fp_to_g1_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_bls_map_fp2_to_g2_inr_type_transport[local]:
-  ((precompile_bls_map_fp2_to_g2 s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_bls_map_fp2_to_g2 s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_bls_map_fp2_to_g2_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> CASE_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem precompile_p256verify_inr_type_transport[local]:
-  ((precompile_p256verify s : 'a execution_result) = (INR ex,t)) <=>
-  ((precompile_p256verify s : 'b execution_result) = (INR ex,t))
-Proof
-  simp[precompile_p256verify_def, ignore_bind_def, bind_eq_inr,
-       finish_def, fail_def] >>
-  cong_tac (SOME 8) >> IF_CASES_TAC >>
-  simp[bind_eq_inr, finish_def, fail_def] >>
-  IF_CASES_TAC >> simp[bind_eq_inr, finish_def, fail_def]
-QED
-
-Theorem dispatch_precompiles_inr_type_transport:
-  ((dispatch_precompiles addr s : 'a execution_result) = (INR ex,t)) <=>
-  ((dispatch_precompiles addr s : 'b execution_result) = (INR ex,t))
-Proof
-  pure_rewrite_tac[dispatch_precompiles_def] >>
-  rpt (IF_CASES_TAC >> asm_rewrite_tac[]) >>
-  simp[fail_def] >>
-  MAP_FIRST MATCH_ACCEPT_TAC [precompile_ecrecover_inr_type_transport,
-    precompile_sha2_256_inr_type_transport,
-    precompile_ripemd_160_inr_type_transport,
-    precompile_identity_inr_type_transport,
-    precompile_modexp_inr_type_transport,
-    precompile_ecadd_inr_type_transport,
-    precompile_ecmul_inr_type_transport,
-    precompile_ecpairing_inr_type_transport,
-    precompile_blake2f_inr_type_transport,
-    precompile_point_eval_inr_type_transport,
-    precompile_bls_g1add_inr_type_transport,
-    precompile_bls_g1msm_inr_type_transport,
-    precompile_bls_g2add_inr_type_transport,
-    precompile_bls_g2msm_inr_type_transport,
-    precompile_bls_pairing_inr_type_transport,
-    precompile_bls_map_fp_to_g1_inr_type_transport,
-    precompile_bls_map_fp2_to_g2_inr_type_transport,
-    precompile_p256verify_inr_type_transport]
-QED
-
-Theorem dispatch_precompiles_inr_to_unit:
-  ((dispatch_precompiles addr s : 'a execution_result) = (INR ex,t)) ==>
-  ((dispatch_precompiles addr s : unit execution_result) = (INR ex,t))
-Proof
-  metis_tac[dispatch_precompiles_inr_type_transport]
-QED
-
 Theorem proceed_call_precompile_success:
   s.contexts = (parent,prb)::rest /\ s.rollback = rb /\
   parent.msgParams.callee = sender /\
@@ -3872,7 +3648,7 @@ Theorem proceed_call_precompile_success:
     ctxt.msgParams.data = buffer_of_list data /\
     ctxt.msgParams.gasLimit = stipend /\
     ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
-    dispatch_precompiles addr s =
+    (dispatch_precompiles addr s : unit execution_result) =
       (INR NONE, s with contexts :=
         (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
   ?c. c.msgParams.outputTo = outputTo /\
@@ -3900,7 +3676,6 @@ Proof
    ctxt.returnData = []` by
     simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def] >>
   qpat_x_assum `!s ctxt crb rest. _` drule_all >>
-  disch_then (mp_tac o MATCH_MP dispatch_precompiles_inr_to_unit) >>
   disch_then SUBST1_TAC >>
   qexists_tac `ctxt with <|gasUsed := pg; returnData := out|>` >>
   simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def,
@@ -3966,13 +3741,13 @@ Theorem step_precompile_success_exact:
   (0 < value ==> ~p.static) /\
   value <= (lookup_account p.callee rb.accounts).balance /\ LENGTH cs < 1024 /\
   data = buffer_take argsOffset argsSize em /\
-  fIN addr precompile_addresses /\ pg <= stipend /\
+  fIN addr precompile_addresses /\
   (!s ctxt crb rest.
     s.contexts = (ctxt,crb)::rest /\
     ctxt.msgParams.data = buffer_of_list data /\
     ctxt.msgParams.gasLimit = stipend /\
     ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
-    dispatch_precompiles addr s =
+    (dispatch_precompiles addr s : unit execution_result) =
       (INR NONE, s with contexts :=
         (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
   step s =
@@ -4004,10 +3779,8 @@ Proof
       NONE => toAccount.code | SOME del => (lookup_account del rb.accounts).code`]
     step_call_prepared)) >>
   strip_tac >>
-  qpat_assum `step_call op s = _` (fn th =>
-    qmatch_abbrev_tac `step s = final` >>
-    qpat_assum `step_call op s = _` (fn th =>
-      qmatch_asmsub_abbrev_tac `proceed_call op _ _ _ _ _ code _ _ prepared`)) >>
+  qmatch_abbrev_tac `step s = final` >>
+  qmatch_asmsub_abbrev_tac `proceed_call op _ _ _ _ _ code _ _ prepared` >>
   `prepared.contexts = (caller with <|stack := DROP (6 + vOff) ss;
     memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs` by
     simp[Abbr `prepared`] >>
@@ -4017,8 +3790,8 @@ Proof
   `data = buffer_take argsOffset argsSize
     (caller with <|stack := DROP (6 + vOff) ss;
     memory := em; gasUsed := g + gasCost; returnData := []|>).memory` by simp[] >>
-  drule_all (Q.INST [`op` |-> `op`, `value` |-> `value`,
-    `code` |-> `code`, `outputTo` |-> `Memory <|offset := retOffset; size := retSize|>`]
+  drule_all (Q.INST
+    [`outputTo` |-> `Memory <|offset := retOffset; size := retSize|>`]
     proceed_call_precompile_success) >>
   disch_then (qspecl_then [`value`, `retSize`, `retOffset`, `op`, `code`] strip_assume_tac) >>
   qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` (fn th =>
@@ -4100,13 +3873,12 @@ Theorem SPEC_Call_precompile:
          LENGTH cs < 1024 ∧
          data = buffer_take argsOffset argsSize em ∧
          fIN addr precompile_addresses ∧
-         pg ≤ stipend ∧
          (∀s ctxt crb rest.
             s.contexts = (ctxt,crb)::rest ∧
             ctxt.msgParams.data = buffer_of_list data ∧
             ctxt.msgParams.gasLimit = stipend ∧
             ctxt.gasUsed = 0 ∧ ctxt.returnData = [] ⇒
-            dispatch_precompiles addr s =
+            (dispatch_precompiles addr s : unit execution_result) =
             (INR NONE,
              s with contexts :=
                (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest))))
@@ -4168,13 +3940,7 @@ Theorem witness_precompile_identity:
         (ctxt with <|gasUsed := pg; returnData := data|>,crb)::rest))
 Proof
   conj_tac >- (
-    EVAL_TAC
-    \\ qmatch_goalsub_abbrev_tac`fset_REP (fset_ABS L)`
-    \\ `set (fset_REP (fset_ABS L)) = set L`
-         by metis_tac[finite_setTheory.fset_ABS_11,
-                      finite_setTheory.fset_ABS_REP,
-                      finite_setTheory.fsequiv_def]
-    \\ pop_assum SUBST1_TAC \\ simp[Abbr`L`])
+    simp[precompile_addresses_def, finite_setTheory.fIN_fset_ABS] \\ EVAL_TAC)
   \\ rw[dispatch_precompiles_def,precompile_identity_def,get_call_data_def,
         bind_def,ignore_bind_def,get_current_context_def,return_def,
         consume_gas_def,assert_def,set_current_context_def,
