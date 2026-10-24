@@ -2228,13 +2228,12 @@ Proof
 QED
 
 Theorem witness_OutOfGas_pop_Add:
-  ∃cost k. step_inst Add =
-           bind (pop_stack 2)
-             (λargs. ignore_bind (consume_gas (cost args)) (k args))
+  ∃k. step_inst Add =
+      bind (pop_stack 2)
+        (λargs. ignore_bind (consume_gas (K (static_gas Add) args)) (k args))
 Proof
   simp[step_inst_def,step_binop_def]
-  \\ qexistsl_tac[`K (static_gas Add)`,
-                  `λargs. push_stack (word_add (EL 0 args) (EL 1 args))`]
+  \\ qexists_tac`λargs. push_stack (word_add (EL 0 args) (EL 1 args))`
   \\ simp[]
 QED
 
