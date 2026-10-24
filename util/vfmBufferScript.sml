@@ -607,6 +607,44 @@ Proof
   rw[buffer_of_list_def]
 QED
 
+Theorem LENGTH_TAKE_PAD_RIGHT[local]:
+  LENGTH (TAKE n (PAD_RIGHT c n l)) = n
+Proof
+  rw[LENGTH_TAKE_EQ, PAD_RIGHT]
+QED
+
+Theorem buffer_take_write_same:
+  LENGTH bs = n ⇒ buffer_take off n (buffer_write off bs b) = bs
+Proof
+  rw[buffer_take_to_list] \\ Cases_on `bs = []` >- gvs[]
+  \\ rw[buffer_to_list_write, DROP_APPEND, LENGTH_TAKE_PAD_RIGHT,
+        DROP_LENGTH_TOO_LONG, TAKE_APPEND1]
+QED
+
+Theorem buffer_take_write_after:
+  off + LENGTH bs ≤ i ⇒
+  buffer_take i n (buffer_write off bs b) = buffer_take i n b
+Proof
+  rw[buffer_take_to_list] \\ Cases_on `bs = []` >- gvs[]
+  \\ rw[buffer_to_list_write, DROP_APPEND, LENGTH_TAKE_PAD_RIGHT,
+        DROP_LENGTH_TOO_LONG, DROP_DROP_T]
+QED
+
+Theorem buffer_take_write_before:
+  i + n ≤ off ∧ i + n ≤ buffer_length b ⇒
+  buffer_take i n (buffer_write off bs b) = buffer_take i n b
+Proof
+  rw[buffer_take_to_list, TAKE_DROP_SWAP] \\ Cases_on `bs = []` >- gvs[]
+  \\ rw[buffer_to_list_write, TAKE_APPEND1, LENGTH_TAKE_PAD_RIGHT,
+        TAKE_TAKE_T, PAD_RIGHT]
+QED
+
+Theorem buffer_take_split:
+  buffer_take i (n1 + n2) b = buffer_take i n1 b ++ buffer_take (i + n1) n2 b
+Proof
+  rw[buffer_take_to_list, TAKE_SUM, DROP_DROP_T]
+QED
+
 (* buffer_sub builds the same words as buffer_of_list does: a word is
    stored iff it is nonzero, and has no bytes beyond its 32 *)
 

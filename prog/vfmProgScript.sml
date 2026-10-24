@@ -1216,6 +1216,21 @@ Proof
   rw[expanded_memory_def, memory_expand_by_def]
 QED
 
+Theorem buffer_length_expanded_memory:
+  buffer_length (expanded_memory m off sz) =
+  MAX (buffer_length m) (if 0 < sz then 32 * word_size (off + sz) else 0)
+Proof
+  rw[expanded_memory_def, memory_expand_by_def, MAX_DEF]
+QED
+
+Theorem buffer_take_expanded_memory:
+  i + n ≤ buffer_length m ⇒
+  buffer_take i n (expanded_memory m off sz) = buffer_take i n m
+Proof
+  rw[buffer_take_to_list, expanded_memory_def, buffer_to_list_extend,
+     rich_listTheory.TAKE_DROP_SWAP, TAKE_APPEND1]
+QED
+
 Definition Keccak256_gas_def:
   Keccak256_gas m offset size =
     static_gas Keccak256 +
