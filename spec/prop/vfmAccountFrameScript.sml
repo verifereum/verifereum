@@ -1044,7 +1044,13 @@ Theorem run_call_empty_code_frame:
   run_call e = SOME (r, e') ⇒
   e'.rollback.accounts = e.rollback.accounts
 Proof
-  cheat
+  strip_tac
+  >> Cases_on `step e`
+  >> drule_all step_empty_code_exit >> strip_tac
+  >> qpat_x_assum `run_call _ = _` mp_tac
+  >> simp[run_call_def, Once OWHILE_THM]
+  >> simp[Once OWHILE_THM]
+  >> strip_tac >> gvs[]
 QED
 
 (* If `a` has no code and a CREATE at `a` would collide (nonzero nonce or
