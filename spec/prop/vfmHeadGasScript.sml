@@ -217,10 +217,7 @@ Theorem set_original_preserves_head_gas_mono[simp]:
   preserves_head_gas_mono (set_original a)
 Proof
   rw[preserves_head_gas_mono_def, preserves_def, head_gas_mono_rel_def,
-     set_original_def, return_def, fail_def]
-  >> gvs[set_last_accounts_def]
-  >> qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES
-  >> gvs[] >> Cases_on`l` >> gvs[]
+     set_original_def, return_def, fail_def] >> gvs[]
 QED
 
 Theorem get_accounts_preserves_head_gas_mono[simp]:

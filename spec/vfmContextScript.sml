@@ -125,6 +125,8 @@ Datatype:
   <| contexts : (context # rollback_state) list
    ; txParams : transaction_parameters
    ; rollback : rollback_state
+   (* CREATE resets an account here; frame rollback does not restore it. *)
+   ; originalAccounts : evm_accounts
    ; msdomain : domain_mode
    |>
 End
@@ -447,6 +449,7 @@ Definition initial_state_def:
     <| contexts := [(ctxt, rb)]
      ; txParams := initial_tx_params chainId prevHashes blk tx authRefund
      ; rollback := rb
+     ; originalAccounts := postAuthAccounts
      ; msdomain := dom
      |>
 End

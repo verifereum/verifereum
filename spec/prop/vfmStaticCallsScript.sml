@@ -66,6 +66,7 @@ QED
 Definition cp_def:
   cp (m: α execution) ⇔
     ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒
+      s'.originalAccounts = s.originalAccounts ∧
       s'.rollback.accounts = s.rollback.accounts ∧
       s'.rollback.tStorage = s.rollback.tStorage ∧
       s'.rollback.toDelete = s.rollback.toDelete ∧
@@ -86,6 +87,7 @@ End
 
 Definition cp_rel_def:
   cp_rel s s' ⇔
+    s'.originalAccounts = s.originalAccounts ∧
     s'.rollback.accounts = s.rollback.accounts ∧
     s'.rollback.tStorage = s.rollback.tStorage ∧
     s'.rollback.toDelete = s.rollback.toDelete ∧

@@ -5,7 +5,8 @@ open HolKernel
   vfmDomainCollectionTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib
   vfmSettlementTheory vfmAccountingTheory
-  vfmContextLengthTheory
+  vfmOriginalStateTheory vfmOriginalAccountsTheory
+  vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
   vfmProgTheory wrappedEtherTheory
 
 val () = new_theory "verifereum";

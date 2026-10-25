@@ -27,6 +27,7 @@ Datatype:
          | CachedRB   rollback_state
          | TxParams   transaction_parameters
          | Rollback   rollback_state
+         | OriginalAccounts evm_accounts
          | Msdomain   domain_mode
 End
 
@@ -53,6 +54,7 @@ Datatype:
           | HasCachedRB
           | HasTxParams
           | HasRollback
+          | HasOriginalAccounts
           | HasMsdomain
 End
 
@@ -73,6 +75,7 @@ Definition evm2set_on_def:
       (if HasCachedRB ∈ dom   then { CachedRB (SND (HD s.contexts)) } else {}) ∪
       (if HasTxParams ∈ dom   then { TxParams s.txParams } else {}) ∪
       (if HasRollback ∈ dom   then { Rollback s.rollback } else {}) ∪
+      (if HasOriginalAccounts ∈ dom then { OriginalAccounts s.originalAccounts } else {}) ∪
       (if HasMsdomain ∈ dom   then { Msdomain s.msdomain } else {}) ∪
       (if HasException ∈ dom  then { Exception (FST r) } else {}) ∪
       { Parsed n (FLOOKUP current_context.msgParams.parsed n)
@@ -135,6 +138,7 @@ Proof
        (if ∃x. CachedRB x ∈ u then {HasCachedRB} else {}) ∪
        (if ∃x. TxParams x ∈ u then {HasTxParams} else {}) ∪
        (if ∃x. Rollback x ∈ u then {HasRollback} else {}) ∪
+       (if ∃x. OriginalAccounts x ∈ u then {HasOriginalAccounts} else {}) ∪
        (if ∃x. Msdomain x ∈ u then {HasMsdomain} else {}) ∪
        (if ∃x. Exception x ∈ u then {HasException} else {}) ∪
        {HasParsed n | ∃x y. Parsed n x y ∈ u}`
@@ -243,6 +247,11 @@ Definition evm_Rollback_def:
   evm_Rollback x = SEP_EQ { Rollback x }
 End
 
+(* Original accounts survive frame rollback and are updated by CREATE. *)
+Definition evm_OriginalAccounts_def:
+  evm_OriginalAccounts x = SEP_EQ { OriginalAccounts x }
+End
+
 Definition evm_Msdomain_def:
   evm_Msdomain x = SEP_EQ { Msdomain x }
 End
@@ -314,7 +323,11 @@ QED
 (* Theorems for construction of |- SPEC EVM_MODEL ...                            *)
 (* ----------------------------------------------------------------------------- *)
 
-Theorem STAR_evm2set:
+Theorem STAR_evm2set_with_original:
+  ((evm_OriginalAccounts a * p) (evm2set_on dom s) ⇔
+   (a = (SND s).originalAccounts) ∧
+   HasOriginalAccounts ∈ dom ∧
+   p (evm2set_on (dom DELETE HasOriginalAccounts) s)) ∧
   ((evm_PC n * p) (evm2set_on dom s) ⇔
    (n = (FST (HD (SND s).contexts)).pc) /\
    HasPC ∈ dom /\ p (evm2set_on (dom DELETE HasPC) s)) /\
@@ -375,7 +388,7 @@ Proof
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
         evm_TxParams_def, evm_Contexts_def, evm_CachedRB_def, evm_Memory_def,
-        evm_Rollback_def, evm_Msdomain_def, evm_Logs_def,
+        evm_Rollback_def, evm_OriginalAccounts_def, evm_Msdomain_def, evm_Logs_def,
         evm_AddRefund_def, evm_SubRefund_def, evm_Parsed_def]
   \\ rw[EQ_IMP_THM]
   >>~- ([`pc < _ (* g *)`], gvs[evm2set_on_def, PUSH_IN_INTO_IF])
@@ -390,6 +403,9 @@ Proof
   \\ rw[EQ_IMP_THM]
   \\ strip_tac \\ gvs[]
 QED
+
+Theorem STAR_evm_OriginalAccounts = CONJUNCT1 STAR_evm2set_with_original;
+Theorem STAR_evm2set = CONJUNCT2 STAR_evm2set_with_original;
 
 Theorem STAR_evm_hide_Parsed:
   ((evm_hide_Parsed pcs * p) (evm2set_on dom s)) <=>
@@ -527,7 +543,7 @@ Proof
   \\ rw[EQ_IMP_THM]
 QED
 
-Theorem UPDATE_evm2set_without[local]:
+Theorem UPDATE_evm2set_without_original[local]:
   wf_state s ∧
   ctxt = FST (HD s.contexts) ∧
   s' = SND r' ∧ s = SND r ∧
@@ -551,6 +567,7 @@ Theorem UPDATE_evm2set_without[local]:
   (HasCachedRB ∉ dom ⇒ SND (HD s'.contexts) = SND (HD s.contexts)) ∧
   (HasTxParams ∉ dom ⇒ s'.txParams = s.txParams) ∧
   (HasRollback ∉ dom ⇒ s'.rollback = s.rollback) ∧
+  (HasOriginalAccounts ∉ dom ⇒ s'.originalAccounts = s.originalAccounts) ∧
   (HasMsdomain ∉ dom ⇒ s'.msdomain = s.msdomain)
   ⇒
   evm2set_without dom r' = evm2set_without dom r
@@ -654,12 +671,12 @@ Proof
   \\ strip_assume_tac run_rel_sequence_EVM_NEXT_REL
   \\ gvs[rel_sequence_EVM_NEXT_REL_FUNPOW]
   \\ Cases_on`k` \\ gvs[]
-  >- gvs[STAR_evm2set]
+  >- gvs[STAR_evm2set, STAR_evm_OriginalAccounts]
   \\ gvs[FUNPOW]
   \\ qmatch_asmsub_rename_tac `k ≤ _`
   \\ Cases_on `k ≤ n` \\ gvs[NOT_LESS_EQUAL]
   \\ first_x_assum drule
-  \\ gvs[STAR_evm2set]
+  \\ gvs[STAR_evm2set, STAR_evm_OriginalAccounts]
   \\ qpat_x_assum`INR _ = _`(mp_tac o SYM) \\ rw[]
 QED
 
@@ -1383,7 +1400,7 @@ Theorem return_destination_case_elim[local] =
 
 val start_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ simp [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ simp [STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ Cases_on ‘b’ \\ fs []
   \\ drule step_preserves_wf_state
@@ -1399,7 +1416,7 @@ val start_tac =
           return_def, wf_context_def, SF CONJ_ss]
 
 val end_tac =
-  irule UPDATE_evm2set_without
+  irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
@@ -1522,7 +1539,7 @@ Theorem SPEC_Stop_inner:
    evm_SubRefund (caller.subRefund + sr))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
+  \\ rewrite_tac [STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
                   EMPTY_evm2set,STAR_evm_hide_Parsed, STAR_CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
@@ -1575,7 +1592,7 @@ Proof
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ ntac 2 strip_tac
@@ -1668,7 +1685,7 @@ fun exn_inner_tac ths =
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ ntac 2 strip_tac
@@ -3187,18 +3204,17 @@ Theorem SPEC_SLoad:
 Proof binop_tac
 QED
 
-Theorem SPEC_SStore:
+Theorem SPEC_SStore_original:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
-   evm_AddRefund ar * evm_SubRefund sr * evm_Contexts cs * evm_CachedRB cb *
+   evm_AddRefund ar * evm_SubRefund sr * evm_OriginalAccounts original *
    cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
          key = HD ss ∧ value = EL 1 ss ∧
          ~p.static ∧ call_stipend < p.gasLimit - g ∧
          sk = SK p.callee key ∧ access_slot_check d sk ∧
-         (orig_rb = if NULL cs then cb else SND (LAST cs)) ∧
          (cost,ad,sd) =
-           SStore_gas orig_rb.accounts rb p.callee key value ∧
+           SStore_gas original rb p.callee key value ∧
          g + cost ≤ p.gasLimit))
   {(pc,SStore)}
   (evm_Stack (DROP 2 ss) *
@@ -3209,11 +3225,12 @@ Theorem SPEC_SStore:
    evm_Msdomain (msdomain_add_slot sk d) *
    evm_AddRefund (ar + ad) *
    evm_SubRefund (sr + sd) *
-   evm_Contexts cs *
-   evm_CachedRB cb *
+   evm_OriginalAccounts original *
    evm_MsgParams p)
 Proof binop_tac
 QED
+
+Theorem SPEC_SStore = SPEC_SStore_original;
 
 Theorem SPEC_Jump:
   SPEC EVM_MODEL
@@ -3513,7 +3530,7 @@ Proof
   qmatch_goalsub_abbrev_tac`~_ ∧ djs ∧ _`
   \\ qmatch_goalsub_abbrev_tac`em = _ ∧ is_create ∧ _`
   \\ irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
@@ -3609,7 +3626,7 @@ Theorem SPEC_Create_fail_created:
 Proof
   qmatch_goalsub_abbrev_tac`em = _ ∧ is_create ∧ _`
   \\ irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
@@ -3661,12 +3678,12 @@ Proof
   \\ end_tac
 QED
 
-Theorem SPEC_Create:
+Theorem SPEC_Create_original:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
    evm_Contexts cs * evm_Msdomain d * evm_JumpDest j *
-   evm_CachedRB cb *
+   evm_CachedRB cb * evm_OriginalAccounts original *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
    cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧ ISL e ∧
@@ -3700,8 +3717,7 @@ Theorem SPEC_Create:
                 accessList := []; blobVersionedHashes := [];
                 maxFeePerGas := NONE; maxFeePerBlobGas := NONE;
                 authorizationList := []|> ∧
-         (orig_rb = if NULL cs then cb else SND (LAST cs)) ∧
-         orig = update_account addr empty_account_state orig_rb.accounts ∧
+         orig = update_account addr empty_account_state original ∧
          caller = <|stack := DROP (if inst = Create2 then 4 else 3) ss;
                     memory := em; pc := pc; jumpDest := j;
                     returnData := []; gasUsed := g + gas + cappedGas;
@@ -3720,13 +3736,14 @@ Theorem SPEC_Create:
    evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
    evm_hide_Parsed (all_pcs DIFF FDOM new_parsed) *
-   evm_Contexts (set_last_accounts orig $ (caller, cb) :: cs) *
+   evm_Contexts ((caller, cb) :: cs) *
+   evm_OriginalAccounts orig *
    evm_CachedRB caller_rb *
    evm_Msdomain (msdomain_add_storage addr $ msdomain_add addr d))
 Proof
   qmatch_goalsub_abbrev_tac`em = _ ∧ is_create ∧ _`
   \\ irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, STAR_evm_hide_Parsed,
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, STAR_evm_hide_Parsed,
                  CODE_POOL_EMPTY,STAR_CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
@@ -3778,11 +3795,7 @@ Proof
   \\ conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
                   \\ metis_tac[NOT_SOME_NONE])
   \\ conj_tac >- (
-       simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`, Abbr`orig_rb`,
-            LAST_CONS_cond, NULL_EQ, Abbr`cb`]
-       \\ qmatch_goalsub_abbrev_tac`_ a1 _ = _ a2 _`
-       \\ `a1 = a2` by (rw[Abbr`a1`, Abbr`a2`,Abbr`rb`] \\ gvs[])
-       \\ simp[] \\ AP_TERM_TAC \\ simp[]
+       simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`]
        \\ simp[context_component_equality]
        \\ simp[Abbr`cappedGas`,Abbr`gasLeft`])
   \\ gs[EMPTY_evm2set]
@@ -3795,12 +3808,14 @@ Proof
        \\ simp[]
        \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
        \\ metis_tac[option_CASES])
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[]
   \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
   \\ simp[initial_msg_params_def]
   \\ metis_tac[]
 QED
+
+Theorem SPEC_Create = SPEC_Create_original;
 
 Definition delegate_check_def:
   delegate_check c d rb dCost newRb newDom ⇔
@@ -3851,7 +3866,7 @@ Theorem SPEC_Call_fail_balance:
    evm_ReturnData [])
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
@@ -3946,7 +3961,7 @@ Theorem SPEC_Call_fail_depth:
    evm_ReturnData [])
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
@@ -4097,7 +4112,7 @@ Theorem SPEC_Call:
    evm_ReturnData [])
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, STAR_evm_hide_Parsed,
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, STAR_evm_hide_Parsed,
                  STAR_CODE_POOL_evm2set, CODE_POOL_EMPTY]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
@@ -4198,7 +4213,7 @@ Proof
        \\ simp[]
        \\ rw[]
        \\ metis_tac[option_CASES])
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[]
   \\ gvs[TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
   \\ simp[initial_msg_params_def]
@@ -4669,7 +4684,7 @@ Proof
   conj_tac >-
     (simp[Abbr `result`] >>
      Cases_on `FST r` >> gvs[]) >>
-  sym_tac >> irule UPDATE_evm2set_without >>
+  sym_tac >> irule UPDATE_evm2set_without_original >>
   gvs[Abbr `result`]
 QED
 
@@ -4736,7 +4751,7 @@ Theorem SPEC_Return_outermost:
    evm_Exception (INR (if inst = Revert then SOME Reverted else NONE)))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_evm2set]
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ qmatch_asmsub_abbrev_tac`sz = _ ∧ is_ret ∧ _`
@@ -4855,7 +4870,7 @@ Theorem SPEC_Return_inner:
    evm_SubRefund (caller.subRefund + if inst = Revert then 0 else sr))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, STAR_CODE_POOL_evm2set,
+  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, STAR_CODE_POOL_evm2set,
                  EMPTY_evm2set, CODE_POOL_EMPTY, STAR_evm_hide_Parsed]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
@@ -4927,7 +4942,7 @@ Proof
           \\ first_x_assum(qspec_then`x`mp_tac)
           \\ simp[]
           \\ rw[] \\ metis_tac[option_CASES]))
-    \\ irule UPDATE_evm2set_without
+    \\ irule UPDATE_evm2set_without_original
     \\ simp[]
     \\ gvs[TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
     \\ metis_tac[])
@@ -4953,7 +4968,7 @@ Proof
           \\ first_x_assum(qspec_then`x`mp_tac)
           \\ simp[]
           \\ rw[] \\ metis_tac[option_CASES]))
-    \\ irule UPDATE_evm2set_without
+    \\ irule UPDATE_evm2set_without_original
     \\ simp[]
     \\ gvs[TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
     \\ metis_tac[]) \\
@@ -4974,7 +4989,7 @@ Proof
         \\ first_x_assum(qspec_then`x`mp_tac)
         \\ simp[]
         \\ rw[] \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[]
   \\ gvs[TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
   \\ metis_tac[]
@@ -5084,7 +5099,7 @@ Proof
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ ntac 2 strip_tac
@@ -5141,6 +5156,7 @@ Theorem SPEC_SelfDestruct_outermost:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_CachedRB cb * evm_ReturnData rd *
    evm_Exception e * evm_Rollback rb * evm_Msdomain d *
+   evm_OriginalAccounts orig *
    cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧ ¬p.static ∧
          addr = w2w (HD ss) ∧ access_check d addr ∧
          sender = lookup_account p.callee rb.accounts ∧
@@ -5152,7 +5168,7 @@ Theorem SPEC_SelfDestruct_outermost:
          g + gasCost ≤ p.gasLimit ∧
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
-         rb2 = (if account_empty (lookup_account p.callee cb.accounts)
+         rb2 = (if account_empty (lookup_account p.callee orig)
                 then rb1 with <| accounts updated_by
                                    update_account p.callee
                                      (sender with balance := 0);
@@ -5162,7 +5178,7 @@ Theorem SPEC_SelfDestruct_outermost:
   (evm_Stack (TL ss) * evm_PC pc * evm_GasUsed (g + gasCost) *
    evm_MsgParams p * evm_Contexts cs * evm_CachedRB cb *
    evm_ReturnData [] * evm_Exception (INR NONE) *
-   evm_Msdomain (msdomain_add addr d) *
+   evm_Msdomain (msdomain_add addr d) * evm_OriginalAccounts orig *
    evm_Rollback (case p.outputTo of Memory _ => rb2 | Code a =>
                  rb2 with accounts updated_by (λaccounts.
                     update_account a
@@ -5179,7 +5195,7 @@ Proof
          assert_not_static_def,get_static_def,update_accounts_def,
          get_original_def,add_to_delete_def,finish_def,HD_TAKE]
   \\ Cases_on`account_empty (lookup_account (FST h).msgParams.callee
-                                             (SND h).accounts)`
+                                             (SND r).originalAccounts)`
   \\ Cases_on`(FST h).msgParams.outputTo`
   \\ gvs[bind_def,ignore_bind_def,return_def,update_accounts_def,
          add_to_delete_def,handle_step_def,vfm_abort_def,handle_def,
@@ -5190,7 +5206,7 @@ Proof
   \\ (conj_tac >-
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on`h` \\ gvs[]
 QED
@@ -5199,7 +5215,7 @@ Theorem SPEC_SelfDestruct_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
-   evm_CachedRB cb * evm_Msdomain d *
+   evm_CachedRB cb * evm_Msdomain d * evm_OriginalAccounts orig *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc SelfDestruct *
    evm_hide_Parsed (all_pcs DELETE pc) *
@@ -5217,8 +5233,7 @@ Theorem SPEC_SelfDestruct_inner:
          g + gasCost ≤ p.gasLimit ∧
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
-         rb2 = (if account_empty
-                     (lookup_account p.callee (SND (LAST cs)).accounts)
+         rb2 = (if account_empty (lookup_account p.callee orig)
                 then rb1 with <| accounts updated_by
                                    update_account p.callee
                                      (sender with balance := 0);
@@ -5239,7 +5254,7 @@ Theorem SPEC_SelfDestruct_inner:
    evm_MsgParams (caller.msgParams) *
    evm_ReturnData [] *
    evm_Exception (INL ()) *
-   evm_Msdomain (msdomain_add addr d) *
+   evm_Msdomain (msdomain_add addr d) * evm_OriginalAccounts orig *
    evm_Rollback (case p.outputTo of Memory _ => rb2 | Code a =>
                  rb2 with accounts updated_by (λaccounts.
                     update_account a
@@ -5252,8 +5267,9 @@ Theorem SPEC_SelfDestruct_inner:
    evm_SubRefund (caller.subRefund + sr))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
-                  EMPTY_evm2set,STAR_evm_hide_Parsed, STAR_CODE_POOL_evm2set]
+  \\ rewrite_tac [STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC,
+                  CODE_POOL_EMPTY, EMPTY_evm2set,STAR_evm_hide_Parsed,
+                  STAR_CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
@@ -5285,7 +5301,7 @@ Proof
   \\ `(FST (HD r2.contexts)).msgParams.parsed =
       parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
-  \\ Cases_on`account_empty (lookup_account p.callee (SND (LAST cs)).accounts)`
+  \\ Cases_on`account_empty (lookup_account p.callee orig)`
   \\ Cases_on`p.outputTo`
   \\ gvs[CaseEq"prod",CaseEq"sum",bind_def,ignore_bind_def,return_def,
          update_accounts_def,add_to_delete_def,handle_step_def,vfm_abort_def,
@@ -5309,7 +5325,7 @@ Proof
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ ntac 2 strip_tac

@@ -138,6 +138,7 @@ Definition same_frame_rel_def:
     SND (HD s'.contexts) = SND (HD s.contexts) ∧
     (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
     s'.txParams = s.txParams ∧
+    s'.originalAccounts = s.originalAccounts ∧
     callee_local_changes
       (FST (HD s.contexts)).msgParams.callee
       s.rollback s'.rollback ∧
@@ -1488,19 +1489,21 @@ Proof
   \\ first_x_assum irule \\ simp[]
 QED
 
-Theorem psf_bind_get_original:
+Theorem psf_bind_get_original_accounts:
   (∀x. psf (λs. p s ∧ s.contexts ≠ [] ∧
-                 x = (SND (LAST s.contexts)).accounts) (f x)) ⇒
+                 x = s.originalAccounts) (f x)) ⇒
   psf p (bind get_original f)
 Proof
   rw[psf_def, bind_def, get_original_def, return_def, fail_def]
   \\ Cases_on `s.contexts` \\ gvs[]
   \\ first_x_assum
-       (qspec_then `(SND (LAST (h::t))).accounts` mp_tac)
+       (qspec_then `s.originalAccounts` mp_tac)
   \\ rw[psf_def]
   \\ first_x_assum irule
   \\ goal_assum (first_assum o mp_then Any mp_tac) \\ simp[]
 QED
+
+Theorem psf_bind_get_original = psf_bind_get_original_accounts;
 
 (* ---------------- Rollback-writer leaves ------------------------ *)
 
