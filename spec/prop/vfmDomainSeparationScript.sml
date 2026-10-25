@@ -1372,7 +1372,6 @@ Theorem step_sstore_gas_consumption_ignores_extra_domain[simp]:
   ignores_extra_domain (step_sstore_gas_consumption z y x)
 Proof
   simp[step_sstore_gas_consumption_def]
-  \\ qpat_abbrev_tac`b0 = COND _ _ _`
   \\ irule bind_ignores_extra_domain \\ rw[]
   \\ irule ignore_bind_ignores_extra_domain \\ rw[]
   \\ irule get_accounts_ignore_extra_domain_slot_bind

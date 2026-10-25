@@ -791,6 +791,8 @@ val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec;
 val th = tt step_exp_def;
 val th = tt step_keccak256_def;
 val th = tt step_sload_def;
+val () = cv_auto_trans sstore_base_gas_def;
+val () = cv_auto_trans sstore_refund_updates_def;
 val th = tf step_sstore_gas_consumption_def;
 val th = tt step_sstore_def;
 val th = tt step_balance_def;
@@ -1105,6 +1107,8 @@ QED
 val () = cv_trans run_within_frame_eq_tr;
 
 val () = cv_auto_trans process_deletions_def;
+
+val () = cv_auto_trans transaction_gas_accounting_def;
 
 val post_transaction_accounting_pre_def = post_transaction_accounting_def
   |> cv_auto_trans_pre "post_transaction_accounting_pre";

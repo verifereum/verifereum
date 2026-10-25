@@ -4,7 +4,7 @@ open HolKernel
   contractABITheory contractABISyntax
   vfmDomainCollectionTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib
-  vfmSettlementTheory
+  vfmSettlementTheory vfmAccountingTheory
   vfmContextLengthTheory
   vfmProgTheory wrappedEtherTheory
 

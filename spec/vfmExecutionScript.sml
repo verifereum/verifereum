@@ -740,6 +740,32 @@ Definition step_sload_def:
   od
 End
 
+(* SSTORE pricing and refund deltas, independent of the state operations. *)
+Definition sstore_refund_updates_def:
+  sstore_refund_updates originalValue currentValue (value:bytes32) =
+     if currentValue ≠ value then
+       let storageSetRefund =
+         if originalValue = value then
+           if originalValue = 0w then
+             storage_set_cost - warm_access_cost
+           else storage_update_cost - cold_sload_cost - warm_access_cost
+         else 0
+       in if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w
+          then (storageSetRefund + storage_clear_refund,0)
+          else if originalValue ≠ 0w ∧ currentValue = 0w
+          then (storageSetRefund,storage_clear_refund)
+          else (storageSetRefund,0)
+     else (0,0)
+End
+
+Definition sstore_base_gas_def:
+  sstore_base_gas originalValue currentValue (value:bytes32) =
+    if originalValue = currentValue ∧ currentValue ≠ value
+    then if originalValue = 0w then storage_set_cost
+    else storage_update_cost - cold_sload_cost
+    else warm_access_cost
+End
+
 Definition step_sstore_gas_consumption_def:
   step_sstore_gas_consumption address key value = do
     gasLeft <- get_gas_left;
@@ -749,29 +775,9 @@ Definition step_sstore_gas_consumption_def:
     original <- get_original;
     originalValue <<- lookup_storage key (lookup_account address original).storage;
     accessCost <- access_slot (SK address key);
-    baseDynamicGas <<-
-      if originalValue = currentValue ∧ currentValue ≠ value
-      then if originalValue = 0w
-           then storage_set_cost
-           else storage_update_cost - cold_sload_cost
-      else warm_access_cost;
-    dynamicGas <<- baseDynamicGas + zero_warm accessCost;
-    refundUpdates <<-
-      if currentValue ≠ value then
-        let storageSetRefund =
-          if originalValue = value then
-            if originalValue = 0w then
-              storage_set_cost - warm_access_cost
-            else
-              storage_update_cost - cold_sload_cost - warm_access_cost
-          else 0
-        in
-          if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w then
-            (storageSetRefund + storage_clear_refund, 0)
-          else if originalValue ≠ 0w ∧ currentValue = 0w then
-            (storageSetRefund, storage_clear_refund)
-          else (storageSetRefund, 0)
-      else (0, 0);
+    dynamicGas <<- sstore_base_gas originalValue currentValue value +
+                   zero_warm accessCost;
+    refundUpdates <<- sstore_refund_updates originalValue currentValue value;
     update_gas_refund refundUpdates;
     consume_gas dynamicGas;
   od
@@ -1792,6 +1798,17 @@ Definition process_deletions_def:
   process_deletions as (update_account a empty_account_state acc)
 End
 
+(* Gas charged and the two credits, before any account is updated. *)
+Definition transaction_gas_accounting_def:
+  transaction_gas_accounting gasPrice baseFee txGasLimit floorCost
+                             (gasLeft, storageRefund, authRefund) =
+  let txGasUsed = txGasLimit - gasLeft in
+  let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
+  let totalGasUsed = MAX (txGasUsed - gasRefund) floorCost in
+    (totalGasUsed, (txGasLimit - totalGasUsed) * gasPrice,
+     totalGasUsed * (gasPrice - baseFee))
+End
+
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
   let (gasLimit, gasUsed, addRefund, subRefund, logs, returnData) =
@@ -1801,14 +1818,10 @@ Definition post_transaction_accounting_def:
       (ctxt.msgParams.gasLimit, ctxt.gasUsed,
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
-  let txGasUsed = tx.gasLimit - gasLeft in
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
-  let gasRefund = MIN (txGasUsed DIV 5) (t.txParams.authRefund + storageRefund) in
-  let floor_cost = calldata_floor_cost tx.data in
-  let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
-  let refundEther = (tx.gasLimit - totalGasUsed) * tx.gasPrice in
-  let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
-  let transactionFee = totalGasUsed * priorityFeePerGas in
+  let (totalGasUsed, refundEther, transactionFee) =
+    transaction_gas_accounting tx.gasPrice blk.baseFeePerGas tx.gasLimit
+      (calldata_floor_cost tx.data) (gasLeft, storageRefund, t.txParams.authRefund) in
   let accounts = if result = NONE then t.rollback.accounts else acc in
   let sender = lookup_account tx.from accounts in
   let accounts = update_account tx.from
