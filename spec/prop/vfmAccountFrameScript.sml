@@ -867,7 +867,28 @@ Theorem run_call_static_frame:
   run_call e = SOME (r, e') ⇒
   e'.rollback.accounts = e.rollback.accounts
 Proof
-  cheat
+  strip_tac
+  >> `0 < LENGTH e.contexts` by (gvs[wf_state_def] >> Cases_on `e.contexts` >> gvs[])
+  >> gvs[run_call_def]
+  >> `(λp. wf_state (SND p) ∧
+       (SND p).rollback.accounts = e.rollback.accounts ∧
+       (LENGTH e.contexts ≤ LENGTH (SND p).contexts ⇒
+        EVERY (λ(c,rb). c.msgParams.static ∧
+          (∀a. c.msgParams.outputTo ≠ Code a) ∧
+          rb.accounts = e.rollback.accounts)
+          (TAKE (LENGTH (SND p).contexts - LENGTH e.contexts + 1)
+                (SND p).contexts))) (r,e')` suffices_by simp[]
+  >> irule (MP_CANON OWHILE_INV_IND)
+  >> goal_assum $ drule_at Any
+  >> simp[]
+  >> conj_tac
+  >- (Cases_on `e.contexts` >> gvs[] >> PairCases_on `h` >> gvs[])
+  >> qx_gen_tac `p` >> PairCases_on `p` >> simp[]
+  >> strip_tac >> Cases_on `step p1` >> simp[]
+  >> mp_tac (Q.INST [`s` |-> `p1`, `s'` |-> `r'`, `r` |-> `q`,
+       `n` |-> `LENGTH e.contexts`, `A` |-> `e.rollback.accounts`]
+       step_preserves_static_account_prefix)
+  >> simp[]
 QED
 
 (* -------------------------------------------------------------------------
