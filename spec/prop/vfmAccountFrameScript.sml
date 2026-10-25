@@ -3238,7 +3238,7 @@ Theorem active_storage_key_absent_iff[local]:
    ∀i. i < LENGTH s.contexts - d + 1 ∧ i + 1 < LENGTH s.contexts ⇒
      ¬fIN z (SND (EL i s.contexts)).accesses.storageKeys)
 Proof
-  simp[active_rollbacks_def]
+  simp[active_rollbacks_saved]
   >> IF_CASES_TAC >> simp[]
   >> simp[EVERY_EL, EL_MAP, EL_TAKE, arithmeticTheory.MIN_DEF]
   >> IF_CASES_TAC >> simp[]
