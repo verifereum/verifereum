@@ -1024,6 +1024,21 @@ val () =
   if evmDecompLib.metadata_start weth_config = SOME 3081 then ()
   else raise mk_HOL_ERR "wrappedEtherScript" "weth_config" "metadata"
 
+(* code without a trailer, ending in a zero length, an empty map (solc
+   layout) or an empty array (Vyper layout), keeps all its bytes *)
+val () =
+  if List.all (fn bytes =>
+       evmDecompLib.metadata_start
+         (evmDecompLib.default_config
+            (ASSUME (mk_eq (mk_var ("c", “:word8 list”),
+                            listSyntax.mk_list
+                              (map (fn b => wordsSyntax.mk_wordii (b, 8))
+                                   bytes, “:word8”))))
+            parsed_contract_code_eq) = NONE)
+     [[0x60, 1, 0, 0], [0, 0, 0], [0x60, 0xa0, 0, 1], [0x60, 0x80, 0, 3]]
+  then ()
+  else raise mk_HOL_ERR "wrappedEtherScript" "metadata_start" "no trailer"
+
 val weth_outcomes = evmDecompLib.summarize_code weth_config
 
 (* no hints needed: every block and exit is summarized *)

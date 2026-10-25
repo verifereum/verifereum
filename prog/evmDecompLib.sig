@@ -17,10 +17,10 @@ sig
   val default_config : thm -> thm -> config
 
   (* the pc where the CBOR metadata trailer begins, if the code ends with
-     one: a CBOR map or array, followed by its length in two big-endian
-     bytes (solc's layout, the length excluding those two bytes, or
-     Vyper's, including them). The item must parse as CBOR and end exactly
-     at the length bytes. *)
+     one: a non-empty CBOR map or array, followed by its length in two
+     big-endian bytes (solc's layout, the length excluding those two bytes,
+     or Vyper's, including them). The item must parse as CBOR and end
+     exactly at the length bytes. *)
   val metadata_start : config -> int option
 
   datatype exit =

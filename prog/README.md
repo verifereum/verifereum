@@ -145,9 +145,9 @@ array to the init code only, with a length that counts the two bytes. These
 bytes parse as instructions, so blocks found there would describe data.
 With `strip_metadata` set, as in `default_config`, `metadata_start` finds
 such a trailer and `instructions` and `block_starts` stop before it. The
-trailer is recognised only if the item at that offset is a CBOR map
-(solc) or array or map (Vyper) and parses to end exactly at the length
-bytes; otherwise the whole code is used. Clear `strip_metadata` to
+trailer is recognised only if the item at that offset is a non-empty
+CBOR map (solc) or array or map (Vyper) and parses to end exactly at the
+length bytes; otherwise the whole code is used. Clear `strip_metadata` to
 summarize the raw code.
 
 ## Example

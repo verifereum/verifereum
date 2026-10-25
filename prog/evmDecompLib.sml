@@ -167,9 +167,13 @@ fun metadata_start cfg =
   let
     val bs = code_bytes cfg
     val n = Vector.length bs
+    (* a non-empty map or array, ending at the length bytes *)
     fun ok start header =
-      start >= 0 andalso header (Vector.sub (bs, start) div 32) andalso
-      cbor_end bs start = SOME (n - 2)
+      start >= 0 andalso start < n - 2 andalso
+      let val b = Vector.sub (bs, start) in
+        header (b div 32) andalso b mod 32 <> 0 andalso
+        cbor_end bs start = SOME (n - 2)
+      end
   in
     if n < 3 then NONE else
     let val l = 256 * Vector.sub (bs, n - 2) + Vector.sub (bs, n - 1) in
