@@ -588,6 +588,84 @@ Proof
   >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
 QED
 
+Theorem step_outer_msgParams:
+  0 < k ∧ k < LENGTH s.contexts ∧ wf_state s ∧ step s = (r,t) ⇒
+  k ≤ LENGTH t.contexts ∧
+  DROP (LENGTH t.contexts - k) (MAP (λp. (FST p).msgParams) t.contexts) =
+  DROP (LENGTH s.contexts - k) (MAP (λp. (FST p).msgParams) s.contexts)
+Proof
+  strip_tac
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (`outputTo_consistent s`
+        by metis_tac[outputTo_consistent_stack_imp_consistent, wf_state_def]
+      >> drule_all step_same_frame >> simp[same_frame_rel_def]
+      >> strip_tac
+      >> Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[])
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (drule_all step_push_foreign >> strip_tac
+      >> `MAP (λp. (FST p).msgParams) (TL (TL t.contexts)) =
+          MAP (λp. (FST p).msgParams) (TL s.contexts)`
+          by metis_tac[MAP_MAP_o, combinTheory.o_DEF]
+      >> `LENGTH t.contexts - k = SUC (LENGTH s.contexts - k)` by decide_tac
+      >> Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
+      >> rename1 `MAP FST (TL cs) = _`
+      >> Cases_on `cs` >> gvs[ADD1])
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> drule_all step_pop_foreign >> strip_tac
+  >> `LENGTH s.contexts = SUC (SUC (LENGTH rest))`
+       by (qpat_assum `s.contexts = _` (once_rewrite_tac o single) >> simp[])
+  >> `k ≤ LENGTH t.contexts ∧
+      LENGTH s.contexts - k = SUC (LENGTH t.contexts - k)` by (gvs[] >> decide_tac)
+  >> qpat_assum `s.contexts = _` (once_rewrite_tac o single)
+  >> simp[ADD1]
+QED
+
+Theorem run_call_outer_msgParams:
+  0 < k ∧ k < LENGTH e.contexts ∧ wf_state e ∧ run_call e = SOME (r,t) ⇒
+  k ≤ LENGTH t.contexts ∧
+  DROP (LENGTH t.contexts - k) (MAP (λp. (FST p).msgParams) t.contexts) =
+  DROP (LENGTH e.contexts - k) (MAP (λp. (FST p).msgParams) e.contexts)
+Proof
+  strip_tac >> gvs[run_call_def]
+  >> `(λp. wf_state (SND p) ∧ k ≤ LENGTH (SND p).contexts ∧
+       DROP (LENGTH (SND p).contexts - k)
+         (MAP (λp. (FST p).msgParams) (SND p).contexts) =
+       DROP (LENGTH e.contexts - k) (MAP (λp. (FST p).msgParams) e.contexts)) (r,t)`
+       suffices_by simp[]
+  >> irule (MP_CANON OWHILE_INV_IND)
+  >> goal_assum (first_assum o mp_then Any mp_tac)
+  >> simp[] >> rpt gen_tac >> strip_tac
+  >> pairarg_tac >> gvs[]
+  >> rename1 `LENGTH s.contexts ≥ LENGTH e.contexts`
+  >> Cases_on `step s` >> gvs[]
+  >> `k < LENGTH s.contexts` by decide_tac
+  >> drule_all step_outer_msgParams >> strip_tac
+  >> metis_tac[step_preserves_wf_state, SND]
+QED
+
+Theorem run_call_parent_msgParams:
+  2 ≤ LENGTH e.contexts ∧ wf_state e ∧ run_call e = SOME (INL (),t) ⇒
+  (FST (HD t.contexts)).msgParams = (FST (EL 1 e.contexts)).msgParams
+Proof
+  strip_tac
+  >> `0 < LENGTH e.contexts - 1 ∧ LENGTH e.contexts - 1 < LENGTH e.contexts`
+       by decide_tac
+  >> `LENGTH e.contexts - 1 ≤ LENGTH t.contexts ∧
+       DROP (LENGTH t.contexts - (LENGTH e.contexts - 1))
+         (MAP (λp. (FST p).msgParams) t.contexts) =
+       DROP (LENGTH e.contexts - (LENGTH e.contexts - 1))
+         (MAP (λp. (FST p).msgParams) e.contexts)`
+       by (irule run_call_outer_msgParams >> metis_tac[])
+  >> `LENGTH t.contexts < LENGTH e.contexts`
+       by (drule run_call_finite_trace >> simp[] >> strip_tac >> decide_tac)
+  >> `LENGTH t.contexts = LENGTH e.contexts - 1 ∧
+      LENGTH e.contexts - (LENGTH e.contexts - 1) = 1` by decide_tac
+  >> gvs[]
+  >> Cases_on `t.contexts` >> Cases_on `e.contexts` >> gvs[]
+  >> rename1 `e.contexts = _::cs`
+  >> Cases_on `cs` >> gvs[]
+QED
+
 Theorem run_call_account_frame:
   wf_state es ∧
   (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
