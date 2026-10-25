@@ -119,6 +119,30 @@ Proof
   \\ gvs[]
 QED
 
+Theorem memory_cost_add:
+  0 < a ∧ 0 < b ∧
+  buffer_length m1 ≤ buffer_length m2 ∧
+  32 * word_size a ≤ buffer_length m2 ∧
+  buffer_length m2 ≤ MAX (buffer_length m1) (32 * word_size a)
+  ⇒
+  memory_cost m1 0 a + (memory_cost m2 a b + rest) =
+  memory_cost m1 0 (a + b) + rest
+Proof
+  strip_tac
+  \\ `buffer_length m2 = MAX (buffer_length m1) (word_size a * 32)`
+     by (gvs[MAX_DEF] \\ rw[] \\ gvs[])
+  \\ rw[vfmProgTheory.memory_cost_def, memory_expansion_cost_def]
+  \\ qabbrev_tac `L = buffer_length m1`
+  \\ qabbrev_tac `A = word_size a * 32`
+  \\ qabbrev_tac `B = word_size (a + b) * 32`
+  \\ `A ≤ B` by (unabbrev_all_tac \\ simp[word_size_mono_leq])
+  \\ `MAX (MAX L A) B = MAX L B` by rw[MAX_DEF]
+  \\ `memory_cost L ≤ memory_cost (MAX L A) ∧
+      memory_cost (MAX L A) ≤ memory_cost (MAX L B)`
+     by (conj_tac \\ irule memory_cost_mono_leq \\ rw[MAX_DEF])
+  \\ gvs[]
+QED
+
 Definition balance_slot_word_def:
   balance_slot_word (a:address) = (
       REVERSE (word_to_bytes_le (w2w a : bytes32)) ++
@@ -990,6 +1014,47 @@ Proof
   rw[EQ_IMP_THM]
 QED
 
+(* memory is a buffer: simplifying the memory effects of the composed
+   specs *)
+
+Theorem word_to_bytes_bytes32_NIL:
+  (word_to_bytes (w:bytes32) be = []) ⇔ F
+Proof
+  rewrite_tac[] \\ strip_tac
+  \\ pop_assum (mp_tac o Q.AP_TERM `LENGTH`) \\ simp[]
+QED
+
+Theorem Keccak256_gas_0_64:
+  64 ≤ buffer_length m ⇒ Keccak256_gas m 0 64 = 42
+Proof
+  strip_tac
+  \\ `memory_cost m 0 64 = 0`
+     by (irule memory_cost_none_zero \\ fs[MULT_32_word_size_64])
+  \\ rw[Keccak256_gas_def] \\ EVAL_TAC
+QED
+
+val balance_slot_word_eq =
+  REWRITE_RULE [word_to_bytes_le_def] balance_slot_word_def;
+val balance_slot_key_eq =
+  REWRITE_RULE [word_of_bytes_be_def] balance_slot_key_def;
+
+val buffer_simps = [
+  buffer_take_write_same, buffer_take_write_after, buffer_take_write_before,
+  buffer_take_expanded_memory, buffer_length_expanded_memory,
+  word_to_bytes_bytes32_NIL,
+  buffer_take_split |> Q.INST[`n1` |-> `32`, `n2` |-> `32`]
+                    |> SIMP_RULE arith_ss [],
+  MAX_LE, expanded_memory_leq, memory_cost_none_zero,
+  MULT_32_word_size_32, MULT_32_word_size_64, MULT_32_word_size_96,
+  MULT_32_word_size_128, memory_cost_buffer_write, Keccak256_gas_0_64,
+  memory_cost_add];
+
+fun tidy_mem th =
+  th |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
+     |> SIMP_RULE (srw_ss() ++ ARITH_ss ++ boolSimps.CONJ_ss) buffer_simps
+     |> SRULE [GSYM balance_slot_word_eq, GSYM balance_slot_key_eq]
+     |> SRULE [GSYM SPEC_MOVE_COND];
+
 local
   val SPEC_PushG = SPEC_Push |> Q.GENL[`n`,`bs`];
   val SPEC_DupG = SPEC_Dup |> Q.GEN`n`
@@ -1063,8 +1128,6 @@ val spec52 = mk_SPEC_Swap `0`;
 val spec53 = mk_SPEC_Log `2`;
 val spec54 = SPEC_Jump;
 
-(*
-
 val th10 = SPEC_COMPOSE_RULE [
   spec00,spec01,spec02,spec03,spec04,spec05,spec06,spec07,spec08,spec09]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
@@ -1094,8 +1157,8 @@ end
 
 val (conds, replace) = extract_conds th10m
 val (th10wi, gl) = SPEC_STRENGTHEN_RULE th10m $ replace $
-   “96 ≤ LENGTH (m:byte list)” ::
-   “TAKE 32 (DROP 64 m) = REVERSE (word_to_bytes (96w:bytes32) F)” ::
+   “96 ≤ buffer_length m” ::
+   “buffer_take 64 32 m = REVERSE (word_to_bytes (96w:bytes32) F)” ::
    conds
 
 Theorem gl[local]:
@@ -1134,6 +1197,7 @@ val th = spec14
 val prefix = "v0_"
 *)
 
+(* Unused exploration helpers, kept for reference.
 fun prepare prefix th = let
   val th1 = th |> REWRITE_RULE [SPEC_MOVE_COND] |> UNDISCH_ALL
   val (_,pre,_,post) = th1 |> concl |> dest_spec
@@ -1180,6 +1244,7 @@ fun prepare_list thms = let
 val res =
   [spec10,spec11,spec12,spec13,spec14,spec15,spec16,spec17]
   |> prepare_list |> SPEC_COMPOSE_RULE;
+*)
 
 (* --- *)
 
@@ -1322,6 +1387,7 @@ val th55m =
         NOT_LENGTH_ADD_LEQ, log_data_cost_def, log_topic_cost_def]
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [GSYM SPEC_MOVE_COND, conj_repeat_last]
+  |> tidy_mem
 
 Theorem SPEC_deposit = th55m;
 
@@ -1358,7 +1424,7 @@ val (conds, replace) = extract_conds sm
 val (smi, gl) = SPEC_STRENGTHEN_RULE sm $ replace $
    “p.parsed = parsed_contract_code” ::
    “p.code = contract_code” ::
-   “LENGTH p.data < 4” ::
+   “buffer_length (p:message_parameters).data < 4” ::
    List.filter (fn tm =>
      not (has_term “^p.code” tm orelse
           has_term “^p.parsed” tm orelse
@@ -1402,6 +1468,7 @@ Theorem SPEC_fallback_code[local] =
   |> SRULE[GSYM AND_IMP_INTRO, evc“FLOOKUP parsed_contract_code 183”,
            cv_eval“LENGTH contract_code”]
   |> SRULE[AND_IMP_INTRO, GSYM SPEC_MOVE_COND, AC CONJ_ASSOC CONJ_COMM]
+  |> tidy_mem
 
 val code_req = SPEC_fallback_code |> concl |> strip_comb |> #2 |> el 3;
 
@@ -1516,6 +1583,10 @@ evc “FLOOKUP parsed_contract_code 183”
 evc “FLOOKUP parsed_contract_code 184”
 *)
 
+(* TODO: false as stated, so left unproved: calldata with no known selector
+   (empty, under 4 bytes, or an unknown selector) falls through to the
+   fallback, which deposits and succeeds (see SPEC_fallback); it needs a
+   restatement first. *)
 (*
 Theorem call_follows_abi_4bytes:
   tx.to = SOME addr ∧
@@ -1558,5 +1629,4 @@ Proof
   \\ `valid_result_eq ((=) s) g ((=) (update_cc uu s)) ()`
   by (
     qunabbrev_tac`g`
-*)
 *)

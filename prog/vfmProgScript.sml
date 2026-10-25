@@ -1148,6 +1148,13 @@ Proof
   \\ rw[MAX_DEF]
 QED
 
+Theorem memory_cost_buffer_write:
+  off + LENGTH bs ≤ buffer_length m ⇒
+  memory_cost (buffer_write off bs m) i n = memory_cost m i n
+Proof
+  rw[memory_cost_def] \\ gvs[MAX_DEF]
+QED
+
 Definition memory_expand_by_def:
   memory_expand_by (m: buffer) offset size =
   MAX (buffer_length m) (if 0 < size then word_size (offset + size) * 32 else 0)
@@ -1214,6 +1221,21 @@ Theorem expanded_memory_0[simp]:
   expanded_memory m off 0 = m
 Proof
   rw[expanded_memory_def, memory_expand_by_def]
+QED
+
+Theorem buffer_length_expanded_memory:
+  buffer_length (expanded_memory m off sz) =
+  MAX (buffer_length m) (if 0 < sz then 32 * word_size (off + sz) else 0)
+Proof
+  rw[expanded_memory_def, memory_expand_by_def, MAX_DEF]
+QED
+
+Theorem buffer_take_expanded_memory:
+  i + n ≤ buffer_length m ⇒
+  buffer_take i n (expanded_memory m off sz) = buffer_take i n m
+Proof
+  rw[buffer_take_to_list, expanded_memory_def, buffer_to_list_extend,
+     rich_listTheory.TAKE_DROP_SWAP, TAKE_APPEND1]
 QED
 
 Definition Keccak256_gas_def:
