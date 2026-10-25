@@ -939,6 +939,53 @@ Proof
   cheat
 QED
 
+Theorem handle_create_foreign_accounts:
+  handle_create e s = (q,s') ∧ s.contexts ≠ [] ∧ outputTo_consistent s ⇒
+  ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
+    foreign_account_change (lookup_account y s.rollback.accounts)
+      (lookup_account y s'.rollback.accounts)
+Proof
+  strip_tac
+  >> mp_tac psf_handle_create >> rw[psf_def]
+  >> first_x_assum drule >> simp[]
+  >> rw[same_frame_rel_def, callee_local_changes_def, foreign_account_change_def]
+QED
+
+Theorem handle_step_pop_foreign_boundary:
+  s.contexts = (callee,callee_rb)::parent::rest ∧
+  outputTo_consistent_ctx callee ∧ handle_step e s = (q,s') ∧
+  LENGTH s'.contexts < LENGTH s.contexts ⇒
+  ∃new_parent.
+    s'.contexts = (new_parent,SND parent)::rest ∧
+    new_parent.msgParams = (FST parent).msgParams ∧
+    (s'.rollback.accounts = callee_rb.accounts ∨
+     ∀y. y ≠ callee.msgParams.callee ⇒
+       foreign_account_change (lookup_account y s.rollback.accounts)
+         (lookup_account y s'.rollback.accounts))
+Proof
+  strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[])
+  >> simp[handle_def]
+  >> `s.contexts ≠ []` by simp[]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[]
+  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e',s1)`
+  >> drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac
+  >> `s1.contexts = (FST (HD s1.contexts),callee_rb)::parent::rest` by
+      (Cases_on `s1.contexts` >> fs[] >> PairCases_on `h` >> fs[])
+  >> drule_all handle_create_preserves_length >> strip_tac
+  >> strip_tac
+  >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
+  >> drule_all handle_exception_pop_generic_gen >> strip_tac >> gvs[]
+  >> disj2_tac
+  >> `s.contexts ≠ [] ∧ outputTo_consistent s`
+    by gvs[outputTo_consistent_def, outputTo_consistent_ctx_def]
+  >> drule handle_create_foreign_accounts >> simp[]
+QED
+
 (* A pop restores the popped frame's saved rollback (failure) or keeps the
  * current one, where only the popped frame's callee changed (success). *)
 Theorem step_pop_foreign:
