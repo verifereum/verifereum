@@ -17,7 +17,9 @@
    next block start, whichever comes first. A terminator with several rules
    gives one summary per rule: JUMPI gives "take" and "skip". A CALL-class
    instruction is a block of its own because its rule hides every other
-   parsed pc, which the code of a longer block would also claim.
+   parsed pc, which the code of a longer block would also claim. With
+   config.strip_metadata, the compiler's CBOR metadata at the end of the
+   code is not searched for blocks (metadata_start).
 
    Summary format. For a block at pc n with d stack slots read and k left:
 
@@ -74,7 +76,11 @@ open pred_setTheory progTheory set_sepTheory helperLib vfmProgTheory;
 val ERR = mk_HOL_ERR "evmDecompLib";
 
 type config = {code_eq : thm, parsed_eq : thm, hints : int list,
-               simps : thm list}
+               simps : thm list, strip_metadata : bool}
+
+fun default_config code_eq parsed_eq : config =
+  {code_eq = code_eq, parsed_eq = parsed_eq, hints = [], simps = [],
+   strip_metadata = true}
 
 datatype exit =
     Jump of term
@@ -109,12 +115,84 @@ exception Infeasible_cond of term
 
 fun opname inst = fst (dest_const (fst (strip_comb inst)))
 
+(* Metadata. solc appends a CBOR map and its length (2 bytes, big-endian,
+   not counting themselves) to the runtime code; Vyper since 0.3.10 appends
+   a CBOR array and a length that counts the two bytes, to the init code
+   only. Its bytes parse as instructions, so blocks found there would
+   describe data. cbor_end returns the index just past the CBOR item at i,
+   for definite lengths only, and NONE if it runs past the end. *)
+fun cbor_end (bs : int vector) i =
+  let
+    val n = Vector.length bs
+    fun byte j = if j < n then SOME (Vector.sub (bs, j)) else NONE
+    fun arg j k = (* the k-byte big-endian argument at j *)
+      if j + k > n then NONE
+      else SOME (List.foldl (fn (b, a) => a * 256 + b) 0
+                   (List.tabulate (k, fn x => Vector.sub (bs, j + x))))
+    fun items j 0 = SOME j
+      | items j m = case cbor_end bs j of
+                      SOME j' => items j' (m - 1) | NONE => NONE
+  in
+    case byte i of
+      NONE => NONE
+    | SOME b =>
+      let
+        val major = b div 32 and info = b mod 32
+        val (len, start) =
+          if info < 24 then (SOME info, i + 1)
+          else if info <= 27 then
+            let val k = List.nth ([1, 2, 4, 8], info - 24)
+            in (arg (i + 1) k, i + 1 + k) end
+          else (NONE, i + 1)
+      in
+        case (major, len) of
+          (_, NONE) => NONE
+        | (0, _) => SOME start
+        | (1, _) => SOME start
+        | (2, SOME l) => if start + l <= n then SOME (start + l) else NONE
+        | (3, SOME l) => if start + l <= n then SOME (start + l) else NONE
+        | (4, SOME l) => if l <= n then items start l else NONE
+        | (5, SOME l) => if 2 * l <= n then items start (2 * l) else NONE
+        | (6, SOME _) => cbor_end bs start
+        | (7, _) => SOME start
+        | _ => NONE
+      end
+  end
+
+fun code_bytes (cfg : config) =
+  #code_eq cfg |> concl |> rhs |> listSyntax.dest_list |> fst
+  |> map wordsSyntax.uint_of_word |> Vector.fromList
+
+fun metadata_start cfg =
+  let
+    val bs = code_bytes cfg
+    val n = Vector.length bs
+    fun ok start header =
+      start >= 0 andalso header (Vector.sub (bs, start) div 32) andalso
+      cbor_end bs start = SOME (n - 2)
+  in
+    if n < 3 then NONE else
+    let val l = 256 * Vector.sub (bs, n - 2) + Vector.sub (bs, n - 1) in
+      if ok (n - 2 - l) (fn m => m = 5) then SOME (n - 2 - l)
+      else if ok (n - l) (fn m => m = 4 orelse m = 5) then SOME (n - l)
+      else NONE
+    end
+  end
+
+(* the instructions before the metadata, when it is stripped *)
 fun instructions (cfg : config) =
-  #parsed_eq cfg |> concl |> rhs
-  |> find_terms finite_mapSyntax.is_fupdate
-  |> map (fn tm => pairSyntax.dest_pair (rand tm))
-  |> map (fn (n, tm) => (numSyntax.int_of_term n, tm))
-  |> Listsort.sort (fn ((n, _), (m, _)) => Int.compare (n, m))
+  let
+    val keep = case (#strip_metadata cfg, metadata_start cfg) of
+                 (true, SOME m) => (fn n => n < m)
+               | _ => K true
+  in
+    #parsed_eq cfg |> concl |> rhs
+    |> find_terms finite_mapSyntax.is_fupdate
+    |> map (fn tm => pairSyntax.dest_pair (rand tm))
+    |> map (fn (n, tm) => (numSyntax.int_of_term n, tm))
+    |> filter (keep o fst)
+    |> Listsort.sort (fn ((n, _), (m, _)) => Int.compare (n, m))
+  end
 
 fun inst_length inst =
   if opname inst = "Push" then

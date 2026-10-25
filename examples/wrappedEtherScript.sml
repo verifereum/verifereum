@@ -1017,7 +1017,12 @@ Theorem SPEC_fallback =
 
 val weth_config : evmDecompLib.config =
   {code_eq = contract_code_eq, parsed_eq = parsed_contract_code_eq,
-   hints = [], simps = [mask_and_w2w]}
+   hints = [], simps = [mask_and_w2w], strip_metadata = true}
+
+(* the last 43 bytes are solc's metadata: a CBOR map and its length *)
+val () =
+  if evmDecompLib.metadata_start weth_config = SOME 3081 then ()
+  else raise mk_HOL_ERR "wrappedEtherScript" "weth_config" "metadata"
 
 val weth_outcomes = evmDecompLib.summarize_code weth_config
 
@@ -1055,7 +1060,8 @@ val memory_cost_64_32 =
 
 val weth_path_config : evmDecompLib.config =
   {code_eq = contract_code_eq, parsed_eq = parsed_contract_code_eq,
-   hints = [], simps = buffer_simps @ [mask_and_w2w, memory_cost_64_32]}
+   hints = [], simps = buffer_simps @ [mask_and_w2w, memory_cost_64_32],
+   strip_metadata = true}
 
 (* calldata shorter than 4 bytes: dispatch (0) jumps to 175, which jumps to
    the deposit code (1088), which returns to 183 *)

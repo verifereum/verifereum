@@ -7,9 +7,21 @@ sig
      `code = [bytes]` for a constant code; parsed_eq is
      `parsed = FEMPTY |+ ...`, the evaluated `parse_code 0 FEMPTY code` for
      a constant parsed. hints are extra block starts (pcs); simps are extra
-     rewrites used when simplifying stack values and side conditions. *)
+     rewrites used when simplifying stack values and side conditions.
+     strip_metadata leaves out the compiler's CBOR metadata at the end of
+     the code (see metadata_start). *)
   type config = {code_eq : thm, parsed_eq : thm, hints : int list,
-                 simps : thm list}
+                 simps : thm list, strip_metadata : bool}
+
+  (* no hints, no simps, metadata stripped *)
+  val default_config : thm -> thm -> config
+
+  (* the pc where the CBOR metadata trailer begins, if the code ends with
+     one: a CBOR map or array, followed by its length in two big-endian
+     bytes (solc's layout, the length excluding those two bytes, or
+     Vyper's, including them). The item must parse as CBOR and end exactly
+     at the length bytes. *)
+  val metadata_start : config -> int option
 
   datatype exit =
       Jump of term          (* JUMP; the target pc, a numeral when constant *)
