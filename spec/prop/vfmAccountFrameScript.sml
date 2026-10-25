@@ -928,8 +928,32 @@ Theorem run_call_empty_code_account:
   (lookup_account a es'.rollback.accounts).storage =
     (lookup_account a es.rollback.accounts).storage
 Proof
-  cheat
+  strip_tac
+  >> `((λacc. acc.code = [] ∧
+          acc.storage = (lookup_account a es.rollback.accounts).storage ∧
+          account_already_created acc)
+        (lookup_account a es'.rollback.accounts))` suffices_by simp[]
+  >> irule run_call_account_frame
+  >> conj_tac
+  >- (rpt strip_tac >> gvs[foreign_account_change_def, account_already_created_def])
+  >> qexistsl_tac [`es`,`r`] >> simp[]
+  >> rpt gen_tac >> strip_tac
+  >> `e'.rollback.accounts = e.rollback.accounts` suffices_by simp[]
+  >> irule run_call_empty_code_frame >> simp[] >> gvs[]
+  >> suspend "empty_entry"
 QED
+
+Resume run_call_empty_code_account[empty_entry]:
+  `(FST (HD e.contexts)).msgParams.callee ≠ (FST (HD s.contexts)).msgParams.callee`
+    by metis_tac[]
+  >> drule_all step_push_new_frame >> strip_tac >> gvs[]
+  >> qpat_assum `FST (HD e.contexts) = initial_context _ _ _ _ _`
+       (once_rewrite_tac o single)
+  >> simp[initial_context_def, initial_msg_params_def,
+          get_delegate_def, is_delegation_def]
+QED
+
+Finalise run_call_empty_code_account
 
 (* -------------------------------------------------------------------------
  * Provenance of storage keys: SK y k enters the access list only in a step
