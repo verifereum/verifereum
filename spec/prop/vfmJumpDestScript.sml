@@ -489,8 +489,7 @@ Theorem preserves_all_jumpDest_NONE_set_original[simp]:
 Proof
   rw[preserves_all_jumpDest_NONE_def, set_original_def, return_def, fail_def,
      all_jumpDest_NONE_def, AllCaseEqs()]
-  >> gvs[set_last_accounts_def]
-  >> qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES >> gvs[]
+  >> gvs[]
 QED
 
 (* inc_pc sets jumpDest := NONE explicitly, preserving all_jumpDest_NONE *)
@@ -823,9 +822,7 @@ Theorem preserves_jumpDest_set_original[simp]:
   preserves_jumpDest (set_original orig)
 Proof
   rw[preserves_jumpDest_def, set_original_def, return_def, fail_def, AllCaseEqs()]
-  >> gvs[set_last_accounts_def]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `t` >> gvs[]
+  >> gvs[]
 QED
 
 Theorem preserves_jumpDest_set_domain[simp]:

@@ -312,7 +312,7 @@ Definition get_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return (SND (LAST s.contexts)).accounts s
+      return s.originalAccounts s
 End
 
 Definition set_last_accounts_def:
@@ -327,8 +327,7 @@ Definition set_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return () $ s with contexts updated_by
-        (set_last_accounts a)
+      return () $ s with originalAccounts := a
 End
 
 Definition get_gas_left_def:
@@ -1870,11 +1869,9 @@ Definition run_create_def:
               transfer_value tx.from calleeAddress tx.value o
               increment_nonce calleeAddress
             ));
-            contexts updated_by (
-              set_last_accounts $
-              update_account calleeAddress empty_account_state
-                (SND crb).accounts
-            )|>, NONE)
+            originalAccounts :=
+              update_account calleeAddress empty_account_state s.originalAccounts
+            |>, NONE)
 End
 
 Definition run_transaction_def:
