@@ -877,9 +877,11 @@ Theorem proceed_call_eq:
     else return ()
   od
 Proof
-  rw[FUN_EQ_THM, proceed_call_def, read_memory_def, read_memory_sub_def,
-     bind_def, ignore_bind_def]
-  \\ rpt (CASE_TAC \\ gvs[return_def])
+  simp[FUN_EQ_THM] \\ qx_gen_tac `s` \\ Cases_on `s.contexts = []`
+  \\ rw[proceed_call_def, read_memory_def, read_memory_sub_def,
+     bind_def, ignore_bind_def, get_rollback_def, get_current_context_def,
+     get_caller_def, get_value_def, get_static_def, update_accounts_def,
+     push_context_def, return_def, fail_def]
   \\ gvs[initial_context_def, initial_msg_params_def,
          vfmBufferTheory.buffer_of_list_take]
 QED
