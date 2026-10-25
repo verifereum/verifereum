@@ -1049,3 +1049,17 @@ Proof
   \\ TOP_CASE_TAC \\ rw[]
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
 QED
+
+(* Domain collection mode is never left. *)
+Theorem step_preserves_collect:
+  (∃d. s.msdomain = Collect d) ∧ step s = (r, s') ⇒
+  ∃d. s'.msdomain = Collect d
+Proof
+  strip_tac
+  >> mp_tac (REWRITE_RULE [computes_minimal_domain_def]
+       step_computes_minimal_domain)
+  >> disch_then (qspecl_then [`s`,`r`,`s'`,`d`] mp_tac)
+  >> simp[] >> strip_tac
+  >> qpat_x_assum `∀d'. ∃d''. _` (qspec_then `d` mp_tac)
+  >> simp[] >> strip_tac >> gvs[]
+QED

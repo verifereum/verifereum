@@ -16,7 +16,6 @@ Ancestors
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
   vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls vfmDecreasesGas
   vfmStoragePredicates vfmPreserves vfmHandleStep vfmStepLength
-  vfmDomainCollection
 Libs
   BasicProvers
 
@@ -286,13 +285,6 @@ Theorem update_accounts_storage_keys[local]:
                    s.rollback.accesses.storageKeys) (update_accounts f)
 Proof
   rw[preserves_def, update_accounts_def, return_def]
-QED
-
-Theorem set_tStorage_storage_keys[local]:
-  preserves (λs t. t.rollback.accesses.storageKeys =
-                   s.rollback.accesses.storageKeys) (set_tStorage x)
-Proof
-  rw[preserves_def, set_tStorage_def, return_def]
 QED
 
 Theorem storage_keys_copy_to_memory[local]:
@@ -1061,16 +1053,6 @@ Proof
   >> metis_tac[call_prefix_trans, call_prefix_contexts]
 QED
 
-Theorem call_prefix_ignore_bind:
-  preserves_when (λs. s.contexts ≠ [])
-    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) g ∧
-  preserves_when (λs. s.contexts ≠ [])
-    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) f ⇒
-  preserves_when (λs. s.contexts ≠ [])
-    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (ignore_bind g f)
-Proof
-  simp[ignore_bind_def] >> strip_tac >> irule call_prefix_bind >> simp[]
-QED
 Theorem call_prefix_leaves:
   preserves_when (λs. s.contexts ≠ [])
     (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (pop_stack n) ∧
@@ -1100,20 +1082,6 @@ Proof
   rpt conj_tac >> irule call_prefix_of_cp_keys
   >> simp[call_prefix_keys_leaves, call_prefix_keys_access_address,
           call_prefix_keys_getters]
-QED
-
-Theorem call_prefix_delegate_selection:
-  preserves_when (λs. s.contexts ≠ [])
-    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys)
-    (case get_delegate acc.code of
-       NONE => return (acc.code, 0)
-     | SOME d => do
-         cost <- access_address d;
-         return ((lookup_account d accounts).code, cost)
-       od)
-Proof
-  Cases_on `get_delegate acc.code` >> simp[call_prefix_leaves]
-  >> irule call_prefix_bind >> simp[call_prefix_leaves]
 QED
 
 Theorem call_prefix_delegate_code_selection:
@@ -1351,7 +1319,7 @@ Proof
         transfer_value_preserves_storage, transfer_value_preserves_nonce]
 QED
 
-Theorem transfer_value_zero[simp]:
+Theorem transfer_value_zero[local,simp]:
   transfer_value sender address 0 accounts = accounts
 Proof
   simp[transfer_value_def]
@@ -1591,34 +1559,6 @@ Proof
   >> qexistsl_tac [`code`, `t`] >> simp[]
 QED
 
-Theorem proceed_call_nonprecompile_tail:
-  proceed_call op sender address value ao az code gas rd s = (r,s') ∧
-  s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
-  TL (TL s'.contexts) = TL s.contexts ∧
-  SND (EL 1 s'.contexts) = SND (HD s.contexts)
-Proof
-  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
-  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
-       get_rollback_def, read_memory_def, get_current_context_def,
-       get_caller_def, get_value_def, get_static_def,
-       push_context_def, update_accounts_def, return_def, fail_def,
-       AllCaseEqs()]
-  >> Cases_on `s.contexts` >> gvs[]
-QED
-
-Theorem step_call_push_tail:
-  step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
-  LENGTH s.contexts < LENGTH s'.contexts ⇒
-  TL (TL s'.contexts) = TL s.contexts ∧
-  SND (EL 1 s'.contexts) = SND (HD s.contexts)
-Proof
-  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
-  >> drule_all call_prefix_contexts >> strip_tac
-  >> drule_all proceed_call_inl_nonprecompile >> strip_tac
-  >> drule_all proceed_call_nonprecompile_tail >> strip_tac
-  >> gvs[cp_rel_def]
-QED
-
 Theorem step_grow_dispatch:
   wf_state s ∧ step s = (r,s') ∧ LENGTH s.contexts < LENGTH s'.contexts ⇒
   r = INL () ∧
@@ -1704,7 +1644,9 @@ Proof
   >> `1 ≤ LENGTH s.contexts` by (Cases_on `s.contexts` >> gvs[])
   >> drule step_push_structure >> simp[] >> strip_tac
   >> drule_all step_grow_dispatch >> strip_tac
-  >- (drule_all step_call_push_tail >> strip_tac
+  >- (drule step_call_push_structure >> simp[] >> strip_tac
+      >> `SND (EL 1 s'.contexts) = SND (HD s.contexts)` by
+           (Cases_on `s'.contexts` >> gvs[] >> Cases_on `t` >> gvs[])
       >> drule_all step_call_push_foreign_accounts >> simp[])
   >> drule_all step_create_push_stack >> strip_tac
   >> simp[] >> gen_tac >> disch_tac
@@ -1754,20 +1696,6 @@ Proof
   >> drule_all step_create_push_new_frame >> strip_tac
   >> qexistsl_tac [`code`, `F`, `Code (FST (HD s'.contexts)).msgParams.callee`, `t`]
   >> simp[]
-QED
-
-(* Domain collection mode is never left. *)
-Theorem step_preserves_collect:
-  (∃d. s.msdomain = Collect d) ∧ step s = (r, s') ⇒
-  ∃d. s'.msdomain = Collect d
-Proof
-  strip_tac
-  >> mp_tac (REWRITE_RULE [computes_minimal_domain_def]
-       step_computes_minimal_domain)
-  >> disch_then (qspecl_then [`s`,`r`,`s'`,`d`] mp_tac)
-  >> simp[] >> strip_tac
-  >> qpat_x_assum `∀d'. ∃d''. _` (qspec_then `d` mp_tac)
-  >> simp[] >> strip_tac >> gvs[]
 QED
 
 Theorem handle_create_foreign_accounts:
@@ -1867,23 +1795,6 @@ Proof
   >> strip_tac >> qexists_tac `new_parent` >> simp[]
   >> gvs[same_frame_rel_def, callee_local_changes_def,
          foreign_account_change_def, account_already_created_def]
-QED
-
-Theorem cp_preserves_account_prefix[local]:
-  cp m ∧ s.contexts ≠ [] ∧
-  s.rollback.accounts = A ∧
-  EVERY (λ(c,rb). P c.msgParams rb) (TAKE k s.contexts) ∧
-  m s = (r,s') ⇒
-  s'.rollback.accounts = A ∧
-  LENGTH s'.contexts = LENGTH s.contexts ∧
-  EVERY (λ(c,rb). P c.msgParams rb) (TAKE k s'.contexts)
-Proof
-  rw[cp_def]
-  >> first_x_assum drule
-  >> disch_then drule >> strip_tac
-  >> Cases_on `s.contexts` >> gvs[]
-  >> PairCases_on `h` >> gvs[]
-  >> Cases_on `k` >> gvs[]
 QED
 
 Theorem account_prefix_bind[local]:
@@ -3354,8 +3265,7 @@ QED
 Theorem active_storage_key_absent_initial[local]:
   wf_state es ∧
   (2 ≤ LENGTH es.contexts ⇒
-     toSet (SND (HD es.contexts)).accesses.storageKeys ⊆
-     toSet es.rollback.accesses.storageKeys) ∧
+     ¬fIN z (SND (HD es.contexts)).accesses.storageKeys) ∧
   ¬fIN z es.rollback.accesses.storageKeys ⇒
   EVERY (λrb. ¬fIN z rb.accesses.storageKeys)
         (active_rollbacks (LENGTH es.contexts) es)
@@ -3442,8 +3352,7 @@ QED
 Theorem run_call_storage_key_added:
   wf_state es ∧
   (2 ≤ LENGTH es.contexts ⇒
-     toSet (SND (HD es.contexts)).accesses.storageKeys ⊆
-     toSet es.rollback.accesses.storageKeys) ∧
+     ¬fIN (SK a k) (SND (HD es.contexts)).accesses.storageKeys) ∧
   run_call es = SOME (r, es') ∧
   fIN (SK a k) es'.rollback.accesses.storageKeys ∧
   ¬fIN (SK a k) es.rollback.accesses.storageKeys ⇒
