@@ -932,8 +932,110 @@ QED
  * Accounts with no code.
  * ------------------------------------------------------------------------- *)
 
+Theorem step_empty_code[local]:
+  wf_state e ∧ (FST (HD e.contexts)).msgParams.code = [] ⇒
+  step e = handle (step_inst Stop) handle_step e
+Proof
+  strip_tac
+  >> `e.contexts ≠ [] ∧ EVERY (wf_context o FST) e.contexts` by
+       gvs[wf_state_def]
+  >> Cases_on `e.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+  >> `h0.msgParams.parsed = FEMPTY` by
+       (qpat_x_assum `wf_context h0` mp_tac
+        >> simp[wf_context_def, Once parse_code_def])
+  >> simp[step_def, get_current_context_def, bind_def, return_def,
+          LET_THM, handle_def]
+QED
+
+Theorem handle_exception_success_accounts[local]:
+  handle_exception NONE s = (r,s') ⇒
+  s'.rollback.accounts = s.rollback.accounts
+Proof
+  Cases_on `s.contexts` >- simp[handle_exception_def, get_num_contexts_def,
+    bind_def, ignore_bind_def, return_def, reraise_def]
+  >> Cases_on `t`
+  >- simp[handle_exception_def, get_num_contexts_def,
+    bind_def, ignore_bind_def, return_def, reraise_def]
+  >> PairCases_on `h` >> PairCases_on `h'`
+  >> Cases_on `h0.msgParams.outputTo`
+  >> simp[handle_exception_def, bind_def, ignore_bind_def,
+     get_num_contexts_def, get_current_context_def, return_def,
+     get_return_data_def, get_output_to_def, reraise_def,
+     pop_and_incorporate_context_def, get_gas_left_def, pop_context_def,
+     unuse_gas_def, assert_def, fail_def, set_current_context_def,
+     push_logs_def, update_gas_refund_def, inc_pc_def,
+     set_return_data_def, push_stack_def, write_memory_def,
+     AllCaseEqs()]
+  >> rpt strip_tac >> gvs[]
+QED
+
 (* A frame running empty code stops at once; if the callee has no code, a
  * code deposit leaves it so. *)
+Theorem handle_create_empty_identity[local]:
+  s.contexts ≠ [] ∧
+  wf_context (FST (HD s.contexts)) ∧
+  outputTo_consistent_ctx (FST (HD s.contexts)) ∧
+  (FST (HD s.contexts)).returnData = [] ∧
+  (lookup_account (FST (HD s.contexts)).msgParams.callee
+    s.rollback.accounts).code = [] ⇒
+  handle_create NONE s = (INR NONE,s)
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h`
+  >> simp[wf_context_def, outputTo_consistent_ctx_def]
+  >> strip_tac
+  >> Cases_on `h0.msgParams.outputTo`
+  >> simp[handle_create_def, get_return_data_def, get_output_to_def,
+      get_current_context_def, bind_def, ignore_bind_def, return_def,
+      reraise_def, assert_def, consume_gas_def, set_current_context_def,
+      update_accounts_def, LET_THM]
+  >> `h0.msgParams.callee = c` by metis_tac[]
+  >> `update_account c (lookup_account c s.rollback.accounts with code := [])
+         s.rollback.accounts = s.rollback.accounts` by
+       (gvs[lookup_account_def, update_account_def, FUN_EQ_THM,
+            combinTheory.APPLY_UPDATE_THM]
+        >> gen_tac >> IF_CASES_TAC >> gvs[]
+        >> simp[account_state_component_equality])
+  >> simp[execution_state_component_equality, rollback_state_component_equality]
+QED
+
+Theorem step_empty_code_exit[local]:
+  wf_state e ∧ (FST (HD e.contexts)).msgParams.code = [] ∧
+  (lookup_account (FST (HD e.contexts)).msgParams.callee
+    e.rollback.accounts).code = [] ∧ step e = (r,s) ⇒
+  s.rollback.accounts = e.rollback.accounts ∧
+  (¬ISL r ∨ LENGTH s.contexts < LENGTH e.contexts)
+Proof
+  strip_tac
+  >> `step e = handle (step_inst Stop) handle_step e` by
+       (irule step_empty_code >> simp[])
+  >> `e.contexts ≠ [] ∧ EVERY (wf_context o FST) e.contexts ∧
+       outputTo_consistent_stack e` by gvs[wf_state_def]
+  >> Cases_on `e.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+  >> qpat_x_assum `handle _ _ _ = _` mp_tac
+  >> simp[step_inst_def, set_return_data_def, finish_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `handle_step NONE mid`
+  >> `(handle_create NONE mid : (unit + exception option) # execution_state) = (INR NONE,mid)` by
+       (irule handle_create_empty_identity
+        >> gvs[Abbr `mid`, outputTo_consistent_stack_def,
+               outputTo_consistent_ctx_def, wf_context_def])
+  >> simp[handle_step_def, vfm_abort_def, handle_def]
+  >> strip_tac >> gvs[]
+  >> conj_tac
+  >- (drule handle_exception_success_accounts >> simp[Abbr `mid`])
+  >> Cases_on `t`
+  >- (qpat_x_assum `handle_exception _ _ = _` mp_tac
+      >> simp[Abbr `mid`, handle_exception_def, get_num_contexts_def,
+              bind_def, ignore_bind_def, return_def, reraise_def]
+      >> strip_tac >> gvs[])
+  >> disj2_tac
+  >> `EVERY (wf_context o FST) mid.contexts ∧ LENGTH mid.contexts ≥ 2` by
+       gvs[Abbr `mid`, wf_context_def]
+  >> drule_all vfmHandleStepTheory.handle_exception_ge_2_pops
+  >> simp[Abbr `mid`]
+QED
+
 Theorem run_call_empty_code_frame:
   wf_state e ∧
   (FST (HD e.contexts)).msgParams.code = [] ∧
