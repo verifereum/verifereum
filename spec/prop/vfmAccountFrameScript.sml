@@ -15,7 +15,7 @@ Ancestors
   combin pair option list rich_list relation While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
   vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls vfmPreserves vfmStepLength
-  vfmHandleStep vfmDecreasesGas
+  vfmHandleStep vfmDecreasesGas vfmDomainCollection
 Libs
   BasicProvers
 
@@ -936,7 +936,13 @@ Theorem step_preserves_collect:
   (∃d. s.msdomain = Collect d) ∧ step s = (r, s') ⇒
   ∃d. s'.msdomain = Collect d
 Proof
-  cheat
+  strip_tac
+  >> mp_tac (REWRITE_RULE [computes_minimal_domain_def]
+       step_computes_minimal_domain)
+  >> disch_then (qspecl_then [`s`,`r`,`s'`,`d`] mp_tac)
+  >> simp[] >> strip_tac
+  >> qpat_x_assum `∀d'. ∃d''. _` (qspec_then `d` mp_tac)
+  >> simp[] >> strip_tac >> gvs[]
 QED
 
 Theorem handle_create_foreign_accounts:
