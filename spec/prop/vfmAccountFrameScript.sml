@@ -2481,7 +2481,7 @@ Theorem active_rollbacks_initial:
   (2 ≤ LENGTH es.contexts ⇒ Q (SND (HD es.contexts))) ⇒
   EVERY Q (active_rollbacks (LENGTH es.contexts) es)
 Proof
-  rw[active_rollbacks_def]
+  rw[active_rollbacks_saved]
   >> Cases_on `es.contexts` >> gvs[]
   >> Cases_on `t` >> gvs[MIN_DEF]
   >> rw[] >> gvs[]
@@ -2534,7 +2534,7 @@ Proof
   >> Cases_on `s.contexts` >> gvs[]
   >> Cases_on `t.contexts` >> gvs[]
   >> Cases_on `t'` >> gvs[]
-  >> Cases_on `t` >> gvs[active_rollbacks_def, MIN_DEF]
+  >> Cases_on `t` >> gvs[active_rollbacks_saved, MIN_DEF]
   >> rw[] >> gvs[]
   >> rename1 `FRONT (TL ys) = FRONT (z::zs)`
   >> Cases_on `ys` >> gvs[]
@@ -2573,7 +2573,7 @@ Theorem active_rollbacks_pop:
   EVERY Q (active_rollbacks d s) ⇒
   Q s.rollback ∧ Q (SND h) ∧ EVERY Q (TL (active_rollbacks d t))
 Proof
-  simp[active_rollbacks_def] >> strip_tac
+  simp[active_rollbacks_saved] >> strip_tac
   >> gvs[MIN_DEF] >> rw[] >> gvs[]
   >> gvs[ADD1]
   >> Cases_on `rest` >> gvs[]
@@ -2585,7 +2585,7 @@ Theorem active_rollbacks_pop_tail:
   t.contexts = (new_head,SND parent)::rest ⇒
   TL (active_rollbacks d t) = TL (TL (active_rollbacks d s))
 Proof
-  strip_tac >> simp[active_rollbacks_def]
+  strip_tac >> simp[active_rollbacks_saved]
   >> gvs[MIN_DEF] >> rw[] >> gvs[ADD1]
   >> Cases_on `rest` >> gvs[]
 QED
