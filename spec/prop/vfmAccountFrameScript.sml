@@ -1174,5 +1174,42 @@ Theorem run_call_storage_key_added:
     ¬fIN (SK a k) s.rollback.accesses.storageKeys ∧
     fIN (SK a k) s'.rollback.accesses.storageKeys
 Proof
-  cheat
+  strip_tac >> spose_not_then assume_tac
+  >> `0 < LENGTH es.contexts` by (Cases_on `es.contexts` >> gvs[wf_state_def])
+  >> `EVERY (λrb. ¬fIN (SK a k) rb.accesses.storageKeys)
+         (active_rollbacks (LENGTH es.contexts) es)` by
+    (irule active_storage_key_absent_initial >> simp[])
+  >> `¬fIN (SK a k) es'.rollback.accesses.storageKeys` suffices_by simp[]
+  >> gvs[run_call_def]
+  >> `((λp. wf_state (SND p) ∧
+          EVERY (λrb. ¬fIN (SK a k) rb.accesses.storageKeys)
+            (active_rollbacks (LENGTH es.contexts) (SND p)) ∧
+          (ISL (FST p) ⇒ run_call_reaches es (SND p))) (r,es'))`
+       suffices_by (BETA_TAC >> pure_rewrite_tac[FST, SND] >> strip_tac
+                    >> drule active_storage_key_absent_current >> simp[])
+  >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
+  >> goal_assum (first_assum o mp_then Any mp_tac)
+  >> simp[] >> rpt gen_tac >> pairarg_tac >> simp[] >> strip_tac
+  >> Cases_on `step s''` >> rename1 `step s'' = (v,t)` >> gvs[]
+  >> `LENGTH es.contexts ≤ LENGTH s''.contexts` by decide_tac
+  >> `¬fIN (SK a k) s''.rollback.accesses.storageKeys` by
+    (drule active_storage_key_absent_current >> simp[])
+  >> `¬fIN (SK a k) t.rollback.accesses.storageKeys` by
+    (Cases_on `(FST (HD s''.contexts)).msgParams.callee = a`
+     >- (qpat_x_assum `∀s u s'. _` (qspecl_then [`s''`,`v`,`t`] mp_tac)
+         >> simp[] >> decide_tac)
+     >> `a ≠ (FST (HD s''.contexts)).msgParams.callee` by simp[]
+     >> strip_tac
+     >> drule_all step_storage_keys_foreign >> strip_tac >> gvs[]
+     >> `s''.contexts ≠ []` by gvs[wf_state_def]
+     >> `t.contexts ≠ []` by
+       (drule step_preserves_nonempty_contexts >> simp[])
+     >> `2 ≤ LENGTH s''.contexts` by
+       (Cases_on `t.contexts` >> gvs[])
+     >> drule_all active_storage_key_absent_head >> simp[])
+  >> conj_tac >- (qspec_then `s''` mp_tac (GEN_ALL step_preserves_wf_state) >> simp[])
+  >> conj_tac
+  >- (irule active_storage_key_absent_step >> simp[] >> goal_assum drule >> simp[])
+  >> Cases_on `v` >> simp[]
+  >> irule run_call_reaches_step >> goal_assum drule >> simp[]
 QED
