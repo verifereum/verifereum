@@ -999,7 +999,43 @@ Theorem step_pop_foreign:
          foreign_account_change (lookup_account y s.rollback.accounts)
                                 (lookup_account y s'.rollback.accounts))
 Proof
-  cheat
+  strip_tac
+  >> `s.contexts ≠ [] ∧ outputTo_consistent_stack s` by gvs[wf_state_def]
+  >> qpat_x_assum `step s = _` mp_tac
+  >> simp[step_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `inner s`
+  >> Cases_on `inner s` >> Cases_on `q`
+  >- (simp[] >> strip_tac >> gvs[]
+      >> `same_frame_or_grow inner` by simp[Abbr `inner`]
+      >> drule_all same_frame_or_grow_length >> simp[])
+  >> simp[] >> strip_tac
+  >> `same_frame_or_grow inner` by simp[Abbr `inner`]
+  >> `LENGTH r'.contexts ≥ LENGTH s.contexts` by
+      (drule_all same_frame_or_grow_length >> simp[])
+  >> `r'.contexts ≠ []` by (Cases_on `r'.contexts` >> fs[])
+  >> `LENGTH s'.contexts + 1 ≥ LENGTH r'.contexts ∧
+      LENGTH s'.contexts ≤ LENGTH r'.contexts`
+      by (drule handle_step_shrinks_by_one >> fs[])
+  >> `LENGTH r'.contexts = LENGTH s.contexts` by decide_tac
+  >> `same_frame_rel s r'` by (drule_all same_frame_or_grow_eq_length >> fs[])
+  >> `LENGTH s.contexts ≥ 2` by
+      (CCONTR_TAC >> fs[]
+       >> `LENGTH s.contexts = 1` by decide_tac
+       >> drule handle_step_preserves_length_1 >> fs[])
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `t` >> gvs[]
+  >> PairCases_on `h`
+  >> `r'.contexts = (FST (HD r'.contexts),h1)::h'::t'` by
+      (gvs[same_frame_rel_def] >> Cases_on `r'.contexts` >> gvs[]
+       >> PairCases_on `h` >> gvs[])
+  >> `outputTo_consistent_ctx (FST (HD r'.contexts))` by
+      gvs[same_frame_rel_def, outputTo_consistent_stack_def,
+          outputTo_consistent_ctx_def]
+  >> drule handle_step_pop_foreign_boundary >> simp[]
+  >> disch_then (qspecl_then [`s'`,`r`,`y`] mp_tac) >> simp[]
+  >> strip_tac >> qexists_tac `new_parent` >> simp[]
+  >> gvs[same_frame_rel_def, callee_local_changes_def,
+         foreign_account_change_def, account_already_created_def]
 QED
 
 (* A static frame changes no account: SSTORE, CREATE, SELFDESTRUCT and
