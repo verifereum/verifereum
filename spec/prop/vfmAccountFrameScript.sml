@@ -641,6 +641,129 @@ Proof
   >> rpt strip_tac >> drule_all proceed_create_saved_storage_keys >> simp[]
 QED
 
+Theorem same_frame_saved_storage_keys[local]:
+  s.contexts ≠ [] ∧ same_frame_rel s t ⇒
+  MAP (λp. (SND p).accesses.storageKeys) t.contexts =
+  MAP (λp. (SND p).accesses.storageKeys) s.contexts
+Proof
+  Cases_on `s.contexts` >> Cases_on `t.contexts`
+  >> simp[same_frame_rel_def]
+  >> rpt strip_tac >> gvs[]
+QED
+
+Theorem step_call_saved_storage_keys_shape[local]:
+  step_call op s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  MAP (λp. (SND p).accesses.storageKeys) t.contexts =
+    s.rollback.accesses.storageKeys ::
+    MAP (λp. (SND p).accesses.storageKeys) s.contexts ∧
+  LENGTH t.contexts = LENGTH s.contexts + 1
+Proof
+  strip_tac
+  >> drule step_call_push_structure >> simp[arithmeticTheory.GREATER_DEF]
+  >> strip_tac
+  >> drule_all step_call_saved_storage_keys >> strip_tac
+  >> drule_at (Pat `step_call _ _ = _`) step_call_grows_by_exactly_one
+  >> simp[arithmeticTheory.GREATER_DEF]
+  >> strip_tac
+  >> Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
+  >> qmatch_goalsub_rename_tac `MAP _ tail`
+  >> Cases_on `tail` >> gvs[]
+QED
+
+Theorem step_create_saved_storage_keys_shape[local]:
+  step_create two s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  MAP (λp. (SND p).accesses.storageKeys) t.contexts =
+    s.rollback.accesses.storageKeys ::
+    MAP (λp. (SND p).accesses.storageKeys) s.contexts ∧
+  LENGTH t.contexts = LENGTH s.contexts + 1
+Proof
+  strip_tac
+  >> drule step_create_push_structure >> simp[arithmeticTheory.GREATER_DEF]
+  >> strip_tac
+  >> drule_all step_create_saved_storage_keys >> strip_tac
+  >> drule_at (Pat `step_create _ _ = _`) step_create_grows_by_exactly_one
+  >> simp[arithmeticTheory.GREATER_DEF]
+  >> strip_tac
+  >> Cases_on `t.contexts` >> gvs[]
+  >> irule LIST_EQ >> simp[EL_MAP]
+  >> rpt strip_tac
+  >> first_x_assum drule >> simp[]
+QED
+
+Theorem step_inst_saved_storage_keys_grow[local]:
+  step_inst op s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  MAP (λp. (SND p).accesses.storageKeys) t.contexts =
+    s.rollback.accesses.storageKeys ::
+    MAP (λp. (SND p).accesses.storageKeys) s.contexts ∧
+  LENGTH t.contexts = LENGTH s.contexts + 1
+Proof
+  strip_tac
+  >> `is_call op` by
+    (Cases_on `r`
+     >- (Cases_on `x` >>
+         drule step_inst_inl_grew_is_call >> simp[arithmeticTheory.GREATER_DEF])
+     >> drule step_inst_inr_grew_is_call_family
+     >> simp[arithmeticTheory.GREATER_DEF] >> strip_tac
+     >> gvs[is_call_def])
+  >> Cases_on `op` >> gvs[is_call_def, step_inst_def]
+  >> metis_tac[step_call_saved_storage_keys_shape,
+               step_create_saved_storage_keys_shape]
+QED
+
+Theorem psf_saved_storage_keys[local]:
+  m s = (r,t) ∧ s.contexts ≠ [] ∧ preserves_same_frame m ⇒
+  MAP (λp. (SND p).accesses.storageKeys) t.contexts =
+    MAP (λp. (SND p).accesses.storageKeys) s.contexts ∧
+  LENGTH t.contexts = LENGTH s.contexts ∧ t.contexts ≠ []
+Proof
+  rw[preserves_same_frame_def]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> drule_all same_frame_saved_storage_keys >> strip_tac
+  >> gvs[same_frame_rel_def]
+  >> Cases_on `t.contexts` >> gvs[]
+QED
+
+Theorem step_inner_saved_storage_keys[local]:
+  wf_state s ∧ step_inner s = (r,t) ⇒
+  (MAP (λp. (SND p).accesses.storageKeys) t.contexts =
+     MAP (λp. (SND p).accesses.storageKeys) s.contexts ∧
+   LENGTH t.contexts = LENGTH s.contexts) ∨
+  (MAP (λp. (SND p).accesses.storageKeys) t.contexts =
+     s.rollback.accesses.storageKeys ::
+     MAP (λp. (SND p).accesses.storageKeys) s.contexts ∧
+   LENGTH t.contexts = LENGTH s.contexts + 1)
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> mp_tac (REWRITE_RULE[same_frame_or_grow_def]
+               same_frame_or_grow_step_inner_named)
+  >> disch_then drule >> simp[] >> strip_tac
+  >- (disj1_tac >> drule_all same_frame_saved_storage_keys
+      >> gvs[same_frame_rel_def])
+  >> disj2_tac
+  >> gvs[step_inner_def, bind_def, ignore_bind_def, get_current_context_def,
+         return_def, fail_def, COND_RATOR, AllCaseEqs()]
+  >> gvs[vfmTypesTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()]
+  >~ [`step_inst Stop s = _`]
+  >- (drule psf_saved_storage_keys >> simp[])
+  >~ [`step_inst Invalid s = _`]
+  >- (drule psf_saved_storage_keys >> simp[])
+  >> gvs[bind_def, AllCaseEqs()]
+  >~ [`inc_pc_or_jump op mid = _`]
+  >- (`LENGTH mid.contexts ≥ LENGTH s.contexts` by
+        (irule (INST_TYPE [``:'a`` |-> ``:unit``] same_frame_or_grow_length) >> simp[]
+         >> qexistsl [`step_inst op`, `INL ()`] >> simp[])
+      >> `mid.contexts ≠ []` by (Cases_on `mid.contexts` >> gvs[arithmeticTheory.GREATER_EQ])
+      >> `preserves_same_frame (inc_pc_or_jump op)` by simp[]
+      >> drule_at (Pat `preserves_same_frame _`) psf_saved_storage_keys
+      >> disch_then drule >> simp[] >> strip_tac
+      >> drule step_inst_saved_storage_keys_grow >> simp[])
+  >> drule step_inst_saved_storage_keys_grow >> simp[]
+QED
+
 Theorem handle_exception_storage_keys[local]:
   s.contexts ≠ [] ∧ handle_exception e s = (r,t) ⇒
   t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∨
