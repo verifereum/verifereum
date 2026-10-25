@@ -1537,6 +1537,13 @@ Proof
   \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def]
 QED
 
+Theorem sstore_base_gas_pos[simp]:
+  0 < sstore_base_gas originalValue currentValue value
+Proof
+  rw[sstore_base_gas_def, warm_access_cost_def, storage_update_cost_def,
+     cold_sload_cost_def, storage_set_cost_def]
+QED
+
 Theorem decreases_gas_step_sstore_gas_consumption[simp]:
   decreases_gas T (step_sstore_gas_consumption address key value)
 Proof
@@ -1555,8 +1562,7 @@ Proof
   \\ irule_at Any decreases_gas_update_gas_refund
   \\ irule_at Any decreases_gas_mono
   \\ irule_at Any decreases_gas_consume_gas
-  \\ rw [warm_access_cost_def, storage_update_cost_def,
-    cold_sload_cost_def, storage_set_cost_def]
+  \\ simp[ZERO_LESS_ADD]
 QED
 
 Theorem decreases_gas_write_storage[simp]:
