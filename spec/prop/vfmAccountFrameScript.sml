@@ -14,7 +14,7 @@ Theory vfmAccountFrame
 Ancestors
   combin pair option list rich_list relation While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStoragePredicates vfmPreserves vfmHandleStep
+  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStoragePredicates vfmPreserves vfmHandleStep vfmStepLength
 Libs
   BasicProvers
 
@@ -426,6 +426,219 @@ Proof
   >> metis_tac[step_inst_foreign_storage_key,
        REWRITE_RULE[preserves_rollback_def]
          preserves_rollback_inc_pc_or_jump]
+QED
+
+Theorem proceed_call_saved_storage_keys[local]:
+  proceed_call op sender address value argsOffset argsSize code stipend
+               outputTo s = (r,t) ∧ s.contexts ≠ [] ⇒
+  (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_call` mp_tac
+  >> simp[proceed_call_def, bind_def, get_rollback_def, return_def]
+  >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
+  >> qmatch_goalsub_abbrev_tac `ignore_bind g`
+  >> simp[ignore_bind_def, Once bind_def]
+  >> TOP_CASE_TAC
+  >> qmatch_asmsub_rename_tac `g s = (q, s1)`
+  >> `s1.contexts = s.contexts` by
+    (gvs[Abbr `g`, COND_RATOR, AllCaseEqs(), update_accounts_def, return_def])
+  >> `ISL q` by
+    (gvs[Abbr `g`, AllCaseEqs(), COND_RATOR, return_def, update_accounts_def])
+  >> TOP_CASE_TAC >> gvs[]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_caller_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_caller_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_value_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_value_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_static_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_static_def, return_def, get_current_context_def]
+  >> rewrite_tac[Once bind_def]
+  >> TOP_CASE_TAC
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
+  >> reverse IF_CASES_TAC >> simp[return_def]
+  >- (strip_tac >> gvs[])
+  >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_, t)`
+  >> `ss.contexts ≠ []` by simp[Abbr `ss`]
+  >> qmatch_asmsub_abbrev_tac `dpa ss = (_,_)`
+  >> `preserves_same_frame dpa` by simp[Abbr `dpa`]
+  >> pop_assum mp_tac
+  >> rewrite_tac[preserves_same_frame_def]
+  >> disch_then drule
+  >> `ss.contexts = (ctx, s.rollback) :: s.contexts` by simp[Abbr `ss`]
+  >> simp[same_frame_rel_def]
+QED
+
+Theorem proceed_create_saved_storage_keys[local]:
+  proceed_create sender address value code cappedGas s = (r,t) ∧
+  s.contexts ≠ [] ⇒
+  (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_create` mp_tac
+  >> simp[proceed_create_def]
+  >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_rollback_def, return_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_original_def, return_def, fail_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[set_original_def, return_def, fail_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[update_accounts_def, return_def]
+  >> strip_tac
+  >> drule push_context_effect >> strip_tac >> gvs[]
+QED
+
+Theorem saved_storage_keys_bind[local]:
+  preserves_same_frame g ∧
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) g ∧
+  (∀x s r t. f x s = (r,t) ∧ s.contexts ≠ [] ∧
+              LENGTH s.contexts < LENGTH t.contexts ⇒
+     (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys) ⇒
+  ∀s r t. bind g f s = (r,t) ∧ s.contexts ≠ [] ∧
+           LENGTH s.contexts < LENGTH t.contexts ⇒
+    (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  rpt strip_tac
+  >> drule_at (Pat `bind _ _ _ = _`) bind_psf_grows_extract
+  >> simp[arithmeticTheory.GREATER_DEF] >> strip_tac
+  >> `sm.contexts ≠ [] ∧ LENGTH sm.contexts = LENGTH s.contexts`
+       by (gvs[same_frame_rel_def] >> Cases_on `sm.contexts` >> gvs[])
+  >> gvs[preserves_def]
+  >> metis_tac[]
+QED
+
+Theorem saved_storage_keys_same_frame[local]:
+  preserves_same_frame m ⇒
+  ∀s r t. m s = (r,t) ∧ s.contexts ≠ [] ∧
+           LENGTH s.contexts < LENGTH t.contexts ⇒
+    (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  rw[preserves_same_frame_def]
+  >> first_x_assum drule >> simp[same_frame_rel_def]
+QED
+
+Theorem saved_storage_keys_ignore_bind[local]:
+  preserves_same_frame g ∧
+  preserves (λs t. t.rollback.accesses.storageKeys =
+                   s.rollback.accesses.storageKeys) g ∧
+  (∀s r t. f s = (r,t) ∧ s.contexts ≠ [] ∧
+            LENGTH s.contexts < LENGTH t.contexts ⇒
+     (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys) ⇒
+  ∀s r t. ignore_bind g f s = (r,t) ∧ s.contexts ≠ [] ∧
+           LENGTH s.contexts < LENGTH t.contexts ⇒
+    (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  simp[ignore_bind_def] >> strip_tac
+  >> ho_match_mp_tac saved_storage_keys_bind >> simp[]
+QED
+
+Theorem saved_storage_keys_cond[local]:
+  (∀s r t. m1 s = (r,t) ∧ s.contexts ≠ [] ∧
+            LENGTH s.contexts < LENGTH t.contexts ⇒
+     (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys) ∧
+  (∀s r t. m2 s = (r,t) ∧ s.contexts ≠ [] ∧
+            LENGTH s.contexts < LENGTH t.contexts ⇒
+     (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys) ⇒
+  ∀s r t. (if b then m1 else m2) s = (r,t) ∧ s.contexts ≠ [] ∧
+           LENGTH s.contexts < LENGTH t.contexts ⇒
+    (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+Theorem step_call_saved_storage_keys[local]:
+  ∀s r t. step_call op s = (r,t) ∧ s.contexts ≠ [] ∧
+           LENGTH s.contexts < LENGTH t.contexts ⇒
+    (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  simp[step_call_def]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> qx_gen_tac `args`
+  >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[access_address_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> qx_gen_tac `accounts`
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> conj_tac >- (Cases_on `get_delegate (lookup_account (w2w (EL 1 args)) accounts).code` >> simp[])
+  >> conj_tac
+  >- (Cases_on `get_delegate (lookup_account (w2w (EL 1 args)) accounts).code`
+      >> simp[rollback_preserves_storage_keys]
+      >> irule storage_keys_bind
+      >> rw[access_address_storage_keys, rollback_preserves_storage_keys])
+  >> Cases >> simp[]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_cond >> conj_tac
+  >- (ho_match_mp_tac saved_storage_keys_same_frame >> simp[SF ETA_ss])
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_cond >> conj_tac
+  >- (ho_match_mp_tac saved_storage_keys_same_frame >> simp[SF ETA_ss])
+  >> rpt strip_tac >> drule_all proceed_call_saved_storage_keys >> simp[]
+QED
+
+Theorem step_create_saved_storage_keys[local]:
+  ∀s r t. step_create two s = (r,t) ∧ s.contexts ≠ [] ∧
+           LENGTH s.contexts < LENGTH t.contexts ⇒
+    (SND (HD t.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  simp[step_create_def]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[access_address_storage_keys, rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> rpt (ho_match_mp_tac saved_storage_keys_ignore_bind
+          >> simp[rollback_preserves_storage_keys])
+  >> ho_match_mp_tac saved_storage_keys_bind
+  >> simp[rollback_preserves_storage_keys] >> gen_tac
+  >> ho_match_mp_tac saved_storage_keys_cond >> conj_tac
+  >- (ho_match_mp_tac saved_storage_keys_same_frame >> simp[SF ETA_ss])
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys, access_address_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_ignore_bind
+  >> simp[rollback_preserves_storage_keys]
+  >> ho_match_mp_tac saved_storage_keys_cond >> conj_tac
+  >- (rpt strip_tac >> drule_all abort_create_exists_length
+      >> simp[arithmeticTheory.GREATER_DEF])
+  >> rpt strip_tac >> drule_all proceed_create_saved_storage_keys >> simp[]
 QED
 
 Theorem handle_exception_storage_keys[local]:
