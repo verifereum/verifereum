@@ -1013,7 +1013,22 @@ Theorem step_storage_keys_foreign:
   LENGTH s'.contexts < LENGTH s.contexts ∧
   fIN (SK y k) (SND (HD s.contexts)).accesses.storageKeys
 Proof
-  cheat
+  strip_tac
+  >> Cases_on `step_inner s`
+  >> rename1 `step_inner s = (u,t)`
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> Cases_on `u`
+  >- (gvs[step_eq_handle_step_inner, handle_def]
+      >> metis_tac[step_inner_foreign_storage_key])
+  >> gvs[step_eq_handle_step_inner, handle_def]
+  >> `t.contexts ≠ []` by
+    (drule_all step_inner_saved_storage_keys >> strip_tac
+     >> Cases_on `t.contexts` >> gvs[])
+  >> drule_all handle_step_storage_keys >> strip_tac
+  >- (gvs[] >> metis_tac[step_inner_foreign_storage_key])
+  >> drule_all step_inner_saved_storage_keys >> strip_tac
+  >- (Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[])
+  >> Cases_on `t.contexts` >> gvs[]
 QED
 
 Theorem step_push_storage_keys:
