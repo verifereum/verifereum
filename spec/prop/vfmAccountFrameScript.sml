@@ -1040,6 +1040,123 @@ Proof
   cheat
 QED
 
+Theorem active_storage_key_absent_iff[local]:
+  EVERY (λrb. ¬fIN z rb.accesses.storageKeys) (active_rollbacks d s) ⇔
+  ¬fIN z s.rollback.accesses.storageKeys ∧
+  (d ≤ LENGTH s.contexts ⇒
+   ∀i. i < LENGTH s.contexts - d + 1 ∧ i + 1 < LENGTH s.contexts ⇒
+     ¬fIN z (SND (EL i s.contexts)).accesses.storageKeys)
+Proof
+  simp[active_rollbacks_def]
+  >> IF_CASES_TAC >> simp[]
+  >> simp[EVERY_EL, EL_MAP, EL_TAKE, arithmeticTheory.MIN_DEF]
+  >> IF_CASES_TAC >> simp[]
+  >> eq_tac >> rpt strip_tac >> gvs[]
+  >> first_x_assum drule >> simp[] >> decide_tac
+QED
+
+Theorem active_storage_key_absent_current[local]:
+  EVERY (λrb. ¬fIN z rb.accesses.storageKeys) (active_rollbacks d s) ⇒
+  ¬fIN z s.rollback.accesses.storageKeys
+Proof
+  simp[active_rollbacks_def]
+QED
+
+Theorem active_storage_key_absent_head[local]:
+  EVERY (λrb. ¬fIN z rb.accesses.storageKeys) (active_rollbacks d s) ∧
+  d ≤ LENGTH s.contexts ∧ 2 ≤ LENGTH s.contexts ⇒
+  ¬fIN z (SND (HD s.contexts)).accesses.storageKeys
+Proof
+  rw[active_storage_key_absent_iff] >> gvs[]
+  >> first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Theorem active_storage_key_absent_initial[local]:
+  wf_state es ∧
+  (2 ≤ LENGTH es.contexts ⇒
+     toSet (SND (HD es.contexts)).accesses.storageKeys ⊆
+     toSet es.rollback.accesses.storageKeys) ∧
+  ¬fIN z es.rollback.accesses.storageKeys ⇒
+  EVERY (λrb. ¬fIN z rb.accesses.storageKeys)
+        (active_rollbacks (LENGTH es.contexts) es)
+Proof
+  rw[active_storage_key_absent_iff]
+  >> gvs[finite_setTheory.fIN_IN, pred_setTheory.SUBSET_DEF]
+  >> metis_tac[]
+QED
+
+Theorem front_eq_el[local]:
+  FRONT xs = FRONT ys ∧ i + 1 < LENGTH xs ∧ i + 1 < LENGTH ys ⇒
+  EL i xs = EL i ys
+Proof
+  strip_tac
+  >> `xs ≠ [] ∧ ys ≠ []` by (Cases_on `xs` >> Cases_on `ys` >> gvs[])
+  >> `EL i (FRONT xs) = EL i (FRONT ys)` by simp[]
+  >> qpat_x_assum `FRONT _ = _` kall_tac
+  >> gvs[rich_listTheory.EL_FRONT, rich_listTheory.LENGTH_FRONT, NULL_EQ]
+QED
+
+Theorem step_push_saved_key_index[local]:
+  wf_state s ∧ step s = (r,t) ∧ LENGTH s.contexts < LENGTH t.contexts ⇒
+  ∀i. i + 1 < LENGTH t.contexts ⇒
+    (SND (EL i t.contexts)).accesses.storageKeys =
+    (if i = 0 then s.rollback.accesses.storageKeys
+     else (SND (EL (i-1) s.contexts)).accesses.storageKeys)
+Proof
+  strip_tac
+  >> drule_all step_push_storage_keys >> strip_tac
+  >> drule_all step_push_foreign >> strip_tac
+  >> qpat_x_assum `∀y. _` kall_tac
+  >> Cases_on `i`
+  >- simp[]
+  >> Cases_on `n`
+  >- (rpt strip_tac >> gvs[])
+  >> rpt strip_tac
+  >> rename1 `SUC (SUC j) + 1 < LENGTH t.contexts`
+  >> `EL j (TL (TL t.contexts)) = EL j (TL s.contexts)` by
+    (irule front_eq_el >> simp[]
+     >> Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
+     >> Cases_on `t'` >> gvs[])
+  >> namedCases_on `t.contexts` ["", "tc tcs"] >> gvs[]
+  >> Cases_on `tcs` >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem active_storage_key_absent_step[local]:
+  wf_state s ∧ 0 < d ∧ d ≤ LENGTH s.contexts ∧ step s = (r,t) ∧
+  EVERY (λrb. ¬fIN z rb.accesses.storageKeys) (active_rollbacks d s) ∧
+  ¬fIN z t.rollback.accesses.storageKeys ⇒
+  EVERY (λrb. ¬fIN z rb.accesses.storageKeys) (active_rollbacks d t)
+Proof
+  simp[active_storage_key_absent_iff] >> strip_tac >> gvs[]
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (drule_all step_same_frame_foreign >> strip_tac
+      >> qpat_x_assum `∀y. _` kall_tac
+      >> simp[] >> rpt strip_tac
+      >> first_x_assum (qspec_then `i` mp_tac)
+      >> Cases_on `i`
+      >- gvs[]
+      >> Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[])
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (drule_at (Pat `step _ = _`) step_push_saved_key_index
+      >> simp[] >> strip_tac
+      >> drule_all step_push_foreign >> strip_tac
+      >> qpat_x_assum `∀y. _` kall_tac
+      >> simp[] >> rpt strip_tac
+      >> first_x_assum (qspec_then `i` mp_tac)
+      >> impl_tac >- decide_tac
+      >> strip_tac >> simp[]
+      >> Cases_on `i` >> gvs[]
+      >> first_x_assum irule >> decide_tac)
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> drule_all step_pop_foreign >> strip_tac
+  >> simp[] >> rpt strip_tac
+  >> first_x_assum (qspec_then `SUC i` mp_tac)
+  >> (impl_tac >- (Cases_on `s.contexts` >> gvs[] >> decide_tac))
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `i` >> gvs[]
+QED
+
 (* Every storage key run_call adds for `a` was added by a step executing as
  * `a`, from a reached state. *)
 Theorem run_call_storage_key_added:
