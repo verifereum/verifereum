@@ -397,6 +397,197 @@ Proof
   >> gvs[active_rollbacks_def]
 QED
 
+Theorem active_rollbacks_push_tail:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  LENGTH t.contexts = SUC (LENGTH s.contexts) ∧
+  FRONT (TL (TL t.contexts)) = FRONT (TL s.contexts) ∧
+  (2 ≤ LENGTH s.contexts ⇒ SND (EL 1 t.contexts) = SND (HD s.contexts)) ⇒
+  TL (active_rollbacks d t) =
+    SND (HD t.contexts) :: TL (active_rollbacks d s)
+Proof
+  strip_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `t.contexts` >> gvs[]
+  >> Cases_on `t'` >> gvs[]
+  >> Cases_on `t` >> gvs[active_rollbacks_def, MIN_DEF]
+  >> rw[] >> gvs[]
+  >> rename1 `FRONT (TL ys) = FRONT (z::zs)`
+  >> Cases_on `ys` >> gvs[]
+  >> simp[ADD1]
+  >> AP_TERM_TAC
+  >> qmatch_goalsub_abbrev_tac `TAKE k _`
+  >> `k < LENGTH t ∧ k < LENGTH (z::zs)` by (simp[Abbr `k`] >> decide_tac)
+  >> metis_tac[TAKE_FRONT, NOT_CONS_NIL, LENGTH_NIL, prim_recTheory.NOT_LESS_0]
+QED
+
+Theorem step_push_account_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH s.contexts < LENGTH t.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac >> drule_all step_push_foreign >> strip_tac
+  >> `TL (active_rollbacks d t) =
+       SND (HD t.contexts) :: TL (active_rollbacks d s)`
+       by (irule active_rollbacks_push_tail >> simp[])
+  >> `P (lookup_account a s.rollback.accounts) ∧
+      EVERY (λrb. P (lookup_account a rb.accounts))
+        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
+  >> `P (lookup_account a t.rollback.accounts) ∧
+      P (lookup_account a (SND (HD t.contexts)).accounts)` by metis_tac[]
+  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+QED
+
+Theorem active_rollbacks_pop:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  s.contexts = h::parent::rest ∧
+  t.contexts = (new_head,SND parent)::rest ∧
+  EVERY Q (active_rollbacks d s) ⇒
+  Q s.rollback ∧ Q (SND h) ∧ EVERY Q (TL (active_rollbacks d t))
+Proof
+  simp[active_rollbacks_def] >> strip_tac
+  >> gvs[MIN_DEF] >> rw[] >> gvs[]
+  >> gvs[ADD1]
+  >> Cases_on `rest` >> gvs[]
+QED
+
+Theorem active_rollbacks_pop_tail:
+  0 < d ∧ d ≤ LENGTH t.contexts ∧
+  s.contexts = h::parent::rest ∧
+  t.contexts = (new_head,SND parent)::rest ⇒
+  TL (active_rollbacks d t) = TL (TL (active_rollbacks d s))
+Proof
+  strip_tac >> simp[active_rollbacks_def]
+  >> gvs[MIN_DEF] >> rw[] >> gvs[ADD1]
+  >> Cases_on `rest` >> gvs[]
+QED
+
+Theorem step_pop_account_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts < LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac >> drule_all step_pop_foreign >> strip_tac
+  >> drule_all active_rollbacks_pop >> strip_tac
+  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
+  >> gvs[active_rollbacks_def]
+QED
+
+Theorem step_foreign_account_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (irule step_same_frame_account_invariant >> metis_tac[])
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (irule step_push_account_invariant >> metis_tac[])
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> irule step_pop_account_invariant >> metis_tac[]
+QED
+
+Theorem step_outer_saved_rollbacks:
+  0 < d ∧ d ≤ k ∧ k < LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ⇒
+  k ≤ LENGTH t.contexts ∧
+  DROP (LENGTH t.contexts - k) (TL (active_rollbacks d t)) =
+  DROP (LENGTH s.contexts - k) (TL (active_rollbacks d s))
+Proof
+  strip_tac
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (`outputTo_consistent s`
+        by metis_tac[outputTo_consistent_stack_imp_consistent, wf_state_def]
+      >> drule_all step_same_frame >> strip_tac
+      >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
+          by (irule active_rollbacks_same_stack >> gvs[same_frame_rel_def])
+      >> simp[])
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (drule_all step_push_foreign >> strip_tac
+      >> `TL (active_rollbacks d t) =
+           SND (HD t.contexts) :: TL (active_rollbacks d s)`
+           by (irule active_rollbacks_push_tail >> simp[])
+      >> `LENGTH t.contexts - k = SUC (LENGTH s.contexts - k)` by decide_tac
+      >> simp[])
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> drule_all step_pop_foreign >> strip_tac
+  >> `LENGTH s.contexts = SUC (SUC (LENGTH rest))`
+       by (qpat_assum `s.contexts = _` (once_rewrite_tac o single) >> simp[])
+  >> `k ≤ LENGTH t.contexts` by (gvs[] >> decide_tac)
+  >> `TL (active_rollbacks d t) = TL (TL (active_rollbacks d s))`
+       by (irule active_rollbacks_pop_tail >> metis_tac[LESS_EQ_TRANS])
+  >> `LENGTH s.contexts - k = SUC (LENGTH t.contexts - k)`
+       by (gvs[] >> decide_tac)
+  >> simp[DROP_SUC]
+  >> once_rewrite_tac[GSYM DROP_SUC]
+  >> Cases_on `TL (active_rollbacks d s)` >> simp[]
+QED
+
+Theorem run_call_outer_saved_rollbacks:
+  0 < d ∧ d ≤ k ∧ k < LENGTH e.contexts ∧
+  wf_state e ∧ run_call e = SOME (r,t) ⇒
+  k ≤ LENGTH t.contexts ∧
+  DROP (LENGTH t.contexts - k) (TL (active_rollbacks d t)) =
+  DROP (LENGTH e.contexts - k) (TL (active_rollbacks d e))
+Proof
+  strip_tac >> gvs[run_call_def]
+  >> `(λp. wf_state (SND p) ∧ k ≤ LENGTH (SND p).contexts ∧
+       DROP (LENGTH (SND p).contexts - k) (TL (active_rollbacks d (SND p))) =
+       DROP (LENGTH e.contexts - k) (TL (active_rollbacks d e))) (r,t)`
+       suffices_by simp[]
+  >> irule (MP_CANON OWHILE_INV_IND)
+  >> goal_assum (first_assum o mp_then Any mp_tac)
+  >> simp[] >> rpt gen_tac >> strip_tac
+  >> pairarg_tac >> gvs[]
+  >> rename1 `LENGTH s.contexts ≥ LENGTH e.contexts`
+  >> Cases_on `step s` >> gvs[]
+  >> `k < LENGTH s.contexts` by decide_tac
+  >> drule_all step_outer_saved_rollbacks >> strip_tac
+  >> metis_tac[step_preserves_wf_state, SND]
+QED
+
+Theorem run_call_popped_saved_rollbacks:
+  0 < d ∧ d < LENGTH e.contexts ∧
+  wf_state e ∧ run_call e = SOME (INL (),t) ⇒
+  TL (active_rollbacks d t) = TL (TL (active_rollbacks d e))
+Proof
+  strip_tac
+  >> `d ≤ LENGTH e.contexts - 1 ∧ LENGTH e.contexts - 1 < LENGTH e.contexts`
+       by decide_tac
+  >> `LENGTH e.contexts - 1 ≤ LENGTH t.contexts ∧
+       DROP (LENGTH t.contexts - (LENGTH e.contexts - 1)) (TL (active_rollbacks d t)) =
+       DROP (LENGTH e.contexts - (LENGTH e.contexts - 1)) (TL (active_rollbacks d e))`
+       by (irule run_call_outer_saved_rollbacks >> metis_tac[])
+  >> `LENGTH t.contexts < LENGTH e.contexts`
+       by (drule run_call_finite_trace >> simp[] >> strip_tac >> decide_tac)
+  >> `LENGTH t.contexts = LENGTH e.contexts - 1 ∧
+      LENGTH e.contexts - (LENGTH e.contexts - 1) = 1` by decide_tac
+  >> gvs[]
+  >> Cases_on `TL (active_rollbacks d e)` >> gvs[]
+QED
+
+Theorem run_call_saved_account_invariant:
+  0 < d ∧ d < LENGTH e.contexts ∧ wf_state e ∧
+  EVERY Q (TL (active_rollbacks d e)) ∧
+  Q t.rollback ∧ run_call e = SOME (INL (),t) ⇒
+  EVERY Q (active_rollbacks d t)
+Proof
+  strip_tac >> drule_all run_call_popped_saved_rollbacks >> strip_tac
+  >> `EVERY Q (TL (TL (active_rollbacks d e)))`
+       by (Cases_on `TL (active_rollbacks d e)` >> gvs[])
+  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+QED
+
 Theorem run_call_account_frame:
   wf_state es ∧
   (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
