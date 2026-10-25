@@ -51,8 +51,9 @@ with several rules gives one summary per rule: a JUMPI block gives a
 `take` summary and a `skip` summary. A CALL-class instruction is a block
 of its own: its rule hides every parsed pc but its own, so a block with
 more code before the call would claim those pcs twice and its summary
-would be vacuous. STOP, RETURN and REVERT summaries use the rules for
-the outermost frame, so their `C` includes `NULL cs`.
+would be vacuous. Halting summaries (STOP, RETURN, REVERT, INVALID,
+SELFDESTRUCT) use the rules for the outermost frame, so their `C`
+includes `NULL cs`.
 
 A summary for a block at pc `n` that reads `d` stack slots and leaves `k`
 has this shape:
@@ -110,16 +111,17 @@ only), and a CALL-class summary after other code.
 ## Rules
 
 The rules come from a table keyed by the opcode constructor's name. By
-default a name maps to `vfmProgTheory`'s `SPEC_<name>`. JUMPI, STOP,
-RETURN, REVERT, INVALID and the CALL-class instructions have explicit
-entries; CREATE and CREATE2 use the successful-creation rule
-`SPEC_Create` only. INVALID has no rule (`SPEC_Invalid` is a placeholder
-with a false precondition), and neither has SELFDESTRUCT yet, so blocks
-ending in them fail with "no rule". A rule is matched against the instruction by its code (or its
+default a name maps to `vfmProgTheory`'s `SPEC_<name>`. JUMPI and the
+halting and CALL-class instructions have explicit entries: the halts use
+the `_outermost` rules, the calls `SPEC_Call`, and CREATE and CREATE2
+the successful-creation rule `SPEC_Create` only. The rules for
+exceptional halts (out of gas, stack underflow, ...) and for calls to
+precompiles are not in the table, so a summary describes the run in
+which the block's instructions succeed. A rule is matched against the instruction by its code (or its
 `evm_Parsed` assertion), so parameterised rules need no special
 handling. `add_rules` and `set_rules` add or replace the rules for an
-opcode, which is how new rules (another SELFDESTRUCT or CREATE rule, a
-rule for a nested call) plug in without changing the library.
+opcode, which is how new rules (an exceptional halt, a failed CREATE, a
+call to a precompile) plug in without changing the library.
 
 ## Hints
 

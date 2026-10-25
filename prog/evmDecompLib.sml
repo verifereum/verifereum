@@ -228,9 +228,8 @@ val () = set_rules "JumpI" [("take", SPEC_JumpI_take),
 val () = set_rules "Stop" [("outermost", SPEC_Stop_outermost)]
 val () = set_rules "Return" [("outermost", SPEC_Return_outermost)]
 val () = set_rules "Revert" [("outermost", SPEC_Return_outermost)]
-(* SPEC_Invalid is a placeholder with precondition F; there is no SELFDESTRUCT
-   rule yet either, so blocks ending in these fail with "no rule" *)
-val () = set_rules "Invalid" []
+val () = set_rules "Invalid" [("outermost", SPEC_Invalid_outermost)]
+val () = set_rules "SelfDestruct" [("outermost", SPEC_SelfDestruct_outermost)]
 val () = app (fn n => set_rules n [("call", SPEC_Call)])
              ["Call", "CallCode", "DelegateCall", "StaticCall"]
 (* the successful creation, entering the init code; SPEC_Create_fail and
