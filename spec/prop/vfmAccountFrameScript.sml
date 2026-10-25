@@ -14,7 +14,7 @@ Theory vfmAccountFrame
 Ancestors
   combin pair option list rich_list relation While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls
+  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls vfmDecreasesGas
 Libs
   BasicProvers
 
@@ -674,6 +674,186 @@ Proof
       >- (rpt strip_tac >> drule_all static_prefix_head >> simp[])
       >> gen_tac >> MATCH_ACCEPT_TAC step_inst_preserves_static_prefix)
   >> disch_then (qspec_then `s` mp_tac) >> simp[]
+QED
+
+Theorem pop_incorporate_account_prefix[local]:
+  0 < n ∧ n ≤ LENGTH s.contexts ∧ 1 < LENGTH s.contexts ∧
+  s.rollback.accounts = A ∧
+  EVERY (λ(c,rb). c.msgParams.static ∧
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
+  (SND (pop_and_incorporate_context success s)).rollback.accounts = A ∧
+  (n ≤ LENGTH (SND (pop_and_incorporate_context success s)).contexts ⇒
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH (SND (pop_and_incorporate_context success s)).contexts - n + 1)
+       (SND (pop_and_incorporate_context success s)).contexts))
+Proof
+  strip_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> Cases_on `t` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> `LENGTH t' + 3 - n = SUC (LENGTH t' + 2 - n)` by decide_tac
+  >> gvs[]
+  >> simp[pop_and_incorporate_context_def, bind_def,
+    get_gas_left_def, get_current_context_def, return_def,
+    pop_context_def, unuse_gas_def, LET_THM,
+    set_current_context_def, fail_def, assert_def, ignore_bind_def]
+  >> Cases_on `success`
+  >> simp[push_logs_def, bind_def, get_current_context_def,
+    set_current_context_def, return_def, update_gas_refund_def, set_rollback_def]
+  >> IF_CASES_TAC >> gvs[]
+  >> strip_tac
+  >> `LENGTH t' + 2 - n = SUC (LENGTH t' + 1 - n)` by decide_tac
+  >> gvs[]
+  >> `SUC (SUC (LENGTH t')) - (n + 1) = SUC (LENGTH t') - n` by decide_tac
+  >> pop_assum SUBST_ALL_TAC >> simp[]
+QED
+
+Theorem cp_preserves_account_prefix_exit[local]:
+  cp m ∧ s.contexts ≠ [] ∧ s.rollback.accounts = A ∧
+  (n ≤ LENGTH s.contexts ⇒
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ∧
+  m s = (r,s') ⇒
+  s'.rollback.accounts = A ∧
+  (n ≤ LENGTH s'.contexts ⇒
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s'.contexts - n + 1) s'.contexts))
+Proof
+  rw[cp_def]
+  >> first_x_assum drule >> disch_then drule >> strip_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> Cases_on `LENGTH t + 2 - n` >> gvs[]
+QED
+
+Theorem handle_ex_helper_account_prefix[local]:
+  0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  EVERY (λ(c,rb). c.msgParams.static ∧
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
+  (SND (handle_ex_helper e s)).rollback.accounts = A ∧
+  (n ≤ LENGTH (SND (handle_ex_helper e s)).contexts ⇒
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH (SND (handle_ex_helper e s)).contexts - n + 1)
+       (SND (handle_ex_helper e s)).contexts))
+Proof
+  strip_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h` >> gvs[]
+  >> simp[handle_ex_helper_def, bind_def, get_num_contexts_def,
+    get_current_context_def, return_def, fail_def]
+  >> Cases_on `t`
+  >- simp[reraise_def]
+  >> simp[bind_def, get_return_data_def, get_output_to_def,
+    get_current_context_def, return_def, ignore_bind_def]
+  >> `1 < LENGTH s.contexts` by simp[]
+  >> mp_tac (Q.INST [`A` |-> `s.rollback.accounts`,
+      `success` |-> `(e : exception option) = NONE`] pop_incorporate_account_prefix)
+  >> impl_tac >- gvs[]
+  >> strip_tac
+  >> Cases_on `pop_and_incorporate_context (e = NONE) s`
+  >> Cases_on `q` >> gvs[]
+  >> `r.contexts ≠ []`
+    by (irule pop_incorporate_contexts_ne
+        >> goal_assum (drule_at Any) >> simp[])
+  >> Cases_on `after_pop h0.returnData h0.msgParams.outputTo (e = NONE) r`
+  >> gvs[]
+  >> drule_at (Pos (el 5)) cp_preserves_account_prefix_exit
+  >> disch_then (qspecl_then [`n`, `s.rollback.accounts`] mp_tac)
+  >> simp[]
+QED
+
+Theorem handle_exception_account_prefix[local]:
+  0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  EVERY (λ(c,rb). c.msgParams.static ∧
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
+  (SND (handle_exception e s)).rollback.accounts = A ∧
+  (n ≤ LENGTH (SND (handle_exception e s)).contexts ⇒
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH (SND (handle_exception e s)).contexts - n + 1)
+       (SND (handle_exception e s)).contexts))
+Proof
+  strip_tac >> simp[handle_exception_decomp, LET_THM]
+  >> qmatch_goalsub_abbrev_tac `bind prefix _ s`
+  >> `cp prefix` by simp[Abbr `prefix`]
+  >> drule cp_preserves_static_prefix
+  >> disch_then (qspecl_then [`n`, `A`, `s`] mp_tac)
+  >> simp[] >> strip_tac
+  >> simp[bind_def]
+  >> Cases_on `prefix s` >> Cases_on `q` >> gvs[]
+  >> mp_tac (Q.INST [`s` |-> `r`, `A` |-> `s.rollback.accounts`]
+      handle_ex_helper_account_prefix)
+  >> simp[]
+QED
+
+Theorem handle_step_account_prefix[local]:
+  0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  EVERY (λ(c,rb). c.msgParams.static ∧
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
+  (SND (handle_step e s)).rollback.accounts = A ∧
+  (n ≤ LENGTH (SND (handle_step e s)).contexts ⇒
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH (SND (handle_step e s)).contexts - n + 1)
+       (SND (handle_step e s)).contexts))
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by (strip_tac >> gvs[])
+  >> `(∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a)` by
+    (Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+     >> `LENGTH t + 2 - n = SUC (LENGTH t + 1 - n)` by decide_tac
+     >> gvs[])
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC >- gvs[reraise_def]
+  >> drule_all (INST_TYPE [alpha |-> ``:unit``] handle_create_reraises)
+  >> simp[handle_def, reraise_def]
+  >> strip_tac >> mp_tac handle_exception_account_prefix >> gvs[]
+QED
+
+Theorem step_preserves_static_account_prefix[local]:
+  wf_state s ∧ 0 < n ∧ n ≤ LENGTH s.contexts ∧
+  s.rollback.accounts = A ∧
+  EVERY (λ(c,rb). c.msgParams.static ∧
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (TAKE (LENGTH s.contexts - n + 1) s.contexts) ∧
+  step s = (r,s') ⇒
+  wf_state s' ∧ s'.rollback.accounts = A ∧
+  (n ≤ LENGTH s'.contexts ⇒
+   EVERY (λ(c,rb). c.msgParams.static ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (TAKE (LENGTH s'.contexts - n + 1) s'.contexts))
+Proof
+  strip_tac
+  >> `wf_state s'` by (drule step_preserves_wf_state >> simp[])
+  >> simp[]
+  >> qpat_x_assum `step s = _` mp_tac
+  >> simp[step_def, LET_THM]
+  >> qmatch_goalsub_abbrev_tac `handle inner handle_step s`
+  >> `∀r s'. inner s = (r,s') ⇒
+       0 < n ∧ n ≤ LENGTH s'.contexts ∧ s'.rollback.accounts = A ∧
+       EVERY (λ(c,rb). c.msgParams.static ∧
+         (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+         (TAKE (LENGTH s'.contexts - n + 1) s'.contexts)` by
+    (map_every qx_gen_tac [`res`, `st`] >> disch_tac
+     >> irule inner_preserves_static_prefix >> conj_tac >- simp[]
+     >> map_every qexists_tac [`res`, `s`] >> gvs[Abbr `inner`])
+  >> simp[handle_def]
+  >> Cases_on `inner s` >> Cases_on `q` >> gvs[]
+  >- (strip_tac >> gvs[])
+  >> rename1 `inner s = (INR ex, mid)`
+  >> mp_tac (Q.INST [`s` |-> `mid`, `e` |-> `ex`,
+       `A` |-> `s.rollback.accounts`] handle_step_account_prefix)
+  >> simp[] >> strip_tac >> Cases_on `handle_step ex mid` >> gvs[]
+  >> strip_tac >> gvs[]
 QED
 
 (* A static frame changes no account: SSTORE, CREATE, SELFDESTRUCT and
