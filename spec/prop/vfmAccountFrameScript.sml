@@ -495,6 +495,88 @@ Proof
   >> qpat_x_assum `dispatch_precompiles _ _ = _` (fn th => simp[th, sumTheory.ISR])
 QED
 
+Theorem step_call_push_storage_keys:
+  step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH s'.contexts ⇒
+  s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∧
+  (SND (HD s'.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_call_inl_nonprecompile >> strip_tac
+  >> drule_all proceed_call_saved_rollback >> simp[]
+QED
+
+Theorem step_call_push_foreign_accounts:
+  step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH s'.contexts ⇒
+  ∀y. foreign_account_change (lookup_account y s.rollback.accounts)
+                             (lookup_account y s'.rollback.accounts) ∧
+      foreign_account_change (lookup_account y s.rollback.accounts)
+                             (lookup_account y (SND (HD s'.contexts)).accounts)
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_call_inl_nonprecompile >> strip_tac
+  >> drule_all proceed_call_saved_rollback >> strip_tac
+  >> drule_all proceed_call_nonprecompile_frame >> strip_tac
+  >> gvs[cp_rel_def]
+  >> rw[foreign_account_change_def, transfer_value_preserves_code,
+        transfer_value_preserves_storage, transfer_value_preserves_nonce]
+QED
+
+Theorem transfer_value_zero[simp]:
+  transfer_value sender address 0 accounts = accounts
+Proof
+  simp[transfer_value_def]
+QED
+
+Theorem step_call_push_new_frame:
+  step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH s'.contexts ∧
+  (FST (HD s'.contexts)).msgParams.callee ≠
+    (FST (HD s.contexts)).msgParams.callee ⇒
+  ∃code static mr t.
+    FST (HD s'.contexts) =
+      initial_context (FST (HD s'.contexts)).msgParams.callee
+        code static (Memory mr) t ∧
+    code = (case get_delegate
+               (lookup_account (FST (HD s'.contexts)).msgParams.callee
+                  s.rollback.accounts).code of
+          NONE => (lookup_account (FST (HD s'.contexts)).msgParams.callee
+                     s.rollback.accounts).code
+        | SOME d => (lookup_account d s.rollback.accounts).code) ∧
+    (FST (HD s'.contexts)).msgParams.caller =
+      (FST (HD s.contexts)).msgParams.callee ∧
+    (FST (HD s'.contexts)).msgParams.value ≤
+      (lookup_account (FST (HD s.contexts)).msgParams.callee
+         s.rollback.accounts).balance ∧
+    s'.rollback.accounts =
+      transfer_value (FST (HD s.contexts)).msgParams.callee
+        (FST (HD s'.contexts)).msgParams.callee
+        (FST (HD s'.contexts)).msgParams.value s.rollback.accounts ∧
+    s'.rollback.tStorage = s.rollback.tStorage ∧
+    (static ⇒ (SND (HD s'.contexts)).accounts = s'.rollback.accounts)
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_call_inl_nonprecompile >> strip_tac
+  >> drule_all proceed_call_saved_rollback >> strip_tac
+  >> drule_all proceed_call_nonprecompile_frame >> strip_tac
+  >> qpat_x_assum `FST (HD s'.contexts) = _` kall_tac
+  >> drule_all proceed_call_nonprecompile_message >> strip_tac
+  >> qpat_x_assum `step_call _ _ = _` kall_tac
+  >> qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` kall_tac
+  >> gvs[cp_rel_def]
+  >> Cases_on `op = CallCode ∨ op = DelegateCall`
+  >- gvs[initial_msg_params_def]
+  >> gvs[initial_msg_params_def]
+  >> qexistsl_tac [`op = StaticCall ∨ (FST (HD s.contexts)).msgParams.static`, `mr`, `tx`]
+  >> Cases_on `tx.value = 0` >> gvs[]
+  >> `op = Call` by gvs[call_has_value_def]
+  >> gvs[]
+QED
+
 (* A push copies the stack below, except that CREATE's set_original may
  * change the last saved rollback.  Only the callee's nonce and the created
  * account's nonce change, and the latter only when it is not yet created. *)
