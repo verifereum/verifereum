@@ -577,6 +577,23 @@ Proof
   >> gvs[]
 QED
 
+Theorem proceed_create_frame_effects:
+  proceed_create sender address value code gas s = (r,s') ∧ s.contexts ≠ [] ⇒
+  r = INL () ∧
+  s'.rollback.accounts =
+    transfer_value sender address value (increment_nonce address (increment_nonce sender s.rollback.accounts)) ∧
+  (SND (HD s'.contexts)).accounts = increment_nonce sender s.rollback.accounts ∧
+  s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∧
+  (SND (HD s'.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys ∧
+  ∃t. FST (HD s'.contexts) = initial_context address code F (Code address) t
+Proof
+  strip_tac
+  >> gvs[proceed_create_def, update_accounts_def, get_rollback_def,
+         get_original_def, set_original_def, push_context_def,
+         ignore_bind_def, bind_def, return_def, fail_def, AllCaseEqs()]
+  >> metis_tac[]
+QED
+
 (* A push copies the stack below, except that CREATE's set_original may
  * change the last saved rollback.  Only the callee's nonce and the created
  * account's nonce change, and the latter only when it is not yet created. *)
