@@ -1685,7 +1685,7 @@ fun exn_inner_tac ths =
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ ntac 2 strip_tac
@@ -4684,7 +4684,7 @@ Proof
   conj_tac >-
     (simp[Abbr `result`] >>
      Cases_on `FST r` >> gvs[]) >>
-  sym_tac >> irule UPDATE_evm2set_without >>
+  sym_tac >> irule UPDATE_evm2set_without_original >>
   gvs[Abbr `result`]
 QED
 
@@ -5099,7 +5099,7 @@ Proof
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ ntac 2 strip_tac
@@ -5156,6 +5156,7 @@ Theorem SPEC_SelfDestruct_outermost:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_CachedRB cb * evm_ReturnData rd *
    evm_Exception e * evm_Rollback rb * evm_Msdomain d *
+   evm_OriginalAccounts orig *
    cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧ ¬p.static ∧
          addr = w2w (HD ss) ∧ access_check d addr ∧
          sender = lookup_account p.callee rb.accounts ∧
@@ -5167,7 +5168,7 @@ Theorem SPEC_SelfDestruct_outermost:
          g + gasCost ≤ p.gasLimit ∧
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
-         rb2 = (if account_empty (lookup_account p.callee cb.accounts)
+         rb2 = (if account_empty (lookup_account p.callee orig)
                 then rb1 with <| accounts updated_by
                                    update_account p.callee
                                      (sender with balance := 0);
@@ -5177,7 +5178,7 @@ Theorem SPEC_SelfDestruct_outermost:
   (evm_Stack (TL ss) * evm_PC pc * evm_GasUsed (g + gasCost) *
    evm_MsgParams p * evm_Contexts cs * evm_CachedRB cb *
    evm_ReturnData [] * evm_Exception (INR NONE) *
-   evm_Msdomain (msdomain_add addr d) *
+   evm_Msdomain (msdomain_add addr d) * evm_OriginalAccounts orig *
    evm_Rollback (case p.outputTo of Memory _ => rb2 | Code a =>
                  rb2 with accounts updated_by (λaccounts.
                     update_account a
@@ -5194,7 +5195,7 @@ Proof
          assert_not_static_def,get_static_def,update_accounts_def,
          get_original_def,add_to_delete_def,finish_def,HD_TAKE]
   \\ Cases_on`account_empty (lookup_account (FST h).msgParams.callee
-                                             (SND h).accounts)`
+                                             (SND r).originalAccounts)`
   \\ Cases_on`(FST h).msgParams.outputTo`
   \\ gvs[bind_def,ignore_bind_def,return_def,update_accounts_def,
          add_to_delete_def,handle_step_def,vfm_abort_def,handle_def,
@@ -5205,7 +5206,7 @@ Proof
   \\ (conj_tac >-
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on`h` \\ gvs[]
 QED
@@ -5214,7 +5215,7 @@ Theorem SPEC_SelfDestruct_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
-   evm_CachedRB cb * evm_Msdomain d *
+   evm_CachedRB cb * evm_Msdomain d * evm_OriginalAccounts orig *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc SelfDestruct *
    evm_hide_Parsed (all_pcs DELETE pc) *
@@ -5232,8 +5233,7 @@ Theorem SPEC_SelfDestruct_inner:
          g + gasCost ≤ p.gasLimit ∧
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
-         rb2 = (if account_empty
-                     (lookup_account p.callee (SND (LAST cs)).accounts)
+         rb2 = (if account_empty (lookup_account p.callee orig)
                 then rb1 with <| accounts updated_by
                                    update_account p.callee
                                      (sender with balance := 0);
@@ -5254,7 +5254,7 @@ Theorem SPEC_SelfDestruct_inner:
    evm_MsgParams (caller.msgParams) *
    evm_ReturnData [] *
    evm_Exception (INL ()) *
-   evm_Msdomain (msdomain_add addr d) *
+   evm_Msdomain (msdomain_add addr d) * evm_OriginalAccounts orig *
    evm_Rollback (case p.outputTo of Memory _ => rb2 | Code a =>
                  rb2 with accounts updated_by (λaccounts.
                     update_account a
@@ -5267,8 +5267,9 @@ Theorem SPEC_SelfDestruct_inner:
    evm_SubRefund (caller.subRefund + sr))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
-                  EMPTY_evm2set,STAR_evm_hide_Parsed, STAR_CODE_POOL_evm2set]
+  \\ rewrite_tac [STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC,
+                  CODE_POOL_EMPTY, EMPTY_evm2set,STAR_evm_hide_Parsed,
+                  STAR_CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
@@ -5300,7 +5301,7 @@ Proof
   \\ `(FST (HD r2.contexts)).msgParams.parsed =
       parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
-  \\ Cases_on`account_empty (lookup_account p.callee (SND (LAST cs)).accounts)`
+  \\ Cases_on`account_empty (lookup_account p.callee orig)`
   \\ Cases_on`p.outputTo`
   \\ gvs[CaseEq"prod",CaseEq"sum",bind_def,ignore_bind_def,return_def,
          update_accounts_def,add_to_delete_def,handle_step_def,vfm_abort_def,
@@ -5324,7 +5325,7 @@ Proof
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without
+  \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
   \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
   \\ ntac 2 strip_tac
