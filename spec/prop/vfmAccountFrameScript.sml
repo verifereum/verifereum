@@ -15,6 +15,7 @@ Ancestors
   combin pair option list rich_list relation While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
   vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls vfmPreserves vfmStepLength
+  vfmHandleStep vfmDecreasesGas
 Libs
   BasicProvers
 
@@ -765,6 +766,97 @@ Proof
   >> qexistsl_tac [`code`, `t`] >> simp[]
 QED
 
+Theorem proceed_call_nonprecompile_tail:
+  proceed_call op sender address value ao az code gas rd s = (r,s') ∧
+  s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
+  TL (TL s'.contexts) = TL s.contexts ∧
+  SND (EL 1 s'.contexts) = SND (HD s.contexts)
+Proof
+  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem step_call_push_tail:
+  step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH s'.contexts ⇒
+  TL (TL s'.contexts) = TL s.contexts ∧
+  SND (EL 1 s'.contexts) = SND (HD s.contexts)
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_call_inl_nonprecompile >> strip_tac
+  >> drule_all proceed_call_nonprecompile_tail >> strip_tac
+  >> gvs[cp_rel_def]
+QED
+
+Theorem step_grow_dispatch:
+  wf_state s ∧ step s = (r,s') ∧ LENGTH s.contexts < LENGTH s'.contexts ⇒
+  r = INL () ∧
+  ((∃op. step_call op s = (INL (),s')) ∨
+   (∃two. step_create two s = (INL (),s')))
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> qpat_x_assum `step s = _` mp_tac
+  >> simp[step_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `inner s`
+  >> Cases_on `inner s` >> Cases_on `q`
+  >- (simp[] >> strip_tac >> gvs[]
+      >> gvs[Abbr `inner`, bind_def, AllCaseEqs()]
+      >> gvs[get_current_context_def, return_def, fail_def, bind_def]
+      >> gvs[option_CASE_rator, CaseEq "option", COND_RATOR, CaseEq "bool"]
+      >~ [`step_inst Stop`]
+      >- (drule_at Any psf_imp_length_contexts_preserved >> simp[])
+      >~ [`step_inst Invalid`]
+      >- (drule_at Any psf_imp_length_contexts_preserved >> simp[])
+      >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
+      >> rename1 `step_inst op s = (INL (),mid)`
+      >> drule_at Any psf_imp_length_contexts_preserved >> simp[]
+      >> (impl_keep_tac >- (strip_tac >>
+          gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def,
+              bind_def, get_current_context_def, fail_def]))
+      >> strip_tac
+      >> `LENGTH s.contexts < LENGTH mid.contexts` by simp[]
+      >> `is_call op` by (irule step_inst_inl_grew_is_call
+          >> qexistsl_tac [`s`, `mid`] >> simp[])
+      >> gvs[inc_pc_or_jump_def, return_def, COND_RATOR, CaseEq "bool"]
+      >> Cases_on `op` >> gvs[is_call_def, step_inst_def]
+      >> metis_tac[])
+  >> simp[] >> strip_tac
+  >> `same_frame_or_grow inner` by simp[Abbr `inner`]
+  >> `LENGTH r'.contexts ≥ LENGTH s.contexts` by
+      (drule_all same_frame_or_grow_length >> simp[])
+  >> `r'.contexts ≠ []` by (strip_tac >> gvs[] >> Cases_on `s.contexts` >> gvs[])
+  >> `LENGTH s'.contexts ≤ LENGTH s.contexts` suffices_by gvs[]
+  >> Cases_on `LENGTH r'.contexts = LENGTH s.contexts`
+  >- (drule handle_step_shrinks_by_one >> simp[])
+  >> `LENGTH r'.contexts > LENGTH s.contexts` by simp[]
+  >> `outputTo_consistent s` by
+      (irule outputTo_consistent_stack_imp_consistent >> gvs[wf_state_def])
+  >> `¬vfm_abort y` by (irule step_inner_inr_grow_not_abort
+      >> qexistsl_tac [`s`, `r'`] >> simp[Abbr `inner`])
+  >> `0 < LENGTH s.contexts` by (Cases_on `s.contexts` >> gvs[])
+  >> `LENGTH r'.contexts ≥ 2` by simp[]
+  >> `LENGTH r'.contexts = LENGTH s.contexts + 1` by
+      (qunabbrev_tac `inner` >> drule_then drule step_inner_grows_by_exactly_one >> gvs[])
+  >> drule_at (Pat `handle_step`) handle_step_not_abort_pops >> gvs[]
+  >> `decreases_gas_cred T 0 0 inner` suffices_by
+      (gvs[decreases_gas_cred_def]
+       >> disch_then (qspec_then `s` mp_tac) >> rw[]
+       >> gvs[wf_state_def, EVERY_MEM])
+  >> simp[Abbr `inner`]
+  >> irule decreases_gas_cred_bind_mono
+  >> qexistsl_tac [`T`, `F`] >> simp[] >> gen_tac
+  >> rw[] >> CASE_TAC >> rw[]
+  >> irule decreases_gas_cred_ignore_bind_mono >> rw[]
+  >> qexistsl_tac [`F`, `T`] >> simp[]
+QED
+
 (* A push copies the stack below, except that CREATE's set_original may
  * change the last saved rollback.  Only the callee's nonce and the created
  * account's nonce change, and the latter only when it is not yet created. *)
@@ -782,7 +874,16 @@ Theorem step_push_foreign:
       foreign_account_change (lookup_account y s.rollback.accounts)
                              (lookup_account y (SND (HD s'.contexts)).accounts)
 Proof
-  cheat
+  strip_tac
+  >> `s.contexts ≠ [] ∧ outputTo_consistent_stack s` by gvs[wf_state_def]
+  >> `1 ≤ LENGTH s.contexts` by (Cases_on `s.contexts` >> gvs[])
+  >> drule step_push_structure >> simp[] >> strip_tac
+  >> drule_all step_grow_dispatch >> strip_tac
+  >- (drule_all step_call_push_tail >> strip_tac
+      >> drule_all step_call_push_foreign_accounts >> simp[])
+  >> drule_all step_create_push_stack >> strip_tac
+  >> simp[] >> gen_tac >> disch_tac
+  >> drule_all step_create_push_foreign_accounts >> simp[]
 QED
 
 (* The frame a push enters as a new callee: a CALL or STATICCALL running the
@@ -821,7 +922,13 @@ Theorem step_push_new_frame:
     (static ⇒ (∃mr. rd = Memory mr) ∧
               (SND (HD s'.contexts)).accounts = s'.rollback.accounts)
 Proof
-  cheat
+  strip_tac >> drule_all step_grow_dispatch >> strip_tac
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >- (drule_all step_call_push_new_frame >> strip_tac
+      >> qexistsl_tac [`code`, `static`, `Memory mr`, `t`] >> simp[])
+  >> drule_all step_create_push_new_frame >> strip_tac
+  >> qexistsl_tac [`code`, `F`, `Code (FST (HD s'.contexts)).msgParams.callee`, `t`]
+  >> simp[]
 QED
 
 (* Domain collection mode is never left. *)
@@ -960,7 +1067,10 @@ Theorem step_push_storage_keys:
   (SND (HD s'.contexts)).accesses.storageKeys =
     s.rollback.accesses.storageKeys
 Proof
-  cheat
+  strip_tac >> drule_all step_grow_dispatch >> strip_tac
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >- (drule_all step_call_push_storage_keys >> simp[])
+  >> drule_all step_create_push_storage_keys >> simp[]
 QED
 
 (* Every storage key run_call adds for `a` was added by a step executing as
