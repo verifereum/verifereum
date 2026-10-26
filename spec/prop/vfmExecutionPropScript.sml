@@ -1107,6 +1107,24 @@ Proof
   rw[step_swap_def] \\ preserves_nonempty_tac
 QED
 
+Theorem step_dupn_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_dupn s)).contexts ≠ []
+Proof
+  rw[step_dupn_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_swapn_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_swapn s)).contexts ≠ []
+Proof
+  rw[step_swapn_def] \\ preserves_nonempty_tac
+QED
+
+Theorem step_exchange_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (step_exchange s)).contexts ≠ []
+Proof
+  rw[step_exchange_def] \\ preserves_nonempty_tac
+QED
+
 Theorem step_log_preserves_nonempty_contexts[simp]:
   s.contexts ≠ [] ⇒ (SND (step_log n s)).contexts ≠ []
 Proof
@@ -1742,6 +1760,30 @@ Theorem preserves_wf_accounts_step_swap[simp]:
   preserves_wf_accounts (step_swap x)
 Proof
   rw[step_swap_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_step_dupn[simp]:
+  preserves_wf_accounts step_dupn
+Proof
+  rw[step_dupn_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_swapn[simp]:
+  preserves_wf_accounts step_swapn
+Proof
+  rw[step_swapn_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
+QED
+
+Theorem preserves_wf_accounts_step_exchange[simp]:
+  preserves_wf_accounts step_exchange
+Proof
+  rw[step_exchange_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[]))
 QED
 
 Theorem preserves_wf_accounts_push_logs[simp]:
@@ -2855,6 +2897,24 @@ Theorem limits_num_contexts_step_swap[simp]:
   limits_num_contexts n n (step_swap x)
 Proof
   rw[step_swap_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_dupn[simp]:
+  limits_num_contexts n n step_dupn
+Proof
+  rw[step_dupn_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_swapn[simp]:
+  limits_num_contexts n n step_swapn
+Proof
+  rw[step_swapn_def] >> tac
+QED
+
+Theorem limits_num_contexts_step_exchange[simp]:
+  limits_num_contexts n n step_exchange
+Proof
+  rw[step_exchange_def] >> tac
 QED
 
 Theorem limits_num_contexts_push_logs[simp]:

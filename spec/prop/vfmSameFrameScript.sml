@@ -996,6 +996,41 @@ Proof
   \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
 QED
 
+Theorem preserves_same_frame_step_dupn[simp]:
+  preserves_same_frame step_dupn
+Proof
+  rw[step_dupn_def]
+  \\ rpt (irule preserves_same_frame_bind \\ rw[])
+  \\ rpt (irule preserves_same_frame_ignore_bind \\ rw[])
+  \\ psf_refl_tac
+QED
+
+Theorem preserves_same_frame_step_swapn[simp]:
+  preserves_same_frame step_swapn
+Proof
+  rw[step_swapn_def]
+  \\ irule preserves_same_frame_ignore_bind >> rw[]
+  \\ rw[preserves_same_frame_def, set_current_context_def, return_def,
+        fail_def, bind_def, ignore_bind_def, assert_def,
+        get_current_context_def, code_byte_def]
+  \\ gvs[AllCaseEqs()]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem preserves_same_frame_step_exchange[simp]:
+  preserves_same_frame step_exchange
+Proof
+  rw[step_exchange_def]
+  \\ irule preserves_same_frame_ignore_bind >> rw[]
+  \\ rw[preserves_same_frame_def, set_current_context_def, return_def,
+        fail_def, bind_def, ignore_bind_def, assert_def,
+        get_current_context_def, code_byte_def, exchange_stack_def]
+  \\ gvs[AllCaseEqs()]
+  \\ Cases_on `s.contexts` \\ gvs[]
+  \\ rw[same_frame_rel_def, callee_local_changes_def]
+QED
+
 Theorem preserves_same_frame_step_swap[simp]:
   preserves_same_frame (step_swap n)
 Proof
@@ -1947,6 +1982,24 @@ QED
 
 Theorem preserves_same_frame_step_inst_SlotNumber[simp]:
   preserves_same_frame (step_inst SlotNumber)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_DupN[simp]:
+  preserves_same_frame (step_inst DupN)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_SwapN[simp]:
+  preserves_same_frame (step_inst SwapN)
+Proof
+  rw[step_inst_def]
+QED
+
+Theorem preserves_same_frame_step_inst_Exchange[simp]:
+  preserves_same_frame (step_inst Exchange)
 Proof
   rw[step_inst_def]
 QED

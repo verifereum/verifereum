@@ -806,6 +806,9 @@ Theorem orig_exec_shared_data[local]:
   orig_exec_rel step_pop step_pop /\
   orig_exec_rel (step_dup n) (step_dup n) /\
   orig_exec_rel (step_swap n) (step_swap n) /\
+  orig_exec_rel step_dupn step_dupn /\
+  orig_exec_rel step_swapn step_swapn /\
+  orig_exec_rel step_exchange step_exchange /\
   orig_exec_rel (step_log n) (step_log n) /\
   orig_exec_rel (step_return b) (step_return b)
 Proof
@@ -815,6 +818,8 @@ Proof
     step_block_hash_def, step_blob_hash_def, step_self_balance_def,
     step_mload_def, step_mstore_def, step_jump_def, step_jumpi_def,
     step_push_def, step_pop_def, step_dup_def, step_swap_def,
+    step_dupn_def, step_swapn_def, step_exchange_def, code_byte_def,
+    exchange_stack_def,
     step_log_def, step_return_def, ignore_bind_def] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_cond, orig_exec_return,

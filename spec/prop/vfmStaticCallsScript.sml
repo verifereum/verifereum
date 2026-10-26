@@ -531,6 +531,18 @@ Proof
   cp_tac [step_swap_def, consume_gas_def]
 QED
 
+Theorem cp_step_swapn[simp]:
+  cp step_swapn
+Proof
+  cp_tac [step_swapn_def, consume_gas_def, code_byte_def]
+QED
+
+Theorem cp_step_exchange[simp]:
+  cp step_exchange
+Proof
+  cp_tac [step_exchange_def, consume_gas_def, code_byte_def, exchange_stack_def]
+QED
+
 (* All non-guarded, non-call step_inst ops are cp *)
 Theorem cp_step_inst_non_call[simp]:
   op ≠ SStore ∧ op ≠ TStore ∧ (∀n. op ≠ Log n) ∧
@@ -545,7 +557,8 @@ Proof
     step_ext_code_size_def, step_ext_code_hash_def,
     step_block_hash_def, step_blob_hash_def, step_self_balance_def,
     step_mstore_def, step_jump_def, step_jumpi_def,
-    step_push_def, step_dup_def, step_pop_def])
+    step_push_def, step_dup_def, step_dupn_def, code_byte_def,
+    step_pop_def])
 QED
 
 (* When f returns INR, projections of handle f h s equal projections of h e s' *)

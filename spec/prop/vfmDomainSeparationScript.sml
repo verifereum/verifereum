@@ -1307,6 +1307,24 @@ Proof
   rw[step_swap_def] \\ tac
 QED
 
+Theorem step_dupn_ignores_extra_domain[simp]:
+  ignores_extra_domain step_dupn
+Proof
+  rw[step_dupn_def] \\ tac
+QED
+
+Theorem step_swapn_ignores_extra_domain[simp]:
+  ignores_extra_domain step_swapn
+Proof
+  rw[step_swapn_def] \\ tac
+QED
+
+Theorem step_exchange_ignores_extra_domain[simp]:
+  ignores_extra_domain step_exchange
+Proof
+  rw[step_exchange_def] \\ tac
+QED
+
 Theorem revert_ignores_extra_domain[simp]:
   ignores_extra_domain revert
 Proof
@@ -3168,6 +3186,38 @@ Proof
   simp[step_swap_def]
   \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
   \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_dupn[simp]:
+  preserves_domain_has_callee (K T) step_dupn
+Proof
+  simp[step_dupn_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_swapn[simp]:
+  preserves_domain_has_callee (K T) step_swapn
+Proof
+  simp[step_swapn_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_exchange[simp]:
+  preserves_domain_has_callee (K T) step_exchange
+Proof
+  simp[step_exchange_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
   \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
 QED

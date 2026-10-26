@@ -1005,6 +1005,68 @@ Definition step_swap_def:
   od
 End
 
+(* EIP-8024: the operand byte of DUPN, SWAPN and EXCHANGE is the code byte
+   after the opcode, read at run time rather than parsed into the
+   instruction.  Past the end of the code it reads as zero, as for PUSH. *)
+Definition code_byte_def:
+  code_byte code pc = if pc < LENGTH code then EL pc code else 0w
+End
+
+(* EIP-8024 EXCHANGE swaps the items n and m deep (0-based) in the stack.
+   The indices are in range whenever the instruction's guards pass; the
+   guard keeps the function total for the translated evaluator. *)
+Definition exchange_stack_def:
+  exchange_stack n m stack =
+  if n < m ∧ m < LENGTH stack then
+    LUPDATE (EL m stack) n (LUPDATE (EL n stack) m stack)
+  else stack
+End
+
+Definition step_dupn_def:
+  step_dupn = do
+    consume_gas $ static_gas DupN;
+    context <- get_current_context;
+    stack <<- context.stack;
+    b <<- code_byte context.msgParams.code (context.pc + 1);
+    assert (valid_single b) InvalidParameter;
+    n <<- decode_single b - 1;
+    assert (n < LENGTH stack) StackUnderflow;
+    word <<- EL n stack;
+    push_stack word
+  od
+End
+
+Definition step_swapn_def:
+  step_swapn = do
+    consume_gas $ static_gas SwapN;
+    context <- get_current_context;
+    stack <<- context.stack;
+    b <<- code_byte context.msgParams.code (context.pc + 1);
+    assert (valid_single b) InvalidParameter;
+    n <<- decode_single b;
+    assert (SUC n < LENGTH stack) StackUnderflow;
+    top <<- HD stack;
+    swap <<- EL n (TL stack);
+    ignored <<- TAKE n (TL stack);
+    rest <<- DROP (SUC n) (TL stack);
+    newStack <<- [swap] ++ ignored ++ [top] ++ rest;
+    set_current_context $ context with stack := newStack
+  od
+End
+
+Definition step_exchange_def:
+  step_exchange = do
+    consume_gas $ static_gas Exchange;
+    context <- get_current_context;
+    stack <<- context.stack;
+    b <<- code_byte context.msgParams.code (context.pc + 1);
+    assert (valid_pair b) InvalidParameter;
+    nm <<- decode_pair b;
+    assert (SND nm < LENGTH stack) StackUnderflow;
+    set_current_context $ context with stack := exchange_stack (FST nm) (SND nm) stack
+  od
+End
+
 Definition step_log_def:
   step_log n = do
     args <- pop_stack $ 2 + n;
@@ -1640,6 +1702,9 @@ Definition step_inst_def:
   ∧ step_inst (Dup n) = step_dup n
   ∧ step_inst (Swap n) = step_swap n
   ∧ step_inst (Log n) = step_log n
+  ∧ step_inst DupN = step_dupn
+  ∧ step_inst SwapN = step_swapn
+  ∧ step_inst Exchange = step_exchange
   ∧ step_inst Create = step_create F
   ∧ step_inst Call = step_call Call
   ∧ step_inst CallCode = step_call CallCode
@@ -1662,10 +1727,32 @@ Definition is_call_def:
   is_call _ = F
 End
 
+(* EIP-8024: the instruction carries an operand byte the parser does not
+   consume, so execution advances two bytes rather than one. *)
+Definition inst_length_def:
+    inst_length DupN = 2
+  ∧ inst_length SwapN = 2
+  ∧ inst_length Exchange = 2
+  ∧ inst_length op = LENGTH (opcode op)
+End
+
+Theorem inst_length_operand[simp]:
+  inst_length DupN = 2 ∧ inst_length SwapN = 2 ∧ inst_length Exchange = 2
+Proof
+  rw[inst_length_def]
+QED
+
+Theorem inst_length_other[simp]:
+  op ≠ DupN ∧ op ≠ SwapN ∧ op ≠ Exchange ⇒
+  inst_length op = LENGTH (opcode op)
+Proof
+  Cases_on `op` \\ simp[inst_length_def]
+QED
+
 Definition inc_pc_or_jump_def:
   inc_pc_or_jump op =
   if is_call op then return () else do
-    n <<- LENGTH (opcode op);
+    n <<- inst_length op;
     context <- get_current_context;
     case context.jumpDest of
     | NONE => set_current_context $ context with pc := context.pc + n

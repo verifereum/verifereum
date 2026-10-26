@@ -330,6 +330,8 @@ Proof
           step_block_hash_def, step_self_balance_def, step_blob_hash_def,
           step_pop_def, step_mload_def, step_mstore_def,
           step_push_def, step_dup_def, step_swap_def,
+          step_dupn_def, step_swapn_def, step_exchange_def,
+          code_byte_def, exchange_stack_def,
           storage_keys_bind, storage_keys_ignore_bind,
           access_address_storage_keys, rollback_preserves_storage_keys,
           storage_keys_copy_to_memory]

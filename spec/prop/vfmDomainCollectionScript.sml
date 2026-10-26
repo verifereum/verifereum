@@ -868,6 +868,24 @@ Proof
   rw[step_dup_def] \\ tac
 QED
 
+Theorem step_dupn_computes_minimal_domain[simp]:
+  computes_minimal_domain step_dupn
+Proof
+  rw[step_dupn_def] \\ tac
+QED
+
+Theorem step_swapn_computes_minimal_domain[simp]:
+  computes_minimal_domain step_swapn
+Proof
+  rw[step_swapn_def] \\ tac
+QED
+
+Theorem step_exchange_computes_minimal_domain[simp]:
+  computes_minimal_domain step_exchange
+Proof
+  rw[step_exchange_def] \\ tac
+QED
+
 Theorem step_log_computes_minimal_domain[simp]:
   computes_minimal_domain (step_log x)
 Proof

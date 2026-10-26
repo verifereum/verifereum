@@ -1274,6 +1274,32 @@ Proof
      assert_def, return_def, fail_def, AllCaseEqs()] >> gvs[]
 QED
 
+Theorem preserves_jumpDest_step_dupn[simp]:
+  preserves_jumpDest step_dupn
+Proof
+  rw[preserves_jumpDest_def, step_dupn_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def, consume_gas_def,
+     push_stack_def, assert_def, return_def, fail_def, code_byte_def,
+     AllCaseEqs()] >> gvs[]
+QED
+
+Theorem preserves_jumpDest_step_swapn[simp]:
+  preserves_jumpDest step_swapn
+Proof
+  rw[preserves_jumpDest_def, step_swapn_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def, consume_gas_def,
+     assert_def, return_def, fail_def, code_byte_def, AllCaseEqs()] >> gvs[]
+QED
+
+Theorem preserves_jumpDest_step_exchange[simp]:
+  preserves_jumpDest step_exchange
+Proof
+  rw[preserves_jumpDest_def, step_exchange_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def, consume_gas_def,
+     assert_def, return_def, fail_def, code_byte_def, exchange_stack_def,
+     AllCaseEqs()] >> gvs[]
+QED
+
 Theorem preserves_jumpDest_step_log[simp]:
   preserves_jumpDest (step_log n)
 Proof
@@ -2027,6 +2053,30 @@ Theorem preserves_all_jumpDest_NONE_step_swap[simp]:
 Proof
   irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
   rw[step_swap_def, ignore_bind_def, consume_gas_def,
+     bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_dupn[simp]:
+  preserves_all_jumpDest_NONE step_dupn
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_dupn_def, ignore_bind_def, consume_gas_def,
+     bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_swapn[simp]:
+  preserves_all_jumpDest_NONE step_swapn
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_swapn_def, ignore_bind_def, consume_gas_def,
+     bind_def, get_current_context_def, fail_def] >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_step_exchange[simp]:
+  preserves_all_jumpDest_NONE step_exchange
+Proof
+  irule preserves_jumpDest_and_same_frame_imp_all >> simp[] >>
+  rw[step_exchange_def, ignore_bind_def, consume_gas_def,
      bind_def, get_current_context_def, fail_def] >> gvs[]
 QED
 

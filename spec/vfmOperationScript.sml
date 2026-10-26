@@ -84,6 +84,11 @@ Datatype:
   | Dup num
   | Swap num
   | Log num
+  (* EIP-8024: the operand byte is read from the code at run time, one past
+     the opcode, so the instruction carries no immediate. *)
+  | DupN
+  | SwapN
+  | Exchange
   | Create
   | Call
   | CallCode
@@ -180,6 +185,9 @@ Definition opcode_def:
   ∧ opcode (Dup n)        = [n2w 0x80 + n2w n]
   ∧ opcode (Swap n)       = [n2w 0x90 + n2w n]
   ∧ opcode (Log n)        = [n2w 0xa0 + n2w n]
+  ∧ opcode DupN           = [n2w 0xe6]
+  ∧ opcode SwapN          = [n2w 0xe7]
+  ∧ opcode Exchange       = [n2w 0xe8]
   ∧ opcode Create         = [n2w 0xf0]
   ∧ opcode Call           = [n2w 0xf1]
   ∧ opcode CallCode       = [n2w 0xf2]
@@ -190,6 +198,31 @@ Definition opcode_def:
   ∧ opcode Revert         = [n2w 0xfd]
   ∧ opcode Invalid        = [n2w 0xfe]
   ∧ opcode SelfDestruct   = [n2w 0xff]
+End
+
+(* EIP-8024 immediate decoding: the operand byte is shifted, so that the
+   encodings in the forbidden ranges (91..127 for DUPN/SWAPN, 82..127 for
+   EXCHANGE) are invalid instructions.  The gaps keep 0x5b and 0x60..0x7f
+   out of the operand byte, since jump destination analysis is unchanged
+   and does not step over it. *)
+Definition valid_single_def:
+  valid_single (b: byte) = (w2n b ≤ 90 ∨ 128 ≤ w2n b)
+End
+
+Definition decode_single_def:
+  decode_single (b: byte) = (w2n b + 145) MOD 256
+End
+
+Definition valid_pair_def:
+  valid_pair (b: byte) = (w2n b ≤ 81 ∨ 128 ≤ w2n b)
+End
+
+Definition decode_pair_def:
+  decode_pair (b: byte) =
+  let k = w2n (b ?? 0x8fw) in
+  let q = k DIV 16 in
+  let r = k MOD 16 in
+    if q < r then (q + 1, r + 1) else (r + 1, 29 - q)
 End
 
 Definition parse_opcode_def:
@@ -274,6 +307,9 @@ Definition static_gas_def[simp]:
   ∧ static_gas (Dup n)        = 3
   ∧ static_gas (Swap n)       = 3
   ∧ static_gas (Log n)        = 375
+  ∧ static_gas DupN           = 3
+  ∧ static_gas SwapN          = 3
+  ∧ static_gas Exchange       = 3
   ∧ static_gas Create         = 32000
   ∧ static_gas Call           = 0
   ∧ static_gas CallCode       = 0
@@ -444,6 +480,9 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0xa2 then SOME (Log 2) else
       if opc = n2w 0xa3 then SOME (Log 3) else
       if opc = n2w 0xa4 then SOME (Log 4) else
+      if opc = n2w 0xe6 then SOME DupN else
+      if opc = n2w 0xe7 then SOME SwapN else
+      if opc = n2w 0xe8 then SOME Exchange else
       if opc = n2w 0xf0 then SOME Create else
       if opc = n2w 0xf1 then SOME Call else
       if opc = n2w 0xf2 then SOME CallCode else

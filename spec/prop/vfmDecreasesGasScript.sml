@@ -206,6 +206,49 @@ Proof
   \\ irule_at Any decreases_gas_push_stack
 QED
 
+Theorem decreases_gas_step_dupn[simp]:
+  decreases_gas T step_dupn
+Proof
+  rw [step_dupn_def]
+  \\ irule decreases_gas_consume_gas_bind \\ rw []
+  \\ irule_at Any decreases_gas_bind_false
+  \\ irule_at Any decreases_gas_get_current_context \\ rw []
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_assert
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_assert
+  \\ irule_at Any decreases_gas_push_stack
+QED
+
+Theorem decreases_gas_step_swapn[simp]:
+  decreases_gas T step_swapn
+Proof
+  rw [step_swapn_def]
+  \\ irule decreases_gas_ignore_bind_mono
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac `F` \\ rw []
+  \\ rw [decreases_gas_def, get_current_context_def, code_byte_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def, fail_def]
+  \\ rpt TOP_CASE_TAC
+  \\ gs[wf_context_def, LENGTH_TAKE_EQ]
+  \\ TRY (qmatch_goalsub_rename_tac`h.stack` \\ Cases_on`h.stack` \\ gs[])
+QED
+
+Theorem decreases_gas_step_exchange[simp]:
+  decreases_gas T step_exchange
+Proof
+  rw [step_exchange_def]
+  \\ irule decreases_gas_ignore_bind_mono
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac `F` \\ rw []
+  \\ rw [decreases_gas_def, get_current_context_def, code_byte_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def, fail_def, exchange_stack_def]
+  \\ rpt TOP_CASE_TAC
+  \\ gs[wf_context_def]
+QED
+
 Theorem decreases_gas_step_swap[simp]:
   decreases_gas T (step_swap n)
 Proof

@@ -735,6 +735,7 @@ QED
 fun mconv def =
   SIMP_CONV std_ss [
     def, copy_to_memory_def,
+    code_byte_def, exchange_stack_def,
     bind_def,
     ignore_bind_def,
     COND_RATOR,
@@ -812,6 +813,26 @@ val th = tf step_push_def;
 val th = tf step_pop_def;
 val th = tt step_dup_def;
 val th = tt step_swap_def;
+val th = tt step_dupn_def;
+val th = tt step_swapn_def;
+
+(* EXCHANGE asserts on a decoded pair, so the translation precondition
+   (which bounds both decoded indices) is not discharged by step_x_pre_tac.
+   Expose it and prove it directly. *)
+val step_exchange_pre_def = let
+    val const_app = step_exchange_def |> SPEC_ALL |> concl |> lhs
+    val stype = #1 $ dom_rng $ type_of const_app
+    val s = mk_var("s", stype)
+    val xdef = mconv step_exchange_def (mk_comb(const_app, s))
+  in
+    cv_auto_trans_pre "step_exchange_pre" xdef
+  end;
+
+Theorem step_exchange_pre[cv_pre]:
+  ∀s. step_exchange_pre s
+Proof
+  rw[step_exchange_pre_def]
+QED
 val th = tt step_log_def;
 val th = tt step_return_def;
 val th = tt step_self_destruct_def;

@@ -684,6 +684,24 @@ Proof
   rw[step_swap_def, LET_THM] >> ptx_tac
 QED
 
+Theorem preserves_txParams_step_dupn[simp]:
+  preserves_txParams step_dupn
+Proof
+  rw[step_dupn_def, LET_THM] >> ptx_tac
+QED
+
+Theorem preserves_txParams_step_swapn[simp]:
+  preserves_txParams step_swapn
+Proof
+  rw[step_swapn_def, LET_THM] >> ptx_tac
+QED
+
+Theorem preserves_txParams_step_exchange[simp]:
+  preserves_txParams step_exchange
+Proof
+  rw[step_exchange_def, LET_THM] >> ptx_tac
+QED
+
 Theorem preserves_txParams_step_log[simp]:
   preserves_txParams (step_log n)
 Proof
