@@ -680,7 +680,8 @@ Proof
       assert_def, bind_def, ignore_bind_def, get_current_context_def,
       set_current_context_def, fail_def, get_static_def, get_original_def,
       finish_def, COND_RATOR, add_to_delete_def, update_accounts_def,
-      update_account_def, APPLY_UPDATE_THM, transfer_value_preserves_storage] >>
+      update_account_def, push_logs_def, APPLY_UPDATE_THM,
+      transfer_value_preserves_storage] >>
   simp[lookup_account_def, APPLY_UPDATE_THM] >> rw[] >>
   rewrite_tac[GSYM lookup_account_def] >>
   simp[transfer_value_preserves_storage]

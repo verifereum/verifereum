@@ -883,7 +883,7 @@ Proof
   >> Cases_on `s.contexts` >> gvs[]
   >> irule cp_preserves_static_inv >> simp[]
   >> rw[static_inv_def, listTheory.FRONT_DEF, rich_listTheory.LAST_CONS]
-  >> gvs[static_inv_def, listTheory.FRONT_DEF]
+  >> gvs[static_inv_def, listTheory.FRONT_DEF, vfmConstantsTheory.transfer_log_def]
 QED
 
 Theorem cp_abort_call_value[simp]:

@@ -205,6 +205,15 @@ Proof
   irule (SRULE [] preserves_deletion_exact_imp_rel) >> simp[]
 QED
 
+Theorem push_logs_deletion_exact:
+  preserves_when (λs. s.contexts ≠ []) ^deletion_exact (push_logs logs)
+Proof
+  rw[preserves_when_def, push_logs_def, bind_def, get_current_context_def,
+     set_current_context_def, return_def] >>
+  Cases_on `s.contexts` >> gvs[] >>
+  rename1 `s.contexts = h::tail` >> Cases_on `tail` >> gvs[]
+QED
+
 Theorem step_self_destruct_deletion_rel:
   preserves_when (λs. s.contexts ≠ []) (^deletion_rel a) step_self_destruct
 Proof
@@ -225,6 +234,8 @@ Proof
   simp[cp_deletion_exact] >>
   irule (SRULE [] deletion_rel_ignore_bind_exact) >>
   simp[update_accounts_deletion_exact] >>
+  irule (SRULE [] deletion_rel_ignore_bind_exact) >>
+  simp[push_logs_deletion_exact] >>
   irule (SRULE [] deletion_rel_bind_get_original) >>
   rpt gen_tac >> simp[] >> strip_tac >>
   gvs[ignore_bind_def, bind_def, update_accounts_def,
@@ -253,15 +264,6 @@ Proof
   simp[write_transient_storage_def] >>
   irule deletion_exact_bind >> simp[cp_deletion_exact] >> gen_tac >>
   rw[preserves_when_def, set_tStorage_def, return_def] >> gvs[]
-QED
-
-Theorem push_logs_deletion_exact:
-  preserves_when (λs. s.contexts ≠ []) ^deletion_exact (push_logs logs)
-Proof
-  rw[preserves_when_def, push_logs_def, bind_def, get_current_context_def,
-     set_current_context_def, return_def] >>
-  Cases_on `s.contexts` >> gvs[] >>
-  rename1 `s.contexts = h::tail` >> Cases_on `tail` >> gvs[]
 QED
 
 Theorem step_sstore_deletion_exact:
@@ -1252,7 +1254,7 @@ Proof
       get_current_context_def, set_current_context_def, assert_def,
       assert_not_static_def, get_static_def, get_original_def,
       update_accounts_def, add_to_delete_def, finish_def, fail_def,
-      return_def, COND_RATOR, AllCaseEqs()] >>
+      push_logs_def, return_def, COND_RATOR, AllCaseEqs()] >>
   simp[transfer_value_preserves_nonce, transfer_value_preserves_code]
 QED
 

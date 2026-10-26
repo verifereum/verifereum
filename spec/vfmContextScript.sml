@@ -466,6 +466,9 @@ Definition initial_state_def:
     let ctxt = initial_context callee code static rd tx in
     let authListLen = LENGTH tx.authorizationList in
     case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
+    (* EIP-7708: the top-level frame logs the transaction's own transfer,
+       and a failed transaction takes the log down with it. *)
+    let ctxt = ctxt with logs := transfer_log tx.from callee tx.value in
     SOME $
     <| contexts := [(ctxt, rb)]
      ; txParams := initial_tx_params chainId prevHashes blk tx authRefund

@@ -188,6 +188,12 @@ Proof
   rw[wf_context_def]
 QED
 
+Theorem wf_context_with_logs[simp]:
+  wf_context (ctxt with logs := l) = wf_context ctxt
+Proof
+  rw[wf_context_def]
+QED
+
 Theorem LENGTH_make_delegation[simp]:
   LENGTH (make_delegation x) = 23
 Proof
@@ -236,6 +242,12 @@ Theorem outputTo_consistent_ctx_apply_intrinsic_cost:
 Proof
   rw[apply_intrinsic_cost_def] >>
   gvs[outputTo_consistent_ctx_def]
+QED
+
+Theorem outputTo_consistent_ctx_with_logs[simp]:
+  outputTo_consistent_ctx (ctxt with logs := l) = outputTo_consistent_ctx ctxt
+Proof
+  rw[outputTo_consistent_ctx_def]
 QED
 
 Theorem wf_initial_state:
@@ -1947,7 +1959,7 @@ val defs = [bind_def, ignore_bind_def, access_address_def,
         assert_not_static_def, add_to_delete_def, finish_def,
         set_return_data_def, get_num_contexts_def, get_rollback_def,
         get_static_def, update_accounts_def, get_gas_left_def,
-        domain_check_def, set_domain_def,
+        domain_check_def, set_domain_def, push_logs_def,
         get_original_def, get_accounts_def, consume_gas_def, return_def, fail_def]
 
 Theorem wf_account_state_with_balance[simp]:

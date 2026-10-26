@@ -97,6 +97,7 @@ Definition stack_original_step_self_destruct_def:
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     assert_not_static;
     update_accounts $ transfer_value senderAddress address balance;
+    push_logs $ transfer_log senderAddress address balance;
     original <- stack_original_get_original;
     originalContract <<- lookup_account senderAddress original;
     if account_empty originalContract
@@ -129,7 +130,8 @@ Definition stack_original_proceed_create_def:
       transfer_value senderAddress address value o
       increment_nonce address;
     push_context
-      (initial_context address code F (Code address) subContextTx, rollback)
+      (initial_context address code F (Code address) subContextTx with
+         logs := transfer_log senderAddress address value, rollback)
   od
 End
 

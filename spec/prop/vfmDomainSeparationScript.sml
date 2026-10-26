@@ -1647,6 +1647,10 @@ Proof
       simp[Abbr`a1`,Abbr`a2`]
       \\ gvs[fIN_IN, accounts_agree_modulo_storage_def,
              account_state_component_equality, account_empty_def])
+    \\ `(x senderAddress).balance = (y senderAddress).balance`
+    by (
+      gvs[fIN_IN, accounts_agree_modulo_storage_def,
+          account_state_component_equality, account_empty_def] )
     \\ simp[Abbr`lhs`] )
   \\ qx_gen_tac`balance`
   \\ simp[ignore_bind_def]
@@ -1675,6 +1679,13 @@ Proof
     \\ simp[update_accounts_def, bind_def, ignore_bind_def, get_current_context_def,
             assert_def, get_static_def, return_def, fail_def,
             set_current_context_def] )
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[push_logs_def, get_current_context_def, bind_def, ignore_bind_def,
+       return_def, fail_def, set_current_context_def]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
   \\ irule get_original_ignores_extra_domain_pred_bind
   \\ simp[]
   \\ conj_tac
@@ -3204,6 +3215,7 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]

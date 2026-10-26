@@ -3782,7 +3782,8 @@ Theorem SPEC_Create_original:
    evm_Rollback (caller_rb with accounts updated_by
                  (transfer_value p.callee addr value o increment_nonce addr)) *
    evm_Memory empty_buffer *
-   evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
+   evm_AddRefund 0 * evm_SubRefund 0 *
+   evm_Logs (transfer_log p.callee addr value) *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
    evm_hide_Parsed (all_pcs DIFF FDOM new_parsed) *
    evm_Contexts ((caller, cb) :: cs) *
@@ -4146,7 +4147,8 @@ Theorem SPEC_Call:
                   (call_inst = StaticCall ∨ p.static)
                   (Memory <|offset := retOffset; size := retSize|>) tx) *
    evm_Memory empty_buffer *
-   evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
+   evm_AddRefund 0 * evm_SubRefund 0 *
+   evm_Logs (transfer_log p.callee callee value) *
    evm_JumpDest NONE *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
    evm_hide_Parsed (all_pcs DIFF FDOM new_parsed) *
@@ -4464,7 +4466,9 @@ Theorem proceed_call_precompile_success:
         (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
   ?c. c.msgParams.outputTo = outputTo /\
       c.msgParams.gasLimit = stipend /\ c.gasUsed = pg /\
-      c.returnData = out /\ c.logs = [] /\
+      c.returnData = out /\
+      c.logs = transfer_log sender
+        (if op = CallCode ∨ op = DelegateCall then sender else addr) value /\
       c.addRefund = 0 /\ c.subRefund = 0 /\
       proceed_call op sender addr value argsOffset argsSize code stipend outputTo s =
         (INR NONE, s with <|
@@ -4497,7 +4501,7 @@ QED
 Theorem handle_step_success_memory_exact:
   s.contexts = (c,crb)::(parent,prb)::rest /\
   c.msgParams.outputTo = Memory mr /\
-  c.logs = [] /\ c.addRefund = 0 /\ c.subRefund = 0 /\
+  c.addRefund = 0 /\ c.subRefund = 0 /\
   c.msgParams.gasLimit - c.gasUsed <= parent.gasUsed /\
   LENGTH parent.stack < stack_limit ==>
   handle_step NONE s =
@@ -4506,7 +4510,8 @@ Theorem handle_step_success_memory_exact:
          gasUsed := parent.gasUsed - (c.msgParams.gasLimit - c.gasUsed);
          pc := parent.pc + 1; returnData := c.returnData;
          stack := 1w::parent.stack;
-         memory := buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory
+         memory := buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory;
+         logs := parent.logs ++ c.logs
        |>,prb)::rest)
 Proof
   strip_tac >>
@@ -4571,7 +4576,10 @@ Theorem step_precompile_success_exact:
         stack := 1w::DROP (6 + vOff) ss; pc := pc + 1;
         gasUsed := g + gasCost - (stipend - pg);
         memory := buffer_write retOffset (TAKE retSize out) em;
-        returnData := out|>,cb)::cs|>)
+        returnData := out;
+        logs := caller.logs ++ transfer_log p.callee
+          (if op = CallCode ∨ op = DelegateCall then p.callee else addr)
+          value|>,cb)::cs|>)
 Proof
   strip_tac >>
   `LENGTH ss <= stack_limit` by
@@ -4637,16 +4645,18 @@ QED
    - proceed_call pushes (initial_context callee calleeCode ... (Memory ...)
      tx, newRb) and, since fIN addr precompile_addresses, runs
      dispatch_precompiles addr on that state. The new context has
-     msgParams.data = buffer_of_list data, gasLimit = stipend, gasUsed = 0 and
-     returnData = [], so the hypothesis applies and the result is INR NONE.
+     msgParams.data = buffer_of_list data, gasLimit = stipend, gasUsed = 0,
+     returnData = [] and logs = transfer_log p.callee callee value (EIP-7708),
+     so the hypothesis applies and the result is INR NONE.
    - step_inst raised, so inc_pc_or_jump does not run; handle_step NONE goes
      through handle_create (outputTo is Memory, so no effect) to
      handle_exception NONE. There are 2 + LENGTH cs contexts, so it pops the
      callee with success = T: unuse_gas (stipend - pg) (stipend ≤ gasCost by
-     call_gas_def, so the assert holds), push_logs [], update_gas_refund
-     (0,0), no rollback reset; then inc_pc, set_return_data out, push_stack
-     1w (the stack fits: wf_state gives LENGTH ss ≤ stack_limit and 6 values
-     were popped) and write_memory retOffset (TAKE retSize out). *)
+     call_gas_def, so the assert holds), push_logs (that transfer log),
+     update_gas_refund (0,0), no rollback reset; then inc_pc,
+     set_return_data out, push_stack 1w (the stack fits: wf_state gives
+     LENGTH ss ≤ stack_limit and 6 values were popped) and write_memory
+     retOffset (TAKE retSize out). *)
 
 Theorem SPEC_Call_precompile:
   SPEC EVM_MODEL
@@ -4703,7 +4713,10 @@ Theorem SPEC_Call_precompile:
                   else I)) *
    evm_Msdomain newDom * evm_ReturnData out *
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
-   evm_AddRefund ar * evm_SubRefund sr * evm_Logs l)
+   evm_AddRefund ar * evm_SubRefund sr *
+   evm_Logs (l ++ transfer_log p.callee
+     (if call_inst = CallCode ∨ call_inst = DelegateCall then p.callee
+      else addr) value))
 Proof
   irule IMP_EVM_SPEC >> rpt strip_tac >>
   rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, STAR_CODE_POOL_evm2set] >>
@@ -5205,7 +5218,7 @@ Theorem SPEC_SelfDestruct_outermost:
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Contexts cs * evm_CachedRB cb * evm_ReturnData rd *
    evm_Exception e * evm_Rollback rb * evm_Msdomain d *
-   evm_OriginalAccounts orig *
+   evm_OriginalAccounts orig * evm_Logs l *
    cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧ ¬p.static ∧
          addr = w2w (HD ss) ∧ access_check d addr ∧
          sender = lookup_account p.callee rb.accounts ∧
@@ -5225,6 +5238,7 @@ Theorem SPEC_SelfDestruct_outermost:
    evm_MsgParams p * evm_Contexts cs * evm_CachedRB cb *
    evm_ReturnData [] * evm_Exception (INR NONE) *
    evm_Msdomain (msdomain_add addr d) * evm_OriginalAccounts orig *
+   evm_Logs (l ++ transfer_log p.callee addr sender.balance) *
    evm_Rollback (case p.outputTo of Memory _ => rb2 | Code a =>
                  rb2 with accounts updated_by (λaccounts.
                     update_account a
@@ -5248,7 +5262,7 @@ Proof
          handle_create_def,get_return_data_def,get_output_to_def,
          get_current_context_def,reraise_def,handle_exception_def,
          get_num_contexts_def,consume_gas_def,assert_def,
-         set_current_context_def,CaseEq"prod",CaseEq"sum"]
+         set_current_context_def,push_logs_def,CaseEq"prod",CaseEq"sum"]
   \\ (conj_tac >-
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
@@ -5305,7 +5319,7 @@ Theorem SPEC_SelfDestruct_inner:
                       accounts)) *
    evm_GasUsed (caller.gasUsed - calleeGasLeft) *
    evm_JumpDest caller.jumpDest *
-   evm_Logs (caller.logs ++ l) *
+   evm_Logs (caller.logs ++ l ++ transfer_log p.callee addr sender.balance) *
    evm_AddRefund (caller.addRefund + ar) *
    evm_SubRefund (caller.subRefund + sr))
 Proof

@@ -1712,7 +1712,8 @@ Theorem step_create_lemma:
           increment_nonce address;
         _ <- get_static;
         push_context $
-          (initial_context address code F (Code address) subContextTx, rollback)
+          (initial_context address code F (Code address) subContextTx with
+             logs := transfer_log senderAddress address value, rollback)
       od
     od
   od
@@ -1859,6 +1860,8 @@ Proof
   \\ irule_at Any decreases_gas_assert_not_static \\ rw []
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_update_accounts \\ rw []
+  \\ irule_at Any decreases_gas_ignore_bind_right
+  \\ irule_at Any decreases_gas_push_logs
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_original \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right \\ reverse (rw [])

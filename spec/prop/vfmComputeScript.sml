@@ -385,6 +385,8 @@ val () = cv_auto_trans $
 val () = cv_auto_trans $
   REWRITE_RULE [GSYM word_of_bytes_be_def] address_for_create2_def;
 
+val () = cv_auto_trans vfmConstantsTheory.transfer_log_def;
+
 val () = “get_gas_left s” |>
   SIMP_CONV std_ss [get_gas_left_def, bind_def]
   |> cv_auto_trans;
@@ -892,7 +894,7 @@ Theorem proceed_call_eq:
     subStatic <<- (op = StaticCall ∨ static);
     context <<- initial_context callee code subStatic outputTo subContextTx;
     context <<- context with msgParams := context.msgParams with data := data;
-    push_context (context, rollback);
+    push_context (context with logs := transfer_log sender callee value, rollback);
     if fIN address precompile_addresses
     then dispatch_precompiles address
     else return ()

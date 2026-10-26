@@ -187,6 +187,28 @@ Definition deposit_event_topic_def:
     0x649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5w
 End
 
+(* EIP-7708: the system address logs every ETH transfer. *)
+Definition system_address_def:
+  system_address : address =
+    0xfffffffffffffffffffffffffffffffffffffffew
+End
+
+Definition transfer_topic_def:
+  transfer_topic : bytes32 =
+    0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3efw
+End
+
+(* EIP-7708: the log a transfer of `amount` from `sender` to `recipient`
+   emits, if it emits one at all.  A transfer to self moves nothing, and
+   a zero transfer is not a transfer. *)
+Definition transfer_log_def:
+  transfer_log (sender: address) (recipient: address) (amount: num) : event list =
+    if amount = 0 ∨ sender = recipient then [] else
+      [<| logger := system_address
+        ; topics := [transfer_topic; w2w sender; w2w recipient]
+        ; data := word_to_bytes (n2w amount : bytes32) T |>]
+End
+
 Definition withdrawal_request_contract_def:
   withdrawal_request_contract : address =
     0x00000961Ef480Eb55e80D19ad83579A64c007002w

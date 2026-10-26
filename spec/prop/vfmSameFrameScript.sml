@@ -2352,6 +2352,13 @@ Proof
     >> simp[transfer_value_preserves_storage,
             transfer_value_preserves_code,
             transfer_value_preserves_nonce] ) >>
+  irule psf_ignore_bind >>
+  simp[] >>
+  qexists_tac`pco` >> simp[] >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac
+    >> gvs[push_logs_def, get_current_context_def, set_current_context_def,
+           bind_def, return_def, fail_def, Abbr`pco`, Abbr`rbc`] ) >>
   irule psf_bind_get_original >>
   qx_gen_tac`original` >>
   simp[] >>

@@ -1115,6 +1115,8 @@ Definition step_self_destruct_def:
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     assert_not_static;
     update_accounts $ transfer_value senderAddress address balance;
+    (* EIP-7708: sweeping the balance is a transfer too. *)
+    push_logs $ transfer_log senderAddress address balance;
     original <- get_original;
     originalContract <<- lookup_account senderAddress original;
     (* EIP-8246: the account keeps its balance when it is deleted, so a
@@ -1171,8 +1173,10 @@ Definition proceed_create_def:
     update_accounts $
       transfer_value senderAddress address value o
       increment_nonce address;
+    (* EIP-7708: the created frame starts with its endowment logged. *)
     push_context
-      (initial_context address code F (Code address) subContextTx, rollback)
+      (initial_context address code F (Code address) subContextTx with
+         logs := transfer_log senderAddress address value, rollback)
   od
 End
 
@@ -1567,7 +1571,10 @@ Definition proceed_call_def:
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
     context <<- initial_context callee code subStatic outputTo subContextTx;
-    push_context (context, rollback);
+    (* EIP-7708: the new frame starts with its incoming transfer logged,
+       so a frame that fails takes the log down with it.  A CALLCODE moves
+       nothing and so logs nothing: its recipient is the caller itself. *)
+    push_context (context with logs := transfer_log sender callee value, rollback);
     if fIN address precompile_addresses
     then dispatch_precompiles address
     else return ()
