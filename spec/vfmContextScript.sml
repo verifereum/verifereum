@@ -155,6 +155,8 @@ Datatype:
    ; rlpSize               : num (* length of the block's RLP encoding *)
    ; parentBeaconBlockRoot : bytes32
    ; requestsHash          : bytes32
+   ; blockAccessListHash   : bytes32 (* EIP-7928 *)
+   ; slotNumber            : num     (* EIP-7843 *)
    ; stateRoot             : bytes32
    ; withdrawalsRoot       : bytes32
    ; transactions          : transaction list

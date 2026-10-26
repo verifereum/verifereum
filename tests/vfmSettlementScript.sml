@@ -8,7 +8,8 @@ Definition settlement_block_def:
     baseFeePerGas := 1; excessBlobGas := 0; gasUsed := 0; blobGasUsed := 0;
     number := 1; timeStamp := 1; coinBase := coinbase; gasLimit := 1000000;
     prevRandao := 0w; hash := 0w; rlpSize := 0;
-    parentBeaconBlockRoot := 0w; requestsHash := 0w; stateRoot := 0w;
+    parentBeaconBlockRoot := 0w; requestsHash := 0w; blockAccessListHash := 0w;
+    slotNumber := 0; stateRoot := 0w;
     withdrawalsRoot := 0w; transactions := []; withdrawals := [] |>
 End
 val () = cv_auto_trans settlement_block_def;

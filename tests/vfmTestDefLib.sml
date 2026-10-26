@@ -613,6 +613,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val stateRoot_tm = bytes32_from_hex $ #stateRoot header
     val parentBeaconBlockRoot_tm = bytes32_from_hex $ #parentBeaconBlockRoot header
     val requestsHash_tm = bytes32_from_hex $ #requestsHash header
+    val blockAccessListHash_tm = bytes32_from_hex $ #blockAccessListHash header
+    val slotNumber_tm = num_from_hex $ #slotNumber header
     val withdrawalsRoot_tm = bytes32_from_hex $ #withdrawalsRoot header
     val transactions_tm = mk_list(
       List.map (mk_transaction_tm baseFeePerGas_tm) $
@@ -635,6 +637,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("rlpSize", rlpSize_tm),
       ("parentBeaconBlockRoot", parentBeaconBlockRoot_tm),
       ("requestsHash", requestsHash_tm),
+      ("blockAccessListHash", blockAccessListHash_tm),
+      ("slotNumber", slotNumber_tm),
       ("stateRoot", stateRoot_tm),
       ("withdrawalsRoot", withdrawalsRoot_tm),
       ("transactions", transactions_tm),

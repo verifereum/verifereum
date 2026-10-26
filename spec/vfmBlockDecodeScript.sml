@@ -25,7 +25,7 @@ Definition block_header_from_rlp_def:
   block_header_from_rlp rlp =
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
-  if ¬(LENGTH ls = 21 ∧ EVERY is_RLPB ls) then NONE else
+  if ¬(LENGTH ls = 23 ∧ EVERY is_RLPB ls) then NONE else
   let ommersHash = dest_RLPB (EL  1 ls) in
   let difficulty = dest_RLPB (EL  7 ls) in
   let extraData  = dest_RLPB (EL 12 ls) in
@@ -49,6 +49,8 @@ Definition block_header_from_rlp_def:
   let excessBlobGas = dest_RLPB (EL 18 ls) in
   let parentBeaconBlockRoot = dest_RLPB (EL 19 ls) in
   let requestsHash = dest_RLPB (EL 20 ls) in
+  let blockAccessListHash = dest_RLPB (EL 21 ls) in
+  let slotNumber = dest_RLPB (EL 22 ls) in
   (*
      parentHash;
      ommersHash;
@@ -70,7 +72,9 @@ Definition block_header_from_rlp_def:
      blobGasUsed;
      excessBlobGas;
      parentBeaconBlockRoot;
-     requestsHash
+     requestsHash;
+     blockAccessListHash;
+     slotNumber
    *)
     SOME
     <| baseFeePerGas := num_of_be_bytes baseFeePerGas
@@ -84,6 +88,8 @@ Definition block_header_from_rlp_def:
      ; prevRandao    := word_of_bytes T 0w prevRandao
      ; parentBeaconBlockRoot := word_of_bytes T 0w parentBeaconBlockRoot
      ; requestsHash  := word_of_bytes T 0w requestsHash
+     ; blockAccessListHash := word_of_bytes T 0w blockAccessListHash
+     ; slotNumber    := num_of_be_bytes slotNumber
      ; stateRoot     := word_of_bytes T 0w stateRoot
      ; withdrawalsRoot := word_of_bytes T 0w withdrawalsRoot
      (* not in header *)

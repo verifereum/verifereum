@@ -307,6 +307,8 @@ Definition deploy_block_def:
   ; transactions := [deploy_tx] (* not true, many others *)
   ; withdrawals := []
   ; requestsHash := 0w (* fake *)
+  ; blockAccessListHash := 0w (* fake *)
+  ; slotNumber := 0 (* fake *)
   ; withdrawalsRoot := word_of_bytes_be (withdrawals_root [])
   |>
 End
