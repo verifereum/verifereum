@@ -51,6 +51,11 @@
    is not checked: the effects are read off the per-step theorems, before
    the final simplification, so they may differ in form from the post.
 
+   Memory. A memory term that is not small is abbreviated after each
+   instruction as a fresh variable mem<n> with a conjunct mem<n> = t in C,
+   so that summaries stay linear in the block's length (abbreviate_memory);
+   inline_memory undoes it.
+
    Simplification. After each instruction the new stack values, effects and
    conditions are simplified with srw_ss, a few list/word lemmas and
    config.simps. Values too large to simplify cheaply (memory, hashes of
@@ -492,12 +497,21 @@ fun simp_hyp cfg cf c th =
 
 fun simp_hyps cfg cf hs th = foldl (fn (c, th) => simp_hyp cfg cf c th) th hs
 
+(* Memory abbreviations: a variable mem<n> of type buffer, defined by a
+   hypothesis mem<n> = t (see abbreviate_memory) *)
+val buffer_ty = “:buffer”
+fun is_mem_abbrev v =
+  is_var v andalso type_of v = buffer_ty andalso
+  String.isPrefix "mem" (fst (dest_var v))
+
 (* a hypothesis v = t (or (v1,...,vn) = t) defining variables local to one
-   rule: they are instantiated away *)
+   rule: they are instantiated away. A memory abbreviation is not local:
+   instantiating it would undo abbreviate_memory. *)
 fun local_def fixed c =
   let
     val (l, r) = dest_eq c
-    fun local_var v = is_var v andalso not (tmem v fixed)
+    fun local_var v = is_var v andalso not (tmem v fixed) andalso
+                      not (is_mem_abbrev v)
     fun def_of (l, r) =
       if local_var l andalso not (free_in l r) then SOME [(l, r)]
       else if pairSyntax.is_pair l then
@@ -796,6 +810,33 @@ fun polish cfg cf th =
     CONV_RULE (RAND_CONV (ONCE_DEPTH_CONV gas_used)) th3
   end
 
+(* Memory is abbreviated. A memory read (MLOAD, KECCAK256, a copy's source)
+   puts the whole memory term into a stack value, and that value can be an
+   offset or size of the next write, whose memory term then holds the
+   previous one several times over: the terms grow exponentially in the
+   number of writes. So when a step leaves a memory term that is not small,
+   it is replaced by a fresh variable mem<n> and the equation mem<n> = t
+   becomes a hypothesis, and so a conjunct of C. Each definition then
+   mentions the previous memory as one variable, and the summary stays
+   linear in the block's length. The theorem holds for every mem<n>, so a
+   consumer gets the memory back by instantiating mem<n> to its definition,
+   which discharges the conjunct. *)
+fun abbreviate_memory th =
+  case post_value "evm_Memory" th of
+    NONE => th
+  | SOME t =>
+      if small t then th
+      else
+        let
+          val frees = thm_frees th
+          val n = length (filter is_mem_abbrev frees) + 1
+          val v = variant frees (mk_var ("mem" ^ Int.toString n, buffer_ty))
+          val eq = SYM (ASSUME (mk_eq (v, t)))
+          fun conv a =
+            if head_name a = "evm_Memory" andalso aconv (rand a) t
+            then RAND_CONV (K eq) a else NO_CONV a
+        in CONV_RULE (RAND_CONV (ONCE_DEPTH_CONV conv)) th end
+
 fun step cfg cf (pc, inst) (label, rule) th =
   apply_rule cfg cf (inst_at (pc, inst)) rule th
   handle Infeasible_cond c => raise Infeasible_cond c
@@ -905,6 +946,38 @@ fun close_conds seen th =
             else raise ERR "close_conds" "hypotheses left"
   in (th2, cnd, gas) end
 
+(* the conjuncts of a closed summary's cond C and cond G *)
+fun closed_conds th =
+  let
+    val cs = map rand (filter is_cond (stars (pre_of th)))
+    val (gas, cnd) = partition mentions_gas cs
+  in (List.concat (map strip_conj cnd), List.concat (map strip_conj gas)) end
+
+(* Undo abbreviate_memory in a closed summary: each mem<n> is instantiated
+   to its definition, which discharges the conjunct defining it. *)
+fun inline_memory th =
+  let
+    val (cnd0, gas0) = closed_conds th
+    fun def_of c =
+      let val (v, t) = dest_eq c
+      in if is_mem_abbrev v then SOME (v, t) else NONE end
+      handle HOL_ERR _ => NONE
+    fun go th cnd gas =
+      case List.mapPartial def_of cnd of
+        [] => (th, cnd, gas)
+      | (v, t) :: _ =>
+          let
+            val s = [v |-> t]
+            val th1 = PROVE_HYP (REFL t) (INST s th)
+            val cnd' = filter (not o aconv (mk_eq (t, t))) (map (subst s) cnd)
+          in go th1 cnd' (map (subst s) gas) end
+    val (th1, cnd, gas) = go (undisch_conds th) cnd0 gas0
+    val th2 = th1 |> move_cond cnd |> move_cond gas
+                  |> CONV_RULE (PRE_CONV (PURE_REWRITE_CONV [STAR_ASSOC]))
+    val _ = if List.null (hyp th2) then ()
+            else raise ERR "inline_memory" "hypotheses left"
+  in th2 end
+
 (* when r reads deeper than th leaves visible, th's rest becomes
    s(d)::...::rest, extending its entry stack s0::...::s(d-1)::rest *)
 fun widen_stack th r =
@@ -954,8 +1027,9 @@ fun summarize_variant cfg cf entry insts d =
       case rules_for (snd pc_inst) of
         [(label, rule)] =>
           let val th' = step cfg cf pc_inst (label, rule) th
-          in (th', effs @ effects_of_step pc_inst th th',
-              seen @ hyp_order seen th')
+              val th'' = abbreviate_memory th'
+          in (th'', effs @ effects_of_step pc_inst th th',
+              seen @ hyp_order seen th'')
           end
       | [] => raise Stuck (fst pc_inst, snd pc_inst, "no rule")
       | _ => raise Stuck (fst pc_inst, snd pc_inst,
@@ -971,8 +1045,9 @@ fun summarize_variant cfg cf entry insts d =
       let
         val th0 = step cfg cf (tpc, tinst) (label, rule) th_body
         val effs = effs @ effects_of_step (tpc, tinst) th_body th0
-        val th1 = polish cfg cf th0
-        val (th3, cnd, gas) = close_conds seen th1
+        val th0' = abbreviate_memory th0
+        val th1 = polish cfg cf th0'
+        val (th3, cnd, gas) = close_conds (seen @ hyp_order seen th0') th1
         val is_call = mem (opname tinst) call_class
         val post_stack = case post_value "evm_Stack" th3 of
                            SOME t => t

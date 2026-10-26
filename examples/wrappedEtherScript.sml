@@ -1085,6 +1085,7 @@ val SPEC_fallback_blocks_composed =
     [weth_summary 0 (fn evmDecompLib.JumpITaken _ => true | _ => false),
      weth_summary 175 (K true),
      weth_summary 1088 (K true)]
+  |> evmDecompLib.inline_memory
   |> SRULE [GSYM balance_slot_word_eq, GSYM balance_slot_key_eq]
 
 Theorem memory_cost_0_128[local]:

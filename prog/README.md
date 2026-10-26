@@ -108,6 +108,26 @@ precondition would be unsatisfiable: a resource that the previous post
 hides and the next block reads (so `drop_gas` goes on the last summary
 only), and a CALL-class summary after other code.
 
+## Memory
+
+A memory read (MLOAD, KECCAK256, the source of an MCOPY) puts the whole
+memory term into a stack value, and that value is often the offset or
+size of the next write (ABI encoding rounds a length read from memory
+and writes there). The next memory term then holds the previous one
+several times, so without care the terms grow exponentially in the
+number of writes: blocks of a hundred instructions printed to tens of
+megabytes or did not finish in fifteen minutes.
+
+So memory is kept in SSA form. When an instruction leaves a memory term
+that is not small, the term `t` is replaced by a fresh variable `mem<n>`
+and `mem<n> = t` becomes a conjunct of `C`. Each definition mentions the
+memory before it as a single variable, and a summary stays linear in the
+block's length. The theorem holds for every value of `mem<n>`, so the
+abbreviation adds no assumption: `inline_memory` instantiates every
+`mem<n>` to its definition, which discharges its conjunct, and gives the
+summary with the memory spelt out. `compose_blocks` keeps the
+abbreviations of the summaries it composes, renaming them apart.
+
 ## Rules
 
 The rules come from a table keyed by the opcode constructor's name. By
