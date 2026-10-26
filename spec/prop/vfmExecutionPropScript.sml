@@ -80,10 +80,12 @@ Proof
 QED
 
 (* TODO: this probably needs to depend on block number (for hardforks) *)
+(* The code bound is max_code_size, which EIP-7954 raises to 64 KiB from
+   EIP-170's 2 ** 14 + 2 ** 13. *)
 Definition wf_account_state_def:
   wf_account_state a
   ⇔ a.nonce < 2 ** 64                  (* https://eips.ethereum.org/EIPS/eip-2681 *)
-  ∧ LENGTH a.code <= 2 ** 14 + 2 ** 13 (* https://eips.ethereum.org/EIPS/eip-170 *)
+  ∧ LENGTH a.code <= 2 ** 16           (* https://eips.ethereum.org/EIPS/eip-7954 *)
 End
 
 Theorem wf_empty_account_state[simp]:

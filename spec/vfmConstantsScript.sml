@@ -13,8 +13,9 @@ Definition base_cost_def:
   base_cost = 21000n
 End
 
+(* EIP-8038: ACCOUNT_WRITE + COLD_ACCOUNT_ACCESS *)
 Definition create_cost_def:
-  create_cost = 32000n
+  create_cost = 12000n
 End
 
 Definition call_data_cost_def:
@@ -22,16 +23,19 @@ Definition call_data_cost_def:
   if is_zero then 4n else 16
 End
 
+(* EIP-7976: every calldata byte counts as four tokens, so the floor is
+   64 gas a byte. *)
 Definition floor_call_data_cost_def:
-  floor_call_data_cost = 10n
+  floor_call_data_cost = 16n
 End
 
 Definition init_code_word_cost_def:
   init_code_word_cost = 2n
 End
 
+(* EIP-7954 *)
 Definition max_code_size_def:
-  max_code_size = 0x6000n
+  max_code_size = 0x10000n
 End
 
 Definition code_deposit_cost_def:
@@ -47,7 +51,7 @@ Definition cold_sload_cost_def:
 End
 
 Definition cold_access_cost_def:
-  cold_access_cost = 2600n
+  cold_access_cost = 3000n
 End
 
 Definition memory_cost_per_word_def:
@@ -66,6 +70,9 @@ Definition keccak256_per_word_cost_def:
   keccak256_per_word_cost = 6n
 End
 
+(* Osaka's STORAGE_SET and COLD_STORAGE_WRITE.  EIP-8038 replaces both with a
+   single 10000 STORAGE_WRITE, which restates the SSTORE gas in vfmExecution,
+   vfmOriginalState and vfmAccounting; that reprice is not in this change. *)
 Definition storage_set_cost_def:
   storage_set_cost = 20000n
 End
@@ -74,6 +81,10 @@ Definition storage_update_cost_def:
   storage_update_cost = 5000n
 End
 
+(* Osaka's REFUND_STORAGE_CLEAR.  EIP-8038 raises it to 11616, which is
+   (STORAGE_WRITE + COLD_STORAGE_ACCESS) * 4800 / 5000 and so only means
+   anything once STORAGE_SET and COLD_STORAGE_WRITE are replaced by the
+   single STORAGE_WRITE; that reprice is not in this change. *)
 Definition storage_clear_refund_def:
   storage_clear_refund = 4800n
 End
@@ -90,12 +101,15 @@ Definition new_account_cost_def:
   new_account_cost = 25000n
 End
 
+(* EIP-8038: ACCOUNT_WRITE + CALL_STIPEND *)
 Definition call_value_cost_def:
-  call_value_cost = 9000n
+  call_value_cost = 11300n
 End
 
+(* EIP-8038: ACCOUNT_WRITE, the execution-gas charge for the account leaf a
+   sweep creates; its state gas is EIP-8037's and charged separately. *)
 Definition self_destruct_new_account_cost_def:
-  self_destruct_new_account_cost = 25000n
+  self_destruct_new_account_cost = 9000n
 End
 
 Definition call_stipend_def:
@@ -106,12 +120,14 @@ Definition word_size_def:
   word_size byteSize = (byteSize + 31) DIV 32
 End
 
+(* EIP-8038: COLD_ACCOUNT_ACCESS - WARM_ACCESS, and
+   COLD_STORAGE_ACCESS - WARM_ACCESS. *)
 Definition access_list_address_cost_def:
-  access_list_address_cost = 2400n
+  access_list_address_cost = 2900n
 End
 
 Definition access_list_storage_key_cost_def:
-  access_list_storage_key_cost = 1900n
+  access_list_storage_key_cost = 2000n
 End
 
 Definition gas_per_blob_def:

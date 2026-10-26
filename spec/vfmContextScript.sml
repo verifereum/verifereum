@@ -347,9 +347,10 @@ Definition initial_access_sets_def:
    |>
 End
 
+(* EIP-7976: the floor counts every calldata byte the same, as four
+   tokens.  The execution-gas calldata cost still distinguishes bytes. *)
 Definition call_data_tokens_def:
-  call_data_tokens data =
-  SUM (MAP (λb. if b = 0w then 1n else 4) data)
+  call_data_tokens data = 4n * LENGTH data
 End
 
 Definition calldata_floor_cost_def:
