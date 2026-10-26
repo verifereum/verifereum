@@ -1903,7 +1903,7 @@ Definition update_beacon_block_def:
   let accounts1 = update_account beacon_addr (a with storage := s2) accounts in
   if b.number = 0 ∨ prevHashes = [] then accounts1 else
   let blockhash_addr = 0x0000F90827F1C53a10cb7A02335B175320002935w in
-  let blockhash_buffer_length = 8192n in
+  let blockhash_buffer_length = 8191n in
   let slot = (b.number - 1) MOD blockhash_buffer_length in
   let parent_hash = HD prevHashes in
   let a2 = lookup_account blockhash_addr accounts1 in
