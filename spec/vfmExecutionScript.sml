@@ -1908,7 +1908,8 @@ Definition post_transaction_accounting_def:
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
   let (totalGasUsed, refundEther, transactionFee) =
     transaction_gas_accounting tx.gasPrice blk.baseFeePerGas tx.gasLimit
-      (calldata_floor_cost tx.data) (gasLeft, storageRefund, t.txParams.authRefund) in
+      (calldata_floor_cost tx.accessList tx.data)
+      (gasLeft, storageRefund, t.txParams.authRefund) in
   let accounts = if result = NONE then t.rollback.accounts else acc in
   let sender = lookup_account tx.from accounts in
   let accounts = update_account tx.from

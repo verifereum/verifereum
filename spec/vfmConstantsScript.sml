@@ -130,6 +130,17 @@ Definition access_list_storage_key_cost_def:
   access_list_storage_key_cost = 2000n
 End
 
+(* EIP-7981: an access list entry's own data is charged at the calldata
+   floor's token price as well as its per-entry cost, as 80 tokens for an
+   address and 128 for a storage key: 1280 and 2048 gas. *)
+Definition access_list_address_floor_tokens_def:
+  access_list_address_floor_tokens = 80n
+End
+
+Definition access_list_storage_key_floor_tokens_def:
+  access_list_storage_key_floor_tokens = 128n
+End
+
 Definition gas_per_blob_def:
   gas_per_blob = 2n ** 17
 End

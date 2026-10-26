@@ -357,9 +357,24 @@ Definition call_data_tokens_def:
   call_data_tokens data = 4n * LENGTH data
 End
 
+(* EIP-7981: the data of the access list counts as floor tokens too, on
+   top of what the entries themselves cost. *)
+Definition access_list_floor_tokens_def:
+  access_list_floor_tokens accessList =
+  access_list_address_floor_tokens * LENGTH accessList +
+  access_list_storage_key_floor_tokens *
+    SUM (MAP (λx. LENGTH x.keys) accessList)
+End
+
+Definition access_list_data_cost_def:
+  access_list_data_cost accessList =
+  floor_call_data_cost * access_list_floor_tokens accessList
+End
+
 Definition calldata_floor_cost_def:
-  calldata_floor_cost data =
-  base_cost + floor_call_data_cost * call_data_tokens data
+  calldata_floor_cost accessList data =
+  base_cost + floor_call_data_cost * call_data_tokens data +
+  access_list_data_cost accessList
 End
 
 Definition intrinsic_cost_def:
@@ -373,6 +388,7 @@ Definition intrinsic_cost_def:
        else 0)
     + access_list_address_cost * LENGTH accessList
     + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
+    + access_list_data_cost accessList
     + new_account_cost * authListLen
 End
 
@@ -406,7 +422,7 @@ Definition pre_transaction_updates_def:
          | _ => F) then NONE else
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
   if t.gasLimit > 2 ** 24 then NONE else
-  if t.gasLimit < calldata_floor_cost t.data then NONE else
+  if t.gasLimit < calldata_floor_cost t.accessList t.data then NONE else
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
