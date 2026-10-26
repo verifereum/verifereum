@@ -32,13 +32,15 @@
    - rest is never inspected: d is the depth the block reads (checked by the
      proof, which fails to reach this shape if d is too small).
    - each e_i, and every resource in the post, is a term over the s_i and
-     the entry resources (p.caller, the memory m, the rollback state rb, ...):
-     no intermediate stack survives.
+     the entry resources (p.caller, the memory m, the rollback state rb, ...)
+     and the memory abbreviations mem<n> defined in C: no intermediate stack
+     survives.
    - C is the condition the block needs to run: stack-depth bound, ISL e,
      j = NONE, p.code/p.parsed equal to the contract's code (when a jump or a
      code-reading instruction needs it), JUMPI conditions, static-context
      facts, access-list facts.
-   - G is the gas layer: every conjunct that mentions p.gasLimit. The
+   - G is the gas layer: every conjunct that mentions p.gasLimit, other
+     than a memory definition (a GAS result written to memory). The
      chain of per-instruction bounds g + c_i <= p.gasLimit is collapsed into
      the strongest one. G cannot be dropped from the precondition (the block
      does need the gas); drop_gas instead hides the gas used in the post, so
@@ -54,7 +56,9 @@
    Memory. A memory term that is not small is abbreviated after each
    instruction as a fresh variable mem<n> with a conjunct mem<n> = t in C,
    so that summaries stay linear in the block's length (abbreviate_memory);
-   inline_memory undoes it.
+   inline_memory undoes it. A buffer variable named mem... is taken for an
+   abbreviation, so rules added with set_rules/add_rules should not use
+   such names.
 
    Simplification. After each instruction the new stack values, effects and
    conditions are simplified with srw_ss, a few list/word lemmas and
@@ -503,6 +507,9 @@ val buffer_ty = “:buffer”
 fun is_mem_abbrev v =
   is_var v andalso type_of v = buffer_ty andalso
   String.isPrefix "mem" (fst (dest_var v))
+fun is_mem_def c =
+  is_eq c andalso is_mem_abbrev (lhs c)
+fun mem_def_of c = if is_mem_def c then SOME (dest_eq c) else NONE
 
 (* a hypothesis v = t (or (v1,...,vn) = t) defining variables local to one
    rule: they are instantiated away. A memory abbreviation is not local:
@@ -759,6 +766,10 @@ fun apply_rule cfg cf prep rule th =
 fun mentions_gas t =
   can (find_term (fn x => can (match_term gaslimit_pat) x)) t
 
+(* a conjunct of G: a memory definition stays in C even when its memory
+   mentions p.gasLimit (a GAS result written to memory) *)
+fun is_gas_cond c = mentions_gas c andalso not (is_mem_def c)
+
 (* The linear-arithmetic skeleton of a term: its maximal non-arithmetic
    subterms (memory costs, storage lookups, p.gasLimit, ...) replaced by
    variables. Gas bounds are sums of large terms; arithmetic decision and
@@ -937,7 +948,7 @@ fun close_conds seen th =
                  |> collapse (is_stack_bound (stack_rest th))
     val order = filter (fn h => tmem h (hyp th1))
                        (seen @ hyp_order seen th)
-    val (gas, cnd) = partition mentions_gas order
+    val (gas, cnd) = partition is_gas_cond order
     val th2 = th1 |> move_cond cnd |> move_cond gas
                   |> CONV_RULE (RATOR_CONV (RAND_CONV code_norm)
                                 THENC PRE_CONV (PURE_REWRITE_CONV
@@ -950,7 +961,7 @@ fun close_conds seen th =
 fun closed_conds th =
   let
     val cs = map rand (filter is_cond (stars (pre_of th)))
-    val (gas, cnd) = partition mentions_gas cs
+    val (gas, cnd) = partition (List.exists is_gas_cond o strip_conj) cs
   in (List.concat (map strip_conj cnd), List.concat (map strip_conj gas)) end
 
 (* Undo abbreviate_memory in a closed summary: each mem<n> is instantiated
@@ -958,12 +969,8 @@ fun closed_conds th =
 fun inline_memory th =
   let
     val (cnd0, gas0) = closed_conds th
-    fun def_of c =
-      let val (v, t) = dest_eq c
-      in if is_mem_abbrev v then SOME (v, t) else NONE end
-      handle HOL_ERR _ => NONE
     fun go th cnd gas =
-      case List.mapPartial def_of cnd of
+      case List.mapPartial mem_def_of cnd of
         [] => (th, cnd, gas)
       | (v, t) :: _ =>
           let
@@ -1003,11 +1010,7 @@ fun widen_stack th r =
    them. *)
 fun renumber_memory seen th =
   let
-    fun def_of c =
-      let val (v, t) = dest_eq c
-      in if is_mem_abbrev v then SOME (v, t) else NONE end
-      handle HOL_ERR _ => NONE
-    val defs = List.mapPartial def_of (hyp th)
+    val defs = List.mapPartial mem_def_of (hyp th)
     val vs = map fst defs
     fun order placed [] = rev placed
       | order placed rest =
@@ -1028,10 +1031,10 @@ fun renumber_memory seen th =
     val sorted_defs = map (fn (v, t) => subst s (mk_eq (v, t))) sorted
     fun fill [] _ = []
       | fill (c :: cs) ds =
-          if isSome (def_of c) then
+          if isSome (mem_def_of c) then
             (case ds of d :: ds' => d :: fill cs ds' | [] => fill cs [])
           else subst s c :: fill cs ds
-    val n = length (List.filter (isSome o def_of) seen)
+    val n = length (List.filter (isSome o mem_def_of) seen)
     val seen1 = fill seen sorted_defs @
                 List.drop (sorted_defs, Int.min (n, length sorted_defs))
   in (seen1, th1) end

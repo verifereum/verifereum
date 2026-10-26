@@ -1089,6 +1089,31 @@ val SPEC_fallback_blocks_composed =
         weth_summary 1088 (K true)])
   |> SRULE [GSYM balance_slot_word_eq, GSYM balance_slot_key_eq]
 
+(* Composed without inlining, the path keeps the summaries' memory
+   abbreviations, numbered mem1, mem2, ... along it; inline_memory then
+   spells them all out. *)
+val () =
+  let
+    val th = evmDecompLib.compose_blocks weth_config
+               [weth_summary 0 (fn evmDecompLib.JumpITaken _ => true
+                                 | _ => false),
+                weth_summary 175 (K true),
+                weth_summary 1088 (K true)]
+    fun mems th =
+      List.filter (fn v => type_of v = “:buffer” andalso
+                           String.isPrefix "mem" (fst (dest_var v)))
+                  (thm_frees th)
+    val names = map (fst o dest_var) (mems th)
+    val expected = List.tabulate (length names,
+                                  fn i => "mem" ^ Int.toString (i + 1))
+    val inlined = evmDecompLib.inline_memory th
+  in
+    if not (null names) andalso List.all (fn n => Lib.mem n names) expected
+       andalso null (mems inlined) andalso null (hyp inlined) then ()
+    else raise mk_HOL_ERR "wrappedEtherScript" "compose_blocks"
+                 "memory abbreviations"
+  end
+
 Theorem memory_cost_0_128[local]:
   memory_cost m 0 128 =
   memory_cost m 0 96 + memory_cost (expanded_memory m 64 32) 96 32
