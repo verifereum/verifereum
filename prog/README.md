@@ -67,15 +67,16 @@ SPEC EVM_MODEL
 ```
 
 - The stack is eliminated. `rest` is never inspected; the `e`s and every
-  resource in the post are terms over the `s`s and the entry resources
-  (`p.caller`, the memory `m`, the rollback state `rb`, ...). No
-  intermediate stack survives, which is what makes the summaries
-  readable and composable.
+  resource in the post are terms over the `s`s, the entry resources
+  (`p.caller`, the memory `m`, the rollback state `rb`, ...) and the
+  memory abbreviations defined in `C` (below). No intermediate stack
+  survives, which is what makes the summaries readable and composable.
 - `C` is what the block needs to run: the stack-depth bound, the absence
   of a pending exception, the JUMPI condition, that `p.code` and
   `p.parsed` are the contract's code (when a jump target or a code read
   depends on it), static-context and access-list facts.
-- `G` is the gas layer: the conjuncts mentioning `p.gasLimit`. The chain
+- `G` is the gas layer: the conjuncts mentioning `p.gasLimit`, other than
+  memory definitions (a GAS result written to memory). The chain
   of per-instruction bounds `g + c ≤ p.gasLimit` is collapsed to the
   strongest. Keeping it apart from `C` lets a reader skip the gas
   arithmetic, but it can't be dropped from the precondition, since the
@@ -107,6 +108,30 @@ is widened to `s(d)::...::rest`. It refuses two compositions whose
 precondition would be unsatisfiable: a resource that the previous post
 hides and the next block reads (so `drop_gas` goes on the last summary
 only), and a CALL-class summary after other code.
+
+## Memory
+
+A memory read (MLOAD, KECCAK256, the source of an MCOPY) puts the whole
+memory term into a stack value, and that value is often the offset or
+size of the next write (ABI encoding rounds a length read from memory
+and writes there). The next memory term then holds the previous one
+several times, so without care the terms grow exponentially in the
+number of writes: blocks of a hundred instructions printed to tens of
+megabytes or did not finish in fifteen minutes.
+
+So memory is kept in SSA form. When an instruction leaves a memory term
+that is not small, the term `t` is replaced by a fresh variable `mem<n>`
+and `mem<n> = t` becomes a conjunct of `C`. Each definition mentions the
+memory before it as a single variable, and a summary stays linear in the
+block's length. The theorem holds for every value of `mem<n>`, so the
+abbreviation adds no assumption: `inline_memory` instantiates every
+`mem<n>` to its definition, which discharges its conjunct, and gives the
+summary with the memory spelt out. `compose_blocks` keeps the
+abbreviations of the summaries it composes, numbered again along the
+path; to simplify reads of memory written earlier on the path, inline
+the summaries' memory first. A `:buffer` variable whose name starts
+with `mem` is taken for an abbreviation, so rules added with
+`add_rules` or `set_rules` should not use such names.
 
 ## Rules
 
@@ -172,5 +197,5 @@ every instruction, so they must be cheap: WETH's memory-buffer lemmas
 the larger blocks take minutes instead of a second. The script uses
 them only to compose the fallback path (blocks 0, 175 and 1088), where
 they turn the memory and gas into the same form as the hand-composed
-`SPEC_fallback`, and then proves `SPEC_fallback` again from that path
-(`SPEC_fallback_blocks`).
+`SPEC_fallback` (after `inline_memory` on each summary), and then proves
+`SPEC_fallback` again from that path (`SPEC_fallback_blocks`).

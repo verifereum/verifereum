@@ -73,6 +73,10 @@ sig
   (* hides the gas used in the post; compose_blocks refuses a hidden
      resource that a later summary reads, so only for the last summary *)
   val drop_gas : thm -> thm
+  (* a summary's memory terms are abbreviated as variables mem<n>, each
+     defined by a conjunct mem<n> = t of its cond C; this instantiates every
+     mem<n> to its definition and drops those conjuncts *)
+  val inline_memory : thm -> thm
 
   val exit_to_string : exit -> string
   val block_summary_to_string : block_summary -> string
