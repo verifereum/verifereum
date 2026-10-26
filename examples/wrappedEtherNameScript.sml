@@ -9,99 +9,12 @@ Ancestors
 Libs
   dep_rewrite wordsLib cv_transLib evmDecompLib
 
-(* ---------------------------------------------------------------- *)
-(* The transaction prelude leaves a contract's code and storage alone *)
-
-Theorem process_authorization_contract:
-  process_authorization c auth (accs, acc, r) = (accs', acc', r') ∧
-  ¬NULL (lookup_account a accs).code ∧
-  ¬is_delegation (lookup_account a accs).code ⇒
-  lookup_account a accs' = lookup_account a accs
-Proof
-  rw[process_authorization_def]
-  \\ gvs[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
-  \\ rw[] \\ gvs[]
-QED
-
-Theorem process_authorizations_contract:
-  ∀auths accs acc r accs' acc' r'.
-    process_authorizations c auths accs acc r = (accs', acc', r') ∧
-    ¬NULL (lookup_account a accs).code ∧
-    ¬is_delegation (lookup_account a accs).code ⇒
-    lookup_account a accs' = lookup_account a accs
-Proof
-  Induct \\ rw[process_authorizations_def]
-  \\ pairarg_tac \\ gvs[]
-  \\ drule_all process_authorization_contract \\ strip_tac
-  \\ first_x_assum drule \\ gvs[]
-QED
-
-Theorem pre_transaction_updates_contract:
-  pre_transaction_updates accs b t = SOME accs' ⇒
-  (lookup_account a accs').code = (lookup_account a accs).code ∧
-  (lookup_account a accs').storage = (lookup_account a accs).storage
-Proof
-  rw[pre_transaction_updates_def, CaseEq"bool"]
-  \\ gvs[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
-  \\ rw[]
-QED
-
-Theorem LENGTH_le_call_data_tokens:
-  ∀l. LENGTH l ≤ call_data_tokens l
-Proof
-  Induct \\ rw[call_data_tokens_def] \\ gvs[call_data_tokens_def]
-QED
-
-Theorem pre_transaction_updates_data_length:
-  pre_transaction_updates accs b t = SOME accs' ⇒
-  LENGTH t.data ≤ 2 ** 24
-Proof
-  rw[pre_transaction_updates_def, CaseEq"bool", calldata_floor_cost_def]
-  \\ qspec_then `t.data` assume_tac LENGTH_le_call_data_tokens
-  \\ gvs[floor_call_data_cost_def]
-QED
-
 Theorem contract_code_not_delegation:
   ¬NULL contract_code ∧ ¬is_delegation contract_code
 Proof
   `LENGTH contract_code ≠ 0 ∧ LENGTH contract_code ≠ 23`
   by (rewrite_tac[cv_eval “LENGTH contract_code”] \\ simp[])
   \\ rw[is_delegation_def, NULL_LENGTH]
-QED
-
-(* the initial state of a call to WETH *)
-Theorem initial_state_contract:
-  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  tx.to = SOME addr ∧
-  (lookup_account addr accounts).code = contract_code ⇒
-  ∃ctxt.
-    s.contexts = [(ctxt, s.rollback)] ∧ s.msdomain = dom ∧
-    ctxt.stack = [] ∧ ctxt.memory = empty_buffer ∧ ctxt.pc = 0 ∧
-    ctxt.jumpDest = NONE ∧ ctxt.returnData = [] ∧ ctxt.gasUsed = 0 ∧
-    ctxt.addRefund = 0 ∧ ctxt.subRefund = 0 ∧ ctxt.logs = [] ∧
-    ctxt.msgParams.callee = addr ∧ ctxt.msgParams.code = contract_code ∧
-    ctxt.msgParams.parsed = parsed_contract_code ∧
-    ctxt.msgParams.value = tx.value ∧
-    ctxt.msgParams.data = buffer_of_list tx.data ∧
-    ¬is_code_dest ctxt.msgParams.outputTo ∧
-    LENGTH tx.data ≤ 2 ** 24 ∧
-    (lookup_account addr s.rollback.accounts).storage =
-    (lookup_account addr accounts).storage
-Proof
-  simp[initial_state_def, CaseEq"option"] \\ strip_tac
-  \\ pairarg_tac \\ gvs[]
-  \\ pairarg_tac \\ gvs[CaseEq"option"]
-  \\ drule pre_transaction_updates_data_length \\ strip_tac
-  \\ drule pre_transaction_updates_contract
-  \\ disch_then (qspec_then `addr` strip_assume_tac)
-  \\ `lookup_account addr postAuthAccounts = lookup_account addr accounts'`
-  by (drule process_authorizations_contract
-      \\ simp[contract_code_not_delegation])
-  \\ gvs[apply_intrinsic_cost_def, initial_context_def,
-         initial_msg_params_def, code_from_tx_def, get_delegate_def,
-         callee_from_tx_to_def, initial_rollback_def,
-         parsed_contract_code_def, contract_code_not_delegation,
-         empty_return_destination_def, is_code_dest_def]
 QED
 
 (* ---------------------------------------------------------------- *)
@@ -172,7 +85,7 @@ val memory_cost_64_32 =
   |> SIMP_RULE arith_ss []
 
 (* evaluates ground with_zero and word_div applications, which the
-   simplifier leaves alone *)
+   simplifier leaves alone; used while composing, removed after *)
 fun ground_div_conv tm =
   let val (f, _) = strip_comb tm in
     if is_const f andalso
@@ -184,9 +97,9 @@ fun ground_div_conv tm =
       end
     else raise UNCHANGED
   end
-val () = augment_srw_ss [simpLib.conv_ss
+val () = augment_srw_ss [simpLib.named_merge_ss "ground_div" [simpLib.conv_ss
   {name = "ground_div", trace = 3, key = SOME ([], mk_var ("x", alpha)),
-   conv = K (K ground_div_conv)}]
+   conv = K (K ground_div_conv)}]]
 
 val name_config : evmDecompLib.config =
   {code_eq = contract_code_eq, parsed_eq = parsed_contract_code_eq,
@@ -216,6 +129,9 @@ val name_path_composed =
     List.foldl (fn (th, acc) => compose_blocks name_config [acc, th])
       th0 (tl ths)
   end
+
+(* ground_div is only for the composition *)
+val () = diminish_srw_ss ["ground_div"]
 
 (* the path keeps slot0 as a condition, not as an assumption *)
 val () = if null (hyp name_path_composed) then ()
@@ -250,10 +166,10 @@ fun ground_conv tm =
               (fst (listSyntax.dest_list tm)))))
   then
     let
-      val th = cv_eval tm handle _ =>
+      val th = cv_eval tm handle Interrupt => raise Interrupt | _ =>
         ((REWRITE_CONV [expanded_memory_def, memory_expand_by_def]
           THENC cv_eval) tm
-         handle _ => EVAL tm)
+         handle Interrupt => raise Interrupt | _ => EVAL tm)
     in
       if rhs (concl th) ~~ tm then NO_CONV tm else th
     end
@@ -374,10 +290,21 @@ Theorem weth_name_run_transaction:
       SOME (result, accounts') ∧
     result.result = NONE ∧
     result.output =
-      enc (Tuple [String]) (ListV [BytesV (MAP (n2w o ORD) "Wrapped Ether")])
+      enc (Tuple [String]) (ListV [BytesV (MAP (n2w o ORD) "Wrapped Ether")]) ∧
+    result.logs = [] ∧
+    ∀a. (lookup_account a accounts').code =
+        (lookup_account a s.rollback.accounts).code ∧
+        (lookup_account a accounts').storage =
+        (lookup_account a s.rollback.accounts).storage ∧
+        (lookup_account a accounts').nonce =
+        (lookup_account a s.rollback.accounts).nonce
 Proof
-  strip_tac
-  \\ drule_all initial_state_contract \\ strip_tac
+  PURE_REWRITE_TAC [cv_eval “enc (Tuple [String])
+                       (ListV [BytesV (MAP (n2w o ORD) "Wrapped Ether")])”]
+  \\ strip_tac
+  \\ strip_assume_tac contract_code_not_delegation
+  \\ drule_all initial_state_call_code \\ strip_tac
+  \\ fs[GSYM parsed_contract_code_def]
   \\ drule_all wf_initial_state \\ strip_tac
   \\ `∃rest. tx.data = [0x06w; 0xFDw; 0xDEw; 0x03w] ++ rest`
   by gvs[name_selector_eq, IS_PREFIX_APPEND]
@@ -403,8 +330,8 @@ Proof
     \\ gvs[ADD1, dimword_def]
     \\ rw[access_slot_cost_def, accesses_add_slot_def, warm_access_cost_def,
           cold_sload_cost_def])
-  \\ strip_tac \\ simp[]
-  \\ CONV_TAC (RAND_CONV cv_eval) \\ simp[]
+  \\ strip_tac
+  \\ gvs[accesses_add_slot_def]
 QED
 
 (* the same from the WETH_EVM relation, which fixes code and slot 0 *)
@@ -422,7 +349,14 @@ Theorem WETH_EVM_name_run_transaction:
       SOME (result, accounts') ∧
     result.result = NONE ∧
     result.output =
-      enc (Tuple [String]) (ListV [BytesV (MAP (n2w o ORD) "Wrapped Ether")])
+      enc (Tuple [String]) (ListV [BytesV (MAP (n2w o ORD) "Wrapped Ether")]) ∧
+    result.logs = [] ∧
+    ∀a. (lookup_account a accounts').code =
+        (lookup_account a s.rollback.accounts).code ∧
+        (lookup_account a accounts').storage =
+        (lookup_account a s.rollback.accounts).storage ∧
+        (lookup_account a accounts').nonce =
+        (lookup_account a s.rollback.accounts).nonce
 Proof
   strip_tac
   \\ qpat_x_assum `WETH_EVM _ _ _`
