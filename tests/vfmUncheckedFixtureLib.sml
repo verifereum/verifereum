@@ -194,7 +194,8 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
     val header = #genesisBlockHeader test
     val genesis : Fixture.block = {
       rlp = #genesisRLP test, blockHeader = header, blocknumber = #number header,
-      transactions = [], uncleHeaders = [], withdrawals = []
+      transactions = [], uncleHeaders = [], withdrawals = [],
+      blockAccessList = NONE
     }
   in
     ML.result_string
