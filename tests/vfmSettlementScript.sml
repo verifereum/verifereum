@@ -77,7 +77,7 @@ Theorem settlement_created_coinbase_selfdestruct:
     (settlement_accounts 1000000)
     (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
                           gasLimit := 100000 |>) =
-    SOME (NONE, 58036, 883928, 1, 0, T)
+    SOME (NONE, 38036, 923928, 1, 0, T)
 Proof
   CONV_TAC cv_eval
 QED
@@ -87,7 +87,7 @@ Theorem settlement_created_coinbase_selfdestruct_zero_tip:
     (settlement_accounts 1000000)
     (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
                           gasLimit := 100000; gasPrice := 1 |>) =
-    SOME (NONE, 58036, 941964, 1, 0, T)
+    SOME (NONE, 38036, 961964, 1, 0, T)
 Proof
   CONV_TAC cv_eval
 QED
