@@ -1235,22 +1235,6 @@ Proof
      get_tStorage_def, set_tStorage_def, return_def]
 QED
 
-Theorem self_destruct_account_update_nonce_code:
-  (lookup_account a
-    (update_account sender ((lookup_account sender accounts) with balance := 0)
-      (transfer_value sender address value accounts))).nonce =
-    (lookup_account a accounts).nonce ∧
-  (lookup_account a
-    (update_account sender ((lookup_account sender accounts) with balance := 0)
-      (transfer_value sender address value accounts))).code =
-    (lookup_account a accounts).code
-Proof
-  Cases_on `a = sender` >>
-  simp[lookup_account_def, update_account_def, combinTheory.APPLY_UPDATE_THM] >>
-  simp[GSYM lookup_account_def, transfer_value_preserves_nonce,
-       transfer_value_preserves_code]
-QED
-
 Theorem preserves_nonce_code_step_self_destruct:
   preserves (^nonce_code_rel a) step_self_destruct
 Proof
@@ -1269,8 +1253,7 @@ Proof
       assert_not_static_def, get_static_def, get_original_def,
       update_accounts_def, add_to_delete_def, finish_def, fail_def,
       return_def, COND_RATOR, AllCaseEqs()] >>
-  simp[self_destruct_account_update_nonce_code,
-       transfer_value_preserves_nonce, transfer_value_preserves_code]
+  simp[transfer_value_preserves_nonce, transfer_value_preserves_code]
 QED
 
 Theorem cp_nonce_code:

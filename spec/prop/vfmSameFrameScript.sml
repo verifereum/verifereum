@@ -2273,25 +2273,6 @@ Proof
   \\ Cases_on `s.contexts` \\ gvs[]
 QED
 
-(* update_account at the callee with a new account agreeing with the
-   current callee account on storage, code, and nonce. Safe under
-   the weakened relation. *)
-Theorem psf_update_accounts_callee_balance_only:
-  psf (λs. senderAddr = (FST (HD s.contexts)).msgParams.callee ∧
-           newAccount.storage =
-             (lookup_account senderAddr s.rollback.accounts).storage ∧
-           newAccount.code =
-             (lookup_account senderAddr s.rollback.accounts).code ∧
-           newAccount.nonce =
-             (lookup_account senderAddr s.rollback.accounts).nonce)
-      (update_accounts (update_account senderAddr newAccount))
-Proof
-  rw[psf_def, update_accounts_def, return_def]
-  \\ rw[same_frame_rel_def, callee_local_changes_def,
-        lookup_account_def, update_account_def, APPLY_UPDATE_THM]
-  \\ rw[] \\ gvs[lookup_account_def]
-QED
-
 (* ---------------- psf step_self_destruct ----------------------- *)
 
 (* step_self_destruct, line by line:
@@ -2306,8 +2287,6 @@ QED
                                     -- psf_update_accounts_transfer_value
      original <- get_original;
      if account_empty originalContract then
-       update_accounts (update_account senderAddress (sender with balance := 0));
-                                    -- psf_update_accounts_callee_balance_only
        add_to_delete senderAddress  -- psf_add_to_delete
      else return ()                 -- psf_return
      finish                         -- preserves_same_frame *)
@@ -2381,19 +2360,10 @@ Proof
   TRY (qexists_tac`pco`) >> simp[return_def]
   >- (
     rpt gen_tac >> strip_tac >>
-      gvs[bind_def, ignore_bind_def, update_accounts_def, return_def,
+      gvs[bind_def, ignore_bind_def, return_def,
        add_to_delete_def, Abbr`pco`, Abbr`rbc`, Abbr`acc`,
        lookup_account_def, update_account_def, APPLY_UPDATE_THM]) >>
-  irule psf_ignore_bind >>
-  reverse conj_tac
-  >- (
-    irule psf_mono >>
-    qspecl_then[`callee`,`acc with balance := 0`]
-      mp_tac (GEN_ALL psf_update_accounts_callee_balance_only) >>
-    strip_tac >>
-    goal_assum $ drule_at Any >>
-    simp[Abbr`pco`] ) >>
-  simp[] >>
+  irule psf_mono >>
   qexists_tac`λs. T` >>
   simp[] >>
   irule psf_add_to_delete

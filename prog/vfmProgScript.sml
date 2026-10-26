@@ -812,20 +812,50 @@ Proof
   >- (rw[process_deletions_def] \\ simp[lookup_account_update_account_other])
 QED
 
-(* Lemma: deleted addresses become empty_account_state *)
+(* EIP-8246: an address a transaction deleted is cleared, not emptied, so
+   the account it leaves behind is its credited self with its nonce, code
+   and storage cleared.  Only the accounting statements need to say this:
+   the executor has already cleared it, by clearing it when it applies
+   `process_deletions`. *)
+Definition clear_deleted_def:
+  clear_deleted deleted a = if deleted then clear_account a else a
+End
+
+Theorem clear_deleted_balance[simp]:
+  (clear_deleted deleted a).balance = a.balance
+Proof
+  rw[clear_deleted_def, clear_account_def]
+QED
+
+(* Lemma: deleted addresses are cleared, keeping their balance (EIP-8246) *)
 Theorem lookup_account_process_deletions_deleted:
   MEM addr toDelete ⇒
-  lookup_account addr (process_deletions toDelete acc) = empty_account_state
+  lookup_account addr (process_deletions toDelete acc) =
+  clear_account (lookup_account addr acc)
 Proof
   qid_spec_tac `acc`
   \\ Induct_on `toDelete`
   >- rw[]
   >- (rw[process_deletions_def]
       >- (Cases_on `MEM addr toDelete`
-          >- (first_x_assum irule \\ first_x_assum ACCEPT_TAC)
+          >- (first_assum (mp_tac o Q.SPEC
+                `update_account addr (clear_account (lookup_account addr acc)) acc`)
+              \\ simp[lookup_account_update_account_same])
           >- simp[lookup_account_process_deletions_other,
-                  lookup_account_update_account_same])
-      >- (first_x_assum irule \\ first_x_assum ACCEPT_TAC))
+                  lookup_account_update_account_same, clear_account_def])
+      >- (first_assum (mp_tac o Q.SPEC
+            `update_account h (clear_account (lookup_account h acc)) acc`)
+          \\ Cases_on `addr = h`
+          \\ simp[lookup_account_update_account_other,
+                  lookup_account_update_account_same]))
+QED
+
+Theorem lookup_account_process_deletions_cleared:
+  MEM addr toDelete ⇒
+  (lookup_account addr (process_deletions toDelete acc)).balance =
+  (lookup_account addr acc).balance
+Proof
+  rw[lookup_account_process_deletions_deleted, clear_account_def]
 QED
 
 (* Lemma: post_transaction_accounting preserves accounts for addresses
@@ -890,8 +920,8 @@ End
 Theorem post_transaction_accounting_success_lookup:
   ~NULL t.contexts /\ NULL (TL t.contexts) ==>
   lookup_account addr (SND (post_transaction_accounting blk tx NONE acc t)) =
-  if MEM addr t.rollback.toDelete then empty_account_state else
-  (lookup_account addr t.rollback.accounts) with balance :=
+  clear_deleted (MEM addr t.rollback.toDelete)
+  ((lookup_account addr t.rollback.accounts) with balance :=
     (lookup_account addr t.rollback.accounts).balance +
     (if addr = tx.from then
        compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
@@ -905,12 +935,13 @@ Theorem post_transaction_accounting_success_lookup:
          (FST (HD t.contexts)).msgParams.gasLimit
          (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
          (FST (HD t.contexts)).subRefund t.txParams.authRefund
-     else 0)
+     else 0))
 Proof
   strip_tac
   >> simp[post_transaction_accounting_def, transaction_gas_accounting_def]
   >> Cases_on `MEM addr t.rollback.toDelete`
-  >> simp[lookup_account_process_deletions_deleted,
+  >> simp[clear_deleted_def,
+          lookup_account_process_deletions_deleted,
           lookup_account_process_deletions_other, lookup_account_two_credits,
           compute_refund_ether_def, compute_transaction_fee_def,
           compute_total_gas_used_def, compute_tx_gas_used_def,
@@ -948,8 +979,8 @@ Theorem SPEC_to_run_transaction:
     (* Fees accumulate at aliased addresses; successful deletions happen last. *)
     (∀addr.
        lookup_account addr accounts' =
-       if MEM addr rb.toDelete then empty_account_state else
-       (lookup_account addr rb.accounts) with balance :=
+       clear_deleted (MEM addr rb.toDelete)
+       ((lookup_account addr rb.accounts) with balance :=
          (lookup_account addr rb.accounts).balance +
          (if addr = tx.from then
             compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
@@ -959,7 +990,7 @@ Theorem SPEC_to_run_transaction:
             compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
               tx.accessList tx.data msgParams.gasLimit gasUsed addRefund
               subRefund txParams.authRefund
-          else 0))
+          else 0)))
 Proof
   strip_tac
   \\ simp[run_transaction_def]
@@ -5187,10 +5218,7 @@ Theorem SPEC_SelfDestruct_outermost:
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
          rb2 = (if account_empty (lookup_account p.callee orig)
-                then rb1 with <| accounts updated_by
-                                   update_account p.callee
-                                     (sender with balance := 0);
-                                 toDelete updated_by CONS p.callee |>
+                then rb1 with toDelete updated_by CONS p.callee
                 else rb1)))
   {(pc,SelfDestruct)}
   (evm_Stack (TL ss) * evm_PC pc * evm_GasUsed (g + gasCost) *
@@ -5252,10 +5280,7 @@ Theorem SPEC_SelfDestruct_inner:
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
          rb2 = (if account_empty (lookup_account p.callee orig)
-                then rb1 with <| accounts updated_by
-                                   update_account p.callee
-                                     (sender with balance := 0);
-                                 toDelete updated_by CONS p.callee |>
+                then rb1 with toDelete updated_by CONS p.callee
                 else rb1) ∧
          calleeGasLeft = p.gasLimit - (g + gasCost) ∧
          calleeGasLeft ≤ caller.gasUsed))

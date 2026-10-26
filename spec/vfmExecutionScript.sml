@@ -1117,11 +1117,11 @@ Definition step_self_destruct_def:
     update_accounts $ transfer_value senderAddress address balance;
     original <- get_original;
     originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then do
-      update_accounts $
-        update_account senderAddress (sender with balance := 0);
-      add_to_delete senderAddress
-    od else return ();
+    (* EIP-8246: the account keeps its balance when it is deleted, so a
+       sweep to itself is not burned either. *)
+    if account_empty originalContract
+    then add_to_delete senderAddress
+    else return ();
     finish
   od
 End
@@ -1879,10 +1879,13 @@ Datatype:
    |>
 End
 
+(* EIP-8246: a deleted account is cleared, not emptied: it keeps its
+   balance, so a self-destructed account that is paid before the end of
+   the transaction keeps what it was paid. *)
 Definition process_deletions_def:
   process_deletions [] acc = acc ∧
   process_deletions (a::as) acc =
-  process_deletions as (update_account a empty_account_state acc)
+  process_deletions as (update_account a (clear_account $ lookup_account a acc) acc)
 End
 
 (* Gas charged and the two credits, before any account is updated. *)

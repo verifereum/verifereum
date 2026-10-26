@@ -99,11 +99,9 @@ Definition stack_original_step_self_destruct_def:
     update_accounts $ transfer_value senderAddress address balance;
     original <- stack_original_get_original;
     originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then do
-      update_accounts $
-        update_account senderAddress (sender with balance := 0);
-      add_to_delete senderAddress
-    od else return ();
+    if account_empty originalContract
+    then add_to_delete senderAddress
+    else return ();
     finish
   od
 End

@@ -1863,8 +1863,6 @@ Proof
   \\ irule_at Any decreases_gas_get_original \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right \\ reverse (rw [])
   >- irule_at Any decreases_gas_return
-  \\ irule_at Any decreases_gas_ignore_bind_right
-  \\ irule_at Any decreases_gas_update_accounts \\ rw []
   \\ irule_at Any decreases_gas_add_to_delete
 QED
 

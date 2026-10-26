@@ -656,11 +656,8 @@ Proof
   >> fs[]
 QED
 
-(* step_self_destruct: each update_accounts preserves storage.
-   - transfer_value: preserves_storage_transfer_value.
-   - update_account senderAddress (sender with balance := 0):
-     sender was captured as lookup_account senderAddress accs, so
-     (sender with balance := 0).storage = accs[senderAddress].storage. *)
+(* step_self_destruct: the only update_accounts it performs is
+   transfer_value, and preserves_storage_transfer_value covers it. *)
 
 Theorem preserves_storage_step_self_destruct:
   preserves_storage step_self_destruct

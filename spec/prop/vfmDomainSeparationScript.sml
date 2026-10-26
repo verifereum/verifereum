@@ -1549,71 +1549,6 @@ Proof
   \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def]
 QED
 
-Theorem self_destruct_helper:
-  do
-    accounts <- get_accounts;
-    sender <<- lookup_account senderAddress accounts;
-    balance <<- sender.balance;
-    beneficiaryEmpty <<- account_empty (lookup_account address accounts);
-    transferCost <<-
-      if 0 < balance ∧ beneficiaryEmpty then
-        self_destruct_new_account_cost
-      else 0;
-    consume_gas
-      (static_gas SelfDestruct + zero_warm accessCost + transferCost);
-    assert_not_static;
-    update_accounts (transfer_value senderAddress address balance);
-    original <- get_original;
-    originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then
-      do
-        update_accounts
-          (update_account senderAddress (sender with balance := 0));
-        add_to_delete senderAddress
-      od
-    else return ();
-    finish
-  od =
-  do
-    accounts <- get_accounts;
-    sender <<- lookup_account senderAddress accounts;
-    balance <<- sender.balance;
-    beneficiaryEmpty <<- account_empty (lookup_account address accounts);
-    transferCost <<-
-      if 0 < balance ∧ beneficiaryEmpty then
-        self_destruct_new_account_cost
-      else 0;
-    consume_gas
-      (static_gas SelfDestruct + zero_warm accessCost + transferCost);
-    assert_not_static;
-    update_accounts (transfer_value senderAddress address balance);
-    original <- get_original;
-    originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then
-      do
-        update_accounts
-          (λa. (senderAddress =+ a senderAddress with balance := 0) a);
-        add_to_delete senderAddress
-      od
-    else return ();
-    finish
-  od
-Proof
-  rw[FUN_EQ_THM, bind_def, ignore_bind_def,
-     assert_not_static_def, update_accounts_def,
-     return_def, fail_def, consume_gas_def, get_original_def,
-     update_accounts_def, get_static_def, get_current_context_def,
-     set_current_context_def, assert_def, get_accounts_def]
-  \\ rw[] \\ gvs[return_def, bind_def]
-  \\ rw[] \\ gvs[return_def, bind_def, update_accounts_def, add_to_delete_def]
-  \\ rw[] \\ gvs[finish_def]
-  \\ gvs[execution_state_component_equality, rollback_state_component_equality]
-  \\ gvs[update_account_def, transfer_value_def, lookup_account_def,
-         APPLY_UPDATE_THM, FUN_EQ_THM]
-  \\ rw[account_state_component_equality, APPLY_UPDATE_THM]
-  \\ rw[]
-QED
-
 Theorem ignores_extra_domain_update_accounts_transfer_value[simp]:
   ignores_extra_domain (update_accounts (transfer_value x y z))
 Proof
@@ -1684,7 +1619,7 @@ Proof
          fail_def, set_current_context_def]
       \\ Cases_on`s.contexts` \\ gvs[]
       \\ Cases_on`h` \\ gvs[])
-  \\ simp[SIMP_RULE(srw_ss())[LET_THM, AC ADD_ASSOC ADD_COMM]self_destruct_helper]
+  \\ simp[]
   \\ irule get_accounts_ignore_extra_domain_pred_bind
   \\ simp[]
   \\ conj_tac
@@ -1699,8 +1634,6 @@ Proof
     \\ rpt strip_tac
     \\ qmatch_goalsub_abbrev_tac`consume_gas n1`
     \\ qmatch_goalsub_abbrev_tac`update_accounts a1`
-    \\ qmatch_goalsub_abbrev_tac`ignore_bind (update_accounts u1)
-                                   (add_to_delete _)`
     \\ qmatch_goalsub_abbrev_tac`lhs = _`
     \\ qmatch_goalsub_abbrev_tac`consume_gas n2`
     \\ qmatch_goalsub_abbrev_tac`update_accounts a2`
@@ -1759,13 +1692,7 @@ Proof
   \\ rw[]
   \\ irule ignores_extra_domain_pred_imp
   \\ tac \\ rw[]
-  \\ rw[update_accounts_def, ignores_extra_domain_def, return_def]
-  \\ gvs[domain_compatible_def, domain_accounts_def,
-         states_agree_modulo_accounts_def, rollback_state_component_equality,
-         rollback_states_agree_modulo_accounts_def, APPLY_UPDATE_THM,
-         accounts_agree_modulo_storage_def, domain_check_def]
-  \\ TOP_CASE_TAC
-  \\ gvs[account_state_component_equality] \\ rw[]
+  \\ rw[add_to_delete_def, ignores_extra_domain_def, return_def]
 QED
 
 Theorem abort_unuse_ignores_extra_domain[simp]:

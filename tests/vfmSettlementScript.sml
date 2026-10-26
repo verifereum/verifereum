@@ -78,7 +78,7 @@ Theorem settlement_created_coinbase_selfdestruct:
     (settlement_accounts 1000000)
     (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
                           gasLimit := 100000 |>) =
-    SOME (NONE, 38036, 923928, 1, 0, T)
+    SOME (NONE, 38036, 923928, 1, 38036, F)
 Proof
   CONV_TAC cv_eval
 QED
