@@ -1,5 +1,5 @@
 Theory vfmTestDefs1948[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stStaticCall/static_callcodecallcodecall_110_suicide_end/static_callcodecallcodecall_110_suicide_end.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stStaticCall/static_callcodecallcodecall_110_suicide_end/static_callcodecallcodecall_110_suicide_end.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stRandom/random_statetest296/random_statetest296.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stRandom/random_statetest296/random_statetest296.json");
 val defs = mapi (define_test "1948") tests;

@@ -1,7 +1,7 @@
 Theory vfmTest1680[no_sig_docs]
 Ancestors vfmTestDefs1680
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result1680_0.nsv", "result1680_1.nsv", "result1680_2.nsv"];
+val () = holbuild_extra_outputs ["result1680_0.nsv"];
 val thyn = "vfmTestDefs1680";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

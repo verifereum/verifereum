@@ -1,7 +1,7 @@
 Theory vfmTest2339[no_sig_docs]
 Ancestors vfmTestDefs2339
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result2339_0.nsv", "result2339_1.nsv", "result2339_2.nsv", "result2339_3.nsv"];
+val () = holbuild_extra_outputs ["result2339_0.nsv"];
 val thyn = "vfmTestDefs2339";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

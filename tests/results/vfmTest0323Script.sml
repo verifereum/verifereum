@@ -1,7 +1,7 @@
 Theory vfmTest0323[no_sig_docs]
 Ancestors vfmTestDefs0323
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result0323_0.nsv", "result0323_1.nsv"];
+val () = holbuild_extra_outputs ["result0323_0.nsv", "result0323_1.nsv", "result0323_2.nsv", "result0323_3.nsv", "result0323_4.nsv", "result0323_5.nsv", "result0323_6.nsv", "result0323_7.nsv", "result0323_8.nsv", "result0323_9.nsv", "result0323_10.nsv", "result0323_11.nsv", "result0323_12.nsv", "result0323_13.nsv", "result0323_14.nsv", "result0323_15.nsv"];
 val thyn = "vfmTestDefs0323";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

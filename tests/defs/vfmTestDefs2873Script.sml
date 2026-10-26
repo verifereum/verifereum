@@ -1,0 +1,5 @@
+Theory vfmTestDefs2873[no_sig_docs]
+Libs vfmTestAuxLib vfmTestDefLib
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stWalletTest/wallet_default_with_out_value/wallet_default_with_out_value.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stWalletTest/wallet_default_with_out_value/wallet_default_with_out_value.json");
+val defs = mapi (define_test "2873") tests;

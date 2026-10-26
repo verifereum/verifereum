@@ -1,5 +1,5 @@
 Theory vfmTestDefs1389[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRandom2/random_statetest444/random_statetest444.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRandom2/random_statetest444/random_statetest444.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stCreateTest/create_e_contract_create_ne_contract_in_init_oog_tr/create_e_contract_create_ne_contract_in_init_oog_tr.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stCreateTest/create_e_contract_create_ne_contract_in_init_oog_tr/create_e_contract_create_ne_contract_in_init_oog_tr.json");
 val defs = mapi (define_test "1389") tests;

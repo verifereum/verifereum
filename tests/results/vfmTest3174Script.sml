@@ -1,0 +1,8 @@
+Theory vfmTest3174[no_sig_docs]
+Ancestors vfmTestDefs3174
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result3174_0.nsv", "result3174_1.nsv", "result3174_2.nsv", "result3174_3.nsv", "result3174_4.nsv", "result3174_5.nsv", "result3174_6.nsv", "result3174_7.nsv", "result3174_8.nsv", "result3174_9.nsv", "result3174_10.nsv", "result3174_11.nsv", "result3174_12.nsv", "result3174_13.nsv", "result3174_14.nsv", "result3174_15.nsv", "result3174_16.nsv", "result3174_17.nsv", "result3174_18.nsv", "result3174_19.nsv", "result3174_20.nsv", "result3174_21.nsv", "result3174_22.nsv", "result3174_23.nsv", "result3174_24.nsv", "result3174_25.nsv", "result3174_26.nsv", "result3174_27.nsv", "result3174_28.nsv", "result3174_29.nsv", "result3174_30.nsv", "result3174_31.nsv", "result3174_32.nsv", "result3174_33.nsv", "result3174_34.nsv", "result3174_35.nsv", "result3174_36.nsv", "result3174_37.nsv", "result3174_38.nsv", "result3174_39.nsv", "result3174_40.nsv", "result3174_41.nsv", "result3174_42.nsv", "result3174_43.nsv", "result3174_44.nsv", "result3174_45.nsv", "result3174_46.nsv", "result3174_47.nsv", "result3174_48.nsv", "result3174_49.nsv", "result3174_50.nsv", "result3174_51.nsv", "result3174_52.nsv", "result3174_53.nsv", "result3174_54.nsv", "result3174_55.nsv", "result3174_56.nsv", "result3174_57.nsv", "result3174_58.nsv", "result3174_59.nsv", "result3174_60.nsv", "result3174_61.nsv", "result3174_62.nsv", "result3174_63.nsv"];
+val thyn = "vfmTestDefs3174";
+val defs = get_result_defs thyn;
+val () = vfmTestLib.remove_nsv_files thyn;
+val () = List.app (ignore o save_result_thm thyn) defs;

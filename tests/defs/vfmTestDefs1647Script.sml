@@ -1,5 +1,5 @@
 Theory vfmTestDefs1647[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRevertTest/revert_sub_call_storage_oog/revert_sub_call_storage_oog.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRevertTest/revert_sub_call_storage_oog/revert_sub_call_storage_oog.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stMemoryTest/mem32kb_plus_1/mem32kb_plus_1.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stMemoryTest/mem32kb_plus_1/mem32kb_plus_1.json");
 val defs = mapi (define_test "1647") tests;

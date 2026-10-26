@@ -1,7 +1,7 @@
 Theory vfmTest1208[no_sig_docs]
 Ancestors vfmTestDefs1208
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result1208_0.nsv"];
+val () = holbuild_extra_outputs ["result1208_0.nsv", "result1208_1.nsv", "result1208_2.nsv", "result1208_3.nsv"];
 val thyn = "vfmTestDefs1208";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
