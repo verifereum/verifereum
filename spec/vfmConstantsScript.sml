@@ -142,16 +142,20 @@ Definition min_base_fee_per_blob_gas_def:
   min_base_fee_per_blob_gas = 1n
 End
 
+(* Amsterdam is built on the bpo lineage rather than the Osaka one, so it
+   carries BPO2's blob schedule: 14 target blobs and 21 maximum, with its
+   own base fee update fraction.  This is not one of Amsterdam's EIPs,
+   but the forks it is scheduled from bring it along. *)
 Definition blob_base_fee_update_fraction_def:
-  blob_base_fee_update_fraction = 5007716n
+  blob_base_fee_update_fraction = 11684671n
 End
 
 Definition max_blob_gas_per_block_def:
-  max_blob_gas_per_block = 1179648n
+  max_blob_gas_per_block = 2752512n
 End
 
 Definition target_blob_gas_per_block_def:
-  target_blob_gas_per_block = 786432n
+  target_blob_gas_per_block = 1835008n
 End
 
 Definition max_blobs_per_tx_def:
