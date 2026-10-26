@@ -1079,13 +1079,14 @@ val weth_path_config : evmDecompLib.config =
    strip_metadata = true}
 
 (* calldata shorter than 4 bytes: dispatch (0) jumps to 175, which jumps to
-   the deposit code (1088), which returns to 183 *)
+   the deposit code (1088), which returns to 183. The summaries' memory is
+   spelt out first, so that the memory lemmas can read it. *)
 val SPEC_fallback_blocks_composed =
   evmDecompLib.compose_blocks weth_path_config
-    [weth_summary 0 (fn evmDecompLib.JumpITaken _ => true | _ => false),
-     weth_summary 175 (K true),
-     weth_summary 1088 (K true)]
-  |> evmDecompLib.inline_memory
+    (map evmDecompLib.inline_memory
+       [weth_summary 0 (fn evmDecompLib.JumpITaken _ => true | _ => false),
+        weth_summary 175 (K true),
+        weth_summary 1088 (K true)])
   |> SRULE [GSYM balance_slot_word_eq, GSYM balance_slot_key_eq]
 
 Theorem memory_cost_0_128[local]:
