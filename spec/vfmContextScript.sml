@@ -11,6 +11,7 @@ Datatype:
    ; baseFeePerGas  : num
    ; baseFeePerBlobGas : num
    ; blockNumber    : num
+   ; slotNumber     : num (* EIP-7843 *)
    ; blockTimeStamp : num
    ; blockCoinBase  : address
    ; blockGasLimit  : num
@@ -235,6 +236,7 @@ Definition initial_tx_params_def:
    ; baseFeePerGas  := b.baseFeePerGas
    ; baseFeePerBlobGas := base_fee_per_blob_gas b.excessBlobGas
    ; blockNumber    := b.number
+   ; slotNumber     := b.slotNumber
    ; blockTimeStamp := b.timeStamp
    ; blockCoinBase  := b.coinBase
    ; blockGasLimit  := b.gasLimit

@@ -1945,6 +1945,12 @@ Proof
   rw[step_inst_def]
 QED
 
+Theorem preserves_same_frame_step_inst_SlotNumber[simp]:
+  preserves_same_frame (step_inst SlotNumber)
+Proof
+  rw[step_inst_def]
+QED
+
 (* --- Stack and memory --- *)
 
 Theorem preserves_same_frame_step_inst_Pop[simp]:

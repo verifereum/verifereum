@@ -63,6 +63,8 @@ Datatype:
   | BaseFee
   | BlobHash
   | BlobBaseFee
+  (* EIP-7843 *)
+  | SlotNumber
   | Pop
   | MLoad
   | MStore
@@ -158,6 +160,7 @@ Definition opcode_def:
   ∧ opcode BaseFee        = [n2w 0x48]
   ∧ opcode BlobHash       = [n2w 0x49]
   ∧ opcode BlobBaseFee    = [n2w 0x4a]
+  ∧ opcode SlotNumber     = [n2w 0x4b]
   ∧ opcode Pop            = [n2w 0x50]
   ∧ opcode MLoad          = [n2w 0x51]
   ∧ opcode MStore         = [n2w 0x52]
@@ -251,6 +254,7 @@ Definition static_gas_def[simp]:
   ∧ static_gas BaseFee        = 2
   ∧ static_gas BlobHash       = 3
   ∧ static_gas BlobBaseFee    = 2
+  ∧ static_gas SlotNumber     = 2
   ∧ static_gas Pop            = 2
   ∧ static_gas MLoad          = 3
   ∧ static_gas MStore         = 3
@@ -354,6 +358,7 @@ Theorem parse_opcode_cond_thm:
       if opc = n2w 0x48 then SOME BaseFee else
       if opc = n2w 0x49 then SOME BlobHash else
       if opc = n2w 0x4a then SOME BlobBaseFee else
+      if opc = n2w 0x4b then SOME SlotNumber else
       if opc = n2w 0x50 then SOME Pop else
       if opc = n2w 0x51 then SOME MLoad else
       if opc = n2w 0x52 then SOME MStore else

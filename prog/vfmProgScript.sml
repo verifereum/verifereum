@@ -3114,6 +3114,20 @@ Theorem SPEC_BlobBaseFee:
 Proof binop_tac
 QED
 
+Theorem SPEC_SlotNumber:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas SlotNumber ≤ p.gasLimit))
+  {(pc,SlotNumber)}
+  (evm_Stack (n2w (t.slotNumber) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode SlotNumber)) *
+   evm_GasUsed (g + static_gas SlotNumber) * evm_MsgParams p)
+Proof binop_tac
+QED
+
 Theorem SPEC_Pop:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *

@@ -1619,6 +1619,7 @@ Definition step_inst_def:
   ∧ step_inst BaseFee = step_txParams BaseFee (λt. n2w t.baseFeePerGas)
   ∧ step_inst BlobHash = step_blob_hash
   ∧ step_inst BlobBaseFee = step_txParams BlobBaseFee (λt. n2w t.baseFeePerBlobGas)
+  ∧ step_inst SlotNumber = step_txParams SlotNumber (λt. n2w t.slotNumber)
   ∧ step_inst Pop = step_pop
   ∧ step_inst MLoad = step_mload
   ∧ step_inst MStore = step_mstore MStore
