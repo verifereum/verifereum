@@ -13,17 +13,35 @@ Ancestors
 Libs
   dep_rewrite BasicProvers
 
-(* Rollbacks that can become current by reverting during run_call.
- * Exclude the final saved rollback: it is never restored, and CREATE may
- * modify it via set_original. *)
-
+(* Saved frames can revert down to the entry frame, but never the root. *)
 Definition active_rollbacks_def:
+  active_rollbacks es_depth s =
+    s.rollback ::
+    MAP SND (TAKE (SUC (LENGTH s.contexts) - MAX 2 es_depth) s.contexts)
+End
+
+Theorem active_rollbacks_saved:
   active_rollbacks es_depth s =
     s.rollback ::
     (if LENGTH s.contexts < es_depth then []
      else MAP SND (TAKE (MIN (LENGTH s.contexts - es_depth + 1)
                               (LENGTH s.contexts - 1)) s.contexts))
-End
+Proof
+  Cases_on `LENGTH s.contexts < es_depth`
+  >- (`SUC (LENGTH s.contexts) - MAX 2 es_depth = 0`
+      by (rw[MAX_DEF] >> decide_tac)
+      >> simp[active_rollbacks_def])
+  >> `SUC (LENGTH s.contexts) - MAX 2 es_depth =
+        MIN (LENGTH s.contexts - es_depth + 1) (LENGTH s.contexts - 1)`
+     by (rw[MAX_DEF, MIN_DEF] >> decide_tac)
+  >> simp[active_rollbacks_def]
+QED
+
+Theorem active_rollbacks_set_original[simp]:
+  active_rollbacks n (SND (set_original a s)) = active_rollbacks n s
+Proof
+  rw[set_original_def, return_def, fail_def, active_rollbacks_def]
+QED
 
 (* Per-context outputTo consistency, needed across pops. *)
 
@@ -67,7 +85,7 @@ Theorem run_call_inv_refl:
         (MAP SND (TAKE 2 es.contexts)) ⇒
   run_call_inv es es
 Proof
-  rw[run_call_inv_def, active_rollbacks_def, storage_slot_preserved_def]
+  rw[run_call_inv_def, active_rollbacks_saved, storage_slot_preserved_def]
   >> gvs[outputTo_consistent_stack_def,wf_state_def]
   >> Cases_on `es.contexts` >> gvs[]
   >> rw[MIN_DEF]
@@ -588,8 +606,8 @@ Proof
   rewrite_tac[GSYM SNOC_APPEND] >> rw[]
 QED
 
-(* step_create growth structure.  set_original may alter the last saved
- * rollback, so storage equality is limited to the needed non-callee case. *)
+(* step_create growth structure. set_original updates originalAccounts
+ * and leaves saved rollback pairs unchanged. *)
 Theorem step_create_push_structure:
   step_create two s = (r, s') ∧ s.contexts ≠ [] ∧
   LENGTH s'.contexts > LENGTH s.contexts ⇒
@@ -738,112 +756,29 @@ Proof
       >> simp[])
   (* Now we have proceed_create sf = (_, s') with growth, and same_frame_rel s sf *)
   >> strip_tac
-  >> drule_all proceed_create_push_structure
-  >> strip_tac
-  (* From same_frame_rel s sf: TL sf.contexts = TL s.contexts *)
-  >> `TL se.contexts = TL s.contexts` by gvs[same_frame_rel_def]
-  >> gvs[]
-  >> conj_asm1_tac >- (
-    qpat_x_assum`same_frame_rel s se`mp_tac >>
-    simp[same_frame_rel_def] >> strip_tac >>
-    Cases_on`s'.contexts` >> gvs[] >>
-    Cases_on`t` >> gvs[] >>
-    Cases_on`se.contexts` >> gvs[] )
-  (* Remaining: per-pos accesses, msgParams, rollback, outputTo, SND(HD),
-     a≠callee storage *)
-  >> rewrite_tac[Ntimes CONJ_ASSOC 3]
-  >> reverse conj_tac >- (
-    (* Position-1 storage equality for non-callee addresses. *)
-    qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac >>
-    rewrite_tac[proceed_create_def] >>
-    simp[ignore_bind_def, bind_def, update_accounts_def, return_def,
-          get_rollback_def, get_original_def, set_original_def, fail_def] >>
-    strip_tac >> gvs[] >>
-    drule push_context_effect >> strip_tac >> gvs[] >>
-    simp[lookup_storage_def, lookup_account_def] >>
-    qmatch_goalsub_abbrev_tac`SND (EL _ (slc uc _))` >>
-    qmatch_goalsub_abbrev_tac`(SND (EL _ icc)).accounts _` >>
-    gvs[push_context_def,return_def,execution_state_component_equality] >>
-    gvs[account_already_created_def,lookup_account_def] >>
-    Cases_on`s.contexts` >- gvs[] >> simp[] >>
-    Cases_on`se.contexts` >- gvs[] >> simp[Abbr`slc`] >>
-    gvs[set_last_accounts_def] >>
-    simp[EL_SNOC] >>
-    simp[Abbr`icc`] >>
-    qmatch_goalsub_abbrev_tac`EL (LENGTH t) (SNOC sn fr)` >>
-    `LENGTH fr = LENGTH t` by simp[Abbr`fr`] >>
-    pop_assum(SUBST1_TAC o SYM) >> simp[EL_LENGTH_SNOC,Abbr`sn`] >>
-    gvs[Abbr`fr`] >>
-    `SND h = SND h'` by (
-      qpat_x_assum`same_frame_rel s se`mp_tac >>
-      simp[same_frame_rel_def] ) >>
-    simp[initial_msg_params_def] >>
-    reverse(qspec_then`t`FULL_STRUCT_CASES_TAC SNOC_CASES >> gvs[]) >- (
-      simp[LAST_CONS_SNOC, FRONT_CONS_SNOC] >>
-      conj_tac >- ( Cases >> simp[EL_SNOC] ) >>
-      simp[Abbr`uc`, update_account_def, APPLY_UPDATE_THM] >>
-      gen_tac >> simp[LAST_CONS_SNOC] ) >>
-    simp[Abbr`uc`, lookup_account_def, update_account_def, APPLY_UPDATE_THM] )
-  >> simp[GSYM CONJ_ASSOC]
-  >> reverse conj_tac >- (
-    (* SND (HD s'.contexts) accesses subset *)
-    reverse conj_tac
-    >- metis_tac[SUBSET_TRANS, same_frame_rel_def] >>
-    (* msgParams *)
-    qpat_x_assum`same_frame_rel s se`mp_tac >>
-    simp[same_frame_rel_def] >> strip_tac >>
-    Cases_on`s.contexts` >- gvs[] >> simp[] >>
-    Cases_on`s'.contexts` >- gvs[] >> simp[] >>
-    Cases_on`t'` >- gvs[] >> simp[] >>
-    Cases_on`se.contexts` >- gvs[] >>
-    fs[]  )
-  (* set_original only touches .accounts. *)
+  >> qpat_x_assum `se.contexts ≠ []` mp_tac
+  >> qpat_x_assum `same_frame_rel s se` mp_tac
   >> qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac
-  >> simp[proceed_create_def]
-  >> simp[ignore_bind_def, bind_def, update_accounts_def, return_def,
-          get_rollback_def, get_original_def, set_original_def, fail_def]
-  >> strip_tac >> gvs[]
-  >> drule push_context_effect >> strip_tac >> gvs[]
-  (* TL s'.contexts = set_last_accounts ... sf.contexts *)
+  >> POP_ASSUM_LIST (K all_tac)
   >> rpt strip_tac
-  >> `i < LENGTH se.contexts` by gvs[same_frame_rel_def]
-  >> simp[set_last_accounts_def]
-  >> qmatch_goalsub_abbrev_tac`SNOC new`
-  >> qhdtm_x_assum`push_context` kall_tac
-  >> qpat_x_assum`_ = TL s.contexts`mp_tac
-  >> simp[LIST_EQ_REWRITE] >> rewrite_tac[GSYM EL]
-  >> Cases_on`i=0` >- (
-    Cases_on`FRONT se.contexts = []`
-    >- (
-      gvs[] >>
-      gvs[Abbr`new`] >>
-      Cases_on`se.contexts` >> gvs[] >>
-      Cases_on`s.contexts` >> gvs[] >>
-      qpat_x_assum`same_frame_rel s se`mp_tac >>
-      simp[same_frame_rel_def] ) >>
-    rewrite_tac[GSYM EL] >>
-    DEP_REWRITE_TAC[EL_SNOC] >>
-    simp[LENGTH_FRONT] >>
-    simp[PRE_SUB1] >>
-    Cases_on`se.contexts` >> gvs[] >>
-    Cases_on`s.contexts` >> gvs[] >>
-    Cases_on`t` >> gvs[] >>
-    qpat_x_assum`same_frame_rel s se`mp_tac >>
-    simp[same_frame_rel_def] )
-  >> Cases_on`i = LENGTH s.contexts - 1`
-  >- (
-    `i = LENGTH (FRONT se.contexts)` by simp[LENGTH_FRONT] >>
-    pop_assum SUBST1_TAC >>
-    simp[EL_LENGTH_SNOC] >>
-    simp[Abbr`new`, LENGTH_FRONT, GSYM LAST_EL] >>
-    simp[LAST_EL] >> strip_tac >>
-    AP_TERM_TAC >> AP_TERM_TAC >>
-    first_x_assum(qspec_then`PRE i`mp_tac) >>
-    simp[PRE_SUB1,ADD1] )
+  >> qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac
+  >> simp[proceed_create_def, ignore_bind_def, bind_def,
+          update_accounts_def, return_def, get_rollback_def,
+          get_original_def, set_original_def, fail_def]
   >> strip_tac
-  >> simp[EL_SNOC, LENGTH_FRONT, EL_FRONT, NULL_EQ]
-  >> first_x_assum(qspec_then`PRE i`mp_tac)
-  >> simp[ADD1, PRE_SUB1]
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  >> qhdtm_x_assum `push_context` kall_tac
+  >> qpat_x_assum `same_frame_rel s se` mp_tac
+  >> simp[same_frame_rel_def] >> strip_tac
+  >> Cases_on `s.contexts` >- gvs[]
+  >> Cases_on `se.contexts` >- gvs[]
+  >> gvs[]
+  >> simp[initial_context_def, initial_msg_params_def,
+          outputTo_consistent_ctx_def]
+  >- (Cases_on `i` >> simp[])
+  >- (Cases_on `i` >> simp[])
+  >> Cases_on `t` >> gvs[]
+  >> simp[LAST_EL]
 QED
 
 (* Full step storage preservation in the same-frame case. *)
@@ -3003,7 +2938,7 @@ Proof
           >> Cases >> simp[])
     >> `active_rollbacks (LENGTH es.contexts) s1 =
           s1.rollback :: TL (active_rollbacks (LENGTH es.contexts) s0)`
-        by (simp[active_rollbacks_def]
+        by (simp[active_rollbacks_saved]
             >> `¬(LENGTH s0.contexts < LENGTH es.contexts)` by simp[]
             >> simp[])
     >> simp[]
@@ -3017,7 +2952,7 @@ Proof
     >> simp[]
     (* Head: storage_slot_preserved s1.rollback es.rollback. *)
     >> `storage_slot_preserved s0.rollback es.rollback`
-        by (fs[run_call_inv_def, active_rollbacks_def])
+        by (fs[run_call_inv_def, active_rollbacks_saved])
     >> simp[storage_slot_preserved_def]
     >> rpt strip_tac
     >> `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
@@ -3050,13 +2985,13 @@ Proof
     >> `storage_slot_preserved s1.rollback es.rollback` by (
       rw[storage_slot_preserved_def] >>
       gvs[SUBSET_DEF, finite_setTheory.fIN_IN] >>
-      gvs[run_call_inv_def, active_rollbacks_def] >>
+      gvs[run_call_inv_def, active_rollbacks_saved] >>
       gvs[storage_slot_preserved_def] >>
       first_x_assum irule >>
       simp[finite_setTheory.fIN_IN] >>
       metis_tac[] )
     (* Now prove EVERY storage_slot_preserved for active_rollbacks *)
-    >> simp[active_rollbacks_def]
+    >> simp[active_rollbacks_saved]
     >> `¬(LENGTH s1.contexts < ed)` by simp[Abbr`ed`]
     >> simp[EVERY_EL, EL_MAP]
     >> rpt strip_tac
@@ -3065,7 +3000,7 @@ Proof
       (* n = 0: SND (EL 0 s1.contexts) has storage = s0.rollback storage *)
       gvs[]
       >> `storage_slot_preserved s0.rollback es.rollback`
-           by (fs[run_call_inv_def, active_rollbacks_def])
+           by (fs[run_call_inv_def, active_rollbacks_saved])
       >> last_x_assum (qspec_then `0` mp_tac) >> simp[]
       >> strip_tac
       >> gvs[storage_slot_preserved_def]
@@ -3085,7 +3020,7 @@ Proof
       >> gvs[LENGTH_TAKE_EQ]
       >> strip_tac
       >> simp[EL_TAKE]
-      >> gvs[run_call_inv_def, active_rollbacks_def]
+      >> gvs[run_call_inv_def, active_rollbacks_saved]
       >> gvs[EVERY_EL, EL_MAP, LENGTH_TAKE_EQ]
       >> last_x_assum(qspec_then`n-1`mp_tac)
       >> simp[EL_TAKE]
@@ -3137,7 +3072,7 @@ Proof
     >> `storage_slot_preserved s0.rollback es.rollback ∧
         storage_slot_preserved (SND callee_ctx) es.rollback`
          by (qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
-             >> simp[active_rollbacks_def]
+             >> simp[active_rollbacks_saved]
              >> qpat_x_assum `s0.contexts = _` SUBST1_TAC
              >> `LENGTH s0.contexts + 2 - ed ≥ 2` by simp[]
              >> `∃n. LENGTH s0.contexts + 2 - ed = SUC (SUC n)` by
@@ -3175,11 +3110,11 @@ Proof
     (* Split on whether s1.contexts is below ed or not. *)
     >> Cases_on `LENGTH s1.contexts < ed`
     >- ((* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
-        simp[active_rollbacks_def])
+        simp[active_rollbacks_saved])
     (* LENGTH s1 ≥ ed. Both active_rollbacks have a non-trivial tail.
        s0's TAKE takes one more element than s1's. *)
     >> qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
-    >> simp[active_rollbacks_def]
+    >> simp[active_rollbacks_saved]
     >> gvs[MIN_DEF] >> rw[] >> gvs[ADD1,Abbr`ed`]
     >> Cases_on`es.contexts` >> gvs[ADD1]
     >> Cases_on`rest` >> Cases_on`t` >> gvs[ADD1]
@@ -3234,7 +3169,7 @@ Theorem run_call_preserves_storage_outside_accessed_slots:
 Proof
   rpt strip_tac
   >> drule_all run_call_preserves_inv
-  >> rw[run_call_inv_def, active_rollbacks_def, storage_slot_preserved_def]
+  >> rw[run_call_inv_def, active_rollbacks_saved, storage_slot_preserved_def]
 QED
 
 Theorem run_call_preserves_txParams:

@@ -120,9 +120,11 @@ Definition wf_context_def:
     c.msgParams.parsed = parse_code 0 FEMPTY c.msgParams.code
 End
 
+(* Only current and restorable accounts need live-state nonce/code bounds. *)
 Definition all_accounts_def:
   all_accounts s =
-  s.rollback.accounts :: (MAP (λcr. (SND cr).accounts) s.contexts)
+  s.rollback.accounts ::
+    FRONT (MAP (λcr. (SND cr).accounts) s.contexts)
 End
 
 Definition outputTo_consistent_ctx_def:
@@ -1964,6 +1966,7 @@ Theorem preserves_wf_accounts_push_context[simp]:
   preserves_wf_accounts (push_context x)
 Proof
   rw[push_context_def, preserves_wf_accounts_def, return_def, all_accounts_def]
+  \\ Cases_on `s.contexts` \\ gvs[]
 QED
 
 Theorem preserves_wf_accounts_update_accounts_transfer_value[simp]:
@@ -2231,12 +2234,7 @@ Proof
     irule wf_accounts_transfer_value
     \\ irule wf_accounts_increment_nonce
     \\ gs[] )
-  \\ rw[EVERY_MAP, EVERY_SNOC, set_last_accounts_def]
-  \\ gs[EVERY_MEM, MEM_MAP, PULL_EXISTS]
-  >- metis_tac[rich_listTheory.MEM_FRONT, list_CASES]
-  \\ irule wf_accounts_update_account
-  \\ gs[EVERY_MEM, MEM_MAP, PULL_EXISTS]
-  \\ metis_tac[rich_listTheory.LAST_MEM]
+  \\ Cases_on `s.contexts` \\ gvs[]
 QED
 
 Theorem preserves_wf_accounts_pred_mono:

@@ -956,7 +956,7 @@ Theorem SPEC_fallback_code[local] =
      [opcode_def, ADD1, SEP_CLAUSES, AC STAR_ASSOC STAR_COMM,
       AC CONJ_ASSOC CONJ_COMM, conj_repeat]
   |> SRULE [SPEC_MOVE_COND, STAR_ASSOC]
-  |> Q.GENL [`pc`,`j`,`orig_rb`]
+  |> Q.GENL [`pc`,`j`]
   |> Q.SPEC`0`
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
      [LENGTH_TAKE, LENGTH_expanded_memory_geq, iffRL SUB_EQ_0,
