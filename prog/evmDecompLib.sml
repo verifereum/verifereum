@@ -997,6 +997,45 @@ fun widen_stack th r =
       in [tl |-> foldr listSyntax.mk_cons tl xs] end
   end
 
+(* Composing renames the summaries' memory abbreviations apart (mem1,
+   mem1', ...); this numbers them again, mem1, mem2, ..., in the order they
+   are defined, and lists the definitions in that order where seen had
+   them. *)
+fun renumber_memory seen th =
+  let
+    fun def_of c =
+      let val (v, t) = dest_eq c
+      in if is_mem_abbrev v then SOME (v, t) else NONE end
+      handle HOL_ERR _ => NONE
+    val defs = List.mapPartial def_of (hyp th)
+    val vs = map fst defs
+    fun order placed [] = rev placed
+      | order placed rest =
+          let
+            fun ready (_, t) =
+              List.all (fn v => not (free_in v t) orelse
+                                tmem v (map fst placed)) vs
+          in
+            case List.partition ready rest of
+              (d :: ds, others) => order (d :: placed) (ds @ others)
+            | ([], _) => raise ERR "renumber_memory" "cyclic definitions"
+          end
+    val sorted = order [] defs
+    val s = mapi (fn i => fn (v, _) =>
+                    v |-> mk_var ("mem" ^ Int.toString (i + 1), buffer_ty))
+                 sorted
+    val th1 = INST s th
+    val sorted_defs = map (fn (v, t) => subst s (mk_eq (v, t))) sorted
+    fun fill [] _ = []
+      | fill (c :: cs) ds =
+          if isSome (def_of c) then
+            (case ds of d :: ds' => d :: fill cs ds' | [] => fill cs [])
+          else subst s c :: fill cs ds
+    val n = length (List.filter (isSome o def_of) seen)
+    val seen1 = fill seen sorted_defs @
+                List.drop (sorted_defs, Int.min (n, length sorted_defs))
+  in (seen1, th1) end
+
 fun compose_blocks cfg [] = raise ERR "compose_blocks" "no summaries"
   | compose_blocks cfg (th :: ths) =
   let
@@ -1014,7 +1053,7 @@ fun compose_blocks cfg [] = raise ERR "compose_blocks" "no summaries"
       in (th', seen @ hyp_order seen th') end
     val numbered = ListPair.zip (List.tabulate (length ths, fn i => i + 1), ths)
     val (th, seen) = foldl go (th0, hyp_order [] th0) numbered
-  in #1 (close_conds seen (polish cfg cf th)) end
+  in #1 (uncurry close_conds (renumber_memory seen (polish cfg cf th))) end
   handle Infeasible_cond c =>
     raise ERR "compose_blocks" (term_to_string c ^ " is false on this path")
 

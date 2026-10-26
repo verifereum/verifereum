@@ -126,7 +126,9 @@ block's length. The theorem holds for every value of `mem<n>`, so the
 abbreviation adds no assumption: `inline_memory` instantiates every
 `mem<n>` to its definition, which discharges its conjunct, and gives the
 summary with the memory spelt out. `compose_blocks` keeps the
-abbreviations of the summaries it composes, renaming them apart.
+abbreviations of the summaries it composes, numbered again along the
+path; to simplify reads of memory written earlier on the path, inline
+the summaries' memory first.
 
 ## Rules
 
@@ -192,5 +194,5 @@ every instruction, so they must be cheap: WETH's memory-buffer lemmas
 the larger blocks take minutes instead of a second. The script uses
 them only to compose the fallback path (blocks 0, 175 and 1088), where
 they turn the memory and gas into the same form as the hand-composed
-`SPEC_fallback`, and then proves `SPEC_fallback` again from that path
-(`SPEC_fallback_blocks`).
+`SPEC_fallback` (after `inline_memory` on each summary), and then proves
+`SPEC_fallback` again from that path (`SPEC_fallback_blocks`).
