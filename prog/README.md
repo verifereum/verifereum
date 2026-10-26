@@ -135,8 +135,20 @@ entry. The pcs to split at go in `config.hints`, and each becomes a
 block start; a hint that is not an instruction's pc (inside PUSH data,
 past the end) is ignored. Hints can only add starts, and every summary
 is still proved, so a wrong hint costs a smaller block, never
-soundness. Hints can't yet remove the data at the end of the code
-(below).
+soundness.
+
+## Metadata
+
+solc appends CBOR-encoded metadata to the runtime code: a CBOR map, then
+its length in two big-endian bytes. Vyper since 0.3.10 appends a CBOR
+array to the init code only, with a length that counts the two bytes. These
+bytes parse as instructions, so blocks found there would describe data.
+With `strip_metadata` set, as in `default_config`, `metadata_start` finds
+such a trailer and `instructions` and `block_starts` stop before it. The
+trailer is recognised only if the item at that offset is a non-empty
+CBOR map (solc) or array or map (Vyper) and parses to end exactly at the
+length bytes; otherwise the whole code is used. Clear `strip_metadata` to
+summarize the raw code.
 
 ## Example
 
@@ -147,14 +159,12 @@ without hints and stores each summary as a theorem,
 ```sml
 val weth_config : evmDecompLib.config =
   {code_eq = contract_code_eq, parsed_eq = parsed_contract_code_eq,
-   hints = [], simps = [mask_and_w2w]}
+   hints = [], simps = [mask_and_w2w], strip_metadata = true}
 val weth_outcomes = evmDecompLib.summarize_code weth_config
 ```
 
-The 109 blocks give 147 summaries and no failures. Five of the blocks,
-from pc 3101 on, are in the metadata appended to the code, whose bytes
-happen to parse as instructions (a DELEGATECALL and two STATICCALLs
-among them); their summaries are true but describe data.
+The code's last 43 bytes, from pc 3081, are solc's metadata. The 104
+blocks before it give 142 summaries and no failures.
 
 `simps` are extra rewrites for the contract's terms. They run after
 every instruction, so they must be cheap: WETH's memory-buffer lemmas
