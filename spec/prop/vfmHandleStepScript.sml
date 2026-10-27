@@ -869,9 +869,22 @@ QED
        - MIN (parent.stateGasLeft + child.stateGasLeft)
              (parent.stateGasSpilled + child.stateGasSpilled).
 
-   The existing term `callee.msgParams.gasLimit - callee.gasUsed` is
-   `calleeGasLeft` on the branch where it matters and an upper bound of it
-   elsewhere, so only the repayment term is added:
+   The child's leftover execution gas at the pop is not
+   `callee.msgParams.gasLimit - callee.gasUsed` in general: `handle_exception`
+   touches the child's `gasUsed` before popping it.  `leftAfter` names that
+   quantity, in the three cases `e` can be:
+     - `e = NONE`: nothing has run, so it is
+       `callee.msgParams.gasLimit - callee.gasUsed`;
+     - `e = SOME Reverted`: `restore_state_gas` credits the child's spill back
+       into its execution gas (`gasUsed := gasUsed - stateGasSpilled`,
+       saturating), so its leftover grows by `MIN callee.stateGasSpilled
+       callee.gasUsed` and the parent gives up that much more through
+       `unuse_gas`;
+     - `e ≠ NONE ∧ e ≠ SOME Reverted`: `forfeit_remaining_gas` leaves the child
+       no execution gas, so the leftover is 0.
+   The repayment term is as derived from `absorb_state_gas` and
+   `repay_state_gas_spill_context` above, and it applies on the success branch
+   only:
    - `e = NONE`: the prefix is `return ()`, so the child's meter at the pop is
      the one the statement names and the term above is exact.
    - `e = SOME Reverted`: `restore_state_gas` moves the child's reservoir to its
@@ -886,14 +899,18 @@ QED
 Theorem handle_exception_pop_generic_gen:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
   handle_exception e s = (q, s') ∧
-  LENGTH s'.contexts < LENGTH s.contexts ⇒
+  LENGTH s'.contexts < LENGTH s.contexts ∧
+  leftAfter = (if e = NONE then callee.msgParams.gasLimit - callee.gasUsed
+               else if e = SOME Reverted then
+                 callee.msgParams.gasLimit -
+                 (callee.gasUsed - MIN callee.stateGasSpilled callee.gasUsed)
+               else 0) ⇒
     (s'.rollback = s.rollback ∨ s'.rollback = callee_rb) ∧
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
       new_parent_ctx.gasUsed ≥
-        (FST parent).gasUsed -
-        (callee.msgParams.gasLimit - callee.gasUsed) -
+        (FST parent).gasUsed - leftAfter -
         MIN ((FST parent).stateGasLeft + callee.stateGasLeft)
             ((FST parent).stateGasSpilled + callee.stateGasSpilled)
 Proof
@@ -990,7 +1007,12 @@ QED
 Theorem handle_step_pop_generic_gen:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
   handle_step e s = (q, s') ∧
-  LENGTH s'.contexts < LENGTH s.contexts ⇒
+  LENGTH s'.contexts < LENGTH s.contexts ∧
+  leftAfter = (if e = NONE then callee.msgParams.gasLimit - callee.gasUsed
+               else if e = SOME Reverted then
+                 callee.msgParams.gasLimit -
+                 (callee.gasUsed - MIN callee.stateGasSpilled callee.gasUsed)
+               else 0) ⇒
     ((∀a. (lookup_account a s'.rollback.accounts).storage =
           (lookup_account a s.rollback.accounts).storage) ∨
      (∀a. (lookup_account a s'.rollback.accounts).storage =
@@ -999,8 +1021,7 @@ Theorem handle_step_pop_generic_gen:
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
       new_parent_ctx.gasUsed ≥
-        (FST parent).gasUsed -
-        (callee.msgParams.gasLimit - callee.gasUsed) -
+        (FST parent).gasUsed - leftAfter -
         MIN ((FST parent).stateGasLeft + callee.stateGasLeft)
             ((FST parent).stateGasSpilled + callee.stateGasSpilled)
 Proof
@@ -1036,13 +1057,17 @@ QED
 Theorem handle_step_pop_generic_gen_paired:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
   handle_step e s = (q, s') ∧
-  LENGTH s'.contexts < LENGTH s.contexts ⇒
+  LENGTH s'.contexts < LENGTH s.contexts ∧
+  leftAfter = (if e = NONE then callee.msgParams.gasLimit - callee.gasUsed
+               else if e = SOME Reverted then
+                 callee.msgParams.gasLimit -
+                 (callee.gasUsed - MIN callee.stateGasSpilled callee.gasUsed)
+               else 0) ⇒
     ∃new_parent_ctx.
       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
       new_parent_ctx.gasUsed ≥
-        (FST parent).gasUsed -
-        (callee.msgParams.gasLimit - callee.gasUsed) -
+        (FST parent).gasUsed - leftAfter -
         MIN ((FST parent).stateGasLeft + callee.stateGasLeft)
             ((FST parent).stateGasSpilled + callee.stateGasSpilled) ∧
       ((toSet s.rollback.accesses.storageKeys ⊆
