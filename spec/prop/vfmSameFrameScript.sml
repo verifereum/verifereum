@@ -803,6 +803,51 @@ Proof
   >- ( rw[subdomain_def, toSet_fINSERT, SUBSET_DEF] )
 QED
 
+Theorem restore_state_gas_same_frame_iff:
+  s.contexts <> [] ==>
+  (same_frame_rel s (SND (restore_state_gas s)) <=>
+   (FST (HD s.contexts)).addRefund = 0 /\
+   (FST (HD s.contexts)).subRefund = 0)
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[restore_state_gas_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def, return_def,
+       same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem preserves_same_frame_state_gas_meter[simp]:
+  preserves_same_frame get_state_gas_left /\
+  preserves_same_frame (charge_state_gas n) /\
+  preserves_same_frame (credit_state_gas_refund n) /\
+  (!s. s.contexts <> [] /\ (FST (HD s.contexts)).addRefund = 0 /\
+       (FST (HD s.contexts)).subRefund = 0 ==>
+       same_frame_rel s (SND (restore_state_gas s))) /\
+  preserves_same_frame commit_state_gas /\
+  preserves_same_frame (restore_state_gas_to_entry sg) /\
+  preserves_same_frame repay_state_gas_spill /\
+  preserves_same_frame forfeit_remaining_gas /\
+  preserves_same_frame withhold_create_gas /\
+  preserves_same_frame drain_state_gas_reservoir /\
+  preserves_same_frame (restore_child_gas gas reservoir)
+Proof
+  rpt conj_tac
+  >- (rw[get_state_gas_left_def] >> irule preserves_same_frame_bind >> simp[])
+  >- (rewrite_tac[charge_state_gas_def] >> psf_head_tac >>
+      gvs[set_current_context_def, consume_gas_def, bind_def,
+          ignore_bind_def, get_current_context_def, assert_def,
+          return_def, fail_def, AllCaseEqs()])
+  >- (rewrite_tac[credit_state_gas_refund_def] >> psf_head_tac)
+  >- (simp[restore_state_gas_same_frame_iff])
+  >- (rewrite_tac[commit_state_gas_def] >> psf_head_tac)
+  >- (rewrite_tac[restore_state_gas_to_entry_def] >> psf_head_tac)
+  >- (rewrite_tac[repay_state_gas_spill_def, repay_state_gas_spill_context_def] >> psf_head_tac)
+  >- (rw[forfeit_remaining_gas_def] >> irule preserves_same_frame_bind >> simp[])
+  >- (rw[withhold_create_gas_def] >> irule preserves_same_frame_bind >> simp[] >>
+      irule preserves_same_frame_ignore_bind >> simp[])
+  >- (rewrite_tac[drain_state_gas_reservoir_def] >> psf_head_tac)
+  >> (rewrite_tac[restore_child_gas_def] >> psf_head_tac)
+QED
+
 (* ================================================================ *)
 (* Pass A: Compound-helper `preserves_same_frame` lemmas.            *)
 (*                                                                   *)
@@ -872,6 +917,12 @@ Theorem preserves_same_frame_step_sstore_gas_consumption[simp]:
 Proof
   rw[step_sstore_gas_consumption_def] >>
   irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_ignore_bind >> rw[] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_ignore_bind >> rw[] >>
+  irule preserves_same_frame_ignore_bind >> rw[] >>
   irule preserves_same_frame_ignore_bind >> rw[]
 QED
 
@@ -2424,7 +2475,9 @@ Proof
         get_rollback_def, read_memory_def, get_current_context_def,
         get_caller_def, get_value_def, get_static_def,
         update_accounts_def, push_context_def, return_def,
-        fail_def, COND_RATOR]
+        fail_def, COND_RATOR, drain_state_gas_reservoir_def,
+        set_current_context_def]
+  >> Cases_on `s.contexts` >> gvs[]
   >> qmatch_asmsub_abbrev_tac`dispatch_precompiles _ sp = _`
   >> `LENGTH sp.contexts = LENGTH s.contexts + 1` by gvs[Abbr`sp`]
   >> drule_at Any (GEN_ALL psf_imp_length_contexts_preserved)
@@ -2441,7 +2494,8 @@ Proof
          get_rollback_def, get_original_def, set_original_def,
          update_accounts_def, push_context_def, return_def,
          fail_def,
-         set_last_accounts_def, LET_THM]
+         set_last_accounts_def, LET_THM, drain_state_gas_reservoir_def,
+         get_current_context_def, set_current_context_def]
   >> Cases_on`s.contexts` >> gvs[]
   >> gvs[listTheory.SNOC_APPEND]
 QED
