@@ -294,6 +294,32 @@ Proof
   >> Cases_on `s.contexts` >> gvs[]
 QED
 
+Theorem cp_get_context_cond:
+  cp (bind get_current_context f) /\ cp (bind get_current_context g) ==>
+  cp (bind get_current_context (\c. if b c then f c else g c))
+Proof
+  pure_rewrite_tac[cp_def]
+  >> strip_tac >> rpt gen_tac >> strip_tac
+  >> first_x_assum (qspec_then `s` mp_tac)
+  >> first_x_assum (qspec_then `s` mp_tac)
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `b (FST h)`
+  >> gvs[bind_def, get_current_context_def, return_def, fail_def]
+QED
+
+Theorem cp_get_set_context_then:
+  (!c. (u c).msgParams = c.msgParams) /\
+  (!c. (u c).logs = c.logs) /\ (!c. cp (k c)) ==>
+  cp (bind get_current_context
+       (\c. ignore_bind (set_current_context (u c)) (k c)))
+Proof
+  rw[cp_def, bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> first_x_assum (qspec_then `FST h` mp_tac)
+  >> disch_then drule >> simp[]
+QED
+
 Theorem cp_get_cp_set_context:
   (∀ctxt. cp (g ctxt)) ∧
   (∀ctxt x. (f ctxt x).msgParams = ctxt.msgParams) ∧
@@ -508,19 +534,48 @@ Theorem cp_state_gas_meter[simp]:
   cp withhold_create_gas ∧ cp drain_state_gas_reservoir ∧
   cp (restore_child_gas g sr)
 Proof
-  rpt conj_tac
-  >> cp_tac [get_state_gas_left_def, charge_state_gas_def,
-       credit_state_gas_refund_def, restore_state_gas_def,
-       commit_state_gas_def, restore_state_gas_to_entry_def,
-       repay_state_gas_spill_def, repay_state_gas_spill_context_def,
-       forfeit_remaining_gas_def, withhold_create_gas_def,
-       drain_state_gas_reservoir_def, restore_child_gas_def, LET_THM]
+  conj_tac >- (cp_simp_tac [get_state_gas_left_def])
+  >> conj_tac
+  >- (pure_rewrite_tac [charge_state_gas_def, LET_THM]
+      >> BETA_TAC
+      >> ho_match_mp_tac cp_get_context_cond >> conj_tac
+      >- (ho_match_mp_tac cp_get_set_context >> simp[])
+      >> ho_match_mp_tac cp_get_context_cond >> conj_tac
+      >- (ho_match_mp_tac cp_get_set_context_then >> simp[]
+          >> gen_tac >> irule cp_ignore_bind >> simp[]
+          >> ho_match_mp_tac cp_get_set_context >> simp[])
+      >> irule cp_bind >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [credit_state_gas_refund_def, LET_THM]
+      >> BETA_TAC >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [restore_state_gas_def]
+      >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [commit_state_gas_def]
+      >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [restore_state_gas_to_entry_def]
+      >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [repay_state_gas_spill_def]
+      >> ho_match_mp_tac cp_get_set_context
+      >> simp[repay_state_gas_spill_context_def])
+  >> conj_tac >- (cp_simp_tac [forfeit_remaining_gas_def])
+  >> conj_tac >- (cp_simp_tac [withhold_create_gas_def, LET_THM])
+  >> conj_tac
+  >- (pure_rewrite_tac [drain_state_gas_reservoir_def]
+      >> ho_match_mp_tac cp_get_set_context_then >> simp[])
+  >> pure_rewrite_tac [restore_child_gas_def]
+  >> irule cp_ignore_bind >> simp[]
+  >> ho_match_mp_tac cp_get_set_context >> simp[]
 QED
 
 Theorem cp_step_sstore_gas[simp]:
   cp (step_sstore_gas_consumption addr key value)
 Proof
   cp_simp_tac [step_sstore_gas_consumption_def]
+  >> simp[cp_state_gas_meter]
 QED
 
 Theorem cp_step_helpers[simp]:
@@ -652,20 +707,15 @@ QED
 Theorem handle_exception_decomp:
   handle_exception e s =
   (let prefix = (if ~(e = NONE) /\ e <> SOME Reverted then
-     do gasLeft <- get_gas_left; consume_gas gasLeft; set_return_data [] od
-   else return ()) in
+     do restore_state_gas; gasLeft <- get_gas_left; consume_gas gasLeft;
+        set_return_data [] od
+   else if e = SOME Reverted then restore_state_gas else return ()) in
    bind prefix (\u. handle_ex_helper e) s)
 Proof
-  simp[handle_exception_def, handle_ex_helper_def, LET_THM,
-       bind_def, ignore_bind_def, after_pop_def,
-       get_num_contexts_def, get_return_data_def, get_output_to_def,
-       get_current_context_def, return_def, fail_def,
-       get_gas_left_def, consume_gas_def, set_return_data_def,
-       pop_and_incorporate_context_def, pop_context_def,
-       set_rollback_def, push_logs_def, set_current_context_def,
-       update_gas_refund_def, inc_pc_def, push_stack_def,
-       write_memory_def, expand_memory_def, read_memory_def,
-       pop_stack_def, unuse_gas_def, reraise_def, assert_def]
+  Cases_on `e = NONE` >> Cases_on `e = SOME Reverted`
+  >> simp[handle_exception_def, handle_ex_helper_def, after_pop_def,
+          forfeit_remaining_gas_def, LET_THM, ignore_bind_def,
+          bind_assoc, b2w_def]
 QED
 
 (* pop_and_incorporate_context preserves static_inv.
@@ -690,7 +740,9 @@ Proof
   >> rpt (CASE_TAC >> gvs[return_def])
   >> simp[push_logs_def, bind_def, get_current_context_def,
           set_current_context_def, return_def,
-          update_gas_refund_def, set_rollback_def]
+          update_gas_refund_def, set_rollback_def,
+          absorb_state_gas_def, repay_state_gas_spill_def,
+          repay_state_gas_spill_context_def]
   >> gvs[listTheory.FRONT_DEF, combinTheory.C_DEF]
   >> rw[] >> gvs[]
   >> Cases_on `t'` >> gvs[listTheory.FRONT_DEF]
@@ -730,14 +782,11 @@ Proof
   strip_tac
   >> `s.contexts <> []` by fs[static_inv_def]
   >> qabbrev_tac `prefix = (if e <> NONE /\ e <> SOME Reverted then
-       do gasLeft <- get_gas_left; consume_gas gasLeft;
+       do restore_state_gas; gasLeft <- get_gas_left; consume_gas gasLeft;
           set_return_data [] od
-     else return ())`
+     else if e = SOME Reverted then restore_state_gas else return ())`
   >> `cp prefix` by
-    (simp[Abbr `prefix`] >> rw[]
-     >> irule cp_ignore_bind >> rw[]
-     >> irule cp_bind >> rw[]
-     >> irule cp_ignore_bind >> rw[])
+    (simp[Abbr `prefix`, cp_state_gas_meter, cp_bind, cp_ignore_bind])
   >> `handle_exception e s = bind prefix (\u. handle_ex_helper e) s`
      by simp[Abbr `prefix`, handle_exception_decomp]
   >> pop_assum (fn th => REWRITE_TAC [th])
@@ -820,7 +869,7 @@ QED
    Repeatedly decomposes bind/ignore_bind/let/cond into cp prefix + rest,
    stopping when it hits assert_not_static (which kills the chain). *)
 (* Solve trivial subgoals from irule: cp facts + assumptions *)
-val solve_side = simp[] ORELSE first_assum ACCEPT_TAC;
+val solve_side = simp[cp_state_gas_meter] ORELSE first_assum ACCEPT_TAC;
 val static_inv_step =
   rpt (CHANGED_TAC (
     irule static_inv_assert_not_static
@@ -893,6 +942,7 @@ Proof
   strip_tac
   >> `?ctxt rb. HD s.contexts = (ctxt, rb)` by metis_tac[pairTheory.PAIR]
   >> simp[proceed_call_def, bind_def, ignore_bind_def, return_def,
+          drain_state_gas_reservoir_def, set_current_context_def,
           get_rollback_def, read_memory_def,
           get_caller_def, get_value_def, get_static_def,
           get_current_context_def,
@@ -903,6 +953,7 @@ Proof
   >> irule cp_preserves_static_inv >> simp[]
   >> rw[static_inv_def, listTheory.FRONT_DEF, rich_listTheory.LAST_CONS]
   >> gvs[static_inv_def, listTheory.FRONT_DEF, vfmConstantsTheory.transfer_log_def]
+  >> Cases_on `t` >> gvs[rich_listTheory.LAST_CONS]
 QED
 
 Theorem cp_abort_call_value[simp]:
@@ -1139,7 +1190,9 @@ Proof
   >> rpt (CASE_TAC >> gvs[return_def])
   >> simp[push_logs_def, bind_def, get_current_context_def,
           set_current_context_def, return_def,
-          update_gas_refund_def, set_rollback_def]
+          update_gas_refund_def, set_rollback_def,
+          absorb_state_gas_def, repay_state_gas_spill_def,
+          repay_state_gas_spill_context_def]
 QED
 
 (* General: cp preserves contexts ≠ [] *)
@@ -1330,6 +1383,10 @@ Proof
   >> gvs[push_logs_def, bind_def, get_current_context_def,
          set_current_context_def, return_def,
          update_gas_refund_def, set_rollback_def]
+  >> qmatch_asmsub_abbrev_tac `repay_state_gas_spill st`
+  >> `st.contexts <> []` by simp[Abbr `st`]
+  >> `cp repay_state_gas_spill` by simp[cp_state_gas_meter]
+  >> metis_tac[cp_contexts_ne_pair]
 QED
 
 (* handle_ex_helper preserves snc *)
@@ -1366,14 +1423,11 @@ Theorem handle_exception_snc:
 Proof
   strip_tac
   >> qabbrev_tac `prefix = (if e <> NONE /\ e <> SOME Reverted then
-       do gasLeft <- get_gas_left; consume_gas gasLeft;
+       do restore_state_gas; gasLeft <- get_gas_left; consume_gas gasLeft;
           set_return_data [] od
-     else return ())`
+     else if e = SOME Reverted then restore_state_gas else return ())`
   >> `cp prefix` by
-    (simp[Abbr `prefix`] >> rw[]
-     >> irule cp_ignore_bind >> rw[]
-     >> irule cp_bind >> rw[]
-     >> irule cp_ignore_bind >> rw[])
+    (cp_simp_tac [Abbr `prefix`, cp_state_gas_meter])
   >> `handle_exception e s = bind prefix (\u. handle_ex_helper e) s`
      by simp[Abbr `prefix`, handle_exception_decomp]
   >> pop_assum (fn th => REWRITE_TAC [th])
@@ -1540,7 +1594,7 @@ Proof
 QED
 
 (* sne step tactic: decompose monadic chain preserving snc ∧ contexts≠[] *)
-val sne_solve = simp[] ORELSE first_assum ACCEPT_TAC;
+val sne_solve = simp[cp_state_gas_meter] ORELSE first_assum ACCEPT_TAC;
 
 (* strip_pos: strip ∀ and ⇒ without touching ∧ or ¬ *)
 val strip_pos = rpt gen_tac >> rpt disch_tac;
@@ -1558,7 +1612,8 @@ val sne_one =
   ORELSE sne_solve;
 
 (* Apply sne_one to current goal repeatedly *)
-val sne_step = rpt (CHANGED_TAC sne_one);
+val sne_step = rpt (CHANGED_TAC
+  (sne_one ORELSE (CHANGED_TAC (simp[pairTheory.FORALL_PROD] >> strip_pos))));
 
 (* Threading snc through a ctx_pres bind *)
 Theorem snc_bind_ctx_pres:
@@ -1587,6 +1642,7 @@ Proof
           get_rollback_def, read_memory_def,
           get_caller_def, get_value_def, get_static_def,
           get_current_context_def, get_callee_def,
+          drain_state_gas_reservoir_def, set_current_context_def,
           push_context_def,
           vfmContextTheory.initial_context_def,
           vfmContextTheory.initial_msg_params_def]
@@ -1625,6 +1681,7 @@ Proof
   strip_tac
   >> simp[proceed_create_def, bind_def, ignore_bind_def, return_def,
           get_rollback_def, get_original_def,
+          drain_state_gas_reservoir_def, set_current_context_def,
           get_current_context_def,
           set_original_def, vfmExecutionTheory.update_accounts_def,
           push_context_def,

@@ -620,6 +620,38 @@ Proof
   rw[get_gas_left_def]
 QED
 
+Theorem preserves_rollback_unuse_gas[simp]:
+  preserves_rollback (unuse_gas n)
+Proof
+  rw[preserves_rollback_def, unuse_gas_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def, return_def,
+     fail_def, assert_def]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem preserves_rollback_state_gas_meter[simp]:
+  preserves_rollback get_state_gas_left /\
+  preserves_rollback (charge_state_gas n) /\
+  preserves_rollback (credit_state_gas_refund n) /\
+  preserves_rollback restore_state_gas /\
+  preserves_rollback commit_state_gas /\
+  preserves_rollback (restore_state_gas_to_entry sg) /\
+  preserves_rollback repay_state_gas_spill /\
+  preserves_rollback forfeit_remaining_gas /\
+  preserves_rollback withhold_create_gas /\
+  preserves_rollback drain_state_gas_reservoir /\
+  preserves_rollback (restore_child_gas gas reservoir)
+Proof
+  rw[get_state_gas_left_def, charge_state_gas_def,
+     credit_state_gas_refund_def, restore_state_gas_def,
+     commit_state_gas_def, restore_state_gas_to_entry_def,
+     repay_state_gas_spill_def, forfeit_remaining_gas_def,
+     withhold_create_gas_def, drain_state_gas_reservoir_def,
+     restore_child_gas_def] >>
+  rpt (irule preserves_rollback_bind >> rw[]
+       ORELSE irule preserves_rollback_ignore_bind >> rw[])
+QED
+
 Theorem preserves_rollback_get_original[simp]:
   preserves_rollback get_original
 Proof
@@ -794,7 +826,7 @@ Proof
   >> rename1 `access_slot (SK address key) sx = (INL _, sy)`
   >> `fIN (SK address key) sy.rollback.accesses.storageKeys`
        by metis_tac[access_slot_adds_to_storageKeys]
-  (* Tail: update_gas_refund followed by consume_gas, both preserves_rollback. *)
+  (* The refund and gas-meter tail preserves rollback. *)
   >> rename1 `update_gas_refund refundUpdates sy = (_, s_gr)`
   >> `s_gr.rollback = sy.rollback` by
        metis_tac[preserves_rollback_update_gas_refund,
@@ -802,7 +834,14 @@ Proof
   >> drule (preserves_rollback_consume_gas
             |> REWRITE_RULE [preserves_rollback_def])
   >> strip_tac
-  >> simp[]
+  >> drule (preserves_rollback_state_gas_meter |> cj 2
+            |> REWRITE_RULE [preserves_rollback_def])
+  >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `if noRefund then _ else _`
+  >> Cases_on `noRefund` >> gvs[return_def]
+  >> drule (preserves_rollback_state_gas_meter |> cj 3
+            |> REWRITE_RULE [preserves_rollback_def])
+  >> strip_tac >> gvs[]
 QED
 
 (* write_storage address key value: the only primitive that writes
@@ -1189,15 +1228,6 @@ Proof
   >> gvs[AllCaseEqs()]
 QED
 
-Theorem preserves_rollback_unuse_gas[simp]:
-  preserves_rollback (unuse_gas n)
-Proof
-  rw[preserves_rollback_def, unuse_gas_def, bind_def, ignore_bind_def,
-     get_current_context_def, set_current_context_def, return_def,
-     fail_def, assert_def]
-  >> gvs[AllCaseEqs()]
-QED
-
 Theorem preserves_rollback_get_num_contexts[simp]:
   preserves_rollback get_num_contexts
 Proof
@@ -1565,7 +1595,6 @@ Proof
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>

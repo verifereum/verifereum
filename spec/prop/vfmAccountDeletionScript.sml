@@ -333,6 +333,19 @@ Proof
   simp[set_last_accounts_def, FRONT_SNOC]
 QED
 
+Theorem deletion_drain_state_gas_reservoir_effect[local]:
+  s.contexts ≠ [] ⇒
+  drain_state_gas_reservoir s =
+    (INL (FST (HD s.contexts)).stateGasLeft,
+     s with contexts :=
+       (FST (HD s.contexts) with stateGasLeft := 0, SND (HD s.contexts)) ::
+       TL s.contexts)
+Proof
+  Cases_on `s.contexts` >>
+  simp[drain_state_gas_reservoir_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def, return_def]
+QED
+
 Theorem proceed_create_deletion_projections:
   s.contexts ≠ [] ∧
   proceed_create sender address value code gas s = (r,t) ⇒
@@ -345,10 +358,10 @@ Theorem proceed_create_deletion_projections:
       s.originalAccounts
 Proof
   strip_tac >> qhdtm_x_assum `proceed_create` mp_tac >>
-  simp[proceed_create_def, ignore_bind_def, bind_def,
+  simp[proceed_create_def, deletion_drain_state_gas_reservoir_effect, ignore_bind_def, bind_def,
        update_accounts_def, get_rollback_def, get_original_def,
        set_original_def, push_context_def, return_def] >>
-  strip_tac >> gvs[]
+  strip_tac >> gvs[] >> Cases_on `s.contexts` >> gvs[]
 QED
 
 Theorem proceed_call_deletion_projections:
@@ -362,7 +375,8 @@ Theorem proceed_call_deletion_projections:
   t.originalAccounts = s.originalAccounts
 Proof
   strip_tac >> qhdtm_x_assum `proceed_call` mp_tac >>
-  simp[proceed_call_def, bind_def, ignore_bind_def, get_rollback_def,
+  simp[proceed_call_def, deletion_drain_state_gas_reservoir_effect,
+       bind_def, ignore_bind_def, get_rollback_def,
        read_memory_def, get_current_context_def, return_def] >>
   Cases_on `op ≠ CallCode ∧ 0 < value` >>
   simp[update_accounts_def, return_def, get_caller_def, get_value_def,
@@ -379,7 +393,7 @@ Proof
   gvs[] >>
   `LENGTH t.contexts = LENGTH ss.contexts` by
     metis_tac[LENGTH_MAP] >>
-  simp[Abbr `ss`, LAST_DEF]
+  Cases_on `s.contexts` >> gvs[Abbr `ss`, LAST_DEF]
 QED
 
 Theorem proceed_call_saved_accounts:
@@ -389,7 +403,8 @@ Theorem proceed_call_saved_accounts:
   (SND (HD t.contexts)).accounts = s.rollback.accounts
 Proof
   strip_tac >> qhdtm_x_assum `proceed_call` mp_tac >>
-  simp[proceed_call_def, bind_def, ignore_bind_def, get_rollback_def,
+  simp[proceed_call_def, deletion_drain_state_gas_reservoir_effect,
+       bind_def, ignore_bind_def, get_rollback_def,
        read_memory_def, get_current_context_def, return_def] >>
   Cases_on `op ≠ CallCode ∧ 0 < value` >>
   simp[update_accounts_def, return_def, get_caller_def, get_value_def,
@@ -673,8 +688,7 @@ Proof
   irule fixed_accounts_get_accounts_eq >>
   simp[] >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
-  irule (SRULE [] deletion_create_bind_cp) >> simp[] >> gen_tac >>
-  irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
+  irule (SRULE [] deletion_create_bind_cp) >> simp[cp_state_gas_meter] >> gen_tac >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
   irule (SRULE [] deletion_create_bind_cp) >> simp[] >> gen_tac >>
@@ -728,7 +742,9 @@ Proof
   Cases_on `s.contexts` >> simp[] >>
   Cases_on `t'` >> simp[] >>
   PairCases_on `h` >> PairCases_on `h'` >>
-  simp[pop_and_incorporate_context_def, bind_def, ignore_bind_def,
+  simp[pop_and_incorporate_context_def, absorb_state_gas_def,
+       repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+       bind_def, ignore_bind_def,
        get_gas_left_def, get_current_context_def, return_def,
        pop_context_def, unuse_gas_def, assert_def, fail_def,
        set_current_context_def, push_logs_def, update_gas_refund_def,
@@ -757,7 +773,8 @@ Proof
   Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
   Cases_on `t'` >> simp[]
   >- (Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-      simp[handle_exception_def, bind_def, ignore_bind_def,
+      simp[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
+           bind_def, ignore_bind_def,
            get_gas_left_def, get_current_context_def, return_def,
            consume_gas_def, set_return_data_def, set_current_context_def,
            get_num_contexts_def, reraise_def, assert_def, fail_def] >>
@@ -767,16 +784,19 @@ Proof
   PairCases_on `h` >>
   Cases_on `h0.msgParams.outputTo` >>
   Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-  simp[handle_exception_def, bind_def, ignore_bind_def,
+  simp[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
+       bind_def, ignore_bind_def,
        get_gas_left_def, get_current_context_def, return_def,
        consume_gas_def, set_return_data_def, set_current_context_def,
        get_num_contexts_def, get_return_data_def, get_output_to_def,
-       reraise_def, assert_def, fail_def,
-       inc_pc_def, push_stack_def, write_memory_def,
-       pop_and_incorporate_context_def, pop_context_def,
-       set_rollback_def, unuse_gas_def,
-       update_gas_refund_def, push_logs_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> Cases_on `t''` >> gvs[AllCaseEqs()]
+       reraise_def, assert_def, fail_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule_at (Pat `pop_and_incorporate_context`) pop_context_deletion_projections >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  gvs[inc_pc_def, push_stack_def, write_memory_def, bind_def, ignore_bind_def,
+      get_current_context_def, set_current_context_def, return_def,
+      assert_def, fail_def, AllCaseEqs()] >>
+  Cases_on `s''.contexts` >> gvs[]
 QED
 
 Theorem handle_step_deletion_projections:
@@ -858,7 +878,7 @@ Theorem proceed_create_nonce_certificate:
   (FST (HD t.contexts)).msgParams.outputTo = Code address
 Proof
   strip_tac >> qhdtm_x_assum `proceed_create` mp_tac >>
-  simp[proceed_create_def, ignore_bind_def, bind_def,
+  simp[proceed_create_def, deletion_drain_state_gas_reservoir_effect, ignore_bind_def, bind_def,
        update_accounts_def, get_rollback_def, get_original_def,
        set_original_def, push_context_def, return_def] >>
   strip_tac >> gvs[] >>
@@ -954,7 +974,6 @@ Proof
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
   IF_CASES_TAC
   >- (rpt strip_tac >> drule_all vfmStepLengthTheory.abort_unuse_length >> simp[]) >>
@@ -972,7 +991,7 @@ Theorem proceed_call_memory_output:
   (FST (HD t.contexts)).msgParams.outputTo = Memory mr
 Proof
   Cases_on `s.contexts` >> simp[] >>
-  simp[proceed_call_def, bind_def, ignore_bind_def,
+  simp[proceed_call_def, deletion_drain_state_gas_reservoir_effect, bind_def, ignore_bind_def,
        get_rollback_def, read_memory_def, get_caller_def,
        get_value_def, get_static_def, update_accounts_def,
        push_context_def, get_current_context_def, return_def] >>
@@ -1080,7 +1099,9 @@ Theorem preserves_nonce_code_proceed_create:
   preserves (^nonce_code_rel a)
     (proceed_create sender address value code gas)
 Proof
-  rw[preserves_def, proceed_create_def, bind_def, ignore_bind_def,
+  simp[preserves_def] >> rpt gen_tac >> Cases_on `s.contexts` >>
+  rw[proceed_create_def, drain_state_gas_reservoir_def,
+       bind_def, ignore_bind_def, get_current_context_def, set_current_context_def,
        update_accounts_def, get_rollback_def, get_original_def,
        set_original_def, push_context_def, return_def, fail_def,
        COND_RATOR, AllCaseEqs(),
@@ -1128,7 +1149,7 @@ Theorem preserves_nonce_code_proceed_call:
     (proceed_call op sender address value off sz code gas output)
 Proof
   simp[proceed_call_def, ignore_bind_def] >>
-  ntac 2
+  ntac 3
     (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
      (conj_tac >-
        (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
@@ -1325,10 +1346,11 @@ Theorem proceed_create_old_snapshot_lookups:
   MAP (λp. lookup_account a (SND p).accounts) s.contexts
 Proof
   strip_tac >> qhdtm_x_assum `proceed_create` mp_tac >>
-  simp[proceed_create_def, ignore_bind_def, bind_def,
+  simp[proceed_create_def, deletion_drain_state_gas_reservoir_effect, ignore_bind_def, bind_def,
        update_accounts_def, get_rollback_def, get_original_def,
        set_original_def, push_context_def, return_def] >>
-  strip_tac >> gvs[] >> simp[set_last_accounts_foreign_lookup]
+  strip_tac >> gvs[] >> Cases_on `s.contexts` >>
+  gvs[set_last_accounts_foreign_lookup]
 QED
 
 Theorem proceed_call_old_snapshot_lookups:
@@ -1338,11 +1360,11 @@ Theorem proceed_call_old_snapshot_lookups:
   MAP (λp. lookup_account a (SND p).accounts) s.contexts
 Proof
   strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value` >>
-  gvs[proceed_call_def, bind_def, ignore_bind_def,
+  gvs[proceed_call_def, deletion_drain_state_gas_reservoir_effect, bind_def, ignore_bind_def,
       get_rollback_def, read_memory_def, get_current_context_def,
       get_caller_def, get_value_def, get_static_def,
       push_context_def, update_accounts_def, return_def, fail_def,
-      AllCaseEqs()]
+      AllCaseEqs()] >> Cases_on `s.contexts` >> gvs[]
 QED
 
 Theorem step_create_old_snapshot_lookups:
@@ -1547,7 +1569,7 @@ Proof
     metis_tac[outputTo_consistent_stack_imp_consistent, wf_state_def] >>
   drule_all step_same_frame >> strip_tac >>
   drule same_frame_nonce_monotone >>
-  disch_then (qspec_then `a` assume_tac) >> decide_tac
+  disch_then (qspec_then `a` assume_tac) >> gvs[]
 QED
 
 Theorem handle_create_nonce:
@@ -2061,7 +2083,13 @@ Proof
   Cases_on `s.contexts` >> gvs[] >> Cases_on `t'` >> gvs[] >>
   PairCases_on `h` >>
   `LENGTH t.contexts < LENGTH s.contexts` by (gvs[] >> decide_tac) >>
-  drule_all handle_exception_pop_generic_gen >> simp[]
+  drule_at (Pat `s.contexts = _`) handle_exception_pop_generic_gen >>
+  disch_then drule >>
+  disch_then (qspec_then
+    `if e = NONE then h0.msgParams.gasLimit - h0.gasUsed
+     else if e = SOME Reverted then h0.msgParams.gasLimit -
+       (h0.gasUsed - MIN h0.stateGasSpilled h0.gasUsed)
+     else 0` mp_tac) >> simp[] >> metis_tac[]
 QED
 
 Theorem handle_step_nonce_sources:
@@ -2120,21 +2148,27 @@ Proof
   Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
   Cases_on `t'` >> simp[]
   >- (Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-      simp[handle_exception_def, bind_def, ignore_bind_def,
+      simp[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
+           bind_def, ignore_bind_def,
            get_gas_left_def, get_current_context_def, return_def,
            consume_gas_def, set_return_data_def, set_current_context_def,
            get_num_contexts_def, reraise_def, assert_def, fail_def,
            AllCaseEqs()]) >>
   PairCases_on `h` >> Cases_on `h0.msgParams.outputTo` >>
   Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-  simp[handle_exception_def, bind_def, ignore_bind_def,
+  simp[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
+       bind_def, ignore_bind_def,
        get_gas_left_def, get_current_context_def, return_def,
        consume_gas_def, set_return_data_def, set_current_context_def,
        get_num_contexts_def, get_return_data_def, get_output_to_def,
-       reraise_def, assert_def, fail_def, inc_pc_def, push_stack_def,
-       write_memory_def, pop_and_incorporate_context_def, pop_context_def,
-       set_rollback_def, unuse_gas_def, update_gas_refund_def,
-       push_logs_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+       reraise_def, assert_def, fail_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule_at (Pat `pop_and_incorporate_context`) pop_context_deletion_projections >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  gvs[inc_pc_def, push_stack_def, write_memory_def, bind_def, ignore_bind_def,
+      get_current_context_def, set_current_context_def, return_def,
+      assert_def, fail_def, AllCaseEqs()] >>
+  Cases_on `s''.contexts` >> gvs[]
 QED
 
 Theorem deletion_handle_step_inl_pops:
@@ -2304,11 +2338,11 @@ Proof
       mp_tac (BETA_RULE deletion_saved_protected_push) >>
       (impl_tac >- fs[]) >> simp[]) >>
   Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+  >- (drule_all step_same_frame >> strip_tac >>
       `∀i. i < LENGTH s.contexts ⇒
         lookup_account a (SND (EL i t.contexts)).accounts =
         lookup_account a (SND (EL i s.contexts)).accounts` by
-        (rpt strip_tac >> drule_all deletion_same_frame_saved_projections >> simp[]) >>
+        (rpt strip_tac >> fs[same_frame_rel_def] >> Cases_on `i` >> gvs[EL]) >>
       mp_tac (BETA_RULE deletion_saved_protected_same_depth) >>
       (impl_tac >- fs[]) >> simp[]) >>
   `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
@@ -2350,10 +2384,10 @@ Proof
       mp_tac (BETA_RULE deletion_saved_absent_push) >>
       (impl_tac >- fs[]) >> simp[]) >>
   Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+  >- (drule_all step_same_frame >> strip_tac >>
       `∀i. i < LENGTH s.contexts ⇒
         (SND (EL i t.contexts)).toDelete = (SND (EL i s.contexts)).toDelete` by
-        (rpt strip_tac >> drule_all deletion_same_frame_saved_projections >> simp[]) >>
+        (rpt strip_tac >> fs[same_frame_rel_def] >> Cases_on `i` >> gvs[EL]) >>
       mp_tac (BETA_RULE deletion_saved_absent_same_depth) >>
       (impl_tac >- fs[]) >> simp[]) >>
   `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
@@ -2451,12 +2485,12 @@ Proof
       mp_tac (BETA_RULE deletion_creation_certificate_push) >>
       (impl_tac >- (fs[] >> metis_tac[])) >> simp[]) >>
   Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+  >- (drule_all step_same_frame >> strip_tac >>
       `∀i. i < LENGTH s.contexts ⇒
         SND (EL i t.contexts) = SND (EL i s.contexts) ∧
         (FST (EL i t.contexts)).msgParams.outputTo =
         (FST (EL i s.contexts)).msgParams.outputTo` by
-        (gen_tac >> strip_tac >> drule_all deletion_same_frame_saved_projections >> simp[]) >>
+        (gen_tac >> strip_tac >> fs[same_frame_rel_def] >> Cases_on `i` >> gvs[EL]) >>
       `(lookup_account a s.rollback.accounts).nonce ≤
         (lookup_account a t.rollback.accounts).nonce` by
         (drule_all same_frame_nonce_monotone >> simp[]) >>

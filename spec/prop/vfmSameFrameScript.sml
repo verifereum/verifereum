@@ -152,6 +152,30 @@ Definition same_frame_rel_def:
     (FST (HD s.contexts)).subRefund ≤ (FST (HD s'.contexts)).subRefund
 End
 
+Theorem handle_exception_same_frame_counterexample:
+  !s c rb.
+    let s0 = s with contexts := [(c with addRefund := 1, rb)] in
+    let out = handle_exception (SOME Reverted) s0 in
+      s0.contexts <> [] /\
+      LENGTH (SND out).contexts = LENGTH s0.contexts /\
+      ~same_frame_rel s0 (SND out)
+Proof
+  simp[handle_exception_def, restore_state_gas_def, bind_def,
+       ignore_bind_def, get_current_context_def, set_current_context_def,
+       return_def, get_num_contexts_def, reraise_def, same_frame_rel_def]
+QED
+
+Theorem restore_state_gas_refund_counterexample:
+  !s c rb.
+    ~same_frame_rel (s with contexts := [(c with addRefund := 1, rb)])
+      (SND (restore_state_gas
+        (s with contexts := [(c with addRefund := 1, rb)])))
+Proof
+  simp[restore_state_gas_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def, return_def,
+       same_frame_rel_def]
+QED
+
 (* ================================================================ *)
 (* Reflexivity.                                                      *)
 (* ================================================================ *)
@@ -792,6 +816,51 @@ Proof
   >- ( rw[subdomain_def, toSet_fINSERT, SUBSET_DEF] )
 QED
 
+Theorem restore_state_gas_same_frame_iff:
+  s.contexts <> [] ==>
+  (same_frame_rel s (SND (restore_state_gas s)) <=>
+   (FST (HD s.contexts)).addRefund = 0 /\
+   (FST (HD s.contexts)).subRefund = 0)
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[restore_state_gas_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def, return_def,
+       same_frame_rel_def, callee_local_changes_def]
+QED
+
+Theorem preserves_same_frame_state_gas_meter[simp]:
+  preserves_same_frame get_state_gas_left /\
+  preserves_same_frame (charge_state_gas n) /\
+  preserves_same_frame (credit_state_gas_refund n) /\
+  (!s. s.contexts <> [] /\ (FST (HD s.contexts)).addRefund = 0 /\
+       (FST (HD s.contexts)).subRefund = 0 ==>
+       same_frame_rel s (SND (restore_state_gas s))) /\
+  preserves_same_frame commit_state_gas /\
+  preserves_same_frame (restore_state_gas_to_entry sg) /\
+  preserves_same_frame repay_state_gas_spill /\
+  preserves_same_frame forfeit_remaining_gas /\
+  preserves_same_frame withhold_create_gas /\
+  preserves_same_frame drain_state_gas_reservoir /\
+  preserves_same_frame (restore_child_gas gas reservoir)
+Proof
+  rpt conj_tac
+  >- (rw[get_state_gas_left_def] >> irule preserves_same_frame_bind >> simp[])
+  >- (rewrite_tac[charge_state_gas_def] >> psf_head_tac >>
+      gvs[set_current_context_def, consume_gas_def, bind_def,
+          ignore_bind_def, get_current_context_def, assert_def,
+          return_def, fail_def, AllCaseEqs()])
+  >- (rewrite_tac[credit_state_gas_refund_def] >> psf_head_tac)
+  >- (simp[restore_state_gas_same_frame_iff])
+  >- (rewrite_tac[commit_state_gas_def] >> psf_head_tac)
+  >- (rewrite_tac[restore_state_gas_to_entry_def] >> psf_head_tac)
+  >- (rewrite_tac[repay_state_gas_spill_def, repay_state_gas_spill_context_def] >> psf_head_tac)
+  >- (rw[forfeit_remaining_gas_def] >> irule preserves_same_frame_bind >> simp[])
+  >- (rw[withhold_create_gas_def] >> irule preserves_same_frame_bind >> simp[] >>
+      irule preserves_same_frame_ignore_bind >> simp[])
+  >- (rewrite_tac[drain_state_gas_reservoir_def] >> psf_head_tac)
+  >> (rewrite_tac[restore_child_gas_def] >> psf_head_tac)
+QED
+
 (* ================================================================ *)
 (* Pass A: Compound-helper `preserves_same_frame` lemmas.            *)
 (*                                                                   *)
@@ -861,6 +930,12 @@ Theorem preserves_same_frame_step_sstore_gas_consumption[simp]:
 Proof
   rw[step_sstore_gas_consumption_def] >>
   irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_ignore_bind >> rw[] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_bind >> rw[] >>
+  irule preserves_same_frame_ignore_bind >> rw[] >>
+  irule preserves_same_frame_ignore_bind >> rw[] >>
   irule preserves_same_frame_ignore_bind >> rw[]
 QED
 
@@ -2190,6 +2265,83 @@ QED
 (* Utility: preserves_same_frame / cp imply length preservation.     *)
 (* ================================================================ *)
 
+Definition zero_head_refunds_def:
+  zero_head_refunds s =
+    s with contexts :=
+      (FST (HD s.contexts) with <|addRefund := 0; subRefund := 0|>,
+       SND (HD s.contexts)) :: TL s.contexts
+End
+
+Theorem zero_head_refunds_projections:
+  s.contexts <> [] ==>
+  LENGTH (zero_head_refunds s).contexts = LENGTH s.contexts /\
+  TL (zero_head_refunds s).contexts = TL s.contexts /\
+  SND (HD (zero_head_refunds s).contexts) = SND (HD s.contexts) /\
+  (FST (HD (zero_head_refunds s).contexts)).msgParams =
+    (FST (HD s.contexts)).msgParams /\
+  (FST (HD (zero_head_refunds s).contexts)).logs =
+    (FST (HD s.contexts)).logs /\
+  (FST (HD (zero_head_refunds s).contexts)).gasUsed =
+    (FST (HD s.contexts)).gasUsed /\
+  (zero_head_refunds s).rollback = s.rollback /\
+  (zero_head_refunds s).txParams = s.txParams /\
+  (zero_head_refunds s).originalAccounts = s.originalAccounts /\
+  (zero_head_refunds s).msdomain = s.msdomain
+Proof
+  Cases_on `s.contexts` >> simp[zero_head_refunds_def]
+QED
+
+Theorem zero_head_refunds_idempotent:
+  zero_head_refunds (zero_head_refunds s) = zero_head_refunds s
+Proof
+  simp[zero_head_refunds_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_refl:
+  s.contexts <> [] ==> same_frame_rel (zero_head_refunds s) s
+Proof
+  Cases_on `s.contexts` >> simp[zero_head_refunds_def, same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_weaken:
+  same_frame_rel s t ==> same_frame_rel (zero_head_refunds s) t
+Proof
+  strip_tac >> irule same_frame_rel_trans >> qexists `s` >>
+  simp[] >> irule same_frame_rel_zero_head_refunds_refl >>
+  gvs[same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_target:
+  s.contexts <> [] /\ same_frame_rel (zero_head_refunds s) t ==>
+  same_frame_rel (zero_head_refunds s) (zero_head_refunds t)
+Proof
+  Cases_on `s.contexts` >> Cases_on `t.contexts` >>
+  simp[zero_head_refunds_def, same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_trans:
+  s.contexts <> [] /\ same_frame_rel (zero_head_refunds s) t /\
+  same_frame_rel (zero_head_refunds t) u ==>
+  same_frame_rel (zero_head_refunds s) u
+Proof
+  metis_tac[same_frame_rel_zero_head_refunds_target, same_frame_rel_trans]
+QED
+
+Theorem outputTo_consistent_zero_head_refunds:
+  s.contexts <> [] ==>
+  (outputTo_consistent (zero_head_refunds s) <=> outputTo_consistent s)
+Proof
+  Cases_on `s.contexts` >> simp[zero_head_refunds_def, outputTo_consistent_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_outputTo_consistent:
+  s.contexts <> [] /\ outputTo_consistent s /\
+  same_frame_rel (zero_head_refunds s) t ==> outputTo_consistent t
+Proof
+  metis_tac[outputTo_consistent_zero_head_refunds,
+            same_frame_rel_preserves_outputTo_consistent]
+QED
+
 Theorem cp_imp_length_contexts_preserved:
   cp m /\ m s = (r,s') /\ s.contexts <> []
   ==> LENGTH s'.contexts = LENGTH s.contexts
@@ -2413,7 +2565,9 @@ Proof
         get_rollback_def, read_memory_def, get_current_context_def,
         get_caller_def, get_value_def, get_static_def,
         update_accounts_def, push_context_def, return_def,
-        fail_def, COND_RATOR]
+        fail_def, COND_RATOR, drain_state_gas_reservoir_def,
+        set_current_context_def]
+  >> Cases_on `s.contexts` >> gvs[]
   >> qmatch_asmsub_abbrev_tac`dispatch_precompiles _ sp = _`
   >> `LENGTH sp.contexts = LENGTH s.contexts + 1` by gvs[Abbr`sp`]
   >> drule_at Any (GEN_ALL psf_imp_length_contexts_preserved)
@@ -2430,7 +2584,8 @@ Proof
          get_rollback_def, get_original_def, set_original_def,
          update_accounts_def, push_context_def, return_def,
          fail_def,
-         set_last_accounts_def, LET_THM]
+         set_last_accounts_def, LET_THM, drain_state_gas_reservoir_def,
+         get_current_context_def, set_current_context_def]
   >> Cases_on`s.contexts` >> gvs[]
   >> gvs[listTheory.SNOC_APPEND]
 QED

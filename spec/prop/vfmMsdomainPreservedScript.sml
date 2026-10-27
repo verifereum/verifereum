@@ -105,6 +105,32 @@ Proof
   rw[set_rollback_def, return_def]
 QED
 
+Theorem SND_state_gas_meter_msdomain[simp]:
+  (!s. (SND (get_state_gas_left s)).msdomain = s.msdomain) /\
+  (!n s. (SND (charge_state_gas n s)).msdomain = s.msdomain) /\
+  (!n s. (SND (credit_state_gas_refund n s)).msdomain = s.msdomain) /\
+  (!s. (SND (restore_state_gas s)).msdomain = s.msdomain) /\
+  (!s. (SND (commit_state_gas s)).msdomain = s.msdomain) /\
+  (!sg s. (SND (restore_state_gas_to_entry sg s)).msdomain = s.msdomain) /\
+  (!s. (SND (repay_state_gas_spill s)).msdomain = s.msdomain) /\
+  (!s. (SND (forfeit_remaining_gas s)).msdomain = s.msdomain) /\
+  (!s. (SND (withhold_create_gas s)).msdomain = s.msdomain) /\
+  (!s. (SND (drain_state_gas_reservoir s)).msdomain = s.msdomain) /\
+  (!gas reservoir s. (SND (restore_child_gas gas reservoir s)).msdomain = s.msdomain)
+Proof
+  rw[get_state_gas_left_def, charge_state_gas_def,
+     credit_state_gas_refund_def, restore_state_gas_def, commit_state_gas_def,
+     restore_state_gas_to_entry_def, repay_state_gas_spill_def,
+     forfeit_remaining_gas_def, withhold_create_gas_def,
+     drain_state_gas_reservoir_def, restore_child_gas_def,
+     consume_gas_def, get_gas_left_def, unuse_gas_def,
+     bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def, assert_def, LET_THM]
+  >> rw[bind_def, ignore_bind_def, get_current_context_def,
+        set_current_context_def, return_def, fail_def, assert_def]
+  >> rw[]
+QED
+
 Theorem SND_pop_and_incorporate_context_msdomain[simp]:
   ∀b s. (SND (pop_and_incorporate_context b s)).msdomain = s.msdomain
 Proof

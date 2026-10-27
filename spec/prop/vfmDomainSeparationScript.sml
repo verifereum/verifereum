@@ -247,6 +247,14 @@ val ignores_extra_domain_def =
   SIMP_RULE std_ss [ignores_extra_domain_pred_def]
   ignores_extra_domain_def
 
+Theorem ignores_extra_domain_msdomain:
+  !m s r t d. ignores_extra_domain m /\ m s = (r,t) /\
+    s.msdomain = Enforce d ==> t.msdomain = s.msdomain
+Proof
+  simp[ignores_extra_domain_def, ignores_extra_domain_pred_def]
+  \\ metis_tac[]
+QED
+
 Theorem handle_ignores_extra_domain_pred_allow:
   ignores_extra_domain_pred p f ∧
   (∀s. p s ⇒ p (SND (f s))) ∧
@@ -2069,6 +2077,9 @@ Theorem proceed_call_ignores_extra_domain[simp]:
   ignores_extra_domain (proceed_call a b c d e f g h i)
 Proof
   simp[proceed_call_def]
+  \\ irule bind_ignores_extra_domain
+  \\ reverse conj_tac >- simp[]
+  \\ qx_gen_tac `reservoir` \\ BETA_TAC
   \\ irule get_rollback_ignores_extra_domain_bind
   \\ reverse conj_asm2_tac
   >- ( simp[] \\ gen_tac \\ tac )
@@ -2212,6 +2223,9 @@ Theorem proceed_create_ignores_extra_domain[simp]:
   ignores_extra_domain (proceed_create a b c d e)
 Proof
   simp[proceed_create_def]
+  \\ irule bind_ignores_extra_domain
+  \\ reverse conj_tac >- simp[]
+  \\ qx_gen_tac `reservoir` \\ BETA_TAC
   \\ irule ignore_bind_ignores_extra_domain \\ rw[]
   \\ irule get_rollback_ignores_extra_domain_bind
   \\ reverse conj_asm2_tac
@@ -2545,7 +2559,10 @@ Proof
             domain_check_def,
             get_current_context_def, assert_def, fail_def, CaseEq"prod",
             CaseEq"sum", set_current_context_def, CaseEq"bool", consume_gas_def,
-            CaseEq"domain_mode", get_gas_left_def, access_address_def, set_domain_def] )
+            CaseEq"domain_mode", get_gas_left_def, access_address_def, set_domain_def]
+        \\ assume_tac withhold_create_gas_ignores_extra_domain
+        \\ drule_all ignores_extra_domain_msdomain
+        \\ simp[] )
       \\ gvs[fail_def, return_def, CaseEq"bool"]
       \\ `toCreate ∈ toSet d.addresses`
       by (
@@ -3090,6 +3107,93 @@ Proof
   \\ rw[]
 QED
 
+Theorem preserves_domain_has_callee_fail[simp]:
+  preserves_domain_has_callee (K T) (fail x)
+Proof
+  rw[fail_def, preserves_domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_unuse_gas[simp]:
+  preserves_domain_has_callee (K T) (unuse_gas x)
+Proof
+  rw[unuse_gas_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_state_gas_meter[simp]:
+  preserves_domain_has_callee (K T) get_state_gas_left /\
+  preserves_domain_has_callee (K T) (charge_state_gas n) /\
+  preserves_domain_has_callee (K T) (credit_state_gas_refund n) /\
+  preserves_domain_has_callee (K T) restore_state_gas /\
+  preserves_domain_has_callee (K T) commit_state_gas /\
+  preserves_domain_has_callee (K T) (restore_state_gas_to_entry sg) /\
+  preserves_domain_has_callee (K T) repay_state_gas_spill /\
+  preserves_domain_has_callee (K T) forfeit_remaining_gas /\
+  preserves_domain_has_callee (K T) withhold_create_gas /\
+  preserves_domain_has_callee (K T) drain_state_gas_reservoir /\
+  preserves_domain_has_callee (K T) (restore_child_gas gas reservoir)
+Proof
+  conj_tac >- (
+    rw[get_state_gas_left_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[] )
+  \\ conj_tac >- suspend "charge"
+  \\ conj_tac >- (
+    rw[credit_state_gas_refund_def, LET_THM]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[restore_state_gas_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[commit_state_gas_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[restore_state_gas_to_entry_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[repay_state_gas_spill_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context
+    \\ rw[repay_state_gas_spill_context_def] )
+  \\ conj_tac >- (
+    rw[forfeit_remaining_gas_def]
+    \\ irule preserves_domain_has_callee_bind \\ rw[] )
+  \\ conj_tac >- (
+    rw[withhold_create_gas_def]
+    \\ irule preserves_domain_has_callee_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_ignore_bind \\ rw[] )
+  \\ conj_tac >- (
+    rw[drain_state_gas_reservoir_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ rw[restore_child_gas_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Resume preserves_domain_has_callee_state_gas_meter[charge]:
+  simp[charge_state_gas_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+  >- (irule preserves_domain_has_callee_set_current_context \\ rw[])
+  \\ irule preserves_domain_has_callee_ignore_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (irule preserves_domain_has_callee_set_current_context \\ rw[])
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Finalise preserves_domain_has_callee_state_gas_meter
+
 Theorem preserves_domain_has_callee_get_original[simp]:
   preserves_domain_has_callee (K T) get_original
 Proof
@@ -3119,6 +3223,10 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind
+  \\ simp[COND_RAND, COND_RATOR, preserves_domain_has_callee_state_gas_meter]
+  \\ irule preserves_domain_has_callee_ignore_bind
+  \\ simp[preserves_domain_has_callee_state_gas_meter]
 QED
 
 Theorem preserves_domain_has_callee_update_accounts[simp]:
@@ -3294,15 +3402,6 @@ Proof
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
 QED
 
-Theorem preserves_domain_has_callee_unuse_gas[simp]:
-  preserves_domain_has_callee (K T) (unuse_gas x)
-Proof
-  rw[unuse_gas_def]
-  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
-  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
-  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
-QED
-
 Theorem preserves_domain_has_callee_inc_pc[simp]:
   preserves_domain_has_callee (K T) inc_pc
 Proof
@@ -3427,12 +3526,6 @@ Proof
   rw[push_context_def]
 QED
 
-Theorem preserves_domain_has_callee_fail[simp]:
-  preserves_domain_has_callee (K T) (fail x)
-Proof
-  rw[fail_def, preserves_domain_has_callee_def]
-QED
-
 Theorem preserves_domain_has_callee_precompiles[simp]:
     preserves_domain_has_callee (K T) precompile_ecrecover
   ∧ preserves_domain_has_callee (K T) precompile_sha2_256
@@ -3488,6 +3581,13 @@ Proof
   rw[dispatch_precompiles_def]
 QED
 
+Theorem SND_drain_state_gas_reservoir_msdomain[simp]:
+  (SND (drain_state_gas_reservoir s)).msdomain = s.msdomain
+Proof
+  rw[drain_state_gas_reservoir_def, ignore_bind_def, bind_def,
+     get_current_context_def, set_current_context_def, return_def, fail_def]
+QED
+
 Theorem preserves_domain_has_callee_proceed_call[simp]:
   (∀s d. p s ∧ s.msdomain = Enforce d ⇒
            b ∈ toSet d.addresses ∧
@@ -3499,7 +3599,13 @@ Theorem preserves_domain_has_callee_proceed_call[simp]:
   preserves_domain_has_callee p (proceed_call a b c d e f g h i)
 Proof
   strip_tac
+  \\ irule preserves_domain_has_callee_mono
+  \\ qexists_tac `\s. !dom. s.msdomain = Enforce dom ==>
+       b IN toSet dom.addresses /\ c IN toSet dom.addresses`
+  \\ conj_tac >- (simp[] \\ metis_tac[])
   \\ simp[proceed_call_def]
+  \\ irule preserves_domain_has_callee_bind
+  \\ simp[preserves_domain_has_callee_state_gas_meter] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
@@ -3509,16 +3615,10 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
-  \\ conj_tac
-  >- (
-    gen_tac \\ strip_tac
-    \\ first_x_assum irule
-    \\ rw[initial_msg_params_def] )
   \\ conj_tac
   >- (
     irule preserves_domain_has_callee_push_context
-    \\ rw[initial_msg_params_def]
-    \\ first_x_assum (drule_then drule) \\ rw[])
+    \\ rw[initial_msg_params_def] \\ gvs[])
   \\ rw[]
 QED
 
@@ -3667,7 +3767,17 @@ Theorem preserves_domain_has_callee_proceed_create:
   preserves_domain_has_callee p (proceed_create a b c d e)
 Proof
   strip_tac
-  \\ rw[proceed_create_def]
+  \\ irule preserves_domain_has_callee_mono
+  \\ qexists_tac `\s. !dom. s.msdomain = Enforce dom ==>
+       b IN toSet dom.addresses`
+  \\ conj_tac >- (simp[] \\ metis_tac[])
+  \\ `!s. (SND (get_original s)).msdomain = s.msdomain` by
+       rw[get_original_def]
+  \\ `!s a. (SND (set_original a s)).msdomain = s.msdomain` by
+       rw[set_original_def, set_last_accounts_def, return_def, fail_def]
+  \\ simp[proceed_create_def]
+  \\ irule preserves_domain_has_callee_bind
+  \\ simp[preserves_domain_has_callee_state_gas_meter] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
@@ -3707,7 +3817,7 @@ QED
 Theorem preserves_domain_has_callee_step_create[simp]:
   preserves_domain_has_callee (K T) (step_create x)
 Proof
-  simp[step_create_def]
+  simp[step_create_def, preserves_domain_has_callee_state_gas_meter]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
@@ -3717,8 +3827,8 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ simp[ignore_bind_def]
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind
+  \\ simp[preserves_domain_has_callee_state_gas_meter] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
