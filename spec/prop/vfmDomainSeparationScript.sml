@@ -455,6 +455,75 @@ Proof
   rw[consume_gas_def] \\ tac
 QED
 
+Theorem fail_ignores_extra_domain[simp]:
+  ignores_extra_domain (fail x)
+Proof
+  rw[ignores_extra_domain_def, fail_def]
+QED
+
+(* EIP-8037: the state gas meter reads and writes the head frame, which
+   `domain_compatible` carries along, so it touches no extra domain. *)
+Theorem get_state_gas_left_ignores_extra_domain[simp]:
+  ignores_extra_domain get_state_gas_left
+Proof
+  rw[get_state_gas_left_def] \\ tac
+QED
+
+Theorem charge_state_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (charge_state_gas n)
+Proof
+  rw[charge_state_gas_def, LET_THM] \\ tac
+QED
+
+Theorem credit_state_gas_refund_ignores_extra_domain[simp]:
+  ignores_extra_domain (credit_state_gas_refund n)
+Proof
+  rw[credit_state_gas_refund_def, LET_THM] \\ tac
+QED
+
+Theorem restore_state_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain restore_state_gas
+Proof
+  rw[restore_state_gas_def] \\ tac
+QED
+
+Theorem commit_state_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain commit_state_gas
+Proof
+  rw[commit_state_gas_def] \\ tac
+QED
+
+Theorem restore_state_gas_to_entry_ignores_extra_domain[simp]:
+  ignores_extra_domain (restore_state_gas_to_entry sg)
+Proof
+  rw[restore_state_gas_to_entry_def] \\ tac
+QED
+
+Theorem repay_state_gas_spill_ignores_extra_domain[simp]:
+  ignores_extra_domain repay_state_gas_spill
+Proof
+  rw[repay_state_gas_spill_def, repay_state_gas_spill_context_def] \\ tac
+QED
+
+Theorem forfeit_remaining_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain forfeit_remaining_gas
+Proof
+  rw[forfeit_remaining_gas_def] \\ tac
+QED
+
+Theorem withhold_create_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain withhold_create_gas
+Proof
+  rw[withhold_create_gas_def, LET_THM] \\ tac
+QED
+
+Theorem drain_state_gas_reservoir_ignores_extra_domain[simp]:
+  ignores_extra_domain drain_state_gas_reservoir
+Proof
+  rw[drain_state_gas_reservoir_def] \\ tac
+QED
+
+
 Theorem set_return_data_ignores_extra_domain[simp]:
   ignores_extra_domain (set_return_data n)
 Proof
@@ -496,6 +565,12 @@ Theorem unuse_gas_ignores_extra_domain[simp]:
   ignores_extra_domain (unuse_gas n)
 Proof
   rw[unuse_gas_def] \\ tac
+QED
+
+Theorem restore_child_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (restore_child_gas g sr)
+Proof
+  rw[restore_child_gas_def] \\ tac
 QED
 
 Theorem push_logs_ignores_extra_domain[simp]:
@@ -1745,11 +1820,6 @@ Proof
   rw[get_value_def] \\ tac
 QED
 
-Theorem fail_ignores_extra_domain[simp]:
-  ignores_extra_domain (fail x)
-Proof
-  rw[ignores_extra_domain_def, fail_def]
-QED
 
 Theorem precompile_ecrecover_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ecrecover

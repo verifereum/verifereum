@@ -251,6 +251,7 @@ Proof
   rw[get_gas_left_def] >> ptx_tac
 QED
 
+
 Theorem preserves_txParams_set_domain[simp]:
   preserves_txParams (set_domain d)
 Proof
@@ -396,6 +397,75 @@ Theorem preserves_txParams_write_transient_storage[simp]:
   preserves_txParams (write_transient_storage a k v)
 Proof
   rw[write_transient_storage_def] >> ptx_tac
+QED
+
+(* EIP-8037: the state gas meter only reads and writes the head frame's gas
+   fields, so it leaves the transaction parameters alone. *)
+Theorem preserves_txParams_get_state_gas_left[simp]:
+  preserves_txParams get_state_gas_left
+Proof
+  rw[get_state_gas_left_def] >> ptx_tac
+QED
+
+Theorem preserves_txParams_charge_state_gas[simp]:
+  preserves_txParams (charge_state_gas n)
+Proof
+  rw[charge_state_gas_def, LET_THM] >> ptx_tac >> simp[]
+QED
+
+Theorem preserves_txParams_credit_state_gas_refund[simp]:
+  preserves_txParams (credit_state_gas_refund n)
+Proof
+  rw[credit_state_gas_refund_def, LET_THM] >> ptx_tac >> simp[]
+QED
+
+Theorem preserves_txParams_restore_state_gas[simp]:
+  preserves_txParams restore_state_gas
+Proof
+  rw[restore_state_gas_def] >> ptx_tac
+QED
+
+Theorem preserves_txParams_commit_state_gas[simp]:
+  preserves_txParams commit_state_gas
+Proof
+  rw[commit_state_gas_def] >> ptx_tac
+QED
+
+Theorem preserves_txParams_restore_state_gas_to_entry[simp]:
+  preserves_txParams (restore_state_gas_to_entry sg)
+Proof
+  rw[restore_state_gas_to_entry_def] >> ptx_tac
+QED
+
+Theorem preserves_txParams_repay_state_gas_spill[simp]:
+  preserves_txParams repay_state_gas_spill
+Proof
+  rw[repay_state_gas_spill_def,
+     repay_state_gas_spill_context_def] >> ptx_tac
+QED
+
+Theorem preserves_txParams_forfeit_remaining_gas[simp]:
+  preserves_txParams forfeit_remaining_gas
+Proof
+  rw[forfeit_remaining_gas_def] >> ptx_tac >> simp[]
+QED
+
+Theorem preserves_txParams_withhold_create_gas[simp]:
+  preserves_txParams withhold_create_gas
+Proof
+  rw[withhold_create_gas_def, LET_THM] >> ptx_tac >> simp[]
+QED
+
+Theorem preserves_txParams_drain_state_gas_reservoir[simp]:
+  preserves_txParams drain_state_gas_reservoir
+Proof
+  rw[drain_state_gas_reservoir_def] >> ptx_tac >> simp[]
+QED
+
+Theorem preserves_txParams_restore_child_gas[simp]:
+  preserves_txParams (restore_child_gas g sr)
+Proof
+  rw[restore_child_gas_def] >> ptx_tac >> simp[]
 QED
 
 Theorem preserves_txParams_step_sstore_gas_consumption[simp]:
