@@ -34,8 +34,8 @@
  *     composes to same-frame.
  *   - `step_same_frame`: step preserves same-frame on length-
  *     preserving transitions.
- *   - `run_within_frame_preserves`, `run_within_frame_gas_monotone`:
- *     the headline OWHILE-iterated theorems.
+ *   - `run_within_frame_preserves`: the headline OWHILE-iterated
+ *     theorem.
  *   - Named downstream corollaries `run_within_frame_preserves_*`
  *     exposing individual conjuncts of `same_frame_rel` for user
  *     consumption (txParams, storage / tStorage / code / nonce
@@ -1312,91 +1312,6 @@ Proof
        >> goal_assum (first_assum o mp_then Any mp_tac)
        >> simp[])
   >> metis_tac[same_frame_rel_trans]
-QED
-
-(* ================================================================ *)
-(* Gas monotonicity corollary (separate from same_frame_rel).        *)
-(* ================================================================ *)
-
-Theorem step_same_frame_gas_monotone:
-  outputTo_consistent s ∧ s.contexts ≠ [] ∧
-  EVERY (wf_context o FST) s.contexts ∧ step s = (r, s') ∧
-  LENGTH s'.contexts = LENGTH s.contexts ⇒
-  (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
-Proof
-  strip_tac
-  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> mp_tac decreases_gas_cred_step
-  >> rewrite_tac[decreases_gas_cred_def]
-  >> disch_then(qspec_then`s`mp_tac)
-  >> IF_CASES_TAC >> gvs[] >> strip_tac
-  (* Use step_same_frame to get the tail and msgParams (hence gasLimit)
-     preservation, which decreases_gas_cred_step alone doesn't give us. *)
-  >> `same_frame_rel s s'` by (
-       irule step_same_frame
-       >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
-  >> `TL s'.contexts = TL s.contexts` by gvs[same_frame_rel_def]
-  >> `(FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`
-     by gvs[same_frame_rel_def]
-  (* Now use decreases_gas_cred_step for the gas-weight inequality. *)
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `s'.contexts` >> gvs[]
-  >> gvs[contexts_weight_def, unused_gas_def]
-  >> (* The inequality reduces because the tails match and gasLimits
-        match at the heads. *)
-     BasicProvers.FULL_CASE_TAC >> gvs[]
-  >> gvs[LEX_DEF]
-  >> gvs[wf_context_def]
-QED
-
-Theorem run_within_frame_gas_monotone:
-  outputTo_consistent es ∧ wf_state es ∧
-  run_within_frame es = SOME (r, es') ∧
-  LENGTH es'.contexts = LENGTH es.contexts ⇒
-  (FST (HD es.contexts)).gasUsed ≤ (FST (HD es'.contexts)).gasUsed
-Proof
-  rpt strip_tac
-  >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> gvs[run_within_frame_def]
-  >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
-           same_frame_rel es (SND p) ∧
-           EVERY (wf_context o FST) (SND p).contexts ∧
-           (FST (HD es.contexts)).gasUsed ≤
-             (FST (HD (SND p).contexts)).gasUsed) (r, es')`
-     suffices_by simp[]
-  >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
-  >> goal_assum (first_assum o mp_then Any mp_tac)
-  >> simp[]
-  >> conj_tac
-  >- gvs[same_frame_rel_refl, wf_state_def]
-  >> rpt gen_tac
-  >> pairarg_tac >> simp[]
-  >> strip_tac
-  >> strip_tac
-  >> Cases_on `step s''` >> simp[]
-  >> `same_frame_rel es s'' ∧ EVERY (wf_context o FST) s''.contexts ∧
-      (FST (HD es.contexts)).gasUsed ≤ (FST (HD s''.contexts)).gasUsed`
-       by simp[]
-  >> `outputTo_consistent s''`
-       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
-  >> `s''.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> `same_frame_rel s'' r'` by (
-       irule step_same_frame
-       >> goal_assum (first_assum o mp_then Any mp_tac)
-       >> simp[])
-  >> `(FST (HD s''.contexts)).gasUsed ≤ (FST (HD r'.contexts)).gasUsed` by (
-       irule step_same_frame_gas_monotone
-       >> goal_assum (first_assum o mp_then Any mp_tac)
-       >> simp[])
-  >> `EVERY (wf_context o FST) r'.contexts` by (
-       mp_tac decreases_gas_cred_step
-       >> rewrite_tac[decreases_gas_cred_def]
-       >> disch_then(qspec_then`s''`mp_tac)
-       >> IF_CASES_TAC >> gvs[] )
-  >> rpt conj_tac
-  >- metis_tac[same_frame_rel_trans]
-  >- simp[]
-  >> simp[]
 QED
 
 (* ================================================================ *)

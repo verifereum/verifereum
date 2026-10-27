@@ -2369,6 +2369,12 @@ Proof
   >> pop_assum mp_tac >> rw[]
 QED
 
+(* EIP-8037: this used to bound `new_head.gasUsed` by the parent's, less the
+   child's leftover execution gas.  That bound is dropped rather than weakened:
+   the frame whose meter pays the merge's spill repayment is the head of the
+   intermediate state, which `step` does not name, so the repayment
+   `MIN stateGasLeft stateGasSpilled` cannot be written in this statement's
+   variables, and any existential over it would be satisfied by every value. *)
 Theorem step_pop_structure:
   ∀s r s'. step s = (r, s') ∧ s.contexts ≠ [] ∧
     outputTo_consistent_stack s ∧
@@ -2378,10 +2384,6 @@ Theorem step_pop_structure:
       s.contexts = HD s.contexts :: parent :: rest ∧
       s'.contexts = (new_head, SND parent) :: rest ∧
       new_head.msgParams = (FST parent).msgParams ∧
-      new_head.gasUsed ≥
-        (FST parent).gasUsed -
-        ((FST (HD s.contexts)).msgParams.gasLimit -
-         (FST (HD s.contexts)).gasUsed) ∧
       ((toSet s.rollback.accesses.storageKeys ⊆
           toSet s'.rollback.accesses.storageKeys ∧
         (∀a. (lookup_account a s'.rollback.accounts).storage =
