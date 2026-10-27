@@ -1853,6 +1853,7 @@ Theorem step_create_lemma:
       _ <- access_address v4;
       _ <- ensure_storage_in_domain v4;
       if b3 then m2 else do
+        reservoir <- drain_state_gas_reservoir;
         _ <- update_accounts $ increment_nonce senderAddress;
         subContextTx <<- <|
             from     := senderAddress
@@ -1874,7 +1875,7 @@ Theorem step_create_lemma:
           increment_nonce address;
         _ <- get_static;
         push_context $
-          (initial_context address code F (Code address) subContextTx with
+          (initial_context address code F (Code address) reservoir subContextTx with
              logs := transfer_log senderAddress address value, rollback)
       od
     od
