@@ -732,6 +732,92 @@ Proof
   \\ gvs[]
 QED
 
+(* The transaction prelude leaves a contract's code and storage alone *)
+Theorem process_authorization_contract:
+  process_authorization c auth (accs, acc, r) = (accs', acc', r') ∧
+  ¬NULL (lookup_account a accs).code ∧
+  ¬is_delegation (lookup_account a accs).code ⇒
+  lookup_account a accs' = lookup_account a accs
+Proof
+  rw[process_authorization_def]
+  \\ gvs[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem process_authorizations_contract:
+  ∀auths accs acc r accs' acc' r'.
+    process_authorizations c auths accs acc r = (accs', acc', r') ∧
+    ¬NULL (lookup_account a accs).code ∧
+    ¬is_delegation (lookup_account a accs).code ⇒
+    lookup_account a accs' = lookup_account a accs
+Proof
+  Induct \\ rw[process_authorizations_def]
+  \\ pairarg_tac \\ gvs[]
+  \\ drule_all process_authorization_contract \\ strip_tac
+  \\ first_x_assum drule \\ gvs[]
+QED
+
+Theorem pre_transaction_updates_contract:
+  pre_transaction_updates accs b t = SOME accs' ⇒
+  (lookup_account a accs').code = (lookup_account a accs).code ∧
+  (lookup_account a accs').storage = (lookup_account a accs).storage
+Proof
+  rw[pre_transaction_updates_def, CaseEq"bool"]
+  \\ gvs[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+  \\ rw[]
+QED
+
+Theorem LENGTH_le_call_data_tokens:
+  ∀l. LENGTH l ≤ call_data_tokens l
+Proof
+  Induct \\ rw[call_data_tokens_def] \\ gvs[call_data_tokens_def]
+QED
+
+Theorem pre_transaction_updates_data_length:
+  pre_transaction_updates accs b t = SOME accs' ⇒
+  LENGTH t.data ≤ 2 ** 24
+Proof
+  rw[pre_transaction_updates_def, CaseEq"bool", calldata_floor_cost_def]
+  \\ qspec_then `t.data` assume_tac LENGTH_le_call_data_tokens
+  \\ gvs[floor_call_data_cost_def]
+QED
+
+(* the initial state of a message call to a contract (code that is not a
+   delegation) *)
+Theorem initial_state_call_code:
+  initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
+  tx.to = SOME addr ∧
+  (lookup_account addr accounts).code = code ∧
+  ¬NULL code ∧ ¬is_delegation code ⇒
+  ∃ctxt.
+    s.contexts = [(ctxt, s.rollback)] ∧ s.msdomain = dom ∧
+    s.rollback.toDelete = [] ∧
+    ctxt.stack = [] ∧ ctxt.memory = empty_buffer ∧ ctxt.pc = 0 ∧
+    ctxt.jumpDest = NONE ∧ ctxt.returnData = [] ∧ ctxt.gasUsed = 0 ∧
+    ctxt.addRefund = 0 ∧ ctxt.subRefund = 0 ∧ ctxt.logs = [] ∧
+    ctxt.msgParams.callee = addr ∧ ctxt.msgParams.code = code ∧
+    ctxt.msgParams.parsed = parse_code 0 FEMPTY code ∧
+    ctxt.msgParams.value = tx.value ∧
+    ctxt.msgParams.data = buffer_of_list tx.data ∧
+    ¬is_code_dest ctxt.msgParams.outputTo ∧
+    LENGTH tx.data ≤ 2 ** 24 ∧
+    (lookup_account addr s.rollback.accounts).storage =
+    (lookup_account addr accounts).storage
+Proof
+  simp[initial_state_def, CaseEq"option"] \\ strip_tac
+  \\ pairarg_tac \\ gvs[]
+  \\ pairarg_tac \\ gvs[CaseEq"option"]
+  \\ drule pre_transaction_updates_data_length \\ strip_tac
+  \\ drule pre_transaction_updates_contract
+  \\ disch_then (qspec_then `addr` strip_assume_tac)
+  \\ `lookup_account addr postAuthAccounts = lookup_account addr accounts'`
+  by (drule process_authorizations_contract \\ simp[])
+  \\ gvs[apply_intrinsic_cost_def, initial_context_def,
+         initial_msg_params_def, code_from_tx_def, get_delegate_def,
+         callee_from_tx_to_def, initial_rollback_def,
+         empty_return_destination_def, is_code_dest_def]
+QED
+
 (* Lemma: post_transaction_accounting extracts output and logs correctly on success *)
 Theorem post_transaction_accounting_success:
   ¬NULL t.contexts ∧
