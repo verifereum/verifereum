@@ -294,6 +294,32 @@ Proof
   >> Cases_on `s.contexts` >> gvs[]
 QED
 
+Theorem cp_get_context_cond:
+  cp (bind get_current_context f) /\ cp (bind get_current_context g) ==>
+  cp (bind get_current_context (\c. if b c then f c else g c))
+Proof
+  pure_rewrite_tac[cp_def]
+  >> strip_tac >> rpt gen_tac >> strip_tac
+  >> first_x_assum (qspec_then `s` mp_tac)
+  >> first_x_assum (qspec_then `s` mp_tac)
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `b (FST h)`
+  >> gvs[bind_def, get_current_context_def, return_def, fail_def]
+QED
+
+Theorem cp_get_set_context_then:
+  (!c. (u c).msgParams = c.msgParams) /\
+  (!c. (u c).logs = c.logs) /\ (!c. cp (k c)) ==>
+  cp (bind get_current_context
+       (\c. ignore_bind (set_current_context (u c)) (k c)))
+Proof
+  rw[cp_def, bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def]
+  >> Cases_on `s.contexts` >> gvs[]
+  >> first_x_assum (qspec_then `FST h` mp_tac)
+  >> disch_then drule >> simp[]
+QED
+
 Theorem cp_get_cp_set_context:
   (∀ctxt. cp (g ctxt)) ∧
   (∀ctxt x. (f ctxt x).msgParams = ctxt.msgParams) ∧
@@ -508,19 +534,48 @@ Theorem cp_state_gas_meter[simp]:
   cp withhold_create_gas ∧ cp drain_state_gas_reservoir ∧
   cp (restore_child_gas g sr)
 Proof
-  rpt conj_tac
-  >> cp_tac [get_state_gas_left_def, charge_state_gas_def,
-       credit_state_gas_refund_def, restore_state_gas_def,
-       commit_state_gas_def, restore_state_gas_to_entry_def,
-       repay_state_gas_spill_def, repay_state_gas_spill_context_def,
-       forfeit_remaining_gas_def, withhold_create_gas_def,
-       drain_state_gas_reservoir_def, restore_child_gas_def, LET_THM]
+  conj_tac >- (cp_simp_tac [get_state_gas_left_def])
+  >> conj_tac
+  >- (pure_rewrite_tac [charge_state_gas_def, LET_THM]
+      >> BETA_TAC
+      >> ho_match_mp_tac cp_get_context_cond >> conj_tac
+      >- (ho_match_mp_tac cp_get_set_context >> simp[])
+      >> ho_match_mp_tac cp_get_context_cond >> conj_tac
+      >- (ho_match_mp_tac cp_get_set_context_then >> simp[]
+          >> gen_tac >> irule cp_ignore_bind >> simp[]
+          >> ho_match_mp_tac cp_get_set_context >> simp[])
+      >> irule cp_bind >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [credit_state_gas_refund_def, LET_THM]
+      >> BETA_TAC >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [restore_state_gas_def]
+      >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [commit_state_gas_def]
+      >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [restore_state_gas_to_entry_def]
+      >> ho_match_mp_tac cp_get_set_context >> simp[])
+  >> conj_tac
+  >- (pure_rewrite_tac [repay_state_gas_spill_def]
+      >> ho_match_mp_tac cp_get_set_context
+      >> simp[repay_state_gas_spill_context_def])
+  >> conj_tac >- (cp_simp_tac [forfeit_remaining_gas_def])
+  >> conj_tac >- (cp_simp_tac [withhold_create_gas_def, LET_THM])
+  >> conj_tac
+  >- (pure_rewrite_tac [drain_state_gas_reservoir_def]
+      >> ho_match_mp_tac cp_get_set_context_then >> simp[])
+  >> pure_rewrite_tac [restore_child_gas_def]
+  >> irule cp_ignore_bind >> simp[]
+  >> ho_match_mp_tac cp_get_set_context >> simp[]
 QED
 
 Theorem cp_step_sstore_gas[simp]:
   cp (step_sstore_gas_consumption addr key value)
 Proof
   cp_simp_tac [step_sstore_gas_consumption_def]
+  >> simp[cp_state_gas_meter]
 QED
 
 Theorem cp_step_helpers[simp]:
@@ -646,6 +701,21 @@ Theorem cp_handle_exception_prefix:
       else return ())
 Proof
   rw[]
+QED
+
+Theorem handle_exception_decomp_counterexample:
+  let st = s with contexts :=
+    [(c with <|stateGasLeft := 0; stateGasBaseline := 1|>, rb)] in
+  handle_exception (SOME Reverted) st <>
+    bind (return ()) (\u. handle_ex_helper (SOME Reverted)) st
+Proof
+  simp[LET_THM, handle_exception_def, handle_ex_helper_def,
+       restore_state_gas_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def,
+       get_num_contexts_def, return_def, reraise_def, fail_def]
+  >> disch_then (mp_tac o Q.AP_TERM
+       `\st. (FST (HD st.contexts)).stateGasLeft`)
+  >> simp[]
 QED
 
 (* Decompose handle_exception into cp prefix + handle_ex_helper *)
