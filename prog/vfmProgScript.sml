@@ -5276,6 +5276,113 @@ Proof
         set_return_data_def,finish_def]
 QED
 
+Theorem revert_positive_spill_probe[local]:
+  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+                       gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      c = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+                     memory := empty_buffer; gasUsed := 1;
+                     stateGasSpilled := 1; stateGasBaseline := 0;
+                     stateGasLeft := 0; stateGasCommitted := 0|>;
+      s = initial with <|contexts := [(c, cached)];
+                         rollback := initial.rollback with accounts := empty_accounts|>
+  in wf_state s /\
+     FLOOKUP p.parsed 0 = SOME Revert /\
+     step s = (INR (SOME Reverted), s with contexts :=
+       [(c with <|stack := []; returnData := []; gasUsed := 0;
+                  stateGasSpilled := 0; addRefund := 0; subRefund := 0|>,cached)])
+Proof
+  simp[LET_THM] >> conj_tac
+  >- simp[wf_state_def, wf_context_def, all_accounts_def,
+          stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def,
+          outputTo_consistent_ctx_def, wf_accounts_def, wf_account_state_def,
+          empty_accounts_def, empty_account_state_def, stack_limit_def, context_limit_def]
+  >> `FLOOKUP (parse_code 0 FEMPTY [253w]) 0 = SOME Revert` by
+       (simp[Once parse_code_def, vfmOperationTheory.parse_opcode_cond_thm, vfmOperationTheory.opcode_def] >>
+        simp[Once parse_code_def, finite_mapTheory.FLOOKUP_UPDATE])
+  >> simp[step_def, get_current_context_def, bind_def, return_def, handle_def]
+  >> simp[step_inst_def, step_return_def, ignore_bind_def, pop_stack_def,
+          assert_def, set_current_context_def, memory_expansion_info_def,
+          consume_gas_def, expand_memory_def, read_memory_def,
+          set_return_data_def, revert_def, handle_step_def, handle_create_def,
+          reraise_def, get_return_data_def, get_output_to_def,
+          handle_exception_def, get_num_contexts_def, restore_state_gas_def,
+          bind_def, return_def, get_current_context_def, handle_def,
+          empty_buffer_def, buffer_length_def]
+  >> simp[buffer_take_def] >> simp[Once read_bytes_def]
+QED
+
+Theorem SPEC_Return_outermost_counterexample[local]:
+  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+                       gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      c = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+                     memory := empty_buffer; gasUsed := 1;
+                     stateGasSpilled := 1; stateGasBaseline := 0;
+                     stateGasLeft := 0; stateGasCommitted := 0|>;
+      rb = initial.rollback with accounts := empty_accounts;
+      pre = evm_Stack [0w;0w] * evm_PC 0 * evm_Contexts [] *
+            evm_Memory empty_buffer * evm_ReturnData c.returnData *
+            evm_MsgParams p * evm_GasUsed 1 * evm_Exception (INL ()) *
+            evm_Rollback rb;
+      post = evm_Stack [] * evm_ReturnData [] * evm_PC 0 * evm_Contexts [] *
+             evm_Rollback rb * evm_Memory empty_buffer * evm_MsgParams p *
+             evm_GasUsed 1 * evm_Exception (INR (SOME Reverted))
+  in ~SPEC EVM_MODEL pre {(0,Revert)} post
+Proof
+  simp[LET_THM] >>
+  qmatch_goalsub_abbrev_tac `evm_MsgParams p` >>
+  qmatch_goalsub_abbrev_tac `evm_Rollback rb` >>
+  qabbrev_tac `c = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+     memory := empty_buffer; gasUsed := 1; stateGasSpilled := 1;
+     stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>` >>
+  qabbrev_tac `s = initial with <|contexts := [(c,cached)]; rollback := rb|>` >>
+  `wf_state s /\ FLOOKUP p.parsed 0 = SOME Revert /\
+   step s = (INR (SOME Reverted), s with contexts :=
+     [(c with <|stack := []; returnData := []; gasUsed := 0;
+                stateGasSpilled := 0; addRefund := 0; subRefund := 0|>,cached)])`
+    by (simp[Abbr `s`, Abbr `c`, Abbr `p`, Abbr `rb`] >>
+        irule (SRULE [LET_THM] revert_positive_spill_probe)) >>
+  rewrite_tac[GSYM V_SPEC_CODE, EVM_SPEC_SEMANTICS] >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `{HasParsed 0; HasStack; HasPC; HasContexts; HasMemory;
+              HasReturnData; HasMsgParams; HasGasUsed; HasException; HasRollback}` >>
+  CONV_TAC NOT_FORALL_CONV >> qexists `(INL (),s)` >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `\n. if n = 0 then (INL (),s) else step s` >>
+  pure_rewrite_tac[NOT_IMP] >> conj_tac
+  >- (conj_tac
+      >- (rewrite_tac[GSYM evm_Parsed_CODE_POOL, GSYM STAR_ASSOC, STAR_evm2set] >>
+          simp[STAR_evm2set, EMPTY_evm2set, Abbr `s`, Abbr `c`,
+               DELETE_INSERT, evm_Rollback_def, SEP_EQ_def, evm2set_on_def,
+               EXTENSION])
+      >> simp[rel_sequence_def, EVM_NEXT_REL_def] >> gen_tac >>
+         Cases_on `n = 0` >> simp[])
+  >> simp[GSYM evm_Parsed_CODE_POOL, GSYM STAR_ASSOC, STAR_evm2set] >>
+     gen_tac >> Cases_on `k = 0` >>
+     simp[STAR_evm2set, Abbr `s`, Abbr `c`]
+QED
+
+(* All cond conjuncts of the frozen rule, at offset=sz=gasCost=codeCost=0,
+   inst=Revert, em=empty_buffer, data=[], returnCode=F. *)
+Theorem revert_positive_spill_side_conditions[local]:
+  2 <= LENGTH ([0w;0w]:bytes32 list) /\ NULL ([]:(context # rollback_state) list) /\
+  ISL (INL ():unit + exception option) /\
+  0 = w2n (EL 0 ([0w;0w]:bytes32 list)) /\
+  0 = w2n (EL 1 ([0w;0w]:bytes32 list)) /\
+  (Revert = Return \/ Revert = Revert) /\
+  empty_buffer = expanded_memory empty_buffer 0 0 /\
+  [] = buffer_take 0 0 empty_buffer /\
+  0 = static_gas Revert + memory_cost empty_buffer 0 0 + 0 /\
+  F = (Revert = Return /\ is_code_dest (Memory <|offset := 0; size := 0|>)) /\
+  (if F then (case ([]:byte list) of [] => T | h::_ => h <> 239w) /\
+      0 = code_deposit_cost * LENGTH ([]:byte list) /\
+      LENGTH ([]:byte list) <= max_code_size else 0 = 0) /\
+  1 + 0 <= 10
+Proof
+  simp[expanded_memory_def, memory_expand_by_def, memory_cost_def,
+       vfmOperationTheory.static_gas_def, empty_buffer_def, buffer_length_def,
+       buffer_take_def, Once read_bytes_def]
+QED
+
 Theorem SPEC_Return_outermost:
   SPEC EVM_MODEL
   (evm_Stack ss *
@@ -5361,6 +5468,7 @@ Proof
         handle_def,bind_def,ignore_bind_def,reraise_def,get_return_data_def,
         get_current_context_def,return_def,get_output_to_def,EL_TAKE,HD_TAKE,
         return_destination_case_elim,handle_exception_def,get_num_contexts_def,
+        restore_state_gas_def,set_current_context_def,
         NULL_EQ]
   >- (
     gvs[Abbr`em`, memory_cost_def, expanded_memory_def, memory_expand_by_def]
