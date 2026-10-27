@@ -150,6 +150,28 @@ Proof
   >> original_tac
 QED
 
+Theorem original_state_gas_meter[local,simp]:
+  (!s. (SND (get_state_gas_left s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (charge_state_gas n s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (credit_state_gas_refund n s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (restore_state_gas s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (commit_state_gas s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (restore_state_gas_to_entry n s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (repay_state_gas_spill s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (forfeit_remaining_gas s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (withhold_create_gas s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (drain_state_gas_reservoir s)).originalAccounts = s.originalAccounts) /\
+  (!gas reservoir s. (SND (restore_child_gas gas reservoir s)).originalAccounts = s.originalAccounts)
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  rewrite_tac[get_state_gas_left_def, charge_state_gas_def,
+    credit_state_gas_refund_def, restore_state_gas_def, commit_state_gas_def,
+    restore_state_gas_to_entry_def, repay_state_gas_spill_def,
+    forfeit_remaining_gas_def, withhold_create_gas_def,
+    drain_state_gas_reservoir_def, restore_child_gas_def, LET_THM] >>
+  original_tac >> simp[original_context_wrappers, original_primitives]
+QED
+
 Theorem original_pop_and_incorporate[local]:
   !s. (SND (pop_and_incorporate_context success s)).originalAccounts = s.originalAccounts
 Proof
@@ -883,12 +905,14 @@ Proof
   >> simp[proceed_call_def, bind_def, ignore_bind_def,
           get_rollback_def, read_memory_def, get_caller_def,
           get_value_def, get_static_def, update_accounts_def,
-          push_context_def, get_current_context_def, return_def]
+          push_context_def, get_current_context_def, return_def,
+          drain_state_gas_reservoir_def, set_current_context_def]
   >> `∀f. update_accounts f s = (INL (), s with rollback updated_by (λr. r with accounts updated_by f))`
        by simp[update_accounts_def, return_def]
   >> Cases_on `op ≠ CallCode ∧ 0 < value`
   >> Cases_on `fIN address precompile_addresses`
-  >> gvs[return_def]
+  >> gvs[return_def, update_accounts_def, get_current_context_def,
+         set_current_context_def, bind_def]
   >> strip_tac
   (* In the precompile branches, extract the exception-shape fact. *)
   >> drule_at (Pat`dispatch_precompiles`)
@@ -911,7 +935,7 @@ Proof
   >> strip_tac
   (* Facts about `pushed`. *)
   >> `SND (HD pushed.contexts) = s.rollback ∧
-      TL pushed.contexts = s.contexts ∧
+      TL pushed.contexts = (FST h with stateGasLeft := 0, SND h)::t ∧
       (FST (HD pushed.contexts)).msgParams.outputTo = Memory mr ∧
       pushed.rollback.accesses = s.rollback.accesses ∧
       pushed.msdomain = s.msdomain ∧
@@ -933,11 +957,12 @@ Proof
   >> strip_tac
   (* Pick parent_ctx = FST h for the existential. *)
   >> `∃parent_ctx.
-       h = (parent_ctx, SND h) ∧ parent_ctx.msgParams = (FST h).msgParams ∧
+       (FST h with stateGasLeft := 0, SND h) = (parent_ctx, SND h) ∧
+       parent_ctx.msgParams = (FST h).msgParams ∧
        parent_ctx.logs = (FST h).logs ∧
        parent_ctx.addRefund = (FST h).addRefund ∧
        parent_ctx.subRefund = (FST h).subRefund`
-     by (qexists_tac `FST h` >> simp[pairTheory.PAIR])
+     by (qexists_tac `FST h with stateGasLeft := 0` >> simp[])
   (* Remaining: callee_local_changes, accesses ⊆, msdomain_compatible. *)
   >> simp[]
   >> fs[]
@@ -1171,7 +1196,7 @@ Theorem step_same_frame:
                          SND (HD s.contexts)) :: TL s.contexts)
     s'
 Proof
-  strip_tac
+  rewrite_tac[GSYM zero_head_refunds_def] >> strip_tac
   >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
   >> gvs[step_def, handle_def]
   >> qmatch_asmsub_abbrev_tac`pair_CASE (inner s)`
@@ -1179,7 +1204,8 @@ Proof
   >> gvs[AllCaseEqs()]
   >- (
     (* inner returned INL: step s = (INL _, r) so s' = r. *)
-    gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[])
+    gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[] >>
+    metis_tac[same_frame_rel_zero_head_refunds_weaken])
   >> (* inner returned INR with state s1: step s = handle_step e s1.
         Two sub-cases based on same_frame_or_grow inner:
           (a) same_frame_rel s s1: compose with handle_step_same_frame.
@@ -1196,10 +1222,11 @@ Proof
     >> `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
     >> `LENGTH s1.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
     >> `LENGTH s'.contexts = LENGTH s1.contexts` by simp[]
-    >> `same_frame_rel s1 s'` by (
+    >> `same_frame_rel (zero_head_refunds s1) s'` by (
          drule handle_step_same_frame >> disch_then drule
-         >> disch_then drule >> simp[])
-    >> metis_tac[same_frame_rel_trans])
+         >> disch_then drule >> simp[zero_head_refunds_def])
+    >> metis_tac[same_frame_rel_zero_head_refunds_weaken,
+                 same_frame_rel_zero_head_refunds_trans])
   >> (* (b) inner grew. Reduce to step_call_handle_step_inr_grow_same_frame.
         The op must be Call/CallCode/DelegateCall/StaticCall (the only
         ops that can INR-grow). *)
@@ -1253,6 +1280,7 @@ Proof
   >> disch_then assume_tac
   >> `step_inst op s = step_call op s` by gvs[step_inst_def]
   >> pop_assum (mp_tac o SYM) >> simp[] >> strip_tac
+  >> irule same_frame_rel_zero_head_refunds_weaken
   >> irule step_call_handle_step_inr_grow_same_frame
   >> simp[]
   >> rpt(goal_assum drule)
@@ -1289,29 +1317,29 @@ Theorem run_within_frame_preserves:
                          SND (HD es.contexts)) :: TL es.contexts)
     es'
 Proof
-  rpt strip_tac
+  rewrite_tac[GSYM zero_head_refunds_def] >> rpt strip_tac
   >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
   >> gvs[run_within_frame_def]
   >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
-           same_frame_rel es (SND p)) (r, es')` suffices_by simp[]
+           same_frame_rel (zero_head_refunds es) (SND p)) (r, es')` suffices_by simp[]
   >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
   >> goal_assum (first_assum o mp_then Any mp_tac)
   >> simp[]
   >> conj_tac
-  >- simp[same_frame_rel_refl]
+  >- simp[same_frame_rel_zero_head_refunds_refl]
   >> rpt gen_tac
   >> pairarg_tac >> simp[]
   >> strip_tac
   >> strip_tac
   >> Cases_on `step s''` >> simp[]
-  >> `same_frame_rel es s''` by simp[]
+  >> `same_frame_rel (zero_head_refunds es) s''` by simp[]
   >> `outputTo_consistent s''`
-       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
-  >> `same_frame_rel s'' r'` by (
-       irule step_same_frame
+       by metis_tac[same_frame_rel_zero_head_refunds_outputTo_consistent]
+  >> `same_frame_rel (zero_head_refunds s'') r'` by (
+       simp[zero_head_refunds_def] >> irule step_same_frame
        >> goal_assum (first_assum o mp_then Any mp_tac)
        >> simp[])
-  >> metis_tac[same_frame_rel_trans]
+  >> metis_tac[same_frame_rel_zero_head_refunds_trans]
 QED
 
 (* ================================================================ *)

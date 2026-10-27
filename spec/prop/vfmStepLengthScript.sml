@@ -368,22 +368,12 @@ Proof
   conj_tac
   >- (
     rpt strip_tac
-    >> `preserves_same_frame get_gas_left` by simp[]
+    >> `preserves_same_frame withhold_create_gas` by simp[]
     >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
     >> disch_then drule >> rw[]
     >> drule same_frame_rel_callee
     >> gvs[Abbr`pco`])
   >> gen_tac
-  >> irule psf_or_grow_ignore_bind >> simp[] >> qexists_tac `pco` >> simp[]
-  >> conj_tac
-  >- (
-    rpt strip_tac
-    >> qmatch_asmsub_abbrev_tac`consume_gas n`
-    >> `preserves_same_frame (consume_gas n)` by simp[]
-    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
-    >> disch_then drule >> rw[]
-    >> drule same_frame_rel_callee
-    >> gvs[Abbr`pco`])
   >> irule psf_or_grow_ignore_bind >> simp[] >>
   qexists_tac `pco` >> simp[]
   >> conj_tac
@@ -493,7 +483,7 @@ Theorem same_frame_or_grow_step_inst[simp]:
   same_frame_or_grow (step_inst op)
 Proof
   Cases_on `op` >> simp[]
-  >> simp[step_inst_def]
+  >> simp[step_inst_def, same_frame_or_grow_step_create]
 QED
 
 (* The inner monad of step (before the outer handle) is composed of
@@ -560,7 +550,8 @@ Proof
   >> gvs[proceed_create_def, bind_def, ignore_bind_def,
          get_rollback_def, get_original_def, set_original_def,
          update_accounts_def, push_context_def, return_def,
-         AllCaseEqs()]
+         drain_state_gas_reservoir_def, get_current_context_def,
+         set_current_context_def, fail_def, AllCaseEqs()]
 QED
 
 Theorem proceed_call_returns_inl:
@@ -573,7 +564,8 @@ Proof
          get_rollback_def, read_memory_def, get_caller_def, COND_RATOR,
          return_def, get_caller_def, get_value_def, get_static_def,
          get_current_context_def, push_context_def, AllCaseEqs(),
-         update_accounts_def]
+         update_accounts_def, drain_state_gas_reservoir_def,
+         set_current_context_def]
 QED
 
 (* step_create never INR-grows. Use same_frame_or_grow_step_create:
@@ -1027,9 +1019,6 @@ Proof
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   gvs[ignore_bind_def] >>
-  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
-  disch_then irule >> simp[] >>
-  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
