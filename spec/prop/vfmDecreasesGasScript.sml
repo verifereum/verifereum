@@ -5,6 +5,42 @@ Ancestors
 Libs
   BasicProvers
 
+(* Eliminate saturated subtraction before invoking Presburger arithmetic.
+   SUB_ELIM_THM gives additive constraints in both order cases. *)
+val gas_arith_tac =
+  rpt gen_tac >>
+  rpt (W (fn (_, w) =>
+    let val sub = find_term (can numSyntax.dest_minus) w in
+      CONV_TAC (UNBETA_CONV sub THENC REWR_CONV SUB_ELIM_THM) >>
+      BETA_TAC >> rpt gen_tac
+    end)) >>
+  numLib.ARITH_TAC;
+
+Theorem gas_arith_increment[local]:
+  !a k:num. 0 < k ==> a < a + k
+Proof
+  gas_arith_tac
+QED
+
+Theorem gas_arith_saturated[local]:
+  !a b:num. a <= b ==> a - b = 0
+Proof
+  gas_arith_tac
+QED
+
+Theorem gas_arith_nested[local]:
+  !a b c:num. a - b - c = a - (b + c)
+Proof
+  gas_arith_tac
+QED
+
+Theorem unused_gas_grant_bound[local]:
+  !gL gU spill:num. spill <= gU /\ gU <= gL ==>
+    gL - gU + spill <= gL
+Proof
+  gas_arith_tac
+QED
+
 (* EIP-8037: what a step must not raise is the head frame's unused gas,
    `frame_unused_gas` (grant less spent, plus the state charge that
    spilled into the grant).  `gasUsed` alone will not do: a state-gas
