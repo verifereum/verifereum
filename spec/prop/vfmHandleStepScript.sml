@@ -857,6 +857,29 @@ Proof
   >> Cases_on `s.contexts` >> gvs[wf_context_def]
 QED
 
+(* EIP-8037: a pop moves execution gas twice, so the bound carries the
+   repayment term.  `pop_and_incorporate_context` reads the child's leftover
+   execution gas and gives it back with `unuse_gas` (`gasUsed := gasUsed - n`,
+   `spec/vfmExecutionScript.sml`), then `absorb_state_gas` (`:578`) adds the
+   child's reservoir and spill to the parent's three meter fields and leaves
+   `gasUsed` alone, and then on the success branch `repay_state_gas_spill_context`
+   (`:599`) removes `MIN stateGasLeft stateGasSpilled` from `gasUsed` as well.
+   So the parent's `gasUsed` after a pop is
+     parent.gasUsed - calleeGasLeft
+       - MIN (parent.stateGasLeft + child.stateGasLeft)
+             (parent.stateGasSpilled + child.stateGasSpilled).
+
+   The existing term `callee.msgParams.gasLimit - callee.gasUsed` is
+   `calleeGasLeft` on the branch where it matters and an upper bound of it
+   elsewhere, so only the repayment term is added:
+   - `e = NONE`: the prefix is `return ()`, so the child's meter at the pop is
+     the one the statement names and the term above is exact.
+   - `e = SOME Reverted`: `restore_state_gas` moves the child's reservoir to its
+     baseline and its spill to 0, and `success = F` skips the repayment, so the
+     parent loses no extra gas and the term only weakens the bound.
+   - `e ≠ NONE` and `e ≠ SOME Reverted`: `forfeit_remaining_gas` leaves the child
+     no execution gas and the repayment is skipped, so the term only weakens
+     the bound. *)
 (* Generic handle_exception pop structure: when it shrinks, the contexts
    take the form (new_head, SND parent) :: rest with msgParams preserved,
    and the rollback is either s.rollback (success) or callee_rb (failure). *)
@@ -870,7 +893,9 @@ Theorem handle_exception_pop_generic_gen:
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
       new_parent_ctx.gasUsed ≥
         (FST parent).gasUsed -
-        (callee.msgParams.gasLimit - callee.gasUsed)
+        (callee.msgParams.gasLimit - callee.gasUsed) -
+        MIN ((FST parent).stateGasLeft + callee.stateGasLeft)
+            ((FST parent).stateGasSpilled + callee.stateGasSpilled)
 Proof
   strip_tac
   >> Cases_on `parent`
@@ -975,7 +1000,9 @@ Theorem handle_step_pop_generic_gen:
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
       new_parent_ctx.gasUsed ≥
         (FST parent).gasUsed -
-        (callee.msgParams.gasLimit - callee.gasUsed)
+        (callee.msgParams.gasLimit - callee.gasUsed) -
+        MIN ((FST parent).stateGasLeft + callee.stateGasLeft)
+            ((FST parent).stateGasSpilled + callee.stateGasSpilled)
 Proof
   strip_tac
   >> qhdtm_x_assum `handle_step` mp_tac
@@ -1015,7 +1042,9 @@ Theorem handle_step_pop_generic_gen_paired:
       new_parent_ctx.msgParams = (FST parent).msgParams ∧
       new_parent_ctx.gasUsed ≥
         (FST parent).gasUsed -
-        (callee.msgParams.gasLimit - callee.gasUsed) ∧
+        (callee.msgParams.gasLimit - callee.gasUsed) -
+        MIN ((FST parent).stateGasLeft + callee.stateGasLeft)
+            ((FST parent).stateGasSpilled + callee.stateGasSpilled) ∧
       ((toSet s.rollback.accesses.storageKeys ⊆
           toSet s'.rollback.accesses.storageKeys ∧
         (∀a. (lookup_account a s'.rollback.accounts).storage =
