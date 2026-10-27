@@ -601,6 +601,16 @@ Proof
   \\ irule_at Any decreases_gas_get_current_context \\ rw []
 QED
 
+Theorem decreases_gas_withhold_create_gas[simp]:
+  decreases_gas F withhold_create_gas
+Proof
+  rw [withhold_create_gas_def, ignore_bind_def]
+  \\ irule decreases_gas_bind_right
+  \\ irule_at Any decreases_gas_get_gas_left \\ rw []
+  \\ irule decreases_gas_bind_right
+  \\ irule_at Any decreases_gas_consume_gas \\ rw []
+QED
+
 Theorem decreases_gas_set_return_data[simp]:
   decreases_gas F (set_return_data data)
 Proof
@@ -2022,6 +2032,7 @@ Proof
   \\ simp[ignore_bind_def]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ qpat_abbrev_tac `v4 = COND a b c`
+  \\ simp[withhold_create_gas_def, ignore_bind_def]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
   \\ simp[GSYM ignore_bind_def]
   \\ irule decreases_gas_cred_consume_gas_debit_more
@@ -2048,8 +2059,9 @@ Proof
     \\ qexists_tac`F` \\ rw[]
     \\ qexists_tac`F` \\ rw[] )
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
   \\ gen_tac
   \\ irule decreases_gas_cred_bind_set_original
