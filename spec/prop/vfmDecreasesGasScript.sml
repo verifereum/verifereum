@@ -173,6 +173,17 @@ Proof
   \\ BasicProvers.TOP_CASE_TAC \\ gs[]
 QED
 
+Theorem decreases_gas_drain_state_gas_reservoir[simp]:
+  decreases_gas F drain_state_gas_reservoir
+Proof
+  rw[decreases_gas_def, drain_state_gas_reservoir_def,
+     get_current_context_def, set_current_context_def,
+     bind_def, ignore_bind_def, return_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def]
+QED
+
 (* The measure is a difference of naturals, so it saturates, and each
    fact about it is a small case analysis on that.  The frame facts are
    stated over the four numbers the measure reads, not over a record
@@ -197,17 +208,19 @@ QED
    but refuses the goal: "at Gen_arith.ARITH_CONV: formula not in the
    allowed subset" -- HOL4's ARITH_CONV decides Presburger arithmetic
    over `num`, and truncated subtraction is outside it. *)
+val _ = numLib.temp_prefer_num ();
+
 Theorem num_consume_gas_lt[simp]:
   !gL gU sp k. 0 < k /\ gU + k <= gL ==> gL - (gU + k) + sp < gL - gU + sp
 Proof
-  cheat
+  gas_arith_tac
 QED
 
 Theorem frame_unused_gas_consume[simp]:
   !(c:context) k. 0 < k /\ c.gasUsed + k <= c.msgParams.gasLimit ==>
     frame_unused_gas (c with gasUsed := c.gasUsed + k) < frame_unused_gas c
 Proof
-  cheat
+  simp[frame_unused_gas_def]
 QED
 
 (* EIP-8037's two state-gas meter operations only move gas between the
@@ -240,7 +253,7 @@ Theorem frame_unused_gas_charge_spill[simp]:
   !gL gU spill d. d <= gL - gU ==>
     gL - (gU + d) + (spill + d) <= gL - gU + spill
 Proof
-  cheat
+  gas_arith_tac
 QED
 
 (* A credit hands execution gas back out of the spill: `gasUsed` and the
@@ -255,7 +268,7 @@ Theorem frame_unused_gas_credit[simp]:
   !gL gU spill f. f <= spill ==>
     gL - (gU - f) + (spill - f) <= gL - gU + spill
 Proof
-  cheat
+  gas_arith_tac
 QED
 
 Theorem decreases_gas_consume_gas:
