@@ -2332,13 +2332,28 @@ QED
 
 (* Full-step pop structure.  Rollback equality is weakened to storage equality
  * plus the matching accesses subset, because handle_create may change code. *)
-Theorem step_inst_same_frame_gas_monotone:
+(* EIP-8037 replacement for `step_inst_same_frame_gas_monotone`, which was
+   false.  `credit_state_gas_refund` (`spec/vfmExecutionScript.sml:518-527`)
+   takes `MIN n stateGasSpilled` out of the frame's `gasUsed`, and
+   `step_sstore_gas_consumption` runs it before its charges (`:1016`, charges
+   at `:1021-1022`), so a slot-clearing SSTORE on a frame that has already
+   spilled can end below its starting `gasUsed`.  Checked witness:
+   `spec/prop/vfmSstoreGasProbeScript.sml`
+   `step_inst_same_frame_gas_monotone_counterexample`.
+
+   The measure is what survives: the credit lowers `gasUsed` and the spill
+   together and puts the excess in the reservoir, which `frame_unused_gas`
+   does not count, so it leaves the measure alone; `charge_state_gas` moves both
+   together on its spill branch; and `update_gas_refund` never touches
+   `gasUsed`.  Inside a same-frame step the head's `frame_unused_gas` can
+   therefore only fall, by `consume_gas`. *)
+Theorem step_inst_same_frame_unused_gas_monotone:
    step_inst op s = (q, s') ∧
    same_frame_rel s s' ∧
    EVERY (wf_context o FST) s.contexts
    ⇒
-     (FST (HD s.contexts)).gasUsed ≤
-     (FST (HD s'.contexts)).gasUsed
+     frame_unused_gas (FST (HD s'.contexts)) ≤
+     frame_unused_gas (FST (HD s.contexts))
 Proof
   strip_tac
   >> qspec_then`op`mp_tac(GEN_ALL decreases_gas_cred_step_inst)
@@ -2626,11 +2641,15 @@ Proof
   >> strip_tac >> simp[]
 QED
 
-Theorem step_inner_same_frame_gas_monotone:
+(* The `step_inner` counterpart of `step_inst_same_frame_unused_gas_monotone`
+   above, replacing `step_inner_same_frame_gas_monotone` for the same reason:
+   `step_inner` is `step_inst` of the decoded op plus `inc_pc_or_jump`
+   (`vfmExecutionPropScript.sml:40-52`), so the SSTORE credit reaches it too. *)
+Theorem step_inner_same_frame_unused_gas_monotone:
   step_inner s = (r, s') ∧ same_frame_rel s s' ∧
   EVERY (wf_context o FST) s.contexts ⇒
-    (FST (HD s.contexts)).gasUsed ≤
-    (FST (HD s'.contexts)).gasUsed
+    frame_unused_gas (FST (HD s'.contexts)) ≤
+    frame_unused_gas (FST (HD s.contexts))
 Proof
   rpt strip_tac
   >> mp_tac decreases_gas_cred_step_inner
