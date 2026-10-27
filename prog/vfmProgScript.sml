@@ -4970,7 +4970,10 @@ Theorem handle_step_success_memory_exact:
        |>,prb)::rest)
 Proof
   strip_tac >>
-  simp[handle_step_def, handle_create_def, handle_exception_def,
+  qpat_x_assum `merged = _` SUBST1_TAC >>
+  simp[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+       absorb_state_gas_def,
+       handle_step_def, handle_create_def, handle_exception_def,
        pop_and_incorporate_context_def, get_gas_left_def,
        get_return_data_def, get_output_to_def, get_num_contexts_def,
        pop_context_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
