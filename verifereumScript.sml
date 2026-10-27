@@ -8,6 +8,7 @@ open HolKernel
   vfmOriginalStateTheory vfmOriginalAccountsTheory
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
   vfmProgTheory wrappedEtherTheory wrappedEtherNameTheory
+  wrappedEtherTransferTheory
 
 val () = new_theory "verifereum";
 
