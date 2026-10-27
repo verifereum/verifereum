@@ -151,7 +151,8 @@ Theorem initial_state_contract:
   lookup_account a s.rollback.accounts = lookup_account a accounts ∧
   a ≠ tx.from ∧ s.rollback.toDelete = [] ∧
   (FST (HD s.contexts)).msgParams.caller = tx.from ∧
-  ¬(FST (HD s.contexts)).msgParams.static
+  ¬(FST (HD s.contexts)).msgParams.static ∧
+  s.originalAccounts = s.rollback.accounts
 Proof
   simp[initial_state_def, CaseEq"option"] \\ strip_tac
   \\ pairarg_tac \\ gvs[]
@@ -551,28 +552,55 @@ Proof
   rw[access_slot_cost_def, warm_access_cost_def, cold_sload_cost_def]
 QED
 
-Theorem SStore_gas_le[local]:
-  FST (SStore_gas original rb address key value) ≤ 22100
+Theorem accesses_add_slot_accounts[local]:
+  (accesses_add_slot a rb).accounts = rb.accounts
 Proof
-  rw[SStore_gas_def, sstore_base_gas_def, zero_warm_def, access_slot_cost_def,
-     warm_access_cost_def, cold_sload_cost_def, storage_set_cost_def,
-     storage_update_cost_def]
+  rw[accesses_add_slot_def]
+QED
+
+Theorem access_slot_cost_add_slot[local]:
+  access_slot_cost (accesses_add_slot a rb) a = 100
+Proof
+  rw[access_slot_cost_def, accesses_add_slot_def, warm_access_cost_def]
+QED
+
+(* an SSTORE to a slot just read pays no cold surcharge *)
+Theorem SStore_gas_add_slot[local]:
+  FST (SStore_gas original (accesses_add_slot (SK a k) rb) a k v) =
+  sstore_base_gas (lookup_storage k (lookup_account a original).storage)
+                  (lookup_storage k (lookup_account a rb.accounts).storage) v
+Proof
+  rw[SStore_gas_def, access_slot_cost_add_slot, zero_warm_def,
+     warm_access_cost_def, accesses_add_slot_accounts]
   \\ pairarg_tac \\ gvs[]
-  \\ rw[]
+QED
+
+Theorem sstore_base_gas_le[local]:
+  sstore_base_gas ov cv v ≤ 20000
+Proof
+  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
+     cold_sload_cost_def, warm_access_cost_def]
+QED
+
+(* the first write to a slot that was nonzero, or that isn't changed *)
+Theorem sstore_base_gas_same_le[local]:
+  (c = 0w ⇒ v = c) ⇒ sstore_base_gas c c v ≤ 2900
+Proof
+  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
+     cold_sload_cost_def, warm_access_cost_def]
+  \\ gvs[]
 QED
 
 (* bounds the path's access and SSTORE costs in the goal by their worst case *)
 fun gas_bounds_tac (asl, w) =
   let
     fun is_cost t =
-      is_app "access_slot_cost" 2 t orelse
-      (is_comb t andalso is_const (rator t) andalso
-       fst (dest_const (rator t)) = "FST" andalso is_app "SStore_gas" 5 (rand t))
+      is_app "access_slot_cost" 2 t orelse is_app "sstore_base_gas" 3 t
     val ts = HOLset.listItems (HOLset.addList (empty_tmset, find_terms is_cost w))
     fun bound t =
       if is_app "access_slot_cost" 2 t then
         PART_MATCH (rand o rator) access_slot_cost_le t
-      else PART_MATCH (rand o rator) SStore_gas_le t
+      else PART_MATCH (rand o rator) sstore_base_gas_le t
   in
     MAP_EVERY (assume_tac o bound) ts (asl, w)
   end
@@ -590,7 +618,7 @@ Theorem weth_transfer_run_transaction:
   access_slot_check dom (SK addr (balance_slot_key dst)) ∧
   blk.coinBase ≠ addr ∧
   initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  53262 ≤ (FST (HD s.contexts)).msgParams.gasLimit
+  29962 ≤ (FST (HD s.contexts)).msgParams.gasLimit
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =
@@ -604,6 +632,13 @@ Theorem weth_transfer_run_transaction:
                (Keccak_256_string "Transfer(address,address,uint256)");
              w2w tx.from; w2w dst];
           data := enc (Tuple [Uint 256]) (ListV [NumV wad]) |>] ∧
+    (∀a. a ≠ addr ⇒
+         (lookup_account a accounts').code =
+         (lookup_account a s.rollback.accounts).code ∧
+         (lookup_account a accounts').storage =
+         (lookup_account a s.rollback.accounts).storage ∧
+         (lookup_account a accounts').nonce =
+         (lookup_account a s.rollback.accounts).nonce) ∧
     lookup_account addr accounts' =
       let acc = lookup_account addr accounts;
           ks = balance_slot_key tx.from;
@@ -656,11 +691,20 @@ Proof
             SIMP_RULE std_ss [APPEND] transfer_selector_calldata,
             DROP_APPEND, DROP_LENGTH_TOO_LONG, calldata_word, mask_and_w2w,
             balance_slot_key_bytes]
+    \\ simp[access_slot_cost_add_slot, SStore_gas_add_slot,
+            accesses_add_slot_accounts]
+    \\ qpat_assum `s.originalAccounts = _` (fn th => rewrite_tac[th])
+    \\ qpat_assum `lookup_account addr s.rollback.accounts = _`
+         (fn th => rewrite_tac[th])
+    \\ qmatch_goalsub_abbrev_tac `sstore_base_gas c0 c0 v0`
+    \\ `sstore_base_gas c0 c0 v0 ≤ 2900`
+    by (irule sstore_base_gas_same_le \\ qunabbrevl_tac [`c0`, `v0`]
+        \\ strip_tac \\ gvs[])
     \\ gas_bounds_tac
     \\ gvs[call_stipend_def])
   \\ strip_tac
   \\ qexistsl_tac [`result`, `accounts'`]
-  \\ qpat_x_assum `∀a. lookup_account a accounts' = _`
+  \\ qpat_assum `∀a. lookup_account a accounts' = _`
        (qspec_then `addr` assume_tac)
   \\ gvs[SStore_write_def, sstore_write_accounts_updater_def,
          accesses_add_slot_def, lookup_account_def, update_account_def,
@@ -807,7 +851,7 @@ Theorem WETH_EVM_transfer_run_transaction:
   access_slot_check dom (SK addr (balance_slot_key dst)) ∧
   blk.coinBase ≠ addr ∧
   initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  53262 ≤ (FST (HD s.contexts)).msgParams.gasLimit
+  29962 ≤ (FST (HD s.contexts)).msgParams.gasLimit
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =
@@ -821,6 +865,13 @@ Theorem WETH_EVM_transfer_run_transaction:
                (Keccak_256_string "Transfer(address,address,uint256)");
              w2w tx.from; w2w dst];
           data := enc (Tuple [Uint 256]) (ListV [NumV wad]) |>] ∧
+    (∀a. a ≠ addr ⇒
+         (lookup_account a accounts').code =
+         (lookup_account a s.rollback.accounts).code ∧
+         (lookup_account a accounts').storage =
+         (lookup_account a s.rollback.accounts).storage ∧
+         (lookup_account a accounts').nonce =
+         (lookup_account a s.rollback.accounts).nonce) ∧
     WETH_EVM addr (WETH_transfer tx.from dst wad ws) accounts'
 Proof
   strip_tac
