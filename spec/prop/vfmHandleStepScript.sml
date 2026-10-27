@@ -1379,7 +1379,7 @@ Proof
   rw[gas_stack_ok_def]
   >> first_x_assum(qspec_then `0` mp_tac)
   >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `t` >> gvs[unused_gas_def]
+  >> Cases_on `t` >> gvs[unused_gas_def, frame_unused_gas_def]
 QED
 
 Theorem stack_room_ok_parent_stack:
