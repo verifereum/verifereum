@@ -2884,24 +2884,6 @@ Proof
   >> simp[]
 QED
 
-(* A completed child pop preserves the slot invariant if both possible
- * storage sources satisfy it. This says nothing about gas or other fields. *)
-Theorem step_pop_preserves_storage_slot:
-  step s = (r, s') ∧ s.contexts ≠ [] ∧
-  outputTo_consistent_stack s ∧
-  EVERY (wf_context o FST) s.contexts ∧
-  LENGTH s'.contexts < LENGTH s.contexts ∧
-  storage_slot_preserved s.rollback rb ∧
-  storage_slot_preserved (SND (HD s.contexts)) rb ⇒
-  storage_slot_preserved s'.rollback rb
-Proof
-  strip_tac
-  >> drule_all step_pop_structure
-  >> strip_tac
-  >> gvs[storage_slot_preserved_def, SUBSET_DEF, finite_setTheory.fIN_IN]
-  >> metis_tac[]
-QED
-
 (* Single-step preservation of run_call_inv, by length-change cases. *)
 
 Theorem run_call_inv_step:
@@ -3098,9 +3080,8 @@ Proof
                    >> Cases_on `n` >> fs[])
              >> simp[] >> strip_tac >> fs[])
     >> `storage_slot_preserved s1.rollback es.rollback` by (
-         irule step_pop_preserves_storage_slot
-         >> qexistsl_tac [`rr`, `s0`]
-         >> gvs[wf_state_def])
+         gvs[storage_slot_preserved_def, SUBSET_DEF, finite_setTheory.fIN_IN]
+         >> metis_tac[])
     (* Split on whether s1.contexts is below ed or not. *)
     >> Cases_on `LENGTH s1.contexts < ed`
     >- ((* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
