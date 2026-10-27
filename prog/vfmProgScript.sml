@@ -1883,6 +1883,7 @@ Theorem SPEC_StackUnderflow_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ LENGTH ss < n ∧
            ∃k. step_inst inst = bind (pop_stack n) k))
@@ -1891,6 +1892,7 @@ Theorem SPEC_StackUnderflow_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME StackUnderflow)))
 Proof
@@ -1902,6 +1904,7 @@ Theorem SPEC_OutOfGas_pop_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ n ≤ LENGTH ss ∧
            p.gasLimit < g + cost (TAKE n ss) ∧
@@ -1913,6 +1916,7 @@ Theorem SPEC_OutOfGas_pop_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME OutOfGas)))
 Proof
@@ -1924,6 +1928,7 @@ Theorem SPEC_OutOfGas_outermost:
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ p.gasLimit < g + c ∧
            ∃k. step_inst inst = ignore_bind (consume_gas c) k))
@@ -1932,6 +1937,7 @@ Theorem SPEC_OutOfGas_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME OutOfGas)))
 Proof
@@ -1943,6 +1949,7 @@ Theorem SPEC_StackOverflow_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ LENGTH ss = stack_limit ∧
            g + c ≤ p.gasLimit ∧
@@ -1955,6 +1962,7 @@ Theorem SPEC_StackOverflow_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME StackOverflow)))
 Proof
@@ -2145,6 +2153,7 @@ Theorem SPEC_InvalidJumpDest_Jump_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_JumpDest j * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧
            g + static_gas Jump ≤ p.gasLimit ∧
@@ -2155,6 +2164,7 @@ Theorem SPEC_InvalidJumpDest_Jump_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_JumpDest (SOME (w2n (HD ss))) *
      evm_Exception (INR (SOME InvalidJumpDest)))
@@ -2169,6 +2179,7 @@ Theorem SPEC_InvalidJumpDest_JumpI_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_JumpDest j * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 2 ≤ LENGTH ss ∧ EL 1 ss ≠ 0w ∧
            g + static_gas JumpI ≤ p.gasLimit ∧
@@ -2179,6 +2190,7 @@ Theorem SPEC_InvalidJumpDest_JumpI_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_JumpDest (SOME (w2n (HD ss))) *
      evm_Exception (INR (SOME InvalidJumpDest)))
@@ -2193,6 +2205,7 @@ Theorem SPEC_OutOfBoundsRead_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Memory m * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 3 ≤ LENGTH ss ∧
            offset = w2n (EL 0 ss) ∧ sz = w2n (EL 2 ss) ∧
@@ -2204,6 +2217,7 @@ Theorem SPEC_OutOfBoundsRead_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] * evm_Memory m *
      evm_Exception (INR (SOME OutOfBoundsRead)))
 Proof
@@ -2355,6 +2369,7 @@ Theorem SPEC_WriteInStaticContext_TStore_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 2 ≤ LENGTH ss ∧ p.static ∧
            g + warm_access_cost ≤ p.gasLimit))
@@ -2363,6 +2378,7 @@ Theorem SPEC_WriteInStaticContext_TStore_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME WriteInStaticContext)))
 Proof
@@ -2375,6 +2391,7 @@ Theorem SPEC_WriteInStaticContext_Log_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Memory m * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 2 + n ≤ LENGTH ss ∧ p.static ∧
            offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
@@ -2386,7 +2403,9 @@ Theorem SPEC_WriteInStaticContext_Log_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_Contexts cs * evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_Contexts cs *
+     evm_AddRefund 0 * evm_SubRefund 0 *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Memory (expanded_memory m offset sz) *
      evm_Exception (INR (SOME WriteInStaticContext)))
 Proof
@@ -2401,6 +2420,7 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      evm_Rollback rb * evm_Msdomain d *
      cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧ p.static ∧
@@ -2416,6 +2436,7 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME WriteInStaticContext)) *
      evm_Rollback (accesses_add addr rb) * evm_Msdomain (msdomain_add addr d))
@@ -5368,6 +5389,7 @@ Theorem SPEC_Invalid_outermost:
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
      evm_StateGasLeft sg * evm_StateGasSpilled sp *
      evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e))
     {(pc,Invalid)}
@@ -5375,6 +5397,7 @@ Theorem SPEC_Invalid_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME InvalidOpcode)))
 Proof
