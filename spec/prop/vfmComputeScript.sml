@@ -483,45 +483,53 @@ val () = “get_state_gas_left s” |>
   cv_auto_trans;
 
 val () = “charge_state_gas n s” |>
-  SIMP_CONV std_ss [charge_state_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
+  SIMP_CONV std_ss [charge_state_gas_def, bind_def, ignore_bind_def,
+                    LET_RATOR, COND_RATOR] |>
   cv_auto_trans;
 
 val () = “credit_state_gas_refund n s” |>
   SIMP_CONV std_ss [credit_state_gas_refund_def, bind_def, ignore_bind_def,
-                    LET_RATOR] |>
+                    LET_RATOR, COND_RATOR] |>
   cv_auto_trans;
 
 val () = “restore_state_gas s” |>
-  SIMP_CONV std_ss [restore_state_gas_def, bind_def, ignore_bind_def] |>
+  SIMP_CONV std_ss [restore_state_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
   cv_auto_trans;
 
 val () = “commit_state_gas s” |>
-  SIMP_CONV std_ss [commit_state_gas_def, bind_def, ignore_bind_def] |>
+  SIMP_CONV std_ss [commit_state_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
   cv_auto_trans;
 
 val () = “restore_state_gas_to_entry sg s” |>
-  SIMP_CONV std_ss [restore_state_gas_to_entry_def, bind_def, ignore_bind_def] |>
+  SIMP_CONV std_ss [restore_state_gas_to_entry_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
   cv_auto_trans;
 
 val () = “repay_state_gas_spill s” |>
-  SIMP_CONV std_ss [repay_state_gas_spill_def, bind_def, ignore_bind_def] |>
+  SIMP_CONV std_ss [repay_state_gas_spill_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
   cv_auto_trans;
 
 val () = “forfeit_remaining_gas s” |>
-  SIMP_CONV std_ss [forfeit_remaining_gas_def, bind_def, ignore_bind_def] |>
+  SIMP_CONV std_ss [forfeit_remaining_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
   cv_auto_trans;
 
 val () = “withhold_create_gas s” |>
   SIMP_CONV std_ss [withhold_create_gas_def, bind_def, ignore_bind_def,
-                    LET_RATOR] |>
+                    LET_RATOR, COND_RATOR] |>
   cv_auto_trans;
 
 val () = “drain_state_gas_reservoir s” |>
-  SIMP_CONV std_ss [drain_state_gas_reservoir_def, bind_def, ignore_bind_def] |>
+  SIMP_CONV std_ss [drain_state_gas_reservoir_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
   cv_auto_trans;
 
 val () = “restore_child_gas g sr s” |>
-  SIMP_CONV std_ss [restore_child_gas_def, bind_def, ignore_bind_def] |>
+  SIMP_CONV std_ss [restore_child_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
   cv_auto_trans;
 
 val () = “pop_stack n s” |>
