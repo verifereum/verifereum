@@ -309,7 +309,23 @@ QED
 Theorem decreases_gas_charge_state_gas[simp]:
   decreases_gas F (charge_state_gas n)
 Proof
-  cheat
+  rw[decreases_gas_def, charge_state_gas_def, get_current_context_def,
+     consume_gas_def, bind_def, return_def, assert_def, ignore_bind_def,
+     set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >> simp[] >>
+  Cases_on `n <= h0.stateGasLeft`
+  >- simp[set_current_context_def, wf_context_def, frame_unused_gas_def] >>
+  Cases_on `n <= h0.stateGasLeft + (h0.msgParams.gasLimit - h0.gasUsed)`
+  >- (simp[set_current_context_def, get_current_context_def, bind_def,
+           ignore_bind_def, assert_def, return_def, fail_def] >>
+      conj_tac
+      >- (simp[wf_context_def] >> rpt strip_tac >>
+          qpat_x_assum `n <= _` mp_tac >> gas_arith_tac) >>
+      simp[frame_unused_gas_def] >>
+      qpat_x_assum `n <= _` mp_tac >>
+      qpat_x_assum `~(n <= _)` mp_tac >> gas_arith_tac) >>
+  simp[fail_def]
 QED
 
 (* Same shape as the charge above.  Hand attempt:
@@ -322,7 +338,12 @@ QED
 Theorem decreases_gas_credit_state_gas_refund[simp]:
   decreases_gas F (credit_state_gas_refund n)
 Proof
-  cheat
+  rw[decreases_gas_def, credit_state_gas_refund_def,
+     get_current_context_def, bind_def, return_def, ignore_bind_def,
+     set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def, frame_unused_gas_credit]
 QED
 
 (* The tail EIP-8037 gives SSTORE: hand back any state-gas refund, spend
