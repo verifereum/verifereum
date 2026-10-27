@@ -1798,6 +1798,41 @@ val state_gas_defs =
    forfeit_remaining_gas_def, withhold_create_gas_def,
    drain_state_gas_reservoir_def, restore_child_gas_def];
 
+Theorem credit_state_gas_refund_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  credit_state_gas_refund n s =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - MIN n c.stateGasSpilled;
+                stateGasSpilled := c.stateGasSpilled - MIN n c.stateGasSpilled;
+                stateGasLeft := c.stateGasLeft + (n - MIN n c.stateGasSpilled)|>,k)::cs)
+Proof
+  strip_tac >> simp[credit_state_gas_refund_def, bind_def,
+    get_current_context_def, set_current_context_def, return_def,
+    context_component_equality, execution_state_component_equality, ADD_COMM]
+QED
+
+Theorem guarded_credit_state_gas_refund_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  (if n = 0 then return () else credit_state_gas_refund n) s =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - MIN n c.stateGasSpilled;
+                stateGasSpilled := c.stateGasSpilled - MIN n c.stateGasSpilled;
+                stateGasLeft := c.stateGasLeft + (n - MIN n c.stateGasSpilled)|>,k)::cs)
+Proof
+  strip_tac >> Cases_on `n = 0`
+  >- gvs[return_def, context_component_equality, execution_state_component_equality]
+  >> drule credit_state_gas_refund_apply >> simp[]
+QED
+
+Theorem charge_state_gas_no_spill_apply[local]:
+  s.contexts = (c,k)::cs /\ n <= c.stateGasLeft ==>
+  charge_state_gas n s =
+    (INL (), s with contexts := (c with stateGasLeft := c.stateGasLeft - n,k)::cs)
+Proof
+  strip_tac >> simp[charge_state_gas_def, bind_def,
+    get_current_context_def, set_current_context_def, return_def]
+QED
+
 Theorem restored_gas_forfeit[local]:
   !u sp lim:num. u <= lim ==> lim - (u - sp) + (u - sp) = lim
 Proof
