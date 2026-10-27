@@ -5936,6 +5936,13 @@ Proof
           set_return_data_def,get_current_context_def,return_def,
           set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
           return_destination_case_elim]
+  \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, set_return_data_def,
+         get_num_contexts_def, reraise_def, assert_def]
+  \\ gvs[get_gas_left_def, consume_gas_def, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def, return_def,
+         set_return_data_def, get_num_contexts_def, reraise_def, assert_def]
   \\ end_tac
 QED
 
@@ -6008,6 +6015,10 @@ Proof
       parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
   \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
+  \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, get_gas_left_def,
+         consume_gas_def, set_return_data_def, assert_def]
   \\ Cases_on`p.outputTo`
   \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
          inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
@@ -6016,6 +6027,15 @@ Proof
          get_output_to_def,set_return_data_def,get_gas_left_def,
          consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
          set_rollback_def]
+  \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, get_gas_left_def,
+         consume_gas_def, set_return_data_def, assert_def,
+         CaseEq "prod", CaseEq "sum"]
+  \\ gvs[pop_context_def, set_rollback_def, get_current_context_def,
+         set_current_context_def, bind_def, ignore_bind_def, return_def,
+         inc_pc_def, push_stack_def, write_memory_def, assert_def,
+         absorb_state_gas_def, Abbr `merged`, Abbr `caller`]
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
