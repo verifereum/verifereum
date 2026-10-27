@@ -4,10 +4,11 @@ open HolKernel
   contractABITheory contractABISyntax
   vfmDomainCollectionTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib
-  vfmSettlementTheory vfmAccountingTheory
+  vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
   vfmOriginalStateTheory vfmOriginalAccountsTheory
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
-  vfmProgTheory wrappedEtherTheory
+  vfmProgTheory wrappedEtherTheory wrappedEtherNameTheory
+  wrappedEtherTransferTheory
   (* Checked counterexamples kept as evidence for the EIP-8037 statement
      shapes.  Nothing depends on them, so without this line the root build
      would never compile them. *)
