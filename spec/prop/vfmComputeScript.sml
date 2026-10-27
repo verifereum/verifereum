@@ -1160,7 +1160,7 @@ val () = run_transaction_def |> cv_auto_trans;
 Definition run_transactions_def:
   run_transactions d st c h b a rs [] = SOME (REVERSE rs, a, d) ∧
   run_transactions d st c h b a rs (tx::txs) =
-  if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.gasUsed) rs) ∨
+  if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.executionGasUsed) rs) ∨
      (case tx.maxFeePerGas of SOME x => x | NONE => tx.gasPrice)
        < b.baseFeePerGas
   then NONE else

@@ -56,6 +56,7 @@ Definition transaction_accounting_inline_def:
   let floor_cost = calldata_floor_cost tx.accessList (IS_NONE tx.to)
                                     (tx.to = SOME tx.from) tx.value tx.data in
   let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
+  let executionGasUsed = MAX txGasUsed floor_cost in
   let refundEther = (tx.gasLimit - totalGasUsed) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
   let transactionFee = totalGasUsed * priorityFeePerGas in
@@ -71,6 +72,7 @@ Definition transaction_accounting_inline_def:
                     else accounts in
   let logs = if result = NONE then logs else [] in
   let tr = <| gasUsed := totalGasUsed;
+              executionGasUsed := executionGasUsed;
               logs := logs;
               result := result;
               output := returnData;
@@ -126,14 +128,15 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* The block's execution gas ignores the refund, the receipt's does not. *)
 Theorem transaction_gas_accounting_cases:
   transaction_gas_accounting 2 1 100000 21000 (60000,10000,0) =
-    (32000,136000,32000) ∧
+    (32000,40000,136000,32000) ∧
   transaction_gas_accounting 2 1 100000 35000 (60000,10000,0) =
-    (35000,130000,35000) ∧
+    (35000,40000,130000,35000) ∧
   transaction_gas_accounting 2 1 100000 21000 (60000,0,10000) =
-    (32000,136000,32000) ∧
-  transaction_gas_accounting 1 1 21000 21000 (0,0,0) = (21000,0,0)
+    (32000,40000,136000,32000) ∧
+  transaction_gas_accounting 1 1 21000 21000 (0,0,0) = (21000,21000,0,0)
 Proof
   CONV_TAC cv_eval
 QED

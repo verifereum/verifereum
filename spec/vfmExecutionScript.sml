@@ -1876,13 +1876,16 @@ Definition run_within_frame_def:
            (step o SND) (INL (), es)
 End
 
+(* The receipt reports `gasUsed`, which a refund reduces; the block sums
+   `executionGasUsed`, which it does not ([EIP-7778]). *)
 Datatype:
   transaction_result =
-  <| gasUsed  : num
-   ; logs     : event list
-   ; output   : byte list
-   ; result   : exception option
-   ; domain   : domain_mode
+  <| gasUsed           : num
+   ; executionGasUsed  : num
+   ; logs              : event list
+   ; output            : byte list
+   ; result            : exception option
+   ; domain            : domain_mode
    |>
 End
 
@@ -1895,14 +1898,18 @@ Definition process_deletions_def:
   process_deletions as (update_account a (clear_account $ lookup_account a acc) acc)
 End
 
-(* Gas charged and the two credits, before any account is updated. *)
+(* Gas charged and the two credits, before any account is updated.  The
+   receipt's gas is the post-refund usage; the block's is the pre-refund
+   usage, and the calldata floor raises both ([EIP-7778]). *)
 Definition transaction_gas_accounting_def:
   transaction_gas_accounting gasPrice baseFee txGasLimit floorCost
                              (gasLeft, storageRefund, authRefund) =
   let txGasUsed = txGasLimit - gasLeft in
   let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
   let totalGasUsed = MAX (txGasUsed - gasRefund) floorCost in
-    (totalGasUsed, (txGasLimit - totalGasUsed) * gasPrice,
+  let executionGasUsed = MAX txGasUsed floorCost in
+    (totalGasUsed, executionGasUsed,
+     (txGasLimit - totalGasUsed) * gasPrice,
      totalGasUsed * (gasPrice - baseFee))
 End
 
@@ -1916,7 +1923,7 @@ Definition post_transaction_accounting_def:
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
-  let (totalGasUsed, refundEther, transactionFee) =
+  let (totalGasUsed, executionGasUsed, refundEther, transactionFee) =
     transaction_gas_accounting tx.gasPrice blk.baseFeePerGas tx.gasLimit
       (calldata_floor_cost tx.accessList (IS_NONE tx.to)
                           (tx.to = SOME tx.from) tx.value tx.data)
@@ -1933,6 +1940,7 @@ Definition post_transaction_accounting_def:
                     else accounts in
   let logs = if result = NONE then logs else [] in
   let tr = <| gasUsed := totalGasUsed;
+              executionGasUsed := executionGasUsed;
               logs := logs;
               result := result;
               output := returnData;
@@ -2218,12 +2226,12 @@ End
 Definition block_invalid_def:
   block_invalid rs deposits withdrawals consolidations b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
-    let gasUsed = SUM (MAP (λr. r.gasUsed) rs) in
+    let blockGasUsed = SUM (MAP (λr. r.executionGasUsed) rs) in
     let requestsHash = compute_requests_hash deposits withdrawals consolidations in
     let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
     ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
-      gasUsed = b.gasUsed ∧
+      blockGasUsed = b.gasUsed ∧
       requestsHash = b.requestsHash ∧
       expectedWithdrawalsRoot = b.withdrawalsRoot)
 End
@@ -2240,7 +2248,7 @@ Definition run_block_def:
     FOLDL
       (λx tx.
          OPTION_BIND x (λ(ls, a, dom).
-           if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.gasUsed) ls) ∨
+           if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.executionGasUsed) ls) ∨
               (case tx.maxFeePerGas of SOME x => x | NONE => tx.gasPrice)
                 < b.baseFeePerGas
            then NONE else
