@@ -763,6 +763,23 @@ Proof
   Cases_on `LENGTH sp.contexts <= 1` >> simp[]
 QED
 
+Theorem handle_exception_preserves_length_1:
+  handle_exception e s = (q,s') /\ LENGTH s.contexts = 1 ==>
+  LENGTH s'.contexts = 1
+Proof
+  simp[handle_exception_decomp] >>
+  qmatch_goalsub_abbrev_tac `bind prefix _` >>
+  `cp prefix` by simp[Abbr `prefix`, cp_state_gas_meter, cp_bind, cp_ignore_bind] >>
+  Cases_on `prefix s` >> rename1 `prefix s = (res,sp)` >>
+  simp[bind_def] >> strip_tac >>
+  `s.contexts <> []` by (Cases_on `s.contexts` >> gvs[]) >>
+  `LENGTH sp.contexts = LENGTH s.contexts` by
+    (drule_all cp_imp_length_contexts_preserved >> simp[]) >>
+  Cases_on `res` >> gvs[] >>
+  `sp.contexts <> []` by (Cases_on `sp.contexts` >> gvs[]) >>
+  drule_all handle_ex_helper_length >> simp[]
+QED
+
 (* When LENGTH ≥ 2 and wf_state, handle_exception takes the pop branch and
    shrinks by exactly 1. The n ≤ 1 reraise branch is not taken, and the
    prefix (consume_gas) succeeds because wf_state ensures gasUsed ≤ gasLimit. *)
@@ -930,6 +947,7 @@ Proof
          pop_and_incorporate_context_def, pop_context_def,
          set_rollback_def, unuse_gas_def,
          update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  >> pure_rewrite_tac[MIN_DEF] >> rpt IF_CASES_TAC >> decide_tac
 QED
 
 (* handle_create preserves TL(contexts) and SND(HD contexts).
@@ -994,6 +1012,36 @@ Proof
          update_accounts_def, return_def]
 QED
 
+Theorem handle_create_effective_leftover:
+  handle_create e s = (INR e', s1) /\ s.contexts <> [] ==>
+  (FST (HD s1.contexts)).stateGasLeft = (FST (HD s.contexts)).stateGasLeft /\
+  (FST (HD s1.contexts)).stateGasSpilled = (FST (HD s.contexts)).stateGasSpilled /\
+  (if e' = NONE then
+     (FST (HD s1.contexts)).msgParams.gasLimit - (FST (HD s1.contexts)).gasUsed
+   else if e' = SOME Reverted then
+     (FST (HD s1.contexts)).msgParams.gasLimit -
+       ((FST (HD s1.contexts)).gasUsed -
+        MIN (FST (HD s1.contexts)).stateGasSpilled (FST (HD s1.contexts)).gasUsed)
+   else 0) <=
+  (if e = NONE then
+     (FST (HD s.contexts)).msgParams.gasLimit - (FST (HD s.contexts)).gasUsed
+   else if e = SOME Reverted then
+     (FST (HD s.contexts)).msgParams.gasLimit -
+       ((FST (HD s.contexts)).gasUsed -
+        MIN (FST (HD s.contexts)).stateGasSpilled (FST (HD s.contexts)).gasUsed)
+   else 0)
+Proof
+  rw[handle_create_def, bind_def, ignore_bind_def,
+     get_return_data_def, get_output_to_def, get_current_context_def,
+     return_def, fail_def, reraise_def, consume_gas_def,
+     update_accounts_def, assert_def, set_current_context_def]
+  >> BasicProvers.every_case_tac
+  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
+         assert_def, get_current_context_def, set_current_context_def,
+         update_accounts_def, return_def]
+  >> Cases_on `s.contexts` >> gvs[]
+QED
+
 (* Generic handle_step pop structure — storage-aware.
 
    When handle_step shrinks contexts, the contexts structure is
@@ -1044,12 +1092,18 @@ Proof
   >> strip_tac
   >> strip_tac
   >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
-  >> drule_all handle_exception_pop_generic_gen
-  >> strip_tac >> gvs[]
+  >> drule_all handle_create_effective_leftover >> strip_tac
+  >> drule_at (Pat `handle_exception _ _ = _`) handle_exception_pop_generic_gen
+  >> simp[] >> strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
   >> mp_tac (INST_TYPE[alpha|->``:unit``]preserves_storage_handle_create)
   >> rewrite_tac[preserves_storage_def]
   >> disch_then drule
   >> gvs[lookup_storage_def, FUN_EQ_THM]
+  >> strip_tac
+  >> qpat_x_assum `(if _ then _ else _) <= _` mp_tac
+  >> qmatch_goalsub_abbrev_tac `newLeft <= oldLeft`
+  >> qmatch_goalsub_abbrev_tac `_ >= used - oldLeft - repayment`
+  >> decide_tac
 QED
 
 (* Strengthening of handle_step_pop_generic_gen that pairs each
@@ -1099,13 +1153,19 @@ Proof
   >> strip_tac
   >> strip_tac
   >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
-  >> drule_all handle_exception_pop_generic_gen
-  >> strip_tac >> gvs[]
+  >> drule_all handle_create_effective_leftover >> strip_tac
+  >> drule_at (Pat `handle_exception _ _ = _`) handle_exception_pop_generic_gen
+  >> simp[] >> strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
   >> drule handle_create_preserves_accesses
   >> mp_tac (INST_TYPE[alpha|->``:unit``]preserves_storage_handle_create)
   >> rewrite_tac[preserves_storage_def]
   >> disch_then drule
   >> gvs[lookup_storage_def, FUN_EQ_THM]
+  >> rpt strip_tac
+  >> qpat_x_assum `(if _ then _ else _) <= _` mp_tac
+  >> qmatch_goalsub_abbrev_tac `newLeft <= oldLeft`
+  >> qmatch_goalsub_abbrev_tac `_ >= used - oldLeft - repayment`
+  >> decide_tac
 QED
 
 (* Saved rollback's accesses are in s'.rollback's accesses, regardless
@@ -1150,25 +1210,8 @@ Proof
   >> drule_all handle_create_preserves_length
   >> strip_tac
   >> `LENGTH s1.contexts = 1` by simp[]
-  >> simp[Once handle_exception_def]
-  >> simp[ignore_bind_def, Once bind_def]
-  >> qmatch_goalsub_abbrev_tac `pair_CASE (prefix s1)`
-  >> `preserves_same_frame prefix` by (
-       simp[Abbr`prefix`]
-       >> IF_CASES_TAC >> simp[]
-       >> irule preserves_same_frame_ignore_bind >> simp[]
-       >> irule preserves_same_frame_bind >> simp[])
-  >> Cases_on `prefix s1`
-  >> qmatch_asmsub_rename_tac `prefix s1 = (res, sp)`
-  >> `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> fs[])
-  >> `same_frame_rel s1 sp` by (
-       Cases_on `res` >> metis_tac[preserves_same_frame_def])
-  >> `LENGTH sp.contexts = 1` by fs[same_frame_rel_def]
-  >> reverse (Cases_on `res`) >> simp[]
-  >- (strip_tac >> gvs[])
-  >> simp[Once bind_def, get_num_contexts_def, return_def]
-  >> simp[reraise_def]
-  >> strip_tac >> gvs[]
+  >> strip_tac
+  >> drule_all handle_exception_preserves_length_1 >> simp[]
 QED
 
 (* handle_step reduces contexts by at most one. *)
