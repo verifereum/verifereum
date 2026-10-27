@@ -5512,6 +5512,14 @@ Proof
   \\ end_tac
 QED
 
+(* Witnesses for SPEC_Return_inner as it stood before the spillRefund
+   correction below: its postcondition took the whole of the child's spill back
+   off the parent's gasUsed, but restore_state_gas lands in the child's own
+   gasUsed (gasUsed := gasUsed - stateGasSpilled, which cannot go below zero) and
+   reaches the parent only through the child's remaining gas, so the refund is
+   capped by the gas the child had used.  A Revert child with gasUsed 0 and
+   stateGasSpilled 1, popped into a parent at gasUsed 11, and the negated rule
+   instance at that state. *)
 Theorem inner_revert_spill_execution[local]:
   let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
           gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
@@ -5691,7 +5699,8 @@ Theorem SPEC_Return_inner:
          all_pcs = (FDOM caller.msgParams.parsed ∪ FDOM p.parsed) ∧
          g + gasCost ≤ p.gasLimit ∧
          calleeGasLeft = p.gasLimit - g - gasCost ∧
-         calleeGasLeft ≤ caller.gasUsed ∧
+         spillRefund = (if inst = Return then 0 else MIN sp (g + gasCost)) ∧
+         calleeGasLeft + spillRefund ≤ caller.gasUsed ∧
          (if returnCode then
           (case data of [] => T | h::_ => h ≠ 239w) ∧
           (codeCost = code_deposit_cost * LENGTH data) ∧
@@ -5716,8 +5725,7 @@ Theorem SPEC_Return_inner:
                     update_account addr
                       (lookup_account addr accounts with code := data)
                       accounts) else if inst = Revert then cb else rb) *
-   evm_GasUsed (merged.gasUsed - calleeGasLeft -
-                (if inst = Return then 0 else sp)) *
+   evm_GasUsed (merged.gasUsed - calleeGasLeft - spillRefund) *
    evm_StateGasLeft merged.stateGasLeft *
    evm_StateGasSpilled merged.stateGasSpilled *
    evm_StateGasBaseline merged.stateGasBaseline *
