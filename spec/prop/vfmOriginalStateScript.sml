@@ -733,7 +733,7 @@ Proof
        orig_exec_bind, orig_exec_ignore_bind, orig_exec_cond,
        original_state_current, original_state_set_current,
        orig_exec_return, orig_exec_assert, orig_exec_fail,
-       orig_exec_get_gas_left, LET_THM,
+       orig_exec_get_gas_left, LET_THM, orig_exec_context_updates,
        orig_exec_forfeit_remaining_gas, orig_exec_withhold_create_gas,
        orig_exec_restore_child_gas]
 QED
@@ -1111,57 +1111,42 @@ Proof
        original_state_current, original_state_set_current, orig_exec_return]
 QED
 
-(* The gas assertions the failure prefix tests: a grant less what the
-   frame has spent, plus what it spent, is the grant again. *)
-Theorem word_sub_add_le[local]:
-  !gL gU. (gL - gU) + gU ≤ gL : 256 word
-Proof
-  rw[WORD_SUB_ADD]
-QED
-
 Theorem orig_exec_handle_exception[local]:
   orig_exec_rel (handle_exception e) (handle_exception e)
 Proof
   simp[handle_exception_def, ignore_bind_def] >>
-  irule orig_exec_bind >> reverse conj_tac
-  >- simp[orig_exec_cond, orig_exec_bind, orig_exec_get_gas_left,
-          orig_exec_context_updates, orig_exec_return,
-          orig_exec_state_gas_updates] >>
-  simp[] >>
+  (* EIP-8037 hangs a longer failure prefix in front of the rereraise:
+     the frame rolls its state gas back, then forfeits its execution
+     grant.  Both are head-frame work, so the prefix composes in
+     relation form and nothing has to be unfolded to get past it. *)
+  irule orig_exec_bind >> conj_tac
+  >- simp[orig_exec_cond, orig_exec_return, orig_exec_state_gas_updates] >>
+  gen_tac >>
+  irule orig_exec_bind >> conj_tac
+  >- simp[orig_exec_cond, orig_exec_return, orig_exec_bind,
+          orig_exec_state_gas_updates, orig_exec_context_updates] >>
+  gen_tac >>
+  (* Read the frame count out of the states, so the branch that reaches
+     the rest of the body still knows how many frames it has. *)
   rewrite_tac[orig_exec_rel_def] >> rpt gen_tac >> strip_tac >>
   drule original_state_rel_fields >> strip_tac >>
   drule original_state_rel_length >> strip_tac >>
   drule original_state_rel_current >> strip_tac >>
   once_rewrite_tac[bind_def] >> simp[get_num_contexts_def, return_def] >>
-  Cases_on `LENGTH new.contexts <= 1`
-  >- (
-    (* EIP-8037 put a longer failure prefix in front of the rereraise:
-       the frame first rolls its state gas back, then forfeits its
-       execution grant.  Every condition that prefix tests is decided by
-       the frame relation or by the gas arithmetic, so it reduces to the
-       single `reraise` leaf on both sides, over a state that still holds
-       one frame -- the head, which the relation pins. *)
-    `LENGTH old.contexts ≤ 1` by simp[] >>
-    conj_tac
-    >- simp [forfeit_remaining_gas_def, restore_state_gas_def,
-             get_gas_left_def, get_current_context_def,
-             set_current_context_def, set_return_data_def, consume_gas_def,
-             get_num_contexts_def, reraise_def, assert_def, fail_def,
-             bind_def, ignore_bind_def, return_def, SUB_EQ_0, ONE,
-             word_sub_add_le]
-    >> simp [forfeit_remaining_gas_def, restore_state_gas_def,
-             get_gas_left_def, get_current_context_def,
-             set_current_context_def, set_return_data_def, consume_gas_def,
-             get_num_contexts_def, reraise_def, assert_def, fail_def,
-             bind_def, ignore_bind_def, return_def, SUB_EQ_0, ONE,
-             word_sub_add_le, original_state_rel_def] ) >>
+  `LENGTH new.contexts = LENGTH old.contexts` by simp[] >>
+  pop_assum (fn th => once_rewrite_tac [th]) >>
+  Cases_on `LENGTH old.contexts ≤ 1`
+  >- (* one frame: both sides rereraise, over the state the prefix left,
+        which the frame relation pins *)
+     simp[reraise_def] >>
+  `1 < LENGTH old.contexts` by metis_tac[NOT_LESS_EQUAL] >>
   `get_return_data old = (INL (FST (HD new.contexts)).returnData, old) /\
    get_return_data new = (INL (FST (HD new.contexts)).returnData, new) /\
    get_output_to old = (INL (FST (HD new.contexts)).msgParams.outputTo, old) /\
    get_output_to new = (INL (FST (HD new.contexts)).msgParams.outputTo, new)` by
     simp[get_return_data_def, get_output_to_def, get_current_context_def,
          bind_def, return_def] >>
-  simp[] >> once_rewrite_tac[bind_def] >> simp[] >>
+  once_rewrite_tac[bind_def] >> simp[] >>
   once_rewrite_tac[bind_def] >> simp[] >>
   irule original_state_bind_at >>
   simp[original_state_pop_incorporate, GSYM ignore_bind_def,

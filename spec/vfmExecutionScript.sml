@@ -485,7 +485,10 @@ Definition get_state_gas_left_def:
 End
 
 (* Draw `n` state gas: the reservoir first, then execution gas, recording
-   what spilled.  Neither pool covering it is an out-of-gas. *)
+   what spilled.  Neither pool covering it is an out-of-gas.  The spill
+   is taken through `consume_gas`, so it carries the same guard as every
+   other execution-gas charge -- EELS's `gas_left` cannot go below zero,
+   and the frame's grant is where that shows here. *)
 Definition charge_state_gas_def:
   charge_state_gas n = do
     context <- get_current_context;
@@ -494,11 +497,14 @@ Definition charge_state_gas_def:
            context with stateGasLeft := context.stateGasLeft - n
     else if n ≤ context.stateGasLeft +
                 (context.msgParams.gasLimit - context.gasUsed)
-    then let spilled = n - context.stateGasLeft in
-      set_current_context $ context with <|
-        stateGasLeft := 0;
-        gasUsed := context.gasUsed + spilled;
-        stateGasSpilled updated_by ($+ spilled) |>
+    then do
+      spilled <<- n - context.stateGasLeft;
+      set_current_context $ context with stateGasLeft := 0;
+      consume_gas spilled;
+      context' <- get_current_context;
+      set_current_context $
+        context' with stateGasSpilled updated_by ($+ spilled)
+    od
     else fail OutOfGas
   od
 End

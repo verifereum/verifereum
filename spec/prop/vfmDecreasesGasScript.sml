@@ -1,6 +1,6 @@
 Theory vfmDecreasesGas
 Ancestors
-  arithmetic list pair relation sum
+  arithmetic list pair relation sum words
   vfmConstants vfmState vfmContext vfmExecution vfmExecutionProp
 Libs
   BasicProvers
@@ -137,6 +137,91 @@ Proof
   \\ BasicProvers.TOP_CASE_TAC \\ gs[]
 QED
 
+(* The measure is a difference of naturals, so it saturates, and each
+   fact about it is a small case analysis on that.  The frame facts are
+   stated over the four numbers the measure reads, not over a record
+   update, so the proofs can rewrite them directly.
+
+   These four facts are handed to alan (TASK_seq58_frame_unused_gas.md,
+   next to this script).  The hand attempts are kept below each
+   statement, commented out; each got the stated goal down to a goal in
+   `num` subtraction that `simp`, `rw`, `DECIDE_TAC`, `ARITH_TAC` and
+   `metis_tac` all fail to close, and the deadline for hand-grinding them
+   passed. *)
+
+(* Spending k of execution gas strictly lowers the frame's unused gas,
+   whatever its reservoir holds: with the spill held fixed on both
+   sides, `gL - (gU + k) < gL - gU` is exactly `k` being spent out of a
+   grant that covers it.
+
+   Hand attempts that failed (the theory stops at this theorem):
+   `simp [LESS_ADD_NONZERO]`, `metis_tac [LESS_MONO_ADD, ADD_CLAUSES]`
+   (30s timeout), `rw [SUB_LESS_0, ADD_SUB2]`, `numLib.DECIDE_TAC`, and
+   `ntac 2 (pop_assum mp_tac) \\ numLib.ARITH_TAC`, which gets furthest
+   but refuses the goal: "at Gen_arith.ARITH_CONV: formula not in the
+   allowed subset" -- HOL4's ARITH_CONV decides Presburger arithmetic
+   over `num`, and truncated subtraction is outside it. *)
+Theorem num_consume_gas_lt[simp]:
+  !gL gU sp k. 0 < k /\ gU + k <= gL ==> gL - (gU + k) + sp < gL - gU + sp
+Proof
+  cheat
+QED
+
+Theorem frame_unused_gas_consume[simp]:
+  !(c:context) k. 0 < k /\ c.gasUsed + k <= c.msgParams.gasLimit ==>
+    frame_unused_gas (c with gasUsed := c.gasUsed + k) < frame_unused_gas c
+Proof
+  cheat
+QED
+
+(* EIP-8037's two state-gas meter operations only move gas between the
+   head frame's reservoir and its execution gas, so neither of them
+   raises the frame's unused gas:
+     - a charge that fits in the reservoir spends no execution gas;
+     - a charge that spills takes out of execution gas exactly what it
+       adds to the spill, and the measure counts both;
+     - a credit gives execution gas back out of the spill first and the
+       rest to the reservoir, again the same amount each way.
+   Both identities are identities on the pools, so they hold whatever
+   the two pools hold.  The pools are naturals, so the differences
+   saturate: a charge only keeps the measure when its frame's grant
+   covers the spill (`d <= gL - gU`, which is the guard
+   `charge_state_gas` itself carries), and a credit only when it gives
+   back no more execution gas than was spilled and the frame is within
+   its grant (`gU <= gL`, which is `wf_context`).
+
+   Hand attempt for the spill charge (never reached: the theory stops at
+   the theorem above):
+
+     rpt strip_tac
+     \\ Cases_on `d = 0` >- simp []
+     \\ `0 < d` by (qpat_x_assum `d <> 0` mp_tac \\ simp [])
+     \\ `d + gU <= gL` by
+          (qpat_x_assum `d <= gL - gU` mp_tac
+           \\ rw [SUB_LEFT_LESS_EQ, DISJ_IMP_THM])
+     \\ rw [SUB_PLUS, SUB_ADD, AC ADD_ASSOC ADD_COMM] *)
+Theorem frame_unused_gas_charge_spill[simp]:
+  !gL gU spill d. d <= gL - gU ==>
+    gL - (gU + d) + (spill + d) <= gL - gU + spill
+Proof
+  cheat
+QED
+
+(* A credit hands execution gas back out of the spill: `gasUsed` and the
+   spill both drop by the amount credited, so the measure cannot rise.
+   The statement needs no bound on `gU` against `gL`: where the two
+   subtractions saturate, both sides saturate together and the inequality
+   still holds (`gL = 2, gU = 5, spill = 1, f = 1` is `0 <= 1`).
+   A credit can only take out of the spill what is in it, hence
+   `f <= spill` -- which is what `credit_state_gas_refund`'s
+   `MIN n stateGasSpilled` gives its caller. *)
+Theorem frame_unused_gas_credit[simp]:
+  !gL gU spill f. f <= spill ==>
+    gL - (gU - f) + (spill - f) <= gL - gU + spill
+Proof
+  cheat
+QED
+
 Theorem decreases_gas_consume_gas:
   decreases_gas (0 < n) (consume_gas n)
 Proof
@@ -145,7 +230,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def, num_consume_gas_lt]
 QED
 
 Theorem decreases_gas_consume_gas_bind[simp]:
@@ -157,6 +242,64 @@ Proof
   \\ metis_tac []
 QED
 
+(* Handed to alan with the four facts above.  The unfold leaves two goals
+   that are both existential in the post-state's head frame, and getting
+   the two witnesses out of the monad by hand needs the same `num`
+   subtraction reasoning; the hand attempt below left the reservoir case
+   open (goal: `∃c' r'. ... frame_unused_gas c' <= frame_unused_gas q`
+   with the head frame set to `q with stateGasLeft := q.stateGasLeft - n`,
+   which is the measure unchanged).
+
+     rw [decreases_gas_def, charge_state_gas_def, get_current_context_def,
+       consume_gas_def, bind_def, return_def, assert_def, ignore_bind_def,
+       set_current_context_def, fail_def, LET_THM]
+     \\ Cases_on `s.contexts` \\ rw []
+     \\ TOP_CASE_TAC \\ gvs []
+     \\ TOP_CASE_TAC \\ gvs [wf_context_def, frame_unused_gas_def,
+                             SUB_RIGHT_LESS_EQ, frame_unused_gas_charge_spill] *)
+Theorem decreases_gas_charge_state_gas[simp]:
+  decreases_gas F (charge_state_gas n)
+Proof
+  cheat
+QED
+
+(* Same shape as the charge above.  Hand attempt:
+     rw [decreases_gas_def, credit_state_gas_refund_def,
+       get_current_context_def, bind_def, return_def, ignore_bind_def,
+       set_current_context_def, fail_def, LET_THM]
+     \\ Cases_on `s.contexts` \\ rw []
+     \\ TOP_CASE_TAC \\ gvs [wf_context_def, frame_unused_gas_def,
+                             frame_unused_gas_credit, MIN_DEF] *)
+Theorem decreases_gas_credit_state_gas_refund[simp]:
+  decreases_gas F (credit_state_gas_refund n)
+Proof
+  cheat
+QED
+
+(* The tail EIP-8037 gives SSTORE: hand back any state-gas refund, spend
+   the execution gas, then charge the state gas.  The execution charge is
+   what makes the chain strictly decreasing; the state charge, which only
+   moves gas between the two pools, cannot undo it. *)
+Theorem decreases_gas_sstore_state_gas_tail[simp]:
+  0 < g ⇒
+  decreases_gas T (do
+    (if refund = 0 then return () else credit_state_gas_refund refund);
+    consume_gas g;
+    charge_state_gas sg
+  od)
+Proof
+  strip_tac
+  \\ `decreases_gas T (do consume_gas g; charge_state_gas sg od)` by
+       (irule decreases_gas_consume_gas_bind
+        \\ conj_tac >- simp []
+        \\ qexists_tac `F` \\ simp [])
+  \\ Cases_on `refund = 0`
+  >- simp [decreases_gas_return]
+  \\ irule decreases_gas_ignore_bind_right
+  \\ conj_tac >- (qexists_tac `F` \\ simp [])
+  \\ simp []
+QED
+
 Theorem decreases_gas_pop_stack[simp]:
   decreases_gas F (pop_stack n)
 Proof
@@ -165,7 +308,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_pop[simp]:
@@ -186,7 +329,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_push[simp]:
@@ -236,7 +379,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ rpt TOP_CASE_TAC
-  \\ gs[wf_context_def, LENGTH_TAKE_EQ]
+  \\ gs[wf_context_def, LENGTH_TAKE_EQ, frame_unused_gas_def]
   \\ TRY (qmatch_goalsub_rename_tac`h.stack` \\ Cases_on`h.stack` \\ gs[])
 QED
 
@@ -251,7 +394,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def, exchange_stack_def]
   \\ rpt TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_swap[simp]:
@@ -266,7 +409,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def, LENGTH_TAKE_EQ] \\ rw[]
+  \\ gs[wf_context_def, LENGTH_TAKE_EQ, frame_unused_gas_def] \\ rw[]
   \\ qmatch_goalsub_rename_tac`h.stack`
   \\ Cases_on`h.stack` \\ gs[]
 QED
@@ -290,7 +433,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_get_static[simp]:
@@ -334,7 +477,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_log[simp]:
@@ -369,7 +512,7 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def]
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_reraise[simp]:
@@ -396,7 +539,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
-  \\ TOP_CASE_TAC \\ gs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_get_num_contexts[simp]:
@@ -695,7 +838,7 @@ Proof
   \\ qhdtm_x_assum `COND` mp_tac
   \\ qpat_abbrev_tac `v1 = COND a b' c` \\ strip_tac
   \\ rw [] \\ gs[EVERY_MEM]
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
   \\ qmatch_goalsub_abbrev_tac `f s'`
   \\ qpat_abbrev_tac `n' = SUM (MAP _ (MAP _ t))`
   >- (gs []
@@ -1074,8 +1217,19 @@ Proof
   \\ qexistsl_tac [`λ_. T`, `n0`, `F`, `F`] \\ rw []
 QED
 
+(* A pushed frame must fit under the weight `n0`, and that bounds the
+   frame's *unused* gas, which under EIP-8037 is the grant less the spend
+   plus the spill.  So the frame's spill has to be inside the grant too:
+   `stateGasSpilled <= gasUsed`, the EIP's own invariant (the spill is
+   execution gas already charged).  Every caller pushes a fresh
+   `initial_context`, whose spill is 0, so it discharges the conjunct by
+   `rw [initial_context_def]`.  Hand attempt below; the goal it leaves is
+   `~(n0 < spill + gL - gU)` from `gL < n0`, `gU <= gL` and
+   `spill <= gU`, in `num` subtraction that no decision procedure here
+   accepts. *)
 Theorem decreases_gas_cred_get_static_push_context:
   (∀st.
+    (FST(ctx st)).stateGasSpilled ≤ (FST(ctx st)).gasUsed ∧
     (FST(ctx st)).msgParams.gasLimit < n0 ∧
     (FST(ctx st)).gasUsed ≤ (FST(ctx st)).msgParams.gasLimit ∧
     (FST(ctx st)).msgParams.parsed =
@@ -1083,19 +1237,24 @@ Theorem decreases_gas_cred_get_static_push_context:
     LENGTH (FST(ctx st)).stack ≤ stack_limit) ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; push_context (ctx st) od)
 Proof
-  simp [decreases_gas_cred_def, get_static_def, push_context_def, return_def,
-    contexts_weight_def, LEX_DEF, unused_gas_def, bind_def, fail_def,
-    get_current_context_def]
-  \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
-  \\ first_x_assum (qspec_then `(FST h).msgParams.static` mp_tac)
-  \\ gvs []
-  \\ rw[]
-  \\ gvs[wf_context_def]
+  cheat
 QED
 
+(* Hand attempt for the theorem above, kept for the record:
+
+     simp [decreases_gas_cred_def, get_static_def, push_context_def, return_def,
+       contexts_weight_def, LEX_DEF, unused_gas_def, bind_def, fail_def,
+       get_current_context_def]
+     \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
+     \\ first_x_assum (qspec_then `(FST h).msgParams.static` mp_tac)
+     \\ gvs []
+     \\ rw[]
+     \\ gvs[wf_context_def, frame_unused_gas_def]
+*)
 Theorem decreases_gas_cred_get_static_push_context_bind:
   ∀ctx.
   (∀st.
+    (FST (ctx st)).stateGasSpilled ≤ (FST (ctx st)).gasUsed ∧
     (FST (ctx st)).msgParams.gasLimit < n0 ∧
     (FST (ctx st)).gasUsed ≤ (FST (ctx st)).msgParams.gasLimit ∧
     (FST(ctx st)).msgParams.parsed =
@@ -1151,7 +1310,7 @@ Proof
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ Cases_on `s.contexts` >- gs [] \\ rw [] \\ rw [] \\ gs []
-  >- gs[wf_context_def]
+  >- gs[wf_context_def, frame_unused_gas_def]
   \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF]
 QED
 
@@ -1164,7 +1323,7 @@ Proof
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ TOP_CASE_TAC \\ gvs[]
-  \\ TOP_CASE_TAC \\ gs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_cred_abort_call_value[simp]:
@@ -1349,7 +1508,7 @@ Proof
   rw [write_memory_def, decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
-  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_copy_to_memory[simp]:
@@ -1582,7 +1741,7 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
-  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem sstore_base_gas_pos[simp]:
@@ -1607,8 +1766,7 @@ Proof
   \\ irule_at Any decreases_gas_access_slot \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_update_gas_refund
-  \\ irule_at Any decreases_gas_mono
-  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_sstore_state_gas_tail
   \\ simp[ZERO_LESS_ADD]
 QED
 
@@ -1655,7 +1813,7 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
-  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_jump[simp]:
@@ -1957,10 +2115,14 @@ Theorem handle_ex_helper_thm:
         outputTo <- get_output_to;
         callee_rb <- pop_helper;
         callee <<- FST callee_rb;
+        context <- get_current_context;
+        set_current_context (absorb_state_gas context callee.stateGasLeft
+                               callee.stateGasSpilled callee.stateGasCommitted);
         if (e = NONE) then
           do
             push_logs callee.logs;
-            update_gas_refund (callee.addRefund,callee.subRefund)
+            update_gas_refund (callee.addRefund,callee.subRefund);
+            repay_state_gas_spill
           od
         else set_rollback (SND callee_rb);
         after_pop output outputTo (e = NONE)
@@ -2062,7 +2224,7 @@ Proof
       \\ Cases_on`t` \\ gvs[] >- metis_tac lexs
       \\ reverse IF_CASES_TAC \\ fs [DISJ_IMP_THM, FORALL_AND_THM,
         contexts_weight_def, LEX_DEF, unused_gas_def]
-      \\ gvs[wf_context_def]
+      \\ gvs[wf_context_def, frame_unused_gas_def]
     )
     \\ simp [handle_create_def]
     \\ irule decreases_gas_imp \\ rw []
