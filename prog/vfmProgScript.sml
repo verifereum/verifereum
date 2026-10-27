@@ -5512,6 +5512,160 @@ Proof
   \\ end_tac
 QED
 
+Theorem inner_revert_spill_execution[local]:
+  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+          gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      q = params with <|code := []; parsed := FEMPTY; gasLimit := 20;
+          outputTo := Memory <|offset := 0; size := 0|> |>;
+      child = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+          memory := empty_buffer; gasUsed := 0; stateGasSpilled := 1;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      parent = ctx_base with <|msgParams := q; stack := []; pc := 0;
+          memory := empty_buffer; gasUsed := 11; stateGasSpilled := 0;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      rb = initial.rollback with accounts := empty_accounts;
+      s = initial with <|contexts := [(child,rb);(parent,rb)]; rollback := rb|>;
+      out = initial with <|contexts := [(parent with <|stack := [0w]; pc := 1;
+          returnData := []; gasUsed := 1|>,rb)]; rollback := rb|>
+  in wf_state s /\ step s = (INL (),out) /\
+     FST (step out) = INR NONE /\
+     (FST (HD (SND (step out)).contexts)).gasUsed = 1
+Proof
+  simp[LET_THM] >> conj_tac
+  >- (simp[wf_state_def, wf_context_def, all_accounts_def,
+          stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def,
+          outputTo_consistent_ctx_def, wf_accounts_def, wf_account_state_def,
+          empty_accounts_def, empty_account_state_def, stack_limit_def, context_limit_def,
+          unused_gas_def, frame_unused_gas_def, Once parse_code_def] >>
+      simp[Once parse_code_def] >> rpt strip_tac >>
+      `i = 0` by decide_tac >> gvs[])
+  >> `FLOOKUP (parse_code 0 FEMPTY [253w]) 0 = SOME Revert` by
+       (simp[Once parse_code_def, vfmOperationTheory.parse_opcode_cond_thm,
+             vfmOperationTheory.opcode_def] >>
+        simp[Once parse_code_def, finite_mapTheory.FLOOKUP_UPDATE])
+  >> simp[step_def, get_current_context_def, bind_def, return_def, handle_def,
+          finite_mapTheory.FLOOKUP_EMPTY]
+  >> simp[step_inst_def, step_return_def, ignore_bind_def, pop_stack_def,
+          assert_def, set_current_context_def, memory_expansion_info_def,
+          consume_gas_def, expand_memory_def, read_memory_def,
+          set_return_data_def, revert_def, handle_step_def, handle_create_def,
+          reraise_def, get_return_data_def, get_output_to_def,
+          handle_exception_def, get_num_contexts_def, restore_state_gas_def,
+          pop_and_incorporate_context_def, get_gas_left_def, pop_context_def,
+          unuse_gas_def, set_rollback_def, inc_pc_def, push_stack_def,
+          write_memory_def, absorb_state_gas_def,
+          bind_def, ignore_bind_def, return_def, get_current_context_def,
+          set_current_context_def, handle_def, assert_def,
+          empty_buffer_def, buffer_length_def]
+  >> simp[buffer_take_def, Once read_bytes_def, finish_def,
+          handle_step_def, handle_create_def, handle_exception_def,
+          reraise_def, handle_def, bind_def, ignore_bind_def,
+          get_current_context_def, get_return_data_def, get_output_to_def,
+          get_num_contexts_def, return_def, vfm_abort_def,
+          context_component_equality, execution_state_component_equality]
+QED
+
+Theorem SPEC_Return_inner_spill_counterexample[local]:
+  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+          gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      q = params with <|code := []; parsed := FEMPTY; gasLimit := 20;
+          outputTo := Memory <|offset := 0; size := 0|> |>;
+      child = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+          memory := empty_buffer; gasUsed := 0; stateGasSpilled := 1;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      parent = ctx_base with <|msgParams := q; stack := []; pc := 0;
+          memory := empty_buffer; gasUsed := 11; stateGasSpilled := 0;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      rb = initial.rollback with accounts := empty_accounts;
+      pre = evm_Stack [0w;0w] * evm_PC 0 * evm_GasUsed 0 * evm_MsgParams p *
+        evm_StateGasLeft 0 * evm_StateGasSpilled 1 * evm_StateGasBaseline 0 *
+        evm_StateGasCommitted 0 * evm_Contexts [(parent,rb)] *
+        evm_ReturnData child.returnData * evm_Exception (INL ()) * evm_Rollback rb *
+        evm_CachedRB rb * evm_Memory empty_buffer * evm_AddRefund child.addRefund *
+        evm_SubRefund child.subRefund * evm_Logs child.logs * evm_JumpDest child.jumpDest *
+        evm_Parsed 0 Revert * evm_hide_Parsed
+          ((FDOM parent.msgParams.parsed UNION FDOM p.parsed) DELETE 0) *
+        cond (
+          absorb_state_gas parent 0 0 0 =
+            (if Revert = Return then repay_state_gas_spill_context
+              (absorb_state_gas parent 0 1 0) else absorb_state_gas parent 0 0 0) /\
+          [(parent,rb)] <> [] /\ 2 <= LENGTH child.stack /\
+          ISL (INL ():unit + exception option) /\
+          0 = w2n (EL 0 child.stack) /\ 0 = w2n (EL 1 child.stack) /\
+          LENGTH parent.stack < stack_limit /\ (Revert = Return \/ Revert = Revert) /\
+          F = (Revert = Return /\ is_code_dest p.outputTo) /\
+          parent = FST (HD [(parent,rb)]) /\
+          empty_buffer = expanded_memory empty_buffer 0 0 /\
+          [] = buffer_take 0 0 empty_buffer /\
+          0 = static_gas Revert + memory_cost empty_buffer 0 0 + 0 /\
+          (FDOM parent.msgParams.parsed UNION FDOM p.parsed) =
+            (FDOM parent.msgParams.parsed UNION FDOM p.parsed) /\
+          0 + 0 <= p.gasLimit /\ 10 = p.gasLimit - 0 - 0 /\
+          10 <= parent.gasUsed /\
+          (if F then (case ([]:byte list) of [] => T | h::_ => h <> 239w) /\
+            0 = code_deposit_cost * LENGTH ([]:byte list) /\
+            LENGTH ([]:byte list) <= max_code_size else 0 = 0));
+      post = evm_Stack [0w] *
+        evm_Memory (buffer_write 0 (TAKE 0 ([]:byte list)) parent.memory) *
+        evm_PC (SUC parent.pc) *
+        evm_hide_Parsed ((FDOM parent.msgParams.parsed UNION FDOM p.parsed)
+                         DIFF FDOM parent.msgParams.parsed) *
+        CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP parent.msgParams.parsed pc = SOME inst} *
+        evm_Contexts [] * evm_CachedRB rb * evm_MsgParams parent.msgParams *
+        evm_ReturnData [] * evm_Exception (INL ()) * evm_Rollback rb *
+        evm_GasUsed ((absorb_state_gas parent 0 0 0).gasUsed - 10 - 1) *
+        evm_StateGasLeft (absorb_state_gas parent 0 0 0).stateGasLeft *
+        evm_StateGasSpilled (absorb_state_gas parent 0 0 0).stateGasSpilled *
+        evm_StateGasBaseline (absorb_state_gas parent 0 0 0).stateGasBaseline *
+        evm_StateGasCommitted (absorb_state_gas parent 0 0 0).stateGasCommitted *
+        evm_JumpDest parent.jumpDest * evm_Logs (parent.logs ++ []) *
+        evm_AddRefund (parent.addRefund + 0) * evm_SubRefund (parent.subRefund + 0)
+  in ~SPEC EVM_MODEL pre {} post
+Proof
+  simp[LET_THM] >>
+  qmatch_goalsub_abbrev_tac `evm_MsgParams p` >>
+  qmatch_goalsub_abbrev_tac `evm_Contexts [(parent,rb)]` >>
+  qabbrev_tac `child = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+          memory := empty_buffer; gasUsed := 0; stateGasSpilled := 1;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>` >>
+  qabbrev_tac `s = initial with <|contexts := [(child,rb);(parent,rb)]; rollback := rb|>` >>
+  qabbrev_tac `out = initial with <|contexts := [(parent with <|stack := [0w]; pc := 1;
+          returnData := []; gasUsed := 1|>,rb)]; rollback := rb|>` >>
+  `wf_state s /\ step s = (INL (),out) /\ FST (step out) = INR NONE /\
+     (FST (HD (SND (step out)).contexts)).gasUsed = 1` by
+    (simp[Abbr `s`, Abbr `child`, Abbr `parent`, Abbr `p`, Abbr `rb`, Abbr `out`] >>
+     irule (SRULE [LET_THM] inner_revert_spill_execution)) >>
+  `parse_code 0 FEMPTY [253w] = FEMPTY |+ (0,Revert)` by
+    (simp[Once parse_code_def, vfmOperationTheory.parse_opcode_cond_thm,
+          vfmOperationTheory.opcode_def] >> simp[Once parse_code_def]) >>
+  simp[Abbr `p`, Abbr `parent`, expanded_memory_def, memory_expand_by_def,
+       memory_cost_def, vfmOperationTheory.static_gas_def, stack_limit_def,
+       empty_buffer_def, buffer_length_def, buffer_take_def, Once read_bytes_def,
+       absorb_state_gas_def, finite_mapTheory.FDOM_FUPDATE] >>
+  rewrite_tac[EVM_SPEC_SEMANTICS] >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `{HasStack; HasPC; HasGasUsed; HasMsgParams; HasStateGasLeft;
+    HasStateGasSpilled; HasStateGasBaseline; HasStateGasCommitted;
+    HasContexts; HasReturnData; HasException; HasRollback; HasCachedRB;
+    HasMemory; HasAddRefund; HasSubRefund; HasLogs; HasJumpDest; HasParsed 0}` >>
+  CONV_TAC NOT_FORALL_CONV >> qexists `(INL (),s)` >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `\n. if n = 0 then (INL (),s) else if n = 1 then (INL (),out) else step out` >>
+  pure_rewrite_tac[NOT_IMP] >> conj_tac
+  >- (conj_tac
+      >- (rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set, STAR_evm_hide_Parsed] >>
+          simp[STAR_evm2set, EMPTY_evm2set, Abbr `s`, Abbr `child`,
+               evm2set_on_def, evm_hide_Parsed_def, EXTENSION] >>
+          simp[empty_buffer_def, finite_mapTheory.FLOOKUP_UPDATE, cond_def])
+      >> simp[rel_sequence_def, EVM_NEXT_REL_def] >> gen_tac >>
+         Cases_on `n = 0` >- simp[] >> Cases_on `n = 1` >> simp[])
+  >> simp[GSYM STAR_ASSOC, STAR_CODE_POOL_evm2set,
+          STAR_evm_hide_Parsed, STAR_evm2set, EMPTY_evm2set] >> gen_tac >>
+     Cases_on `k = 0` >- simp[Abbr `s`, Abbr `child`] >>
+     Cases_on `k = 1` >> gvs[Abbr `out`, STAR_evm2set,
+       STAR_evm_hide_Parsed, EMPTY_evm2set, evm2set_on_def]
+QED
+
 Theorem SPEC_Return_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
@@ -5625,9 +5779,19 @@ Proof
      gvs[expanded_memory_def, memory_expand_by_def]
   \\ gs[Abbr`ex`]
   \\ pop_assum kall_tac
+  \\ `p.gasLimit <= g - sp + caller.gasUsed` by
+     (qpat_assum `wf_state (SND r)`
+        (mp_tac o REWRITE_RULE [wf_state_def, gas_stack_ok_def])
+      \\ strip_tac
+      \\ first_x_assum (qspec_then `0` mp_tac)
+      \\ Cases_on `(SND r).contexts` \\ gvs[Abbr`cs`]
+      \\ Cases_on `t` \\ gvs[Abbr`caller`, Abbr`p`, Abbr`g`, Abbr`sp`,
+                                  unused_gas_def, frame_unused_gas_def]
+      \\ decide_tac)
   \\ Cases_on`inst = Revert`
   >- (
-    gvs[revert_def, handle_step_def, handle_create_def, handle_def,
+    gvs[Abbr`is_ret`, Abbr`returnCode`, Abbr`gasCost`]
+    \\ gvs[revert_def, handle_step_def, handle_create_def, handle_def,
         return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
         get_return_data_def, get_current_context_def, return_def, get_output_to_def,
         handle_exception_def, get_num_contexts_def, pop_and_incorporate_context_def,
@@ -5635,9 +5799,12 @@ Proof
         assert_def,set_current_context_def,inc_pc_def,return_destination_case_rator,
         CaseEq"return_destination",CaseEq"prod",CaseEq"sum",set_return_data_def,
         push_stack_def,write_memory_def,EMPTY_evm2set,SUBSET_DEF,PULL_EXISTS,
+        restore_state_gas_def,
         Abbr`calleeGasLeft`,Abbr`all_pcs`,TO_FLOOKUP]
+    \\ gvs[absorb_state_gas_def, Abbr`merged`]
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
+    \\ (conj_tac >- decide_tac)
     \\ (conj_tac >-
          (qpat_x_assum ‘_ = {}’ mp_tac
           \\ fs [EXTENSION]
