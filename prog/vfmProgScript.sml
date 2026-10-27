@@ -5128,6 +5128,21 @@ QED
      LENGTH ss ≤ stack_limit and 6 values were popped) and write_memory
      retOffset (TAKE retSize out). *)
 
+Theorem repay_absorb_meter_fields[local]:
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).gasUsed =
+    c.gasUsed - MIN (c.stateGasLeft + sg) (c.stateGasSpilled + sp) /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasLeft =
+    c.stateGasLeft + sg - MIN (c.stateGasLeft + sg) (c.stateGasSpilled + sp) /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasSpilled =
+    c.stateGasSpilled + sp - MIN (c.stateGasLeft + sg) (c.stateGasSpilled + sp) /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasBaseline =
+    c.stateGasBaseline /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasCommitted =
+    c.stateGasCommitted + cm
+Proof
+  simp[repay_state_gas_spill_context_def, absorb_state_gas_def]
+QED
+
 Theorem SPEC_Call_precompile:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g *
@@ -5217,7 +5232,12 @@ Proof
   rename1 `evm2set_without dom r = _` >>
   mp_tac (Q.INST [`s` |-> `SND (r : (unit + exception option) # execution_state)`,
     `caller` |-> `FST (HD (SND (r : (unit + exception option) # execution_state)).contexts)`, `op` |-> `call_inst`]
-    step_precompile_success_exact) >>
+    (Q.INST [`merged` |-> `repay_state_gas_spill_context
+      (absorb_state_gas
+        (caller with <|stack := DROP (6 + vOff) ss; memory := em;
+          returnData := []; stateGasLeft := 0;
+          gasUsed := g + gasCost - (stipend - pg)|>)
+        caller.stateGasLeft 0 0)`] step_precompile_success_exact)) >>
   (impl_tac >- gvs[]) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `step (SND r) = result` >>
@@ -5229,7 +5249,8 @@ Proof
   simp[] >>
   conj_tac >-
     (simp[Abbr `result`] >>
-     Cases_on `FST r` >> gvs[]) >>
+     Cases_on `FST r` >> gvs[] >>
+     simp[repay_absorb_meter_fields] >> decide_tac) >>
   sym_tac >> irule UPDATE_evm2set_without_original >>
   gvs[Abbr `result`]
 QED
