@@ -4890,7 +4890,7 @@ Theorem proceed_call_precompile_success:
           rollback := rb with accounts updated_by
             (if op <> CallCode /\ 0 < value
              then transfer_value sender addr value else I);
-          contexts := (c,rb)::(parent,prb)::rest |> )
+          contexts := (c,rb)::(parent with <|stateGasLeft := 0|>,prb)::rest |> )
 Proof
   strip_tac >>
   Cases_on `op <> CallCode /\ 0 < value` >>
@@ -4918,11 +4918,15 @@ Theorem handle_step_success_memory_exact:
   c.msgParams.outputTo = Memory mr /\
   c.addRefund = 0 /\ c.subRefund = 0 /\
   c.msgParams.gasLimit - c.gasUsed <= parent.gasUsed /\
-  LENGTH parent.stack < stack_limit ==>
+  LENGTH parent.stack < stack_limit /\
+  merged = repay_state_gas_spill_context
+             (absorb_state_gas
+                (parent with gasUsed :=
+                   parent.gasUsed - (c.msgParams.gasLimit - c.gasUsed))
+                c.stateGasLeft c.stateGasSpilled c.stateGasCommitted) ==>
   handle_step NONE s =
     (INL (), s with contexts :=
-      (parent with <|
-         gasUsed := parent.gasUsed - (c.msgParams.gasLimit - c.gasUsed);
+      (merged with <|
          pc := parent.pc + 1; returnData := c.returnData;
          stack := 1w::parent.stack;
          memory := buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory;
@@ -4980,7 +4984,13 @@ Theorem step_precompile_success_exact:
     ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
     (dispatch_precompiles addr s : unit execution_result) =
       (INR NONE, s with contexts :=
-        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
+        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) /\
+  merged = repay_state_gas_spill_context
+             (absorb_state_gas
+                (caller with <|stack := DROP (6 + vOff) ss; memory := em;
+                               returnData := []; stateGasLeft := 0;
+                               gasUsed := g + gasCost - (stipend - pg)|>)
+                caller.stateGasLeft 0 0) ==>
   step s =
     (INL (),s with <|
       rollback := newRb with accounts updated_by
@@ -4989,7 +4999,11 @@ Theorem step_precompile_success_exact:
       msdomain := newDom;
       contexts := (caller with <|
         stack := 1w::DROP (6 + vOff) ss; pc := pc + 1;
-        gasUsed := g + gasCost - (stipend - pg);
+        gasUsed := merged.gasUsed;
+        stateGasLeft := merged.stateGasLeft;
+        stateGasSpilled := merged.stateGasSpilled;
+        stateGasBaseline := merged.stateGasBaseline;
+        stateGasCommitted := merged.stateGasCommitted;
         memory := buffer_write retOffset (TAKE retSize out) em;
         returnData := out;
         logs := caller.logs ++ transfer_log p.callee
@@ -5075,11 +5089,21 @@ QED
 
 Theorem SPEC_Call_precompile:
   SPEC EVM_MODEL
-  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm * evm_MsgParams p *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   cond (6 + vOff ≤ LENGTH ss ∧
+   cond (merged = repay_state_gas_spill_context
+                    (absorb_state_gas
+                       <|stack := DROP (6 + vOff) ss; memory := em; pc := pc;
+                         jumpDest := j; returnData := []; gasUsed := g + gasCost;
+                         addRefund := ar; subRefund := sr; stateGasLeft := 0;
+                         stateGasSpilled := sp; stateGasBaseline := bsl;
+                         stateGasCommitted := cm; logs := l; msgParams := p|>
+                       sg 0 0) ∧
+         6 + vOff ≤ LENGTH ss ∧
          vOff = (if call_has_value call_inst then 1 else 0) ∧
          ISL e ∧
          gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧
@@ -5120,7 +5144,11 @@ Theorem SPEC_Call_precompile:
                (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest))))
   {(pc,call_inst)}
   (evm_Stack (1w :: DROP (6 + vOff) ss) * evm_PC (pc + 1) *
-   evm_GasUsed (g + gasCost - (stipend - pg)) * evm_MsgParams p *
+   evm_GasUsed (merged.gasUsed - (stipend - pg)) *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted * evm_MsgParams p *
    evm_Memory (buffer_write retOffset (TAKE retSize out) em) *
    evm_Rollback (newRb with accounts updated_by
                  (if call_inst ≠ CallCode ∧ 0 < value
