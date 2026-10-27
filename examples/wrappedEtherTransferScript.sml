@@ -143,29 +143,6 @@ Proof
        REVERSE_word_to_bytes_bytes32]
 QED
 
-(* the transaction start, for a contract other than the sender *)
-Theorem initial_state_contract:
-  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  ¬NULL (lookup_account a accounts).code ∧
-  ¬is_delegation (lookup_account a accounts).code ⇒
-  lookup_account a s.rollback.accounts = lookup_account a accounts ∧
-  a ≠ tx.from ∧ s.rollback.toDelete = [] ∧
-  (FST (HD s.contexts)).msgParams.caller = tx.from ∧
-  ¬(FST (HD s.contexts)).msgParams.static ∧
-  s.originalAccounts = s.rollback.accounts
-Proof
-  simp[initial_state_def, CaseEq"option"] \\ strip_tac
-  \\ pairarg_tac \\ gvs[]
-  \\ pairarg_tac \\ gvs[CaseEq"option"]
-  \\ `lookup_account a accounts' = lookup_account a accounts ∧ a ≠ tx.from`
-  by (gvs[pre_transaction_updates_def, CaseEq"bool", lookup_account_def,
-          update_account_def, APPLY_UPDATE_THM]
-      \\ Cases_on `a = tx.from` \\ gvs[])
-  \\ drule process_authorizations_contract \\ simp[] \\ strip_tac
-  \\ gvs[apply_intrinsic_cost_def, initial_context_def,
-         initial_msg_params_def, initial_rollback_def]
-QED
-
 (* ---------------------------------------------------------------- *)
 (* The transfer path, composed from the block summaries *)
 
@@ -607,18 +584,15 @@ fun gas_bounds_tac (asl, w) =
 
 Theorem weth_transfer_run_transaction:
   (lookup_account addr accounts).code = contract_code ∧
-  wf_accounts accounts ∧ ¬fIN addr precompile_addresses ∧
-  tx.to = SOME addr ∧ tx.value = 0 ∧
-  function_selector "transfer" [Address; Uint 256] ++
-    enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad])
-    ≼ tx.data ∧
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "transfer" [Address; Uint 256] ++
+     enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad]))
+    29962 s ∧
   wad ≤ w2n (lookup_storage (balance_slot_key tx.from)
                (lookup_account addr accounts).storage) ∧
   access_slot_check dom (SK addr (balance_slot_key tx.from)) ∧
   access_slot_check dom (SK addr (balance_slot_key dst)) ∧
-  blk.coinBase ≠ addr ∧
-  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  29962 ≤ (FST (HD s.contexts)).msgParams.gasLimit
+  blk.coinBase ≠ addr
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =
@@ -651,7 +625,7 @@ Proof
   PURE_REWRITE_TAC [cv_eval “enc (Tuple [Bool]) (ListV [NumV 1])”,
                     cv_eval “word_of_bytes_be (Keccak_256_string
                        "Transfer(address,address,uint256)") : bytes32”,
-                    transfer_value_enc]
+                    transfer_value_enc, zero_value_call_def]
   \\ strip_tac
   \\ strip_assume_tac contract_code_not_delegation
   \\ drule_all initial_state_call_code \\ strip_tac
@@ -836,11 +810,10 @@ QED
    with each other, with any touched account's slot, or with slots 0-2 *)
 Theorem WETH_EVM_transfer_run_transaction:
   WETH_EVM addr ws accounts ∧
-  wf_accounts accounts ∧ ¬fIN addr precompile_addresses ∧
-  tx.to = SOME addr ∧ tx.value = 0 ∧
-  function_selector "transfer" [Address; Uint 256] ++
-    enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad])
-    ≼ tx.data ∧
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "transfer" [Address; Uint 256] ++
+     enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad]))
+    29962 s ∧
   wad ≤ ws.balances tx.from ∧
   (∀a b. (a = tx.from ∨ a = dst) ∧
          (b = tx.from ∨ b = dst ∨ b ∈ ws.touched) ∧
@@ -849,9 +822,7 @@ Theorem WETH_EVM_transfer_run_transaction:
   balance_slot_key dst ∉ {0w; 1w; 2w} ∧
   access_slot_check dom (SK addr (balance_slot_key tx.from)) ∧
   access_slot_check dom (SK addr (balance_slot_key dst)) ∧
-  blk.coinBase ≠ addr ∧
-  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  29962 ≤ (FST (HD s.contexts)).msgParams.gasLimit
+  blk.coinBase ≠ addr
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =

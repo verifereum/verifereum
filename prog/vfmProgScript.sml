@@ -5421,3 +5421,37 @@ Proof
   \\ simp[]
   \\ strip_tac \\ gvs[]
 QED
+
+(* the callee of a message call to a contract (code that is not a delegation)
+   is untouched by the transaction's set-up *)
+Theorem initial_state_contract:
+  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
+  ¬NULL (lookup_account a accounts).code ∧
+  ¬is_delegation (lookup_account a accounts).code ⇒
+  lookup_account a s.rollback.accounts = lookup_account a accounts ∧
+  a ≠ tx.from ∧ s.rollback.toDelete = [] ∧
+  (FST (HD s.contexts)).msgParams.caller = tx.from ∧
+  ¬(FST (HD s.contexts)).msgParams.static ∧
+  s.originalAccounts = s.rollback.accounts
+Proof
+  simp[initial_state_def, CaseEq"option"] \\ strip_tac
+  \\ pairarg_tac \\ gvs[]
+  \\ pairarg_tac \\ gvs[CaseEq"option"]
+  \\ `lookup_account a accounts' = lookup_account a accounts ∧ a ≠ tx.from`
+  by (gvs[pre_transaction_updates_def, CaseEq"bool", lookup_account_def,
+          update_account_def, APPLY_UPDATE_THM]
+      \\ Cases_on `a = tx.from` \\ gvs[])
+  \\ drule process_authorizations_contract \\ simp[] \\ strip_tac
+  \\ gvs[apply_intrinsic_cost_def, initial_context_def,
+         initial_msg_params_def, initial_rollback_def]
+QED
+
+(* a transaction calling contract addr with no value, its calldata
+   starting with data, and at least gas left when the call starts *)
+Definition zero_value_call_def:
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr data gas s ⇔
+    wf_accounts accounts ∧ ¬fIN addr precompile_addresses ∧
+    tx.to = SOME addr ∧ tx.value = 0 ∧ data ≼ tx.data ∧
+    initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
+    gas ≤ (FST (HD s.contexts)).msgParams.gasLimit
+End
