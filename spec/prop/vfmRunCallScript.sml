@@ -209,11 +209,26 @@ Proof
   >> rw[]
 QED
 
-(* proceed_call push structure. *)
+(* proceed_call push structure.
+
+   EIP-8037: the call drains the calling frame's reservoir before it
+   pushes.  `drain_state_gas_reservoir` (`spec/vfmExecutionScript.sml:653`)
+   sets the current context's `stateGasLeft := 0` and returns the old
+   value, `proceed_call_def` (`:1798`) opens with it and builds the new
+   frame from that return (`:1822`), and `push_context` (`:270`) is
+   `contexts updated_by CONS crb`.  So the output's tail is the parent
+   *with its reservoir zeroed*, and the tail equality holds only of the
+   frames below the parent; the parent's one moved field is named here.
+   Checked witness for the old form:
+   `spec/prop/vfmCallDrainProbeScript.sml`
+   `proceed_call_push_structure_counterexample`. *)
 Theorem proceed_call_push_structure:
   proceed_call op sender address value argsOffset argsSize code stipend
                outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
-  TL s'.contexts = s.contexts ∧
+  LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
+  TL (TL s'.contexts) = TL s.contexts ∧
+  FST (HD (TL s'.contexts)) =
+    (FST (HD s.contexts) with stateGasLeft := 0) ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
   (FST (HD s'.contexts)).msgParams.outputTo = outputTo ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
