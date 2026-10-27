@@ -2272,6 +2272,47 @@ Proof
                  frame_unused_gas_credit) >> simp[]
 QED
 
+Theorem decreases_gas_forfeit_remaining_gas[simp]:
+  decreases_gas F forfeit_remaining_gas
+Proof
+  rw[decreases_gas_def, forfeit_remaining_gas_def, get_gas_left_def,
+     consume_gas_def, get_current_context_def, bind_def, return_def,
+     ignore_bind_def, assert_def, set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  IF_CASES_TAC >> simp[wf_context_def, frame_unused_gas_def] >>
+  rpt strip_tac >> gas_arith_tac
+QED
+
+Theorem decreases_gas_repay_state_gas_spill[simp]:
+  decreases_gas F repay_state_gas_spill
+Proof
+  rw[decreases_gas_def, repay_state_gas_spill_def,
+     repay_state_gas_spill_context_def, get_current_context_def,
+     bind_def, return_def, set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def, frame_unused_gas_credit]
+QED
+
+Theorem decreases_gas_cred_pop_absorb:
+  decreases_gas_cred T 0 0
+    (do callee_rb <- pop_helper;
+        context <- get_current_context;
+        set_current_context (absorb_state_gas context
+          (FST callee_rb).stateGasLeft (FST callee_rb).stateGasSpilled
+          (FST callee_rb).stateGasCommitted);
+        return callee_rb od)
+Proof
+  simp[pop_helper_def, bind_def, decreases_gas_cred_def, get_gas_left_def,
+       get_current_context_def, return_def, pop_context_def,
+       unuse_gas_def, ignore_bind_def, fail_def, assert_def,
+       set_current_context_def, get_num_contexts_def] >>
+  gen_tac >> Cases_on `s.contexts` >> simp[] >>
+  Cases_on `t` >> simp[] >- metis_tac lexs >>
+  IF_CASES_TAC >>
+  simp[absorb_state_gas_def, contexts_weight_def, LEX_DEF,
+       unused_gas_def, wf_context_def, frame_unused_gas_def]
+QED
+
 Theorem decreases_gas_cred_step[simp]:
   decreases_gas_cred T 0 0 step
 Proof
