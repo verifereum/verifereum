@@ -2884,6 +2884,24 @@ Proof
   >> simp[]
 QED
 
+(* A completed child pop preserves the slot invariant if both possible
+ * storage sources satisfy it. This says nothing about gas or other fields. *)
+Theorem step_pop_preserves_storage_slot:
+  step s = (r, s') ∧ s.contexts ≠ [] ∧
+  outputTo_consistent_stack s ∧
+  EVERY (wf_context o FST) s.contexts ∧
+  LENGTH s'.contexts < LENGTH s.contexts ∧
+  storage_slot_preserved s.rollback rb ∧
+  storage_slot_preserved (SND (HD s.contexts)) rb ⇒
+  storage_slot_preserved s'.rollback rb
+Proof
+  strip_tac
+  >> drule_all step_pop_structure
+  >> strip_tac
+  >> gvs[storage_slot_preserved_def, SUBSET_DEF, finite_setTheory.fIN_IN]
+  >> metis_tac[]
+QED
+
 (* Single-step preservation of run_call_inv, by length-change cases. *)
 
 Theorem run_call_inv_step:
@@ -3080,33 +3098,9 @@ Proof
                    >> Cases_on `n` >> fs[])
              >> simp[] >> strip_tac >> fs[])
     >> `storage_slot_preserved s1.rollback es.rollback` by (
-         (* step_pop_structure's conclusion is a disjunction of
-            (accesses-subset ∧ storage-eq) pairs. Case-split and discharge
-            each via the matching subset and the corresponding
-            storage_slot_preserved hypothesis. *)
-         simp[storage_slot_preserved_def]
-         >> rpt strip_tac
-         >> gvs[]
-         >- (
-           (* Disjunct A: s.accesses ⊆ s'.accesses ∧ storage s' = storage s. *)
-           `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
-             by (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
-                 >> metis_tac[])
-           >> `lookup_storage k (lookup_account a s0.rollback.accounts).storage =
-               lookup_storage k (lookup_account a es.rollback.accounts).storage`
-                by fs[storage_slot_preserved_def]
-           >> fs[lookup_storage_def]
-           >> metis_tac[])
-         >>
-           (* Disjunct B: callee_rb.accesses ⊆ s'.accesses ∧
-              storage s' = storage callee_rb. *)
-           `¬fIN (SK a k) (SND callee_ctx).accesses.storageKeys`
-             by (gvs[]
-                 >> gvs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
-                 >> metis_tac[])
-           >> `lookup_storage k (lookup_account a (SND callee_ctx).accounts).storage =
-               lookup_storage k (lookup_account a es.rollback.accounts).storage`
-                by fs[storage_slot_preserved_def])
+         irule step_pop_preserves_storage_slot
+         >> qexistsl_tac [`rr`, `s0`]
+         >> gvs[wf_state_def])
     (* Split on whether s1.contexts is below ed or not. *)
     >> Cases_on `LENGTH s1.contexts < ed`
     >- ((* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
