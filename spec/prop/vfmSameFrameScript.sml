@@ -2265,6 +2265,83 @@ QED
 (* Utility: preserves_same_frame / cp imply length preservation.     *)
 (* ================================================================ *)
 
+Definition zero_head_refunds_def:
+  zero_head_refunds s =
+    s with contexts :=
+      (FST (HD s.contexts) with <|addRefund := 0; subRefund := 0|>,
+       SND (HD s.contexts)) :: TL s.contexts
+End
+
+Theorem zero_head_refunds_projections:
+  s.contexts <> [] ==>
+  LENGTH (zero_head_refunds s).contexts = LENGTH s.contexts /\
+  TL (zero_head_refunds s).contexts = TL s.contexts /\
+  SND (HD (zero_head_refunds s).contexts) = SND (HD s.contexts) /\
+  (FST (HD (zero_head_refunds s).contexts)).msgParams =
+    (FST (HD s.contexts)).msgParams /\
+  (FST (HD (zero_head_refunds s).contexts)).logs =
+    (FST (HD s.contexts)).logs /\
+  (FST (HD (zero_head_refunds s).contexts)).gasUsed =
+    (FST (HD s.contexts)).gasUsed /\
+  (zero_head_refunds s).rollback = s.rollback /\
+  (zero_head_refunds s).txParams = s.txParams /\
+  (zero_head_refunds s).originalAccounts = s.originalAccounts /\
+  (zero_head_refunds s).msdomain = s.msdomain
+Proof
+  Cases_on `s.contexts` >> simp[zero_head_refunds_def]
+QED
+
+Theorem zero_head_refunds_idempotent:
+  zero_head_refunds (zero_head_refunds s) = zero_head_refunds s
+Proof
+  simp[zero_head_refunds_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_refl:
+  s.contexts <> [] ==> same_frame_rel (zero_head_refunds s) s
+Proof
+  Cases_on `s.contexts` >> simp[zero_head_refunds_def, same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_weaken:
+  same_frame_rel s t ==> same_frame_rel (zero_head_refunds s) t
+Proof
+  strip_tac >> irule same_frame_rel_trans >> qexists `s` >>
+  simp[] >> irule same_frame_rel_zero_head_refunds_refl >>
+  gvs[same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_target:
+  s.contexts <> [] /\ same_frame_rel (zero_head_refunds s) t ==>
+  same_frame_rel (zero_head_refunds s) (zero_head_refunds t)
+Proof
+  Cases_on `s.contexts` >> Cases_on `t.contexts` >>
+  simp[zero_head_refunds_def, same_frame_rel_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_trans:
+  s.contexts <> [] /\ same_frame_rel (zero_head_refunds s) t /\
+  same_frame_rel (zero_head_refunds t) u ==>
+  same_frame_rel (zero_head_refunds s) u
+Proof
+  metis_tac[same_frame_rel_zero_head_refunds_target, same_frame_rel_trans]
+QED
+
+Theorem outputTo_consistent_zero_head_refunds:
+  s.contexts <> [] ==>
+  (outputTo_consistent (zero_head_refunds s) <=> outputTo_consistent s)
+Proof
+  Cases_on `s.contexts` >> simp[zero_head_refunds_def, outputTo_consistent_def]
+QED
+
+Theorem same_frame_rel_zero_head_refunds_outputTo_consistent:
+  s.contexts <> [] /\ outputTo_consistent s /\
+  same_frame_rel (zero_head_refunds s) t ==> outputTo_consistent t
+Proof
+  metis_tac[outputTo_consistent_zero_head_refunds,
+            same_frame_rel_preserves_outputTo_consistent]
+QED
+
 Theorem cp_imp_length_contexts_preserved:
   cp m /\ m s = (r,s') /\ s.contexts <> []
   ==> LENGTH s'.contexts = LENGTH s.contexts
