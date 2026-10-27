@@ -278,12 +278,9 @@ Theorem weth_name_run_transaction:
   (lookup_account addr accounts).code = contract_code ∧
   lookup_storage 0w (lookup_account addr accounts).storage =
     0x577261707065642045746865720000000000000000000000000000000000001Aw ∧
-  wf_accounts accounts ∧ ¬fIN addr precompile_addresses ∧
-  tx.to = SOME addr ∧ tx.value = 0 ∧
-  function_selector "name" [] ≼ tx.data ∧
-  access_slot_check dom (SK addr 0w) ∧
-  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  3110 ≤ (FST (HD s.contexts)).msgParams.gasLimit
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "name" []) 3110 s ∧
+  access_slot_check dom (SK addr 0w)
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =
@@ -300,7 +297,8 @@ Theorem weth_name_run_transaction:
         (lookup_account a s.rollback.accounts).nonce
 Proof
   PURE_REWRITE_TAC [cv_eval “enc (Tuple [String])
-                       (ListV [BytesV (MAP (n2w o ORD) "Wrapped Ether")])”]
+                       (ListV [BytesV (MAP (n2w o ORD) "Wrapped Ether")])”,
+                    zero_value_call_def]
   \\ strip_tac
   \\ strip_assume_tac contract_code_not_delegation
   \\ drule_all initial_state_call_code \\ strip_tac
@@ -337,12 +335,9 @@ QED
 (* the same from the WETH_EVM relation, which fixes code and slot 0 *)
 Theorem WETH_EVM_name_run_transaction:
   WETH_EVM addr ws accounts ∧
-  wf_accounts accounts ∧ ¬fIN addr precompile_addresses ∧
-  tx.to = SOME addr ∧ tx.value = 0 ∧
-  function_selector "name" [] ≼ tx.data ∧
-  access_slot_check dom (SK addr 0w) ∧
-  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  3110 ≤ (FST (HD s.contexts)).msgParams.gasLimit
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "name" []) 3110 s ∧
+  access_slot_check dom (SK addr 0w)
   ⇒
   ∃result accounts'.
     run_transaction dom F chainId prevHashes blk accounts tx =
