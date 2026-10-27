@@ -1353,9 +1353,8 @@ Proof
          assert_def, set_current_context_def, update_accounts_def,
          set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
          reraise_def, unused_gas_def]
-  >> Cases_on `i` >> gvs[]
-  >> TRY(first_x_assum(qspec_then `0` mp_tac) >> rw[] >> NO_TAC)
-  >> first_x_assum(qspec_then `SUC n` mp_tac) >> rw[]
+  >> first_x_assum(qspec_then `i` mp_tac)
+  >> Cases_on `i` >> gvs[frame_unused_gas_def]
 QED
 
 (* --- Linchpin: handle_exception at depth ≥ 2 returns INL under     *)
