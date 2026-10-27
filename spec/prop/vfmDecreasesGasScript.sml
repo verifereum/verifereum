@@ -2313,6 +2313,29 @@ Proof
        unused_gas_def, wf_context_def, frame_unused_gas_def]
 QED
 
+Theorem decreases_gas_cred_pop_absorb_bind:
+  (!child. decreases_gas_cred F 0 0 (k child)) ==>
+  decreases_gas_cred T 0 0
+    (do child <- pop_helper;
+        context <- get_current_context;
+        set_current_context (absorb_state_gas context
+          (FST child).stateGasLeft (FST child).stateGasSpilled
+          (FST child).stateGasCommitted);
+        k child od)
+Proof
+  strip_tac >>
+  `decreases_gas_cred T 0 0
+    (bind (do child <- pop_helper;
+              context <- get_current_context;
+              set_current_context (absorb_state_gas context
+                (FST child).stateGasLeft (FST child).stateGasSpilled
+                (FST child).stateGasCommitted);
+              return child od) k)` by
+    (irule decreases_gas_cred_bind_false >>
+     simp[decreases_gas_cred_pop_absorb]) >>
+  gvs[ignore_bind_def, bind_assoc]
+QED
+
 Theorem decreases_gas_cred_step[simp]:
   decreases_gas_cred T 0 0 step
 Proof
@@ -2331,46 +2354,29 @@ Proof
         \\ simp[decreases_gas_restore_state_gas])
       \\ simp[GSYM after_pop_def, GSYM handle_ex_helper_def]
       \\ simp[handle_ex_helper_thm]
+      \\ irule decreases_gas_cred_ignore_bind_mono
+      \\ CONV_TAC SWAP_EXISTS_CONV \\ qexistsl_tac [`F`, `T`] \\ simp[]
+      \\ conj_tac >- (
+        irule decreases_gas_imp \\ rw[]
+        \\ irule_at Any decreases_gas_ignore_bind_false
+        \\ irule_at Any decreases_gas_forfeit_remaining_gas
+        \\ irule_at Any decreases_gas_set_return_data)
       \\ irule decreases_gas_cred_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_num_contexts \\ rw []
       \\ irule decreases_gas_cred_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_return_data \\ rw []
       \\ irule decreases_gas_cred_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_output_to \\ rw []
-      \\ irule_at Any decreases_gas_cred_bind_mono
-      \\ qexistsl_tac[`F`,`T`]
-      \\ simp[]
-      \\ conj_tac >- (
-        rw[] >- (
-          irule decreases_gas_imp \\ rw []
-          \\ irule decreases_gas_ignore_bind_false
-          \\ conj_tac
-          >- (
-            qexists_tac`F`
-            \\ irule decreases_gas_ignore_bind_false
-            \\ conj_tac
-            >- ( qexists_tac`F` \\ irule decreases_gas_push_logs)
-            \\ qexists_tac`F` \\ irule decreases_gas_update_gas_refund
-          )
-          \\ irule_at Any decreases_gas_after_pop
-        )
-        \\ irule decreases_gas_imp \\ rw []
-        \\ irule_at Any decreases_gas_ignore_bind_false
-        \\ irule_at Any decreases_gas_set_rollback
-        \\ irule_at Any decreases_gas_after_pop
-      )
-      \\ rw[pop_helper_def]
-      \\ simp[bind_def, decreases_gas_cred_def, get_gas_left_def,
-              get_current_context_def, return_def, pop_context_def,
-              unuse_gas_def, ignore_bind_def, fail_def, assert_def,
-              set_current_context_def, get_num_contexts_def,
-              assert_def]
-      \\ gen_tac
-      \\ Cases_on`s.contexts` \\ gvs []
-      \\ Cases_on`t` \\ gvs[] >- metis_tac lexs
-      \\ reverse IF_CASES_TAC \\ fs [DISJ_IMP_THM, FORALL_AND_THM,
-        contexts_weight_def, LEX_DEF, unused_gas_def]
-      \\ gvs[wf_context_def, frame_unused_gas_def]
+      \\ ho_match_mp_tac decreases_gas_cred_pop_absorb_bind
+      \\ gen_tac \\ irule decreases_gas_imp
+      \\ irule_at Any decreases_gas_ignore_bind_false
+      \\ irule_at Any decreases_gas_after_pop
+      \\ rw[] \\ qexists_tac `F` \\ simp[]
+      \\ irule_at Any decreases_gas_ignore_bind_false
+      \\ irule_at Any decreases_gas_push_logs
+      \\ irule_at Any decreases_gas_ignore_bind_false
+      \\ irule_at Any decreases_gas_update_gas_refund
+      \\ irule_at Any decreases_gas_repay_state_gas_spill
     )
     \\ simp [handle_create_def]
     \\ irule decreases_gas_imp \\ rw []
