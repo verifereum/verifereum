@@ -498,6 +498,25 @@ Proof
 QED
 
 
+(* EIP-8037: the state gas meter reads and writes the head frame's gas
+   fields, which `cp` does not constrain beyond `msgParams` and `logs`. *)
+Theorem cp_state_gas_meter[simp]:
+  cp get_state_gas_left ∧ cp (charge_state_gas n) ∧
+  cp (credit_state_gas_refund n) ∧ cp restore_state_gas ∧
+  cp commit_state_gas ∧ cp (restore_state_gas_to_entry sg) ∧
+  cp repay_state_gas_spill ∧ cp forfeit_remaining_gas ∧
+  cp withhold_create_gas ∧ cp drain_state_gas_reservoir ∧
+  cp (restore_child_gas g sr)
+Proof
+  rpt conj_tac
+  >> cp_tac [get_state_gas_left_def, charge_state_gas_def,
+       credit_state_gas_refund_def, restore_state_gas_def,
+       commit_state_gas_def, restore_state_gas_to_entry_def,
+       repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+       forfeit_remaining_gas_def, withhold_create_gas_def,
+       drain_state_gas_reservoir_def, restore_child_gas_def, LET_THM]
+QED
+
 Theorem cp_step_sstore_gas[simp]:
   cp (step_sstore_gas_consumption addr key value)
 Proof
