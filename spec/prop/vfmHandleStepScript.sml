@@ -86,7 +86,10 @@ Theorem handle_exception_same_frame:
   s.contexts ≠ [] ∧
   handle_exception e s = (r, s') ∧
   LENGTH s'.contexts = LENGTH s.contexts ⇒
-  same_frame_rel s s'
+  same_frame_rel
+    (s with contexts := (FST (HD s.contexts) with <|addRefund := 0; subRefund := 0|>,
+                         SND (HD s.contexts)) :: TL s.contexts)
+    s'
 Proof
   simp[handle_exception_def, bind_def, ignore_bind_def]
   \\ strip_tac
