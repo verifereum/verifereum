@@ -286,11 +286,22 @@ Proof
   >> gvs[Abbr`ss`]
 QED
 
-(* proceed_create push structure. *)
+(* proceed_create push structure.
+
+   The same EIP-8037 drain as `proceed_call` above: `proceed_create_def`
+   (`spec/vfmExecutionScript.sml:1402`) opens by draining the creating
+   frame's reservoir and the new frame is built from that return
+   (`:1424`), so the output's tail is the caller *with its reservoir
+   zeroed* and the tail equality holds only of the frames below it.
+   `set_original` touches only `originalAccounts` and `update_accounts`
+   only the rollback, so `stateGasLeft` is the parent's one moved field. *)
 Theorem proceed_create_push_structure:
   proceed_create senderAddress address value code cappedGas s = (r, s') ∧
   s.contexts ≠ [] ⇒
-  MAP FST (TL s'.contexts) = MAP FST s.contexts ∧
+  LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
+  TL (TL s'.contexts) = TL s.contexts ∧
+  FST (HD (TL s'.contexts)) =
+    (FST (HD s.contexts) with stateGasLeft := 0) ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
   outputTo_consistent_ctx (FST (HD s'.contexts)) ∧
   toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
