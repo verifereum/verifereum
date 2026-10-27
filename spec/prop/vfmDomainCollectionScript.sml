@@ -262,6 +262,28 @@ Proof
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
 QED
 
+Theorem state_gas_meter_computes_minimal_domain[simp]:
+  computes_minimal_domain get_state_gas_left /\
+  (!n. computes_minimal_domain (charge_state_gas n)) /\
+  (!n. computes_minimal_domain (credit_state_gas_refund n)) /\
+  computes_minimal_domain restore_state_gas /\
+  computes_minimal_domain commit_state_gas /\
+  (!sg. computes_minimal_domain (restore_state_gas_to_entry sg)) /\
+  computes_minimal_domain repay_state_gas_spill /\
+  computes_minimal_domain forfeit_remaining_gas /\
+  computes_minimal_domain withhold_create_gas /\
+  computes_minimal_domain drain_state_gas_reservoir /\
+  (!gas reservoir. computes_minimal_domain (restore_child_gas gas reservoir))
+Proof
+  rw[get_state_gas_left_def, charge_state_gas_def,
+     credit_state_gas_refund_def, restore_state_gas_def, commit_state_gas_def,
+     restore_state_gas_to_entry_def, repay_state_gas_spill_def,
+     forfeit_remaining_gas_def, withhold_create_gas_def,
+     drain_state_gas_reservoir_def, restore_child_gas_def]
+  \\ rpt ((irule bind_computes_minimal_domain ORELSE
+            irule ignore_bind_computes_minimal_domain) \\ rw[])
+QED
+
 Theorem set_rollback_computes_minimal_domain[simp]:
   computes_minimal_domain (set_rollback x)
 Proof
@@ -288,10 +310,8 @@ Theorem pop_and_incorporate_context_computes_minimal_domain[simp]:
   computes_minimal_domain (pop_and_incorporate_context x)
 Proof
   rw[pop_and_incorporate_context_def]
-  \\ irule bind_computes_minimal_domain \\ rw[]
-  \\ irule bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ rpt ((irule bind_computes_minimal_domain ORELSE
+            irule ignore_bind_computes_minimal_domain) \\ rw[])
 QED
 
 Theorem inc_pc_computes_minimal_domain[simp]:
@@ -328,10 +348,13 @@ Proof
     rw[]
     \\ irule bind_computes_minimal_domain \\ rw[]
     \\ irule ignore_bind_computes_minimal_domain \\ rw[] )
+  \\ irule ignore_bind_computes_minimal_domain
+  \\ conj_tac >- (rw[] \\ irule ignore_bind_computes_minimal_domain \\ rw[])
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ irule bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain
+  \\ rw[pop_and_incorporate_context_computes_minimal_domain]
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
@@ -366,7 +389,7 @@ Theorem handle_step_computes_minimal_domain[simp]:
 Proof
   rw[handle_step_def]
   \\ irule handle_computes_minimal_domain
-  \\ rw[]
+  \\ rw[handle_exception_computes_minimal_domain]
   \\ gvs[handle_create_def, bind_def, get_return_data_def,
          get_current_context_def, CaseEq"prod", CaseEq"sum",
          CaseEq"bool", fail_def, return_def, get_output_to_def,
