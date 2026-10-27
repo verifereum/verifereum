@@ -5079,14 +5079,15 @@ Proof
     memory := em; gasUsed := g + gasCost; returnData := []|>).memory` by simp[] >>
   drule_all (Q.INST
     [`outputTo` |-> `Memory <|offset := retOffset; size := retSize|>`]
-    proceed_call_precompile_success) >>
+    proceed_call_precompile_success_meter) >>
   disch_then (qspecl_then [`value`, `retSize`, `retOffset`, `op`, `code`] strip_assume_tac) >>
   qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` (fn th =>
     qpat_x_assum `step_call op s = _` (assume_tac o REWRITE_RULE [th])) >>
   qmatch_asmsub_abbrev_tac `step_call op s = (INR NONE, returned)` >>
   `returned.contexts = (c,newRb)::
     (caller with <|stack := DROP (6 + vOff) ss;
-     memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs` by
+     memory := em; gasUsed := g + gasCost; returnData := [];
+     stateGasLeft := 0|>,cb)::cs` by
     simp[Abbr `returned`] >>
   drule (Q.INST [`s` |-> `returned`] handle_step_success_memory_exact) >>
   simp[] >>
@@ -5099,7 +5100,8 @@ Proof
      Cases_on `op` >> simp[is_call_def, step_inst_def]) >>
   simp[step_def, handle_def, bind_def, ignore_bind_def, return_def, get_current_context_def] >>
   simp[Abbr `final`, Abbr `returned`, Abbr `prepared`,
-       execution_state_component_equality, context_component_equality]
+       execution_state_component_equality, context_component_equality] >>
+  simp[repay_state_gas_spill_context_def, absorb_state_gas_def]
 QED
 
 (* A call to a precompile runs the precompile and returns to the caller in
