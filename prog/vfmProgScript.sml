@@ -1891,8 +1891,6 @@ Theorem SPEC_StackUnderflow_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME StackUnderflow)))
 Proof
@@ -1915,8 +1913,6 @@ Theorem SPEC_OutOfGas_pop_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME OutOfGas)))
 Proof
@@ -1936,8 +1932,6 @@ Theorem SPEC_OutOfGas_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME OutOfGas)))
 Proof
@@ -1961,8 +1955,6 @@ Theorem SPEC_StackOverflow_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME StackOverflow)))
 Proof
@@ -1972,7 +1964,7 @@ QED
 Theorem SPEC_StackUnderflow_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2014,7 +2006,7 @@ QED
 Theorem SPEC_OutOfGas_pop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2058,7 +2050,7 @@ QED
 Theorem SPEC_OutOfGas_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2100,7 +2092,7 @@ QED
 Theorem SPEC_StackOverflow_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2163,8 +2155,6 @@ Theorem SPEC_InvalidJumpDest_Jump_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_JumpDest (SOME (w2n (HD ss))) *
      evm_Exception (INR (SOME InvalidJumpDest)))
@@ -2189,8 +2179,6 @@ Theorem SPEC_InvalidJumpDest_JumpI_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_JumpDest (SOME (w2n (HD ss))) *
      evm_Exception (INR (SOME InvalidJumpDest)))
@@ -2216,8 +2204,6 @@ Theorem SPEC_OutOfBoundsRead_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] * evm_Memory m *
      evm_Exception (INR (SOME OutOfBoundsRead)))
 Proof
@@ -2229,7 +2215,7 @@ QED
 Theorem SPEC_InvalidJumpDest_Jump_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2274,7 +2260,7 @@ QED
 Theorem SPEC_InvalidJumpDest_JumpI_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2320,7 +2306,7 @@ QED
 Theorem SPEC_OutOfBoundsRead_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2377,8 +2363,6 @@ Theorem SPEC_WriteInStaticContext_TStore_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME WriteInStaticContext)))
 Proof
@@ -2402,8 +2386,6 @@ Theorem SPEC_WriteInStaticContext_Log_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_Contexts cs * evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Memory (expanded_memory m offset sz) *
      evm_Exception (INR (SOME WriteInStaticContext)))
@@ -2434,8 +2416,6 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME WriteInStaticContext)) *
      evm_Rollback (accesses_add addr rb) * evm_Msdomain (msdomain_add addr d))
@@ -2449,7 +2429,7 @@ QED
 Theorem SPEC_WriteInStaticContext_TStore_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2491,7 +2471,7 @@ QED
 Theorem SPEC_WriteInStaticContext_Log_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2539,7 +2519,7 @@ QED
 Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Msdomain d *
@@ -5205,8 +5185,10 @@ Theorem SPEC_Return_inner:
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
    cond (
-         merged = repay_state_gas_spill_context
-                    (absorb_state_gas caller sg sp cm) ∧
+         merged = (if inst = Return
+                   then repay_state_gas_spill_context
+                          (absorb_state_gas caller sg sp cm)
+                   else absorb_state_gas caller bsl 0 cm) ∧
          cs ≠ [] ∧ 2 ≤ LENGTH ss ∧ ISL e ∧
          offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
          LENGTH caller.stack < stack_limit ∧
@@ -5244,7 +5226,8 @@ Theorem SPEC_Return_inner:
                     update_account addr
                       (lookup_account addr accounts with code := data)
                       accounts) else if inst = Revert then cb else rb) *
-   evm_GasUsed (merged.gasUsed - calleeGasLeft) *
+   evm_GasUsed (merged.gasUsed - calleeGasLeft -
+                (if inst = Return then 0 else sp)) *
    evm_StateGasLeft merged.stateGasLeft *
    evm_StateGasSpilled merged.stateGasSpilled *
    evm_StateGasBaseline merged.stateGasBaseline *
@@ -5392,8 +5375,6 @@ Theorem SPEC_Invalid_outermost:
      evm_StateGasLeft bsl *
      evm_StateGasSpilled 0 *
      evm_StateGasBaseline bsl *
-     evm_StateGasCommitted 0 *
-     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME InvalidOpcode)))
 Proof
@@ -5411,7 +5392,7 @@ QED
 Theorem SPEC_Invalid_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_StateGasLeft sg * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
