@@ -1148,11 +1148,9 @@ Proof
      relation form and nothing has to be unfolded to get past it. *)
   irule orig_exec_bind >>
   simp[orig_exec_cond, orig_exec_return, orig_exec_state_gas_updates] >>
-  gen_tac >>
   irule orig_exec_bind >>
   simp[orig_exec_cond, orig_exec_return, orig_exec_bind,
        orig_exec_state_gas_updates, orig_exec_context_updates] >>
-  gen_tac >>
   (* Read the frame count out of the states, so the branch that reaches
      the rest of the body still knows how many frames it has. *)
   rewrite_tac[orig_exec_rel_def] >> rpt gen_tac >> strip_tac >>
@@ -1173,6 +1171,7 @@ Proof
    get_output_to new = (INL (FST (HD new.contexts)).msgParams.outputTo, new)` by
     simp[get_return_data_def, get_output_to_def, get_current_context_def,
          bind_def, return_def] >>
+  once_rewrite_tac[bind_def] >> simp[] >>
   once_rewrite_tac[bind_def] >> simp[] >>
   once_rewrite_tac[bind_def] >> simp[] >>
   irule original_state_bind_at >>
