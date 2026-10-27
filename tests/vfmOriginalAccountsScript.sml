@@ -5,20 +5,27 @@ Libs cv_transLib monadsyntax wordsLib
 val () = monadsyntax.enable_monad "evm_execution";
 val () = monadsyntax.enable_monadsyntax();
 
-(* Exercise child execution and settlement without external fixtures. *)
+(* Exercise child execution and settlement without external fixtures.
+
+   EIP-8037: a transaction's state gas is funded by the part of its gas
+   limit above EIP-7825's 2**24 cap on execution gas, so the fixture asks
+   for a limit above the cap and the sender is funded to pay for it.  The
+   children below get their state gas from the reservoir the transaction
+   hands down, not from execution gas: a fresh storage slot costs 97920
+   state gas, which a 100000-gas child could not have spilled. *)
 Definition original_accounts_fixture_def:
   original_accounts_fixture =
     update_account 0x300w (empty_account_state with balance := 7) $
     update_account 0x200w (empty_account_state with balance := 100) $
     update_account 0x400w (empty_account_state with balance := 100) $
-    settlement_accounts 10000000
+    settlement_accounts 100000000
 End
 val () = cv_auto_trans original_accounts_fixture_def;
 
 Definition original_child_run_def:
   original_child_run nested gas code =
     case initial_state (Collect empty_domain) F 1 [] (settlement_block 0x500w)
-      original_accounts_fixture (settlement_tx with gasLimit := 500000) of
+      original_accounts_fixture (settlement_tx with gasLimit := 20000000) of
       NONE => NONE
     | SOME s =>
       case (if nested then do
