@@ -106,6 +106,118 @@ QED
  * rollback has the old rollback's storage. *)
 
 (* proceed_call captures s.rollback as the pushed rollback. *)
+Theorem proceed_call_push_structure:
+  proceed_call op sender address value argsOffset argsSize code stipend
+               outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
+  LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
+  TL (TL s'.contexts) = TL s.contexts ∧
+  FST (HD (TL s'.contexts)) =
+    (FST (HD s.contexts) with stateGasLeft := 0) ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
+  (FST (HD s'.contexts)).msgParams.outputTo = outputTo ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
+Proof
+  strip_tac >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h`
+  >> qhdtm_x_assum `proceed_call` mp_tac
+  >> simp[proceed_call_def, drain_state_gas_reservoir_def,
+          bind_def, ignore_bind_def, get_current_context_def,
+          set_current_context_def, return_def, get_rollback_def,
+          read_memory_def, get_caller_def, get_value_def, get_static_def]
+  >> Cases_on `op <> CallCode /\ 0 < value`
+  >> (simp[update_accounts_def, return_def]
+  >> simp[push_context_def, return_def, bind_def]
+  >> qmatch_goalsub_abbrev_tac `(if _ then _ else _) ss`
+  >> Cases_on `fIN address precompile_addresses`
+  >- (simp[] >> strip_tac
+      >> `ss.contexts <> []` by simp[Abbr`ss`]
+      >> qmatch_asmsub_abbrev_tac `dpa ss = (_, _)`
+      >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
+      >> pop_assum mp_tac
+      >> rewrite_tac[preserves_same_frame_def]
+      >> disch_then drule >> simp[]
+      >> simp[same_frame_rel_def, Abbr`ss`]
+      >> strip_tac >> gvs[initial_context_def, initial_msg_params_def])
+  >> simp[return_def, Abbr`ss`, initial_context_def, initial_msg_params_def]
+  >> strip_tac >> gvs[])
+QED
+
+Theorem proceed_call_saved_parent_rollback:
+  proceed_call op sender address value argsOffset argsSize code stipend
+               outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
+  SND (HD (TL s'.contexts)) = SND (HD s.contexts)
+Proof
+  strip_tac >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h`
+  >> qhdtm_x_assum `proceed_call` mp_tac
+  >> simp[proceed_call_def, drain_state_gas_reservoir_def,
+          bind_def, ignore_bind_def, get_current_context_def,
+          set_current_context_def, return_def, get_rollback_def,
+          read_memory_def, get_caller_def, get_value_def, get_static_def]
+  >> Cases_on `op <> CallCode /\ 0 < value`
+  >> (simp[update_accounts_def, return_def, push_context_def, bind_def]
+      >> qmatch_goalsub_abbrev_tac `(if _ then _ else _) ss`
+      >> Cases_on `fIN address precompile_addresses`
+      >- (simp[] >> strip_tac
+          >> `ss.contexts <> []` by simp[Abbr`ss`]
+          >> qmatch_asmsub_abbrev_tac `dpa ss = (_, _)`
+          >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
+          >> pop_assum mp_tac
+          >> rewrite_tac[preserves_same_frame_def]
+          >> disch_then drule >> simp[]
+          >> simp[same_frame_rel_def, Abbr`ss`]
+          >> strip_tac >> gvs[])
+      >> simp[return_def, Abbr`ss`] >> strip_tac >> gvs[])
+QED
+
+Theorem proceed_create_push_structure:
+  proceed_create senderAddress address value code cappedGas s = (r, s') ∧
+  s.contexts ≠ [] ⇒
+  LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
+  TL (TL s'.contexts) = TL s.contexts ∧
+  FST (HD (TL s'.contexts)) =
+    (FST (HD s.contexts) with stateGasLeft := 0) ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
+  outputTo_consistent_ctx (FST (HD s'.contexts)) ∧
+  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_create` mp_tac
+  >> simp[proceed_create_def, drain_state_gas_reservoir_def,
+          get_current_context_def, set_current_context_def,
+          bind_def, ignore_bind_def, return_def]
+  >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_rollback_def, return_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[get_original_def, return_def, fail_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[set_original_def, return_def, fail_def]
+  >> rewrite_tac[Once bind_def]
+  >> simp[update_accounts_def, return_def]
+  >> strip_tac
+  >> drule push_context_effect >> strip_tac >> gvs[]
+  >> simp[outputTo_consistent_ctx_def, initial_context_def,
+          initial_msg_params_def]
+  >> simp[set_last_accounts_def, MAP_SNOC, MAP_FRONT]
+  >> Cases_on `s.contexts` >> gvs[SUBSET_DEF]
+QED
+
+Theorem proceed_create_saved_parent_rollback:
+  proceed_create senderAddress address value code cappedGas s = (r, s') ∧
+  s.contexts ≠ [] ⇒
+  SND (HD (TL s'.contexts)) = SND (HD s.contexts)
+Proof
+  strip_tac
+  >> qhdtm_x_assum `proceed_create` mp_tac
+  >> simp[proceed_create_def, drain_state_gas_reservoir_def,
+          get_current_context_def, set_current_context_def,
+          bind_def, ignore_bind_def, return_def, update_accounts_def,
+          get_rollback_def, get_original_def, set_original_def, fail_def,
+          push_context_def]
+  >> strip_tac >> gvs[]
+QED
+
 Theorem proceed_call_pushed_rb_storage:
   proceed_call op sender address value argsOffset argsSize code stipend
                 outputTo s = (r, s') ∧ s.contexts ≠ [] ∧
@@ -113,62 +225,27 @@ Theorem proceed_call_pushed_rb_storage:
   ∀a. (lookup_account a (SND (HD s'.contexts)).accounts).storage =
       (lookup_account a s.rollback.accounts).storage
 Proof
-  strip_tac
+  strip_tac >> Cases_on `s.contexts` >> gvs[]
+  >> PairCases_on `h`
   >> qhdtm_x_assum `proceed_call` mp_tac
-  >> simp[proceed_call_def]
-  (* get_rollback captures s.rollback. *)
-  >> simp[bind_def, get_rollback_def, return_def]
-  >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
-  >> qmatch_goalsub_abbrev_tac `ignore_bind g`
-  >> simp[ignore_bind_def, Once bind_def]
-  >> TOP_CASE_TAC
-  >> qmatch_asmsub_rename_tac `g s = (q, s1)`
-  (* g is either update_accounts (transfer_value ...) or return () — both
-     preserve storage of s.rollback.accounts at every address. *)
-  >> `∀a. (lookup_account a s1.rollback.accounts).storage =
-         (lookup_account a s.rollback.accounts).storage`
-      by (`preserves_storage g`
-            by (simp[Abbr`g`] >> IF_CASES_TAC >> simp[])
-          >> fs[preserves_storage_def] >> first_x_assum drule >>
-          rw[lookup_storage_def] >> gvs[FUN_EQ_THM])
-  >> `ISL q` by (gvs[Abbr`g`,AllCaseEqs(),COND_RATOR,return_def,
-                     update_accounts_def])
-  >> TOP_CASE_TAC >> gvs[]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_caller_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_caller_def, return_def, get_current_context_def]
-  >> IF_CASES_TAC >> gvs[fail_def] >- (rw[] >> gvs[])
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_value_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_value_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_static_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_static_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> TOP_CASE_TAC
-  >> drule push_context_effect >> strip_tac >> gvs[]
-  (* After push_context: HD = (context, s1.rollback-like). Specifically,
-     push_context (c, rollback) where `rollback` was captured by get_rollback
-     after g ran. So HD s_after_push.contexts = (c, s1.rollback). *)
-  >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
-  >> reverse IF_CASES_TAC >> simp[return_def]
-  >- ((* No precompile: result state has HD = (ctx, s1.rollback). *)
-      strip_tac >> gvs[])
-  (* Precompile: dispatch_precompiles runs after push. It is
-     preserves_same_frame at the new depth, so SND (HD ·) is invariant. *)
-  >> strip_tac
-  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_, s')`
-  >> `ss.contexts ≠ []` by simp[Abbr`ss`]
-  >> qmatch_asmsub_abbrev_tac`dpa ss = (_,_)`
-  >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
-  >> pop_assum mp_tac
-  >> rewrite_tac[preserves_same_frame_def]
-  >> disch_then drule
-  >> `ss.contexts = (ctx, s.rollback) :: s1.contexts` by simp[Abbr`ss`]
-  >> simp[same_frame_rel_def]
+  >> simp[proceed_call_def, drain_state_gas_reservoir_def,
+          bind_def, ignore_bind_def, get_current_context_def,
+          set_current_context_def, return_def, get_rollback_def,
+          read_memory_def, get_caller_def, get_value_def, get_static_def]
+  >> Cases_on `op <> CallCode /\ 0 < value`
+  >> (simp[update_accounts_def, return_def, push_context_def, bind_def]
+      >> qmatch_goalsub_abbrev_tac `(if _ then _ else _) ss`
+      >> Cases_on `fIN address precompile_addresses`
+      >- (simp[] >> strip_tac
+          >> `ss.contexts <> []` by simp[Abbr`ss`]
+          >> qmatch_asmsub_abbrev_tac `dpa ss = (_, _)`
+          >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
+          >> pop_assum mp_tac
+          >> rewrite_tac[preserves_same_frame_def]
+          >> disch_then drule >> simp[]
+          >> simp[same_frame_rel_def, Abbr`ss`]
+          >> strip_tac >> gvs[])
+      >> simp[return_def, Abbr`ss`] >> strip_tac >> gvs[])
 QED
 
 (* Intermediate: proceed_create captures s.rollback (post increment_nonce)
@@ -183,7 +260,9 @@ Theorem proceed_create_pushed_rb_storage:
 Proof
   strip_tac
   >> qhdtm_x_assum `proceed_create` mp_tac
-  >> simp[proceed_create_def]
+  >> simp[proceed_create_def, drain_state_gas_reservoir_def,
+          get_current_context_def, set_current_context_def,
+          bind_def, ignore_bind_def, return_def]
   (* update_accounts (increment_nonce senderAddress) *)
   >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
   (* get_rollback: captures increment_nonce'd rollback. *)
@@ -222,118 +301,6 @@ QED
    Checked witness for the old form:
    `spec/prop/vfmCallDrainProbeScript.sml`
    `proceed_call_push_structure_counterexample`. *)
-Theorem proceed_call_push_structure:
-  proceed_call op sender address value argsOffset argsSize code stipend
-               outputTo s = (r, s') ∧ s.contexts ≠ [] ⇒
-  LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
-  TL (TL s'.contexts) = TL s.contexts ∧
-  FST (HD (TL s'.contexts)) =
-    (FST (HD s.contexts) with stateGasLeft := 0) ∧
-  toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
-  (FST (HD s'.contexts)).msgParams.outputTo = outputTo ∧
-  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
-Proof
-  strip_tac
-  >> qhdtm_x_assum `proceed_call` mp_tac
-  >> simp[proceed_call_def]
-  >> simp[bind_def, get_rollback_def, return_def]
-  >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
-  >> qmatch_goalsub_abbrev_tac `ignore_bind g`
-  >> simp[ignore_bind_def, Once bind_def]
-  >> TOP_CASE_TAC
-  >> qmatch_asmsub_rename_tac `g s = (q, s1)`
-  (* g preserves contexts and accesses. *)
-  >> `s1.contexts = s.contexts ∧
-      toSet s.rollback.accesses.storageKeys ⊆ toSet s1.rollback.accesses.storageKeys`
-      by (simp[Abbr`g`] >> gvs[COND_RATOR,AllCaseEqs(),update_accounts_def, return_def])
-  >> `ISL q` by (gvs[Abbr`g`,AllCaseEqs(),COND_RATOR,return_def,
-                     update_accounts_def])
-  >> TOP_CASE_TAC >> gvs[]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_caller_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_caller_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_value_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_value_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_static_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_static_def, return_def, get_current_context_def]
-  >> rewrite_tac[Once bind_def]
-  >> TOP_CASE_TAC
-  >> drule push_context_effect >> strip_tac >> gvs[]
-  (* After push_context, TL is the old contexts. *)
-  >> qmatch_asmsub_abbrev_tac `push_context (ctx, _) s1`
-  >> reverse IF_CASES_TAC >> simp[return_def]
-  >- ((* No precompile *)
-      strip_tac >> gvs[Abbr`ctx`, initial_msg_params_def] >>
-      gvs[SUBSET_DEF] )
-  (* Precompile dispatch is same-frame. *)
-  >> strip_tac
-  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles addr ss = (_, s')`
-  >> `ss.contexts ≠ []` by simp[Abbr`ss`]
-  >> qmatch_asmsub_abbrev_tac`dpa ss = (_,_)`
-  >> `preserves_same_frame dpa` by simp[Abbr`dpa`]
-  >> pop_assum mp_tac
-  >> rewrite_tac[preserves_same_frame_def]
-  >> disch_then drule
-  >> `ss.contexts = (ctx, s.rollback) :: s.contexts` by simp[Abbr`ss`]
-  >> simp[same_frame_rel_def]
-  >> strip_tac >> gvs[SUBSET_DEF]
-  >> gvs[Abbr`ctx`,initial_context_def, initial_msg_params_def]
-  >> gvs[Abbr`ss`]
-QED
-
-(* proceed_create push structure.
-
-   The same EIP-8037 drain as `proceed_call` above: `proceed_create_def`
-   (`spec/vfmExecutionScript.sml:1402`) opens by draining the creating
-   frame's reservoir and the new frame is built from that return
-   (`:1424`), so the output's tail is the caller *with its reservoir
-   zeroed* and the tail equality holds only of the frames below it.
-   `set_original` touches only `originalAccounts` and `update_accounts`
-   only the rollback, so `stateGasLeft` is the parent's one moved field. *)
-Theorem proceed_create_push_structure:
-  proceed_create senderAddress address value code cappedGas s = (r, s') ∧
-  s.contexts ≠ [] ⇒
-  LENGTH s'.contexts = LENGTH s.contexts + 1 ∧
-  TL (TL s'.contexts) = TL s.contexts ∧
-  FST (HD (TL s'.contexts)) =
-    (FST (HD s.contexts) with stateGasLeft := 0) ∧
-  toSet s.rollback.accesses.storageKeys ⊆ toSet s'.rollback.accesses.storageKeys ∧
-  outputTo_consistent_ctx (FST (HD s'.contexts)) ∧
-  toSet s.rollback.accesses.storageKeys ⊆ toSet (SND (HD s'.contexts)).accesses.storageKeys
-Proof
-  strip_tac
-  >> qhdtm_x_assum `proceed_create` mp_tac
-  >> simp[proceed_create_def]
-  (* update_accounts (increment_nonce senderAddress) *)
-  >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
-  (* get_rollback *)
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_rollback_def, return_def]
-  (* get_original / set_original: don't modify contexts or accesses *)
-  >> rewrite_tac[Once bind_def]
-  >> simp[get_original_def, return_def, fail_def]
-  >> rewrite_tac[Once bind_def]
-  >> simp[set_original_def, return_def, fail_def]
-  (* update_accounts (transfer_value o increment_nonce) *)
-  >> rewrite_tac[Once bind_def]
-  >> simp[update_accounts_def, return_def]
-  (* push_context *)
-  >> strip_tac
-  >> drule push_context_effect >> strip_tac >> gvs[]
-  (* outputTo_consistent: outputTo = Code address, callee = address *)
-  >> simp[outputTo_consistent_ctx_def, initial_context_def,
-          initial_msg_params_def]
-  >> simp[set_last_accounts_def, MAP_SNOC, MAP_FRONT]
-  >> qspec_then`MAP FST s.contexts`mp_tac SNOC_LAST_FRONT
-  >> simp[]
-  (* SND HD is the captured rollback; nonce changes preserve accesses. *)
-  >> gvs[SUBSET_DEF]
-QED
 
 (* CALL/CREATE wrappers: same-frame storage-preserving prefixes, then proceed_*. *)
 
@@ -604,9 +571,10 @@ Proof
     drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
     >> simp[])
   (* Now we have proceed_call sm = (_, s') with growth, and same_frame_rel s sm *)
+  >> drule_all_then assume_tac proceed_call_saved_parent_rollback
   >> drule_all proceed_call_push_structure
   >> strip_tac
-  (* From same_frame_rel s sm: sm.contexts = s.contexts *)
+  (* The prefix preserves the parent's saved rollback and msgParams. *)
   >> `TL sb.contexts = TL s.contexts` by ( fs[same_frame_rel_def] )
   >> gvs[]
   >> conj_asm1_tac >- gvs[same_frame_rel_def]
@@ -712,40 +680,33 @@ Proof
   >> `same_frame_rel s s8` by metis_tac[same_frame_rel_trans]
   >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel get_gas_left *)
+  (* Peel withhold_create_gas *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel s8 s9`
   >> `same_frame_rel s s9` by metis_tac[same_frame_rel_trans]
   >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel consume_gas (cappedGas) *)
+  (* Peel assert_not_static *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel s9 s0`
   >> `same_frame_rel s s0` by metis_tac[same_frame_rel_trans]
   >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel assert_not_static *)
+  (* Peel set_return_data *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel s0 sa`
   >> `same_frame_rel s sa` by metis_tac[same_frame_rel_trans]
   >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel set_return_data *)
+  (* Peel get_num_contexts *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel sa sb`
   >> `same_frame_rel s sb` by metis_tac[same_frame_rel_trans]
   >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s.contexts`
-  by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel get_num_contexts *)
-  >> drule_at (Pat`bind`) bind_psf_grows_extract
-  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
-  >> rename1`same_frame_rel sb sc`
-  >> `same_frame_rel s sc` by metis_tac[same_frame_rel_trans]
-  >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
   (* Split the preliminary failure condition. *)
   >> gvs[COND_RATOR]
@@ -760,7 +721,7 @@ Proof
   (* Peel access_address *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
-  >> rename1`same_frame_rel sc sd`
+  >> rename1`same_frame_rel sb sd`
   >> `same_frame_rel s sd` by metis_tac[same_frame_rel_trans]
   >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
@@ -782,29 +743,43 @@ Proof
       >> simp[])
   (* Now we have proceed_create sf = (_, s') with growth, and same_frame_rel s sf *)
   >> strip_tac
+  >> qpat_x_assum `s.contexts ≠ []` mp_tac
   >> qpat_x_assum `se.contexts ≠ []` mp_tac
   >> qpat_x_assum `same_frame_rel s se` mp_tac
   >> qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac
   >> POP_ASSUM_LIST (K all_tac)
-  >> rpt strip_tac
-  >> qpat_x_assum `proceed_create _ _ _ _ _ se = _` mp_tac
-  >> simp[proceed_create_def, ignore_bind_def, bind_def,
-          update_accounts_def, return_def, get_rollback_def,
-          get_original_def, set_original_def, fail_def]
-  >> strip_tac
-  >> drule push_context_effect >> strip_tac >> gvs[]
-  >> qhdtm_x_assum `push_context` kall_tac
-  >> qpat_x_assum `same_frame_rel s se` mp_tac
-  >> simp[same_frame_rel_def] >> strip_tac
+  >> ntac 4 strip_tac
+  >> drule_all_then assume_tac proceed_create_saved_parent_rollback
+  >> drule_all proceed_create_push_structure >> strip_tac
+  >> `TL se.contexts = TL s.contexts /\
+      SND (HD se.contexts) = SND (HD s.contexts) /\
+      (FST (HD se.contexts)).msgParams = (FST (HD s.contexts)).msgParams /\
+      toSet s.rollback.accesses.storageKeys SUBSET toSet se.rollback.accesses.storageKeys`
+     by fs[same_frame_rel_def]
+  >> qpat_x_assum `same_frame_rel _ _` kall_tac
+  >> qhdtm_x_assum `proceed_create` kall_tac
   >> Cases_on `s.contexts` >- gvs[]
   >> Cases_on `se.contexts` >- gvs[]
+  >> Cases_on `s'.contexts` >- gvs[]
+  >> Cases_on `t''` >- gvs[]
   >> gvs[]
-  >> simp[initial_context_def, initial_msg_params_def,
-          outputTo_consistent_ctx_def]
-  >- (Cases_on `i` >> simp[])
-  >- (Cases_on `i` >> simp[])
+  >> conj_tac >- (gen_tac >> Cases_on `i` >> simp[])
+  >> conj_tac >- metis_tac[SUBSET_TRANS]
+  >> conj_tac >- metis_tac[SUBSET_TRANS]
+  >> conj_tac >- (gen_tac >> Cases_on `i` >> simp[])
   >> Cases_on `t` >> gvs[]
   >> simp[LAST_EL]
+QED
+
+Theorem handle_step_same_length_storageKeys_subset:
+  outputTo_consistent s ∧
+  handle_step e s = (r,s') ∧
+  LENGTH s'.contexts = LENGTH s.contexts ⇒
+  toSet s.rollback.accesses.storageKeys SUBSET
+  toSet s'.rollback.accesses.storageKeys
+Proof
+  strip_tac >> drule_all handle_step_same_frame
+  >> simp[same_frame_rel_def]
 QED
 
 (* Full step storage preservation in the same-frame case. *)
@@ -966,7 +941,9 @@ Proof
                 by fs[same_frame_rel_def]
            >> simp[])
          >> `LENGTH s'.contexts = LENGTH r'.contexts` by fs[same_frame_rel_def]
-         >> `same_frame_rel r' s'` by metis_tac[handle_step_same_frame]
+         >> `toSet r'.rollback.accesses.storageKeys SUBSET
+                toSet s'.rollback.accesses.storageKeys`
+             by metis_tac[handle_step_same_length_storageKeys_subset]
          >> drule step_inst_preserves_non_accessed_storage >> simp[]
          >> disch_then (qspecl_then [`(FST (HD s.contexts)).msgParams.callee`, `k`] mp_tac)
          >> impl_keep_tac
@@ -979,8 +956,7 @@ Proof
          >> pop_assum $ assume_tac o SYM >> gvs[]
          >> irule handle_step_preserves_storage_same_length
          >> drule same_frame_rel_contexts_ne >> simp[] >> strip_tac
-         >> reverse conj_tac >- goal_assum drule
-         >> imp_res_tac same_frame_rel_contexts_ne)
+         >> goal_assum drule)
     >> (* INR from inc_pc_or_jump: use step_inst storage preservation, then
           rollback preservation of inc_pc_or_jump. *)
        Cases_on `is_call op`
@@ -996,7 +972,9 @@ Proof
                  by fs[same_frame_rel_def]
             >> simp[])
           >> `LENGTH s'.contexts = LENGTH r'.contexts` by fs[same_frame_rel_def]
-          >> `same_frame_rel r' s'` by metis_tac[handle_step_same_frame]
+          >> `toSet r'.rollback.accesses.storageKeys SUBSET
+                toSet s'.rollback.accesses.storageKeys`
+             by metis_tac[handle_step_same_length_storageKeys_subset]
           >> `lookup_storage k
                 (lookup_account (FST (HD s.contexts)).msgParams.callee
                    r'.rollback.accounts).storage =
@@ -1229,8 +1207,7 @@ Proof
       >> simp[])
     >> drule_all proceed_call_push_structure
     >> strip_tac
-    >> `TL s'.contexts = sb.contexts` by simp[]
-    >> Cases_on`sb.contexts` >> gvs[])
+    >> gvs[])
   >> (
     (* If pop_stack failed, the state did not grow. *)
     qpat_x_assum `pop_stack n s = _` mp_tac
@@ -1323,7 +1300,7 @@ Proof
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s8.contexts)).stack < stack_limit` by gvs[]
-    (* Peel get_gas_left *)
+    (* Peel withhold_create_gas *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
@@ -1331,20 +1308,12 @@ Proof
     >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s0.contexts)).stack < stack_limit` by gvs[]
-    (* Peel consume_gas (cappedGas) *)
-    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s0 sa`
-    >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s0.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> `LENGTH (FST (HD sa.contexts)).stack < stack_limit` by gvs[]
     (* Peel assert_not_static *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sa sb`
-    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
+    >> rename1`same_frame_rel s0 sb`
+    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s0.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD sb.contexts)).stack < stack_limit` by gvs[]
     (* Peel set_return_data *)
@@ -1394,9 +1363,6 @@ Proof
     >> strip_tac
     >> drule_all proceed_create_push_structure
     >> strip_tac
-    >> `FST (HD (TL s'.contexts)) = FST (HD se.contexts)` by (
-         Cases_on`s'.contexts` >> gvs[] >> Cases_on`t` >> gvs[] >>
-         Cases_on`se.contexts` >> gvs[] )
     >> gvs[])
   >> (
     qpat_x_assum `pop_stack n s = _` mp_tac
@@ -1522,10 +1488,9 @@ Proof
     >- (drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> drule_all proceed_call_push_structure
     >> strip_tac
-    >> `TL s'.contexts = sb.contexts` by simp[]
-    >> Cases_on`sb.contexts` >> gvs[EL_CONS]
-    >> Cases_on`s.contexts` >> gvs[]
-    >> Cases_on`s'.contexts` >> gvs[] )
+    >> `EL 1 s'.contexts = HD (TL s'.contexts)` by
+         (Cases_on `s'.contexts` >> gvs[EL_CONS])
+    >> simp[] )
   >> (
     qpat_x_assum `pop_stack n s = _` mp_tac
     >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
@@ -1616,20 +1581,16 @@ Proof
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s8.contexts)).gasUsed` by decide_tac
-    (* get_gas_left *)
+    (* withhold_create_gas consumes the capped execution gas. *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> simp[]
+    >> (impl_tac >- (simp[withhold_create_gas_def] >>
+         irule preserves_head_gas_mono_bind >> simp[] >> gen_tac >>
+         irule preserves_head_gas_mono_ignore_bind >> simp[]))
+    >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s0.contexts)).gasUsed` by decide_tac
-    (* consume_gas cappedGas *)
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s0 sa`
-    >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s0.contexts`
+    >> rename1`same_frame_rel s8 sa`
+    >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sa.contexts)).gasUsed` by decide_tac
     (* assert_not_static *)
@@ -1687,10 +1648,9 @@ Proof
     >> strip_tac
     >> drule_all proceed_create_push_structure
     >> strip_tac
-    >> `FST (EL 1 s'.contexts) = FST (HD se.contexts)` by (
-         Cases_on`s'.contexts` >> gvs[EL_CONS] >> Cases_on`t` >> gvs[EL_CONS] >>
-         Cases_on`se.contexts` >> gvs[] )
-    >> gvs[])
+    >> `EL 1 s'.contexts = HD (TL s'.contexts)` by
+         (Cases_on `s'.contexts` >> gvs[EL_CONS])
+    >> simp[])
   >> (
     qpat_x_assum `pop_stack n s = _` mp_tac
     >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
@@ -1720,20 +1680,19 @@ Theorem proceed_call_parent_gas_ok:
 Proof
   strip_tac
   >> qhdtm_x_assum `proceed_call` mp_tac
-  >> simp[proceed_call_def]
+  >> simp[proceed_call_def, drain_state_gas_reservoir_def,
+          bind_def, ignore_bind_def, get_current_context_def,
+          set_current_context_def, return_def]
   >> simp[bind_def, get_rollback_def, return_def]
   >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
-  >> qmatch_goalsub_abbrev_tac `ignore_bind g`
-  >> simp[ignore_bind_def, Once bind_def]
-  >> TOP_CASE_TAC
-  >> qmatch_asmsub_rename_tac `g s = (q, s1)`
-  >> `s1.contexts = s.contexts`
-      by (simp[Abbr`g`] >> gvs[COND_RATOR, AllCaseEqs(),
-                                 update_accounts_def, return_def])
-  >> `ISL q`
-      by (gvs[Abbr`g`, AllCaseEqs(), COND_RATOR, return_def,
-              update_accounts_def])
-  >> TOP_CASE_TAC >> gvs[]
+  >> qmatch_goalsub_abbrev_tac `COND transfer _ _`
+  >> Cases_on `transfer`
+  >> qpat_x_assum `Abbrev _` kall_tac
+  >> (simp[update_accounts_def, return_def]
+  >> qmatch_goalsub_abbrev_tac `get_caller s1`
+  >> `s1.contexts <> [] /\
+      (FST (HD s1.contexts)).gasUsed = (FST (HD s.contexts)).gasUsed`
+       by simp[Abbr `s1`]
   >> rewrite_tac[Once bind_def]
   >> simp[get_caller_def, return_def, get_current_context_def]
   >> rewrite_tac[Once bind_def]
@@ -1761,7 +1720,7 @@ Proof
   >> simp[same_frame_rel_def]
   >> strip_tac
   >> gvs[Abbr`ctx`, Abbr`ss`, initial_context_def, initial_msg_params_def]
-  >> Cases_on`s'.contexts` >> gvs[]
+  >> Cases_on`s'.contexts` >> gvs[])
 QED
 
 Theorem proceed_create_parent_gas_ok:
@@ -1775,7 +1734,9 @@ Theorem proceed_create_parent_gas_ok:
 Proof
   strip_tac
   >> qhdtm_x_assum `proceed_create` mp_tac
-  >> simp[proceed_create_def]
+  >> simp[proceed_create_def, drain_state_gas_reservoir_def,
+          get_current_context_def, set_current_context_def,
+          bind_def, ignore_bind_def, return_def]
   >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
   >> rewrite_tac[Once bind_def]
   >> simp[get_rollback_def, return_def]
@@ -2009,25 +1970,25 @@ Proof
     >> rename1`same_frame_rel s7 s8`
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
-    (* get_gas_left *)
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    (* consume_gas cappedGas: this is the key additive-reservation point. *)
+    (* withhold_create_gas: the additive execution-gas reservation. *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[]
-    >> qmatch_asmsub_abbrev_tac `consume_gas cappedGas s2 = _`
-    >> `((FST (HD s2.contexts)).gasUsed + cappedGas ≤
-          (FST (HD s3.contexts)).gasUsed)` by (
-        irule consume_gas_head_gas_add_ge >> gvs[] )
+    >> (impl_tac >- (simp[withhold_create_gas_def] >>
+         irule preserves_head_gas_mono_bind >> simp[] >> gen_tac >>
+         irule preserves_head_gas_mono_ignore_bind >> simp[]))
     >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s0 sa`
-    >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s0.contexts`
+    >> rename1`same_frame_rel s8 sa`
+    >> `sa.contexts <> [] /\ LENGTH sa.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> qpat_x_assum `withhold_create_gas s8 = (INL _, sa)` mp_tac
+    >> simp[withhold_create_gas_def, get_gas_left_def,
+            get_current_context_def, bind_def, ignore_bind_def, return_def]
+    >> strip_tac >> gvs[AllCaseEqs()]
+    >> rename1 `consume_gas cappedGas s8 = _`
+    >> `(FST (HD s8.contexts)).gasUsed + cappedGas <=
+        (FST (HD sa.contexts)).gasUsed` by
+         (drule consume_gas_head_gas_add_ge >> simp[])
     (* assert_not_static *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac

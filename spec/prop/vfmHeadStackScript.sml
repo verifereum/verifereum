@@ -161,6 +161,35 @@ Proof
   >> gvs[AllCaseEqs()]
 QED
 
+Theorem preserves_head_stack_state_gas_meter[simp]:
+  preserves_head_stack get_state_gas_left ∧
+  preserves_head_stack (charge_state_gas n) ∧
+  preserves_head_stack (credit_state_gas_refund n) ∧
+  preserves_head_stack restore_state_gas ∧
+  preserves_head_stack commit_state_gas ∧
+  preserves_head_stack (restore_state_gas_to_entry sg) ∧
+  preserves_head_stack repay_state_gas_spill ∧
+  preserves_head_stack forfeit_remaining_gas ∧
+  preserves_head_stack withhold_create_gas ∧
+  preserves_head_stack drain_state_gas_reservoir ∧
+  preserves_head_stack (restore_child_gas gas reservoir)
+Proof
+  rw[preserves_head_stack_def, preserves_def, head_stack_rel_def,
+     get_state_gas_left_def, charge_state_gas_def,
+     credit_state_gas_refund_def, restore_state_gas_def,
+     commit_state_gas_def, restore_state_gas_to_entry_def,
+     repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+     forfeit_remaining_gas_def, withhold_create_gas_def,
+     drain_state_gas_reservoir_def, restore_child_gas_def,
+     get_gas_left_def, consume_gas_def, unuse_gas_def,
+     bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def, assert_def]
+  >> gvs[AllCaseEqs()]
+  >> gvs[COND_RATOR, AllCaseEqs(), bind_def, ignore_bind_def,
+         set_current_context_def, get_current_context_def,
+         return_def, fail_def, assert_def]
+QED
+
 Theorem set_return_data_preserves_head_stack[simp]:
   preserves_head_stack (set_return_data bytes)
 Proof
