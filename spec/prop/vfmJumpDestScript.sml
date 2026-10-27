@@ -527,6 +527,76 @@ val pajdn_tac = rpt (
   (irule preserves_all_jumpDest_NONE_handle >> rw[])
 )
 
+Theorem preserves_all_jumpDest_NONE_get_update:
+  (!c. (f c).jumpDest = c.jumpDest) ==>
+  preserves_all_jumpDest_NONE
+    (bind get_current_context (\c. set_current_context (f c)))
+Proof
+  rw[preserves_all_jumpDest_NONE_def, bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, all_jumpDest_NONE_def, AllCaseEqs()] >>
+  Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_get_update_then:
+  (!c. (f c).jumpDest = c.jumpDest) /\
+  preserves_all_jumpDest_NONE k ==>
+  preserves_all_jumpDest_NONE
+    (bind get_current_context (\c. ignore_bind (set_current_context (f c)) k))
+Proof
+  rw[preserves_all_jumpDest_NONE_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def,
+     return_def, fail_def, AllCaseEqs()] >>
+  Cases_on `s.contexts` >> gvs[all_jumpDest_NONE_def] >>
+  first_x_assum irule >> simp[all_jumpDest_NONE_def] >>
+  goal_assum drule >> simp[]
+QED
+
+Theorem preserves_all_jumpDest_NONE_state_gas_meter[simp]:
+  preserves_all_jumpDest_NONE get_state_gas_left /\
+  (!n. preserves_all_jumpDest_NONE (charge_state_gas n)) /\
+  (!n. preserves_all_jumpDest_NONE (credit_state_gas_refund n)) /\
+  preserves_all_jumpDest_NONE restore_state_gas /\
+  preserves_all_jumpDest_NONE commit_state_gas /\
+  (!n. preserves_all_jumpDest_NONE (restore_state_gas_to_entry n)) /\
+  preserves_all_jumpDest_NONE repay_state_gas_spill /\
+  preserves_all_jumpDest_NONE forfeit_remaining_gas /\
+  preserves_all_jumpDest_NONE withhold_create_gas /\
+  preserves_all_jumpDest_NONE drain_state_gas_reservoir /\
+  (!gas reservoir. preserves_all_jumpDest_NONE (restore_child_gas gas reservoir))
+Proof
+  rpt conj_tac
+  >- (rw[get_state_gas_left_def])
+  >- (rw[preserves_all_jumpDest_NONE_def, charge_state_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, consume_gas_def, assert_def,
+         return_def, fail_def, AllCaseEqs()] >>
+      Cases_on `s.contexts` >>
+      gvs[all_jumpDest_NONE_def, bind_def, ignore_bind_def,
+          get_current_context_def, set_current_context_def,
+          return_def, fail_def, assert_def, COND_RATOR, AllCaseEqs()])
+  >- (gen_tac >> simp[credit_state_gas_refund_def, LET_THM] >>
+      ho_match_mp_tac preserves_all_jumpDest_NONE_get_update >> simp[])
+  >- (rewrite_tac[restore_state_gas_def] >>
+      ho_match_mp_tac preserves_all_jumpDest_NONE_get_update >> simp[])
+  >- (rewrite_tac[commit_state_gas_def] >>
+      ho_match_mp_tac preserves_all_jumpDest_NONE_get_update >> simp[])
+  >- (gen_tac >> rewrite_tac[restore_state_gas_to_entry_def] >>
+      ho_match_mp_tac preserves_all_jumpDest_NONE_get_update >> simp[])
+  >- (rewrite_tac[repay_state_gas_spill_def] >>
+      ho_match_mp_tac preserves_all_jumpDest_NONE_get_update >>
+      simp[repay_state_gas_spill_context_def])
+  >- (rw[forfeit_remaining_gas_def] >> pajdn_tac)
+  >- (rw[withhold_create_gas_def] >> pajdn_tac)
+  >- (rw[preserves_all_jumpDest_NONE_def, drain_state_gas_reservoir_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, fail_def, AllCaseEqs()] >>
+      Cases_on `s.contexts` >> gvs[all_jumpDest_NONE_def])
+  >> rpt gen_tac >> rewrite_tac[restore_child_gas_def] >>
+  irule preserves_all_jumpDest_NONE_ignore_bind >> simp[] >>
+  ho_match_mp_tac preserves_all_jumpDest_NONE_get_update >> simp[]
+QED
+
 (* Abort functions preserve all_jumpDest_NONE *)
 Theorem preserves_all_jumpDest_NONE_abort_call_value[simp]:
   preserves_all_jumpDest_NONE (abort_call_value x)
@@ -559,8 +629,15 @@ QED
 Theorem preserves_all_jumpDest_NONE_pop_and_incorporate_context[simp]:
   preserves_all_jumpDest_NONE (pop_and_incorporate_context b)
 Proof
-  rw[pop_and_incorporate_context_def] >> pajdn_tac >>
-  IF_CASES_TAC >> gvs[] >> pajdn_tac
+  rewrite_tac[pop_and_incorporate_context_def] >>
+  irule preserves_all_jumpDest_NONE_bind >> simp[] >> gen_tac >>
+  irule preserves_all_jumpDest_NONE_bind >> simp[] >> gen_tac >>
+  simp[LET_THM] >>
+  irule preserves_all_jumpDest_NONE_ignore_bind >> simp[] >>
+  ho_match_mp_tac preserves_all_jumpDest_NONE_get_update_then >>
+  simp[absorb_state_gas_def] >>
+  Cases_on `b` >> simp[] >> pajdn_tac >>
+  simp[preserves_all_jumpDest_NONE_state_gas_meter]
 QED
 
 (* handle_exception preserves all_jumpDest_NONE *)
@@ -568,6 +645,8 @@ Theorem preserves_all_jumpDest_NONE_handle_exception[simp]:
   preserves_all_jumpDest_NONE (handle_exception e)
 Proof
   rw[handle_exception_def] >> pajdn_tac >>
+  simp[preserves_all_jumpDest_NONE_pop_and_incorporate_context,
+       preserves_all_jumpDest_NONE_state_gas_meter] >>
   TOP_CASE_TAC >> pajdn_tac >> gvs[]
 QED
 
@@ -1094,6 +1173,51 @@ val pjd_tac = rpt (
   (irule preserves_jumpDest_handle >> rw[])
 )
 
+Theorem preserves_jumpDest_state_gas_meter[simp]:
+  preserves_jumpDest get_state_gas_left /\
+  (!n. preserves_jumpDest (charge_state_gas n)) /\
+  (!n. preserves_jumpDest (credit_state_gas_refund n)) /\
+  preserves_jumpDest restore_state_gas /\
+  preserves_jumpDest commit_state_gas /\
+  (!n. preserves_jumpDest (restore_state_gas_to_entry n)) /\
+  preserves_jumpDest repay_state_gas_spill /\
+  preserves_jumpDest forfeit_remaining_gas /\
+  preserves_jumpDest withhold_create_gas /\
+  preserves_jumpDest drain_state_gas_reservoir /\
+  (!gas reservoir. preserves_jumpDest (restore_child_gas gas reservoir))
+Proof
+  rpt conj_tac
+  >- (rw[get_state_gas_left_def])
+  >- (rw[preserves_jumpDest_def, charge_state_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, consume_gas_def, assert_def,
+         return_def, fail_def, AllCaseEqs()] >>
+      Cases_on `s.contexts` >>
+      gvs[bind_def, ignore_bind_def, get_current_context_def,
+          set_current_context_def, return_def, fail_def, assert_def,
+          COND_RATOR, AllCaseEqs()])
+  >- (gen_tac >> simp[credit_state_gas_refund_def, LET_THM] >>
+      ho_match_mp_tac preserves_jumpDest_set_current_context_if >> simp[])
+  >- (rewrite_tac[restore_state_gas_def] >>
+      ho_match_mp_tac preserves_jumpDest_set_current_context_if >> simp[])
+  >- (rewrite_tac[commit_state_gas_def] >>
+      ho_match_mp_tac preserves_jumpDest_set_current_context_if >> simp[])
+  >- (gen_tac >> rewrite_tac[restore_state_gas_to_entry_def] >>
+      ho_match_mp_tac preserves_jumpDest_set_current_context_if >> simp[])
+  >- (rewrite_tac[repay_state_gas_spill_def] >>
+      ho_match_mp_tac preserves_jumpDest_set_current_context_if >>
+      simp[repay_state_gas_spill_context_def])
+  >- (rw[forfeit_remaining_gas_def] >> pjd_tac)
+  >- (rw[withhold_create_gas_def] >> pjd_tac)
+  >- (rw[preserves_jumpDest_def, drain_state_gas_reservoir_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, fail_def, AllCaseEqs()] >>
+      Cases_on `s.contexts` >> gvs[])
+  >> rpt gen_tac >> rewrite_tac[restore_child_gas_def] >>
+  irule preserves_jumpDest_ignore_bind >> simp[] >>
+  ho_match_mp_tac preserves_jumpDest_set_current_context_if >> simp[]
+QED
+
 Theorem preserves_jumpDest_step_binop[simp]:
   preserves_jumpDest (step_binop op f)
 Proof
@@ -1538,7 +1662,10 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1652,6 +1779,9 @@ Proof
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
   gvs[bind_def, return_def, push_context_def]
 QED
 
@@ -1699,9 +1829,6 @@ Proof
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
-  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
-  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  rpt gen_tac >> strip_tac >>
   gvs[COND_RATOR] >>
   qpat_x_assum`_ = (_,_)`mp_tac >>
   IF_CASES_TAC >- (
@@ -1816,8 +1943,8 @@ QED
 Theorem preserves_all_jumpDest_NONE_handle_step[simp]:
   preserves_all_jumpDest_NONE (handle_step e)
 Proof
-  rw[handle_step_def] >>
-  IF_CASES_TAC >> gvs[] >> pajdn_tac
+  rw[handle_step_def] >> pajdn_tac >>
+  simp[preserves_all_jumpDest_NONE_handle_exception]
 QED
 
 (* For step_inst on non-call/create ops, we use the bridge lemma.
@@ -2110,6 +2237,7 @@ Theorem preserves_all_jumpDest_NONE_proceed_call[simp]:
   preserves_all_jumpDest_NONE (proceed_call a b c d e f g h s)
 Proof
   rw[proceed_call_def] >> pajdn_tac >>
+  simp[preserves_all_jumpDest_NONE_state_gas_meter] >>
   (* push_context case: initial_context has jumpDest = NONE *)
   irule preserves_all_jumpDest_NONE_push_context >>
   simp[initial_context_simp]
@@ -2122,6 +2250,7 @@ Proof
   TRY pairarg_tac >> gvs[] >> pajdn_tac >> gvs[] >>
   TRY pairarg_tac >> gvs[] >> pajdn_tac >> gvs[] >>
   TRY pairarg_tac >> gvs[] >> pajdn_tac >> gvs[] >>
+  simp[preserves_all_jumpDest_NONE_proceed_call] >>
   TOP_CASE_TAC >> pajdn_tac >> gvs[]
 QED
 
@@ -2129,6 +2258,7 @@ Theorem preserves_all_jumpDest_NONE_proceed_create:
   preserves_all_jumpDest_NONE (proceed_create a b c d e)
 Proof
   rw[proceed_create_def] >> pajdn_tac >>
+  simp[preserves_all_jumpDest_NONE_state_gas_meter] >>
   irule preserves_all_jumpDest_NONE_push_context >>
   simp[initial_context_simp]
 QED
@@ -2138,7 +2268,8 @@ Theorem preserves_all_jumpDest_NONE_step_create[simp]:
 Proof
   rw[step_create_def] >> pajdn_tac >>
   rpt (IF_CASES_TAC >> gvs[] >> pajdn_tac) >>
-  simp[preserves_all_jumpDest_NONE_proceed_create]
+  simp[preserves_all_jumpDest_NONE_proceed_create,
+       preserves_all_jumpDest_NONE_state_gas_meter]
 QED
 
 (* step_inst preserves all_jumpDest_NONE for all opcodes *)
@@ -2146,7 +2277,9 @@ Theorem preserves_all_jumpDest_NONE_step_inst[simp]:
   op ≠ Jump ∧ op ≠ JumpI ⇒
   preserves_all_jumpDest_NONE (step_inst op)
 Proof
-  Cases_on `op` >> rw[step_inst_def]
+  Cases_on `op` >> rw[step_inst_def,
+    preserves_all_jumpDest_NONE_step_call,
+    preserves_all_jumpDest_NONE_step_create]
 QED
 
 (* The inner do-block of step: INL case preserves all_jumpDest_NONE *)
@@ -2241,7 +2374,10 @@ Proof
   `LENGTH s1.contexts > 1` by (
     CCONTR_TAC >> fs[handle_exception_def] >>
     gvs[bind_def,ignore_bind_def,AllCaseEqs(),COND_RATOR,reraise_def,
-        get_num_contexts_def,return_def] >>
+        get_num_contexts_def,return_def, restore_state_gas_def,
+        forfeit_remaining_gas_def, get_gas_left_def,
+        get_current_context_def, set_current_context_def,
+        consume_gas_def, assert_def, fail_def, set_return_data_def] >>
     rpt(drule_at_then Any
       (fn th => CHANGED_TAC(mp_tac th >>
                 impl_tac >- (gvs[] >> strip_tac >> gvs[]) >> rw[]))
@@ -2262,7 +2398,10 @@ Proof
          pop_and_incorporate_context_def, pop_context_def,
          set_rollback_def, inc_pc_def, push_stack_def,
          write_memory_def, update_gas_refund_def, push_logs_def,
-         outputTo_consistent_def, return_destination_CASE_rator]
+         outputTo_consistent_def, return_destination_CASE_rator,
+         restore_state_gas_def, forfeit_remaining_gas_def,
+         repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+         absorb_state_gas_def, reraise_def]
   >> Cases_on `s.contexts` >> fs[]
   >> Cases_on `t` >> fs[]
 QED
@@ -2293,7 +2432,8 @@ Proof
         >> gvs[handle_exception_def]
         >> gvs[bind_def,ignore_bind_def,AllCaseEqs(),get_num_contexts_def,
                reraise_def,COND_RATOR,return_def,get_gas_left_def,
-               get_current_context_def,fail_def] ) >>
+               get_current_context_def,fail_def, restore_state_gas_def,
+               forfeit_remaining_gas_def, set_current_context_def] ) >>
   gvs[bind_def,AllCaseEqs(),get_current_context_def,return_def,fail_def] >>
   gvs[COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs()]
   >~ [`step_inst Stop`]
