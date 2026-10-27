@@ -1217,10 +1217,10 @@ QED
 Theorem proceed_call_nonprecompile_frame:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
   s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
-  ∃static t.
+  ∃static sg t.
     FST (HD s'.contexts) =
       (initial_context (if op = CallCode ∨ op = DelegateCall then sender else address)
-        code static rd t) with
+        code static rd sg t) with
         logs := transfer_log sender
                   (if op = CallCode ∨ op = DelegateCall then sender else address) value ∧
     s'.rollback.accounts =
@@ -1241,10 +1241,10 @@ Theorem proceed_call_nonprecompile_message:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
   s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
   r = INL () ∧ s'.rollback.tStorage = s.rollback.tStorage ∧
-  ∃tx.
+  ∃sg tx.
     FST (HD s'.contexts) =
       (initial_context (if op = CallCode ∨ op = DelegateCall then sender else address)
-        code (op = StaticCall ∨ (FST (HD s.contexts)).msgParams.static) rd tx) with
+        code (op = StaticCall ∨ (FST (HD s.contexts)).msgParams.static) rd sg tx) with
         logs := transfer_log sender
                   (if op = CallCode ∨ op = DelegateCall then sender else address) value ∧
     tx.from = (if op = DelegateCall then (FST (HD s.contexts)).msgParams.caller else sender) ∧
@@ -1352,10 +1352,10 @@ Theorem step_call_push_new_frame:
   LENGTH s.contexts < LENGTH s'.contexts ∧
   (FST (HD s'.contexts)).msgParams.callee ≠
     (FST (HD s.contexts)).msgParams.callee ⇒
-  ∃code static mr t.
+  ∃code static sg mr t.
     FST (HD s'.contexts) =
       (initial_context (FST (HD s'.contexts)).msgParams.callee
-        code static (Memory mr) t) with
+        code static (Memory mr) sg t) with
         logs := transfer_log (FST (HD s.contexts)).msgParams.callee
                   (FST (HD s'.contexts)).msgParams.callee t.value ∧
     code = (case get_delegate
@@ -1480,9 +1480,9 @@ Theorem proceed_create_frame_effects:
   (SND (HD s'.contexts)).accounts = increment_nonce sender s.rollback.accounts ∧
   s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∧
   (SND (HD s'.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys ∧
-  ∃t.
+  ∃sg t.
     (FST (HD s'.contexts) =
-      (initial_context address code F (Code address) t) with
+      (initial_context address code F (Code address) sg t) with
         logs := transfer_log sender address value) ∧
     (* EIP-7708: the log's amount is the frame's endowment. *)
     t.value = value
@@ -1575,10 +1575,10 @@ QED
 Theorem step_create_push_new_frame:
   s.contexts ≠ [] ∧ step_create two s = (r,s') ∧
   LENGTH s.contexts < LENGTH s'.contexts ⇒
-  ∃code t.
+  ∃code sg t.
     FST (HD s'.contexts) =
       (initial_context (FST (HD s'.contexts)).msgParams.callee code F
-        (Code (FST (HD s'.contexts)).msgParams.callee) t) with
+        (Code (FST (HD s'.contexts)).msgParams.callee) sg t) with
         logs := transfer_log (FST (HD s.contexts)).msgParams.callee
                   (FST (HD s'.contexts)).msgParams.callee t.value ∧
     ¬account_already_created
@@ -1693,10 +1693,10 @@ Theorem step_push_new_frame:
   wf_state s ∧ step s = (r, s') ∧ LENGTH s.contexts < LENGTH s'.contexts ∧
   (FST (HD s'.contexts)).msgParams.callee ≠
     (FST (HD s.contexts)).msgParams.callee ⇒
-  ∃code static rd t.
+  ∃code static rd sg t.
     FST (HD s'.contexts) =
       (initial_context (FST (HD s'.contexts)).msgParams.callee
-        code static rd t) with
+        code static rd sg t) with
         logs := transfer_log (FST (HD s.contexts)).msgParams.callee
                   (FST (HD s'.contexts)).msgParams.callee t.value ∧
     ((∃mr. rd = Memory mr) ∧
@@ -3043,10 +3043,10 @@ Resume run_call_account_frame[static_push]:
   >> drule_all step_push_new_frame >> strip_tac
   >> `(FST (HD c.contexts)).msgParams.static = static ∧
       (FST (HD c.contexts)).msgParams.outputTo = rd`
-       by (qpat_assum `FST (HD c.contexts) = (initial_context _ _ _ _ _) with logs := _`
+       by (qpat_assum `FST (HD c.contexts) = (initial_context _ _ _ _ _ _) with logs := _`
              (once_rewrite_tac o single) >>
            simp[initial_context_def, initial_msg_params_def])
-  >> qpat_x_assum `FST (HD c.contexts) = (initial_context _ _ _ _ _) with logs := _` kall_tac
+  >> qpat_x_assum `FST (HD c.contexts) = (initial_context _ _ _ _ _ _) with logs := _` kall_tac
   >> irule run_call_static_frame >> gvs[] >> metis_tac[]
 QED
 
@@ -3215,7 +3215,7 @@ Resume run_call_empty_code_account[empty_entry]:
   `(FST (HD e.contexts)).msgParams.callee ≠ (FST (HD s.contexts)).msgParams.callee`
     by metis_tac[]
   >> drule_all step_push_new_frame >> strip_tac >> gvs[]
-  >> qpat_assum `FST (HD e.contexts) = (initial_context _ _ _ _ _) with logs := _`
+  >> qpat_assum `FST (HD e.contexts) = (initial_context _ _ _ _ _ _) with logs := _`
        (once_rewrite_tac o single)
   >> simp[initial_context_def, initial_msg_params_def,
           get_delegate_def, is_delegation_def]

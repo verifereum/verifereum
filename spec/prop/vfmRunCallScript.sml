@@ -3208,7 +3208,7 @@ Proof
 QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots_initial:
-    es.contexts = [(initial_context callee code static rd t, es.rollback)] ∧
+    es.contexts = [(initial_context callee code static rd sg t, es.rollback)] ∧
     wf_accounts es.rollback.accounts ∧
     (∀a. rd = Code a ⇒ callee = a) ∧
     run_call es = SOME (r, es') ⇒
