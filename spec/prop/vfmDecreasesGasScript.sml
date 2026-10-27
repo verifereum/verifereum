@@ -1307,7 +1307,16 @@ Theorem decreases_gas_cred_get_static_push_context:
     LENGTH (FST(ctx st)).stack ≤ stack_limit) ⇒
   decreases_gas_cred F n0 0 (do st <- get_static; push_context (ctx st) od)
 Proof
-  cheat
+  simp [decreases_gas_cred_def, get_static_def, push_context_def, return_def,
+    contexts_weight_def, LEX_DEF, unused_gas_def, bind_def, fail_def,
+    get_current_context_def]
+  \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
+  \\ first_x_assum (qspec_then `(FST h).msgParams.static` mp_tac)
+  \\ gvs []
+  \\ rw []
+  \\ gvs [wf_context_def, frame_unused_gas_def]
+  \\ drule_all unused_gas_grant_bound \\ strip_tac
+  \\ gas_arith_tac
 QED
 
 (* Hand attempt for the theorem above, kept for the record:
@@ -1352,6 +1361,7 @@ Proof
   \\ qpat_abbrev_tac `v1 = COND a b c`
   \\ qpat_abbrev_tac `v2 = COND a b c`
   \\ qpat_abbrev_tac `v3 = COND a b c`
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ reverse (rw [])
