@@ -5674,6 +5674,26 @@ Proof
        STAR_evm_hide_Parsed, EMPTY_evm2set, evm2set_on_def]
 QED
 
+Theorem restored_unused_gas[local]:
+  x <= limit ==> limit - (x - sp) = (limit - x) + MIN sp x
+Proof
+  strip_tac >> Cases_on `sp <= x` >> simp[MIN_DEF] >> decide_tac
+QED
+
+Theorem restored_unused_gas_bound[local]:
+  x <= limit /\ (limit - x) + MIN sp x <= callerGas ==>
+  limit - (x - sp) <= callerGas
+Proof
+  strip_tac >> asm_simp_tac pure_ss [restored_unused_gas]
+QED
+
+Theorem restored_unused_gas_sub[local]:
+  x <= limit ==>
+  callerGas - (limit - (x - sp)) = callerGas - (limit - x) - MIN sp x
+Proof
+  strip_tac >> asm_simp_tac pure_ss [restored_unused_gas] >> decide_tac
+QED
+
 Theorem SPEC_Return_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
