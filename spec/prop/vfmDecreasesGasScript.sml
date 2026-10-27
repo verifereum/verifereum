@@ -2153,9 +2153,9 @@ Proof
   >> irule decreases_gas_cred_bind_mono >> simp[]
   >> qexistsl_tac [`T`, `F`] >> simp[]
   >> gen_tac >> rw[]
-  >> CASE_TAC >> simp[]
+  >> CASE_TAC >> simp[decreases_gas_cred_step_inst]
   >> irule decreases_gas_cred_ignore_bind_mono
-  >> qexistsl_tac [`F`, `T`] >> simp[]
+  >> qexistsl_tac [`F`, `T`] >> simp[decreases_gas_cred_step_inst]
 QED
 
 Definition pop_helper_def:
