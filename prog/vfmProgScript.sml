@@ -5819,10 +5819,18 @@ Proof
   \\ Cases_on`inst = Revert`
   >- (
     gvs[Abbr`is_ret`, Abbr`returnCode`, Abbr`gasCost`]
+    \\ `p.gasLimit - (g + memory_cost m offset sz - sp) =
+          calleeGasLeft + spillRefund` by
+         (asm_simp_tac pure_ss [restored_unused_gas] >>
+          simp[Abbr `calleeGasLeft`, Abbr `spillRefund`])
     \\ gvs[revert_def, handle_step_def, handle_create_def, handle_def,
-        return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
+        reraise_def, bind_def, ignore_bind_def, get_return_data_def,
+        get_current_context_def, return_def, get_output_to_def,
+        handle_exception_def, get_num_contexts_def, restore_state_gas_def,
+        set_current_context_def]
+    \\ gvs[return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
         get_return_data_def, get_current_context_def, return_def, get_output_to_def,
-        handle_exception_def, get_num_contexts_def, pop_and_incorporate_context_def,
+        pop_and_incorporate_context_def,
         get_gas_left_def, pop_context_def, unuse_gas_def, set_rollback_def,
         assert_def,set_current_context_def,inc_pc_def,return_destination_case_rator,
         CaseEq"return_destination",CaseEq"prod",CaseEq"sum",set_return_data_def,
@@ -5832,7 +5840,6 @@ Proof
     \\ gvs[absorb_state_gas_def, Abbr`merged`]
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
-    \\ (conj_tac >- decide_tac)
     \\ (conj_tac >-
          (qpat_x_assum ‘_ = {}’ mp_tac
           \\ fs [EXTENSION]
@@ -5857,6 +5864,11 @@ Proof
         pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
         assert_def,is_code_dest_def,SUBSET_DEF,PULL_EXISTS,EMPTY_evm2set,
         Abbr`calleeGasLeft`,Abbr`all_pcs`,TO_FLOOKUP]
+    \\ gvs[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+           absorb_state_gas_def, Abbr `merged`, bind_def, ignore_bind_def,
+           get_current_context_def, set_current_context_def, return_def,
+           inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
+           assert_def, Abbr `codeCost`, Abbr `gasCost`]
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >-
@@ -5878,6 +5890,11 @@ Proof
       pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
       assert_def,is_code_dest_def,SUBSET_DEF,PULL_EXISTS,EMPTY_evm2set,
       consume_gas_def,update_accounts_def,Abbr`all_pcs`,TO_FLOOKUP]
+  \\ gvs[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+         absorb_state_gas_def, Abbr `merged`, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def, return_def,
+         inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
+         assert_def, Abbr `spillRefund`]
   \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
   \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
   \\ (conj_tac >-
