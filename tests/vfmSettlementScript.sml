@@ -112,7 +112,7 @@ Theorem settlement_storage_refund_and_tip:
         storage := update_storage 0w 1w empty_storage |>)
       (settlement_accounts 1000000))
     (settlement_tx with gasLimit := 100000) =
-    SOME (NONE, 16005, 983995, 1, 983995, F)
+    SOME (NONE, 21765, 978235, 1, 978235, F)
 Proof
   CONV_TAC cv_eval
 QED
