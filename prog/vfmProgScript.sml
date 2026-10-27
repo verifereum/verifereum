@@ -4642,7 +4642,7 @@ Proof
          get_current_context_def,return_def,set_current_context_def,
          get_num_contexts_def,abort_unuse_def,unuse_gas_def,assert_def,
          push_stack_def,inc_pc_def, inc_pc_or_jump_def,Abbr`c`,
-         proceed_call_def,get_rollback_def,read_memory_def]
+         proceed_call_def,drain_state_gas_reservoir_def,get_rollback_def,read_memory_def]
   \\ pop_assum kall_tac \\ qunabbrev_tac`b` \\ qunabbrev_tac`a`
   \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
   \\ qmatch_goalsub_abbrev_tac`_ with accounts updated_by f`
