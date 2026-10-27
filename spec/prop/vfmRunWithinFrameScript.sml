@@ -1529,9 +1529,11 @@ Proof
   \\ rw[same_frame_rel_def]
 QED
 
-(* The true corollary of `run_within_frame_preserves` for a frame that enters
-   with nothing accrued: a nested failure zeroes the frame's counters, so the
-   frame's counters are monotone exactly when it had nothing to roll back. *)
+(* Corollary of `run_within_frame_preserves` for a frame that enters with
+   nothing accrued: the frame-local statement that a rollback discards the
+   frame's accrued refunds and nothing else decreases them.  Entered at 0, the
+   counters can only stay 0 or rise, and a nested rollback can zero them and
+   let them rise again. *)
 Theorem run_within_frame_refund_monotone:
   outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
   LENGTH es'.contexts = LENGTH es.contexts ∧
