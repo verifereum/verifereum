@@ -710,6 +710,32 @@ Proof
   \\ simp[original_state_set_current, orig_exec_return]
 QED
 
+(* `charge_state_gas` is the one meter op whose body branches into a
+   nested block, so the composition has to be spelled out branch by
+   branch: on the spill path the reservoir moves first, then the spill
+   is charged through `consume_gas`, then the frame is read back. *)
+Theorem orig_exec_charge_state_gas[local]:
+  orig_exec_rel (charge_state_gas n) (charge_state_gas n)
+Proof
+  rewrite_tac[charge_state_gas_def]
+  \\ irule orig_exec_bind
+  \\ simp[original_state_current]
+  \\ gen_tac
+  \\ irule orig_exec_cond
+  \\ simp[original_state_set_current]
+  \\ irule orig_exec_cond
+  \\ simp[orig_exec_fail]
+  \\ simp[LET_THM]
+  \\ irule orig_exec_ignore_bind
+  \\ simp[original_state_set_current]
+  \\ irule orig_exec_ignore_bind
+  \\ simp[orig_exec_context_updates]
+  \\ irule orig_exec_bind
+  \\ simp[original_state_current]
+  \\ gen_tac
+  \\ simp[original_state_set_current]
+QED
+
 Theorem orig_exec_state_gas_updates[local]:
   !n g sr.
   orig_exec_rel get_state_gas_left get_state_gas_left /\
@@ -734,6 +760,7 @@ Proof
        original_state_current, original_state_set_current,
        orig_exec_return, orig_exec_assert, orig_exec_fail,
        orig_exec_get_gas_left, LET_THM, orig_exec_context_updates,
+       orig_exec_charge_state_gas,
        orig_exec_forfeit_remaining_gas, orig_exec_withhold_create_gas,
        orig_exec_restore_child_gas]
 QED
@@ -1119,12 +1146,12 @@ Proof
      the frame rolls its state gas back, then forfeits its execution
      grant.  Both are head-frame work, so the prefix composes in
      relation form and nothing has to be unfolded to get past it. *)
-  irule orig_exec_bind >> conj_tac
-  >- simp[orig_exec_cond, orig_exec_return, orig_exec_state_gas_updates] >>
+  irule orig_exec_bind >>
+  simp[orig_exec_cond, orig_exec_return, orig_exec_state_gas_updates] >>
   gen_tac >>
-  irule orig_exec_bind >> conj_tac
-  >- simp[orig_exec_cond, orig_exec_return, orig_exec_bind,
-          orig_exec_state_gas_updates, orig_exec_context_updates] >>
+  irule orig_exec_bind >>
+  simp[orig_exec_cond, orig_exec_return, orig_exec_bind,
+       orig_exec_state_gas_updates, orig_exec_context_updates] >>
   gen_tac >>
   (* Read the frame count out of the states, so the branch that reaches
      the rest of the body still knows how many frames it has. *)
