@@ -4866,6 +4866,57 @@ Proof
     simp_tac (srw_ss()) [execution_state_component_equality, tr, td]))
 QED
 
+Theorem proceed_call_precompile_success_meter[local]:
+  s.contexts = (parent,prb)::rest /\ s.rollback = rb /\
+  parent.msgParams.callee = sender /\
+  data = buffer_take argsOffset argsSize parent.memory /\
+  fIN addr precompile_addresses /\
+  (!s ctxt crb rest.
+    s.contexts = (ctxt,crb)::rest /\
+    ctxt.msgParams.data = buffer_of_list data /\
+    ctxt.msgParams.gasLimit = stipend /\
+    ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
+    (dispatch_precompiles addr s : unit execution_result) =
+      (INR NONE, s with contexts :=
+        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
+  ?c. c.msgParams.outputTo = outputTo /\
+      c.msgParams.gasLimit = stipend /\ c.gasUsed = pg /\
+      c.returnData = out /\
+      c.logs = transfer_log sender
+        (if op = CallCode \/ op = DelegateCall then sender else addr) value /\
+      c.addRefund = 0 /\ c.subRefund = 0 /\
+      c.stateGasLeft = parent.stateGasLeft /\ c.stateGasSpilled = 0 /\
+      c.stateGasCommitted = 0 /\ c.stateGasBaseline = parent.stateGasLeft /\
+      proceed_call op sender addr value argsOffset argsSize code stipend outputTo s =
+        (INR NONE, s with <|
+          rollback := rb with accounts updated_by
+            (if op <> CallCode /\ 0 < value
+             then transfer_value sender addr value else I);
+          contexts := (c,rb)::(parent with <|stateGasLeft := 0|>,prb)::rest |> )
+Proof
+  strip_tac >>
+  Cases_on `op <> CallCode /\ 0 < value` >>
+  simp[proceed_call_def, drain_state_gas_reservoir_def,
+       get_rollback_def, read_memory_def,
+       update_accounts_def, get_caller_def, get_value_def, get_static_def,
+       get_current_context_def, set_current_context_def, push_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `CONS (ctxt,rb)` >>
+  qmatch_goalsub_abbrev_tac `dispatch_precompiles addr ds` >>
+  `ds.contexts = (ctxt,rb)::(parent with stateGasLeft := 0,prb)::rest` by
+    simp[Abbr `ds`] >>
+  `ctxt.msgParams.data = buffer_of_list data /\
+   ctxt.msgParams.gasLimit = stipend /\ ctxt.gasUsed = 0 /\
+   ctxt.returnData = []` by
+    simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def] >>
+  qpat_x_assum `!s ctxt crb rest. _` drule_all >>
+  disch_then SUBST1_TAC >>
+  qexists_tac `ctxt with <|gasUsed := pg; returnData := out|>` >>
+  simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def,
+       Abbr `ds`, execution_state_component_equality,
+       rollback_state_component_equality]
+QED
+
 Theorem proceed_call_precompile_success:
   s.contexts = (parent,prb)::rest /\ s.rollback = rb /\
   parent.msgParams.callee = sender /\
@@ -4893,24 +4944,9 @@ Theorem proceed_call_precompile_success:
           contexts := (c,rb)::(parent with <|stateGasLeft := 0|>,prb)::rest |> )
 Proof
   strip_tac >>
-  Cases_on `op <> CallCode /\ 0 < value` >>
-  simp[proceed_call_def, get_rollback_def, read_memory_def,
-       update_accounts_def, get_caller_def, get_value_def, get_static_def,
-       get_current_context_def, push_context_def,
-       bind_def, ignore_bind_def, return_def] >>
-  qmatch_goalsub_abbrev_tac `CONS (ctxt,rb)` >>
-  qmatch_goalsub_abbrev_tac `dispatch_precompiles addr ds` >>
-  `ds.contexts = (ctxt,rb)::(parent,prb)::rest` by simp[Abbr `ds`] >>
-  `ctxt.msgParams.data = buffer_of_list data /\
-   ctxt.msgParams.gasLimit = stipend /\ ctxt.gasUsed = 0 /\
-   ctxt.returnData = []` by
-    simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def] >>
-  qpat_x_assum `!s ctxt crb rest. _` drule_all >>
-  disch_then SUBST1_TAC >>
-  qexists_tac `ctxt with <|gasUsed := pg; returnData := out|>` >>
-  simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def,
-       Abbr `ds`, execution_state_component_equality,
-       rollback_state_component_equality]
+  drule_all proceed_call_precompile_success_meter >>
+  disch_then (qspecl_then [`value`, `outputTo`, `op`, `code`] strip_assume_tac) >>
+  qexists_tac `c` >> simp[]
 QED
 
 Theorem handle_step_success_memory_exact:
