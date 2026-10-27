@@ -45,14 +45,14 @@ val () = cv_auto_trans settlement_observation_def;
 
 Theorem settlement_sender_is_coinbase:
   settlement_observation 0x100w (settlement_accounts 100000) settlement_tx =
-    SOME (NONE, 21000, 79000, 1, 79000, F)
+    SOME (NONE, 15000, 85000, 1, 85000, F)
 Proof
   CONV_TAC cv_eval
 QED
 
 Theorem settlement_distinct_coinbase:
   settlement_observation 0x300w (settlement_accounts 100000) settlement_tx =
-    SOME (NONE, 21000, 58000, 1, 21000, F)
+    SOME (NONE, 15000, 70000, 1, 15000, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -60,7 +60,7 @@ QED
 Theorem settlement_unused_gas_and_tip:
   settlement_observation 0x100w (settlement_accounts 100000)
     (settlement_tx with gasLimit := 40000) =
-    SOME (NONE, 21000, 79000, 1, 79000, F)
+    SOME (NONE, 15000, 85000, 1, 85000, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -68,7 +68,7 @@ QED
 Theorem settlement_zero_tip_empty_coinbase:
   settlement_observation 0x300w (settlement_accounts 100000)
     (settlement_tx with gasPrice := 1) =
-    SOME (NONE, 21000, 79000, 1, 0, T)
+    SOME (NONE, 15000, 85000, 1, 0, T)
 Proof
   CONV_TAC cv_eval
 QED
@@ -78,7 +78,7 @@ Theorem settlement_created_coinbase_selfdestruct:
     (settlement_accounts 1000000)
     (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
                           gasLimit := 100000 |>) =
-    SOME (NONE, 38036, 923928, 1, 38036, F)
+    SOME (NONE, 29036, 941928, 1, 29036, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -88,7 +88,7 @@ Theorem settlement_created_coinbase_selfdestruct_zero_tip:
     (settlement_accounts 1000000)
     (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
                           gasLimit := 100000; gasPrice := 1 |>) =
-    SOME (NONE, 38036, 961964, 1, 0, T)
+    SOME (NONE, 29036, 970964, 1, 0, T)
 Proof
   CONV_TAC cv_eval
 QED
@@ -99,7 +99,7 @@ Theorem settlement_reverted_sender_is_coinbase:
       (empty_account_state with code := [0x60w; 0w; 0x60w; 0w; 0xfdw])
       (settlement_accounts 100000))
     (settlement_tx with gasLimit := 40000) =
-    SOME (SOME Reverted, 21006, 78994, 1, 78994, F)
+    SOME (SOME Reverted, 15006, 84994, 1, 84994, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -112,7 +112,7 @@ Theorem settlement_storage_refund_and_tip:
         storage := update_storage 0w 1w empty_storage |>)
       (settlement_accounts 1000000))
     (settlement_tx with gasLimit := 100000) =
-    SOME (NONE, 21206, 978794, 1, 978794, F)
+    SOME (NONE, 16005, 983995, 1, 983995, F)
 Proof
   CONV_TAC cv_eval
 QED

@@ -887,32 +887,34 @@ Definition compute_tx_gas_used_def:
 End
 
 Definition compute_total_gas_used_def:
-  compute_total_gas_used (txGasLimit:num) txAccessList txData ctxtGasLimit
-                         ctxtGasUsed ctxtAddRefund ctxtSubRefund authRefund =
+  compute_total_gas_used (txGasLimit:num) txAccessList txData txTo txFrom
+                         txValue ctxtGasLimit ctxtGasUsed ctxtAddRefund
+                         ctxtSubRefund authRefund =
     let txGasUsed = compute_tx_gas_used txGasLimit ctxtGasLimit ctxtGasUsed in
     let storageRefund = ctxtAddRefund - ctxtSubRefund in
     let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
-    let floor_cost = calldata_floor_cost txAccessList txData in
+    let floor_cost = calldata_floor_cost txAccessList (IS_NONE txTo)
+                                      (txTo = SOME txFrom) txValue txData in
       MAX (txGasUsed - gasRefund) floor_cost
 End
 
 Definition compute_refund_ether_def:
-  compute_refund_ether (txGasLimit:num) txGasPrice txAccessList txData
-                       ctxtGasLimit ctxtGasUsed ctxtAddRefund ctxtSubRefund
-                       authRefund =
+  compute_refund_ether (txGasLimit:num) txGasPrice txAccessList txData txTo
+                       txFrom txValue ctxtGasLimit ctxtGasUsed ctxtAddRefund
+                       ctxtSubRefund authRefund =
     let totalGasUsed = compute_total_gas_used txGasLimit txAccessList txData
-                         ctxtGasLimit ctxtGasUsed ctxtAddRefund ctxtSubRefund
-                         authRefund in
+                         txTo txFrom txValue ctxtGasLimit ctxtGasUsed
+                         ctxtAddRefund ctxtSubRefund authRefund in
       (txGasLimit - totalGasUsed) * txGasPrice
 End
 
 Definition compute_transaction_fee_def:
   compute_transaction_fee (txGasLimit:num) txGasPrice baseFeePerGas txAccessList
-                          txData ctxtGasLimit ctxtGasUsed ctxtAddRefund
-                          ctxtSubRefund authRefund =
+                          txData txTo txFrom txValue ctxtGasLimit ctxtGasUsed
+                          ctxtAddRefund ctxtSubRefund authRefund =
     let totalGasUsed = compute_total_gas_used txGasLimit txAccessList txData
-                         ctxtGasLimit ctxtGasUsed ctxtAddRefund ctxtSubRefund
-                         authRefund in
+                         txTo txFrom txValue ctxtGasLimit ctxtGasUsed
+                         ctxtAddRefund ctxtSubRefund authRefund in
     let priorityFeePerGas = txGasPrice - baseFeePerGas in
       totalGasUsed * priorityFeePerGas
 End
@@ -925,13 +927,14 @@ Theorem post_transaction_accounting_success_lookup:
     (lookup_account addr t.rollback.accounts).balance +
     (if addr = tx.from then
        compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
+         tx.to tx.from tx.value
          (FST (HD t.contexts)).msgParams.gasLimit
          (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
          (FST (HD t.contexts)).subRefund t.txParams.authRefund
      else 0) +
     (if addr = blk.coinBase then
        compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
-         tx.accessList tx.data
+         tx.accessList tx.data tx.to tx.from tx.value
          (FST (HD t.contexts)).msgParams.gasLimit
          (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
          (FST (HD t.contexts)).subRefund t.txParams.authRefund
@@ -984,11 +987,13 @@ Theorem SPEC_to_run_transaction:
          (lookup_account addr rb.accounts).balance +
          (if addr = tx.from then
             compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
+              tx.to tx.from tx.value
               msgParams.gasLimit gasUsed addRefund subRefund txParams.authRefund
           else 0) +
          (if addr = blk.coinBase then
             compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
-              tx.accessList tx.data msgParams.gasLimit gasUsed addRefund
+              tx.accessList tx.data tx.to tx.from tx.value
+              msgParams.gasLimit gasUsed addRefund
               subRefund txParams.authRefund
           else 0)))
 Proof
@@ -1034,6 +1039,11 @@ Proof
   \\ disch_then (qspecl_then [`tx`, `blk`, `addr`, `s.rollback.accounts`] mp_tac)
   \\ disch_then SUBST1_TAC
   \\ AP_TERM_TAC
+  (* The two sides disagree on the recipient: the spec keeps `tx.to`, the
+     accounting lemma's instance was already rewritten to `SOME callee`.
+     Rewrite before abbreviating, or the abbreviation hides the occurrence
+     from the rewriter and the AC step cannot close. *)
+  \\ qpat_x_assum `tx.to = SOME callee` (fn th => simp [th])
   \\ qmatch_goalsub_abbrev_tac `_ with balance := balance + refund + fee`
   \\ simp[NoAsms, account_state_component_equality, AC ADD_ASSOC ADD_COMM]
 QED

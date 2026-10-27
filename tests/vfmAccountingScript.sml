@@ -53,7 +53,8 @@ Definition transaction_accounting_inline_def:
   let txGasUsed = tx.gasLimit - gasLeft in
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
   let gasRefund = MIN (txGasUsed DIV 5) (t.txParams.authRefund + storageRefund) in
-  let floor_cost = calldata_floor_cost tx.accessList tx.data in
+  let floor_cost = calldata_floor_cost tx.accessList (IS_NONE tx.to)
+                                    (tx.to = SOME tx.from) tx.value tx.data in
   let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
   let refundEther = (tx.gasLimit - totalGasUsed) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in

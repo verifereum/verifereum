@@ -304,12 +304,9 @@ Definition get_delegate_def:
     else NONE
 End
 
-Definition per_auth_base_cost_def:
-  per_auth_base_cost = 12500n
-End
-
 Definition process_authorization_def:
-  process_authorization chainId (auth: authorization) (accs, accesses: access_sets, refund) =
+  process_authorization chainId (auth: authorization)
+                        (accs, accesses: access_sets, refund: num) =
     let authority = auth.authority in
     let delegate = auth.delegate in
     let authChainId = auth.authChainId in
@@ -326,9 +323,10 @@ Definition process_authorization_def:
     let newCode = if delegate = 0w then [] else make_delegation delegate in
     let newAcc = acc with <| code := newCode; nonce := SUC acc.nonce |> in
     let newAccs = update_account authority newAcc accs in
-    let newRefund = if account_empty acc then refund
-                    else refund + (new_account_cost - per_auth_base_cost) in
-    (newAccs, newAccesses, newRefund)
+    (* EIP-2780: the intrinsic charge for an authorization no longer includes
+       the new-account cost, so an existing authority has nothing to refund.
+       What a new one costs is state gas, charged at the top frame. *)
+    (newAccs, newAccesses, refund)
 End
 
 Definition process_authorizations_def:
@@ -371,9 +369,22 @@ Definition access_list_data_cost_def:
   floor_call_data_cost * access_list_floor_tokens accessList
 End
 
+(* EIP-2780: the intrinsic base, decomposed.  The transaction's own bytes,
+   its calldata and its access list are not part of it.  The floor charges
+   this and nothing else of the execution cost, so it shares the definition
+   rather than repeating which recipient and value charges apply. *)
+Definition tx_intrinsic_base_def:
+  tx_intrinsic_base isCreate isSelfTransfer (value:num) =
+  base_cost +
+  (if isCreate then create_cost
+   else if isSelfTransfer then 0
+   else cold_access_cost + (if value = 0 then 0 else tx_value_cost))
+End
+
 Definition calldata_floor_cost_def:
-  calldata_floor_cost accessList data =
-  base_cost + floor_call_data_cost * call_data_tokens data +
+  calldata_floor_cost accessList isCreate isSelfTransfer (value:num) data =
+  tx_intrinsic_base isCreate isSelfTransfer value +
+  floor_call_data_cost * call_data_tokens data +
   access_list_data_cost accessList
 End
 
@@ -381,15 +392,15 @@ Definition intrinsic_cost_def:
   intrinsic_cost accessList authListLen p =
   let isCreate = is_code_dest p.outputTo in
   let data = if isCreate then p.code else buffer_to_list p.data in
-    base_cost
+    tx_intrinsic_base isCreate (p.callee = p.caller) p.value
     + SUM (MAP (λb. call_data_cost (b = 0w)) data)
     + (if isCreate
-       then create_cost + init_code_word_cost * (word_size $ LENGTH data)
+       then init_code_word_cost * (word_size $ LENGTH data)
        else 0)
     + access_list_address_cost * LENGTH accessList
     + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
     + access_list_data_cost accessList
-    + new_account_cost * authListLen
+    + execution_per_auth_base_cost * authListLen
 End
 
 Definition apply_intrinsic_cost_def:
@@ -422,7 +433,9 @@ Definition pre_transaction_updates_def:
          | _ => F) then NONE else
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
   if t.gasLimit > 2 ** 24 then NONE else
-  if t.gasLimit < calldata_floor_cost t.accessList t.data then NONE else
+  if t.gasLimit < calldata_floor_cost t.accessList (IS_NONE t.to)
+                                          (t.to = SOME t.from) t.value t.data
+  then NONE else
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else

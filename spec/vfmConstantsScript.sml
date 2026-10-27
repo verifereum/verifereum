@@ -9,13 +9,22 @@ Definition context_limit_def[simp]:
   context_limit = 1024n
 End
 
+(* EIP-2780: one ECDSA recovery, the sender's access and write, and the
+   transaction's bytes in the block.  What the transaction reaches adds to
+   it, in `tx_intrinsic_base`. *)
 Definition base_cost_def:
-  base_cost = 21000n
+  base_cost = 12000n
 End
 
-(* EIP-8038: ACCOUNT_WRITE + COLD_ACCOUNT_ACCESS *)
+(* EIP-8038: ACCOUNT_WRITE + COLD_ACCOUNT_ACCESS; EIP-2780 charges it as the
+   intrinsic cost of creating a contract. *)
 Definition create_cost_def:
   create_cost = 12000n
+End
+
+(* EIP-2780: sending value to an account other than the sender's own. *)
+Definition tx_value_cost_def:
+  tx_value_cost = 6000n
 End
 
 Definition call_data_cost_def:
@@ -99,6 +108,14 @@ End
 
 Definition new_account_cost_def:
   new_account_cost = 25000n
+End
+
+(* EIP-8037: the state-independent part of what one authorization costs, which
+   EIP-2780 charges in the intrinsic.  The state-dependent part (the new
+   account, the first write, the delegation bytes) is charged at the top
+   frame, so an existing authority has nothing to refund any more. *)
+Definition execution_per_auth_base_cost_def:
+  execution_per_auth_base_cost = 7816n
 End
 
 (* EIP-8038: ACCOUNT_WRITE + CALL_STIPEND *)
