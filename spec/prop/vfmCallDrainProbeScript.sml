@@ -31,3 +31,23 @@ Proof
   rpt strip_tac >>
   pop_assum (mp_tac o Q.AP_TERM `\c. c.stateGasLeft`) >> simp[]
 QED
+
+(* Historical witness for the superseded CREATE exact-tail statement. *)
+Theorem proceed_create_push_structure_counterexample:
+  !s c rb.
+    let s0 = s with contexts := [(c with stateGasLeft := 1, rb)] in
+    let out = proceed_create 0w 100w 0 [] 0 s0 in
+    s0.contexts <> [] /\
+    FST out = INL () /\
+    LENGTH (SND out).contexts = 2 /\
+    (FST (HD s0.contexts)).stateGasLeft = 1 /\
+    (FST (HD (TL (SND out).contexts))).stateGasLeft = 0 /\
+    MAP FST (TL (SND out).contexts) <> MAP FST s0.contexts
+Proof
+  simp[proceed_create_def, drain_state_gas_reservoir_def,
+       bind_def, ignore_bind_def, return_def, get_current_context_def,
+       set_current_context_def, update_accounts_def, get_rollback_def,
+       get_original_def, set_original_def, push_context_def] >>
+  rpt strip_tac >>
+  pop_assum (mp_tac o Q.AP_TERM `\c. c.stateGasLeft`) >> simp[]
+QED
