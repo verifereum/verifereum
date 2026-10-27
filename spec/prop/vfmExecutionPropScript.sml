@@ -145,8 +145,20 @@ Definition stack_room_ok_def:
     EVERY (λc. LENGTH c.stack < stack_limit) (MAP FST (TL s.contexts))
 End
 
+(* EIP-8037: the execution gas a frame still holds is what its grant is
+   short of what it has spent -- and a state charge that spilled into the
+   frame's execution gas spent it just as any other charge does, so the
+   spill counts here too.  The reservoir does not: it is a separate pool
+   that rides down into a child and back, and a state-gas credit raises
+   it, which would make this measure grow.  Counting the spill instead
+   makes a state charge and its credit both leave the measure alone. *)
+Definition frame_unused_gas_def:
+  frame_unused_gas c =
+    c.msgParams.gasLimit - c.gasUsed + c.stateGasSpilled
+End
+
 Definition unused_gas_def:
-  unused_gas ctxs = SUM (MAP (λc. c.msgParams.gasLimit - c.gasUsed) ctxs)
+  unused_gas ctxs = SUM (MAP frame_unused_gas ctxs)
 End
 
 Definition gas_stack_ok_def:

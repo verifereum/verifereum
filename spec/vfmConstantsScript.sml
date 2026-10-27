@@ -90,23 +90,33 @@ Definition keccak256_per_word_cost_def:
   keccak256_per_word_cost = 6n
 End
 
-(* Osaka's STORAGE_SET and COLD_STORAGE_WRITE.  EIP-8038 replaces both with a
-   single 10000 STORAGE_WRITE, which restates the SSTORE gas in vfmExecution,
-   vfmOriginalState and vfmAccounting; that reprice is not in this change. *)
-Definition storage_set_cost_def:
-  storage_set_cost = 20000n
+(* EIP-8038: STORAGE_SET and COLD_STORAGE_WRITE collapse into one
+   STORAGE_WRITE, charged each time a slot moves away from its
+   transaction-start value and refunded when it is restored. *)
+Definition storage_write_cost_def:
+  storage_write_cost = 10000n
 End
 
-Definition storage_update_cost_def:
-  storage_update_cost = 5000n
-End
-
-(* Osaka's REFUND_STORAGE_CLEAR.  EIP-8038 raises it to 11616, which is
-   (STORAGE_WRITE + COLD_STORAGE_ACCESS) * 4800 / 5000 and so only means
-   anything once STORAGE_SET and COLD_STORAGE_WRITE are replaced by the
-   single STORAGE_WRITE; that reprice is not in this change. *)
+(* EIP-8038: (STORAGE_WRITE + COLD_STORAGE_ACCESS) * 4800 / 5000. *)
 Definition storage_clear_refund_def:
-  storage_clear_refund = 4800n
+  storage_clear_refund = 11616n
+End
+
+(* EIP-8037: the state gas a first-time set of a zero slot pays for, 64
+   state bytes at COST_PER_STATE_BYTE, and what a slot set then cleared
+   credits back.  State gas, not execution gas: it draws on the frame's
+   reservoir (vfmContext's `stateGasLeft`) before execution gas. *)
+Definition cost_per_state_byte_def:
+  cost_per_state_byte = 1530n
+End
+
+Definition state_bytes_per_storage_set_def:
+  state_bytes_per_storage_set = 64n
+End
+
+Definition storage_set_state_gas_def:
+  storage_set_state_gas =
+    state_bytes_per_storage_set * cost_per_state_byte
 End
 
 Definition log_topic_cost_def:

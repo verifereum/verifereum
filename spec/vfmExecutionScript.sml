@@ -461,6 +461,208 @@ Definition unuse_gas_def:
   od
 End
 
+(* ================================================================ *)
+(* EIP-8037's state gas meter operations.                            *)
+(*                                                                   *)
+(* State gas comes out of the head frame's reservoir first and        *)
+(* spills into its execution gas once that is empty; a credit gives   *)
+(* the pools back in the reverse order, so the two never drift.  The  *)
+(* reservoir is a per-transaction grant that rides down into a child  *)
+(* frame's meter and back out of it; only the top frame commits any   *)
+(* of it as non-refillable.                                          *)
+(*                                                                   *)
+(* Two invariants the arithmetic relies on, which EIP-8037 states as  *)
+(* assertions: the spill never exceeds the execution gas `gasUsed`    *)
+(* accounts for (`spill ≤ gasUsed`), and a commit only ever lowers    *)
+(* the baseline (`stateGasLeft ≤ stateGasBaseline` after a credit).   *)
+(* ================================================================ *)
+
+Definition get_state_gas_left_def:
+  get_state_gas_left = do
+    context <- get_current_context;
+    return context.stateGasLeft
+  od
+End
+
+(* Draw `n` state gas: the reservoir first, then execution gas, recording
+   what spilled.  Neither pool covering it is an out-of-gas. *)
+Definition charge_state_gas_def:
+  charge_state_gas n = do
+    context <- get_current_context;
+    if n ≤ context.stateGasLeft
+    then set_current_context $
+           context with stateGasLeft := context.stateGasLeft - n
+    else if n ≤ context.stateGasLeft +
+                (context.msgParams.gasLimit - context.gasUsed)
+    then let spilled = n - context.stateGasLeft in
+      set_current_context $ context with <|
+        stateGasLeft := 0;
+        gasUsed := context.gasUsed + spilled;
+        stateGasSpilled updated_by ($+ spilled) |>
+    else fail OutOfGas
+  od
+End
+
+(* Credit `n` state gas back to the pools it was drawn from, last-charged
+   first: execution gas up to the spill, then the reservoir.  A credit can
+   land in a different frame than the charge it undoes, so the excess
+   above this frame's spill goes to the reservoir even though the charge
+   it undoes may have drawn on execution gas; `repay_state_gas_spill`
+   squares that up once a successful child's meter is merged. *)
+Definition credit_state_gas_refund_def:
+  credit_state_gas_refund n = do
+    context <- get_current_context;
+    let fromGasLeft = MIN n context.stateGasSpilled in
+    set_current_context $ context with <|
+      gasUsed := context.gasUsed - fromGasLeft;
+      stateGasSpilled := context.stateGasSpilled - fromGasLeft;
+      stateGasLeft updated_by ($+ (n - fromGasLeft)) |>
+  od
+End
+
+(* A frame's rollback, on a revert or an exceptional halt: the state gas
+   the frame spent is given back, the spill to execution gas first and
+   then the reservoir to the baseline the frame started at, and the
+   refunds accrued on the undone changes are discarded with them.  State
+   gas a commit marked non-refillable stays charged. *)
+Definition restore_state_gas_def:
+  restore_state_gas = do
+    context <- get_current_context;
+    set_current_context $ context with <|
+      gasUsed := context.gasUsed - context.stateGasSpilled;
+      stateGasSpilled := 0;
+      stateGasLeft := context.stateGasBaseline;
+      addRefund := 0;
+      subRefund := 0 |>
+  od
+End
+
+(* Mark the state gas spent so far as non-refillable: the reservoir level
+   becomes the frame's new baseline and the spill so far is committed. *)
+Definition commit_state_gas_def:
+  commit_state_gas = do
+    context <- get_current_context;
+    set_current_context $ context with <|
+      stateGasCommitted updated_by ($+ context.stateGasSpilled);
+      stateGasBaseline := context.stateGasLeft;
+      stateGasSpilled := 0 |>
+  od
+End
+
+(* Undo a commit: used when the state a commit protected is rolled back
+   too, so every state charge refills, committed or not. *)
+Definition restore_state_gas_to_entry_def:
+  restore_state_gas_to_entry sg = do
+    context <- get_current_context;
+    set_current_context $ context with <|
+      gasUsed := context.gasUsed - context.stateGasSpilled -
+                 context.stateGasCommitted;
+      stateGasSpilled := 0;
+      stateGasCommitted := 0;
+      stateGasLeft := sg;
+      stateGasBaseline := sg |>
+  od
+End
+
+(* A child's meter joins its parent's: the pools add up and the gas the
+   child left goes back to the parent's execution gas.  A pure move
+   between the two pools, so no usage counter moves.  Spelled out as a
+   context function as well as a step, because a frame rule has to name
+   the merged meter in its postcondition. *)
+Definition absorb_state_gas_def:
+  absorb_state_gas ctxt sg sp sc = <|
+      stack      := ctxt.stack;
+      memory     := ctxt.memory;
+      pc         := ctxt.pc;
+      jumpDest   := ctxt.jumpDest;
+      returnData := ctxt.returnData;
+      gasUsed    := ctxt.gasUsed;
+      addRefund  := ctxt.addRefund;
+      subRefund  := ctxt.subRefund;
+      stateGasLeft      := ctxt.stateGasLeft + sg;
+      stateGasSpilled   := ctxt.stateGasSpilled + sp;
+      stateGasBaseline  := ctxt.stateGasBaseline;
+      stateGasCommitted := ctxt.stateGasCommitted + sc;
+      logs       := ctxt.logs;
+      msgParams  := ctxt.msgParams |>
+End
+
+(* Once a successful child's meter is merged into the parent's, the
+   reservoir repays execution gas up to the spill still outstanding: gas
+   only crosses back between the two pools it drifted across, so no state
+   creation is undone and the usage counters do not move. *)
+Definition repay_state_gas_spill_context_def:
+  repay_state_gas_spill_context ctxt = <|
+      stack      := ctxt.stack;
+      memory     := ctxt.memory;
+      pc         := ctxt.pc;
+      jumpDest   := ctxt.jumpDest;
+      returnData := ctxt.returnData;
+      gasUsed    := ctxt.gasUsed -
+                    MIN ctxt.stateGasLeft ctxt.stateGasSpilled;
+      addRefund  := ctxt.addRefund;
+      subRefund  := ctxt.subRefund;
+      stateGasLeft    := ctxt.stateGasLeft -
+                         MIN ctxt.stateGasLeft ctxt.stateGasSpilled;
+      stateGasSpilled := ctxt.stateGasSpilled -
+                         MIN ctxt.stateGasLeft ctxt.stateGasSpilled;
+      stateGasBaseline  := ctxt.stateGasBaseline;
+      stateGasCommitted := ctxt.stateGasCommitted;
+      logs       := ctxt.logs;
+      msgParams  := ctxt.msgParams |>
+End
+
+Definition repay_state_gas_spill_def:
+  repay_state_gas_spill = do
+    context <- get_current_context;
+    set_current_context (repay_state_gas_spill_context context)
+  od
+End
+
+(* An exceptional halt forfeits the frame's whole execution grant.  A
+   rollback has already credited the spill back, so there is none left to
+   account for. *)
+Definition forfeit_remaining_gas_def:
+  forfeit_remaining_gas = do
+    gasLeft <- get_gas_left;
+    consume_gas gasLeft
+  od
+End
+
+(* Withhold all but one 64th of the execution gas as a CREATE child's
+   grant, and return it.  EIP-8037 has no such rule for state gas: a
+   child's whole reservoir is drained, below. *)
+Definition withhold_create_gas_def:
+  withhold_create_gas = do
+    gasLeft <- get_gas_left;
+    childGas <<- gasLeft - gasLeft DIV 64;
+    consume_gas childGas;
+    return childGas
+  od
+End
+
+(* Empty the frame's reservoir into a child frame's meter, which starts
+   with it as both its reservoir and its baseline.  The parent's reservoir
+   comes back with the child's, at the merge. *)
+Definition drain_state_gas_reservoir_def:
+  drain_state_gas_reservoir = do
+    context <- get_current_context;
+    set_current_context $ context with stateGasLeft := 0;
+    return context.stateGasLeft
+  od
+End
+
+(* Return a child frame's execution grant and drained reservoir to the
+   parent, for the paths that never entered the child. *)
+Definition restore_child_gas_def:
+  restore_child_gas gas reservoir = do
+    unuse_gas gas;
+    context <- get_current_context;
+    set_current_context $
+      context with stateGasLeft updated_by ($+ reservoir)
+  od
+End
+
 Definition pop_stack_def:
   pop_stack n =
   do
@@ -739,35 +941,60 @@ Definition step_sload_def:
   od
 End
 
-(* SSTORE pricing and refund deltas, independent of the state operations. *)
+(* SSTORE pricing, refund deltas and state gas, independent of the state
+   operations.  All three read the same original/current/new comparison. *)
+
+(* EIP-8038: the refund counter moves when the slot's value changes.  A
+   slot cleared at transaction start is refunded; a clear that is undone
+   takes that refund back; and a slot restored to its transaction-start
+   value refunds the STORAGE_WRITE that moving it away charged.  The last
+   one applies however the slot got there, a first-ever set included, so
+   it is the write cost itself and no longer a set-or-update difference. *)
 Definition sstore_refund_updates_def:
   sstore_refund_updates originalValue currentValue (value:bytes32) =
      if currentValue ≠ value then
-       let storageSetRefund =
-         if originalValue = value then
-           if originalValue = 0w then
-             storage_set_cost - warm_access_cost
-           else storage_update_cost - cold_sload_cost - warm_access_cost
-         else 0
+       let writeRefund =
+         if originalValue = value then storage_write_cost else 0
        in if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w
-          then (storageSetRefund + storage_clear_refund,0)
+          then (writeRefund + storage_clear_refund,0)
           else if originalValue ≠ 0w ∧ currentValue = 0w
-          then (storageSetRefund,storage_clear_refund)
-          else (storageSetRefund,0)
+          then (writeRefund,storage_clear_refund)
+          else (writeRefund,0)
      else (0,0)
 End
 
+(* The execution gas an SSTORE charges on top of the access cost: moving a
+   slot off its transaction-start value. *)
 Definition sstore_base_gas_def:
   sstore_base_gas originalValue currentValue (value:bytes32) =
-    if originalValue = currentValue ∧ currentValue ≠ value
-    then if originalValue = 0w then storage_set_cost
-    else storage_update_cost - cold_sload_cost
-    else warm_access_cost
+    warm_access_cost +
+    (if originalValue = currentValue ∧ currentValue ≠ value
+     then storage_write_cost else 0)
+End
+
+(* EIP-8037: the state gas the write creates, charged before it happens:
+   a first-time set of a zero slot pays for the state it creates. *)
+Definition sstore_state_gas_def:
+  sstore_state_gas originalValue currentValue (value:bytes32) =
+    if originalValue = currentValue ∧ currentValue ≠ value ∧ originalValue = 0w
+    then storage_set_state_gas
+    else 0
+End
+
+(* EIP-8037: and what a slot set then cleared gives back -- the state the
+   cleared slot no longer occupies. *)
+Definition sstore_state_gas_refund_def:
+  sstore_state_gas_refund originalValue currentValue (value:bytes32) =
+    if currentValue ≠ value ∧ originalValue = value ∧ originalValue = 0w
+    then storage_set_state_gas
+    else 0
 End
 
 Definition step_sstore_gas_consumption_def:
   step_sstore_gas_consumption address key value = do
     gasLeft <- get_gas_left;
+    (* EIP-2200's stipend sentry, on execution gas alone: it fires before
+       the slot read, and the reservoir does not count towards it. *)
     assert (call_stipend < gasLeft) OutOfGas;
     accounts <- get_accounts;
     currentValue <<- lookup_storage key (lookup_account address accounts).storage;
@@ -778,7 +1005,15 @@ Definition step_sstore_gas_consumption_def:
                    zero_warm accessCost;
     refundUpdates <<- sstore_refund_updates originalValue currentValue value;
     update_gas_refund refundUpdates;
+    stateGasRefund <<- sstore_state_gas_refund originalValue currentValue value;
+    if stateGasRefund = 0 then return ()
+    else credit_state_gas_refund stateGasRefund;
+    stateGas <<- sstore_state_gas originalValue currentValue value;
+    (* Execution gas before state gas, so an execution-gas out-of-gas
+       never spends state gas that a failing frame would leave in the
+       parent's reservoir. *)
     consume_gas dynamicGas;
+    charge_state_gas stateGas;
   od
 End
 
@@ -1154,6 +1389,11 @@ End
 Definition proceed_create_def:
   proceed_create senderAddress address value code cappedGas =
   do
+    (* EIP-8037: a child's whole state gas reservoir rides along with it,
+       and comes back with it; the creating frame holds none while the
+       child runs.  A colliding target never gets this far, so its
+       reservoir never leaves the parent. *)
+    reservoir <- drain_state_gas_reservoir;
     update_accounts $ increment_nonce senderAddress;
     subContextTx <<- <|
         from     := senderAddress
@@ -1175,7 +1415,7 @@ Definition proceed_create_def:
       increment_nonce address;
     (* EIP-7708: the created frame starts with its endowment logged. *)
     push_context
-      (initial_context address code F (Code address) subContextTx with
+      (initial_context address code F (Code address) reservoir subContextTx with
          logs := transfer_log senderAddress address value, rollback)
   od
 End
@@ -1203,9 +1443,7 @@ Definition step_create_def:
                 then address_for_create2 senderAddress salt code
                 else address_for_create senderAddress nonce;
     assert (LENGTH code ≤ 2 * max_code_size) OutOfGas;
-    gasLeft <- get_gas_left;
-    cappedGas <<- gasLeft - gasLeft DIV 64;
-    consume_gas cappedGas;
+    cappedGas <- withhold_create_gas;
     assert_not_static;
     set_return_data [];
     sucDepth <- get_num_contexts;
@@ -1547,6 +1785,11 @@ Definition proceed_call_def:
   proceed_call op sender address value
     argsOffset argsSize code stipend
     outputTo = do
+    (* EIP-8037: a child's whole state gas reservoir rides along with it,
+       and comes back with it at the merge; the calling frame holds none
+       while the child runs.  The paths that never enter the child -- a
+       failed balance or depth check -- never drain it. *)
+    reservoir <- drain_state_gas_reservoir;
     rollback <- get_rollback;
     data <- read_memory argsOffset argsSize;
     if op ≠ CallCode (* otherwise to := sender *) ∧ 0 < value then
@@ -1570,7 +1813,7 @@ Definition proceed_call_def:
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
-    context <<- initial_context callee code subStatic outputTo subContextTx;
+    context <<- initial_context callee code subStatic outputTo reservoir subContextTx;
     (* EIP-7708: the new frame starts with its incoming transfer logged,
        so a frame that fails takes the log down with it.  A CALLCODE moves
        nothing and so logs nothing: its recipient is the caller itself. *)
@@ -1780,9 +2023,20 @@ Definition pop_and_incorporate_context_def:
     callee_rb <- pop_context;
     callee <<- FST callee_rb;
     unuse_gas calleeGasLeft;
+    (* EIP-8037: the child's meter comes back to the parent whatever
+       became of it.  A failed child has already rolled its own state gas
+       back to its baseline, so what it gives back is exactly the
+       reservoir the parent handed it. *)
+    context <- get_current_context;
+    set_current_context (absorb_state_gas context callee.stateGasLeft
+                           callee.stateGasSpilled callee.stateGasCommitted);
     if success then do
       push_logs callee.logs;
-      update_gas_refund (callee.addRefund, callee.subRefund)
+      update_gas_refund (callee.addRefund, callee.subRefund);
+      (* A successful merge is where a charge's claim and a refund's
+         credit, which can land in different frames, first share a meter:
+         the reservoir repays the execution gas they drifted across. *)
+      repay_state_gas_spill
     od else
       set_rollback (SND callee_rb)
   od
@@ -1811,9 +2065,13 @@ End
 Definition handle_exception_def:
   handle_exception e = do
     success <<- (e = NONE);
+    (* EIP-8037: a frame that fails gives its state gas back -- the
+       reservoir to its baseline, the spill to execution gas -- before it
+       is settled or merged into its parent.  A frame that finished
+       normally keeps what it spent. *)
+    if success then return () else restore_state_gas;
     if ¬success ∧ e ≠ SOME Reverted then do
-      gasLeft <- get_gas_left;
-      consume_gas gasLeft;
+      forfeit_remaining_gas;
       set_return_data [];
     od else return ();
     n <- get_num_contexts;
@@ -1929,18 +2187,20 @@ End
 
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
-  let (gasLimit, gasUsed, stateGasLeft, addRefund, subRefund, logs, returnData) =
+  let (gasLimit, gasUsed, stateGasLeft, stateGasSpilled, stateGasCommitted,
+       addRefund, subRefund, logs, returnData) =
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
-    then (0, 0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
+    then (0, 0, 0, 0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = FST $ HD t.contexts in
       (ctxt.msgParams.gasLimit, ctxt.gasUsed, ctxt.stateGasLeft,
+       ctxt.stateGasSpilled, ctxt.stateGasCommitted,
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
   let (totalGasUsed, executionGasUsed, stateGasUsed, refundEther, transactionFee) =
     transaction_gas_accounting tx.gasPrice blk.baseFeePerGas tx.gasLimit
-      t.txParams.stateGasReservoir t.txParams.stateGasSpilled
-      t.txParams.stateGasCommitted
+      t.txParams.stateGasReservoir stateGasSpilled
+      stateGasCommitted
       (calldata_floor_cost tx.accessList (IS_NONE tx.to)
                           (tx.to = SOME tx.from) tx.value tx.data)
       (gasLeft, stateGasLeft, storageRefund, t.txParams.authRefund) in

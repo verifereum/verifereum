@@ -21,15 +21,10 @@ Datatype:
    ; chainId        : num
    ; authRefund     : num
    (* EIP-8037: the transaction's state gas grant, what the top frame's
-      reservoir is filled from and settlement measures against, and the
-      two amounts settlement adds to what the reservoir lost: the gas that
-      covered state charges once the reservoir had emptied, and the part
-      of it marked non-refillable.  No charge site exists yet, so nothing
-      spills and both stay zero; they move into the frame, where EIP-8037
-      keeps them, with the charge sites that first give them values. *)
+      reservoir is filled from and what settlement measures the state
+      dimension against.  The frame's own state-gas meter is on the
+      context, where EIP-8037 keeps it. *)
    ; stateGasReservoir : num
-   ; stateGasSpilled   : num
-   ; stateGasCommitted : num
    |>
 End
 
@@ -94,12 +89,15 @@ Datatype:
    |>
 End
 
-(* EIP-8037: the frame's state gas meter, the reservoir its state charges
-   draw from first.  The frame's execution gas is `gasUsed` against
-   `msgParams.gasLimit`, which the split makes the execution grant rather
-   than the transaction's gas limit; what state gas the frame spills and
-   commits once the reservoir is empty is settled through the transaction
-   parameters, since nothing spills until a charge site exists. *)
+(* EIP-8037: the frame's state gas meter, alongside its execution gas
+   (`gasUsed` against `msgParams.gasLimit`, which the split at transaction
+   entry makes the execution grant rather than the transaction's gas
+   limit).  `stateGasLeft` is the reservoir the frame's state charges draw
+   from first; `stateGasSpilled` is the execution gas that covered a state
+   charge once the reservoir was empty and has not been credited back yet
+   (EIP-8037's `state_gas_from_gas_left`); `stateGasBaseline` is the
+   reservoir level a rollback refills to, moved down by a commit;
+   `stateGasCommitted` is the spill a commit marked non-refillable. *)
 Datatype:
   context =
   <| stack      : bytes32 list
@@ -110,7 +108,10 @@ Datatype:
    ; gasUsed    : num
    ; addRefund  : num
    ; subRefund  : num
-   ; stateGasLeft : num
+   ; stateGasLeft      : num
+   ; stateGasSpilled   : num
+   ; stateGasBaseline  : num
+   ; stateGasCommitted : num
    ; logs       : event list
    ; msgParams  : message_parameters
    |>
@@ -263,13 +264,14 @@ Definition initial_tx_params_def:
    ; chainId        := c
    ; authRefund     := ar
    ; stateGasReservoir := sr
-   ; stateGasSpilled   := 0
-   ; stateGasCommitted := 0
    |>
 End
 
+(* EIP-8037: a frame starts with the state gas reservoir it was handed --
+   the pool its state charges draw on -- as both the reservoir and the
+   baseline a rollback refills it to. *)
 Definition initial_context_def:
-  initial_context callee code static rd t =
+  initial_context callee code static rd sg t =
   <| stack      := []
    ; memory     := empty_buffer
    ; pc         := 0
@@ -278,24 +280,30 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; addRefund  := 0
    ; subRefund  := 0
-   ; stateGasLeft := 0
+   ; stateGasLeft      := sg
+   ; stateGasSpilled   := 0
+   ; stateGasBaseline  := sg
+   ; stateGasCommitted := 0
    ; logs       := []
    ; msgParams  := initial_msg_params callee code static rd t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context fr c s rd t).stack = [] ∧
-  (initial_context fr c s rd t).memory = empty_buffer ∧
-  (initial_context fr c s rd t).pc = 0 ∧
-  (initial_context fr c s rd t).jumpDest = NONE ∧
-  (initial_context fr c s rd t).returnData = [] ∧
-  (initial_context fr c s rd t).gasUsed = 0 ∧
-  (initial_context fr c s rd t).addRefund = 0 ∧
-  (initial_context fr c s rd t).subRefund = 0 ∧
-  (initial_context fr c s rd t).stateGasLeft = 0 ∧
-  (initial_context fr c s rd t).logs = [] ∧
-  (initial_context fr c s rd t).msgParams  = initial_msg_params fr c s rd t
+  (initial_context fr c s rd sg t).stack = [] ∧
+  (initial_context fr c s rd sg t).memory = empty_buffer ∧
+  (initial_context fr c s rd sg t).pc = 0 ∧
+  (initial_context fr c s rd sg t).jumpDest = NONE ∧
+  (initial_context fr c s rd sg t).returnData = [] ∧
+  (initial_context fr c s rd sg t).gasUsed = 0 ∧
+  (initial_context fr c s rd sg t).addRefund = 0 ∧
+  (initial_context fr c s rd sg t).subRefund = 0 ∧
+  (initial_context fr c s rd sg t).stateGasLeft = sg ∧
+  (initial_context fr c s rd sg t).stateGasSpilled = 0 ∧
+  (initial_context fr c s rd sg t).stateGasBaseline = sg ∧
+  (initial_context fr c s rd sg t).stateGasCommitted = 0 ∧
+  (initial_context fr c s rd sg t).logs = [] ∧
+  (initial_context fr c s rd sg t).msgParams  = initial_msg_params fr c s rd t
 Proof
   rw[initial_context_def]
 QED
@@ -501,7 +509,9 @@ Definition initial_state_def:
     let (code, accesses) = code_from_tx postAuthAccounts postAuthAccesses tx in
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback postAuthAccounts accesses in
-    let ctxt = initial_context callee code static rd tx in
+    (* The state gas reservoir is only known once the intrinsic is, below,
+       so the frame is built with an empty one and filled in with it. *)
+    let ctxt = initial_context callee code static rd 0 tx in
     let authListLen = LENGTH tx.authorizationList in
     case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
     (* EIP-8037: what is left of the transaction's gas after its intrinsic
@@ -516,7 +526,8 @@ Definition initial_state_def:
     let reservoir = evmGas - executionGas in
     let ctxt = ctxt with <|
         msgParams updated_by (λp. p with gasLimit := executionGas);
-        stateGasLeft := reservoir |>
+        stateGasLeft := reservoir;
+        stateGasBaseline := reservoir |>
     in
     (* EIP-7708: the top-level frame logs the transaction's own transfer,
        and a failed transaction takes the log down with it. *)

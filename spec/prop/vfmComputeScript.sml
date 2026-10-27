@@ -477,6 +477,53 @@ val () = “unuse_gas n s” |>
   SIMP_CONV std_ss [unuse_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
 
+(* EIP-8037's state gas meter operations. *)
+val () = “get_state_gas_left s” |>
+  SIMP_CONV std_ss [get_state_gas_left_def, bind_def] |>
+  cv_auto_trans;
+
+val () = “charge_state_gas n s” |>
+  SIMP_CONV std_ss [charge_state_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
+  cv_auto_trans;
+
+val () = “credit_state_gas_refund n s” |>
+  SIMP_CONV std_ss [credit_state_gas_refund_def, bind_def, ignore_bind_def,
+                    LET_RATOR] |>
+  cv_auto_trans;
+
+val () = “restore_state_gas s” |>
+  SIMP_CONV std_ss [restore_state_gas_def, bind_def, ignore_bind_def] |>
+  cv_auto_trans;
+
+val () = “commit_state_gas s” |>
+  SIMP_CONV std_ss [commit_state_gas_def, bind_def, ignore_bind_def] |>
+  cv_auto_trans;
+
+val () = “restore_state_gas_to_entry sg s” |>
+  SIMP_CONV std_ss [restore_state_gas_to_entry_def, bind_def, ignore_bind_def] |>
+  cv_auto_trans;
+
+val () = “repay_state_gas_spill s” |>
+  SIMP_CONV std_ss [repay_state_gas_spill_def, bind_def, ignore_bind_def] |>
+  cv_auto_trans;
+
+val () = “forfeit_remaining_gas s” |>
+  SIMP_CONV std_ss [forfeit_remaining_gas_def, bind_def, ignore_bind_def] |>
+  cv_auto_trans;
+
+val () = “withhold_create_gas s” |>
+  SIMP_CONV std_ss [withhold_create_gas_def, bind_def, ignore_bind_def,
+                    LET_RATOR] |>
+  cv_auto_trans;
+
+val () = “drain_state_gas_reservoir s” |>
+  SIMP_CONV std_ss [drain_state_gas_reservoir_def, bind_def, ignore_bind_def] |>
+  cv_auto_trans;
+
+val () = “restore_child_gas g sr s” |>
+  SIMP_CONV std_ss [restore_child_gas_def, bind_def, ignore_bind_def] |>
+  cv_auto_trans;
+
 val () = “pop_stack n s” |>
   SIMP_CONV std_ss [pop_stack_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
@@ -870,6 +917,7 @@ val () = “dispatch_precompiles a s” |>
 Theorem proceed_call_eq:
   proceed_call op sender address value argsOffset argsSize code stipend
     outputTo = do
+    reservoir <- drain_state_gas_reservoir;
     rollback <- get_rollback;
     data <- read_memory_sub argsOffset argsSize;
     if op ≠ CallCode ∧ 0 < value then
@@ -892,7 +940,7 @@ Theorem proceed_call_eq:
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
-    context <<- initial_context callee code subStatic outputTo subContextTx;
+    context <<- initial_context callee code subStatic outputTo reservoir subContextTx;
     context <<- context with msgParams := context.msgParams with data := data;
     push_context (context with logs := transfer_log sender callee value, rollback);
     if fIN address precompile_addresses
@@ -904,7 +952,8 @@ Proof
   \\ rw[proceed_call_def, read_memory_def, read_memory_sub_def,
      bind_def, ignore_bind_def, get_rollback_def, get_current_context_def,
      get_caller_def, get_value_def, get_static_def, update_accounts_def,
-     push_context_def, return_def, fail_def]
+     push_context_def, return_def, fail_def,
+     drain_state_gas_reservoir_def, set_current_context_def]
   \\ gvs[initial_context_def, initial_msg_params_def,
          vfmBufferTheory.buffer_of_list_take]
 QED

@@ -5,6 +5,11 @@ Ancestors
 Libs
   BasicProvers
 
+(* EIP-8037: what a step must not raise is the head frame's unused gas,
+   `frame_unused_gas` (grant less spent, plus the state charge that
+   spilled into the grant).  `gasUsed` alone will not do: a state-gas
+   credit hands execution gas back to the frame, and a state charge that
+   spills spends execution gas without any charge of its own. *)
 Definition decreases_gas_def:
   decreases_gas strict (m: α execution) =
     ∀s. case s.contexts of
@@ -16,8 +21,8 @@ Definition decreases_gas_def:
         (c.gasUsed < c'.gasUsed ⇒ c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
         (wf_context c ⇒ wf_context c') ∧
         if strict ∧ ISL (FST (m s))
-        then c.gasUsed < c'.gasUsed
-        else c.gasUsed ≤ c'.gasUsed
+        then frame_unused_gas c' < frame_unused_gas c
+        else frame_unused_gas c' ≤ frame_unused_gas c
 End
 
 Theorem decreases_gas_mono:
@@ -1583,8 +1588,7 @@ QED
 Theorem sstore_base_gas_pos[simp]:
   0 < sstore_base_gas originalValue currentValue value
 Proof
-  rw[sstore_base_gas_def, warm_access_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, storage_set_cost_def]
+  simp[sstore_base_gas_def, warm_access_cost_def, ZERO_LESS_ADD]
 QED
 
 Theorem decreases_gas_step_sstore_gas_consumption[simp]:
