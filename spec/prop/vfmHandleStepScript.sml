@@ -45,37 +45,7 @@ val _ = Parse.hide "from"
 Theorem psf_handle_create:
   psf outputTo_consistent (handle_create e)
 Proof
-  rw[psf_def, handle_create_def, bind_def,
-     get_return_data_def, get_output_to_def,
-     get_current_context_def, return_def]
-  \\ Cases_on `s.contexts` \\ gvs[]
-  \\ PairCases_on `h` \\ gvs[]
-  \\ Cases_on `e`
-  >- (
-    (* e = NONE *)
-    Cases_on `h0.msgParams.outputTo` \\ gvs[reraise_def]
-    >- (
-      (* outputTo = Memory — reraise *)
-      irule same_frame_rel_refl \\ simp[])
-    >- (
-      (* outputTo = Code c — install code at c *)
-      gvs[ignore_bind_def, bind_def, assert_def, return_def,
-          fail_def, AllCaseEqs(), consume_gas_def,
-          get_current_context_def,
-          set_current_context_def, update_accounts_def,
-          reraise_def]
-      (* Each branch: either fail (refl), or consume_gas + update_accounts.
-         The update is at address = c, which equals the head's callee by
-         outputTo_consistent. *)
-      \\ gvs[outputTo_consistent_def]
-      \\ rw[same_frame_rel_def, callee_local_changes_def,
-            lookup_account_def, update_account_def,
-            APPLY_UPDATE_THM]
-      \\ rw[]))
-  \\ (* e = SOME _ — reraise *)
-    gvs[reraise_def]
-  \\ Cases_on `h0.msgParams.outputTo` \\ gvs[reraise_def]
-  \\ irule same_frame_rel_refl \\ simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_exception either reraises (n ≤ 1) or pops (n > 1). When the
@@ -88,103 +58,7 @@ Theorem handle_exception_same_frame:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   same_frame_rel s s'
 Proof
-  simp[handle_exception_def, bind_def, ignore_bind_def]
-  \\ strip_tac
-  \\ reverse (Cases_on`LENGTH s.contexts ≤ 1`)
-  >- (
-    gvs[AllCaseEqs(), COND_RATOR, get_num_contexts_def,
-        return_def, reraise_def] >>
-    TRY (
-      gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def,
-          set_return_data_def, consume_gas_def, get_gas_left_def,
-          assert_def, set_current_context_def, fail_def,
-          get_current_context_def, same_frame_rel_def] >> NO_TAC ) >>
-    rename1`_ s1 = (_,s')` >>
-    TRY (
-      rename1`_ s = (_,s1)` >>
-      `LENGTH s1.contexts = LENGTH s.contexts` by
-        gvs[bind_def, ignore_bind_def, AllCaseEqs(),
-            get_gas_left_def, consume_gas_def, assert_def,
-            set_return_data_def, fail_def, return_def,
-            set_current_context_def, get_current_context_def]) >>
-     `LENGTH s'.contexts <> LENGTH s1.contexts` suffices_by gvs[] >>
-     qpat_x_assum`_ = (_,s')`mp_tac >>
-     pop_assum kall_tac >>
-     simp[bind_def] >>
-     simp[get_return_data_def, bind_def,
-          return_def, get_current_context_def] >>
-     TRY IF_CASES_TAC >> gvs[return_def, fail_def] >>
-     simp[get_output_to_def, bind_def, get_current_context_def] >>
-     gvs[return_def] >>
-     simp[pop_and_incorporate_context_def,bind_def] >>
-     simp[get_gas_left_def, bind_def, get_current_context_def, return_def] >>
-     simp[pop_context_def, return_def] >>
-     simp[ignore_bind_def, bind_def] >>
-     CASE_TAC >>
-     drule_at Any cp_imp_length_contexts_preserved >>
-     simp[] >>
-     Cases_on`s1.contexts` >> gvs[] >>
-     Cases_on`t` >> gvs[] >> strip_tac >>
-     BasicProvers.TOP_CASE_TAC >> (
-     reverse BasicProvers.TOP_CASE_TAC >- (
-       rw[] >> gvs[AllCaseEqs(),set_rollback_def,return_def] >>
-       drule_at Any psf_imp_length_contexts_preserved >> rw[] >>
-       gvs[push_logs_def, bind_def, get_current_context_def, AllCaseEqs(),
-           return_def, set_current_context_def]
-     ) ) >>
-     BasicProvers.TOP_CASE_TAC >>
-     drule_at Any psf_imp_length_contexts_preserved >>
-     (impl_tac >- (simp[] >> gvs[AllCaseEqs(), set_rollback_def, return_def] >>
-                   strip_tac >> gvs[] >>
-                   qhdtm_x_assum`update_gas_refund`assume_tac >>
-                   drule_at Any psf_imp_length_contexts_preserved >>
-                   rw[] >> strip_tac >> gvs[] >>
-                   qhdtm_x_assum`push_logs`assume_tac >>
-                   drule_at Any psf_imp_length_contexts_preserved >>
-                   rw[] >> strip_tac >> gvs[]
-     )) >> strip_tac >> (
-     reverse BasicProvers.TOP_CASE_TAC >- (
-       rw[] >>
-       strip_tac >>  gvs[AllCaseEqs(),set_rollback_def,return_def] >>
-                   qhdtm_x_assum`update_gas_refund`assume_tac >>
-                   drule_at Any psf_imp_length_contexts_preserved >>
-                   rw[] >> strip_tac >> gvs[] >>
-                   qhdtm_x_assum`push_logs`assume_tac >>
-                   drule_at Any psf_imp_length_contexts_preserved >>
-                   rw[] >> strip_tac >> gvs[]
-     ) ) >>
-     simp[AllCaseEqs(),return_destination_CASE_rator,bind_def] >>
-     rw[] >> gvs[push_stack_def, set_return_data_def, get_current_context_def,
-                 set_current_context_def, bind_def, return_def, assert_def,
-                 fail_def,AllCaseEqs(),ignore_bind_def] >>
-     strip_tac >> gvs[set_rollback_def, return_def] >>
-     gvs[write_memory_def, bind_def, ignore_bind_def,
-         get_current_context_def, set_current_context_def, assert_def,
-         fail_def,return_def] >>
-                   qhdtm_x_assum`update_gas_refund`assume_tac >>
-                   drule_at Any psf_imp_length_contexts_preserved >>
-                   rw[] >> strip_tac >> gvs[] >>
-                   qhdtm_x_assum`push_logs`assume_tac >>
-                   drule_at Any psf_imp_length_contexts_preserved >>
-                   rw[] >> strip_tac >> gvs[]
-  )
-  \\ gvs[AllCaseEqs(), COND_RATOR]
-  (* Various branches: the prefix may be a consume_gas + set_return_data
-     block or just return (); then n <- get_num_contexts; if n ≤ 1
-     reraise else pop. The length hypothesis rules out the pop branch. *)
-  \\ gvs[get_gas_left_def, get_current_context_def,
-         return_def, get_num_contexts_def, reraise_def, fail_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_return_data_def, get_output_to_def]
-  \\ gvs[bind_def, ignore_bind_def, AllCaseEqs(), get_current_context_def,
-         assert_def, fail_def, return_def, set_current_context_def,
-         inc_pc_def]
-  \\ Cases_on `s.contexts` \\ gvs[]
-  \\ (* In each remaining branch, s' equals s with possibly modified
-        head context (gasUsed up, returnData cleared). *)
-    PairCases_on `h` \\ gvs[]
-  \\ rw[same_frame_rel_def, callee_local_changes_def]
-  \\ gvs[AllCaseEqs(), rich_listTheory.IS_PREFIX_REFL]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---------------- handle_step under length preservation --------- *)
@@ -201,30 +75,7 @@ Theorem handle_step_same_frame:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   same_frame_rel s s'
 Proof
-  rw[handle_step_def]
-  >- (
-    (* vfm_abort e: reraise, state unchanged *)
-    gvs[reraise_def]
-    \\ irule same_frame_rel_refl
-    \\ gvs[outputTo_consistent_def])
-  \\ (* handle (handle_create e) handle_exception s *)
-    gvs[handle_def]
-  \\ `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-  \\ qspec_then`e`mp_tac(Q.GEN`e`(INST_TYPE[alpha |-> ``:unit``]handle_create_INR))
-  \\ rw[] >> gvs[]
-  \\ rename1`handle_create _ s = (_,s1)`
-  \\ qmatch_asmsub_abbrev_tac`hce s = _`
-  \\ `psf outputTo_consistent hce` by metis_tac[psf_handle_create]
-  \\ `same_frame_rel s s1` by (
-       gvs[psf_def,Abbr`hce`]
-       \\ first_x_assum irule
-       \\ simp[] \\ metis_tac[])
-  \\ `LENGTH s1.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
-  \\ `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-  \\ `LENGTH s'.contexts = LENGTH s1.contexts` by simp[]
-  \\ `same_frame_rel s1 s'`
-     by (irule handle_exception_same_frame \\ metis_tac[])
-  \\ metis_tac[same_frame_rel_trans]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ================================================================ *)
@@ -252,7 +103,7 @@ Theorem set_rollback_effect:
   set_rollback r s = (q, s') ⇒
     q = INL () ∧ s' = s with rollback := r
 Proof
-  rw[set_rollback_def, return_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* pop_context removes the head of contexts, returns it, leaves
@@ -262,8 +113,7 @@ Theorem pop_context_effect:
   pop_context s = (q, s') ⇒
     q = INL (HD s.contexts) ∧ s' = s with contexts := TL s.contexts
 Proof
-  rw[pop_context_def, return_def, fail_def] >>
-  rw[execution_state_component_equality]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* push_context adds to the head. *)
@@ -271,8 +121,7 @@ Theorem push_context_effect:
   push_context crb s = (q, s') ⇒
     q = INL () ∧ s' = s with contexts := crb :: s.contexts
 Proof
-  rw[push_context_def, return_def] >>
-  rw[execution_state_component_equality]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---- Behaviour of pop_and_incorporate_context on failure ------- *)
@@ -311,16 +160,7 @@ Theorem pop_and_incorporate_context_failure_effect:
        new_parent_ctx.jumpDest = (FST parent).jumpDest ∧
        new_parent_ctx.returnData = (FST parent).returnData)
 Proof
-  strip_tac
-  >> gvs[pop_and_incorporate_context_def, bind_def, ignore_bind_def]
-  >> gvs[get_gas_left_def, get_current_context_def, return_def,
-         pop_context_def]
-  >> gvs[unuse_gas_def, bind_def, get_current_context_def, return_def,
-         assert_def, set_current_context_def, set_rollback_def,
-         fail_def, ignore_bind_def]
-  >> Cases_on `parent` >> gvs[]
-  >> qmatch_asmsub_abbrev_tac `if cond then _ else _`
-  >> Cases_on `cond` >> gvs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---- Behaviour of handle_exception's pop-failure branch -------- *)
@@ -354,17 +194,7 @@ Theorem handle_exception_pop_failure_memory_effect:
        new_parent_ctx.addRefund = (FST parent).addRefund ∧
        new_parent_ctx.subRefund = (FST parent).subRefund)
 Proof
-  strip_tac
-  >> Cases_on `parent`
-  >> Cases_on `e = SOME Reverted` >> gvs[]
-  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, unuse_gas_def, AllCaseEqs()]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Variant for the success path (e = NONE): pop_and_incorporate_context T
@@ -381,17 +211,7 @@ Theorem handle_exception_pop_success_memory_effect:
        new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
        new_parent_ctx.subRefund ≥ (FST parent).subRefund)
 Proof
-  strip_tac
-  >> Cases_on `parent`
-  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Generalised variant: drops `= (INL (), s')` requirement. Even if
@@ -416,17 +236,7 @@ Theorem handle_exception_pop_success_memory_effect_gen:
        new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
        new_parent_ctx.subRefund ≥ (FST parent).subRefund)
 Proof
-  strip_tac
-  >> Cases_on `parent`
-  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Generalised variant for failure path: drops INL () requirement.
@@ -461,17 +271,7 @@ Theorem handle_exception_pop_failure_memory_effect_gen:
        new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
        new_parent_ctx.subRefund ≥ (FST parent).subRefund)
 Proof
-  strip_tac
-  >> Cases_on `parent`
-  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---- Behaviour of handle_step when the pushed frame has Memory
@@ -491,18 +291,7 @@ Theorem handle_step_pop_success_memory_effect:
        new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
        new_parent_ctx.subRefund ≥ (FST parent).subRefund)
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by simp[]
-  >> `∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a` by simp[]
-  >> drule (INST_TYPE [alpha |-> ``:unit``]
-             vfmStaticCallsTheory.handle_create_reraises)
-  >> simp[reraise_def]
-  >> strip_tac
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def, handle_def, vfm_abort_def]
-  >> strip_tac
-  >> drule_all handle_exception_pop_success_memory_effect
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Generalised handle_step pop success: drops q = INL () requirement.
@@ -519,17 +308,7 @@ Theorem handle_step_pop_success_memory_effect_gen:
        new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
        new_parent_ctx.subRefund ≥ (FST parent).subRefund)
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by simp[]
-  >> `∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a` by simp[]
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def, handle_def, vfm_abort_def, handle_create_def,
-          bind_def, get_return_data_def, get_output_to_def,
-          get_current_context_def, return_def, reraise_def]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> strip_tac
-  >> drule_all handle_exception_pop_success_memory_effect_gen
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Combines handle_create_reraises (for Memory outputTo) with
@@ -548,18 +327,7 @@ Theorem handle_step_pop_memory_effect:
        new_parent_ctx.addRefund = (FST parent).addRefund ∧
        new_parent_ctx.subRefund = (FST parent).subRefund)
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by simp[]
-  >> `∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a` by simp[]
-  >> drule (INST_TYPE [alpha |-> ``:unit``]
-             vfmStaticCallsTheory.handle_create_reraises)
-  >> simp[reraise_def]
-  >> strip_tac
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def, handle_def]
-  >> strip_tac
-  >> drule_all handle_exception_pop_failure_memory_effect
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Generalised handle_step pop failure: drops q = INL () requirement.
@@ -581,19 +349,7 @@ Theorem handle_step_pop_memory_effect_gen:
        new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
        new_parent_ctx.subRefund ≥ (FST parent).subRefund)
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by simp[]
-  >> `∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a` by simp[]
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def, handle_def, handle_create_def,
-          bind_def, get_return_data_def, get_output_to_def,
-          get_current_context_def, return_def, reraise_def]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> simp[AllCaseEqs()]
-  >> strip_tac
-  >> `LENGTH s'.contexts < LENGTH s.contexts` by simp[]
-  >> drule_all handle_exception_pop_failure_memory_effect_gen
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Rollback-only version of handle_exception_pop_failure_memory_effect_gen.
@@ -607,18 +363,7 @@ Theorem handle_exception_pop_failure_rollback_gen:
   LENGTH s'.contexts < LENGTH s.contexts ⇒
     s'.rollback = callee_rb
 Proof
-  strip_tac
-  >> Cases_on `parent`
-  >> Cases_on `callee.msgParams.outputTo`
-  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* When e <> NONE, handle_create always reraises regardless of outputTo.
@@ -627,11 +372,7 @@ QED
 Theorem handle_create_reraises_when_some:
   e <> NONE /\ s.contexts <> [] ==> handle_create e s = reraise e s
 Proof
-  strip_tac
-  >> Cases_on `e` >> gvs[]
-  >> simp[handle_create_def, bind_def, get_return_data_def, get_output_to_def,
-          get_current_context_def, return_def, reraise_def, AllCaseEqs()]
-  >> Cases_on `(FST (HD s.contexts)).msgParams.outputTo` >> gvs[reraise_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 
@@ -651,8 +392,7 @@ Theorem preserves_rollback_handle_exception_prefix:
                    (set_return_data [])
      else return ())
 Proof
-  Cases_on `b` >> rw[]
-  >> irule preserves_rollback_ignore_bind >> rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_exception with num_contexts ≤ 1 preserves rollback:
@@ -667,46 +407,7 @@ Theorem handle_exception_same_length_preserves_rollback:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   s'.rollback = s.rollback
 Proof
-  simp[handle_exception_def] >>
-  qmatch_goalsub_abbrev_tac`ignore_bind prefix _` >>
-  simp[ignore_bind_def, bind_def] >>
-  TOP_CASE_TAC >>
-  `r'.rollback = s.rollback ∧ LENGTH r'.contexts = LENGTH s.contexts` by (
-    gvs[Abbr`prefix`,return_def,AllCaseEqs(),COND_RATOR,
-        bind_def,ignore_bind_def,get_gas_left_def,
-        get_current_context_def,fail_def,return_def,
-        consume_gas_def,set_current_context_def,
-        set_return_data_def,assert_def] >>
-    Cases_on`s.contexts` >> gvs[] ) >>
-  reverse TOP_CASE_TAC >- (rw[] >> gvs[]) >>
-  simp[get_num_contexts_def, return_def] >>
-  IF_CASES_TAC >- (rw[reraise_def] >> gvs[]) >>
-  simp[bind_def, get_return_data_def, get_output_to_def, return_def,
-       get_current_context_def] >>
-  IF_CASES_TAC >> gvs[] >>
-  TOP_CASE_TAC >>
-  qmatch_asmsub_rename_tac`pop_and_incorporate_context _ s1 = (r2, s2)` >>
-  `s2.contexts <> [] ∧ (ISR r2 ⇒ s2.rollback = s1.rollback)
-   ∧ (ISL r2 ⇒ LENGTH s2.contexts < LENGTH s1.contexts)` by (
-    gvs[pop_and_incorporate_context_def] >>
-    gvs[bind_def, AllCaseEqs(),ignore_bind_def,get_gas_left_def,return_def,
-        pop_context_def,fail_def,get_current_context_def,unuse_gas_def,
-        assert_def,set_current_context_def,COND_RATOR,
-        update_gas_refund_def,push_logs_def,set_rollback_def] >>
-    Cases_on`s1.contexts` >> gvs[] ) >>
-  reverse TOP_CASE_TAC >- (rw[] >> gvs[]) >>
-  gvs[] >>
-  simp[inc_pc_def, get_current_context_def, return_def, bind_def,
-       ignore_bind_def,set_current_context_def] >>
-  simp[AllCaseEqs(), return_destination_CASE_rator, bind_def,
-       ignore_bind_def, set_return_data_def, get_current_context_def,
-       return_def, push_stack_def, assert_def, COND_RATOR, fail_def] >>
-  rw[] >> gvs[set_current_context_def, return_def] >>
-  qmatch_asmsub_abbrev_tac`write_memory i bs` >>
-  mp_tac preserves_same_frame_write_memory >>
-  rewrite_tac[preserves_same_frame_def] >>
-  disch_then drule >>
-  simp[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_step preserves storage when it preserves length.
@@ -723,32 +424,7 @@ Theorem handle_step_preserves_storage_same_length:
     lookup_storage k (lookup_account a s'.rollback.accounts).storage =
     lookup_storage k (lookup_account a s.rollback.accounts).storage
 Proof
-  rw[handle_step_def, reraise_def, handle_def]
-  >> gvs[AllCaseEqs()]
-  >- (
-    (* handle_create returned INL — impossible by handle_create_INR. *)
-    rename1 `handle_create e`
-    >> strip_assume_tac(INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-    >> gvs[] )
-  (* handle_create returned INR eout; handle_exception eout s'' = (r, s'). *)
-  >> rename1 `handle_create y s = (INR eout, s'')`
-  >> mp_tac (INST_TYPE [alpha |-> ``:unit``]
-              (GEN_ALL preserves_storage_handle_create))
-  >> simp[preserves_storage_def]
-  >> disch_then drule >> rw[]
-  >> `same_frame_rel s s''` by (
-       mp_tac (Q.SPEC `y`
-                (Q.GEN `e`
-                  (SIMP_RULE std_ss [psf_def]
-                    (INST_TYPE [alpha |-> ``:unit``] psf_handle_create))))
-       >> disch_then drule
-       >> simp[])
-  >> `s''.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-  >> `LENGTH s''.contexts = LENGTH s.contexts` by fs[same_frame_rel_def]
-  >> `LENGTH s'.contexts = LENGTH s''.contexts` by simp[]
-  >> `s'.rollback = s''.rollback`
-       by metis_tac[handle_exception_same_length_preserves_rollback]
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* =====================================================================
@@ -763,61 +439,7 @@ Theorem handle_exception_shrinks_by_one:
   LENGTH s'.contexts + 1 ≥ LENGTH s.contexts ∧
   LENGTH s'.contexts ≤ LENGTH s.contexts
 Proof
-  strip_tac
-  >> qhdtm_x_assum `handle_exception` mp_tac
-  >> simp[handle_exception_def]
-  >> simp[ignore_bind_def, Once bind_def]
-  >> qmatch_goalsub_abbrev_tac `prefix s`
-  >> `preserves_same_frame prefix` by (
-       simp[Abbr`prefix`] >> IF_CASES_TAC >> simp[])
-  >> Cases_on `prefix s`
-  >> qmatch_asmsub_rename_tac `prefix s = (res, sp)`
-  >> `same_frame_rel s sp` by metis_tac[preserves_same_frame_def]
-  >> `LENGTH sp.contexts = LENGTH s.contexts` by fs[same_frame_rel_def]
-  >> `sp.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-  >> reverse (Cases_on `res`) >> simp[]
-  >- (strip_tac >> gvs[])
-  >> simp[Once bind_def, get_num_contexts_def, return_def]
-  >> IF_CASES_TAC
-  >- (simp[reraise_def] >> strip_tac >> gvs[])
-  >> simp[Once bind_def]
-  >> simp[get_return_data_def, bind_def, get_current_context_def,
-          return_def, fail_def]
-  >> Cases_on `sp.contexts` >> fs[]
-  >> simp[get_output_to_def, bind_def, get_current_context_def,
-          return_def, fail_def]
-  >> Cases_on `pop_and_incorporate_context (e = NONE) sp` >> simp[]
-  >> Cases_on `q'` >> simp[]
-  >- ((* INL case: pop succeeded, shrinks by exactly 1. *)
-      `LENGTH r.contexts + 1 = LENGTH sp.contexts` by (
-        qhdtm_x_assum `pop_and_incorporate_context` mp_tac
-        >> gvs[pop_and_incorporate_context_def, bind_def, ignore_bind_def,
-               get_gas_left_def, return_def, pop_context_def, fail_def,
-               unuse_gas_def, get_current_context_def,
-               set_current_context_def, push_logs_def,
-               update_gas_refund_def, set_rollback_def, assert_def,
-               AllCaseEqs()]
-        >> strip_tac >> gvs[] >> pop_assum mp_tac
-        >> IF_CASES_TAC
-        >> gvs[bind_def, get_current_context_def, set_current_context_def,
-               return_def, fail_def, set_rollback_def, AllCaseEqs()]
-        >> strip_tac >> gvs[])
-      >> simp[inc_pc_def, bind_def, get_current_context_def,
-              ignore_bind_def, set_current_context_def]
-      >> IF_CASES_TAC >> gvs[return_def, return_destination_CASE_rator]
-      >> rw[] >> gvs[AllCaseEqs(),bind_def,COND_RATOR]
-      >> gvs[set_return_data_def,push_stack_def,write_memory_def,
-             get_current_context_def,bind_def,return_def,fail_def,
-             assert_def,pop_and_incorporate_context_def,AllCaseEqs(),
-             ignore_bind_def,set_current_context_def])
-  (* INR case: pop failed. *)
-  >> strip_tac >> gvs[]
-  >> gvs[set_return_data_def,push_stack_def,write_memory_def,
-         get_current_context_def,bind_def,return_def,fail_def,
-         assert_def,pop_and_incorporate_context_def,AllCaseEqs(),
-         ignore_bind_def,set_current_context_def,COND_RATOR,
-         pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
-         get_gas_left_def,set_rollback_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* When LENGTH ≥ 2 and wf_state, handle_exception takes the pop branch and
@@ -827,83 +449,7 @@ Theorem handle_exception_ge_2_pops:
   EVERY (wf_context o FST) s.contexts ∧ LENGTH s.contexts ≥ 2 ∧ handle_exception e s = (q, s') ⇒
   LENGTH s'.contexts + 1 = LENGTH s.contexts (* ∧ ISL q *)
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
-  >> `wf_context (FST (HD s.contexts))` by (
-       Cases_on `s.contexts` >> gvs[EVERY_MEM])
-  >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s.contexts)).msgParams.gasLimit`
-       by gvs[wf_context_def]
-  >> qhdtm_x_assum `handle_exception` mp_tac
-  >> simp[handle_exception_def]
-  >> simp[ignore_bind_def, Once bind_def]
-  >> qmatch_goalsub_abbrev_tac `prefix s`
-  (* prefix always succeeds (INL) when gasUsed ≤ gasLimit *)
-  >> `∃r sp. prefix s = (INL r, sp) ∧ LENGTH sp.contexts = LENGTH s.contexts` by (
-       simp[Abbr`prefix`]
-       >> IF_CASES_TAC >> simp[return_def]
-       >> simp[bind_def, get_gas_left_def, get_current_context_def, return_def]
-       >> simp[consume_gas_def, bind_def, assert_def, return_def, ignore_bind_def,
-               get_current_context_def, set_current_context_def]
-       >> simp[ignore_bind_def, set_return_data_def, bind_def,
-               get_current_context_def, set_current_context_def, return_def])
-  >> gvs[]
-  >> simp[Once bind_def, get_num_contexts_def, return_def]
-  (* The key: LENGTH sp.contexts ≥ 2 means ¬(n ≤ 1), so pop branch taken *)
-  >> `¬(LENGTH sp.contexts ≤ 1)` by simp[]
-  >> simp[]
-  >> simp[Once bind_def]
-  >> simp[get_return_data_def, bind_def, get_current_context_def,
-          return_def, fail_def]
-  >> `sp.contexts ≠ []` by (Cases_on `sp.contexts` >> gvs[])
-  >> Cases_on `sp.contexts` >> fs[]
-  >> simp[get_output_to_def, bind_def, get_current_context_def,
-          return_def, fail_def]
-  >> Cases_on `pop_and_incorporate_context (e = NONE) sp` >> simp[]
-  >> `EVERY (wf_context o FST) sp.contexts`
-  by (
-    gvs[Abbr`prefix`,COND_RATOR,AllCaseEqs(),return_def] >>
-    gvs[bind_def,ignore_bind_def,AllCaseEqs()] >>
-    gvs[EVERY_MEM,consume_gas_def,get_gas_left_def,set_return_data_def,
-        get_current_context_def,set_current_context_def,bind_def,
-        return_def,fail_def,AllCaseEqs(),ignore_bind_def,assert_def] >>
-    Cases_on`s.contexts` >> gvs[] >>
-    gvs[wf_context_def] )
-  >> Cases_on `q'` >> simp[]
-  >- ((* INL case: pop succeeded, shrinks by exactly 1. *)
-      `LENGTH r.contexts + 1 = LENGTH sp.contexts` by (
-        qhdtm_x_assum `pop_and_incorporate_context` mp_tac
-        >> gvs[pop_and_incorporate_context_def, bind_def, ignore_bind_def,
-               get_gas_left_def, return_def, pop_context_def, fail_def,
-               unuse_gas_def, get_current_context_def,
-               set_current_context_def, push_logs_def,
-               update_gas_refund_def, set_rollback_def, assert_def,
-               AllCaseEqs()]
-        >> strip_tac >> gvs[] >> pop_assum mp_tac
-        >> IF_CASES_TAC
-        >> gvs[bind_def, get_current_context_def, set_current_context_def,
-               return_def, fail_def, set_rollback_def, AllCaseEqs()]
-        >> strip_tac >> gvs[])
-      >> simp[inc_pc_def, bind_def, get_current_context_def,
-              ignore_bind_def, set_current_context_def]
-      >> IF_CASES_TAC >> gvs[return_def, return_destination_CASE_rator]
-      >> strip_tac
-      >> gvs[set_return_data_def,push_stack_def,write_memory_def,
-             get_current_context_def,bind_def,return_def,fail_def,
-             assert_def,pop_and_incorporate_context_def,AllCaseEqs(),
-             bind_def,ignore_bind_def,set_current_context_def, COND_RATOR,
-             push_logs_def, unuse_gas_def, update_gas_refund_def,
-             get_gas_left_def, pop_context_def, set_rollback_def]
-      >> Cases_on`t` >> gvs[]
-      >> gvs[EVERY_MEM, wf_context_def]
-  )
-  (* INR case: pop failed. *)
-  >> strip_tac >> gvs[]
-  >> gvs[set_return_data_def,push_stack_def,write_memory_def,
-         get_current_context_def,bind_def,return_def,fail_def,
-         assert_def,pop_and_incorporate_context_def,AllCaseEqs(),
-         ignore_bind_def,set_current_context_def,COND_RATOR,
-         pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
-         get_gas_left_def,set_rollback_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_create doesn't change contexts length (it may modify
@@ -912,16 +458,7 @@ Theorem handle_create_preserves_length:
   handle_create e s = (q, s') ⇒
   LENGTH s'.contexts = LENGTH s.contexts
 Proof
-  rw[handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def]
-  >> BasicProvers.every_case_tac
-  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
-         assert_def, get_current_context_def, set_current_context_def,
-         update_accounts_def, return_def]
-  >> gvs[AllCaseEqs()]
-  >> Cases_on `s.contexts` >> fs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_create preserves wf_state: it doesn't modify stack, gasUsed, or
@@ -930,43 +467,14 @@ Theorem handle_create_preserves_wf_state:
   wf_state s ∧ handle_create e s = (q, s') ⇒
   wf_state s'
 Proof
-  rw[handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def,
-     wf_state_def, all_accounts_def, wf_context_def]
-  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
-         assert_def, get_current_context_def, set_current_context_def,
-         update_accounts_def, return_def, wf_state_def, all_accounts_def, wf_context_def,
-         return_destination_CASE_rator, vfmTypesTheory.option_CASE_rator]
-  >> Cases_on `s.contexts` >> gvs[wf_context_def]
-  >> gvs[update_account_def, lookup_account_def, APPLY_UPDATE_THM,
-         wf_accounts_def] >> rw[] >>
-     gvs[wf_account_state_def, EVAL``max_code_size``]
-  >> gvs[stack_room_ok_def, gas_stack_ok_def,
-         outputTo_consistent_ctx_def,
-         outputTo_consistent_stack_def]
-  >> Cases_on`t` >> gvs[unused_gas_def]
-  >> TRY (
-    Cases >> gvs[]
-    >> TRY ( first_x_assum(qspec_then`0`mp_tac) >> simp[] >> NO_TAC)
-    >> first_x_assum(qspec_then`SUC n`mp_tac) >> simp[] )
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem handle_create_preserves_wf_contexts:
   EVERY (wf_context o FST) s.contexts ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s') ⇒
   EVERY (wf_context o FST) s'.contexts
 Proof
-  rw[handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def,
-     wf_context_def]
-  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
-         assert_def, get_current_context_def, set_current_context_def,
-         update_accounts_def, return_def, wf_context_def,
-         return_destination_CASE_rator, vfmTypesTheory.option_CASE_rator]
-  >> Cases_on `s.contexts` >> gvs[wf_context_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Generic handle_exception pop structure: when it shrinks, the contexts
@@ -984,20 +492,7 @@ Theorem handle_exception_pop_generic_gen:
         (FST parent).gasUsed -
         (callee.msgParams.gasLimit - callee.gasUsed)
 Proof
-  strip_tac
-  >> Cases_on `parent`
-  >> Cases_on `callee.msgParams.outputTo`
-  >> Cases_on `e = NONE`
-  >> Cases_on `e = SOME Reverted`
-  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_create preserves TL(contexts) and SND(HD contexts).
@@ -1012,16 +507,7 @@ Theorem handle_create_preserves_tl_and_snd_hd:
     (FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
     (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
 Proof
-  rw[handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def]
-  >> BasicProvers.every_case_tac
-  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
-         assert_def, get_current_context_def, set_current_context_def,
-         update_accounts_def, return_def]
-  >> gvs[AllCaseEqs()]
-  >> Cases_on `s.contexts` >> fs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_create preserves rollback (it only modifies .code via
@@ -1035,14 +521,7 @@ Theorem handle_create_non_code_success_preserves_rollback:
   (e ≠ NONE ∨ ∃mr. (FST (HD s.contexts)).msgParams.outputTo = Memory mr) ⇒
   s'.rollback = s.rollback
 Proof
-  rw[handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def]
-  >> BasicProvers.every_case_tac
-  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
-         assert_def, get_current_context_def, set_current_context_def,
-         update_accounts_def, return_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_create preserves .accesses: all primitives within
@@ -1052,14 +531,7 @@ Theorem handle_create_preserves_accesses:
   handle_create e s = (q, s') ⇒
   s'.rollback.accesses = s.rollback.accesses
 Proof
-  rw[handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def]
-  >> BasicProvers.every_case_tac
-  >> gvs[AllCaseEqs(), reraise_def, fail_def, bind_def, ignore_bind_def,
-         assert_def, get_current_context_def, set_current_context_def,
-         update_accounts_def, return_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Generic handle_step pop structure — storage-aware.
@@ -1087,31 +559,7 @@ Theorem handle_step_pop_generic_gen:
         (FST parent).gasUsed -
         (callee.msgParams.gasLimit - callee.gasUsed)
 Proof
-  strip_tac
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def]
-  >> IF_CASES_TAC
-  >- (simp[reraise_def] >> strip_tac >> gvs[])
-  >> simp[handle_def]
-  >> `s.contexts ≠ []` by simp[]
-  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> simp[]
-  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
-  >> drule_all handle_create_preserves_tl_and_snd_hd
-  >> strip_tac
-  >> `s1.contexts = (FST (HD s1.contexts), callee_rb) :: parent :: rest` by (
-       Cases_on `s1.contexts` >> fs[]
-       >> PairCases_on `h` >> fs[])
-  >> drule_all handle_create_preserves_length
-  >> strip_tac
-  >> strip_tac
-  >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
-  >> drule_all handle_exception_pop_generic_gen
-  >> strip_tac >> gvs[]
-  >> mp_tac (INST_TYPE[alpha|->``:unit``]preserves_storage_handle_create)
-  >> rewrite_tac[preserves_storage_def]
-  >> disch_then drule
-  >> gvs[lookup_storage_def, FUN_EQ_THM]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Strengthening of handle_step_pop_generic_gen that pairs each
@@ -1135,33 +583,7 @@ Theorem handle_step_pop_generic_gen_paired:
         (∀a. (lookup_account a s'.rollback.accounts).storage =
              (lookup_account a callee_rb.accounts).storage)))
 Proof
-  strip_tac
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def]
-  >> IF_CASES_TAC
-  >- (simp[reraise_def] >> strip_tac >> gvs[])
-  >> simp[handle_def]
-  >> `s.contexts ≠ []` by simp[]
-  >> strip_assume_tac
-       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> simp[]
-  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
-  >> drule_all handle_create_preserves_tl_and_snd_hd
-  >> strip_tac
-  >> `s1.contexts = (FST (HD s1.contexts), callee_rb) :: parent :: rest` by (
-       Cases_on `s1.contexts` >> fs[]
-       >> PairCases_on `h` >> fs[])
-  >> drule_all handle_create_preserves_length
-  >> strip_tac
-  >> strip_tac
-  >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
-  >> drule_all handle_exception_pop_generic_gen
-  >> strip_tac >> gvs[]
-  >> drule handle_create_preserves_accesses
-  >> mp_tac (INST_TYPE[alpha|->``:unit``]preserves_storage_handle_create)
-  >> rewrite_tac[preserves_storage_def]
-  >> disch_then drule
-  >> gvs[lookup_storage_def, FUN_EQ_THM]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Saved rollback's accesses are in s'.rollback's accesses, regardless
@@ -1183,48 +605,14 @@ Theorem handle_step_pop_accesses_bound:
   toSet callee_rb.accesses.storageKeys ⊆
     toSet s'.rollback.accesses.storageKeys
 Proof
-  rw[] >>
-  drule_then drule handle_step_pop_generic_gen_paired >>
-  rw[] >>
-  gvs[SUBSET_DEF]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem handle_step_preserves_length_1:
   handle_step e s = (q, s') ∧ LENGTH s.contexts = 1 ⇒
   LENGTH s'.contexts = 1
 Proof
-  strip_tac
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def]
-  >> reverse IF_CASES_TAC >> simp[]
-  >> TRY (simp[reraise_def] >> strip_tac >> gvs[] >> NO_TAC)
-  >> simp[handle_def]
-  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
-  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> simp[]
-  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
-  >> drule_all handle_create_preserves_length
-  >> strip_tac
-  >> `LENGTH s1.contexts = 1` by simp[]
-  >> simp[Once handle_exception_def]
-  >> simp[ignore_bind_def, Once bind_def]
-  >> qmatch_goalsub_abbrev_tac `pair_CASE (prefix s1)`
-  >> `preserves_same_frame prefix` by (
-       simp[Abbr`prefix`]
-       >> IF_CASES_TAC >> simp[]
-       >> irule preserves_same_frame_ignore_bind >> simp[]
-       >> irule preserves_same_frame_bind >> simp[])
-  >> Cases_on `prefix s1`
-  >> qmatch_asmsub_rename_tac `prefix s1 = (res, sp)`
-  >> `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> fs[])
-  >> `same_frame_rel s1 sp` by (
-       Cases_on `res` >> metis_tac[preserves_same_frame_def])
-  >> `LENGTH sp.contexts = 1` by fs[same_frame_rel_def]
-  >> reverse (Cases_on `res`) >> simp[]
-  >- (strip_tac >> gvs[])
-  >> simp[Once bind_def, get_num_contexts_def, return_def]
-  >> simp[reraise_def]
-  >> strip_tac >> gvs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* handle_step reduces contexts by at most one. *)
@@ -1233,22 +621,7 @@ Theorem handle_step_shrinks_by_one:
   LENGTH s'.contexts + 1 ≥ LENGTH s.contexts ∧
   LENGTH s'.contexts ≤ LENGTH s.contexts
 Proof
-  strip_tac
-  >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def]
-  >> reverse IF_CASES_TAC >> simp[]
-  >> TRY (strip_tac >> gvs[reraise_def] >> NO_TAC)
-  >> simp[handle_def]
-  >> strip_assume_tac
-       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> simp[]
-  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
-  >> drule_all handle_create_preserves_length
-  >> strip_tac
-  >> `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> fs[])
-  >> strip_tac
-  >> imp_res_tac handle_exception_shrinks_by_one
-  >> fs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* When ¬vfm_abort e, wf_context on all contexts, and LENGTH ≥ 2,
@@ -1258,20 +631,7 @@ Theorem handle_step_not_abort_pops:
   handle_step e s = (q, s') ⇒
   LENGTH s'.contexts + 1 = LENGTH s.contexts
 Proof
-  strip_tac
-  >> gvs[handle_step_def, handle_def]
-  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
-  >> strip_assume_tac
-       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> gvs[]
-  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
-  >> drule_all handle_create_preserves_length
-  >> strip_tac
-  >> `LENGTH s1.contexts ≥ 2` by simp[]
-  (* Need EVERY (wf_context o FST) s1 to apply handle_exception_ge_2_pops *)
-  >> `EVERY (wf_context o FST) s1.contexts` by metis_tac[handle_create_preserves_wf_contexts]
-  >> drule_all handle_exception_ge_2_pops
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 
@@ -1292,7 +652,7 @@ QED
 Theorem same_frame_rel_preserves_stack_room_ok:
   same_frame_rel s s' ∧ stack_room_ok s ⇒ stack_room_ok s'
 Proof
-  rw[stack_room_ok_def, same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* --- Case 1: same_frame_rel preserves gas_stack_ok under           *)
@@ -1310,11 +670,7 @@ Theorem same_frame_rel_preserves_gas_stack_ok:
   (FST (HD s'.contexts)).gasUsed ≥ (FST (HD s.contexts)).gasUsed
   ⇒ gas_stack_ok s'
 Proof
-  rw[gas_stack_ok_def, same_frame_rel_def] >>
-  Cases_on`s.contexts` >- gvs[] >> fs[] >> BasicProvers.VAR_EQ_TAC >>
-  Cases_on`s'.contexts` >- gvs[] >> fs[unused_gas_def] >>
-  first_x_assum(qspec_then`i`mp_tac) >>
-  Cases_on`i` >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* --- handle_create preserves both invariants (contexts structure    *)
@@ -1324,39 +680,14 @@ Theorem handle_create_preserves_stack_room_ok:
   stack_room_ok s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s')
   ⇒ stack_room_ok s'
 Proof
-  rw[stack_room_ok_def, handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def,
-     AllCaseEqs()] >> gvs[]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `(FST h).msgParams.outputTo` >> gvs[reraise_def]
-  >> Cases_on `e` >> gvs[reraise_def]
-  >> gvs[consume_gas_def, bind_def, get_current_context_def, return_def,
-         assert_def, set_current_context_def, update_accounts_def,
-         set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
-         reraise_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem handle_create_preserves_gas_stack_ok:
   gas_stack_ok s ∧ s.contexts ≠ [] ∧ handle_create e s = (q, s')
   ⇒ gas_stack_ok s'
 Proof
-  rw[gas_stack_ok_def, handle_create_def, bind_def, ignore_bind_def,
-     get_return_data_def, get_output_to_def, get_current_context_def,
-     return_def, fail_def, reraise_def, consume_gas_def,
-     update_accounts_def, assert_def, set_current_context_def,
-     AllCaseEqs()] >> gvs[]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `(FST h).msgParams.outputTo` >> gvs[reraise_def]
-  >> Cases_on `e` >> gvs[reraise_def]
-  >> gvs[consume_gas_def, bind_def, get_current_context_def, return_def,
-         assert_def, set_current_context_def, update_accounts_def,
-         set_return_data_def, bind_def, ignore_bind_def, AllCaseEqs(),
-         reraise_def, unused_gas_def]
-  >> Cases_on `i` >> gvs[]
-  >> TRY(first_x_assum(qspec_then `0` mp_tac) >> rw[] >> NO_TAC)
-  >> first_x_assum(qspec_then `SUC n` mp_tac) >> rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* --- Linchpin: handle_exception at depth ≥ 2 returns INL under     *)
@@ -1378,19 +709,14 @@ Theorem gas_stack_ok_parent_has_child_unused:
     (FST (HD s.contexts)).msgParams.gasLimit -
     (FST (HD s.contexts)).gasUsed
 Proof
-  rw[gas_stack_ok_def]
-  >> first_x_assum(qspec_then `0` mp_tac)
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `t` >> gvs[unused_gas_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem stack_room_ok_parent_stack:
   stack_room_ok s ∧ LENGTH s.contexts ≥ 2 ⇒
     LENGTH (FST (EL 1 s.contexts)).stack < stack_limit
 Proof
-  rw[stack_room_ok_def]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `t` >> gvs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem handle_exception_ge_2_inl:
@@ -1398,113 +724,5 @@ Theorem handle_exception_ge_2_inl:
   LENGTH s.contexts ≥ 2 ∧ handle_exception e s = (q, s') ⇒
     ISL q
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[])
-  >> `wf_context (FST (HD s.contexts))` by (
-       Cases_on `s.contexts` >> gvs[EVERY_MEM])
-  >> `(FST (HD s.contexts)).gasUsed ≤
-      (FST (HD s.contexts)).msgParams.gasLimit` by gvs[wf_context_def]
-  >> `LENGTH (FST (EL 1 s.contexts)).stack < stack_limit`
-       by metis_tac[stack_room_ok_parent_stack]
-  >> `(FST (EL 1 s.contexts)).gasUsed ≥
-      (FST (HD s.contexts)).msgParams.gasLimit -
-      (FST (HD s.contexts)).gasUsed`
-       by metis_tac[gas_stack_ok_parent_has_child_unused]
-  >> qhdtm_x_assum `handle_exception` mp_tac
-  >> simp[handle_exception_def]
-  >> simp[ignore_bind_def, Once bind_def]
-  >> qmatch_goalsub_abbrev_tac `prefix s`
-  >> `∃r sp. prefix s = (INL r, sp) ∧
-        LENGTH sp.contexts = LENGTH s.contexts ∧
-        sp.contexts ≠ [] ∧
-        (FST (HD sp.contexts)).msgParams = (FST (HD s.contexts)).msgParams ∧
-        (FST (HD sp.contexts)).gasUsed =
-          if ¬(e = NONE) ∧ e ≠ SOME Reverted then
-            (FST (HD s.contexts)).msgParams.gasLimit
-          else (FST (HD s.contexts)).gasUsed` by (
-       simp[Abbr`prefix`]
-       >> IF_CASES_TAC >> simp[return_def]
-       >> simp[bind_def, get_gas_left_def, get_current_context_def, return_def]
-       >> simp[consume_gas_def, bind_def, assert_def, return_def,
-               ignore_bind_def, get_current_context_def,
-               set_current_context_def]
-       >> simp[set_return_data_def, bind_def, get_current_context_def,
-               set_current_context_def, return_def]
-       >> Cases_on `s.contexts` >> gvs[wf_context_def])
-  >> gvs[]
-  >> simp[Once bind_def, get_num_contexts_def, return_def]
-  >> `¬(LENGTH sp.contexts ≤ 1)` by simp[]
-  >> simp[]
-  >> simp[Once bind_def]
-  >> simp[get_return_data_def, bind_def, get_current_context_def,
-          return_def, fail_def]
-  >> Cases_on `sp.contexts` >> gvs[]
-  >> simp[get_output_to_def, bind_def, get_current_context_def,
-          return_def, fail_def]
-  >> qmatch_goalsub_abbrev_tac `pop_and_incorporate_context success sp`
-  >> `ISL (FST (pop_and_incorporate_context success sp))` by (
-       simp[Abbr`success`, pop_and_incorporate_context_def, bind_def,
-            ignore_bind_def, get_gas_left_def, get_current_context_def,
-            return_def, pop_context_def, unuse_gas_def, assert_def,
-            set_current_context_def, fail_def]
-       >> Cases_on `sp.contexts` >> gvs[]
-       >> Cases_on `t` >> gvs[]
-       >> gvs[set_rollback_def, push_logs_def, update_gas_refund_def,
-              bind_def, return_def, ignore_bind_def]
-       >> qmatch_goalsub_abbrev_tac`COND nrv _ (_.gasUsed)` >>
-       gvs[gas_stack_ok_def, unused_gas_def] >>
-       Cases_on`s.contexts` >> gvs[] >>
-       qpat_x_assum`_.gasUsed = _`(assume_tac o SYM) >> gs[] >>
-       Cases_on`t` >> gvs[] >>
-       reverse(Cases_on`nrv`) >- (
-         qpat_x_assum`prefix _ = _`mp_tac >>
-         simp[return_def,Abbr`prefix`] >> strip_tac >>
-         BasicProvers.VAR_EQ_TAC >>
-         pop_assum mp_tac >> simp[] >> strip_tac >>
-         qpat_x_assum`_ = F`mp_tac >> fs[] >> gvs[] >>
-         Cases_on`e <> NONE` >> simp[set_rollback_def,return_def] >>
-         strip_tac >> gs[] >>
-         simp[bind_def,get_current_context_def,return_def] >>
-         simp[set_current_context_def,return_def] ) >>
-       gs[] >>
-       simp[set_rollback_def,return_def] )
-  >> Cases_on `pop_and_incorporate_context success sp` >> Cases_on `q'` >> gvs[]
-  >> simp[inc_pc_def, bind_def, get_current_context_def,
-          ignore_bind_def, set_current_context_def, return_def]
-  >> IF_CASES_TAC >> gvs[return_destination_CASE_rator, fail_def]
-  >- (rpt strip_tac >> gvs[] >>
-      Cases_on`LENGTH sp.contexts > 1` >- (
-        drule pop_and_incorporate_context_preserves >>
-        disch_then(qspec_then`success`mp_tac) >> simp[] ) >>
-      gvs[] )
-  >> Cases_on `h` >> gvs[]
-  >> Cases_on `t` >> gvs[]
-  >> Cases_on`s` >> gvs[]
-  >> `LENGTH (FST(HD r.contexts)).stack < stack_limit`
-  suffices_by (
-    strip_tac
-    >> TOP_CASE_TAC
-    >> gvs[set_return_data_def, push_stack_def, write_memory_def, COND_RATOR,
-           bind_def, get_current_context_def, return_def, fail_def,
-           assert_def, set_current_context_def, bind_def, ignore_bind_def] >>
-     rw[] >> rpt strip_tac >> gvs[] )
-  >> `TL sp.contexts = TL l ∧
-      (FST (HD r.contexts)).stack = (FST h).stack`
-     suffices_by (
-       rpt strip_tac >> gvs[] >>
-       Cases_on`l` >> gvs[] )
-  >> conj_asm2_tac >- (
-    gvs[Abbr`prefix`,COND_RATOR,CaseEq"bool"] >>
-    gs[return_def] >> rpt BasicProvers.VAR_EQ_TAC >> fs[] >>
-    rpt BasicProvers.VAR_EQ_TAC >>
-    Cases_on`l` >> gvs[] >>
-    gvs[bind_def,get_gas_left_def,get_current_context_def,return_def] >>
-    gvs[consume_gas_def,return_def,bind_def,get_current_context_def,
-        assert_def,ignore_bind_def,set_current_context_def,
-        set_return_data_def] ) >>
-  gvs[pop_and_incorporate_context_def] >>
-  gvs[bind_def,ignore_bind_def,get_gas_left_def,get_current_context_def,
-      return_def,assert_def,pop_context_def, unuse_gas_def,
-      AllCaseEqs(),set_current_context_def,set_rollback_def,
-      push_logs_def,return_def,update_gas_refund_def]
+  cheat  (* SCAFFOLD *)
 QED

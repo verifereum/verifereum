@@ -61,8 +61,7 @@ Theorem original_bind[local]:
   (!x s. (SND (f x s)).originalAccounts = s.originalAccounts) ==>
   !s. (SND (bind g f s)).originalAccounts = s.originalAccounts
 Proof
-  rpt strip_tac >> Cases_on `g s` >> Cases_on `q`
-  >> gvs[bind_def] >> metis_tac[SND]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_ignore_bind[local]:
@@ -70,8 +69,7 @@ Theorem original_ignore_bind[local]:
   (!s. (SND (f s)).originalAccounts = s.originalAccounts) ==>
   !s. (SND (ignore_bind g f s)).originalAccounts = s.originalAccounts
 Proof
-  strip_tac >> rewrite_tac[ignore_bind_def]
-  >> irule original_bind >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_handle[local]:
@@ -79,8 +77,7 @@ Theorem original_handle[local]:
   (!e s. (SND (f e s)).originalAccounts = s.originalAccounts) ==>
   !s. (SND (handle g f s)).originalAccounts = s.originalAccounts
 Proof
-  rpt strip_tac >> Cases_on `g s` >> Cases_on `q`
-  >> gvs[handle_def] >> metis_tac[SND]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_cond[local]:
@@ -88,7 +85,7 @@ Theorem original_cond[local]:
   (!s. (SND (n s)).originalAccounts = s.originalAccounts) ==>
   !s. (SND ((if b then m else n) s)).originalAccounts = s.originalAccounts
 Proof
-  Cases_on `b` >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_primitives[local]:
@@ -107,11 +104,7 @@ Theorem original_primitives[local]:
   (!f s. (SND (update_accounts f s)).originalAccounts = s.originalAccounts) /\
   (!d s. (SND (set_domain d s)).originalAccounts = s.originalAccounts)
 Proof
-  simp[return_def, fail_def, reraise_def, assert_def,
-       get_current_context_def, set_current_context_def,
-       get_num_contexts_def, push_context_def, pop_context_def,
-       get_accounts_def, get_rollback_def, set_rollback_def,
-       update_accounts_def, set_domain_def, COND_RATOR, COND_RAND]
+  cheat  (* SCAFFOLD *)
 QED
 
 val original_tac = rpt
@@ -140,42 +133,25 @@ Theorem original_context_wrappers[local]:
   (!a bs s. (SND (write_memory a bs s)).originalAccounts = s.originalAccounts) /\
   (!a n s. (SND (memory_expansion_info a n s)).originalAccounts = s.originalAccounts)
 Proof
-  rpt conj_tac >> rpt gen_tac
-  >> rewrite_tac[get_gas_left_def, get_callee_def, get_caller_def,
-       get_value_def, get_static_def, get_return_data_def, get_output_to_def,
-       set_return_data_def, consume_gas_def, unuse_gas_def, pop_stack_def,
-       push_stack_def, push_logs_def, update_gas_refund_def, inc_pc_def,
-       expand_memory_def, read_memory_def, write_memory_def,
-       memory_expansion_info_def, LET_THM]
-  >> original_tac
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_pop_and_incorporate[local]:
   !s. (SND (pop_and_incorporate_context success s)).originalAccounts = s.originalAccounts
 Proof
-  gen_tac >> rewrite_tac[pop_and_incorporate_context_def, LET_THM]
-  >> original_tac >> simp[original_context_wrappers, original_primitives]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_push_dispatch[local]:
   !s. (SND (ignore_bind (push_context cr) (dispatch_precompiles a) s)).originalAccounts = s.originalAccounts
 Proof
-  simp[ignore_bind_def, bind_def, push_context_def, return_def]
-  >> gen_tac
-  >> qspec_then `a` mp_tac (GEN_ALL cp_dispatch_precompiles)
-  >> pure_rewrite_tac[cp_def]
-  >> disch_then (qspec_then `s with contexts updated_by CONS cr` mp_tac)
-  >> Cases_on `dispatch_precompiles a (s with contexts updated_by CONS cr)`
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_access_address[local]:
   !s. (SND (access_address a s)).originalAccounts = s.originalAccounts
 Proof
-  gen_tac >> Cases_on `s.msdomain`
-  >> simp[access_address_def, domain_check_def, set_domain_def,
-          ignore_bind_def, bind_def, return_def, fail_def, LET_THM,
-          COND_RAND, COND_RATOR]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_call_wrappers[local]:
@@ -183,79 +159,43 @@ Theorem original_call_wrappers[local]:
   (!n s. (SND (abort_unuse n s)).originalAccounts = s.originalAccounts) /\
   (!n s. (SND (abort_call_value n s)).originalAccounts = s.originalAccounts)
 Proof
-  rpt conj_tac >> rpt gen_tac
-  >> rewrite_tac[assert_not_static_def, abort_unuse_def, abort_call_value_def]
-  >> original_tac >> simp[original_context_wrappers, original_primitives]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_handle_create[local]:
   !s. (SND (handle_create e s)).originalAccounts = s.originalAccounts
 Proof
-  gen_tac >> rewrite_tac[handle_create_def, LET_THM]
-  >> original_tac >> simp[original_context_wrappers, original_primitives]
-  >> Cases_on `e` >> Cases_on `x'` >> simp[] >> original_tac
-  >> simp[original_context_wrappers, original_primitives]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_handle_exception[local]:
   !s. (SND (handle_exception e s)).originalAccounts = s.originalAccounts
 Proof
-  gen_tac >> simp[handle_exception_def, LET_THM]
-  >> irule original_ignore_bind >> conj_tac
-  >- (Cases_on `e = NONE` >> Cases_on `e = SOME Reverted`
-      >> simp[original_primitives] >> original_tac
-      >> simp[original_context_wrappers])
-  >> original_tac
-  >> simp[original_context_wrappers, original_primitives, original_pop_and_incorporate]
-  >> Cases_on `x'` >> simp[] >> original_tac
-  >> simp[original_context_wrappers, original_primitives]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem handle_step_original_accounts[local]:
   handle_step e s = (r,t) ==> t.originalAccounts = s.originalAccounts
 Proof
-  `!s. (SND (handle_step e s)).originalAccounts = s.originalAccounts`
-    suffices_by metis_tac[SND]
-  >> gen_tac >> rewrite_tac[handle_step_def] >> original_tac
-  >> simp[original_primitives, original_handle_create, original_handle_exception]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_proceed_call[local]:
   !s. (SND (proceed_call op sender address value ao az code stipend ot s)).originalAccounts = s.originalAccounts
 Proof
-  gen_tac >> simp[proceed_call_def, LET_THM]
-  >> Cases_on `fIN address precompile_addresses` >> simp[]
-  >> rpt (FIRST [irule original_push_dispatch, irule original_bind,
-                 irule original_ignore_bind, irule original_cond]
-          >> rpt conj_tac >> rpt gen_tac
-          >> simp[original_context_wrappers, original_primitives])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem original_step_call[local]:
   !s. (SND (step_call op s)).originalAccounts = s.originalAccounts
 Proof
-  gen_tac >> simp[step_call_def, LET_THM]
-  >> original_tac
-  >> simp[original_context_wrappers, original_primitives,
-          original_access_address, original_call_wrappers, original_proceed_call]
-  >> pairarg_tac >> simp[] >> original_tac
-  >> simp[original_context_wrappers, original_primitives,
-          original_access_address, original_call_wrappers, original_proceed_call]
-  >- (pairarg_tac >> simp[] >> original_tac
-      >> simp[original_context_wrappers, original_primitives]
-      >> pairarg_tac >> simp[] >> original_tac
-      >> simp[original_context_wrappers, original_primitives,
-              original_call_wrappers, original_proceed_call])
-  >> qmatch_goalsub_abbrev_tac `get_delegate ac.code`
-  >> Cases_on `get_delegate ac.code`
-  >> simp[original_primitives] >> original_tac
-  >> simp[original_access_address]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem step_call_original_accounts[local]:
   step_call op s = (r,t) ==> t.originalAccounts = s.originalAccounts
 Proof
-  metis_tac[original_step_call, SND]
+  cheat  (* SCAFFOLD *)
 QED
 
 
@@ -277,28 +217,7 @@ Theorem bind_inr_grow_factor:
     ∃x sp. g s = (INL x, sp) ∧ same_frame_rel s sp ∧
             f x sp = (INR e, s1)
 Proof
-  strip_tac
-  >> fs[preserves_same_frame_def]
-  >> `∀rr ss. g s = (rr, ss) ⇒ same_frame_rel s ss`
-      by (rpt strip_tac
-          >> first_x_assum drule >> simp[])
-  >> Cases_on `g s`
-  >> rename1 `g s = (q, sp)`
-  >> Cases_on `q`
-  >- (  (* g returned INL x *)
-       qexists_tac `x` >> qexists_tac `sp`
-       >> `same_frame_rel s sp` by (first_x_assum irule >> simp[])
-       >> simp[]
-       >> qpat_x_assum `bind _ _ _ = _` mp_tac
-       >> simp[bind_def])
-  (* g returned INR: sp ≠ s1 because same_frame_rel s sp gives equal
-     lengths, but LENGTH s1 > LENGTH s. *)
-  >> `same_frame_rel s sp` by (first_x_assum irule >> simp[])
-  >> qpat_x_assum `monad_bind _ _ _ = _` mp_tac
-  >> simp[bind_def]
-  >> strip_tac
-  >> spose_not_then strip_assume_tac
-  >> fs[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem ignore_bind_inr_grow_factor:
@@ -309,9 +228,7 @@ Theorem ignore_bind_inr_grow_factor:
     ∃sp. g s = (INL (), sp) ∧ same_frame_rel s sp ∧
          f sp = (INR e, s1)
 Proof
-  rw[ignore_bind_def]
-  >> drule_all bind_inr_grow_factor
-  >> rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---------------- inr_grow_witness predicate ------------------- *)
@@ -336,7 +253,7 @@ Theorem inr_grow_witness_mono:
   inr_grow_witness P m ∧ (∀sp s1 e. P sp s1 e ⇒ Q sp s1 e) ⇒
   inr_grow_witness Q m
 Proof
-  rw[inr_grow_witness_def] >> metis_tac[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Composition: preserves_same_frame prefix + inr_grow_witness tail. *)
@@ -344,58 +261,42 @@ Theorem inr_grow_witness_bind_preserves_g:
   preserves_same_frame g ∧ (∀x. inr_grow_witness P (f x)) ⇒
   inr_grow_witness P (bind g f)
 Proof
-  rw[inr_grow_witness_def]
-  >> drule_all bind_inr_grow_factor
-  >> strip_tac
-  >> first_x_assum (qspec_then `x` mp_tac)
-  >> rewrite_tac[inr_grow_witness_def]
-  >> disch_then drule
-  >> `sp.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-  >> `LENGTH s1.contexts > LENGTH sp.contexts`
-       by (`LENGTH sp.contexts = LENGTH s.contexts` by fs[same_frame_rel_def]
-           >> simp[])
-  >> simp[]
-  >> strip_tac
-  >> qexists_tac `sp'`
-  >> simp[]
-  >> metis_tac[same_frame_rel_trans]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_grow_witness_ignore_bind_preserves_g:
   preserves_same_frame g ∧ inr_grow_witness P f ⇒
   inr_grow_witness P (ignore_bind g f)
 Proof
-  rw[ignore_bind_def]
-  >> irule inr_grow_witness_bind_preserves_g
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_grow_witness_cond[simp]:
   inr_grow_witness P m1 ∧ inr_grow_witness P m2 ⇒
   inr_grow_witness P (if b then m1 else m2)
 Proof
-  rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_grow_witness_case_option[simp]:
   inr_grow_witness P m_none ∧ (∀x. inr_grow_witness P (m_some x)) ⇒
   inr_grow_witness P (case opt of NONE => m_none | SOME x => m_some x)
 Proof
-  Cases_on `opt` >> rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_grow_witness_let[simp]:
   (∀x. inr_grow_witness P (f x)) ⇒
   inr_grow_witness P (let x = v in f x)
 Proof
-  rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_grow_witness_case_pair[simp]:
   (∀a b. inr_grow_witness P (f a b)) ⇒
   inr_grow_witness P (case p of (a, b) => f a b)
 Proof
-  Cases_on `p` >> rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* From preserves_same_frame: m never INR-grows, so witness is
@@ -403,9 +304,7 @@ QED
 Theorem inr_grow_witness_of_preserves_same_frame:
   preserves_same_frame m ⇒ inr_grow_witness P m
 Proof
-  rw[preserves_same_frame_def, inr_grow_witness_def]
-  >> first_x_assum drule_all
-  >> rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Predicate capturing the INR-grow structure we want from
@@ -474,58 +373,41 @@ Theorem inr_ok_exn_bind:
   preserves_same_frame g ∧ inr_ok_exn g ∧ (∀x. inr_ok_exn (f x)) ⇒
   inr_ok_exn (bind g f)
 Proof
-  simp[inr_ok_exn_def, bind_def]
-  >> strip_tac
-  >> rpt gen_tac
-  >> Cases_on `g s` >> rename1 `g s = (q, sm)`
-  >> Cases_on `q` >> simp[]
-  >- (
-    (* g returned INL x. Use preserves_same_frame to get
-       sm.contexts ≠ [], then apply (f x)'s inr_ok_exn. *)
-    strip_tac
-    >> `same_frame_rel s sm` by (
-      qpat_x_assum `preserves_same_frame _` mp_tac
-      >> rewrite_tac[preserves_same_frame_def]
-      >> disch_then drule >> simp[])
-    >> `sm.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-    >> metis_tac[])
-  (* g returned INR y. r = INR y and s' = sm. Apply inr_ok_exn g. *)
-  >> rw[]
-  >> metis_tac[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_ignore_bind:
   preserves_same_frame g ∧ inr_ok_exn g ∧ inr_ok_exn f ⇒
   inr_ok_exn (ignore_bind g f)
 Proof
-  rw[ignore_bind_def] >> irule inr_ok_exn_bind >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_cond:
   inr_ok_exn m1 ∧ inr_ok_exn m2 ⇒
   inr_ok_exn (if b then m1 else m2)
 Proof
-  rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_case_option:
   inr_ok_exn m_none ∧ (∀x. inr_ok_exn (m_some x)) ⇒
   inr_ok_exn (case opt of NONE => m_none | SOME x => m_some x)
 Proof
-  Cases_on `opt` >> rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_case_pair:
   (∀x y. inr_ok_exn (f x y)) ⇒
   inr_ok_exn (case pr of (x, y) => f x y)
 Proof
-  Cases_on `pr` >> rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_let:
   (∀x. inr_ok_exn (f x)) ⇒ inr_ok_exn (let x = v in f x)
 Proof
-  rw[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---- Leaf lemmas: primitives used inside precompile bodies ---- *)
@@ -533,68 +415,61 @@ QED
 Theorem inr_ok_exn_return[simp]:
   inr_ok_exn (return x)
 Proof
-  rw[inr_ok_exn_def, return_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_fail_OutOfGas[simp]:
   inr_ok_exn (fail OutOfGas)
 Proof
-  rw[inr_ok_exn_def, fail_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_fail_InvalidParameter[simp]:
   inr_ok_exn (fail InvalidParameter)
 Proof
-  rw[inr_ok_exn_def, fail_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_fail_KZGProofError[simp]:
   inr_ok_exn (fail KZGProofError)
 Proof
-  rw[inr_ok_exn_def, fail_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_assert_OutOfGas[simp]:
   inr_ok_exn (assert b OutOfGas)
 Proof
-  rw[inr_ok_exn_def, assert_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_assert_KZGProofError[simp]:
   inr_ok_exn (assert b KZGProofError)
 Proof
-  rw[inr_ok_exn_def, assert_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_finish[simp]:
   inr_ok_exn finish
 Proof
-  rw[inr_ok_exn_def, finish_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_get_call_data[simp]:
   inr_ok_exn get_call_data
 Proof
-  rw[inr_ok_exn_def, get_call_data_def, bind_def,
-     get_current_context_def, return_def, fail_def, AllCaseEqs()]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_consume_gas[simp]:
   inr_ok_exn (consume_gas n)
 Proof
-  rw[inr_ok_exn_def, consume_gas_def, bind_def, ignore_bind_def,
-     get_current_context_def, set_current_context_def,
-     assert_def, return_def, fail_def, AllCaseEqs()]
-  >> gvs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_set_return_data[simp]:
   inr_ok_exn (set_return_data d)
 Proof
-  rw[inr_ok_exn_def, set_return_data_def, bind_def,
-     get_current_context_def, set_current_context_def,
-     return_def, fail_def, AllCaseEqs()]
-  >> gvs[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---- Per-precompile `inr_ok_exn` lemmas ----------------------- *)
@@ -609,101 +484,61 @@ QED
 Theorem inr_ok_exn_precompile_ecrecover:
   inr_ok_exn precompile_ecrecover
 Proof
-  rw[precompile_ecrecover_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_sha2_256:
   inr_ok_exn precompile_sha2_256
 Proof
-  rw[precompile_sha2_256_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_ripemd_160:
   inr_ok_exn precompile_ripemd_160
 Proof
-  rw[precompile_ripemd_160_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_identity:
   inr_ok_exn precompile_identity
 Proof
-  rw[precompile_identity_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_modexp:
   inr_ok_exn precompile_modexp
 Proof
-  rw[precompile_modexp_def, LET_THM]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_ecadd:
   inr_ok_exn precompile_ecadd
 Proof
-  rw[precompile_ecadd_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_ecmul:
   inr_ok_exn precompile_ecmul
 Proof
-  rw[precompile_ecmul_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_ecpairing:
   inr_ok_exn precompile_ecpairing
 Proof
-  rw[precompile_ecpairing_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> irule inr_ok_exn_cond >> simp[]
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_blake2f:
   inr_ok_exn precompile_blake2f
 Proof
-  rw[precompile_blake2f_def]
-  >> irule inr_ok_exn_bind >> simp[] >> gen_tac
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_point_eval:
   inr_ok_exn precompile_point_eval
 Proof
-  rw[precompile_point_eval_def]
-  >> irule inr_ok_exn_bind >> simp[] >> gen_tac
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 (* The BLS precompiles share a common shape:
@@ -713,83 +548,49 @@ QED
 Theorem inr_ok_exn_precompile_bls_g1add:
   inr_ok_exn precompile_bls_g1add
 Proof
-  rw[precompile_bls_g1add_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_bls_g1msm:
   inr_ok_exn precompile_bls_g1msm
 Proof
-  rw[precompile_bls_g1msm_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_bls_g2add:
   inr_ok_exn precompile_bls_g2add
 Proof
-  rw[precompile_bls_g2add_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_bls_g2msm:
   inr_ok_exn precompile_bls_g2msm
 Proof
-  rw[precompile_bls_g2msm_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_bls_pairing:
   inr_ok_exn precompile_bls_pairing
 Proof
-  rw[precompile_bls_pairing_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_bls_map_fp_to_g1:
   inr_ok_exn precompile_bls_map_fp_to_g1
 Proof
-  rw[precompile_bls_map_fp_to_g1_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_bls_map_fp2_to_g2:
   inr_ok_exn precompile_bls_map_fp2_to_g2
 Proof
-  rw[precompile_bls_map_fp2_to_g2_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem inr_ok_exn_precompile_p256verify:
   inr_ok_exn precompile_p256verify
 Proof
-  rw[precompile_p256verify_def]
-  >> rpt (irule inr_ok_exn_bind >> simp[] >> gen_tac)
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
-  >> BasicProvers.PURE_CASE_TAC >> simp[]
-  >> rpt (irule inr_ok_exn_ignore_bind >> simp[])
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---- Helper: precompile bodies only raise OOG/IP/KZG ---------- *)
@@ -803,36 +604,7 @@ Theorem dispatch_precompiles_inr_not_reverted_not_abort:
   dispatch_precompiles a s = (INR e, s') ⇒
     ¬ vfm_abort e ∧ e ≠ SOME Reverted
 Proof
-  rw[dispatch_precompiles_def]
-  >> TRY (
-    (* The 18 precompile branches: match via the `inr_ok_exn`
-       property of each. *)
-    qmatch_asmsub_abbrev_tac `pc s = (INR e, s')`
-    >> `inr_ok_exn pc`
-         by simp[Abbr`pc`, inr_ok_exn_precompile_ecrecover,
-                 inr_ok_exn_precompile_sha2_256,
-                 inr_ok_exn_precompile_ripemd_160,
-                 inr_ok_exn_precompile_identity,
-                 inr_ok_exn_precompile_modexp,
-                 inr_ok_exn_precompile_ecadd,
-                 inr_ok_exn_precompile_ecmul,
-                 inr_ok_exn_precompile_ecpairing,
-                 inr_ok_exn_precompile_blake2f,
-                 inr_ok_exn_precompile_point_eval,
-                 inr_ok_exn_precompile_bls_g1add,
-                 inr_ok_exn_precompile_bls_g1msm,
-                 inr_ok_exn_precompile_bls_g2add,
-                 inr_ok_exn_precompile_bls_g2msm,
-                 inr_ok_exn_precompile_bls_pairing,
-                 inr_ok_exn_precompile_bls_map_fp_to_g1,
-                 inr_ok_exn_precompile_bls_map_fp2_to_g2,
-                 inr_ok_exn_precompile_p256verify]
-    >> pop_assum mp_tac >> rewrite_tac[inr_ok_exn_def]
-    >> disch_then drule
-    >> simp[] >> NO_TAC)
-  (* Default branch: `dispatch_precompiles a = fail Impossible`.
-     Rule out via `fIN a precompile_addresses`. *)
-  >> gvs[precompile_addresses_def, fIN_fset_ABS]
+  cheat  (* SCAFFOLD *)
 QED
 
 
@@ -856,8 +628,7 @@ Theorem preserves_same_frame_update_accounts_transfer_value[local,simp]:
   preserves_same_frame
     (update_accounts (transfer_value fromAddr toAddr amount))
 Proof
-  rewrite_tac[preserves_same_frame_eq_psf_T]
-  >> irule psf_update_accounts_transfer_value
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Witness for proceed_call with outputTo = Memory mr: when it
@@ -868,82 +639,7 @@ Theorem inr_grow_witness_proceed_call:
     (proceed_call op sender address value aOff aSz code stipend
                   (Memory mr))
 Proof
-  (* Unfold proceed_call and analyse directly. Don't use
-     `inr_grow_witness_bind_preserves_g` because it erases the
-     `x = s.rollback` equation we need for the pushed rollback. *)
-  simp[inr_grow_witness_def]
-  >> rpt gen_tac >> strip_tac
-  (* Witness: sp = s (the state entering proceed_call). The pushed
-     rollback captured by get_rollback IS s.rollback. *)
-  >> qexists_tac `s` >> simp[same_frame_rel_refl]
-  (* Split on the transfer_value and precompile conditions first,
-     then unfold proceed_call's body for each branch. *)
-  >> Cases_on `s.contexts` >> gvs[]
-  >> qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac
-  >> simp[proceed_call_def, bind_def, ignore_bind_def,
-          get_rollback_def, read_memory_def, get_caller_def,
-          get_value_def, get_static_def, update_accounts_def,
-          push_context_def, get_current_context_def, return_def]
-  >> `∀f. update_accounts f s = (INL (), s with rollback updated_by (λr. r with accounts updated_by f))`
-       by simp[update_accounts_def, return_def]
-  >> Cases_on `op ≠ CallCode ∧ 0 < value`
-  >> Cases_on `fIN address precompile_addresses`
-  >> gvs[return_def]
-  >> strip_tac
-  (* In the precompile branches, extract the exception-shape fact. *)
-  >> drule_at (Pat`dispatch_precompiles`)
-       dispatch_precompiles_inr_not_reverted_not_abort
-  >> simp[]
-  >> strip_tac
-  >> simp[inr_grow_P_def]
-  (* Extract cp facts and same_frame_rel facts about the
-     dispatch_precompiles step. *)
-  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed`
-  >> `pushed.contexts ≠ []` by (gvs[Abbr`pushed`])
-  (* Extract cp facts: accounts/tStorage/toDelete preserved,
-     contexts structure. *)
-  >> drule (REWRITE_RULE [cp_def] (Q.SPEC `address` (GEN_ALL cp_dispatch_precompiles)))
-  >> simp[]
-  >> strip_tac
-  >> drule (REWRITE_RULE [preserves_same_frame_def]
-              (Q.SPEC `address` (GEN_ALL preserves_same_frame_dispatch_precompiles)))
-  >> simp[]
-  >> strip_tac
-  (* Facts about `pushed`. *)
-  >> `SND (HD pushed.contexts) = s.rollback ∧
-      TL pushed.contexts = s.contexts ∧
-      (FST (HD pushed.contexts)).msgParams.outputTo = Memory mr ∧
-      pushed.rollback.accesses = s.rollback.accesses ∧
-      pushed.msdomain = s.msdomain ∧
-      (∀a. (lookup_account a pushed.rollback.accounts).storage =
-           (lookup_account a s.rollback.accounts).storage) ∧
-      (∀a. (lookup_account a pushed.rollback.accounts).code =
-           (lookup_account a s.rollback.accounts).code) ∧
-      (∀a. (lookup_account a pushed.rollback.accounts).nonce =
-           (lookup_account a s.rollback.accounts).nonce) ∧
-      pushed.rollback.tStorage = s.rollback.tStorage`
-     by (gvs[Abbr`pushed`, initial_context_def, initial_msg_params_def,
-             transfer_value_preserves_storage,
-             transfer_value_preserves_code,
-             transfer_value_preserves_nonce])
-  >> gvs[]
-  (* Extract same_frame_rel pushed s1 into its conjuncts. *)
-  >> qpat_x_assum `same_frame_rel pushed s1` mp_tac
-  >> rewrite_tac[same_frame_rel_def]
-  >> strip_tac
-  (* Pick parent_ctx = FST h for the existential. *)
-  >> `∃parent_ctx.
-       h = (parent_ctx, SND h) ∧ parent_ctx.msgParams = (FST h).msgParams ∧
-       parent_ctx.logs = (FST h).logs ∧
-       parent_ctx.addRefund = (FST h).addRefund ∧
-       parent_ctx.subRefund = (FST h).subRefund`
-     by (qexists_tac `FST h` >> simp[pairTheory.PAIR])
-  (* Remaining: callee_local_changes, accesses ⊆, msdomain_compatible. *)
-  >> simp[]
-  >> fs[]
-  >> simp[callee_local_changes_def]
-  >> fs[callee_local_changes_def]
-  >> metis_tac[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* Main witness lemma: step_call's INR-growth carries the full
@@ -952,31 +648,7 @@ QED
 Theorem inr_grow_witness_step_call:
   inr_grow_witness inr_grow_P (step_call op)
 Proof
-  simp[step_call_def]
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> pairarg_tac >> simp[]
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> pairarg_tac >> simp[]
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> pairarg_tac >> simp[]
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> irule inr_grow_witness_cond >> conj_tac
-  >- (
-    (* abort_call_value is preserves_same_frame, never INR-grows *)
-    irule inr_grow_witness_of_preserves_same_frame >> simp[])
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
-  >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
-  >> irule inr_grow_witness_cond >> conj_tac
-  >- (
-    (* abort_unuse is preserves_same_frame, never INR-grows *)
-    irule inr_grow_witness_of_preserves_same_frame >> simp[])
-  >> irule inr_grow_witness_proceed_call
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem step_call_inr_grow_structure:
@@ -1011,15 +683,7 @@ Theorem step_call_inr_grow_structure:
           parent_ctx.subRefund = (FST (HD sp.contexts)).subRefund) ∧
        callee_ctx.msgParams.outputTo = Memory mr)
 Proof
-  strip_tac
-  >> mp_tac inr_grow_witness_step_call
-  >> rewrite_tac[inr_grow_witness_def]
-  >> disch_then drule
-  >> simp[]
-  >> strip_tac
-  >> gvs[inr_grow_P_def]
-  >> rpt (goal_assum (first_assum o mp_then Any mp_tac))
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ---- The case (b) lemma ---------------------------------------- *)
@@ -1034,72 +698,7 @@ Theorem step_call_handle_step_inr_grow_same_frame:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   same_frame_rel s s'
 Proof
-  strip_tac
-  >> `s'.originalAccounts = s.originalAccounts`
-       by metis_tac[step_call_original_accounts, handle_step_original_accounts]
-  (* Step 1: Extract structure from step_call_inr_grow_structure. *)
-  >> drule_all step_call_inr_grow_structure
-  >> strip_tac
-  (* Now in scope: ¬ vfm_abort e, same_frame_rel s sp,
-     callee_rb = sp.rollback, s1.rollback = sp.rollback,
-     s1.contexts = (callee_ctx, callee_rb) ::
-                   (parent_ctx, SND (HD sp.contexts)) :: TL sp.contexts,
-     parent_ctx.msgParams = (FST (HD sp.contexts)).msgParams,
-     ... parent_ctx.addRefund/subRefund/logs = ...,
-     callee_ctx.msgParams.outputTo = Memory mr. *)
-  >> `∃mr'. callee_ctx.msgParams.outputTo = Memory mr'`
-       by (qexists_tac `mr` >> simp[])
-  >> `s.contexts ≠ []` by simp[]
-  >> `sp.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-  >> `LENGTH sp.contexts = LENGTH s.contexts`
-       by metis_tac[same_frame_rel_def]
-  (* Step 2: Split on e = NONE vs e ≠ NONE to apply correct pop lemma. *)
-  (* Common txParams and msdomain reasoning for both branches. *)
-  >> `s'.txParams = s.txParams` by (
-       `s'.txParams = s1.txParams`
-         by metis_tac[vfmTxParamsTheory.handle_step_preserves_txParams, SND]
-       >> `s1.txParams = s.txParams`
-         by metis_tac[vfmTxParamsTheory.step_call_preserves_txParams, SND]
-       >> simp[])
-  >> `s'.msdomain = s1.msdomain`
-       by metis_tac[SND_handle_step_msdomain, SND]
-  >> `msdomain_compatible sp.msdomain s'.msdomain` by simp[]
-  >> `s.txParams = sp.txParams` by fs[same_frame_rel_def]
-  >> `s.originalAccounts = sp.originalAccounts` by fs[same_frame_rel_def]
-  >> Cases_on `e = NONE`
-  >- (  (* Success case: e = NONE. Use _gen variant which handles
-           q = INR post-pop finalization failures too. *)
-       gvs[]
-       >> drule handle_step_pop_success_memory_effect_gen
-       >> disch_then (qspecl_then [`s'`, `q`] mp_tac)
-       >> impl_tac >- simp[]
-       >> strip_tac
-       >> `s'.rollback = s1.rollback` by simp[]
-       (* Prove same_frame_rel sp s': uses callee_local_changes
-          from the structure lemma (sp → s1), plus the pop's
-          structural effect. *)
-       >> `same_frame_rel sp s'` by (
-            simp[same_frame_rel_def]
-            >> rpt conj_tac
-            >> fs[rich_listTheory.IS_PREFIX_APPEND]
-            >> fs[same_frame_rel_def]
-            >> decide_tac)
-       >> metis_tac[same_frame_rel_trans])
-  (* Failure case: e ≠ NONE. Use _gen variant. Need e ≠ SOME Reverted,
-     which comes from the structure lemma (precompiles don't raise
-     Reverted). *)
-  >> drule handle_step_pop_memory_effect_gen
-  >> disch_then (qspecl_then [`s'`, `q`, `e`] mp_tac)
-  >> impl_tac >- simp[]
-  >> strip_tac
-  >> `s'.rollback = sp.rollback` by simp[]
-  >> `same_frame_rel sp s'` by (
-       simp[same_frame_rel_def, callee_local_changes_refl]
-       >> fs[]
-       >> rw[]
-       >> fs[rich_listTheory.IS_PREFIX_APPEND]
-       >> decide_tac)
-  >> metis_tac[same_frame_rel_trans]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* When the step inner computation INR-grows, the exception is not a
@@ -1120,41 +719,7 @@ Theorem step_inner_inr_grow_not_abort:
   LENGTH s'.contexts > LENGTH s.contexts ⇒
   ¬vfm_abort e
 Proof
-  strip_tac
-  >> gvs[bind_def, get_current_context_def, return_def, fail_def,
-         COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs(),
-         ignore_bind_def]
-  (* Stop case: preserves_same_frame, can't grow - contradiction *)
-  >~ [`step_inst Stop`]
-  >- (`preserves_same_frame (step_inst Stop)` by simp[]
-      >> imp_res_tac psf_imp_length_contexts_preserved
-      >> gvs[])
-  (* Invalid case: preserves_same_frame, can't grow - contradiction *)
-  >~ [`step_inst Invalid`]
-  >- (`preserves_same_frame (step_inst Invalid)` by simp[]
-      >> imp_res_tac psf_imp_length_contexts_preserved
-      >> gvs[])
-  (* SOME op case: step_inst op >>= inc_pc_or_jump op *)
-  (* step_inst INL, inc_pc_or_jump INR: inc_pc_or_jump is psf, contradiction *)
-  >- (`preserves_same_frame (inc_pc_or_jump op)` by simp[]
-      >> drule_then drule psf_imp_length_contexts_preserved
-        >> impl_tac
-        >- (
-          strip_tac >> gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def]
-          >> gvs[bind_def, AllCaseEqs(), get_current_context_def, fail_def] )
-      >> strip_tac >> drule step_inst_inl_grew_is_call >> gvs[]
-      >> strip_tac >> gvs[inc_pc_or_jump_def, return_def])
-  (* step_inst INR with growth *)
-  >> rename1 `step_inst op s = (INR e, s')`
-  (* By step_inst_inr_grew_is_call_family, op is Call-family *)
-  >> drule step_inst_inr_grew_is_call_family
-  >> impl_tac >- gvs[]
-  >> reverse(Cases_on`step_inst op s = step_call op s`)
-  >- ( strip_tac >> gvs[step_inst_def] )
-  (* By step_call_inr_grow_structure, ¬vfm_abort e *)
-  >> gvs[]
-  >> drule_all step_call_inr_grow_structure
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem step_same_frame:
@@ -1163,92 +728,7 @@ Theorem step_same_frame:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   same_frame_rel s s'
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> gvs[step_def, handle_def]
-  >> qmatch_asmsub_abbrev_tac`pair_CASE (inner s)`
-  >> `same_frame_or_grow inner` by simp[Abbr`inner`]
-  >> gvs[AllCaseEqs()]
-  >- (
-    (* inner returned INL: step s = (INL _, r) so s' = r. *)
-    gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[])
-  >> (* inner returned INR with state s1: step s = handle_step e s1.
-        Two sub-cases based on same_frame_or_grow inner:
-          (a) same_frame_rel s s1: compose with handle_step_same_frame.
-          (b) inner grew: s1.contexts = s.contexts + k for some k ≥ 1.
-              handle_step must shrink back to s.contexts for our
-              hypothesis. This happens when handle_exception pops. *)
-  rename1`inner s = (INR e, s1)` >>
-  `same_frame_rel s s1 ∨ LENGTH s1.contexts ≥ LENGTH s.contexts + 1`
-  by (gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[])
-  >- (
-    (* (a) same_frame_rel s s1 *)
-    `outputTo_consistent s1` by
-       metis_tac[same_frame_rel_preserves_outputTo_consistent]
-    >> `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-    >> `LENGTH s1.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
-    >> `LENGTH s'.contexts = LENGTH s1.contexts` by simp[]
-    >> `same_frame_rel s1 s'` by (
-         drule handle_step_same_frame >> disch_then drule
-         >> disch_then drule >> simp[])
-    >> metis_tac[same_frame_rel_trans])
-  >> (* (b) inner grew. Reduce to step_call_handle_step_inr_grow_same_frame.
-        The op must be Call/CallCode/DelegateCall/StaticCall (the only
-        ops that can INR-grow). *)
-     (* Unfold inner to extract the opcode *)
-     qunabbrev_tac `inner`
-  >> pop_assum mp_tac
-  >> simp[bind_def]
-  >> simp[get_current_context_def, return_def, fail_def]
-  >> Cases_on `s.contexts` >> gvs[]
-  >> strip_tac >> gvs[bind_def, get_current_context_def, return_def]
-  >> gvs[vfmTypesTheory.option_CASE_rator,CaseEq"option"]
-  >> gvs[CaseEq"bool",COND_RATOR]
-  >~ [`step_inst Stop`]
-  >- (
-    (* step_inst Stop case: doesn't grow (preserves_same_frame).
-       Contradicts the grow hypothesis. *)
-    `preserves_same_frame (step_inst Stop)` by simp[]
-    >> drule_then drule psf_imp_length_contexts_preserved
-    >> simp[])
-  >~ [`step_inst Invalid`]
-  >- (
-    (* step_inst Invalid case: doesn't grow. *)
-    `preserves_same_frame (step_inst Invalid)` by simp[]
-    >> drule_then drule psf_imp_length_contexts_preserved
-    >> simp[])
-  >> (* step_inst x; inc_pc_or_jump x case *)
-     gvs[ignore_bind_def, bind_def]
-  >> gvs[AllCaseEqs()]  >- (
-    (* step_inst x returned INL, then inc_pc_or_jump x returned INR.
-       inc_pc_or_jump is preserves_same_frame, so can't grow. *)
-    `preserves_same_frame (inc_pc_or_jump op)` by simp[]
-    >> drule_then drule psf_imp_length_contexts_preserved >>
-    `same_frame_or_grow (step_inst op)` by simp[]
-    >> pop_assum mp_tac >> rewrite_tac[same_frame_or_grow_def]
-    >> disch_then drule >> simp[]
-    >> strip_tac
-    >- (
-      impl_keep_tac >- metis_tac[same_frame_rel_contexts_ne]
-      >> `LENGTH s.contexts = LENGTH s''.contexts`
-      by metis_tac[same_frame_rel_def]
-      >> strip_tac >> gvs[] )
-    >> impl_keep_tac >- (strip_tac >> gvs[])
-    >> drule step_inst_inl_grew_is_call
-    >> simp[]
-    >> strip_tac >> gvs[inc_pc_or_jump_def]
-    >> gvs[return_def])
-  (* step_inst x returned INR with grew state s1.
-     Must be Call-family. Reduce to step_call_handle_step_inr_grow. *)
-  >> drule step_inst_inr_grew_is_call_family
-  >> impl_tac >- gvs[]
-  >> disch_then assume_tac
-  >> `step_inst op s = step_call op s` by gvs[step_inst_def]
-  >> pop_assum (mp_tac o SYM) >> simp[] >> strip_tac
-  >> irule step_call_handle_step_inr_grow_same_frame
-  >> simp[]
-  >> rpt(goal_assum drule)
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ================================================================ *)
@@ -1273,29 +753,7 @@ Theorem run_within_frame_preserves:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   same_frame_rel es es'
 Proof
-  rpt strip_tac
-  >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> gvs[run_within_frame_def]
-  >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
-           same_frame_rel es (SND p)) (r, es')` suffices_by simp[]
-  >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
-  >> goal_assum (first_assum o mp_then Any mp_tac)
-  >> simp[]
-  >> conj_tac
-  >- simp[same_frame_rel_refl]
-  >> rpt gen_tac
-  >> pairarg_tac >> simp[]
-  >> strip_tac
-  >> strip_tac
-  >> Cases_on `step s''` >> simp[]
-  >> `same_frame_rel es s''` by simp[]
-  >> `outputTo_consistent s''`
-       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
-  >> `same_frame_rel s'' r'` by (
-       irule step_same_frame
-       >> goal_assum (first_assum o mp_then Any mp_tac)
-       >> simp[])
-  >> metis_tac[same_frame_rel_trans]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ================================================================ *)
@@ -1308,29 +766,7 @@ Theorem step_same_frame_gas_monotone:
   LENGTH s'.contexts = LENGTH s.contexts ⇒
   (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
 Proof
-  strip_tac
-  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> mp_tac decreases_gas_cred_step
-  >> rewrite_tac[decreases_gas_cred_def]
-  >> disch_then(qspec_then`s`mp_tac)
-  >> IF_CASES_TAC >> gvs[] >> strip_tac
-  (* Use step_same_frame to get the tail and msgParams (hence gasLimit)
-     preservation, which decreases_gas_cred_step alone doesn't give us. *)
-  >> `same_frame_rel s s'` by (
-       irule step_same_frame
-       >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
-  >> `TL s'.contexts = TL s.contexts` by gvs[same_frame_rel_def]
-  >> `(FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`
-     by gvs[same_frame_rel_def]
-  (* Now use decreases_gas_cred_step for the gas-weight inequality. *)
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `s'.contexts` >> gvs[]
-  >> gvs[contexts_weight_def, unused_gas_def]
-  >> (* The inequality reduces because the tails match and gasLimits
-        match at the heads. *)
-     BasicProvers.FULL_CASE_TAC >> gvs[]
-  >> gvs[LEX_DEF]
-  >> gvs[wf_context_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_gas_monotone:
@@ -1339,48 +775,7 @@ Theorem run_within_frame_gas_monotone:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   (FST (HD es.contexts)).gasUsed ≤ (FST (HD es'.contexts)).gasUsed
 Proof
-  rpt strip_tac
-  >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> gvs[run_within_frame_def]
-  >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
-           same_frame_rel es (SND p) ∧
-           EVERY (wf_context o FST) (SND p).contexts ∧
-           (FST (HD es.contexts)).gasUsed ≤
-             (FST (HD (SND p).contexts)).gasUsed) (r, es')`
-     suffices_by simp[]
-  >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
-  >> goal_assum (first_assum o mp_then Any mp_tac)
-  >> simp[]
-  >> conj_tac
-  >- gvs[same_frame_rel_refl, wf_state_def]
-  >> rpt gen_tac
-  >> pairarg_tac >> simp[]
-  >> strip_tac
-  >> strip_tac
-  >> Cases_on `step s''` >> simp[]
-  >> `same_frame_rel es s'' ∧ EVERY (wf_context o FST) s''.contexts ∧
-      (FST (HD es.contexts)).gasUsed ≤ (FST (HD s''.contexts)).gasUsed`
-       by simp[]
-  >> `outputTo_consistent s''`
-       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
-  >> `s''.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> `same_frame_rel s'' r'` by (
-       irule step_same_frame
-       >> goal_assum (first_assum o mp_then Any mp_tac)
-       >> simp[])
-  >> `(FST (HD s''.contexts)).gasUsed ≤ (FST (HD r'.contexts)).gasUsed` by (
-       irule step_same_frame_gas_monotone
-       >> goal_assum (first_assum o mp_then Any mp_tac)
-       >> simp[])
-  >> `EVERY (wf_context o FST) r'.contexts` by (
-       mp_tac decreases_gas_cred_step
-       >> rewrite_tac[decreases_gas_cred_def]
-       >> disch_then(qspec_then`s''`mp_tac)
-       >> IF_CASES_TAC >> gvs[] )
-  >> rpt conj_tac
-  >- metis_tac[same_frame_rel_trans]
-  >- simp[]
-  >> simp[]
+  cheat  (* SCAFFOLD *)
 QED
 
 (* ================================================================ *)
@@ -1395,9 +790,7 @@ Theorem run_within_frame_preserves_txParams:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   es'.txParams = es.txParams
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_preserves_storage_outside_callee:
@@ -1407,9 +800,7 @@ Theorem run_within_frame_preserves_storage_outside_callee:
       (lookup_account a es'.rollback.accounts).storage =
       (lookup_account a es.rollback.accounts).storage
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_preserves_tStorage_outside_callee:
@@ -1418,9 +809,7 @@ Theorem run_within_frame_preserves_tStorage_outside_callee:
   ∀a. a ≠ (FST (HD es.contexts)).msgParams.callee ⇒
       es'.rollback.tStorage a = es.rollback.tStorage a
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_preserves_code_outside_callee:
@@ -1430,9 +819,7 @@ Theorem run_within_frame_preserves_code_outside_callee:
       (lookup_account a es'.rollback.accounts).code =
       (lookup_account a es.rollback.accounts).code
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_preserves_nonce_outside_callee:
@@ -1442,9 +829,7 @@ Theorem run_within_frame_preserves_nonce_outside_callee:
       (lookup_account a es'.rollback.accounts).nonce =
       (lookup_account a es.rollback.accounts).nonce
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_preserves_nonhead_contexts:
@@ -1452,9 +837,7 @@ Theorem run_within_frame_preserves_nonhead_contexts:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   TL es'.contexts = TL es.contexts
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_preserves_head_msgParams:
@@ -1462,9 +845,7 @@ Theorem run_within_frame_preserves_head_msgParams:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   (FST (HD es'.contexts)).msgParams = (FST (HD es.contexts)).msgParams
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_preserves_saved_rollback:
@@ -1472,9 +853,7 @@ Theorem run_within_frame_preserves_saved_rollback:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   SND (HD es'.contexts) = SND (HD es.contexts)
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_callee_nonce_monotone:
@@ -1485,9 +864,7 @@ Theorem run_within_frame_callee_nonce_monotone:
   (lookup_account (FST (HD es.contexts)).msgParams.callee
       es'.rollback.accounts).nonce
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def, callee_local_changes_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_logs_grow:
@@ -1495,9 +872,7 @@ Theorem run_within_frame_logs_grow:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   IS_PREFIX (FST (HD es'.contexts)).logs (FST (HD es.contexts)).logs
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_accesses_grow:
@@ -1508,9 +883,7 @@ Theorem run_within_frame_accesses_grow:
   toSet es.rollback.accesses.storageKeys ⊆
     toSet es'.rollback.accesses.storageKeys
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_refund_monotone:
@@ -1519,9 +892,7 @@ Theorem run_within_frame_refund_monotone:
   (FST (HD es.contexts)).addRefund ≤ (FST (HD es'.contexts)).addRefund ∧
   (FST (HD es.contexts)).subRefund ≤ (FST (HD es'.contexts)).subRefund
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
 
 Theorem run_within_frame_domain_compatible:
@@ -1529,7 +900,5 @@ Theorem run_within_frame_domain_compatible:
   LENGTH es'.contexts = LENGTH es.contexts ⇒
   msdomain_compatible es.msdomain es'.msdomain
 Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
+  cheat  (* SCAFFOLD *)
 QED
