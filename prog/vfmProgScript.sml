@@ -1798,6 +1798,21 @@ val state_gas_defs =
    forfeit_remaining_gas_def, withhold_create_gas_def,
    drain_state_gas_reservoir_def, restore_child_gas_def];
 
+Theorem restored_gas_forfeit[local]:
+  !u sp lim:num. u <= lim ==> lim - (u - sp) + (u - sp) = lim
+Proof
+  decide_tac
+QED
+
+Theorem self_destruct_restored_gas_forfeit[local]:
+  !g base warm transfer sp lim:num.
+    g + base + warm + transfer <= lim ==>
+    lim - (g + (warm + (transfer + base)) - sp) +
+      (g + (warm + (transfer + base)) - sp) = lim
+Proof
+  decide_tac
+QED
+
 fun exn_outer_tac ths =
   start_tac
   \\ gvs (ths @ state_gas_defs @
@@ -1808,6 +1823,7 @@ fun exn_outer_tac ths =
           set_return_data_def,get_current_context_def,return_def,
           set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
           return_destination_case_elim])
+  \\ gvs[DELETE_COMM]
   \\ end_tac
 
 fun exn_inner_tac ths =
@@ -1841,7 +1857,7 @@ fun exn_inner_tac ths =
          handle_step_def,vfm_abort_def,handle_def,handle_create_def,
          get_return_data_def,get_output_to_def,reraise_def,
          get_current_context_def,return_def,set_current_context_def,
-         assert_def,consume_gas_def,return_destination_case_rator])
+         assert_def,consume_gas_def,get_gas_left_def,return_destination_case_rator])
   \\ qmatch_assum_rename_tac`wf_state r2`
   \\ `(FST (HD r2.contexts)).msgParams.parsed =
       parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
@@ -1855,6 +1871,11 @@ fun exn_inner_tac ths =
          get_output_to_def,set_return_data_def,get_gas_left_def,
          consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
          set_rollback_def]
+  \\ gvs (state_gas_defs @
+          [bind_def, ignore_bind_def, return_def, get_current_context_def,
+           set_current_context_def, get_gas_left_def, consume_gas_def,
+           fail_def, assert_def, pop_context_def, set_rollback_def,
+           Abbr`merged`])
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
@@ -2441,7 +2462,8 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
      evm_Exception (INR (SOME WriteInStaticContext)) *
      evm_Rollback (accesses_add addr rb) * evm_Msdomain (msdomain_add addr d))
 Proof
-  exn_outer_tac [step_inst_def,step_self_destruct_def,access_address_split,
+  exn_outer_tac [self_destruct_restored_gas_forfeit,
+                 step_inst_def,step_self_destruct_def,access_address_split,
                  set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                  assert_not_static_def,get_static_def,get_callee_def,
                  GSYM rich_listTheory.TAIL_BY_DROP,SUB_ADD]
