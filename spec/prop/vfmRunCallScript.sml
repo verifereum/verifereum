@@ -2363,12 +2363,8 @@ Proof
   >> gvs[same_frame_rel_def]
   >> Cases_on`s.contexts` >> gvs[]
   >> Cases_on`s'.contexts` >> gvs[]
-  >> gvs[contexts_weight_def]
-  >> gvs[unused_gas_def]
-  >> gvs[LEX_DEF]
-  >> strip_tac
-  >> gvs[wf_context_def]
-  >> pop_assum mp_tac >> rw[]
+  >> gvs[contexts_weight_def, unused_gas_def, LEX_DEF]
+  >> strip_tac >> Cases_on `ISL q` >> gvs[]
 QED
 
 (* EIP-8037: this used to bound `new_head.gasUsed` by the parent's, less the
@@ -2659,8 +2655,8 @@ Proof
   >> strip_tac
   >> Cases_on `s.contexts` >> gvs[]
   >> Cases_on `s'.contexts` >> gvs[]
-  >> gvs[contexts_weight_def, unused_gas_def, LEX_DEF, wf_context_def]
-  >> ntac 3 (pop_assum mp_tac) >> rw[]
+  >> gvs[contexts_weight_def, unused_gas_def, LEX_DEF]
+  >> Cases_on `ISL r` >> gvs[]
 QED
 
 Theorem inner_push_preserves_stack_room_ok:
