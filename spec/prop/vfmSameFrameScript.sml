@@ -152,6 +152,19 @@ Definition same_frame_rel_def:
     (FST (HD s.contexts)).subRefund ≤ (FST (HD s'.contexts)).subRefund
 End
 
+Theorem handle_exception_same_frame_counterexample:
+  !s c rb.
+    let s0 = s with contexts := [(c with addRefund := 1, rb)] in
+    let out = handle_exception (SOME Reverted) s0 in
+      s0.contexts <> [] /\
+      LENGTH (SND out).contexts = LENGTH s0.contexts /\
+      ~same_frame_rel s0 (SND out)
+Proof
+  simp[handle_exception_def, restore_state_gas_def, bind_def,
+       ignore_bind_def, get_current_context_def, set_current_context_def,
+       return_def, get_num_contexts_def, reraise_def, same_frame_rel_def]
+QED
+
 Theorem restore_state_gas_refund_counterexample:
   !s c rb.
     ~same_frame_rel (s with contexts := [(c with addRefund := 1, rb)])
