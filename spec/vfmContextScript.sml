@@ -20,6 +20,16 @@ Datatype:
    ; blobHashes     : bytes32 list
    ; chainId        : num
    ; authRefund     : num
+   (* EIP-8037: the transaction's state gas grant, what the top frame's
+      reservoir is filled from and settlement measures against, and the
+      two amounts settlement adds to what the reservoir lost: the gas that
+      covered state charges once the reservoir had emptied, and the part
+      of it marked non-refillable.  No charge site exists yet, so nothing
+      spills and both stay zero; they move into the frame, where EIP-8037
+      keeps them, with the charge sites that first give them values. *)
+   ; stateGasReservoir : num
+   ; stateGasSpilled   : num
+   ; stateGasCommitted : num
    |>
 End
 
@@ -84,6 +94,12 @@ Datatype:
    |>
 End
 
+(* EIP-8037: the frame's state gas meter, the reservoir its state charges
+   draw from first.  The frame's execution gas is `gasUsed` against
+   `msgParams.gasLimit`, which the split makes the execution grant rather
+   than the transaction's gas limit; what state gas the frame spills and
+   commits once the reservoir is empty is settled through the transaction
+   parameters, since nothing spills until a charge site exists. *)
 Datatype:
   context =
   <| stack      : bytes32 list
@@ -94,6 +110,7 @@ Datatype:
    ; gasUsed    : num
    ; addRefund  : num
    ; subRefund  : num
+   ; stateGasLeft : num
    ; logs       : event list
    ; msgParams  : message_parameters
    |>
@@ -230,7 +247,7 @@ Definition base_fee_per_blob_gas_def:
 End
 
 Definition initial_tx_params_def:
-  initial_tx_params c h b t ar =
+  initial_tx_params c h b t ar sr =
   <| origin         := t.from
    ; gasPrice       := t.gasPrice
    ; baseFeePerGas  := b.baseFeePerGas
@@ -245,6 +262,9 @@ Definition initial_tx_params_def:
    ; blobHashes     := t.blobVersionedHashes
    ; chainId        := c
    ; authRefund     := ar
+   ; stateGasReservoir := sr
+   ; stateGasSpilled   := 0
+   ; stateGasCommitted := 0
    |>
 End
 
@@ -258,6 +278,7 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; addRefund  := 0
    ; subRefund  := 0
+   ; stateGasLeft := 0
    ; logs       := []
    ; msgParams  := initial_msg_params callee code static rd t
    |>
@@ -272,6 +293,7 @@ Theorem initial_context_simp[simp]:
   (initial_context fr c s rd t).gasUsed = 0 ∧
   (initial_context fr c s rd t).addRefund = 0 ∧
   (initial_context fr c s rd t).subRefund = 0 ∧
+  (initial_context fr c s rd t).stateGasLeft = 0 ∧
   (initial_context fr c s rd t).logs = [] ∧
   (initial_context fr c s rd t).msgParams  = initial_msg_params fr c s rd t
 Proof
@@ -426,16 +448,19 @@ End
 
 Definition pre_transaction_updates_def:
   pre_transaction_updates a blobBaseFee t =
+  let floorCost = calldata_floor_cost t.accessList (IS_NONE t.to)
+                                       (t.to = SOME t.from) t.value t.data in
   if (case t.maxFeePerBlobGas of SOME mf =>
            mf < blobBaseFee ∨
            NULL t.blobVersionedHashes ∨
            LENGTH t.blobVersionedHashes > max_blobs_per_tx
          | _ => F) then NONE else
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
-  if t.gasLimit > 2 ** 24 then NONE else
-  if t.gasLimit < calldata_floor_cost t.accessList (IS_NONE t.to)
-                                          (t.to = SOME t.from) t.value t.data
-  then NONE else
+  (* EIP-8037 caps the transaction's two dimensions together; EIP-7825
+     bounds the calldata floor, which is execution gas, on its own.  The
+     intrinsic's own bound is checked once it is known, in `initial_state`. *)
+  if t.gasLimit > tx_max_total_gas_limit then NONE else
+  if t.gasLimit < floorCost ∨ tx_max_gas_limit < floorCost then NONE else
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
@@ -479,12 +504,26 @@ Definition initial_state_def:
     let ctxt = initial_context callee code static rd tx in
     let authListLen = LENGTH tx.authorizationList in
     case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
+    (* EIP-8037: what is left of the transaction's gas after its intrinsic
+       splits into the execution grant, capped at `tx_max_gas_limit` less
+       the intrinsic, and the state gas reservoir holding the rest.  The
+       frame's `gasLimit` becomes the grant, so `GAS` and everything that
+       reads the frame's execution budget keep their meaning. *)
+    let intrinsic = tx.gasLimit - ctxt.msgParams.gasLimit in
+    if tx_max_gas_limit < intrinsic then NONE else
+    let evmGas = ctxt.msgParams.gasLimit in
+    let executionGas = MIN (tx_max_gas_limit - intrinsic) evmGas in
+    let reservoir = evmGas - executionGas in
+    let ctxt = ctxt with <|
+        msgParams updated_by (λp. p with gasLimit := executionGas);
+        stateGasLeft := reservoir |>
+    in
     (* EIP-7708: the top-level frame logs the transaction's own transfer,
        and a failed transaction takes the log down with it. *)
     let ctxt = ctxt with logs := transfer_log tx.from callee tx.value in
     SOME $
     <| contexts := [(ctxt, rb)]
-     ; txParams := initial_tx_params chainId prevHashes blk tx authRefund
+     ; txParams := initial_tx_params chainId prevHashes blk tx authRefund reservoir
      ; rollback := rb
      ; originalAccounts := postAuthAccounts
      ; msdomain := dom

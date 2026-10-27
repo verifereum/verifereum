@@ -182,6 +182,21 @@ Proof
   rw[apply_intrinsic_cost_def, wf_context_def] \\ rw[EQ_IMP_THM]
 QED
 
+(* The intrinsic is charged against the frame's gas limit alone, so what
+   the frame has spent and every other field are left where they were. *)
+Theorem context_gasUsed_with_msgParams[simp]:
+  (c:context with msgParams updated_by f).gasUsed = c.gasUsed
+Proof
+  Cases_on `c` \\ simp[]
+QED
+
+Theorem apply_intrinsic_cost_gasUsed:
+  apply_intrinsic_cost a n c = SOME c' ⇒
+  c'.gasUsed = c.gasUsed
+Proof
+  rw[apply_intrinsic_cost_def] \\ simp[]
+QED
+
 Theorem wf_context_with_addRefund[simp]:
   wf_context (ctxt with addRefund updated_by f) = wf_context ctxt
 Proof
@@ -263,16 +278,27 @@ Proof
   \\ simp[wf_state_def]
   \\ simp[all_accounts_def]
   \\ conj_tac
-  >- ( drule wf_context_apply_intrinsic_cost \\ simp[] )
+  >- ( (* EIP-8037: the split caps the frame's execution gas below the
+         intrinsic-reduced limit, so `wf_context`'s `gasUsed ≤ gasLimit`
+         needs the top frame's untouched `gasUsed = 0`, not just the
+         limit dropping. *)
+       `ctxt.gasUsed = 0` by
+         (drule apply_intrinsic_cost_gasUsed \\ simp[initial_context_simp])
+       \\ `wf_context ctxt` by
+            (drule wf_context_apply_intrinsic_cost \\ simp[wf_context_def])
+       \\ fs[wf_context_def] )
   \\ simp[initial_rollback_def]
   >> simp[gas_stack_ok_def, stack_room_ok_def]
   >> simp[outputTo_consistent_stack_def]
   >> reverse conj_tac
   >- (
-    drule_at_then Any irule outputTo_consistent_ctx_apply_intrinsic_cost >>
-    irule outputTo_consistent_ctx_initial_context >>
-    Cases_on`t.to` >> simp[] >>
-    EVAL_TAC >> rw[] )
+    `outputTo_consistent_ctx ctxt` by (
+      drule_at_then Any irule outputTo_consistent_ctx_apply_intrinsic_cost >>
+      irule outputTo_consistent_ctx_initial_context >>
+      Cases_on`t.to` >> simp[] >>
+      EVAL_TAC >> rw[] ) >>
+    qpat_x_assum `outputTo_consistent_ctx ctxt` mp_tac >>
+    rw[outputTo_consistent_ctx_def] )
   \\ irule wf_accounts_process_authorizations
   \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
   \\ irule wf_accounts_pre_transaction_updates

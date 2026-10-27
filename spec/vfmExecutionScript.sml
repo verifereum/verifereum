@@ -1877,11 +1877,13 @@ Definition run_within_frame_def:
 End
 
 (* The receipt reports `gasUsed`, which a refund reduces; the block sums
-   `executionGasUsed`, which it does not ([EIP-7778]). *)
+   the transaction's two pre-refund dimensions, `executionGasUsed` and
+   `stateGasUsed`, which it does not ([EIP-7778]). *)
 Datatype:
   transaction_result =
   <| gasUsed           : num
    ; executionGasUsed  : num
+   ; stateGasUsed      : num
    ; logs              : event list
    ; output            : byte list
    ; result            : exception option
@@ -1900,34 +1902,48 @@ End
 
 (* Gas charged and the two credits, before any account is updated.  The
    receipt's gas is the post-refund usage; the block's is the pre-refund
-   usage, and the calldata floor raises both ([EIP-7778]). *)
+   usage, split by dimension, and the calldata floor raises both
+   ([EIP-7778]).  `gasLeft` is execution gas and `stateGasLeft` the
+   reservoir, both as the top frame gave them back, so what the
+   transaction spent is what the transaction's limit is short of the two
+   together.  EIP-8037's state gas used is measured off the top frame's
+   finished meter: the reservoir drawn down since the grant, plus the
+   spill, outstanding or committed; the block takes it clamped at zero,
+   and the execution dimension takes what is left of the pre-refund
+   usage once that is removed. *)
 Definition transaction_gas_accounting_def:
-  transaction_gas_accounting gasPrice baseFee txGasLimit floorCost
-                             (gasLeft, storageRefund, authRefund) =
-  let txGasUsed = txGasLimit - gasLeft in
-  let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
-  let totalGasUsed = MAX (txGasUsed - gasRefund) floorCost in
-  let executionGasUsed = MAX txGasUsed floorCost in
-    (totalGasUsed, executionGasUsed,
+  transaction_gas_accounting gasPrice baseFee txGasLimit
+                             stateGasReservoir stateGasSpilled stateGasCommitted
+                             floorCost
+                             (gasLeft, stateGasLeft, storageRefund, authRefund) =
+  let gasUsedBeforeRefund = txGasLimit - gasLeft - stateGasLeft in
+  let gasRefund = MIN (gasUsedBeforeRefund DIV 5) (authRefund + storageRefund) in
+  let totalGasUsed = MAX (gasUsedBeforeRefund - gasRefund) floorCost in
+  let stateGasUsed = (stateGasReservoir - stateGasLeft) +
+                     stateGasSpilled + stateGasCommitted in
+  let executionGasUsed = MAX (gasUsedBeforeRefund - stateGasUsed) floorCost in
+    (totalGasUsed, executionGasUsed, stateGasUsed,
      (txGasLimit - totalGasUsed) * gasPrice,
      totalGasUsed * (gasPrice - baseFee))
 End
 
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
-  let (gasLimit, gasUsed, addRefund, subRefund, logs, returnData) =
+  let (gasLimit, gasUsed, stateGasLeft, addRefund, subRefund, logs, returnData) =
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
-    then (0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
+    then (0, 0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = FST $ HD t.contexts in
-      (ctxt.msgParams.gasLimit, ctxt.gasUsed,
+      (ctxt.msgParams.gasLimit, ctxt.gasUsed, ctxt.stateGasLeft,
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
-  let (totalGasUsed, executionGasUsed, refundEther, transactionFee) =
+  let (totalGasUsed, executionGasUsed, stateGasUsed, refundEther, transactionFee) =
     transaction_gas_accounting tx.gasPrice blk.baseFeePerGas tx.gasLimit
+      t.txParams.stateGasReservoir t.txParams.stateGasSpilled
+      t.txParams.stateGasCommitted
       (calldata_floor_cost tx.accessList (IS_NONE tx.to)
                           (tx.to = SOME tx.from) tx.value tx.data)
-      (gasLeft, storageRefund, t.txParams.authRefund) in
+      (gasLeft, stateGasLeft, storageRefund, t.txParams.authRefund) in
   let accounts = if result = NONE then t.rollback.accounts else acc in
   let sender = lookup_account tx.from accounts in
   let accounts = update_account tx.from
@@ -1941,6 +1957,7 @@ Definition post_transaction_accounting_def:
   let logs = if result = NONE then logs else [] in
   let tr = <| gasUsed := totalGasUsed;
               executionGasUsed := executionGasUsed;
+              stateGasUsed := stateGasUsed;
               logs := logs;
               result := result;
               output := returnData;
@@ -2227,11 +2244,14 @@ Definition block_invalid_def:
   block_invalid rs deposits withdrawals consolidations b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
     let blockGasUsed = SUM (MAP (λr. r.executionGasUsed) rs) in
+    let blockStateGasUsed = SUM (MAP (λr. r.stateGasUsed) rs) in
     let requestsHash = compute_requests_hash deposits withdrawals consolidations in
     let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
     ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
-      blockGasUsed = b.gasUsed ∧
+      (* EIP-8037: the header reports the larger of the block's two
+         dimensions, not their sum. *)
+      MAX blockGasUsed blockStateGasUsed = b.gasUsed ∧
       requestsHash = b.requestsHash ∧
       expectedWithdrawalsRoot = b.withdrawalsRoot)
 End
@@ -2239,7 +2259,10 @@ End
 (* The EIP-7934 size limit and the header are checked before any transaction
    runs, as in EELS state_transition: executing under an invalid header can be
    infeasible, e.g. the blob base fee for an excessBlobGas near 2^64 takes
-   ~10^13 fake_exponential steps on ever larger numbers. *)
+   ~10^13 fake_exponential steps on ever larger numbers.  Each transaction is
+   admitted against each dimension's own remaining budget (EIP-8037): at most
+   `tx_max_gas_limit` of execution gas, and at most the transaction's whole
+   limit of state gas. *)
 Definition run_block_def:
   run_block dom chainId prevHashes parent accounts b =
   if b.rlpSize > max_rlp_block_size then NONE else
@@ -2248,7 +2271,9 @@ Definition run_block_def:
     FOLDL
       (λx tx.
          OPTION_BIND x (λ(ls, a, dom).
-           if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.executionGasUsed) ls) ∨
+           if MIN tx_max_gas_limit tx.gasLimit >
+                b.gasLimit - SUM (MAP (λr. r.executionGasUsed) ls) ∨
+              tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.stateGasUsed) ls) ∨
               (case tx.maxFeePerGas of SOME x => x | NONE => tx.gasPrice)
                 < b.baseFeePerGas
            then NONE else

@@ -17,6 +17,7 @@ Datatype:
          | JumpDest   (num option)
          | ReturnData (byte list)
          | GasUsed    num
+         | StateGasLeft num                       (* EIP-8037 state gas *)
          | AddRefund  num
          | SubRefund  num
          | Logs       (event list)
@@ -44,6 +45,7 @@ Datatype:
           | HasJumpDest
           | HasReturnData
           | HasGasUsed
+          | HasStateGasLeft
           | HasAddRefund
           | HasSubRefund
           | HasLogs
@@ -67,6 +69,7 @@ Definition evm2set_on_def:
       (if HasJumpDest ∈ dom   then { JumpDest (current_context.jumpDest) } else {}) ∪
       (if HasReturnData ∈ dom then { ReturnData (current_context.returnData) } else {}) ∪
       (if HasGasUsed ∈ dom    then { GasUsed (current_context.gasUsed) } else {}) ∪
+      (if HasStateGasLeft ∈ dom then { StateGasLeft (current_context.stateGasLeft) } else {}) ∪
       (if HasAddRefund ∈ dom  then { AddRefund (current_context.addRefund) } else {}) ∪
       (if HasSubRefund ∈ dom  then { SubRefund (current_context.subRefund) } else {}) ∪
       (if HasLogs ∈ dom       then { Logs (current_context.logs) } else {}) ∪
@@ -130,6 +133,7 @@ Proof
        (if ∃x. JumpDest x ∈ u then {HasJumpDest} else {}) ∪
        (if ∃x. ReturnData x ∈ u then {HasReturnData} else {}) ∪
        (if ∃x. GasUsed x ∈ u then {HasGasUsed} else {}) ∪
+       (if ∃x. StateGasLeft x ∈ u then {HasStateGasLeft} else {}) ∪
        (if ∃x. AddRefund x ∈ u then {HasAddRefund} else {}) ∪
        (if ∃x. SubRefund x ∈ u then {HasSubRefund} else {}) ∪
        (if ∃x. MsgParams x ∈ u then {HasMsgParams} else {}) ∪
@@ -205,6 +209,12 @@ End
 
 Definition evm_GasUsed_def:
   evm_GasUsed g = SEP_EQ { GasUsed g }
+End
+
+(* EIP-8037: the state gas the top frame's reservoir still holds, which
+   settlement needs to know what the transaction spent. *)
+Definition evm_StateGasLeft_def:
+  evm_StateGasLeft g = SEP_EQ { StateGasLeft g }
 End
 
 Definition evm_MsgParams_def:
@@ -337,6 +347,9 @@ Theorem STAR_evm2set_with_original:
   ((evm_GasUsed g * p) (evm2set_on dom s) ⇔
    (g = (FST (HD (SND s).contexts)).gasUsed) /\
    HasGasUsed ∈ dom /\ p (evm2set_on (dom DELETE HasGasUsed) s)) /\
+  ((evm_StateGasLeft g * p) (evm2set_on dom s) ⇔
+   (g = (FST (HD (SND s).contexts)).stateGasLeft) /\
+   HasStateGasLeft ∈ dom /\ p (evm2set_on (dom DELETE HasStateGasLeft) s)) /\
   ((evm_JumpDest j * p) (evm2set_on dom s) ⇔
    (j = (FST (HD (SND s).contexts)).jumpDest) /\
    HasJumpDest ∈ dom /\ p (evm2set_on (dom DELETE HasJumpDest) s)) /\
@@ -386,6 +399,7 @@ Theorem STAR_evm2set_with_original:
 Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
+        evm_StateGasLeft_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
         evm_TxParams_def, evm_Contexts_def, evm_CachedRB_def, evm_Memory_def,
         evm_Rollback_def, evm_OriginalAccounts_def, evm_Msdomain_def, evm_Logs_def,
@@ -552,6 +566,7 @@ Theorem UPDATE_evm2set_without_original[local]:
   (HasException ∉ dom ⇒ FST r' = FST r) ∧
   (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
   (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
+  (HasStateGasLeft ∉ dom ⇒ ctxt'.stateGasLeft = ctxt.stateGasLeft) ∧
   (HasMsgParams ∉ dom ⇒ ctxt'.msgParams = ctxt.msgParams) ∧
   (HasLogs ∉ dom ⇒ ctxt'.logs = ctxt.logs) ∧
   (HasSubRefund ∉ dom ⇒ ctxt'.subRefund = ctxt.subRefund) ∧
@@ -871,9 +886,15 @@ Theorem post_transaction_accounting_accounts:
   lookup_account addr t.rollback.accounts
 Proof
   strip_tac
-  \\ simp[post_transaction_accounting_def, transaction_gas_accounting_def, LET_THM,
-          lookup_account_process_deletions_other,
-          lookup_account_update_account_other]
+  (* `std_ss`, not `simp`/`srw_ss`: the goal matches two copies of the
+     settlement arithmetic against each other, and the arithmetic
+     normaliser needs minutes over it now that the state dimension is in
+     there.  Nothing here needs arithmetic, only the unfolding. *)
+  \\ ASM_SIMP_TAC std_ss [post_transaction_accounting_def,
+         transaction_gas_accounting_def, LET_THM, COND_CLAUSES,
+         pairTheory.pair_case_thm, pairTheory.UNCURRY_DEF,
+         lookup_account_process_deletions_other,
+         lookup_account_update_account_other]
 QED
 
 (* Helper definitions for gas accounting in bridging theorem *)
@@ -881,16 +902,21 @@ Definition compute_gas_left_def:
   compute_gas_left (ctxtGasLimit:num) ctxtGasUsed = ctxtGasLimit - ctxtGasUsed
 End
 
+(* EIP-8037: what the transaction spent is its limit less the execution
+   gas and the state gas reservoir the top frame gave back. *)
 Definition compute_tx_gas_used_def:
-  compute_tx_gas_used (txGasLimit:num) ctxtGasLimit ctxtGasUsed =
-    txGasLimit - compute_gas_left ctxtGasLimit ctxtGasUsed
+  compute_tx_gas_used (txGasLimit:num) ctxtGasLimit ctxtGasUsed
+                      ctxtStateGasLeft =
+    txGasLimit - compute_gas_left ctxtGasLimit ctxtGasUsed - ctxtStateGasLeft
 End
 
 Definition compute_total_gas_used_def:
   compute_total_gas_used (txGasLimit:num) txAccessList txData txTo txFrom
-                         txValue ctxtGasLimit ctxtGasUsed ctxtAddRefund
+                         txValue ctxtGasLimit ctxtGasUsed ctxtStateGasLeft
+                         ctxtAddRefund
                          ctxtSubRefund authRefund =
-    let txGasUsed = compute_tx_gas_used txGasLimit ctxtGasLimit ctxtGasUsed in
+    let txGasUsed = compute_tx_gas_used txGasLimit ctxtGasLimit ctxtGasUsed
+                         ctxtStateGasLeft in
     let storageRefund = ctxtAddRefund - ctxtSubRefund in
     let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
     let floor_cost = calldata_floor_cost txAccessList (IS_NONE txTo)
@@ -900,21 +926,23 @@ End
 
 Definition compute_refund_ether_def:
   compute_refund_ether (txGasLimit:num) txGasPrice txAccessList txData txTo
-                       txFrom txValue ctxtGasLimit ctxtGasUsed ctxtAddRefund
+                       txFrom txValue ctxtGasLimit ctxtGasUsed ctxtStateGasLeft
+                       ctxtAddRefund
                        ctxtSubRefund authRefund =
     let totalGasUsed = compute_total_gas_used txGasLimit txAccessList txData
                          txTo txFrom txValue ctxtGasLimit ctxtGasUsed
-                         ctxtAddRefund ctxtSubRefund authRefund in
+                         ctxtStateGasLeft ctxtAddRefund ctxtSubRefund authRefund in
       (txGasLimit - totalGasUsed) * txGasPrice
 End
 
 Definition compute_transaction_fee_def:
   compute_transaction_fee (txGasLimit:num) txGasPrice baseFeePerGas txAccessList
                           txData txTo txFrom txValue ctxtGasLimit ctxtGasUsed
+                          ctxtStateGasLeft
                           ctxtAddRefund ctxtSubRefund authRefund =
     let totalGasUsed = compute_total_gas_used txGasLimit txAccessList txData
                          txTo txFrom txValue ctxtGasLimit ctxtGasUsed
-                         ctxtAddRefund ctxtSubRefund authRefund in
+                         ctxtStateGasLeft ctxtAddRefund ctxtSubRefund authRefund in
     let priorityFeePerGas = txGasPrice - baseFeePerGas in
       totalGasUsed * priorityFeePerGas
 End
@@ -929,26 +957,35 @@ Theorem post_transaction_accounting_success_lookup:
        compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
          tx.to tx.from tx.value
          (FST (HD t.contexts)).msgParams.gasLimit
-         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
+         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).stateGasLeft
+         (FST (HD t.contexts)).addRefund
          (FST (HD t.contexts)).subRefund t.txParams.authRefund
      else 0) +
     (if addr = blk.coinBase then
        compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
          tx.accessList tx.data tx.to tx.from tx.value
          (FST (HD t.contexts)).msgParams.gasLimit
-         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
+         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).stateGasLeft
+         (FST (HD t.contexts)).addRefund
          (FST (HD t.contexts)).subRefund t.txParams.authRefund
      else 0))
 Proof
   strip_tac
-  >> simp[post_transaction_accounting_def, transaction_gas_accounting_def]
+  (* `std_ss` for the same reason as `post_transaction_accounting_accounts`
+     above: the spec's settlement formula and the `compute_*` mirrors are
+     unfolded and matched syntactically, which `srw_ss` cannot do quickly. *)
+  >> ASM_SIMP_TAC std_ss [post_transaction_accounting_def,
+        transaction_gas_accounting_def, LET_THM, COND_CLAUSES,
+        pairTheory.pair_case_thm, pairTheory.UNCURRY_DEF]
   >> Cases_on `MEM addr t.rollback.toDelete`
-  >> simp[clear_deleted_def,
-          lookup_account_process_deletions_deleted,
-          lookup_account_process_deletions_other, lookup_account_two_credits,
-          compute_refund_ether_def, compute_transaction_fee_def,
-          compute_total_gas_used_def, compute_tx_gas_used_def,
-          compute_gas_left_def]
+  >> ASM_SIMP_TAC std_ss [clear_deleted_def,
+        lookup_account_process_deletions_deleted,
+        lookup_account_process_deletions_other,
+        lookup_account_update_account_other,
+        lookup_account_update_account_same, lookup_account_two_credits,
+        compute_refund_ether_def, compute_transaction_fee_def,
+        compute_total_gas_used_def, compute_tx_gas_used_def,
+        compute_gas_left_def, LET_THM, COND_CLAUSES]
 QED
 
 (* Main bridging theorem: connects SPEC to run_transaction for message calls *)
@@ -969,7 +1006,8 @@ Theorem SPEC_to_run_transaction:
   (* Postcondition has the required form for successful execution *)
   Q = evm_Exception (INR NONE) * evm_ReturnData returnData *
       evm_Logs logs * evm_Rollback rb * evm_Contexts [] *
-      evm_GasUsed gasUsed * evm_MsgParams msgParams *
+      evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+      evm_MsgParams msgParams *
       evm_AddRefund addRefund * evm_SubRefund subRefund *
       evm_TxParams txParams * R
   ⇒
@@ -988,12 +1026,13 @@ Theorem SPEC_to_run_transaction:
          (if addr = tx.from then
             compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
               tx.to tx.from tx.value
-              msgParams.gasLimit gasUsed addRefund subRefund txParams.authRefund
+              msgParams.gasLimit gasUsed stateGasLeft addRefund subRefund
+              txParams.authRefund
           else 0) +
          (if addr = blk.coinBase then
             compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
               tx.accessList tx.data tx.to tx.from tx.value
-              msgParams.gasLimit gasUsed addRefund
+              msgParams.gasLimit gasUsed stateGasLeft addRefund
               subRefund txParams.authRefund
           else 0)))
 Proof
@@ -1008,13 +1047,14 @@ Proof
       \\ conj_tac
       >- (qexists_tac `evm_ReturnData returnData * evm_Logs logs *
             evm_Rollback rb * evm_Contexts [] * evm_GasUsed gasUsed *
+            evm_StateGasLeft stateGasLeft *
             evm_MsgParams msgParams * evm_AddRefund addRefund *
             evm_SubRefund subRefund * evm_TxParams txParams * R`
           \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
       >- (qexists_tac `P` \\ simp[]))
   \\ gvs[]
   \\ `FST rs2 = INR NONE` by
-     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
       \\ simp[evm2set_def]
       \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
       \\ simp[])
@@ -1022,7 +1062,7 @@ Proof
   \\ `r.contexts <> []` by
      (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
       \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
-  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
   \\ simp[evm2set_def, STAR_evm2set]
   \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
   \\ simp[]
@@ -1550,6 +1590,7 @@ QED
 Theorem SPEC_Stop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -1578,6 +1619,7 @@ Theorem SPEC_Stop_inner:
                       (lookup_account addr accounts with code := [])
                       accounts)) *
    evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs (caller.logs ++ l) *
    evm_AddRefund (caller.addRefund + ar) *
@@ -1806,6 +1848,7 @@ QED
 Theorem SPEC_StackUnderflow_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -1830,6 +1873,7 @@ Theorem SPEC_StackUnderflow_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -1841,6 +1885,7 @@ QED
 Theorem SPEC_OutOfGas_pop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -1867,6 +1912,7 @@ Theorem SPEC_OutOfGas_pop_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -1878,6 +1924,7 @@ QED
 Theorem SPEC_OutOfGas_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -1902,6 +1949,7 @@ Theorem SPEC_OutOfGas_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -1913,6 +1961,7 @@ QED
 Theorem SPEC_StackOverflow_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -1940,6 +1989,7 @@ Theorem SPEC_StackOverflow_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -2014,6 +2064,7 @@ QED
 Theorem SPEC_InvalidJumpDest_Jump_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2039,6 +2090,7 @@ Theorem SPEC_InvalidJumpDest_Jump_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -2052,6 +2104,7 @@ QED
 Theorem SPEC_InvalidJumpDest_JumpI_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2078,6 +2131,7 @@ Theorem SPEC_InvalidJumpDest_JumpI_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -2091,6 +2145,7 @@ QED
 Theorem SPEC_OutOfBoundsRead_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2118,6 +2173,7 @@ Theorem SPEC_OutOfBoundsRead_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -2192,6 +2248,7 @@ QED
 Theorem SPEC_WriteInStaticContext_TStore_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2216,6 +2273,7 @@ Theorem SPEC_WriteInStaticContext_TStore_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -2227,6 +2285,7 @@ QED
 Theorem SPEC_WriteInStaticContext_Log_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -2254,6 +2313,7 @@ Theorem SPEC_WriteInStaticContext_Log_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -2268,6 +2328,7 @@ QED
 Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Msdomain d *
@@ -2300,6 +2361,7 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
    evm_Msdomain (msdomain_add addr d) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -3740,6 +3802,7 @@ QED
 Theorem SPEC_Create_original:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
    evm_Contexts cs * evm_Msdomain d * evm_JumpDest j *
    evm_CachedRB cb * evm_OriginalAccounts original *
@@ -3780,12 +3843,13 @@ Theorem SPEC_Create_original:
          caller = <|stack := DROP (if inst = Create2 then 4 else 3) ss;
                     memory := em; pc := pc; jumpDest := j;
                     returnData := []; gasUsed := g + gas + cappedGas;
-                    addRefund := ar; subRefund := sr; logs := l;
-                    msgParams := p|> ∧
+                    addRefund := ar; subRefund := sr; stateGasLeft := sg;
+                    logs := l; msgParams := p|> ∧
          caller_rb = accesses_add addr rb
                      with accounts updated_by increment_nonce p.callee ))
   {}
   (evm_Stack [] * evm_PC 0 * evm_GasUsed 0 *
+   evm_StateGasLeft 0 *
    evm_MsgParams (initial_msg_params addr code F (Code addr) tx) *
    evm_JumpDest NONE *
    evm_Exception (INL ()) * evm_ReturnData [] *
@@ -4100,6 +4164,7 @@ QED
 Theorem SPEC_Call:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -4150,9 +4215,10 @@ Theorem SPEC_Call:
          all_pcs = FDOM p.parsed ∪ FDOM new_parsed ∧
          caller = <|stack := DROP (6 + vOff) ss; memory := em; pc := pc; jumpDest := j;
                     returnData := []; gasUsed := g + gasCost; addRefund := ar;
-                    subRefund := sr; logs := l; msgParams := p|>))
+                    subRefund := sr; stateGasLeft := sg; logs := l; msgParams := p|>))
   {}
   (evm_Stack [] * evm_PC 0 * evm_GasUsed 0 *
+   evm_StateGasLeft 0 *
    evm_MsgParams (initial_msg_params callee calleeCode
                   (call_inst = StaticCall ∨ p.static)
                   (Memory <|offset := retOffset; size := retSize|>) tx) *
@@ -4894,6 +4960,7 @@ QED
 Theorem SPEC_Return_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -4936,6 +5003,7 @@ Theorem SPEC_Return_inner:
                       (lookup_account addr accounts with code := data)
                       accounts) else if inst = Revert then cb else rb) *
    evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs (caller.logs ++ if inst = Revert then [] else l) *
    evm_AddRefund (caller.addRefund + if inst = Revert then 0 else ar) *
@@ -5091,6 +5159,7 @@ QED
 Theorem SPEC_Invalid_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -5113,6 +5182,7 @@ Theorem SPEC_Invalid_inner:
    evm_Exception (INL ()) *
    evm_Rollback cb *
    evm_GasUsed caller.gasUsed *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -5284,6 +5354,7 @@ QED
 Theorem SPEC_SelfDestruct_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb * evm_Msdomain d * evm_OriginalAccounts orig *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -5328,6 +5399,7 @@ Theorem SPEC_SelfDestruct_inner:
                       (lookup_account a accounts with code := [])
                       accounts)) *
    evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   evm_StateGasLeft (FST (HD cs)).stateGasLeft *
    evm_JumpDest caller.jumpDest *
    evm_Logs (caller.logs ++ l ++ transfer_log p.callee addr sender.balance) *
    evm_AddRefund (caller.addRefund + ar) *

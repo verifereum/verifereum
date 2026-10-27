@@ -43,20 +43,22 @@ End
 
 Definition transaction_accounting_inline_def:
   transaction_accounting_inline blk tx result acc t =
-  let (gasLimit, gasUsed, addRefund, subRefund, logs, returnData) =
+  let (gasLimit, gasUsed, stateGasLeft, addRefund, subRefund, logs, returnData) =
     if NULL t.contexts ∨ ¬NULL (TL t.contexts)
-    then (0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
+    then (0, 0, 0, 0, 0, [], MAP (n2w o ORD) "not exactly one remaining context")
     else let ctxt = FST $ HD t.contexts in
-      (ctxt.msgParams.gasLimit, ctxt.gasUsed,
+      (ctxt.msgParams.gasLimit, ctxt.gasUsed, ctxt.stateGasLeft,
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
-  let txGasUsed = tx.gasLimit - gasLeft in
+  let txGasUsed = tx.gasLimit - gasLeft - stateGasLeft in
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
   let gasRefund = MIN (txGasUsed DIV 5) (t.txParams.authRefund + storageRefund) in
   let floor_cost = calldata_floor_cost tx.accessList (IS_NONE tx.to)
                                     (tx.to = SOME tx.from) tx.value tx.data in
   let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
-  let executionGasUsed = MAX txGasUsed floor_cost in
+  let stateGasUsed = (t.txParams.stateGasReservoir - stateGasLeft) +
+                     t.txParams.stateGasSpilled + t.txParams.stateGasCommitted in
+  let executionGasUsed = MAX (txGasUsed - stateGasUsed) floor_cost in
   let refundEther = (tx.gasLimit - totalGasUsed) * tx.gasPrice in
   let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
   let transactionFee = totalGasUsed * priorityFeePerGas in
@@ -73,6 +75,7 @@ Definition transaction_accounting_inline_def:
   let logs = if result = NONE then logs else [] in
   let tr = <| gasUsed := totalGasUsed;
               executionGasUsed := executionGasUsed;
+              stateGasUsed := stateGasUsed;
               logs := logs;
               result := result;
               output := returnData;
@@ -128,15 +131,21 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* The block's execution gas ignores the refund, the receipt's does not. *)
+(* The block's two dimensions ignore the refund, the receipt's does not,
+   and the state dimension comes off the execution one: a transaction
+   with no state gas is unchanged, one that draws its reservoir reports
+   the draw as state gas and the rest as execution, and a spill with a
+   committed part counts in the state dimension even though the gas left
+   the execution budget. *)
 Theorem transaction_gas_accounting_cases:
-  transaction_gas_accounting 2 1 100000 21000 (60000,10000,0) =
-    (32000,40000,136000,32000) ∧
-  transaction_gas_accounting 2 1 100000 35000 (60000,10000,0) =
-    (35000,40000,130000,35000) ∧
-  transaction_gas_accounting 2 1 100000 21000 (60000,0,10000) =
-    (32000,40000,136000,32000) ∧
-  transaction_gas_accounting 1 1 21000 21000 (0,0,0) = (21000,21000,0,0)
+  transaction_gas_accounting 2 1 100000 0 0 0 21000 (60000,0,10000,0) =
+    (32000,40000,0,136000,32000) ∧
+  transaction_gas_accounting 2 1 100000 0 0 0 35000 (60000,0,10000,0) =
+    (35000,40000,0,130000,35000) ∧
+  transaction_gas_accounting 2 1 220000 100000 0 0 21000 (60000,40000,0,0) =
+    (120000,60000,60000,200000,120000) ∧
+  transaction_gas_accounting 1 1 100000 1000 2000 500 0 (90000,0,0,0) =
+    (10000,6500,3500,90000,0)
 Proof
   CONV_TAC cv_eval
 QED

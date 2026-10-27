@@ -22,6 +22,17 @@ Definition create_cost_def:
   create_cost = 12000n
 End
 
+(* EIP-7825: the execution gas a transaction may be granted.  EIP-8037
+   bounds the intrinsic and the calldata floor by it separately, and caps
+   the two dimensions' sum by `tx_max_total_gas_limit`. *)
+Definition tx_max_gas_limit_def[simp]:
+  tx_max_gas_limit = 2n ** 24
+End
+
+Definition tx_max_total_gas_limit_def[simp]:
+  tx_max_total_gas_limit = 2n ** 32 - 1
+End
+
 (* EIP-2780: sending value to an account other than the sender's own. *)
 Definition tx_value_cost_def:
   tx_value_cost = 6000n
