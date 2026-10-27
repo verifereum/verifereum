@@ -4016,7 +4016,7 @@ Proof
          set_current_context_def, consume_gas_def, EL_TAKE,
          read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, memory_expansion_info_split,
-         expand_memory_split,get_gas_left_def]
+         expand_memory_split,get_gas_left_def,withhold_create_gas_def]
   \\ qpat_x_assum`step_inst _ = _`kall_tac
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
@@ -4112,7 +4112,7 @@ Proof
          set_current_context_def, consume_gas_def, EL_TAKE,
          read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, memory_expansion_info_split,
-         expand_memory_split,get_gas_left_def]
+         expand_memory_split,get_gas_left_def,withhold_create_gas_def]
   \\ qpat_x_assum`step_inst _ = _`kall_tac
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
@@ -4237,12 +4237,12 @@ Proof
          set_current_context_def, consume_gas_def, EL_TAKE,
          read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, memory_expansion_info_split,
-         expand_memory_split,get_gas_left_def]
+         expand_memory_split,get_gas_left_def,withhold_create_gas_def]
   \\ qpat_x_assum`step_inst _ = _`kall_tac
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
          set_current_context_def, get_num_contexts_def, access_storage_split,
-         HD_TAKE, proceed_create_def,
+         HD_TAKE, proceed_create_def, drain_state_gas_reservoir_def,
          update_accounts_def, get_rollback_def, get_original_def,
          set_original_def, push_context_def, inc_pc_or_jump_def]
   \\ gvs[access_address_split, access_storage_split]
