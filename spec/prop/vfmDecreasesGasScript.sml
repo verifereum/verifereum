@@ -1391,7 +1391,9 @@ Proof
   \\ strip_tac
   \\ Cases_on `s.contexts` >- gs [] \\ rw [] \\ rw [] \\ gs []
   >- gs[wf_context_def, frame_unused_gas_def]
-  \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF]
+  \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF, frame_unused_gas_def]
+  \\ qpat_x_assum `n <= n'` mp_tac
+  \\ gas_arith_tac
 QED
 
 Theorem decreases_gas_inc_pc[simp]:
