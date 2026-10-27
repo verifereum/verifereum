@@ -198,11 +198,19 @@ QED
    returns INR, so handle_exception is always invoked; we compose
    psf_handle_create with the same-length version of
    handle_exception_same_frame. *)
+(* EIP-8037: the failure path's `restore_state_gas` zeroes the failing frame's
+   refund counters (`restore_state_gas_def`), so `same_frame_rel` does not hold
+   of the frame as it entered.  The statement pins the input's refund counters
+   at 0 instead, which is the relation's refund clause with the loss removed;
+   it reduces to the old statement when the frame had no accrued refunds. *)
 Theorem handle_step_same_frame:
   outputTo_consistent s ∧
   handle_step e s = (r, s') ∧
   LENGTH s'.contexts = LENGTH s.contexts ⇒
-  same_frame_rel s s'
+  same_frame_rel
+    (s with contexts := (FST (HD s.contexts) with <|addRefund := 0; subRefund := 0|>,
+                         SND (HD s.contexts)) :: TL s.contexts)
+    s'
 Proof
   rw[handle_step_def]
   >- (

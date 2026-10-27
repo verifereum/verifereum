@@ -1157,11 +1157,19 @@ Proof
   >> simp[]
 QED
 
+(* EIP-8037: the failure path's `restore_state_gas` zeroes the failing frame's
+   refund counters (`restore_state_gas_def`), so `same_frame_rel` does not hold
+   of the frame as it entered.  The statement pins the input's refund counters
+   at 0 instead, which is the relation's refund clause with the loss removed;
+   it reduces to the old statement when the frame had no accrued refunds. *)
 Theorem step_same_frame:
   outputTo_consistent s ∧
   step s = (r, s') ∧
   LENGTH s'.contexts = LENGTH s.contexts ⇒
-  same_frame_rel s s'
+  same_frame_rel
+    (s with contexts := (FST (HD s.contexts) with <|addRefund := 0; subRefund := 0|>,
+                         SND (HD s.contexts)) :: TL s.contexts)
+    s'
 Proof
   strip_tac
   >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
@@ -1267,11 +1275,19 @@ QED
    guard stops iteration there. The theorem's hypothesis
    `LENGTH es'.contexts = LENGTH es.contexts` rules the "pop below"
    and "pushed" cases out at the conclusion. *)
+(* EIP-8037: the failure path's `restore_state_gas` zeroes the failing frame's
+   refund counters (`restore_state_gas_def`), so `same_frame_rel` does not hold
+   of the frame as it entered.  The statement pins the input's refund counters
+   at 0 instead, which is the relation's refund clause with the loss removed;
+   it reduces to the old statement when the frame had no accrued refunds. *)
 Theorem run_within_frame_preserves:
   outputTo_consistent es ∧
   run_within_frame es = SOME (r, es') ∧
   LENGTH es'.contexts = LENGTH es.contexts ⇒
-  same_frame_rel es es'
+  same_frame_rel
+    (es with contexts := (FST (HD es.contexts) with <|addRefund := 0; subRefund := 0|>,
+                         SND (HD es.contexts)) :: TL es.contexts)
+    es'
 Proof
   rpt strip_tac
   >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
@@ -1513,9 +1529,14 @@ Proof
   \\ rw[same_frame_rel_def]
 QED
 
+(* The true corollary of `run_within_frame_preserves` for a frame that enters
+   with nothing accrued: a nested failure zeroes the frame's counters, so the
+   frame's counters are monotone exactly when it had nothing to roll back. *)
 Theorem run_within_frame_refund_monotone:
   outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
-  LENGTH es'.contexts = LENGTH es.contexts ⇒
+  LENGTH es'.contexts = LENGTH es.contexts ∧
+  (FST (HD es.contexts)).addRefund = 0 ∧
+  (FST (HD es.contexts)).subRefund = 0 ⇒
   (FST (HD es.contexts)).addRefund ≤ (FST (HD es'.contexts)).addRefund ∧
   (FST (HD es.contexts)).subRefund ≤ (FST (HD es'.contexts)).subRefund
 Proof
