@@ -1745,7 +1745,9 @@ Proof
          set_current_context_def,assert_def,get_return_data_def,
          get_output_to_def,set_return_data_def,Abbr`calleeGasLeft`,
          write_memory_def,pop_context_def,unuse_gas_def,push_logs_def,
-         update_gas_refund_def,get_gas_left_def]
+         update_gas_refund_def,get_gas_left_def,
+         repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+         absorb_state_gas_def, Abbr`merged`]
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
