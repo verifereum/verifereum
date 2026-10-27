@@ -679,3 +679,187 @@ Proof
   \\ simp[account_state_component_equality]
   \\ rw[FUN_EQ_THM]
 QED
+
+Theorem balance_slot_lookup[local]:
+  (∀a. balance_slot_key a ∉ {0w; 1w; 2w} ∧
+       (a ∈ ts ∨ balance_slot_key a ∉ IMAGE balance_slot_key ts) ⇒
+       lookup_storage (balance_slot_key a) st = n2w (f a)) ⇒
+  ∀x. balance_slot_key x ∉ {0w; 1w; 2w} ∧
+      (∀b. b ∈ ts ∧ balance_slot_key x = balance_slot_key b ⇒ x = b) ⇒
+      lookup_storage (balance_slot_key x) st = n2w (f x)
+Proof
+  rpt strip_tac \\ first_x_assum irule \\ simp[] \\ metis_tac[]
+QED
+
+Theorem lookup_update_storage[local]:
+  lookup_storage k (update_storage k' v s) =
+  if k' = k then v else lookup_storage k s
+Proof
+  rw[lookup_storage_def, update_storage_def, APPLY_UPDATE_THM]
+QED
+
+Theorem WETH_transfer_locked[local]:
+  (WETH_transfer src dst n ws).locked = ws.locked
+Proof
+  rw[WETH_transfer_def]
+QED
+
+Theorem WETH_transfer_fields[local]:
+  (WETH_transfer src dst n ws).touched = dst INSERT ws.touched ∧
+  (WETH_transfer src dst n ws).balances =
+    (dst =+ (src =+ ws.balances src - n) ws.balances dst + n)
+      ((src =+ ws.balances src - n) ws.balances)
+Proof
+  rw[WETH_transfer_def]
+QED
+
+(* the storage writes of a transfer keep the WETH_EVM relation *)
+Theorem WETH_transfer_storage[local]:
+  wf_WETH_state ws ∧ wad ≤ ws.balances src ∧
+  (∀a. balance_slot_key a ∉ {0w; 1w; 2w} ∧
+       (a ∈ ws.touched ∨ balance_slot_key a ∉ IMAGE balance_slot_key ws.touched) ⇒
+       lookup_storage (balance_slot_key a) st = n2w (ws.balances a)) ∧
+  (∀a b. (a = src ∨ a = dst) ∧
+         (b = src ∨ b = dst ∨ b ∈ ws.touched) ∧
+         balance_slot_key a = balance_slot_key b ⇒ a = b) ∧
+  balance_slot_key src ∉ {0w; 1w; 2w} ∧
+  balance_slot_key dst ∉ {0w; 1w; 2w}
+  ⇒
+  let st1 = update_storage (balance_slot_key src)
+              (n2w (ws.balances src - wad)) st;
+      st2 = update_storage (balance_slot_key dst)
+              (lookup_storage (balance_slot_key dst) st1 + n2w wad) st1;
+      ws' = WETH_transfer src dst wad ws in
+  wf_WETH_state ws' ∧
+  (∀a. balance_slot_key a ∉ {0w; 1w; 2w} ∧
+       (a ∈ ws'.touched ∨
+        balance_slot_key a ∉ IMAGE balance_slot_key ws'.touched) ⇒
+       lookup_storage (balance_slot_key a) st2 = n2w (ws'.balances a)) ∧
+  lookup_storage 0w st2 = lookup_storage 0w st ∧
+  lookup_storage 1w st2 = lookup_storage 1w st ∧
+  lookup_storage 2w st2 = lookup_storage 2w st
+Proof
+  strip_tac
+  \\ `∀a. a ∉ ws.touched ⇒ ws.balances a = 0`
+     by (gvs[wf_WETH_state_def, SUBSET_DEF] \\ metis_tac[NOT_ZERO_LT_ZERO])
+  \\ `lookup_storage (balance_slot_key src) st = n2w (ws.balances src) ∧
+      lookup_storage (balance_slot_key dst) st = n2w (ws.balances dst)`
+     by (conj_tac \\ first_assum irule \\ simp[] \\ metis_tac[])
+  \\ `balance_slot_key src = balance_slot_key dst ⇒ src = dst`
+     by metis_tac[]
+  \\ rpt (qpat_x_assum `balance_slot_key _ ∉ _`
+            (strip_assume_tac o
+             REWRITE_RULE [IN_INSERT, NOT_IN_EMPTY, DE_MORGAN_THM]))
+  \\ simp_tac std_ss [LET_THM]
+  \\ conj_tac >- (irule wf_WETH_transfer \\ asm_rewrite_tac[])
+  \\ asm_rewrite_tac[lookup_update_storage, WETH_transfer_fields,
+                     APPLY_UPDATE_THM]
+  \\ rpt gen_tac \\ disch_then (map_every assume_tac o CONJUNCTS)
+  \\ Cases_on `a = src`
+  >- (
+    pop_assum SUBST_ALL_TAC
+    \\ Cases_on `src = dst`
+    >- (pop_assum SUBST_ALL_TAC \\ rewrite_tac[word_add_n2w]
+        \\ qpat_assum `wad ≤ _` (rewrite_tac o single o MATCH_MP SUB_ADD))
+    \\ `dst ≠ src ∧ balance_slot_key dst ≠ balance_slot_key src`
+       by metis_tac[]
+    \\ asm_rewrite_tac[])
+  \\ Cases_on `a = dst`
+  >- (
+    pop_assum SUBST_ALL_TAC
+    \\ `src ≠ dst ∧ balance_slot_key src ≠ balance_slot_key dst`
+       by metis_tac[]
+    \\ asm_rewrite_tac[word_add_n2w])
+  \\ `src ≠ a ∧ dst ≠ a` by metis_tac[]
+  \\ `balance_slot_key dst ≠ balance_slot_key a`
+     by metis_tac[IN_IMAGE, IN_INSERT]
+  \\ asm_rewrite_tac[]
+  \\ Cases_on `balance_slot_key src = balance_slot_key a`
+  >- (
+    `src ∉ ws.touched ∧ a ∉ ws.touched`
+      by metis_tac[IN_IMAGE, IN_INSERT]
+    \\ `ws.balances src = 0 ∧ ws.balances a = 0` by metis_tac[]
+    \\ `wad = 0` by decide_tac
+    \\ asm_rewrite_tac[SUB_0])
+  \\ asm_rewrite_tac[]
+  \\ qpat_assum `∀a. _ ∧ _ ⇒ lookup_storage _ st = _` irule
+  \\ conj_tac >- first_assum ACCEPT_TAC
+  \\ metis_tac[IN_IMAGE, IN_INSERT]
+QED
+
+(* the same from the WETH_EVM relation: the abstract state moves wad from
+   the caller to dst, assuming the two balance slots involved don't collide
+   with each other, with any touched account's slot, or with slots 0-2 *)
+Theorem WETH_EVM_transfer_run_transaction:
+  WETH_EVM addr ws accounts ∧
+  wf_accounts accounts ∧ ¬fIN addr precompile_addresses ∧
+  tx.to = SOME addr ∧ tx.value = 0 ∧
+  function_selector "transfer" [Address; Uint 256] ++
+    enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad])
+    ≼ tx.data ∧
+  wad ≤ ws.balances tx.from ∧
+  (∀a b. (a = tx.from ∨ a = dst) ∧
+         (b = tx.from ∨ b = dst ∨ b ∈ ws.touched) ∧
+         balance_slot_key a = balance_slot_key b ⇒ a = b) ∧
+  balance_slot_key tx.from ∉ {0w; 1w; 2w} ∧
+  balance_slot_key dst ∉ {0w; 1w; 2w} ∧
+  access_slot_check dom (SK addr (balance_slot_key tx.from)) ∧
+  access_slot_check dom (SK addr (balance_slot_key dst)) ∧
+  blk.coinBase ≠ addr ∧
+  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
+  53262 ≤ (FST (HD s.contexts)).msgParams.gasLimit
+  ⇒
+  ∃result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') ∧
+    result.result = NONE ∧
+    result.output = enc (Tuple [Bool]) (ListV [NumV 1]) ∧
+    result.logs =
+      [<| logger := addr;
+          topics :=
+            [word_of_bytes_be
+               (Keccak_256_string "Transfer(address,address,uint256)");
+             w2w tx.from; w2w dst];
+          data := enc (Tuple [Uint 256]) (ListV [NumV wad]) |>] ∧
+    WETH_EVM addr (WETH_transfer tx.from dst wad ws) accounts'
+Proof
+  strip_tac
+  \\ qpat_x_assum `WETH_EVM _ _ _`
+       (strip_assume_tac o SIMP_RULE std_ss [WETH_EVM_def, LET_THM])
+  \\ qpat_assum `wf_WETH_state ws`
+       (strip_assume_tac o REWRITE_RULE [wf_WETH_state_def])
+  \\ qpat_assum `∀a. _ ∧ _ ⇒ lookup_storage _ _ = n2w _`
+       (assume_tac o MATCH_MP balance_slot_lookup)
+  \\ `lookup_storage (balance_slot_key tx.from)
+        (lookup_account addr accounts).storage = n2w (ws.balances tx.from) ∧
+      lookup_storage (balance_slot_key dst)
+        (lookup_account addr accounts).storage = n2w (ws.balances dst)`
+  by (pop_assum (fn th => conj_tac \\ irule th)
+      \\ asm_rewrite_tac[] \\ rpt strip_tac
+      \\ qpat_x_assum `∀a b. _` irule \\ asm_rewrite_tac[])
+  \\ `wad ≤ w2n (lookup_storage (balance_slot_key tx.from)
+                   (lookup_account addr accounts).storage)`
+  by (qpat_assum `lookup_storage (balance_slot_key tx.from) _ = _`
+        SUBST1_TAC
+      \\ `ws.balances tx.from MOD dimword (:256) = ws.balances tx.from`
+      by (irule LESS_MOD
+          \\ rewrite_tac[EVAL “dimword (:256)”, GSYM (EVAL “2n ** 256”)]
+          \\ qpat_assum `∀a. ws.balances a < _` MATCH_ACCEPT_TAC)
+      \\ asm_rewrite_tac[w2n_n2w])
+  \\ drule_at_then Any (drule_all_then strip_assume_tac)
+       weth_transfer_run_transaction
+  \\ qexistsl_tac [`result`, `accounts'`]
+  \\ asm_rewrite_tac[WETH_EVM_def]
+  \\ qpat_x_assum `lookup_account addr accounts' = _` SUBST1_TAC
+  \\ simp_tac std_ss [LET_THM]
+  \\ qpat_assum `lookup_storage (balance_slot_key tx.from) _ = _`
+       (fn th => rewrite_tac[th])
+  \\ qpat_assum `wad ≤ ws.balances tx.from`
+       (rewrite_tac o single o GSYM o MATCH_MP n2w_sub)
+  \\ mp_tac (Q.INST [`src` |-> `tx.from`,
+                     `st` |-> `(lookup_account addr accounts).storage`]
+                    WETH_transfer_storage)
+  \\ impl_tac >- asm_rewrite_tac[]
+  \\ simp_tac std_ss [LET_THM] \\ strip_tac
+  \\ asm_rewrite_tac[account_state_accfupds, K_THM, WETH_transfer_locked]
+QED
