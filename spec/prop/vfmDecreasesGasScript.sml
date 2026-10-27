@@ -2258,6 +2258,20 @@ Proof
     \\ irule_at Any decreases_gas_write_memory)
 QED
 
+Theorem decreases_gas_restore_state_gas[simp]:
+  decreases_gas F restore_state_gas
+Proof
+  rw[decreases_gas_def, restore_state_gas_def,
+     get_current_context_def, bind_def, return_def,
+     set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def] >>
+  mp_tac (Q.SPECL [`h0.msgParams.gasLimit`, `h0.gasUsed`,
+                  `h0.stateGasSpilled`, `h0.stateGasSpilled`]
+                 frame_unused_gas_credit) >> simp[]
+QED
+
 Theorem decreases_gas_cred_step[simp]:
   decreases_gas_cred T 0 0 step
 Proof
@@ -2272,12 +2286,8 @@ Proof
       \\ CONV_TAC SWAP_EXISTS_CONV \\ qexists_tac `F`
       \\ simp []
       \\ CONJ_TAC >- (rw []
-        \\ irule decreases_gas_imp \\ rw []
-        \\ irule decreases_gas_bind_right
-        \\ irule_at Any decreases_gas_get_gas_left \\ rw []
-        \\ irule decreases_gas_ignore_bind_mono
-        \\ irule_at Any decreases_gas_consume_gas \\ rw []
-        \\ irule_at Any decreases_gas_set_return_data)
+        \\ irule decreases_gas_imp
+        \\ simp[decreases_gas_restore_state_gas])
       \\ simp[GSYM after_pop_def, GSYM handle_ex_helper_def]
       \\ simp[handle_ex_helper_thm]
       \\ irule decreases_gas_cred_bind_right \\ irule_at Any decreases_gas_imp
