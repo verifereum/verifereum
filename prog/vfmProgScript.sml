@@ -1567,8 +1567,9 @@ val end_tac =
 (* `extra` carries the definitions of a step's own gas arithmetic, which
    only the rule for that step needs; the rest of the family shares the
    base set. *)
-fun binop_tac_of extra =
+fun binop_prefix_tac extra prepare =
   start_tac
+  \\ prepare
   \\ gvs (extra @
          [step_inst_def,step_binop_def,step_modop_def,pop_stack_def,bind_def,
           ignore_bind_def,get_current_context_def,return_def,assert_def,
@@ -1602,8 +1603,10 @@ fun binop_tac_of extra =
           ExtCodeHash_gas_def,step_ext_code_hash_def,step_mload_def,
           step_copy_to_memory_def,copy_to_memory_def,step_blob_hash_def,
           write_memory_def,memory_expand_by_def,step_keccak256_def,
-          step_block_hash_def,step_self_balance_def,get_callee_def])
-  \\ Cases_on ‘FST r’ \\ gvs[]
+          step_block_hash_def,step_self_balance_def,get_callee_def]);
+
+val binop_tail_tac =
+  Cases_on ‘FST r’ \\ gvs[]
   \\ TRY(Cases_on ‘(FST (HD (SND r).contexts)).stack’ >- gvs[] \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`DROP _ (hs:bytes32 list)` \\ Cases_on`hs` \\ gvs[])
@@ -1622,6 +1625,11 @@ fun binop_tac_of extra =
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
   \\ end_tac
+
+fun binop_staged_tac extra prepare normalize =
+  binop_prefix_tac extra prepare >> normalize >> binop_tail_tac;
+
+fun binop_tac_of extra = binop_staged_tac extra all_tac all_tac;
 
 val binop_tac = binop_tac_of [];
 
@@ -3636,8 +3644,42 @@ Theorem SPEC_SStore_original:
    evm_StateGasSpilled (sp - MIN stateGasRefund sp) *
    evm_MsgParams p)
 Proof
-  binop_tac_of [SStore_state_gas_def, get_state_gas_left_def,
-                charge_state_gas_def, credit_state_gas_refund_def]
+  binop_prefix_tac [SStore_state_gas_def, get_state_gas_left_def]
+    (Cases_on `(SND r).contexts` >> gvs[] >>
+     rename1 `(SND r).contexts = h::t` >> Cases_on `h` >>
+     rename1 `(SND r).contexts = (ctx,k)::cs` >> gvs[])
+  >> qmatch_asmsub_abbrev_tac
+       `(if refund = 0 then return () else credit_state_gas_refund refund) st` >>
+     `st.contexts <> []` by simp[Abbr `st`] >>
+     Cases_on `st.contexts` >- gvs[] >>
+     rename1 `st.contexts = h::ts` >> Cases_on `h` >>
+     drule guarded_credit_state_gas_refund_apply >>
+     disch_then (qspec_then `refund` assume_tac) >>
+     gvs[bind_def, get_current_context_def, set_current_context_def,
+         return_def, Abbr `st`] >>
+     qmatch_asmsub_abbrev_tac `charge_state_gas sg st2` >>
+     `st2.contexts <> []` by simp[Abbr `st2`] >>
+     Cases_on `st2.contexts` >- gvs[] >>
+     rename1 `st2.contexts = h::ts` >> Cases_on `h` >>
+     drule charge_state_gas_no_spill_apply >>
+     disch_then (qspec_then `sg` mp_tac) >>
+     (impl_tac >- (gvs[Abbr `st2`] >> decide_tac)) >>
+     strip_tac >>
+     gvs[bind_def, get_current_context_def, set_current_context_def,
+         return_def, Abbr `st2`, inc_pc_or_jump_def, is_call_def] >>
+     qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
+     qpat_x_assum `charge_state_gas _ _ = _` kall_tac >>
+     conj_tac >- (Cases_on `FST r` >> gvs[]) >>
+     conj_tac >- (qpat_x_assum `(ad,sd) = _`
+                   (mp_tac o AP_TERM ``FST :num#num -> num``) >> simp[]) >>
+     conj_tac >- (qpat_x_assum `(ad,sd) = _` mp_tac >>
+                 disch_then (mp_tac o AP_TERM ``SND :num#num -> num``) >> simp[]) >>
+     conj_tac >- (rpt (pop_assum kall_tac) >> rw[MIN_DEF] >> decide_tac) >>
+     conj_tac >-
+       (qpat_x_assum `_ = {_}` $ rewrite_tac o single o GSYM >>
+        fs[EXTENSION] >> rw[] >> eq_tac >> rw[]) >>
+     irule UPDATE_evm2set_without_original >>
+     simp[execution_state_component_equality]
 QED
 
 Theorem SPEC_SStore = SPEC_SStore_original;
