@@ -5276,6 +5276,12 @@ Proof
         set_return_data_def,finish_def]
 QED
 
+(* Witnesses for SPEC_Return_outermost as it stood before the Revert correction
+   below: it concluded evm_GasUsed (g + gasCost) and left the head frame's refund
+   counters alone for Revert too, but a failing frame runs restore_state_gas,
+   which hands the spill back to execution gas and zeroes addRefund/subRefund.
+   A positive-spill Revert instance, the negated SPEC instance at that state, and
+   the rule's side conditions there. *)
 Theorem revert_positive_spill_probe[local]:
   let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
                        gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
@@ -5392,6 +5398,12 @@ Theorem SPEC_Return_outermost:
    evm_ReturnData rd *
    evm_MsgParams p *
    evm_GasUsed g *
+   evm_StateGasLeft sg *
+   evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl *
+   evm_StateGasCommitted cm *
+   evm_AddRefund ar *
+   evm_SubRefund sr *
    evm_Exception e *
    evm_Rollback rb *
    cond (2 ≤ LENGTH ss ∧ NULL cs ∧ ISL e ∧
@@ -5421,7 +5433,13 @@ Theorem SPEC_Return_outermost:
                  else rb) *
    evm_Memory em *
    evm_MsgParams p *
-   evm_GasUsed (g + gasCost) *
+   evm_GasUsed (g + gasCost - (if inst = Return then 0 else sp)) *
+   evm_StateGasLeft (if inst = Return then sg else bsl) *
+   evm_StateGasSpilled (if inst = Return then sp else 0) *
+   evm_StateGasBaseline bsl *
+   evm_StateGasCommitted cm *
+   evm_AddRefund (if inst = Return then ar else 0) *
+   evm_SubRefund (if inst = Return then sr else 0) *
    evm_Exception (INR (if inst = Revert then SOME Reverted else NONE)))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
