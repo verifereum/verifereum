@@ -361,8 +361,8 @@ Proof
   strip_tac
   \\ `decreases_gas T (do consume_gas g; charge_state_gas sg od)` by
        (irule decreases_gas_consume_gas_bind
-        \\ conj_tac >- simp []
-        \\ qexists_tac `F` \\ simp [])
+        \\ (conj_tac >- simp [])
+        \\ qexists_tac `F` \\ simp [decreases_gas_charge_state_gas])
   \\ Cases_on `refund = 0`
   >- simp [decreases_gas_return]
   \\ irule decreases_gas_ignore_bind_right
