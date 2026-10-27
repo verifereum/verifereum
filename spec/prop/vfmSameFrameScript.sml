@@ -152,6 +152,17 @@ Definition same_frame_rel_def:
     (FST (HD s.contexts)).subRefund ≤ (FST (HD s'.contexts)).subRefund
 End
 
+Theorem restore_state_gas_refund_counterexample:
+  !s c rb.
+    ~same_frame_rel (s with contexts := [(c with addRefund := 1, rb)])
+      (SND (restore_state_gas
+        (s with contexts := [(c with addRefund := 1, rb)])))
+Proof
+  simp[restore_state_gas_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def, return_def,
+       same_frame_rel_def]
+QED
+
 (* ================================================================ *)
 (* Reflexivity.                                                      *)
 (* ================================================================ *)
