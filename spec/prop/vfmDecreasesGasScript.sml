@@ -2137,7 +2137,7 @@ QED
 Theorem decreases_gas_cred_step_inst[simp]:
   decreases_gas_cred T 0 0 (step_inst inst)
 Proof
-  Cases_on `inst` \\ rw [step_inst_def]
+  Cases_on `inst` \\ rw [step_inst_def, decreases_gas_cred_step_create]
   \\ irule decreases_gas_imp \\ rw []
   >- (irule decreases_gas_ignore_bind_right \\ rw []
     \\ irule_at Any decreases_gas_set_return_data)
