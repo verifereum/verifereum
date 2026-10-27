@@ -703,27 +703,13 @@ Proof
   rw[]
 QED
 
-Theorem handle_exception_decomp_counterexample:
-  let st = s with contexts :=
-    [(c with <|stateGasLeft := 0; stateGasBaseline := 1|>, rb)] in
-  handle_exception (SOME Reverted) st <>
-    bind (return ()) (\u. handle_ex_helper (SOME Reverted)) st
-Proof
-  simp[LET_THM, handle_exception_def, handle_ex_helper_def,
-       restore_state_gas_def, bind_def, ignore_bind_def,
-       get_current_context_def, set_current_context_def,
-       get_num_contexts_def, return_def, reraise_def, fail_def]
-  >> disch_then (mp_tac o Q.AP_TERM
-       `\st. (FST (HD st.contexts)).stateGasLeft`)
-  >> simp[]
-QED
-
 (* Decompose handle_exception into cp prefix + handle_ex_helper *)
 Theorem handle_exception_decomp:
   handle_exception e s =
   (let prefix = (if ~(e = NONE) /\ e <> SOME Reverted then
-     do gasLeft <- get_gas_left; consume_gas gasLeft; set_return_data [] od
-   else return ()) in
+     do restore_state_gas; gasLeft <- get_gas_left; consume_gas gasLeft;
+        set_return_data [] od
+   else if e = SOME Reverted then restore_state_gas else return ()) in
    bind prefix (\u. handle_ex_helper e) s)
 Proof
   simp[handle_exception_def, handle_ex_helper_def, LET_THM,
