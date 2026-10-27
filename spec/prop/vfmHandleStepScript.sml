@@ -1282,19 +1282,33 @@ Proof
   rw[stack_room_ok_def, same_frame_rel_def]
 QED
 
-(* --- Case 1: same_frame_rel preserves gas_stack_ok under           *)
-(* gasUsed monotonicity.                                              *)
+(* --- Case 1: same_frame_rel preserves gas_stack_ok when the head's *)
+(* frame_unused_gas does not grow.                                    *)
 (*                                                                    *)
-(* Key: head's gasUsed never decreases in a same-frame step.         *)
-(* consume_gas always increases it; unuse_gas decreases it, but only  *)
-(* after consume_gas increased it by more (net positive). All other   *)
-(* same-frame ops leave gasUsed unchanged. Since gasLimit =          *)
-(* msgParams.gasLimit is preserved by same_frame_rel, the bound      *)
-(* gasLimit - gasUsed can only shrink, preserving the inequality.    *)
+(* EIP-8037: the head's share of `unused_gas` is its                  *)
+(* `frame_unused_gas`, `gasLimit - gasUsed + stateGasSpilled`, and    *)
+(* the two meter fields move independently.  `same_frame_rel` pins no *)
+(* meter field at all, so gasUsed monotonicity alone was not enough:  *)
+(* a head whose spill grows with its `gasUsed` unchanged has a larger *)
+(* `frame_unused_gas`, and `gas_stack_ok` -- at the frames below it,  *)
+(* whose `EL (SUC i)` is the same frame in both states -- fails.      *)
+(* Checked witness:                                                   *)
+(* `spec/prop/vfmGasStackProbeScript.sml`                             *)
+(* `same_frame_rel_preserves_gas_stack_ok_counterexample`.            *)
+(*                                                                    *)
+(* The hypotheses below say jointly that the head's `frame_unused_gas` *)
+(* does not grow, which is what the bound needs.  They are stronger    *)
+(* than the invariant needs on a step that spills state gas, where     *)
+(* `charge_state_gas` spends execution gas and raises the spill by the *)
+(* same amount: such a step leaves `frame_unused_gas` alone while both *)
+(* conjuncts move, so it cannot supply the spill half.  That boundary, *)
+(* and whether this is still the right measure now that a merge moves  *)
+(* a child's spill into its parent, is with the design owner.          *)
 
 Theorem same_frame_rel_preserves_gas_stack_ok:
   same_frame_rel s s' ∧ gas_stack_ok s ∧
-  (FST (HD s'.contexts)).gasUsed ≥ (FST (HD s.contexts)).gasUsed
+  (FST (HD s'.contexts)).gasUsed ≥ (FST (HD s.contexts)).gasUsed ∧
+  (FST (HD s'.contexts)).stateGasSpilled ≤ (FST (HD s.contexts)).stateGasSpilled
   ⇒ gas_stack_ok s'
 Proof
   rw[gas_stack_ok_def, same_frame_rel_def] >>
