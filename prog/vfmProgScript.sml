@@ -1650,6 +1650,17 @@ Proof
   \\ end_tac
 QED
 
+Theorem repay_absorb_gasUsed_sub[local]:
+  repay_state_gas_spill_context
+    (absorb_state_gas (c with gasUsed := c.gasUsed - n) sg sp cm) =
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)) with
+    gasUsed := (repay_state_gas_spill_context
+                  (absorb_state_gas c sg sp cm)).gasUsed - n
+Proof
+  simp[absorb_state_gas_def, repay_state_gas_spill_context_def,
+       context_component_equality] >> decide_tac
+QED
+
 Theorem SPEC_Stop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
