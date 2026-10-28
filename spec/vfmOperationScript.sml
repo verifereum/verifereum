@@ -310,12 +310,13 @@ Definition static_gas_def[simp]:
   ∧ static_gas DupN           = 3
   ∧ static_gas SwapN          = 3
   ∧ static_gas Exchange       = 3
-  ∧ static_gas Create         = 32000
+  (* EIP-8038: ACCOUNT_WRITE + COLD_ACCOUNT_ACCESS, replacing the flat 32000. *)
+  ∧ static_gas Create         = 12000
   ∧ static_gas Call           = 0
   ∧ static_gas CallCode       = 0
   ∧ static_gas Return         = 0
   ∧ static_gas DelegateCall   = 0
-  ∧ static_gas Create2        = 32000
+  ∧ static_gas Create2        = 12000
   ∧ static_gas StaticCall     = 0
   ∧ static_gas Revert         = 0
   ∧ static_gas Invalid        = 0

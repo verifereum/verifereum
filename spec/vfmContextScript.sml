@@ -86,6 +86,11 @@ Datatype:
    ; data      : buffer
    ; static    : bool
    ; outputTo  : return_destination
+   (* EIP-8037: the frame the parent entered charged this frame's account
+      creation to its own meter before the frame started, `new_account_charged`
+      in EELS.  A failed frame never made that change, so the parent credits
+      the charge back when it pops this frame. *)
+   ; newAccountCharged : bool
    |>
 End
 
@@ -217,7 +222,7 @@ Definition callee_from_tx_to_def:
 End
 
 Definition initial_msg_params_def:
-  initial_msg_params callee code static rd t =
+  initial_msg_params callee code static rd charged t =
   <| caller    := t.from
    ; callee    := callee
    ; code      := code
@@ -227,6 +232,7 @@ Definition initial_msg_params_def:
    ; gasLimit  := t.gasLimit
    ; static    := static
    ; outputTo  := rd
+   ; newAccountCharged := charged
    |>
 End
 
@@ -271,7 +277,7 @@ End
    the pool its state charges draw on -- as both the reservoir and the
    baseline a rollback refills it to. *)
 Definition initial_context_def:
-  initial_context callee code static rd sg t =
+  initial_context callee code static rd charged sg t =
   <| stack      := []
    ; memory     := empty_buffer
    ; pc         := 0
@@ -285,25 +291,25 @@ Definition initial_context_def:
    ; stateGasBaseline  := sg
    ; stateGasCommitted := 0
    ; logs       := []
-   ; msgParams  := initial_msg_params callee code static rd t
+   ; msgParams  := initial_msg_params callee code static rd charged t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context fr c s rd sg t).stack = [] ∧
-  (initial_context fr c s rd sg t).memory = empty_buffer ∧
-  (initial_context fr c s rd sg t).pc = 0 ∧
-  (initial_context fr c s rd sg t).jumpDest = NONE ∧
-  (initial_context fr c s rd sg t).returnData = [] ∧
-  (initial_context fr c s rd sg t).gasUsed = 0 ∧
-  (initial_context fr c s rd sg t).addRefund = 0 ∧
-  (initial_context fr c s rd sg t).subRefund = 0 ∧
-  (initial_context fr c s rd sg t).stateGasLeft = sg ∧
-  (initial_context fr c s rd sg t).stateGasSpilled = 0 ∧
-  (initial_context fr c s rd sg t).stateGasBaseline = sg ∧
-  (initial_context fr c s rd sg t).stateGasCommitted = 0 ∧
-  (initial_context fr c s rd sg t).logs = [] ∧
-  (initial_context fr c s rd sg t).msgParams  = initial_msg_params fr c s rd t
+  (initial_context fr c s rd ch sg t).stack = [] ∧
+  (initial_context fr c s rd ch sg t).memory = empty_buffer ∧
+  (initial_context fr c s rd ch sg t).pc = 0 ∧
+  (initial_context fr c s rd ch sg t).jumpDest = NONE ∧
+  (initial_context fr c s rd ch sg t).returnData = [] ∧
+  (initial_context fr c s rd ch sg t).gasUsed = 0 ∧
+  (initial_context fr c s rd ch sg t).addRefund = 0 ∧
+  (initial_context fr c s rd ch sg t).subRefund = 0 ∧
+  (initial_context fr c s rd ch sg t).stateGasLeft = sg ∧
+  (initial_context fr c s rd ch sg t).stateGasSpilled = 0 ∧
+  (initial_context fr c s rd ch sg t).stateGasBaseline = sg ∧
+  (initial_context fr c s rd ch sg t).stateGasCommitted = 0 ∧
+  (initial_context fr c s rd ch sg t).logs = [] ∧
+  (initial_context fr c s rd ch sg t).msgParams  = initial_msg_params fr c s rd ch t
 Proof
   rw[initial_context_def]
 QED
@@ -510,8 +516,10 @@ Definition initial_state_def:
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback postAuthAccounts accesses in
     (* The state gas reservoir is only known once the intrinsic is, below,
-       so the frame is built with an empty one and filled in with it. *)
-    let ctxt = initial_context callee code static rd 0 tx in
+       so the frame is built with an empty one and filled in with it.  The
+       top frame charges its own account creation (below, in `run_create`),
+       so no parent ever credits it back and its flag is clear. *)
+    let ctxt = initial_context callee code static rd F 0 tx in
     let authListLen = LENGTH tx.authorizationList in
     case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
     (* EIP-8037: what is left of the transaction's gas after its intrinsic

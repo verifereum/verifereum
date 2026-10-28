@@ -531,6 +531,21 @@ End
    then the reservoir to the baseline the frame started at, and the
    refunds accrued on the undone changes are discarded with them.  State
    gas a commit marked non-refillable stays charged. *)
+(* EIP-8037: a call or a create charges the account it creates, when it
+   creates one; `charged` is EELS's `new_account_charged`. *)
+Definition charge_new_account_def:
+  charge_new_account charged =
+    if charged then charge_state_gas new_account_state_gas else return ()
+End
+
+(* EIP-8037: and gives it back when the child it was charged for did not
+   make the change, either because it failed or because it was never
+   entered. *)
+Definition credit_new_account_def:
+  credit_new_account charged =
+    if charged then credit_state_gas_refund new_account_state_gas else return ()
+End
+
 Definition restore_state_gas_def:
   restore_state_gas = do
     context <- get_current_context;
@@ -667,6 +682,25 @@ Definition restore_child_gas_def:
     set_current_context $
       context with stateGasLeft updated_by ($+ reservoir)
   od
+End
+
+(* The top frame's charges run before any step, so they cannot fail through
+   the monad: this is `charge_state_gas`'s arithmetic as a function of the
+   context, `NONE` for EELS's `OutOfGas`.  Both are the same cases, with
+   `consume_gas`'s guard turned into the middle test; a zero charge is the
+   identity, as a zero `charge_state_gas` is. *)
+Definition charge_state_gas_context_def:
+  charge_state_gas_context ctxt n =
+    if n = 0 then SOME ctxt
+    else if n ≤ ctxt.stateGasLeft then
+      SOME $ ctxt with stateGasLeft := ctxt.stateGasLeft - n
+    else if n ≤ ctxt.stateGasLeft + (ctxt.msgParams.gasLimit - ctxt.gasUsed)
+    then let spilled = n - ctxt.stateGasLeft in
+      SOME $ ctxt with <|
+        gasUsed := ctxt.gasUsed + spilled;
+        stateGasLeft := 0;
+        stateGasSpilled updated_by ($+ spilled) |>
+    else NONE
 End
 
 Definition pop_stack_def:
@@ -1357,6 +1391,12 @@ Definition step_self_destruct_def:
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty
                      then self_destruct_new_account_cost else 0;
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
+    (* EIP-8037: the account leaf the sweep creates, in state gas, after the
+       execution gas above so an execution out-of-gas never consumes state
+       gas that would inflate the parent's reservoir on this frame's failure.
+       It refills only through the frame's own rollback, which is why the
+       condition is the same one `transferCost` was decided by. *)
+    charge_new_account (0 < balance ∧ beneficiaryEmpty);
     assert_not_static;
     update_accounts $ transfer_value senderAddress address balance;
     (* EIP-7708: sweeping the balance is a transfer too. *)
@@ -1387,6 +1427,16 @@ Definition abort_unuse_def:
   od
 End
 
+(* A create that aborts before its child is entered: nothing was charged for
+   the child and its grant was never withheld, so the zero the opcode pushes
+   is all that is left to do. *)
+Definition abort_create_def:
+  abort_create = do
+    push_stack $ b2w F;
+    inc_pc
+  od
+End
+
 Definition abort_create_exists_def:
   abort_create_exists senderAddress = do
     update_accounts $ increment_nonce senderAddress;
@@ -1398,6 +1448,12 @@ End
 Definition proceed_create_def:
   proceed_create senderAddress address value code cappedGas =
   do
+    (* EIP-8037: the creation `step_create` charged for this child, so the
+       frame that charged it can refill it if the child fails.  Read here,
+       before the transfer below, from the same accounts the charge was
+       decided by. *)
+    accounts <- get_accounts;
+    charged <<- account_empty $ lookup_account address accounts;
     (* EIP-8037: a child's whole state gas reservoir rides along with it,
        and comes back with it; the creating frame holds none while the
        child runs.  A colliding target never gets this far, so its
@@ -1424,7 +1480,7 @@ Definition proceed_create_def:
       increment_nonce address;
     (* EIP-7708: the created frame starts with its endowment logged. *)
     push_context
-      (initial_context address code F (Code address) reservoir subContextTx with
+      (initial_context address code F (Code address) charged reservoir subContextTx with
          logs := transfer_log senderAddress address value, rollback)
   od
 End
@@ -1452,18 +1508,28 @@ Definition step_create_def:
                 then address_for_create2 senderAddress salt code
                 else address_for_create senderAddress nonce;
     assert (LENGTH code ≤ 2 * max_code_size) OutOfGas;
-    cappedGas <- withhold_create_gas;
     assert_not_static;
     set_return_data [];
     sucDepth <- get_num_contexts;
+    (* The aborts below charge nothing: the destination's creation, the
+       child's execution grant and its state gas reservoir all belong to a
+       child frame that is never entered. *)
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
        sucDepth > 1024
-    then abort_unuse cappedGas
+    then abort_create
     else do
       access_address address;
       ensure_storage_in_domain address;
       toCreate <<- lookup_account address accounts;
+      (* EIP-8037: the destination's creation, charged before the child's
+         grant is withheld so a spill thins what is withheld.  Decided by
+         the destination's existence alone, independently of the collision
+         check below: a colliding target exists with a nonce or code, so it
+         is alive and nothing was charged for it. *)
+      newAccountCharged <<- account_empty toCreate;
+      charge_new_account newAccountCharged;
+      cappedGas <- withhold_create_gas;
       if account_already_created toCreate
       then abort_create_exists senderAddress
       else proceed_create senderAddress address value code cappedGas
@@ -1794,6 +1860,13 @@ Definition proceed_call_def:
   proceed_call op sender address value
     argsOffset argsSize code stipend
     outputTo = do
+    (* EIP-8037: the creation `step_call` charged for this child, so the
+       frame that charged it can refill it if the child fails.  Read here,
+       before the transfer below, from the same accounts the charge was
+       decided by. *)
+    accounts <- get_accounts;
+    charged <<- op = Call ∧ 0 < value ∧
+               account_empty $ lookup_account address accounts;
     (* EIP-8037: a child's whole state gas reservoir rides along with it,
        and comes back with it at the merge; the calling frame holds none
        while the child runs.  The paths that never enter the child -- a
@@ -1822,7 +1895,7 @@ Definition proceed_call_def:
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
-    context <<- initial_context callee code subStatic outputTo reservoir subContextTx;
+    context <<- initial_context callee code subStatic outputTo charged reservoir subContextTx;
     (* EIP-7708: the new frame starts with its incoming transfer logged,
        so a frame that fails takes the log down with it.  A CALLCODE moves
        nothing and so logs nothing: its recipient is the caller itself. *)
@@ -1857,22 +1930,41 @@ Definition step_call_def:
                  cost <- access_address delegate;
                  return ((lookup_account delegate accounts).code, cost)
                od;
-    createCost <<- if op = Call ∧ 0 < value ∧ account_empty toAccount
-                   then new_account_cost else 0;
-    gasLeft <- get_gas_left;
-    (dynamicGas, stipend) <<- call_gas value gas gasLeft mx.cost $
-                                accessCost + positiveValueCost + createCost + delegateCost;
-    consume_gas $ static_gas op + dynamicGas + mx.cost;
+    (* EIP-8037: a value transfer that creates its recipient is charged by
+       this frame, in state gas, and refilled here if the child is never
+       entered and at the pop if the child fails.  EIP-8038 dropped the
+       25000 execution gas this used to carry. *)
+    newAccountCharged <<- op = Call ∧ 0 < value ∧ account_empty toAccount;
+    (* EIP-8038: the opcode's own cost, the address and value it touches and
+       the memory it expands, all in execution gas, charged before the
+       recipient's creation so an execution out-of-gas never consumes state
+       gas that would inflate this frame's reservoir on its failure. *)
+    consume_gas $ static_gas op + accessCost + positiveValueCost +
+                  delegateCost + mx.cost;
+    (* The creation is charged before the child's grant is computed, so a
+       spill thins the gas the 63/64 rule applies to. *)
+    charge_new_account newAccountCharged;
     if op = Call ∧ 0 < value then assert_not_static else return ();
     expand_memory mx.expand_by;
+    gasLeft <- get_gas_left;
+    (callGas, stipend) <<- call_gas value gas gasLeft 0 0;
+    consume_gas callGas;
     sender <- get_callee;
     if (lookup_account sender accounts).balance < value
-    then abort_call_value stipend
+    then do
+      (* The child is never entered: its creation refills and its grant,
+         which this frame has already paid for, comes back. *)
+      credit_new_account newAccountCharged;
+      abort_call_value stipend
+    od
     else do
       set_return_data [];
       sucDepth <- get_num_contexts;
       if sucDepth > 1024
-      then abort_unuse stipend
+      then do
+        credit_new_account newAccountCharged;
+        abort_unuse stipend
+      od
       else proceed_call op sender address value
              argsOffset argsSize code stipend
              (Memory <| offset := retOffset; size := retSize |>)
@@ -2046,8 +2138,14 @@ Definition pop_and_incorporate_context_def:
          credit, which can land in different frames, first share a meter:
          the reservoir repays the execution gas they drifted across. *)
       repay_state_gas_spill
-    od else
+    od else do
+      (* EIP-8037: a failed child never made the account its parent charged
+         to enter it, so the charge refills, over the merged meter.  The
+         flag rides on the child itself, so a frame that charged one and
+         then aborted without entering its child cannot leave it set. *)
+      credit_new_account callee.msgParams.newAccountCharged;
       set_rollback (SND callee_rb)
+    od
   od
 End
 
@@ -2058,10 +2156,17 @@ Definition handle_create_def:
     case (e, outputTo) of
     | (NONE, Code address) => do
       codeLen <<- LENGTH code;
-      codeGas <<- code_deposit_cost * codeLen;
+      (* EIP-8038: the deposit's execution gas is the keccak word cost of the
+         code, not EIP-170's 200 a byte. *)
+      codeGas <<- keccak256_per_word_cost * word_size codeLen;
       assert (case code of h::_ => h ≠ n2w 0xef | _ => T) InvalidContractPrefix;
       consume_gas codeGas;
       assert (codeLen ≤ max_code_size) OutOfGas;
+      (* EIP-8037: the bytes the deposit writes to state, after the hash cost
+         above so an execution out-of-gas does not consume state gas.  A
+         failure here -- of either charge, or of either assert -- restores
+         this frame's state gas and forfeits its grant in `handle_exception`. *)
+      charge_state_gas (cost_per_state_byte * codeLen);
       update_accounts $ (λaccounts.
         update_account address
           (lookup_account address accounts with code := code)
@@ -2243,14 +2348,30 @@ Definition run_create_def:
     let ctxt = FST crb in
     let calleeAddress = ctxt.msgParams.callee in
     if IS_SOME tx.to then
-      INR $ (s.rollback.accounts, s with rollback updated_by
+      (* EIP-8037: a value transfer to an account that is not alive creates
+         it, and the top frame pays for that out of its own meter before it
+         is entered.  EELS charges the same at `create_evm`. *)
+      let charge = if 0 < tx.value ∧
+                       account_empty (lookup_account calleeAddress
+                                        s.rollback.accounts)
+                    then new_account_state_gas else 0 in
+      (case charge_state_gas_context ctxt charge of
+       | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                        accounts
+                        (s with contexts := [
+                          (ctxt with gasUsed := ctxt.msgParams.gasLimit,
+                           SND crb)])
+       | SOME ctxt' =>
+      INR $ (s.rollback.accounts, s with <|
+          contexts := [(ctxt', SND crb)];
+          rollback updated_by
                                    (λr. r with accounts updated_by
-             transfer_value tx.from calleeAddress tx.value),
+             transfer_value tx.from calleeAddress tx.value) |>,
              if fIN calleeAddress precompile_addresses
-             then SOME calleeAddress else NONE)
+             then SOME calleeAddress else NONE))
     else
-      let accounts = s.rollback.accounts in
-      let callee = lookup_account calleeAddress accounts in
+      let rbAccounts = s.rollback.accounts in
+      let callee = lookup_account calleeAddress rbAccounts in
       if account_already_created callee then
         INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
               (s with contexts := [
@@ -2258,14 +2379,29 @@ Definition run_create_def:
                  SND crb)
                ])
       else
-        INR $ (accounts, s with <|
+        (* EIP-8037: the created account's state gas, decided by the account
+           at transaction start the way EELS's `get_pre_state_account` reads
+           it.  A creation whose charge cannot be covered forfeits the
+           frame's whole grant and leaves the reservoir whole, which is the
+           state `ctxt` is already in. *)
+        let charge = if account_empty (lookup_account calleeAddress accounts)
+                       then new_account_state_gas else 0 in
+        (case charge_state_gas_context ctxt charge of
+         | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                          accounts
+                          (s with contexts := [
+                            (ctxt with gasUsed := ctxt.msgParams.gasLimit,
+                             SND crb)])
+         | SOME ctxt' =>
+        INR $ (rbAccounts, s with <|
+            contexts := [(ctxt', SND crb)];
             rollback updated_by (λr. r with accounts updated_by (
               transfer_value tx.from calleeAddress tx.value o
               increment_nonce calleeAddress
             ));
             originalAccounts :=
               update_account calleeAddress empty_account_state s.originalAccounts
-            |>, NONE)
+            |>, NONE))
 End
 
 Definition run_transaction_def:

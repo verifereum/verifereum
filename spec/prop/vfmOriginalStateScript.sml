@@ -80,6 +80,7 @@ Definition stack_original_step_self_destruct_def:
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty
                      then self_destruct_new_account_cost else 0;
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
+    charge_new_account (0 < balance ∧ beneficiaryEmpty);
     assert_not_static;
     update_accounts $ transfer_value senderAddress address balance;
     push_logs $ transfer_log senderAddress address balance;
@@ -95,6 +96,8 @@ End
 Definition stack_original_proceed_create_def:
   stack_original_proceed_create senderAddress address value code cappedGas =
   do
+    accounts <- get_accounts;
+    charged <<- account_empty $ lookup_account address accounts;
     reservoir <- drain_state_gas_reservoir;
     update_accounts $ increment_nonce senderAddress;
     subContextTx <<- <|
@@ -116,7 +119,7 @@ Definition stack_original_proceed_create_def:
       transfer_value senderAddress address value o
       increment_nonce address;
     push_context
-      (initial_context address code F (Code address) reservoir subContextTx with
+      (initial_context address code F (Code address) charged reservoir subContextTx with
          logs := transfer_log senderAddress address value, rollback)
   od
 End
@@ -144,18 +147,20 @@ Definition stack_original_step_create_def:
                 then address_for_create2 senderAddress salt code
                 else address_for_create senderAddress nonce;
     assert (LENGTH code ≤ 2 * max_code_size) OutOfGas;
-    cappedGas <- withhold_create_gas;
     assert_not_static;
     set_return_data [];
     sucDepth <- get_num_contexts;
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
        sucDepth > 1024
-    then abort_unuse cappedGas
+    then abort_create
     else do
       access_address address;
       ensure_storage_in_domain address;
       toCreate <<- lookup_account address accounts;
+      newAccountCharged <<- account_empty toCreate;
+      charge_new_account newAccountCharged;
+      cappedGas <- withhold_create_gas;
       if account_already_created toCreate
       then abort_create_exists senderAddress
       else stack_original_proceed_create senderAddress address value code cappedGas
@@ -212,14 +217,27 @@ Definition stack_original_run_create_def:
     let ctxt = FST crb in
     let calleeAddress = ctxt.msgParams.callee in
     if IS_SOME tx.to then
-      INR $ (s.rollback.accounts, s with rollback updated_by
+      let charge = if 0 < tx.value ∧
+                       account_empty (lookup_account calleeAddress
+                                        s.rollback.accounts)
+                    then new_account_state_gas else 0 in
+      (case charge_state_gas_context ctxt charge of
+       | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                        accounts
+                        (s with contexts := [
+                          (ctxt with gasUsed := ctxt.msgParams.gasLimit,
+                           SND crb)])
+       | SOME ctxt' =>
+      INR $ (s.rollback.accounts, s with <|
+          contexts := [(ctxt', SND crb)];
+          rollback updated_by
                                    (λr. r with accounts updated_by
-             transfer_value tx.from calleeAddress tx.value),
+             transfer_value tx.from calleeAddress tx.value) |>,
              if fIN calleeAddress precompile_addresses
-             then SOME calleeAddress else NONE)
+             then SOME calleeAddress else NONE))
     else
-      let accounts = s.rollback.accounts in
-      let callee = lookup_account calleeAddress accounts in
+      let rbAccounts = s.rollback.accounts in
+      let callee = lookup_account calleeAddress rbAccounts in
       if account_already_created callee then
         INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
               (s with contexts := [
@@ -227,16 +245,23 @@ Definition stack_original_run_create_def:
                  SND crb)
                ])
       else
-        INR $ (accounts, s with <|
+        let charge = if account_empty (lookup_account calleeAddress accounts)
+                       then new_account_state_gas else 0 in
+        (case charge_state_gas_context ctxt charge of
+         | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                          accounts
+                          (s with contexts := [
+                            (ctxt with gasUsed := ctxt.msgParams.gasLimit,
+                             SND crb)])
+         | SOME ctxt' =>
+        INR $ (rbAccounts, s with <|
+            contexts := [(ctxt', SND crb with accounts :=
+                            update_account calleeAddress empty_account_state
+                              (SND crb).accounts)];
             rollback updated_by (λr. r with accounts updated_by (
               transfer_value tx.from calleeAddress tx.value o
               increment_nonce calleeAddress
-            ));
-            contexts updated_by (
-              set_last_accounts $
-              update_account calleeAddress empty_account_state
-                (SND crb).accounts
-            )|>, NONE)
+            ))|>, NONE))
 End
 
 Definition stack_original_run_transaction_def:
@@ -766,6 +791,14 @@ Proof
 QED
 
 
+Theorem orig_exec_new_account[local]:
+  orig_exec_rel (charge_new_account charged) (charge_new_account charged) /\
+  orig_exec_rel (credit_new_account charged) (credit_new_account charged)
+Proof
+  Cases_on `charged` >>
+  simp[charge_new_account_def, credit_new_account_def, orig_exec_cond,
+       orig_exec_return, orig_exec_state_gas_updates]
+QED
 Theorem orig_exec_sstore_gas[local]:
   orig_exec_rel (stack_original_step_sstore_gas_consumption address key value)
                 (step_sstore_gas_consumption address key value)
@@ -804,6 +837,7 @@ Proof
             orig_exec_get_accounts, orig_exec_update_accounts,
             original_state_get_original, orig_exec_access_address,
             orig_exec_simple_wrappers, orig_exec_return,
+            orig_exec_state_gas_updates, orig_exec_new_account,
             orig_exec_add_to_delete, orig_exec_finish] >> rpt gen_tac)
 QED
 
@@ -814,6 +848,7 @@ Proof
   rewrite_tac[stack_original_proceed_create_def, proceed_create_def, ignore_bind_def] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_update_accounts,
+            orig_exec_get_accounts,
             orig_exec_get_rollback, original_state_get_original,
             original_state_set_original, original_state_push,
             orig_exec_state_gas_updates] >> rpt gen_tac)
@@ -823,26 +858,39 @@ Theorem orig_exec_create_aborts[local]:
   orig_exec_rel inc_pc inc_pc /\
   orig_exec_rel (abort_unuse n) (abort_unuse n) /\
   orig_exec_rel (abort_create_exists a) (abort_create_exists a) /\
-  orig_exec_rel (abort_call_value n) (abort_call_value n)
+  orig_exec_rel (abort_call_value n) (abort_call_value n) /\
+  orig_exec_rel abort_create abort_create
 Proof
-  simp[inc_pc_def, abort_unuse_def, abort_create_exists_def, abort_call_value_def,
+  simp[inc_pc_def, abort_unuse_def, abort_create_def,
+       abort_create_exists_def, abort_call_value_def,
        orig_exec_bind, orig_exec_ignore_bind, orig_exec_update_accounts,
        original_state_current, original_state_set_current,
        orig_exec_context_updates]
 QED
 
+
+(* Everything the create's own steps need, short of `orig_exec_cond`: the
+   opcode ends in two `if`s, which the bind loop cannot peel and which are
+   split explicitly below. *)
+val create_step_lemmas = [
+    orig_exec_bind,
+    orig_exec_context_reads, orig_exec_context_updates,
+    orig_exec_get_accounts, orig_exec_get_gas_left, orig_exec_get_num_contexts,
+    orig_exec_assert, orig_exec_simple_wrappers, orig_exec_access_address,
+    orig_exec_ensure_storage, orig_exec_create_aborts, orig_exec_proceed_create,
+    orig_exec_state_gas_updates, orig_exec_new_account];
+
 Theorem orig_exec_create[local]:
   orig_exec_rel (stack_original_step_create two) (step_create two)
 Proof
   rewrite_tac[stack_original_step_create_def, step_create_def, ignore_bind_def] >>
-  rpt (irule orig_exec_bind >>
-       simp[orig_exec_bind, orig_exec_cond,
-            orig_exec_context_reads, orig_exec_context_updates,
-            orig_exec_get_accounts, orig_exec_get_gas_left, orig_exec_get_num_contexts,
-            orig_exec_assert, orig_exec_simple_wrappers, orig_exec_access_address,
-            orig_exec_ensure_storage, orig_exec_create_aborts, orig_exec_proceed_create,
-            orig_exec_state_gas_updates] >>
-       rpt gen_tac)
+  rpt (irule orig_exec_bind >> simp create_step_lemmas >> rpt gen_tac) >>
+  (* the preflight abort *)
+  irule orig_exec_cond >> conj_tac >- simp[orig_exec_create_aborts] >>
+  rpt (irule orig_exec_bind >> simp create_step_lemmas >> rpt gen_tac) >>
+  (* the collision abort *)
+  irule orig_exec_cond >> conj_tac >- simp[orig_exec_create_aborts] >>
+  simp[orig_exec_proceed_create]
 QED
 
 (* Unchanged instructions use only the compatible primitive interface. *)
@@ -990,7 +1038,8 @@ Proof
   rewrite_tac[proceed_call_def, ignore_bind_def] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_cond, orig_exec_return,
-            orig_exec_get_rollback, orig_exec_update_accounts, original_state_push,
+            orig_exec_get_rollback, orig_exec_get_accounts,
+            orig_exec_update_accounts, original_state_push,
             orig_exec_context_reads, orig_exec_dispatch_precompiles,
             orig_exec_state_gas_updates] >> rpt gen_tac)
 QED
@@ -1009,13 +1058,29 @@ Proof
             orig_exec_get_accounts, orig_exec_get_gas_left,
             orig_exec_get_num_contexts, orig_exec_access_address,
             orig_exec_simple_wrappers, orig_exec_create_aborts,
+            orig_exec_new_account,
             orig_exec_proceed_call] >> rpt gen_tac) >>
   pairarg_tac >> gvs[] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_cond, orig_exec_return,
             orig_exec_context_reads, orig_exec_context_updates,
             orig_exec_get_num_contexts, orig_exec_simple_wrappers,
-            orig_exec_create_aborts, orig_exec_proceed_call] >> rpt gen_tac)
+            orig_exec_get_gas_left, orig_exec_create_aborts,
+            orig_exec_new_account,
+            orig_exec_proceed_call] >> rpt gen_tac) >>
+  (* not enough balance for the value, so the creation refills *)
+  irule orig_exec_cond >>
+  conj_tac >- simp[orig_exec_bind, orig_exec_new_account, orig_exec_create_aborts] >>
+  rpt (irule orig_exec_bind >>
+       simp[orig_exec_bind, orig_exec_return,
+            orig_exec_context_reads, orig_exec_context_updates,
+            orig_exec_get_num_contexts, orig_exec_simple_wrappers,
+            orig_exec_create_aborts, orig_exec_new_account,
+            orig_exec_proceed_call] >> rpt gen_tac) >>
+  (* too deep to call, so the creation refills here too *)
+  irule orig_exec_cond >>
+  conj_tac >- simp[orig_exec_bind, orig_exec_new_account, orig_exec_create_aborts] >>
+  simp[orig_exec_proceed_call]
 QED
 
 Theorem orig_exec_inc_pc_or_jump[local]:
@@ -1056,8 +1121,13 @@ Proof
   irule orig_exec_bind >> reverse conj_tac >- simp[orig_exec_context_reads] >>
   qx_gen_tac `dest` >>
   Cases_on `e` >> Cases_on `dest` >>
-  simp[ignore_bind_def, orig_exec_bind, orig_exec_reraise,
-       orig_exec_assert, orig_exec_context_updates, orig_exec_update_accounts]
+  simp[ignore_bind_def] >>
+  rpt (irule orig_exec_bind >>
+       simp[orig_exec_bind, orig_exec_assert, orig_exec_reraise,
+            orig_exec_return, orig_exec_context_reads,
+            orig_exec_context_updates, orig_exec_update_accounts,
+            orig_exec_state_gas_updates] >> rpt gen_tac) >>
+  simp[orig_exec_reraise]
 QED
 
 Theorem original_state_bind_at[local]:
@@ -1111,7 +1181,7 @@ Proof
     irule orig_exec_bind >> simp[original_state_set_current] >> rpt gen_tac >>
     irule orig_exec_cond >>
     simp[orig_exec_bind, orig_exec_context_updates, orig_exec_state_gas_updates,
-         orig_exec_set_rollback] ) >>
+         orig_exec_new_account, orig_exec_set_rollback] ) >>
   simp[]
 QED
 
@@ -1325,8 +1395,20 @@ Proof
   Cases_on `initial_state dom static chainId prevHashes blk accounts tx` >> simp[] >>
   drule original_state_initial >> strip_tac >>
   Cases_on `IS_SOME tx.to`
-  >- gvs[original_state_rel_def] >>
+  >- (Cases_on `charge_state_gas_context (FST (HD x.contexts))
+                 (if 0 < tx.value /\
+                     account_empty
+                       (lookup_account (FST (HD x.contexts)).msgParams.callee
+                                       x.rollback.accounts)
+                  then new_account_state_gas else 0)` >> simp[] >>
+      `HD x.contexts = LAST x.contexts` by (Cases_on `x.contexts` >> gvs[]) >>
+      gvs[original_state_rel_def]) >>
   simp[] >> IF_CASES_TAC >> simp[] >>
+  Cases_on `charge_state_gas_context (FST (HD x.contexts))
+              (if account_empty
+                    (lookup_account (FST (HD x.contexts)).msgParams.callee
+                                    accounts)
+               then new_account_state_gas else 0)` >> simp[] >>
   Cases_on `x.contexts` >> gvs[] >>
   PairCases_on `h` >> gvs[original_state_rel_def, set_last_accounts_def] >>
   fs[rollback_state_component_equality]

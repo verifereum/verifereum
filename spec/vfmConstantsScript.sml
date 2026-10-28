@@ -16,8 +16,10 @@ Definition base_cost_def:
   base_cost = 12000n
 End
 
-(* EIP-8038: ACCOUNT_WRITE + COLD_ACCOUNT_ACCESS; EIP-2780 charges it as the
-   intrinsic cost of creating a contract. *)
+(* EIP-8038: ACCOUNT_WRITE + COLD_ACCOUNT_ACCESS.  EIP-2780 charges it as the
+   intrinsic cost of a create transaction, and EIP-8038 charges it as the
+   CREATE/CREATE2 opcode's own cost (`static_gas`), where it replaces EIP-170's
+   flat 32000. *)
 Definition create_cost_def:
   create_cost = 12000n
 End
@@ -58,10 +60,6 @@ Definition max_code_size_def:
   max_code_size = 0x10000n
 End
 
-Definition code_deposit_cost_def:
-  code_deposit_cost = 200n
-End
-
 Definition warm_access_cost_def:
   warm_access_cost = 100n
 End
@@ -86,6 +84,8 @@ Definition exp_per_byte_cost_def:
   exp_per_byte_cost = 50n
 End
 
+(* A keccak word, which is what a code deposit costs in execution gas: EIP-170's
+   200 a byte is gone, and the bytes are EIP-8037 state gas instead. *)
 Definition keccak256_per_word_cost_def:
   keccak256_per_word_cost = 6n
 End
@@ -119,16 +119,23 @@ Definition storage_set_state_gas_def:
     state_bytes_per_storage_set * cost_per_state_byte
 End
 
+Definition state_bytes_per_new_account_def:
+  state_bytes_per_new_account = 120n
+End
+
+(* EIP-8037: a new account's creation, 120 state bytes at COST_PER_STATE_BYTE.
+   EIP-8038 drops the 25000 execution gas it used to carry. *)
+Definition new_account_state_gas_def:
+  new_account_state_gas =
+    state_bytes_per_new_account * cost_per_state_byte
+End
+
 Definition log_topic_cost_def:
   log_topic_cost = 375n
 End
 
 Definition log_data_cost_def:
   log_data_cost = 8n
-End
-
-Definition new_account_cost_def:
-  new_account_cost = 25000n
 End
 
 (* EIP-8037: the state-independent part of what one authorization costs, which
