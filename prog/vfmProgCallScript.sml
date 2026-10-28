@@ -1256,6 +1256,68 @@ Proof
   drule_all run_call_preserves_collect >> metis_tac[]
 QED
 
+(* run_call_finite_trace already provides the reusable finite-steps interface. *)
+Theorem run_call_last_step[local]:
+  run_call es = SOME (INL (),t) ==>
+  ?n before. FUNPOW (step o SND) n (INL (),es) = (INL (),before) /\
+    run_call_reaches es before /\ LENGTH es.contexts <= LENGTH before.contexts /\
+    step before = (INL (),t)
+Proof
+  strip_tac >> drule run_call_finite_trace >> strip_tac >>
+  Cases_on `n`
+  >- gvs[] >>
+  rename1 `FUNPOW (step o SND) (SUC n) _ = _` >>
+  `ISL (FST (FUNPOW (step o SND) n (INL (),es))) /\
+    LENGTH es.contexts <= LENGTH (SND (FUNPOW (step o SND) n (INL (),es))).contexts`
+    by (first_x_assum (qspec_then `n` mp_tac) >> simp[]) >>
+  `run_call_reaches es (SND (FUNPOW (step o SND) n (INL (),es)))` by
+    (irule run_call_trace_reaches >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  qexistsl_tac [`n`, `SND (FUNPOW (step o SND) n (INL (),es))`] >>
+  gvs[FUNPOW_SUC] >>
+  Cases_on `FUNPOW (step o SND) n (INL (),es)` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[]
+QED
+
+Theorem run_call_last_pop[local]:
+  wf_state es /\ run_call es = SOME (INL (),t) ==>
+  ?n before err mid.
+    FUNPOW (step o SND) n (INL (),es) = (INL (),before) /\
+    run_call_reaches es before /\ wf_state before /\
+    LENGTH before.contexts = LENGTH es.contexts /\
+    TL before.contexts = TL es.contexts /\
+    t.txParams = es.txParams /\ step before = (INL (),t) /\
+    step_inner before = (INR err,mid) /\ handle_step err mid = (INL (),t)
+Proof
+  strip_tac >> drule run_call_last_step >> strip_tac >>
+  `wf_state before` by metis_tac[run_call_reaches_wf_state] >>
+  `LENGTH t.contexts + 1 = LENGTH es.contexts` by
+    metis_tac[run_call_inl_length] >>
+  `LENGTH before.contexts <= LENGTH t.contexts + 1` by
+    metis_tac[step_length_not_drop_more_than_one] >>
+  `LENGTH before.contexts = LENGTH es.contexts` by decide_tac >>
+  `TL before.contexts = TL es.contexts` by
+    (drule_all run_call_reaches_outer_contexts >> simp[] >>
+     Cases_on `before.contexts` >> gvs[]) >>
+  `before.txParams = es.txParams` by
+    (`(\s. s.txParams = es.txParams) before` suffices_by simp[] >>
+     irule run_call_reaches_inv >> qexists_tac `es` >> simp[] >>
+     rpt strip_tac >>
+     metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND]) >>
+  `t.txParams = es.txParams` by
+    metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND] >>
+  qpat_x_assum `step before = _` mp_tac >>
+  simp[step_eq_handle_step_inner, handle_def] >>
+  Cases_on `step_inner before` >> Cases_on `q` >> simp[]
+  >- (strip_tac >> gvs[] >>
+      `same_frame_or_grow step_inner` by simp[] >>
+      `before.contexts <> []` by gvs[wf_state_def] >>
+      drule_all same_frame_or_grow_length >> simp[]) >>
+  strip_tac >> qexistsl_tac [`n`, `before`, `y`, `r`] >>
+  simp[GSYM step_eq_handle_step_inner]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
