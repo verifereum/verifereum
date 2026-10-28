@@ -82,8 +82,10 @@ sig
      the summaries, composed into one triple, a JUMPI whose guard the path
      leaves open giving the postcondition if b then Q1 else Q2. Also
      returns each path, as the entry pcs of its summaries, and how it ends:
-     "halt", or where the walk stopped ("loop back to n", "jump to t",
-     "call at n", "no summary at n"). *)
+     "halt", or where the walk stopped ("revisit n" for a pc already on
+     the path, "jump to t", "call at n", "no summary at n"). Conditions it
+     cannot discharge, such as those of a branch with no summary, stay in
+     the triple's cond. *)
   val compose_region : config -> thm list -> thm ->
                        thm * (int list * string) list
 
