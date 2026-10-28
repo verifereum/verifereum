@@ -1192,6 +1192,36 @@ Proof
   >> metis_tac[step_inner_preserves_stack_room_gas_ok]
 QED
 
+Theorem step_collect_ge2_inl[local]:
+  wf_state s /\ s.msdomain = Collect dd /\ 2 <= LENGTH s.contexts /\
+  step s = (r,t) ==> ISL r
+Proof
+  strip_tac >>
+  `s.contexts <> []` by (strip_tac >> gvs[]) >>
+  `!x. r <> INR (SOME (OutsideDomain x))` by
+    metis_tac[step_collect_not_outside] >>
+  qpat_x_assum `step s = _` mp_tac >>
+  simp[step_eq_handle_step_inner, handle_def] >>
+  Cases_on `step_inner s` >> Cases_on `q` >> gvs[] >>
+  rename1 `step_inner s = (INR err, mid)` >> strip_tac >>
+  `err <> SOME Impossible /\ err <> SOME Unimplemented` by
+    metis_tac[step_inner_not_impossible_unimplemented] >>
+  Cases_on `vfm_abort err`
+  >- (gvs[handle_step_def, reraise_def] >>
+      Cases_on `err` >> gvs[vfm_abort_def] >>
+      Cases_on `x` >> gvs[vfm_abort_def] >> metis_tac[]) >>
+  drule_all step_inner_handler_state >> strip_tac >>
+  irule handle_step_not_abort_returns_inl >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem step_collect_ge2_not_abort[local]:
+  wf_state s /\ s.msdomain = Collect dd /\ 2 <= LENGTH s.contexts /\
+  step s = (r,t) ==> !e. r = INR e ==> ~vfm_abort e
+Proof
+  strip_tac >> drule_all step_collect_ge2_inl >> Cases_on `r` >> simp[]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
