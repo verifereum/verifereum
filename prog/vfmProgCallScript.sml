@@ -1700,6 +1700,79 @@ Proof
     call_stipend_prefix_proceed_zero >> simp[]
 QED
 
+Theorem handle_exception_memory_footprint[local]:
+  call_footprint A D oa s /\
+  s.contexts = (callee,saved)::(caller,callerSaved)::rest /\
+  callee.msgParams.outputTo = Memory r /\
+  callee.gasUsed <= callee.msgParams.gasLimit /\
+  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed /\
+  LENGTH caller.stack < stack_limit /\ handle_exception e s = (res,t) ==>
+  t.originalAccounts = oa /\
+  (e = NONE ==> t.rollback.accounts = A /\ t.rollback.toDelete = D) /\
+  (e <> NONE ==> t.rollback = saved)
+Proof
+  strip_tac >> drule_all handle_exception_memory_return >>
+  Cases_on `e = NONE` >> simp[LET_THM] >> strip_tac >> gvs[call_footprint_def]
+QED
+
+Theorem call_stipend_prefix_pop[local]:
+  call_stipend_prefix n A D oa s /\
+  s.contexts = (callee,saved)::(caller,callerSaved)::rest /\
+  caller'.msgParams = caller.msgParams /\
+  t = s with <| contexts := (caller',callerSaved)::rest;
+    rollback := if success then s.rollback else saved |> ==>
+  t.originalAccounts = oa /\
+  (n <= LENGTH t.contexts ==> call_stipend_prefix n A D oa t)
+Proof
+  simp[call_stipend_prefix_def, call_footprint_def] >> strip_tac >>
+  strip_tac >> gvs[] >>
+  `SUC (SUC (LENGTH rest)) - n = SUC (SUC (LENGTH rest) - n)` by decide_tac >>
+  `SUC (SUC (LENGTH rest)) - n + 1 = SUC (SUC (LENGTH rest) - n + 1)` by decide_tac >>
+  gvs[] >>
+  `SUC (SUC (LENGTH rest)) - (n + 1) = SUC (LENGTH rest) - n` by decide_tac >>
+  gvs[] >> Cases_on `SUC (LENGTH rest) - n` >> gvs[] >>
+  Cases_on `success` >> simp[]
+QED
+
+Theorem call_stipend_prefix_handle_step[local]:
+  wf_state s /\ call_stipend_prefix n A D oa s /\
+  handle_step e s = (res,t) ==>
+  t.originalAccounts = oa /\
+  (n <= LENGTH t.contexts ==> call_stipend_prefix n A D oa t)
+Proof
+  strip_tac >>
+  drule call_stipend_prefix_head >> strip_tac >>
+  `s.contexts <> []` by simp[] >>
+  qpat_x_assum `handle_step e s = _` mp_tac >>
+  simp[handle_step_def] >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[call_stipend_prefix_def, call_footprint_def]) >>
+  simp[handle_def] >>
+  drule_all (INST_TYPE [alpha |-> ``:unit``] handle_create_reraises) >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[reraise_def] >>
+  `2 <= LENGTH s.contexts` by
+    (fs[call_stipend_prefix_def] >> decide_tac) >>
+  Cases_on `s.contexts` >> gvs[] >>
+  Cases_on `t'` >> gvs[] >>
+  PairCases_on `h` >> PairCases_on `h'` >> gvs[] >>
+  Cases_on `h0.msgParams.outputTo` >> gvs[] >>
+  `h0.gasUsed <= h0.msgParams.gasLimit /\ LENGTH h'0.stack < stack_limit` by
+    (qpat_x_assum `wf_state s` mp_tac >>
+     simp[wf_state_def, wf_context_def, stack_room_ok_def]) >>
+  `h0.msgParams.gasLimit - h0.gasUsed <= h'0.gasUsed` by
+    (`gas_stack_ok s` by fs[wf_state_def] >>
+     fs[gas_stack_ok_def] >> first_x_assum (qspec_then `0` mp_tac) >>
+     simp[unused_gas_def]) >>
+  drule_all handle_exception_memory_return >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[LET_THM] >> strip_tac >>
+  irule call_stipend_prefix_pop >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qpat_x_assum `_ = t` (assume_tac o SYM) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
