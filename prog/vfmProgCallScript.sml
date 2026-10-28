@@ -1826,6 +1826,42 @@ Proof
   strip_tac >> drule_all call_stipend_prefix_handle_step >> simp[]
 QED
 
+Theorem run_call_reaches_stipend_prefix[local]:
+  wf_state es /\ call_stipend_prefix (LENGTH es.contexts) A D oa es /\
+  run_call_reaches es t ==>
+  t.originalAccounts = oa /\
+  (LENGTH es.contexts <= LENGTH t.contexts ==>
+    call_stipend_prefix (LENGTH es.contexts) A D oa t)
+Proof
+  strip_tac >>
+  `(\s. wf_state s /\ s.originalAccounts = oa /\
+    (LENGTH es.contexts <= LENGTH s.contexts ==>
+      call_stipend_prefix (LENGTH es.contexts) A D oa s)) t` suffices_by simp[] >>
+  irule run_call_reaches_inv >> qexists_tac `es` >> simp[] >>
+  conj_tac >- fs[call_stipend_prefix_def, call_footprint_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all step_preserves_stipend_prefix >> simp[]
+QED
+
+Theorem run_call_stipend_originalAccounts:
+  wf_state es /\ es.contexts = (callee,saved)::cs /\ 1 <= LENGTH cs /\
+  callee.msgParams.gasLimit <= call_stipend /\
+  (!a. callee.msgParams.outputTo <> Code a) /\
+  run_call es = SOME (INL (),t) ==>
+  t.originalAccounts = es.originalAccounts
+Proof
+  strip_tac >>
+  `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
+    es.rollback.toDelete es.originalAccounts es` by
+    (irule call_stipend_prefix_root >> simp[call_footprint_def] >> metis_tac[]) >>
+  drule run_call_last_step >> strip_tac >>
+  `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
+    es.rollback.toDelete es.originalAccounts before` by
+    metis_tac[run_call_reaches_stipend_prefix] >>
+  `wf_state before` by metis_tac[run_call_reaches_wf_state] >>
+  drule_all step_preserves_stipend_prefix >> simp[]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
