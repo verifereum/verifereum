@@ -103,6 +103,85 @@ Proof
   \\ irule DROP_pop \\ simp[]
 QED
 
+Theorem call_delegate_resolution[local]:
+  delegate_check code s.msdomain s.rollback dc rb' dom' ==>
+  (case get_delegate code of
+     NONE => return (code,0)
+   | SOME a => bind (access_address a)
+       (\cost. return ((lookup_account a s.rollback.accounts).code,cost))) s =
+  (INL ((case get_delegate code of NONE => code
+           | SOME a => (lookup_account a s.rollback.accounts).code),dc),
+   s with <|rollback := rb'; msdomain := dom'|>)
+Proof
+  Cases_on `get_delegate code` >>
+  simp[delegate_check_def, access_address_split, bind_def, return_def] >>
+  rpt strip_tac >> gvs[execution_state_component_equality]
+QED
+
+(* The return boundary retains every unmentioned state and context field. *)
+Theorem pop_and_incorporate_context_pair[local]:
+  s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
+  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed ==>
+  pop_and_incorporate_context success s =
+    (INL (), s with <|
+      contexts :=
+        (caller with <|
+          gasUsed := caller.gasUsed -
+            (callee.msgParams.gasLimit - callee.gasUsed);
+          logs := caller.logs ++ (if success then callee.logs else []);
+          addRefund := caller.addRefund + (if success then callee.addRefund else 0);
+          subRefund := caller.subRefund + (if success then callee.subRefund else 0)
+        |>, callerSaved)::rest;
+      rollback := if success then s.rollback else saved
+    |>)
+Proof
+  strip_tac >> Cases_on `success` >>
+  simp[pop_and_incorporate_context_def, get_gas_left_def,
+       get_current_context_def, pop_context_def, unuse_gas_def,
+       push_logs_def, update_gas_refund_def, set_rollback_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, fail_def, combinTheory.o_DEF, combinTheory.C_DEF,
+       vfmContextTheory.context_component_equality] >>
+  cong_tac (SOME 4) >> simp[context_component_equality]
+QED
+
+Theorem handle_exception_memory_return[local]:
+  s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
+  callee.msgParams.outputTo = Memory r /\
+  callee.gasUsed <= callee.msgParams.gasLimit /\
+  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed /\
+  LENGTH caller.stack < stack_limit ==>
+  handle_exception e s =
+  let success = (e = NONE);
+      gasLeft = if e = NONE \/ e = SOME Reverted then
+                  callee.msgParams.gasLimit - callee.gasUsed else 0;
+      out = if e = NONE \/ e = SOME Reverted then callee.returnData else []
+  in (INL (), s with <|
+    contexts := (caller with <|
+      stack := b2w success :: caller.stack;
+      pc := SUC caller.pc;
+      gasUsed := caller.gasUsed - gasLeft;
+      memory := buffer_write r.offset (TAKE r.size out) caller.memory;
+      returnData := out;
+      logs := caller.logs ++ (if success then callee.logs else []);
+      addRefund := caller.addRefund + (if success then callee.addRefund else 0);
+      subRefund := caller.subRefund + (if success then callee.subRefund else 0)
+    |>, callerSaved)::rest;
+    rollback := if success then s.rollback else saved
+  |>)
+Proof
+  strip_tac >> Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
+  gvs[handle_exception_def, pop_and_incorporate_context_def,
+      get_gas_left_def, get_num_contexts_def, get_output_to_def,
+      get_return_data_def, get_current_context_def, pop_context_def,
+      consume_gas_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
+      set_rollback_def, set_current_context_def, set_return_data_def,
+      inc_pc_def, push_stack_def, write_memory_def,
+      bind_def, ignore_bind_def, return_def, assert_def, fail_def,
+      combinTheory.o_DEF, combinTheory.C_DEF] >>
+  cong_tac (SOME 4) >> simp[context_component_equality, ADD_COMM]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
