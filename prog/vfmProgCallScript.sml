@@ -1588,6 +1588,118 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+Theorem call_stipend_prefix_precompiles[local]:
+  call_stipend_prefix n A D oa s /\ dispatch_precompiles addr s = (r,t) ==>
+  call_stipend_prefix n A D oa t
+Proof
+  strip_tac >> irule cp_preserves_stipend_prefix >>
+  qexistsl_tac [`dispatch_precompiles addr`, `r`, `s`] >> simp[]
+QED
+
+Theorem call_stipend_prefix_proceed_zero[local]:
+  cg <= call_stipend /\ (!a. output <> Code a) ==>
+  !s r t. call_stipend_prefix n A D oa s /\
+    proceed_call op sender addr 0 ao az code cg output s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `s.contexts <> []` by metis_tac[call_stipend_prefix_head] >>
+  qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[proceed_call_def, get_rollback_def, read_memory_def,
+       get_current_context_def, get_caller_def, get_value_def, get_static_def,
+       push_context_def, bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `(if _ then _ else _) pushed` >>
+  `call_stipend_prefix n A D oa pushed` by
+    (simp[Abbr `pushed`] >>
+     qmatch_goalsub_abbrev_tac `CONS (child,s.rollback)` >>
+     `s with contexts updated_by CONS (child,s.rollback) =
+      s with contexts := (child,s.rollback)::s.contexts` by
+       simp[execution_state_component_equality] >>
+     pop_assum (fn th => rewrite_tac[th]) >>
+     irule call_stipend_prefix_push >> simp[Abbr `child`, initial_context_def, initial_msg_params_def]) >>
+  IF_CASES_TAC >> simp[return_def] >> strip_tac >> gvs[] >>
+  drule_all call_stipend_prefix_precompiles >> simp[]
+QED
+
+Theorem consume_gas_affordable[local]:
+  s.contexts <> [] /\ consume_gas cost s = (INL (),t) ==>
+  cost <= (FST (HD s.contexts)).msgParams.gasLimit -
+          (FST (HD s.contexts)).gasUsed
+Proof
+  simp[consume_gas_def, get_current_context_def, bind_def,
+       ignore_bind_def, return_def, assert_def, fail_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem call_stipend_prefix_call_charge[local]:
+  (0 < value ==> call_value_cost <= oc) /\
+  (!cg s r t. value = 0 /\ cg <= call_stipend /\
+    call_stipend_prefix n A D oa s /\ suffix cg s = (r,t) ==>
+    call_stipend_prefix n A D oa t) ==>
+  !s r t. call_stipend_prefix n A D oa s /\
+    bind get_gas_left (\left.
+      let (dg,cg) = call_gas value gas left mc oc in
+        bind (consume_gas (sc + dg + mc)) (\u. suffix cg)) s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule call_stipend_prefix_head >> strip_tac >>
+  qpat_x_assum `bind _ _ s = _` mp_tac >>
+  simp[get_gas_left_def, get_current_context_def, bind_def, return_def] >>
+  Cases_on `call_gas value gas
+    ((FST (HD s.contexts)).msgParams.gasLimit - (FST (HD s.contexts)).gasUsed) mc oc` >>
+  rename1 `call_gas value gas _ mc oc = (dg,cg)` >>
+  simp[bind_def] >>
+  Cases_on `consume_gas (dg + (mc + sc)) s` >>
+  rename1 `consume_gas _ s = (res,mid)` >>
+  `call_stipend_prefix n A D oa mid` by
+    (irule (INST_TYPE [alpha |-> ``:unit``] cp_preserves_stipend_prefix) >>
+     qexistsl_tac [`consume_gas (dg + (mc + sc))`, `res`, `s`] >> simp[]) >>
+  Cases_on `res` >> simp[]
+  >- (Cases_on `x` >>
+      drule_all consume_gas_affordable >> strip_tac >>
+      `value = 0 /\ cg <= call_stipend` by
+        (`value = 0 /\ cg <=
+          (FST (HD s.contexts)).msgParams.gasLimit -
+          (FST (HD s.contexts)).gasUsed` suffices_by simp[] >>
+         irule call_gas_stipend_budget >>
+         conj_tac >- decide_tac >>
+         qexistsl_tac [`dg`, `gas`, `mc`, `oc`, `sc`] >> simp[] >> decide_tac) >>
+      strip_tac >> metis_tac[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem call_stipend_prefix_call[local]:
+  !s r t. call_stipend_prefix n A D oa s /\ step_call op s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rewrite_tac[step_call_def, ignore_bind_def] >> simp[] >>
+  ho_match_mp_tac call_stipend_prefix_cp_bind >>
+  conj_tac >- simp[] >> gen_tac >> simp[] >> pairarg_tac >> simp[] >>
+  ntac 3 (ho_match_mp_tac call_stipend_prefix_cp_bind >>
+    conj_tac >- simp[] >> gen_tac >> simp[]) >>
+  pop_assum kall_tac >>
+  ho_match_mp_tac call_stipend_prefix_cp_bind >>
+  conj_tac >- (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  qx_gen_tac `code_cost` >> PairCases_on `code_cost` >> simp[] >>
+  ho_match_mp_tac (SRULE [LET_THM, AC ADD_ASSOC ADD_COMM] call_stipend_prefix_call_charge) >>
+  conj_tac >- (strip_tac >> simp[] >> IF_CASES_TAC >> simp[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `_ s = (r,t)` mp_tac >>
+  qpat_x_assum `call_stipend_prefix n A D oa s` mp_tac >>
+  qid_spec_tac `t` >> qid_spec_tac `r` >> qid_spec_tac `s` >>
+  simp[AND_IMP_INTRO] >>
+  ntac 4 (ho_match_mp_tac call_stipend_prefix_cp_bind >>
+    conj_tac >- simp[] >> gen_tac >> simp[]) >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >>
+      irule (INST_TYPE [alpha |-> ``:unit``] cp_preserves_stipend_prefix) >>
+      qexistsl_tac [`abort_unuse stipend`, `r`, `s`] >> simp[]) >>
+  rpt strip_tac >>
+  drule_at (Pat `proceed_call _ _ _ _ _ _ _ _ _ _ = _`)
+    call_stipend_prefix_proceed_zero >> simp[]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
