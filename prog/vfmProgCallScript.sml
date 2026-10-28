@@ -841,6 +841,147 @@ Proof
   irule call_exn_safe_step_copy_to_memory >> simp[call_exn_safe_context_readers]
 QED
 
+Theorem call_exn_safe_unuse_gas[local]:
+  call_exn_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (unuse_gas n) (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def] >>
+  gvs[unuse_gas_def, get_current_context_def, bind_def, return_def,
+      ignore_bind_def, assert_def, set_current_context_def]
+QED
+
+Theorem call_exn_safe_inc_pc[local]:
+  call_exn_safe (\s. s.contexts <> []) inc_pc (\s. s.contexts <> [])
+Proof
+  rewrite_tac[inc_pc_def] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_abort_unuse[local]:
+  call_exn_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (abort_unuse n) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[abort_unuse_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac
+  >- simp[call_exn_safe_unuse_gas] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_stack, call_exn_safe_inc_pc]
+QED
+
+Theorem call_exn_safe_push_context[local]:
+  call_exn_safe P (push_context crb) (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def] >> gvs[push_context_def, return_def]
+QED
+
+Theorem call_exn_safe_abort_create_exists[local]:
+  call_exn_safe (\s. s.contexts <> []) (abort_create_exists a) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[abort_create_exists_def, ignore_bind_def] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_state_updates, call_exn_safe_stack] >>
+       gen_tac >> simp[]) >> simp[call_exn_safe_inc_pc]
+QED
+
+Theorem call_exn_safe_proceed_create[local]:
+  call_exn_safe (\s. s.contexts <> []) (proceed_create sender addr value code gas)
+    (\s. s.contexts <> [])
+Proof
+  rewrite_tac[proceed_create_def, ignore_bind_def] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_state_updates, call_exn_safe_state_readers,
+         call_exn_safe_original] >> gen_tac >> simp[]) >>
+  simp[call_exn_safe_push_context]
+QED
+
+Theorem call_exn_safe_abort_call_value[local]:
+  call_exn_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (abort_call_value n) (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def] >>
+  gvs[abort_call_value_def, push_stack_def, set_return_data_def,
+    unuse_gas_def, inc_pc_def, get_current_context_def, set_current_context_def,
+    bind_def, ignore_bind_def, return_def, assert_def, AllCaseEqs()]
+QED
+
+Theorem call_exn_safe_dispatch_precompiles[local]:
+  fIN a precompile_addresses ==>
+  call_exn_safe (\s. s.contexts <> []) (dispatch_precompiles a) (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def]
+  >- metis_tac[dispatch_precompiles_preserves_nonempty_contexts, SND] >>
+  drule_all dispatch_precompiles_inr_not_reverted_not_abort >>
+  Cases_on `e` >> simp[vfm_abort_def] >> Cases_on `x` >> simp[vfm_abort_def]
+QED
+
+Theorem call_exn_safe_proceed_call[local]:
+  call_exn_safe (\s. s.contexts <> [])
+    (proceed_call op sender addr value argsOff argsSz code gas output)
+    (\s. s.contexts <> [])
+Proof
+  rewrite_tac[proceed_call_def, ignore_bind_def] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_state_readers, call_exn_safe_memory] >>
+       gen_tac >> simp[]) >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[call_exn_safe_state_updates, call_exn_safe_return]) >>
+  gen_tac >> simp[] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_context_readers, call_exn_safe_push_context] >>
+       gen_tac >> simp[]) >>
+  IF_CASES_TAC >> simp[call_exn_safe_dispatch_precompiles, call_exn_safe_return]
+QED
+
+Definition call_success_safe_def:
+  call_success_safe P m Q <=>
+    call_exn_safe P m (\s. s.contexts <> []) /\
+    (!s x t. P s /\ m s = (INL x,t) ==> Q x t)
+End
+
+Theorem call_success_safe_forget[local]:
+  call_success_safe P m Q ==> call_exn_safe P m (\s. s.contexts <> [])
+Proof
+  simp[call_success_safe_def]
+QED
+
+Theorem call_success_safe_lift[local]:
+  call_exn_safe P m R /\ (!s. R s ==> s.contexts <> []) ==>
+  call_success_safe P m (\x s. R s)
+Proof
+  simp[call_success_safe_def, call_exn_safe_def] >> metis_tac[]
+QED
+
+Theorem call_success_safe_consequence[local]:
+  (!s. P' s ==> P s) /\ call_success_safe P m Q /\
+  (!x s. Q x s ==> Q' x s) ==> call_success_safe P' m Q'
+Proof
+  simp[call_success_safe_def, call_exn_safe_def] >> metis_tac[]
+QED
+
+Theorem call_success_safe_return[local]:
+  (!s. P s ==> s.contexts <> []) ==>
+  call_success_safe P (return v) (\x s. x = v /\ P s)
+Proof
+  simp[call_success_safe_def, call_exn_safe_def, return_def]
+QED
+
+Theorem call_success_safe_bind[local]:
+  call_success_safe P m R /\ (!x. call_success_safe (R x) (f x) Q) ==>
+  call_success_safe P (bind m f) Q
+Proof
+  rw[call_success_safe_def, call_exn_safe_def, bind_def] >>
+  Cases_on `m s` >> Cases_on `q` >> gvs[] >> metis_tac[]
+QED
+
+Theorem call_success_safe_bind_exn[local]:
+  call_success_safe P m R /\
+  (!x. call_exn_safe (R x) (f x) (\s. s.contexts <> [])) ==>
+  call_exn_safe P (bind m f) (\s. s.contexts <> [])
+Proof
+  rw[call_success_safe_def, call_exn_safe_def, bind_def] >>
+  Cases_on `m s` >> Cases_on `q` >> gvs[] >> metis_tac[]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
