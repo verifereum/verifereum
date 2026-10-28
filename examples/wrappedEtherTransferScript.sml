@@ -161,6 +161,11 @@ val transfer_path =
    (1676, "_take"), (1756, "_take"), (1972, "_take"), (2255, "_Jump"),
    (3035, "_Jump"), (944, "_outermost")]
 
+(* the same to the balance check at 1676, which fails, falling through to
+   the REVERT at 1752 *)
+val revert_path =
+  List.take (transfer_path, 13) @ [(1676, "_skip"), (1752, "_outermost")]
+
 val memory_cost_64_32 =
   Q.SPECL [`64`,`32`] (Q.GENL [`off`,`sz`] memory_cost_offset_to_0)
   |> SIMP_RULE arith_ss []
@@ -198,20 +203,19 @@ fun var_named th n =
   valOf (List.find (fn v => fst (dest_var v) = n) (thm_frees th))
 
 (* composed with the memory abbreviations kept, spelt out at the end *)
-val transfer_path_abbrev =
+fun compose_path path =
   let
-    val ths = map (fn (n, v) => weth_block n v) transfer_path
+    val ths = map (fn (n, v) => weth_block n v) path
     val th0 = hd ths
     val th0 = INST [var_named th0 "m" |-> “empty_buffer”,
                     var_named th0 "g" |-> “0n”] th0
   in
-    List.foldl (fn ((th, (n, _)), acc) =>
-      compose_blocks transfer_config [acc, th])
-      th0 (zip (tl ths) (tl transfer_path))
+    inline_memory (List.foldl (fn (th, acc) =>
+      compose_blocks transfer_config [acc, th]) th0 (tl ths))
   end
 
-val transfer_path_composed =
-  inline_memory transfer_path_abbrev
+val transfer_path_composed = compose_path transfer_path
+val revert_path_composed = compose_path revert_path
 
 (* ---------------------------------------------------------------- *)
 (* Reading the composed path's memory
@@ -383,8 +387,9 @@ and args_conv tm =
   in
     List.foldl (fn (th, acc) => MK_COMB (acc, th)) (REFL f) ths
   end
-val transfer_path_reads =
-  CONV_RULE (helperLib.PRE_POST_CONV reads_conv) transfer_path_composed
+val path_reads = CONV_RULE (helperLib.PRE_POST_CONV reads_conv)
+val transfer_path_reads = path_reads transfer_path_composed
+val revert_path_reads = path_reads revert_path_composed
 
 val () = diminish_srw_ss ["ground_div"]
 
@@ -398,18 +403,17 @@ Theorem balance_slot_key_bytes[local] =
        else NO_CONV t))))
   |> GSYM
 
-val transfer_path_keys =
-  PURE_REWRITE_RULE [balance_slot_key_bytes] transfer_path_reads
-
-val () = if null (hyp transfer_path_keys) then ()
-         else raise mk_HOL_ERR "wrappedEtherTransferScript" "transfer_path_keys"
-                "hypotheses"
+fun path_keys th =
+  let val th' = PURE_REWRITE_RULE [balance_slot_key_bytes] th in
+    if null (hyp th') then th'
+    else raise mk_HOL_ERR "wrappedEtherTransferScript" "path_keys"
+           "hypotheses"
+  end
 
 (* a call's start: no pending exception or jump, no outer contexts, an
    empty stack, and not a create, so no code deposit *)
-val transfer_spec_start =
+fun spec_start th =
   let
-    val th = transfer_path_keys
     val e = var_named th "e" and j = var_named th "j"
     val cs = var_named th "cs" and rest = var_named th "rest"
     val codeCost = var_named th "codeCost"
@@ -420,6 +424,9 @@ val transfer_spec_start =
           rest |-> listSyntax.mk_nil (listSyntax.dest_list_type (type_of rest)),
           codeCost |-> “0n”] th
   end
+
+val transfer_spec_start = spec_start (path_keys transfer_path_reads)
+val revert_spec_start = spec_start (path_keys revert_path_reads)
 
 Theorem FST_SND_SND_EVM_MODEL[local]:
   FST (SND (SND EVM_MODEL)) = EVM_INSTR
@@ -433,9 +440,9 @@ QED
 fun evc tm = tm |> (REWRITE_CONV [parsed_contract_code_eq] THENC EVAL)
 
 (* the path's instructions are entries of the parsed code *)
-val transfer_spec_code =
+fun spec_code spec_start =
   let
-    val th = MATCH_MP SPEC_SUBSET_CODE transfer_spec_start
+    val th = MATCH_MP SPEC_SUBSET_CODE spec_start
              |> SPEC “fmap_entries parsed_contract_code”
     val tac = rewrite_tac [SUBSET_DEF] \\ Cases
       \\ rewrite_tac [IN_INSERT, NOT_IN_EMPTY, PAIR_EQ]
@@ -448,9 +455,9 @@ val transfer_spec_code =
 
 (* framed with the transaction parameters, which run_transaction's lifting
    names, the code moved into the pre- and postcondition *)
-val transfer_spec_pool =
+fun spec_pool spec_code =
   SPEC “evm_TxParams txParams * SEP_T”
-    (MATCH_MP SPEC_FRAME transfer_spec_code)
+    (MATCH_MP SPEC_FRAME spec_code)
   |> ONCE_REWRITE_RULE [GSYM SPEC_CODE]
   |> REWRITE_RULE [FST_SND_SND_EVM_MODEL]
 
@@ -465,10 +472,10 @@ fun strip_star tm =
   let val (_, a, b) = dest_star tm in strip_star a @ strip_star b end
   handle HOL_ERR _ => [tm]
 
-(* the postcondition in the order SPEC_to_run_transaction names it *)
-val transfer_spec_ordered =
+(* the postcondition in the order a lifting theorem names it *)
+fun spec_ordered names spec_pool =
   let
-    val post = rand (concl transfer_spec_pool)
+    val post = rand (concl spec_pool)
     val (star, _, _) = dest_star post
     fun mk_star (a, b) = list_mk_comb (star, [a, b])
     fun head_name tm =
@@ -476,10 +483,6 @@ val transfer_spec_ordered =
         if is_const f then fst (dest_const f) else ""
       end
     val factors = strip_star post
-    val names = ["evm_Exception", "evm_ReturnData", "evm_Logs",
-                 "evm_Rollback", "evm_Contexts", "evm_GasUsed",
-                 "evm_MsgParams", "evm_AddRefund", "evm_SubRefund",
-                 "evm_TxParams"]
     val picked = map (fn n => valOf (List.find (fn f => head_name f = n)
                                        factors)) names
     val others = List.filter (fn f => not (Lib.mem (head_name f) names))
@@ -491,25 +494,36 @@ val transfer_spec_ordered =
     val eq = EQT_ELIM (SIMP_CONV bool_ss [AC STAR_ASSOC STAR_COMM]
                          (mk_eq (post, post')))
   in
-    CONV_RULE (RAND_CONV (REWR_CONV eq)) transfer_spec_pool
+    CONV_RULE (RAND_CONV (REWR_CONV eq)) spec_pool
   end
 
-val transfer_lift =
+fun spec_lift lift_thm spec_ordered =
   let
-    val th = MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
-                         SPEC_to_run_transaction) transfer_spec_ordered
+    val th = MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] lift_thm)
+               spec_ordered
     val (ants, _) = strip_imp (concl th)
     val (q, form) = dest_eq (last ants)
     val (tmS, tyS) = match_term form q
+    val th = INST tmS (INST_TYPE tyS th) |> REWRITE_RULE [AND_IMP_INTRO]
   in
-    INST tmS (INST_TYPE tyS th) |> REWRITE_RULE [AND_IMP_INTRO]
+    (* MATCH_MP primed the lifting theorem's states; name them s and s' *)
+    INST [var_named th "s''" |-> mk_var ("s", “:execution_state”),
+          var_named th "s'''" |-> mk_var ("s'", “:execution_state”)] th
   end
 
-(* MATCH_MP primed the lifting theorem's states; name them s and s' *)
 val transfer_lift =
-  INST [var_named transfer_lift "s''" |-> mk_var ("s", “:execution_state”),
-        var_named transfer_lift "s'''" |-> mk_var ("s'", “:execution_state”)]
-    transfer_lift
+  transfer_spec_start |> spec_code |> spec_pool
+  |> spec_ordered ["evm_Exception", "evm_ReturnData", "evm_Logs",
+                   "evm_Rollback", "evm_Contexts", "evm_GasUsed",
+                   "evm_MsgParams", "evm_AddRefund", "evm_SubRefund",
+                   "evm_TxParams"]
+  |> spec_lift SPEC_to_run_transaction
+
+val revert_lift =
+  revert_spec_start |> spec_code |> spec_pool
+  |> spec_ordered ["evm_Exception", "evm_ReturnData", "evm_Contexts",
+                   "evm_GasUsed", "evm_MsgParams", "evm_TxParams"]
+  |> spec_lift SPEC_to_run_transaction_failure
 
 Theorem transfer_value_zero[local]:
   transfer_value f t 0 = I
@@ -884,4 +898,138 @@ Proof
   \\ impl_tac >- asm_rewrite_tac[]
   \\ simp_tac std_ss [LET_THM] \\ strip_tac
   \\ asm_rewrite_tac[account_state_accfupds, K_THM, WETH_transfer_locked]
+QED
+
+(* ---------------------------------------------------------------- *)
+(* transfer reverts when the caller's balance is below wad *)
+
+Theorem weth_transfer_revert_run_transaction:
+  (lookup_account addr accounts).code = contract_code ∧
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "transfer" [Address; Uint 256] ++
+     enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad]))
+    2615 s ∧
+  w2n (lookup_storage (balance_slot_key tx.from)
+         (lookup_account addr accounts).storage) < wad ∧
+  wad < dimword (:256) ∧
+  access_slot_check dom (SK addr (balance_slot_key tx.from))
+  ⇒
+  ∃result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') ∧
+    result.result = SOME Reverted ∧
+    result.output = [] ∧
+    result.logs = [] ∧
+    (∀a. (lookup_account a accounts').code =
+         (lookup_account a s.rollback.accounts).code ∧
+         (lookup_account a accounts').storage =
+         (lookup_account a s.rollback.accounts).storage ∧
+         (lookup_account a accounts').nonce =
+         (lookup_account a s.rollback.accounts).nonce) ∧
+    (lookup_account addr accounts').code = contract_code ∧
+    (lookup_account addr accounts').storage =
+      (lookup_account addr accounts).storage ∧
+    (blk.coinBase ≠ addr ⇒
+     lookup_account addr accounts' = lookup_account addr accounts)
+Proof
+  PURE_REWRITE_TAC [zero_value_call_def]
+  \\ strip_tac
+  \\ strip_assume_tac contract_code_not_delegation
+  \\ drule_all initial_state_call_code \\ strip_tac
+  \\ drule initial_state_contract
+  \\ disch_then (qspec_then `addr` mp_tac)
+  \\ impl_tac >- gvs[]
+  \\ strip_tac
+  \\ fs[GSYM parsed_contract_code_def]
+  \\ drule_all wf_initial_state \\ strip_tac
+  \\ `∃rest. tx.data = [0xA9w; 0x05w; 0x9Cw; 0xBBw] ++
+                       word_to_bytes (w2w dst : bytes32) T ++
+                       word_to_bytes (n2w wad : bytes32) T ++ rest`
+  by (qpat_x_assum `_ ≼ tx.data` mp_tac
+      \\ rewrite_tac[transfer_selector_eq, transfer_args_enc, IS_PREFIX_APPEND]
+      \\ strip_tac \\ simp[REV_DEF, w2w_def])
+  \\ mp_tac (Q.INST [‘p’ |-> ‘ctxt.msgParams’, ‘rb’ |-> ‘s.rollback’,
+                     ‘d’ |-> ‘dom’, ‘rd’ |-> ‘[]’, ‘returnCode’ |-> ‘F’,
+                     ‘txParams’ |-> ‘s.txParams’, ‘callee’ |-> ‘addr’,
+                     ‘s'’ |-> ‘s with rollback updated_by
+                       (λr. r with accounts updated_by
+                              transfer_value tx.from addr tx.value)’]
+                    revert_lift)
+  \\ impl_tac
+  >- (
+    simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+    \\ simp[STAR_evm2set, STAR_evm_OriginalAccounts, STAR_CODE_POOL_evm2set,
+            cond_STAR, SEP_T_def,
+            transfer_value_zero, execution_state_component_equality,
+            rollback_state_component_equality, fmap_entries_def,
+            SIMP_RULE std_ss [APPEND] transfer_selector_calldata,
+            DROP_APPEND, DROP_LENGTH_TOO_LONG, calldata_word, mask_and_w2w,
+            balance_slot_key_bytes]
+    \\ qpat_assum `lookup_account addr s.rollback.accounts = _`
+         (fn th => rewrite_tac[th])
+    \\ gas_bounds_tac
+    \\ gvs[])
+  \\ strip_tac
+  \\ qexistsl_tac [`result`, `accounts'`]
+  \\ gvs[lookup_account_pay_transaction_gas, transfer_value_zero]
+  \\ rw[account_state_component_equality]
+QED
+
+(* the same from the WETH_EVM relation, which the revert preserves, assuming
+   the caller's balance slot is none of the slots 0-2 and, if the caller is
+   untouched, no touched account's slot *)
+Theorem WETH_EVM_transfer_revert_run_transaction:
+  WETH_EVM addr ws accounts ∧
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "transfer" [Address; Uint 256] ++
+     enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad]))
+    2615 s ∧
+  ws.balances tx.from < wad ∧ wad < dimword (:256) ∧
+  (tx.from ∉ ws.touched ⇒
+   balance_slot_key tx.from ∉ IMAGE balance_slot_key ws.touched) ∧
+  balance_slot_key tx.from ∉ {0w; 1w; 2w} ∧
+  access_slot_check dom (SK addr (balance_slot_key tx.from)) ∧
+  blk.coinBase ≠ addr
+  ⇒
+  ∃result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') ∧
+    result.result = SOME Reverted ∧
+    result.output = [] ∧
+    result.logs = [] ∧
+    (∀a. a ≠ addr ⇒
+         (lookup_account a accounts').code =
+         (lookup_account a s.rollback.accounts).code ∧
+         (lookup_account a accounts').storage =
+         (lookup_account a s.rollback.accounts).storage ∧
+         (lookup_account a accounts').nonce =
+         (lookup_account a s.rollback.accounts).nonce) ∧
+    WETH_EVM addr ws accounts'
+Proof
+  strip_tac
+  \\ `lookup_storage (balance_slot_key tx.from)
+        (lookup_account addr accounts).storage = n2w (ws.balances tx.from)`
+  by (qpat_x_assum `WETH_EVM _ _ _` mp_tac
+      \\ simp_tac std_ss [WETH_EVM_def, LET_THM] \\ strip_tac
+      \\ first_x_assum irule \\ gvs[] \\ metis_tac[])
+  \\ `ws.balances tx.from < dimword (:256)`
+  by (qpat_x_assum `WETH_EVM _ _ _` mp_tac
+      \\ simp[WETH_EVM_def, wf_WETH_state_def])
+  \\ `w2n (lookup_storage (balance_slot_key tx.from)
+             (lookup_account addr accounts).storage) < wad`
+  by gvs[]
+  \\ `(lookup_account addr accounts).code = contract_code`
+  by gvs[WETH_EVM_def]
+  \\ drule_all weth_transfer_revert_run_transaction \\ strip_tac
+  \\ qexistsl_tac [`result`, `accounts'`]
+  \\ `lookup_account addr accounts' = lookup_account addr accounts` by gvs[]
+  \\ rpt conj_tac \\ TRY (first_assum ACCEPT_TAC)
+  >- (gen_tac \\ strip_tac \\ asm_rewrite_tac[])
+  \\ qpat_x_assum `WETH_EVM _ _ _` mp_tac
+  \\ simp_tac std_ss [WETH_EVM_def, LET_THM]
+  \\ pop_assum SUBST1_TAC
+  \\ asm_rewrite_tac[]
+  \\ strip_tac
+  \\ asm_simp_tac std_ss []
+  \\ first_assum ACCEPT_TAC
 QED
