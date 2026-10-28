@@ -2147,7 +2147,8 @@ Theorem run_call_memory_returns[local]:
   wf_state es ∧ es.contexts = (callee,saved)::(caller,cb)::rest ∧
   es.msdomain = Collect dd ∧ callee.msgParams.outputTo = Memory mr ⇒
   ∃k t dd' cc gasLeft out success.
-    FUNPOW (step o SND) k (INL (),es) = (INL (),t) ∧
+    FUNPOW (λr. if ISR (FST r) then r else step (SND r))
+      k (INL (),es) = (INL (),t) ∧ wf_state t ∧
     t.msdomain = Collect dd' ∧ t.txParams = es.txParams ∧
     gasLeft ≤ callee.msgParams.gasLimit ∧
     t.contexts = (caller with <|
@@ -2187,8 +2188,9 @@ Proof
          Cases_on `err = NONE` >> gvs[])
      >> drule_all run_call_last_pop >> metis_tac[]) >>
   drule_all call_memory_final_pop >> strip_tac >>
-  qexistsl_tac [`SUC n`,`es'`,`dd'`,`cc`,`gasLeft`,`out`,`err = NONE`] >>
-  simp[FUNPOW_SUC] >> metis_tac[]
+  drule_all run_call_guarded_trace >> strip_tac >>
+  qexistsl_tac [`k`,`es'`,`dd'`,`cc`,`gasLeft`,`out`,`err = NONE`] >>
+  simp[] >> metis_tac[]
 QED
 
 (* The entry normalization is supplied by call_entry_prepared; caller is the
@@ -2207,7 +2209,8 @@ Theorem call_returns_summary[local]:
      else ignore_bind (set_return_data [])
        (proceed_call op sender addr value ao az code cg (Memory mr)) prepared) ⇒
   ∃k t dd' cc gasLeft out success.
-    FUNPOW (step o SND) k (INL (),s) = (INL (),t) ∧
+    FUNPOW (λr. if ISR (FST r) then r else step (SND r))
+      k (INL (),s) = (INL (),t) ∧ wf_state t ∧
     t.msdomain = Collect dd' ∧ t.txParams = s.txParams ∧
     gasLeft ≤ cg ∧
     t.contexts = (caller with <|
@@ -2234,6 +2237,8 @@ Proof
   >- (drule_all call_abort_pair >> simp[LET_THM] >> strip_tac >>
       `step s = abort_call_value cg prepared` by
         (simp[] >> irule step_call_success_dispatch >> metis_tac[]) >>
+      `wf_state (SND (abort_call_value cg prepared))` by
+        metis_tac[step_preserves_wf_state] >>
       qexistsl_tac [`1`,`SND (abort_call_value cg prepared)`,`dd`,
                     `caller`,`cg`,`[]`,`F`] >>
       simp[FUNPOW_1, context_component_equality]) >>
@@ -2313,7 +2318,8 @@ Theorem call_entry_prepared[local]:
   prepared = s with <|rollback := rb'; msdomain := dom';
                       contexts := (caller,cb)::cs|> ⇒
   ∃k t dd' cc gasLeft out success.
-    FUNPOW (step o SND) k (INL (),s) = (INL (),t) ∧
+    FUNPOW (λr. if ISR (FST r) then r else step (SND r))
+      k (INL (),s) = (INL (),t) ∧ wf_state t ∧
     t.msdomain = Collect dd' ∧ t.txParams = s.txParams ∧ gasLeft ≤ cg ∧
     t.contexts = (caller with <|
       stack := b2w success :: caller.stack;
