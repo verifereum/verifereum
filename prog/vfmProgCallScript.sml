@@ -1222,6 +1222,40 @@ Proof
   strip_tac >> drule_all step_collect_ge2_inl >> Cases_on `r` >> simp[]
 QED
 
+Theorem run_call_collect_inl[local]:
+  wf_state es /\ es.msdomain = Collect dd /\ 2 <= LENGTH es.contexts /\
+  run_call es = SOME (r,t) ==> ISL r
+Proof
+  strip_tac >>
+  `(\p. ISL (FST p) /\ wf_state (SND p) /\
+      ?d. (SND p).msdomain = Collect d) (r,t)` suffices_by simp[] >>
+  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
+  qexists_tac `\(r,s). ISL r /\ LENGTH es.contexts <= LENGTH s.contexts` >>
+  qexists_tac `step o SND` >>
+  qexists_tac `(INL () : unit + exception option,es)` >> simp[] >>
+  reverse conj_tac >- fs[run_call_def, GREATER_EQ, UNCURRY] >>
+  qx_gen_tac `st` >> PairCases_on `st` >> simp[] >> strip_tac >>
+  Cases_on `step st1` >> simp[] >>
+  `2 <= LENGTH st1.contexts` by decide_tac >>
+  conj_tac >- metis_tac[step_collect_ge2_inl] >>
+  conj_tac >- (drule step_preserves_wf_state >> simp[]) >>
+  irule step_preserves_collect >> metis_tac[]
+QED
+
+Theorem run_call_collect_returns[local]:
+  wf_state es /\ es.msdomain = Collect dd /\ 2 <= LENGTH es.contexts ==>
+  ?es' dd'. run_call es = SOME (INL (),es') /\
+    LENGTH es'.contexts + 1 = LENGTH es.contexts /\ es'.msdomain = Collect dd'
+Proof
+  strip_tac >>
+  Cases_on `run_call_tr (LENGTH es.contexts) (step es)` >>
+  `run_call es = SOME (q,r)` by simp[run_call_eq_tr] >>
+  `ISL q` by metis_tac[run_call_collect_inl] >>
+  Cases_on `q` >> gvs[] >>
+  drule_all run_call_inl_length >>
+  drule_all run_call_preserves_collect >> metis_tac[]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
