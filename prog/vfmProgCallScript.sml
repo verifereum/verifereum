@@ -1862,6 +1862,65 @@ Proof
   drule_all step_preserves_stipend_prefix >> simp[]
 QED
 
+Theorem IMP_EVM_SPEC_FINITE:
+  (!s dom. p (evm2set_on dom s) ==>
+    ?k t. FUNPOW (\s. if ISR (FST s) then s else step (SND s)) k s = t /\
+      q (evm2set_on dom t) /\ evm2set_without dom s = evm2set_without dom t) ==>
+  SPEC EVM_MODEL p {} q
+Proof
+  rewrite_tac[EVM_SPEC_SEMANTICS, rel_sequence_EVM_NEXT_REL_FUNPOW] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `k` >> simp[]
+QED
+
+Theorem IMP_EVM_SPEC_FINITE_CODE:
+  (!s dom. (p * CODE_POOL EVM_INSTR code) (evm2set_on dom s) ==>
+    ?k t. FUNPOW (\s. if ISR (FST s) then s else step (SND s)) k s = t /\
+      (q * CODE_POOL EVM_INSTR code) (evm2set_on dom t) /\
+      evm2set_without dom s = evm2set_without dom t) ==>
+  SPEC EVM_MODEL p code q
+Proof
+  strip_tac >>
+  once_rewrite_tac[GSYM (REWRITE_RULE [GSYM EVM_MODEL_def]
+    (SIMP_RULE std_ss [EVM_MODEL_def] (ISPEC ``EVM_MODEL`` SPEC_CODE)))] >>
+  irule IMP_EVM_SPEC_FINITE >> simp[STAR_COMM] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `k` >> gvs[]
+QED
+
+Theorem caller_observation_frame:
+  wf_state (SND r) ∧ wf_state (SND r') ∧
+  ctxt = FST (HD (SND r).contexts) ∧
+  ctxt' = FST (HD (SND r').contexts) ∧
+  (HasException ∉ dom ⇒ FST r' = FST r) ∧
+  (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
+  (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
+  (HasMsgParams ∉ dom ⇒ ctxt'.msgParams = ctxt.msgParams) ∧
+  (HasLogs ∉ dom ⇒ ctxt'.logs = ctxt.logs) ∧
+  (HasSubRefund ∉ dom ⇒ ctxt'.subRefund = ctxt.subRefund) ∧
+  (HasAddRefund ∉ dom ⇒ ctxt'.addRefund = ctxt.addRefund) ∧
+  (HasReturnData ∉ dom ⇒ ctxt'.returnData = ctxt.returnData) ∧
+  (HasJumpDest ∉ dom ⇒ ctxt'.jumpDest = ctxt.jumpDest) ∧
+  (HasMemory ∉ dom ⇒ ctxt'.memory = ctxt.memory) ∧
+  (HasPC ∉ dom ⇒ ctxt'.pc = ctxt.pc) ∧
+  (∀pc. HasParsed pc ∉ dom ⇒
+    FLOOKUP ctxt'.msgParams.parsed pc = FLOOKUP ctxt.msgParams.parsed pc) ∧
+  (HasContexts ∉ dom ⇒ TL (SND r').contexts = TL (SND r).contexts) ∧
+  (HasCachedRB ∉ dom ⇒
+    SND (HD (SND r').contexts) = SND (HD (SND r).contexts)) ∧
+  (HasTxParams ∉ dom ⇒ (SND r').txParams = (SND r).txParams) ∧
+  (HasRollback ∉ dom ⇒ (SND r').rollback = (SND r).rollback) ∧
+  (HasOriginalAccounts ∉ dom ⇒
+    (SND r').originalAccounts = (SND r).originalAccounts) ∧
+  (HasMsdomain ∉ dom ⇒ (SND r').msdomain = (SND r).msdomain)
+  ⇒ evm2set_without dom r' = evm2set_without dom r
+Proof
+  strip_tac >>
+  simp[evm2set_without_def, evm2set_def, EXTENSION, evm2set_on_def] >>
+  Cases >> simp[COND_RAND, COND_RATOR] >>
+  rw[Once EQ_IMP_THM] >> gvs[]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
