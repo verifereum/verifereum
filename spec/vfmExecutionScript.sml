@@ -1284,7 +1284,10 @@ Definition step_swapn_def:
     stack <<- context.stack;
     b <<- code_byte context.msgParams.code (context.pc + 1);
     assert (valid_single b) InvalidParameter;
-    n <<- decode_single b;
+    (* EIP-8024 counts SWAPN's operand as `stack[top - n]`, one deeper than
+       DUPN's `stack[top - n + 1]`, so the decode comes off by one the way
+       `step_dupn`'s does and the guard is the EIP's `n + 1 <= len(stack)`. *)
+    n <<- decode_single b - 1;
     assert (SUC n < LENGTH stack) StackUnderflow;
     top <<- HD stack;
     swap <<- EL n (TL stack);
