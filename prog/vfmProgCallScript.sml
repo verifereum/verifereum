@@ -1,6 +1,7 @@
 (* CALL to arbitrary code, as one SPEC step for the caller: control comes
    back to the caller's frame with the callee's effects confined to the
-   rollback state, logs and refunds. *)
+   rollback state, msdomain, originalAccounts, logs, refunds and return
+   data. *)
 Theory vfmProgCall
 Ancestors
   vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
@@ -1293,7 +1294,6 @@ Proof
   drule_all run_call_preserves_collect >> metis_tac[]
 QED
 
-(* run_call_finite_trace already provides the reusable finite-steps interface. *)
 Theorem run_call_last_step[local]:
   run_call es = SOME (INL (),t) ==>
   ?n before. FUNPOW (step o SND) n (INL (),es) = (INL (),before) /\
@@ -1919,7 +1919,7 @@ Proof
   metis_tac[call_stipend_prefix_noncall_dispatch]
 QED
 
-Theorem step_inner_preserves_stipend_prefix:
+Theorem step_inner_preserves_stipend_prefix[local]:
   !s r t. call_stipend_prefix n A D oa s /\ step_inner s = (r,t) ==>
     call_stipend_prefix n A D oa t
 Proof
@@ -1939,7 +1939,7 @@ Proof
   qexistsl_tac [`inc_pc_or_jump x`, `r`, `mid`] >> simp[]
 QED
 
-Theorem step_preserves_stipend_prefix:
+Theorem step_preserves_stipend_prefix[local]:
   wf_state s /\ call_stipend_prefix n A D oa s /\ step s = (r,t) ==>
   wf_state t /\ t.originalAccounts = oa /\
   (n <= LENGTH t.contexts ==> call_stipend_prefix n A D oa t)
@@ -1980,7 +1980,7 @@ Proof
   drule_all step_preserves_stipend_prefix >> simp[]
 QED
 
-Theorem run_call_stipend_originalAccounts:
+Theorem run_call_stipend_originalAccounts[local]:
   wf_state es /\ es.contexts = (callee,saved)::cs /\ 1 <= LENGTH cs /\
   callee.msgParams.gasLimit <= call_stipend /\
   (!a. callee.msgParams.outputTo <> Code a) /\
@@ -2082,7 +2082,7 @@ QED
 
 Finalise run_call_stipend_footprint
 
-Theorem FUNPOW_guarded_prefix:
+Theorem FUNPOW_guarded_prefix[local]:
   ∀stop f n x. (∀i. i < n ⇒ ¬stop (FUNPOW f i x)) ⇒
   FUNPOW (λx. if stop x then x else f x) n x = FUNPOW f n x
 Proof
@@ -2094,7 +2094,7 @@ Proof
   simp[FUNPOW_SUC]
 QED
 
-Theorem guarded_steps_preserve_wf:
+Theorem guarded_steps_preserve_wf[local]:
   ∀n r. wf_state (SND r) ⇒
   wf_state (SND (FUNPOW
     (λr. if ISR (FST r) then r else step (SND r)) n r))
@@ -2266,9 +2266,6 @@ QED
 
 Finalise call_returns_summary
 
-(* Strengthened in place: the pure entry interface now returns the caller.
-   The implementation-level entry equation is proved only in the suspended
-   normalization block, not re-unfolded by either SPEC consumer. *)
 Theorem call_entry_prepared[local]:
   wf_state s ∧ s.contexts = (c,cb)::cs ∧
   FLOOKUP c.msgParams.parsed c.pc = SOME op ∧
@@ -2482,45 +2479,6 @@ Proof
   rw[Once EQ_IMP_THM] >> gvs[]
 QED
 
-(* Why SPEC_Call_any holds (notes for the proof; ignore freely):
-   - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
-     the proof may pick the state right after the callee's frame pops
-     (contexts back to the caller's length), FUNPOW steps after the
-     start; vfmProg's one-step IMP_EVM_SPEC_LEMMA needs a many-step twin.
-   - The CALL step itself ends in one of three states, already pinned
-     down by SPEC_Call_fail_balance, SPEC_Call_fail_depth and SPEC_Call
-     in vfmProg: the two fail states are already the final state
-     (success = F, out = [], gasLeft = calleeGas).
-   - From the callee's entry state, run_call always terminates
-     (run_call_eq_tr).  An INR result there would be an abort
-     (run_call_inr_requires_abort_ge2); under Collect no step aborts:
-     OutsideDomain needs Enforce, Unimplemented is never raised, and
-     Impossible needs empty contexts, an unuse_gas overrun (ruled out by
-     gas_stack_ok in wf_state) or the dispatch_precompiles fallback.
-     The domain stays Collect (set_domain only adds to a Collect set).
-   - So run_call ends INL at the caller's depth, and the last step is the
-     callee's pop: handle_exception / pop_and_incorporate_context with
-     outputTo = Memory, which writes the caller's stack, pc, memory,
-     return data, gas, logs and refunds as in the postcondition.  The
-     contexts below are untouched (run_call_reaches_outer_contexts),
-     and txParams too (run_call_preserves_txParams).
-   - gasLeft ≤ calleeGas: the callee's gasLimit is calleeGas and its
-     gasUsed only grows.
-   For SPEC_Call_stipend, the extra fact is an invariant over the
-   callee's run in the style of run_call_static_frame in
-   vfmAccountFrame: every frame above the caller has gas left ≤
-   call_stipend and outputTo = Memory, and rollback.accounts and
-   toDelete stay at their value just after the CALL's transfer.  An
-   SSTORE fails its sentry (call_stipend < gas left), a CALL/CALLCODE
-   with value needs call_value_cost = 9000, SELFDESTRUCT 5000 and CREATE
-   32000 static gas, all charged before any account write; nested
-   calls get at most the parent's gas left. *)
-
-(* CALL to any code at a non-precompile, in a Collect domain (the
-   default; an Enforce domain can abort the callee).  The precondition is
-   SPEC_Call's without the balance and depth checks: when those fail the
-   CALL returns 0 at once, which the postcondition covers. The callee's
-   CREATEs reset accounts in originalAccounts, so the rule owns it. *)
 val call_spec_entry_tac =
   irule IMP_EVM_SPEC_FINITE_CODE >> rpt gen_tac >>
   CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss())
@@ -2562,6 +2520,11 @@ val call_spec_post_tac = fn witnesses =>
 val call_spec_frame_tac =
   sym_tac >> irule caller_observation_frame >> simp[];
 
+(* CALL to any code at a non-precompile, in a Collect domain (the
+   default; an Enforce domain can abort the callee).  The precondition is
+   SPEC_Call's without the balance and depth checks: when those fail the
+   CALL returns 0 at once, which the postcondition covers. The callee's
+   CREATEs reset accounts in originalAccounts, so the rule owns it. *)
 Theorem SPEC_Call_any:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *

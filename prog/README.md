@@ -29,6 +29,12 @@ bytes), `SPEC_JumpI_take` and `SPEC_JumpI_skip`, `SPEC_Return_outermost`
 frame), and so on. Larger triples are composed from these with
 `SPEC_COMPOSE` and `SPEC_FRAME`.
 
+`vfmProgCallTheory` has the caller-side CALL rules: `SPEC_Call_any`
+takes a CALL to arbitrary code straight to the caller's next
+instruction, and `SPEC_Call_stipend` adds that a callee given at most
+the 2300-gas stipend changes no account beyond the call's own value
+transfer.
+
 ## Block summaries
 
 Composing rules by hand for a whole contract is long and fragile: a
