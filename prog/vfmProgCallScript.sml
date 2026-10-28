@@ -5,7 +5,7 @@ Theory vfmProgCall
 Ancestors
   vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
   vfmDecreasesGas vfmRunCall vfmContextLength vfmAccountFrame vfmStaticCalls
-  vfmRunWithinFrame vfmSameFrame vfmDomainCollection
+  vfmRunWithinFrame vfmSameFrame vfmDomainCollection vfmStepLength
   vfmTypes vfmBuffer
   prog set_sep pred_set pair list arithmetic option finite_map combin
 
@@ -1147,6 +1147,49 @@ Proof
   irule call_exn_safe_consequence >>
   qexistsl_tac [`\s. s.contexts <> []`, `\s. s.contexts <> []`] >>
   simp[call_exn_safe_proceed_call]
+QED
+
+Theorem call_exn_safe_step_inst[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_inst op) (\s. s.contexts <> [])
+Proof
+  Cases_on `is_call op` >- (Cases_on `op` >>
+    gvs[is_call_def, step_inst_def, call_exn_safe_step_call, call_exn_safe_step_create]) >>
+  simp[call_exn_safe_step_inst_noncall]
+QED
+
+Theorem call_exn_safe_step_inner[local]:
+  call_exn_safe (\s. s.contexts <> []) step_inner (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_inner_def] >> irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_get_current_context] >>
+  gen_tac >> simp[] >> BasicProvers.TOP_CASE_TAC
+  >- (IF_CASES_TAC >> simp[call_exn_safe_step_inst]) >>
+  rewrite_tac[ignore_bind_def] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_step_inst, call_exn_safe_inc_pc_or_jump]
+QED
+
+Theorem step_inner_not_impossible_unimplemented[local]:
+  s.contexts <> [] /\ step_inner s = (INR e,t) ==>
+  e <> SOME Impossible /\ e <> SOME Unimplemented
+Proof
+  mp_tac call_exn_safe_step_inner >> simp[call_exn_safe_def] >> metis_tac[]
+QED
+
+Theorem step_inner_handler_state[local]:
+  wf_state s /\ 2 <= LENGTH s.contexts /\ step_inner s = (r,t) ==>
+  2 <= LENGTH t.contexts /\ EVERY (wf_context o FST) t.contexts /\
+  stack_room_ok t /\ gas_stack_ok t
+Proof
+  rpt strip_tac
+  >- (`s.contexts <> []` by (strip_tac >> gvs[]) >>
+      `LENGTH s.contexts <= LENGTH t.contexts` by
+        (`same_frame_or_grow step_inner` by simp[] >>
+         drule_all same_frame_or_grow_length >> simp[]) >> decide_tac)
+  >- (mp_tac decreases_gas_cred_step_inner >>
+      simp[decreases_gas_cred_def] >>
+      disch_then (qspec_then `s` mp_tac) >> gvs[wf_state_def])
+  >- metis_tac[step_inner_preserves_stack_room_gas_ok]
+  >> metis_tac[step_inner_preserves_stack_room_gas_ok]
 QED
 
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
