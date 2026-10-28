@@ -1418,40 +1418,6 @@ val () = cv_trans miller_loop_def;
 (* Final exponentiation                                         *)
 (* ============================================================ *)
 
-(* Frobenius endomorphism: raise each coefficient to p-th power *)
-(* For polynomial representation, this permutes coefficients *)
-Definition poly12_frobenius_def:
-  poly12_frobenius (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) =
-  (* This is a simplification - actual Frobenius involves coefficient multiplication *)
-  (* For now, placeholder that would need proper Frobenius constants *)
-  (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11)
-End
-
-val () = cv_trans poly12_frobenius_def;
-
-(* Conjugation in Fq12 (for easy part of final exp) *)
-Definition poly12_conj_def:
-  poly12_conj (a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) =
-  (a0, fneg a1, a2, fneg a3, a4, fneg a5,
-   fneg a6, a7, fneg a8, a9, fneg a10, a11)
-End
-
-val () = cv_trans poly12_conj_def;
-
-(* Final exponentiation: f^((p^12 - 1) / n) *)
-(* Split into easy part: f^((p^6 - 1)(p^2 + 1)) and hard part *)
-Definition final_exp_easy_def:
-  final_exp_easy f = let
-    (* f^(p^6-1) = f^(p^6) / f = conj(f) / f *)
-    f_conj = poly12_conj f;
-    f1 = poly12_div f_conj f;
-    (* f^(p^2+1) = f^(p^2) * f - using Frobenius^2 *)
-    f2 = poly12_mul (poly12_frobenius (poly12_frobenius f1)) f1
-  in f2
-End
-
-val () = cv_trans final_exp_easy_def;
-
 (* Exponentiation by squaring *)
 Definition poly12_exp_loop_def:
   poly12_exp_loop acc base n =

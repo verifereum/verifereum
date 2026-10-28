@@ -79,17 +79,6 @@ structure vfmTestLib :> vfmTestLib = struct
     before OS.FileSys.closeDir ds
   end
 
-  val collect_json_files = collect_files "json"
-
-  fun collect_json_files_rec start_path = let
-    fun loop [] jsons = jsons
-      | loop (path::paths_left) jsons = let
-          val (dirs, jsons) = collect_json_files path (paths_left, jsons)
-        in loop dirs jsons end
-  in
-    loop [start_path] []
-  end
-
   val test_index_entry_decoder =
     JSONDecode.map (fn (fork, format, json_path) =>
       if fork = fork_name andalso format = "blockchain_test"
