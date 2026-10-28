@@ -1318,6 +1318,72 @@ Proof
   simp[GSYM step_eq_handle_step_inner]
 QED
 
+(* Protected persistent footprint and fixed-limit descendant invariant. *)
+Definition call_footprint_def:
+  call_footprint A D oa s <=>
+    s.rollback.accounts = A /\ s.rollback.toDelete = D /\
+    s.originalAccounts = oa
+End
+
+Definition call_stipend_prefix_def:
+  call_stipend_prefix n A D oa s <=>
+    2 <= n /\ n <= LENGTH s.contexts /\ call_footprint A D oa s /\
+    EVERY (\(c,rb). c.msgParams.gasLimit <= call_stipend /\
+                   (!a. c.msgParams.outputTo <> Code a))
+      (TAKE (LENGTH s.contexts - n + 1) s.contexts) /\
+    EVERY (\(c,rb). rb.accounts = A /\ rb.toDelete = D)
+      (TAKE (LENGTH s.contexts - n) s.contexts)
+End
+
+Theorem call_footprint_contexts[local]:
+  call_footprint A D oa (s with contexts := cs) <=>
+  call_footprint A D oa s
+Proof
+  simp[call_footprint_def]
+QED
+
+Theorem call_stipend_prefix_bookkeeping[local]:
+  call_stipend_prefix n A D oa
+    (s with <| msdomain := dom; rollback := accesses_add addr s.rollback |>) <=>
+  call_stipend_prefix n A D oa s
+Proof
+  simp[call_stipend_prefix_def, call_footprint_def, accesses_add_def]
+QED
+
+Theorem call_gas_stipend_budget[local]:
+  L <= call_stipend /\ call_gas v gas L mc oc = (dg,cg) /\
+  sc + dg + mc <= L /\ (0 < v ==> call_value_cost <= oc) ==>
+  v = 0 /\ cg <= L
+Proof
+  simp[call_gas_def, LET_THM] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), call_stipend_def, call_value_cost_def] >>
+  decide_tac
+QED
+
+Theorem call_stipend_prefix_root[local]:
+  call_footprint A D oa s /\ s.contexts = (c,rb)::cs /\
+  1 <= LENGTH cs /\ c.msgParams.gasLimit <= call_stipend /\
+  (!a. c.msgParams.outputTo <> Code a) ==>
+  call_stipend_prefix (LENGTH s.contexts) A D oa s
+Proof
+  simp[call_stipend_prefix_def]
+QED
+
+Theorem call_stipend_prefix_push[local]:
+  call_stipend_prefix n A D oa s /\
+  c.msgParams.gasLimit <= call_stipend /\
+  (!a. c.msgParams.outputTo <> Code a) ==>
+  call_stipend_prefix n A D oa
+    (s with contexts := (c,s.rollback)::s.contexts)
+Proof
+  simp[call_stipend_prefix_def, call_footprint_def] >> strip_tac >>
+  `SUC (LENGTH s.contexts) - n = SUC (LENGTH s.contexts - n)` by decide_tac >>
+  simp[ADD1] >>
+  `LENGTH s.contexts + 1 - n = LENGTH s.contexts - n + 1` by decide_tac >>
+  pop_assum (fn th => pure_once_rewrite_tac [th]) >>
+  first_assum ACCEPT_TAC
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
