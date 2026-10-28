@@ -5,7 +5,7 @@ Ancestors vfmExecution
    Unspecified record fields are arbitrary: the failure uses only gas fields. *)
 Definition pop_gas_child_def:
   pop_gas_child c = c with <|
-    msgParams := c.msgParams with <| gasLimit := 0;
+    msgParams := c.msgParams with <| gasLimit := 0; newAccountCharged := F;
       outputTo := Memory <| offset := 0; size := 0 |> |>;
     gasUsed := 0; stateGasLeft := 0; stateGasSpilled := 0;
     stateGasCommitted := 0; returnData := [] |>
@@ -48,7 +48,7 @@ QED
 (* Failure branch: restoration refunds spilled execution gas before pop. *)
 Definition reverted_pop_gas_child_def:
   reverted_pop_gas_child c = c with <|
-    msgParams := c.msgParams with <| gasLimit := 1;
+    msgParams := c.msgParams with <| gasLimit := 1; newAccountCharged := F;
       outputTo := Memory <| offset := 0; size := 0 |> |>;
     gasUsed := 1; stateGasLeft := 0; stateGasSpilled := 1;
     stateGasBaseline := 0; stateGasCommitted := 0; returnData := [] |>
@@ -82,6 +82,7 @@ Proof
        handle_exception_def, restore_state_gas_def, bind_def, ignore_bind_def,
        return_def, get_num_contexts_def, get_return_data_def,
        get_output_to_def, pop_and_incorporate_context_def,
+       credit_new_account_def,
        get_gas_left_def, get_current_context_def, pop_context_def,
        unuse_gas_def, set_current_context_def, absorb_state_gas_def,
        set_rollback_def, inc_pc_def, set_return_data_def,
@@ -140,6 +141,7 @@ Proof
        handle_exception_def, restore_state_gas_def, bind_def, ignore_bind_def,
        return_def, get_num_contexts_def, get_return_data_def,
        get_output_to_def, pop_and_incorporate_context_def,
+       credit_new_account_def,
        get_gas_left_def, get_current_context_def, pop_context_def,
        unuse_gas_def, set_current_context_def, absorb_state_gas_def,
        set_rollback_def, inc_pc_def, set_return_data_def,

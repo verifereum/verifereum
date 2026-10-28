@@ -419,6 +419,18 @@ Proof
   rw[credit_state_gas_refund_def, LET_THM] >> ptx_tac >> simp[]
 QED
 
+Theorem preserves_txParams_charge_new_account[simp]:
+  preserves_txParams (charge_new_account charged)
+Proof
+  Cases_on `charged` >> simp[charge_new_account_def]
+QED
+
+Theorem preserves_txParams_credit_new_account[simp]:
+  preserves_txParams (credit_new_account charged)
+Proof
+  Cases_on `charged` >> simp[credit_new_account_def]
+QED
+
 Theorem preserves_txParams_restore_state_gas[simp]:
   preserves_txParams restore_state_gas
 Proof
@@ -568,6 +580,12 @@ Theorem preserves_txParams_abort_create_exists[simp]:
   preserves_txParams (abort_create_exists a)
 Proof
   rw[abort_create_exists_def] >> ptx_tac
+QED
+
+Theorem preserves_txParams_abort_create[simp]:
+  preserves_txParams abort_create
+Proof
+  rw[abort_create_def] >> ptx_tac
 QED
 
 Theorem preserves_txParams_abort_call_value[simp]:
