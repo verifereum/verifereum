@@ -843,7 +843,12 @@ Proof
 QED
 
 (* the initial state of a message call to a contract (code that is not a
-   delegation) *)
+   delegation)
+
+   EIP-7708: the transaction's own transfer is the frame's first log, so the
+   initial frame's logs are `transfer_log` of it rather than empty.  The log
+   lives in the frame, so a transaction that fails takes it down with the rest
+   of the frame's logs. *)
 Theorem initial_state_call_code:
   initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
   tx.to = SOME addr ∧
@@ -854,7 +859,13 @@ Theorem initial_state_call_code:
     s.rollback.toDelete = [] ∧
     ctxt.stack = [] ∧ ctxt.memory = empty_buffer ∧ ctxt.pc = 0 ∧
     ctxt.jumpDest = NONE ∧ ctxt.returnData = [] ∧ ctxt.gasUsed = 0 ∧
-    ctxt.addRefund = 0 ∧ ctxt.subRefund = 0 ∧ ctxt.logs = [] ∧
+    ctxt.addRefund = 0 ∧ ctxt.subRefund = 0 ∧
+    (* EIP-8037: the frame starts with nothing spilled out of it and nothing
+       committed, so its meter's only non-zero cell is the reservoir -- which
+       is the transaction's state gas grant, handed to the top frame whole. *)
+    ctxt.stateGasSpilled = 0 ∧ ctxt.stateGasCommitted = 0 ∧
+    ctxt.stateGasLeft = s.txParams.stateGasReservoir ∧
+    ctxt.logs = transfer_log tx.from addr tx.value ∧
     ctxt.msgParams.callee = addr ∧ ctxt.msgParams.code = code ∧
     ctxt.msgParams.parsed = parse_code 0 FEMPTY code ∧
     ctxt.msgParams.value = tx.value ∧
@@ -875,6 +886,7 @@ Proof
   \\ gvs[apply_intrinsic_cost_def, initial_context_def,
          initial_msg_params_def, code_from_tx_def, get_delegate_def,
          callee_from_tx_to_def, initial_rollback_def,
+         initial_tx_params_def,
          empty_return_destination_def, is_code_dest_def]
 QED
 
