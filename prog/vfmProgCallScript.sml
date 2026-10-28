@@ -5,7 +5,7 @@ Theory vfmProgCall
 Ancestors
   vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
   vfmDecreasesGas vfmRunCall vfmContextLength vfmAccountFrame vfmStaticCalls
-  vfmRunWithinFrame vfmSameFrame
+  vfmRunWithinFrame vfmSameFrame vfmDomainCollection
   vfmTypes vfmBuffer
   prog set_sep pred_set pair list arithmetic option finite_map combin
 
@@ -314,6 +314,94 @@ Proof
       bind_def, ignore_bind_def, return_def, assert_def, fail_def,
       combinTheory.o_DEF, combinTheory.C_DEF] >>
   cong_tac (SOME 4) >> simp[context_component_equality, ADD_COMM]
+QED
+
+Theorem step_collect_not_outside[local]:
+  s.msdomain = Collect dd /\ step s = (r,s') ==>
+  r <> INR (SOME (OutsideDomain x))
+Proof
+  strip_tac >>
+  mp_tac step_computes_minimal_domain >>
+  rewrite_tac[computes_minimal_domain_def] >>
+  disch_then drule >> simp[]
+QED
+
+Theorem run_call_preserves_collect[local]:
+  es.msdomain = Collect dd /\ run_call es = SOME (r,es') ==>
+  ?dd'. es'.msdomain = Collect dd'
+Proof
+  strip_tac >>
+  `(\p. ?d. (SND p).msdomain = Collect d) (r,es')` suffices_by simp[] >>
+  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
+  qexists_tac `\(r,s). ISL r /\ LENGTH es.contexts <= LENGTH s.contexts` >>
+  qexists_tac `step o SND` >>
+  qexists_tac `(INL () : unit + exception option,es)` >>
+  simp[] >>
+  reverse conj_tac >- fs[run_call_def, GREATER_EQ, UNCURRY] >>
+  qx_gen_tac `st` >> PairCases_on `st` >> simp[] >> strip_tac >>
+  Cases_on `step st1` >> simp[] >>
+  irule step_preserves_collect >> metis_tac[]
+QED
+
+Definition call_exn_safe_def:
+  call_exn_safe P m Q <=>
+    !s r t. P s /\ m s = (r,t) ==>
+      Q t /\ (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
+End
+
+Theorem call_exn_safe_bind_probe[local]:
+  call_exn_safe (\s:execution_state. T) (fail Reverted : execution_state -> unit execution_result)
+    (\s. T) /\
+  (!x:unit. call_exn_safe (\s:execution_state. T)
+    (\s. (INL (),s with contexts := [])) (\s. s.contexts = [])) /\
+  ~call_exn_safe (\s:execution_state. T)
+    (bind (fail Reverted : execution_state -> unit execution_result)
+      (\x:unit. \s. (INL (),s with contexts := [])))
+    (\s. s.contexts = [])
+Proof
+  simp[call_exn_safe_def, fail_def, bind_def] >>
+  qexists_tac `ARB with contexts := [(ARB,ARB)]` >> simp[]
+QED
+
+Theorem call_exn_safe_consequence[local]:
+  (!s. P' s ==> P s) /\ call_exn_safe P m Q /\ (!s. Q s ==> Q' s) ==>
+  call_exn_safe P' m Q'
+Proof
+  simp[call_exn_safe_def] >> metis_tac[]
+QED
+
+Theorem call_exn_safe_bind[local]:
+  call_exn_safe P g R /\ (!x. call_exn_safe R (f x) Q) /\
+  (!s. R s ==> Q s) ==> call_exn_safe P (bind g f) Q
+Proof
+  rw[call_exn_safe_def, bind_def] >>
+  Cases_on `g s` >> Cases_on `q` >> gvs[] >> metis_tac[]
+QED
+
+Theorem call_exn_safe_bind_invariant[local]:
+  call_exn_safe P g Inv /\ (!x. call_exn_safe Inv (f x) Inv) ==>
+  call_exn_safe P (bind g f) Inv
+Proof
+  strip_tac >> irule call_exn_safe_bind >> metis_tac[]
+QED
+
+Theorem call_exn_safe_return[local]:
+  call_exn_safe P (return x) P
+Proof
+  simp[call_exn_safe_def, return_def]
+QED
+
+Theorem call_exn_safe_fail[local]:
+  e <> Impossible /\ e <> Unimplemented ==> call_exn_safe P (fail e) P
+Proof
+  simp[call_exn_safe_def, fail_def]
+QED
+
+Theorem call_exn_safe_bind_positive_probe[local]:
+  call_exn_safe P (bind (fail Reverted) (\x:unit. return x)) P
+Proof
+  irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_fail, call_exn_safe_return]
 QED
 
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
