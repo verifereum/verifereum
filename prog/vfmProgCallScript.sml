@@ -1735,8 +1735,8 @@ Proof
 QED
 
 Theorem call_stipend_prefix_handle_step[local]:
-  wf_state s /\ call_stipend_prefix n A D oa s /\
-  handle_step e s = (res,t) ==>
+  EVERY (wf_context o FST) s.contexts /\ stack_room_ok s /\ gas_stack_ok s /\
+  call_stipend_prefix n A D oa s /\ handle_step e s = (res,t) ==>
   t.originalAccounts = oa /\
   (n <= LENGTH t.contexts ==> call_stipend_prefix n A D oa t)
 Proof
@@ -1757,11 +1757,9 @@ Proof
   PairCases_on `h` >> PairCases_on `h'` >> gvs[] >>
   Cases_on `h0.msgParams.outputTo` >> gvs[] >>
   `h0.gasUsed <= h0.msgParams.gasLimit /\ LENGTH h'0.stack < stack_limit` by
-    (qpat_x_assum `wf_state s` mp_tac >>
-     simp[wf_state_def, wf_context_def, stack_room_ok_def]) >>
+    (fs[wf_context_def, stack_room_ok_def]) >>
   `h0.msgParams.gasLimit - h0.gasUsed <= h'0.gasUsed` by
-    (`gas_stack_ok s` by fs[wf_state_def] >>
-     fs[gas_stack_ok_def] >> first_x_assum (qspec_then `0` mp_tac) >>
+    (fs[gas_stack_ok_def] >> first_x_assum (qspec_then `0` mp_tac) >>
      simp[unused_gas_def]) >>
   drule_all handle_exception_memory_return >>
   disch_then (fn th => rewrite_tac[th]) >>
@@ -1771,6 +1769,61 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `_ = t` (assume_tac o SYM) >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem call_stipend_prefix_step_inst[local]:
+  !s r t. call_stipend_prefix n A D oa s /\ step_inst op s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  Cases_on `op = Call` >- (gvs[step_inst_def] >> metis_tac[call_stipend_prefix_call]) >>
+  Cases_on `op = CallCode` >- (gvs[step_inst_def] >> metis_tac[call_stipend_prefix_call]) >>
+  Cases_on `op = DelegateCall` >- (gvs[step_inst_def] >> metis_tac[call_stipend_prefix_call]) >>
+  Cases_on `op = StaticCall` >- (gvs[step_inst_def] >> metis_tac[call_stipend_prefix_call]) >>
+  metis_tac[call_stipend_prefix_noncall_dispatch]
+QED
+
+Theorem step_inner_preserves_stipend_prefix:
+  !s r t. call_stipend_prefix n A D oa s /\ step_inner s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rewrite_tac[step_inner_def, ignore_bind_def] >>
+  ho_match_mp_tac call_stipend_prefix_cp_bind >>
+  conj_tac >- simp[] >> gen_tac >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[]
+  >- (IF_CASES_TAC >> simp[] >> metis_tac[call_stipend_prefix_step_inst]) >>
+  rpt strip_tac >>
+  qpat_x_assum `bind _ _ s = _` mp_tac >>
+  simp[bind_def] >> Cases_on `step_inst x s` >>
+  rename1 `step_inst x s = (rr,mid)` >>
+  `call_stipend_prefix n A D oa mid` by
+    metis_tac[call_stipend_prefix_step_inst] >>
+  Cases_on `rr` >> simp[] >> strip_tac >> gvs[] >>
+  irule (INST_TYPE [alpha |-> ``:unit``] cp_preserves_stipend_prefix) >>
+  qexistsl_tac [`inc_pc_or_jump x`, `r`, `mid`] >> simp[]
+QED
+
+Theorem step_preserves_stipend_prefix:
+  wf_state s /\ call_stipend_prefix n A D oa s /\ step s = (r,t) ==>
+  wf_state t /\ t.originalAccounts = oa /\
+  (n <= LENGTH t.contexts ==> call_stipend_prefix n A D oa t)
+Proof
+  strip_tac >>
+  `wf_state t` by (drule step_preserves_wf_state >> simp[]) >> simp[] >>
+  qpat_x_assum `step s = _` mp_tac >>
+  rewrite_tac[step_eq_handle_step_inner, handle_def] >>
+  Cases_on `step_inner s` >> rename1 `step_inner s = (rr,mid)` >>
+  `call_stipend_prefix n A D oa mid` by
+    metis_tac[step_inner_preserves_stipend_prefix] >>
+  Cases_on `rr` >> simp[]
+  >- (strip_tac >> gvs[call_stipend_prefix_def, call_footprint_def]) >>
+  `stack_room_ok mid /\ gas_stack_ok mid` by
+    metis_tac[step_inner_preserves_stack_room_gas_ok] >>
+  `EVERY (wf_context o FST) mid.contexts` by
+    (mp_tac decreases_gas_cred_step_inner >>
+     simp[decreases_gas_cred_def] >>
+     disch_then (qspec_then `s` mp_tac) >> simp[] >>
+     fs[wf_state_def]) >>
+  strip_tac >> drule_all call_stipend_prefix_handle_step >> simp[]
 QED
 
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
