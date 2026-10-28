@@ -103,6 +103,40 @@ Proof
   \\ irule DROP_pop \\ simp[]
 QED
 
+(* Why SPEC_Call_any holds (notes for the proof; ignore freely):
+   - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
+     the proof may pick the state right after the callee's frame pops
+     (contexts back to the caller's length), FUNPOW steps after the
+     start; vfmProg's one-step IMP_EVM_SPEC_LEMMA needs a many-step twin.
+   - The CALL step itself ends in one of three states, already pinned
+     down by SPEC_Call_fail_balance, SPEC_Call_fail_depth and SPEC_Call
+     in vfmProg: the two fail states are already the final state
+     (success = F, out = [], gasLeft = calleeGas).
+   - From the callee's entry state, run_call always terminates
+     (run_call_eq_tr).  An INR result there would be an abort
+     (run_call_inr_requires_abort_ge2); under Collect no step aborts:
+     OutsideDomain needs Enforce, Unimplemented is never raised, and
+     Impossible needs empty contexts, an unuse_gas overrun (ruled out by
+     gas_stack_ok in wf_state) or the dispatch_precompiles fallback.
+     The domain stays Collect (set_domain only adds to a Collect set).
+   - So run_call ends INL at the caller's depth, and the last step is the
+     callee's pop: handle_exception / pop_and_incorporate_context with
+     outputTo = Memory, which writes the caller's stack, pc, memory,
+     return data, gas, logs and refunds as in the postcondition.  The
+     contexts below are untouched (run_call_reaches_outer_contexts),
+     and txParams too (run_call_preserves_txParams).
+   - gasLeft ≤ calleeGas: the callee's gasLimit is calleeGas and its
+     gasUsed only grows.
+   For SPEC_Call_stipend, the extra fact is an invariant over the
+   callee's run in the style of run_call_static_frame in
+   vfmAccountFrame: every frame above the caller has gas left ≤
+   call_stipend and outputTo = Memory, and rollback.accounts and
+   toDelete stay at their value just after the CALL's transfer.  An
+   SSTORE fails its sentry (call_stipend < gas left), a CALL/CALLCODE
+   with value needs call_value_cost = 9000, SELFDESTRUCT 5000 and CREATE
+   32000 static gas, all charged before any account write; nested
+   calls get at most the parent's gas left. *)
+
 (* CALL to any code at a non-precompile, in a Collect domain (the
    default; an Enforce domain can abort the callee).  The precondition is
    SPEC_Call's without the balance and depth checks: when those fail the
