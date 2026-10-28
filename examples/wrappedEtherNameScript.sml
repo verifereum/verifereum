@@ -204,9 +204,13 @@ val name_spec_code =
 
 (* framed with the components run_transaction's lifting names, the code
    moved into the pre- and postcondition *)
+(* The frame carries only what the path leaves out.  The path's exit rule
+   names the frame's refund counters and state-gas meter (EIP-8037 gives a
+   frame's exit a state-gas effect and EIP-7708 gives the outermost frame a
+   log), so framing them here as well would put two copies of each cell in
+   the postcondition. *)
 val name_spec_pool =
-  SPEC “evm_Logs logs * evm_AddRefund addRefund * evm_SubRefund subRefund *
-        evm_TxParams txParams * SEP_T”
+  SPEC “evm_Logs logs * evm_TxParams txParams * SEP_T”
     (MATCH_MP SPEC_FRAME name_spec_code)
   |> ONCE_REWRITE_RULE [GSYM SPEC_CODE]
   |> REWRITE_RULE [FST_SND_SND_EVM_MODEL]
@@ -233,8 +237,12 @@ val name_spec_ordered =
         if is_const f then fst (dest_const f) else ""
       end
     val factors = strip_star post
+    (* EIP-8037: `SPEC_to_run_transaction`'s Q names the frame's state-gas
+       reservoir between its gas and its message parameters, so the path's
+       own reservoir cell has to be picked into that position. *)
     val names = ["evm_Exception", "evm_ReturnData", "evm_Logs",
                  "evm_Rollback", "evm_Contexts", "evm_GasUsed",
+                 "evm_StateGasLeft",
                  "evm_MsgParams", "evm_AddRefund", "evm_SubRefund",
                  "evm_TxParams"]
     val picked = map (fn n => valOf (List.find (fn f => head_name f = n)
@@ -308,7 +316,14 @@ Proof
   by gvs[name_selector_eq, IS_PREFIX_APPEND]
   \\ mp_tac (Q.INST [‘p’ |-> ‘ctxt.msgParams’, ‘rb’ |-> ‘s.rollback’,
                      ‘d’ |-> ‘dom’, ‘rd’ |-> ‘[]’, ‘logs’ |-> ‘[]’,
-                     ‘addRefund’ |-> ‘0’, ‘subRefund’ |-> ‘0’,
+                     (* the outermost frame's own meter and refunds: the path
+                        carries them through unchanged, and a fresh frame has
+                        nothing spilled or committed *)
+                     ‘sg’ |-> ‘ctxt.stateGasLeft’,
+                     ‘sp’ |-> ‘0’,
+                     ‘bsl’ |-> ‘ctxt.stateGasBaseline’,
+                     ‘cm’ |-> ‘0’,
+                     ‘ar’ |-> ‘ctxt.addRefund’, ‘sr’ |-> ‘ctxt.subRefund’,
                      ‘txParams’ |-> ‘s.txParams’, ‘callee’ |-> ‘addr’,
                      ‘s'’ |-> ‘s with rollback updated_by
                        (λr. r with accounts updated_by
@@ -321,6 +336,9 @@ Proof
             transfer_value_zero, execution_state_component_equality,
             rollback_state_component_equality,
             fmap_entries_def,
+            (* EIP-7708: the frame's first log is the transaction's own
+               transfer, which a zero-value call does not emit. *)
+            transfer_log_def,
             SIMP_RULE std_ss [APPEND] name_selector_calldata]
     \\ `LENGTH rest + 4 ≤ 16777216 ∧ 3110 ≤ ctxt.msgParams.gasLimit` by gvs[]
     \\ `(LENGTH rest + 4) MOD dimword (:256) = LENGTH rest + 4`
@@ -329,7 +347,9 @@ Proof
     \\ rw[access_slot_cost_def, accesses_add_slot_def, warm_access_cost_def,
           cold_sload_cost_def])
   \\ strip_tac
-  \\ gvs[accesses_add_slot_def]
+  (* `clear_deleted` wraps the accounting now: a successful transaction
+     clears the accounts it deleted, and this one deletes none. *)
+  \\ gvs[accesses_add_slot_def, clear_deleted_def]
 QED
 
 (* the same from the WETH_EVM relation, which fixes code and slot 0 *)
