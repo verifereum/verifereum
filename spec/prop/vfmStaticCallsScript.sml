@@ -66,6 +66,7 @@ QED
 Definition cp_def:
   cp (m: α execution) ⇔
     ∀s r s'. m s = (r, s') ∧ s.contexts ≠ [] ⇒
+      s'.originalAccounts = s.originalAccounts ∧
       s'.rollback.accounts = s.rollback.accounts ∧
       s'.rollback.tStorage = s.rollback.tStorage ∧
       s'.rollback.toDelete = s.rollback.toDelete ∧
@@ -86,6 +87,7 @@ End
 
 Definition cp_rel_def:
   cp_rel s s' ⇔
+    s'.originalAccounts = s.originalAccounts ∧
     s'.rollback.accounts = s.rollback.accounts ∧
     s'.rollback.tStorage = s.rollback.tStorage ∧
     s'.rollback.toDelete = s.rollback.toDelete ∧
@@ -242,6 +244,12 @@ Proof
      access_address_def, access_slot_def, domain_check_def,
      set_domain_def, set_jump_dest_def, update_gas_refund_def,
      ensure_storage_in_domain_def]
+QED
+
+Theorem cp_update_gas_refund[simp]:
+  cp (update_gas_refund updates)
+Proof
+  Cases_on `updates` >> simp[]
 QED
 
 (* Getters are cp (they just read state) *)

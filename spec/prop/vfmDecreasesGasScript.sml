@@ -1537,6 +1537,13 @@ Proof
   \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def]
 QED
 
+Theorem sstore_base_gas_pos[simp]:
+  0 < sstore_base_gas originalValue currentValue value
+Proof
+  rw[sstore_base_gas_def, warm_access_cost_def, storage_update_cost_def,
+     cold_sload_cost_def, storage_set_cost_def]
+QED
+
 Theorem decreases_gas_step_sstore_gas_consumption[simp]:
   decreases_gas T (step_sstore_gas_consumption address key value)
 Proof
@@ -1555,8 +1562,7 @@ Proof
   \\ irule_at Any decreases_gas_update_gas_refund
   \\ irule_at Any decreases_gas_mono
   \\ irule_at Any decreases_gas_consume_gas
-  \\ rw [warm_access_cost_def, storage_update_cost_def,
-    cold_sload_cost_def, storage_set_cost_def]
+  \\ simp[ZERO_LESS_ADD]
 QED
 
 Theorem decreases_gas_write_storage[simp]:
@@ -1697,32 +1703,10 @@ Theorem decreases_gas_cred_bind_set_original[simp]:
   decreases_gas_cred F n1 n2 f ⇒
   decreases_gas_cred F n1 n2 (ignore_bind (set_original a) f)
 Proof
-  rw[decreases_gas_cred_def, ignore_bind_def, bind_def, set_original_def]
-  \\ rw[return_def, fail_def]
-  \\ Cases_on`s.contexts = []` \\ gvs[SNOC_APPEND]
-  \\ qmatch_goalsub_abbrev_tac`f ss`
-  \\ `ss.contexts ≠ []`
-  by ( strip_tac \\ gvs[Abbr`ss`, set_last_accounts_def] )
-  \\ first_x_assum (qspec_then`ss`mp_tac)
-  \\ rw[]
-  >- (
-    first_x_assum irule
-    \\ gs[Abbr`ss`, EVERY_MEM, FORALL_PROD, set_last_accounts_def]
-    \\ rw[] \\ first_x_assum irule
-    \\ metis_tac[rich_listTheory.MEM_FRONT, list_CASES,
-                 rich_listTheory.LAST_MEM, pair_CASES, FST, SND] )
-  \\ irule transitive_LE_LEX_LE
-  \\ goal_assum drule
-  \\ qmatch_goalsub_abbrev_tac`_ x1 x2`
-  \\ `x1 = x2`
-  by (
-    unabbrev_all_tac
-    \\ reverse $ rw[contexts_weight_def, rich_listTheory.LENGTH_FRONT, PRE_SUB1,
-                    set_last_accounts_def]
-    >- (Cases_on`LENGTH s.contexts` \\ gs[])
-    \\ qspec_then`s.contexts`FULL_STRUCT_CASES_TAC SNOC_CASES
-    \\ gs[SNOC_APPEND] )
-  \\ rw[LEX_DEF, UNCURRY]
+  rw[decreases_gas_cred_def, ignore_bind_def, bind_def, set_original_def,
+     return_def, fail_def]
+  \\ first_x_assum (qspec_then `s with originalAccounts := a` mp_tac)
+  \\ Cases_on `s.contexts = []` \\ simp[]
 QED
 
 Theorem decreases_gas_cred_step_create[simp]:

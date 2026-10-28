@@ -4,8 +4,11 @@ open HolKernel
   contractABITheory contractABISyntax
   vfmDomainCollectionTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib
-  vfmContextLengthTheory
-  vfmProgTheory wrappedEtherTheory
+  vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
+  vfmOriginalStateTheory vfmOriginalAccountsTheory
+  vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
+  vfmProgTheory wrappedEtherTheory wrappedEtherNameTheory
+  wrappedEtherTransferTheory
 
 val () = new_theory "verifereum";
 

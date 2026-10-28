@@ -706,22 +706,7 @@ val () = “ensure_storage_in_domain x s” |>
     COND_RATOR, LET_RATOR
   ] |> cv_auto_trans;
 
-val set_last_accounts_pre_def =
-    “set_last_accounts a c”
-  |> SIMP_CONV std_ss [set_last_accounts_def]
-  |> cv_auto_trans_pre "set_last_accounts_pre";
-
-val set_original_pre_def = “set_original a s” |>
-  SIMP_CONV std_ss [
-    set_original_def
-  ] |> cv_auto_trans_pre "set_original_pre";
-
-Theorem set_original_pre[cv_pre]:
-  set_original_pre a s
-Proof
-  rw[set_original_pre_def, set_last_accounts_pre_def]
-  \\ Cases_on `s` \\ gvs[]
-QED
+val () = cv_auto_trans set_original_def;
 
 val () = cv_auto_trans $ REWRITE_RULE [GSYM word_of_bytes_be_def]
   get_delegate_def;
@@ -791,6 +776,8 @@ val () = cv_auto_trans $ INST_TYPE[alpha |-> “:(256)”] word_exp_tailrec;
 val th = tt step_exp_def;
 val th = tt step_keccak256_def;
 val th = tt step_sload_def;
+val () = cv_auto_trans sstore_base_gas_def;
+val () = cv_auto_trans sstore_refund_updates_def;
 val th = tf step_sstore_gas_consumption_def;
 val th = tt step_sstore_def;
 val th = tt step_balance_def;
@@ -890,9 +877,11 @@ Theorem proceed_call_eq:
     else return ()
   od
 Proof
-  rw[FUN_EQ_THM, proceed_call_def, read_memory_def, read_memory_sub_def,
-     bind_def, ignore_bind_def]
-  \\ rpt (BasicProvers.PURE_CASE_TAC \\ gvs[return_def])
+  simp[FUN_EQ_THM] \\ qx_gen_tac `s` \\ Cases_on `s.contexts = []`
+  \\ rw[proceed_call_def, read_memory_def, read_memory_sub_def,
+     bind_def, ignore_bind_def, get_rollback_def, get_current_context_def,
+     get_caller_def, get_value_def, get_static_def, update_accounts_def,
+     push_context_def, return_def, fail_def]
   \\ gvs[initial_context_def, initial_msg_params_def,
          vfmBufferTheory.buffer_of_list_take]
 QED
@@ -1106,6 +1095,8 @@ val () = cv_trans run_within_frame_eq_tr;
 
 val () = cv_auto_trans process_deletions_def;
 
+val () = cv_auto_trans transaction_gas_accounting_def;
+
 val post_transaction_accounting_pre_def = post_transaction_accounting_def
   |> cv_auto_trans_pre "post_transaction_accounting_pre";
 
@@ -1137,7 +1128,7 @@ Theorem run_create_pre[cv_pre]:
 Proof
   rw[run_create_pre_def, initial_state_def,
      pre_transaction_updates_def, execution_state_component_equality,
-     initial_rollback_def, code_from_tx_def, set_last_accounts_pre_def]
+     initial_rollback_def, code_from_tx_def]
   \\ strip_tac \\ gvs[CaseEq"option", UNCURRY]
 QED
 

@@ -312,7 +312,7 @@ Definition get_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return (SND (LAST s.contexts)).accounts s
+      return s.originalAccounts s
 End
 
 Definition set_last_accounts_def:
@@ -327,8 +327,7 @@ Definition set_original_def:
     if s.contexts = [] then
       fail Impossible s
     else
-      return () $ s with contexts updated_by
-        (set_last_accounts a)
+      return () $ s with originalAccounts := a
 End
 
 Definition get_gas_left_def:
@@ -740,6 +739,32 @@ Definition step_sload_def:
   od
 End
 
+(* SSTORE pricing and refund deltas, independent of the state operations. *)
+Definition sstore_refund_updates_def:
+  sstore_refund_updates originalValue currentValue (value:bytes32) =
+     if currentValue ≠ value then
+       let storageSetRefund =
+         if originalValue = value then
+           if originalValue = 0w then
+             storage_set_cost - warm_access_cost
+           else storage_update_cost - cold_sload_cost - warm_access_cost
+         else 0
+       in if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w
+          then (storageSetRefund + storage_clear_refund,0)
+          else if originalValue ≠ 0w ∧ currentValue = 0w
+          then (storageSetRefund,storage_clear_refund)
+          else (storageSetRefund,0)
+     else (0,0)
+End
+
+Definition sstore_base_gas_def:
+  sstore_base_gas originalValue currentValue (value:bytes32) =
+    if originalValue = currentValue ∧ currentValue ≠ value
+    then if originalValue = 0w then storage_set_cost
+    else storage_update_cost - cold_sload_cost
+    else warm_access_cost
+End
+
 Definition step_sstore_gas_consumption_def:
   step_sstore_gas_consumption address key value = do
     gasLeft <- get_gas_left;
@@ -749,29 +774,9 @@ Definition step_sstore_gas_consumption_def:
     original <- get_original;
     originalValue <<- lookup_storage key (lookup_account address original).storage;
     accessCost <- access_slot (SK address key);
-    baseDynamicGas <<-
-      if originalValue = currentValue ∧ currentValue ≠ value
-      then if originalValue = 0w
-           then storage_set_cost
-           else storage_update_cost - cold_sload_cost
-      else warm_access_cost;
-    dynamicGas <<- baseDynamicGas + zero_warm accessCost;
-    refundUpdates <<-
-      if currentValue ≠ value then
-        let storageSetRefund =
-          if originalValue = value then
-            if originalValue = 0w then
-              storage_set_cost - warm_access_cost
-            else
-              storage_update_cost - cold_sload_cost - warm_access_cost
-          else 0
-        in
-          if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w then
-            (storageSetRefund + storage_clear_refund, 0)
-          else if originalValue ≠ 0w ∧ currentValue = 0w then
-            (storageSetRefund, storage_clear_refund)
-          else (storageSetRefund, 0)
-      else (0, 0);
+    dynamicGas <<- sstore_base_gas originalValue currentValue value +
+                   zero_warm accessCost;
+    refundUpdates <<- sstore_refund_updates originalValue currentValue value;
     update_gas_refund refundUpdates;
     consume_gas dynamicGas;
   od
@@ -1792,6 +1797,17 @@ Definition process_deletions_def:
   process_deletions as (update_account a empty_account_state acc)
 End
 
+(* Gas charged and the two credits, before any account is updated. *)
+Definition transaction_gas_accounting_def:
+  transaction_gas_accounting gasPrice baseFee txGasLimit floorCost
+                             (gasLeft, storageRefund, authRefund) =
+  let txGasUsed = txGasLimit - gasLeft in
+  let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
+  let totalGasUsed = MAX (txGasUsed - gasRefund) floorCost in
+    (totalGasUsed, (txGasLimit - totalGasUsed) * gasPrice,
+     totalGasUsed * (gasPrice - baseFee))
+End
+
 Definition post_transaction_accounting_def:
   post_transaction_accounting blk tx result acc t =
   let (gasLimit, gasUsed, addRefund, subRefund, logs, returnData) =
@@ -1801,25 +1817,20 @@ Definition post_transaction_accounting_def:
       (ctxt.msgParams.gasLimit, ctxt.gasUsed,
        ctxt.addRefund, ctxt.subRefund, ctxt.logs, ctxt.returnData) in
   let gasLeft = gasLimit - gasUsed in
-  let txGasUsed = tx.gasLimit - gasLeft in
   let storageRefund = if result ≠ NONE then 0 else addRefund - subRefund in
-  let gasRefund = MIN (txGasUsed DIV 5) (t.txParams.authRefund + storageRefund) in
-  let floor_cost = calldata_floor_cost tx.data in
-  let totalGasUsed = MAX (txGasUsed - gasRefund) floor_cost in
-  let refundEther = (tx.gasLimit - totalGasUsed) * tx.gasPrice in
-  let priorityFeePerGas = tx.gasPrice - blk.baseFeePerGas in
-  let transactionFee = totalGasUsed * priorityFeePerGas in
-  let accounts = if result = NONE
-                 then process_deletions t.rollback.toDelete t.rollback.accounts
-                 else acc in
+  let (totalGasUsed, refundEther, transactionFee) =
+    transaction_gas_accounting tx.gasPrice blk.baseFeePerGas tx.gasLimit
+      (calldata_floor_cost tx.data) (gasLeft, storageRefund, t.txParams.authRefund) in
+  let accounts = if result = NONE then t.rollback.accounts else acc in
   let sender = lookup_account tx.from accounts in
+  let accounts = update_account tx.from
+    (sender with balance updated_by $+ refundEther) accounts in
   let feeRecipient = lookup_account blk.coinBase accounts in
-  let newAccounts =
-    update_account tx.from
-      (sender with balance updated_by $+ refundEther) $
-    update_account blk.coinBase
-      (feeRecipient with balance updated_by $+ transactionFee)
-    accounts in
+  let accounts = update_account blk.coinBase
+    (feeRecipient with balance updated_by $+ transactionFee) accounts in
+  let newAccounts = if result = NONE
+                    then process_deletions t.rollback.toDelete accounts
+                    else accounts in
   let logs = if result = NONE then logs else [] in
   let tr = <| gasUsed := totalGasUsed;
               logs := logs;
@@ -1858,11 +1869,9 @@ Definition run_create_def:
               transfer_value tx.from calleeAddress tx.value o
               increment_nonce calleeAddress
             ));
-            contexts updated_by (
-              set_last_accounts $
-              update_account calleeAddress empty_account_state
-                (SND crb).accounts
-            )|>, NONE)
+            originalAccounts :=
+              update_account calleeAddress empty_account_state s.originalAccounts
+            |>, NONE)
 End
 
 Definition run_transaction_def:
@@ -1894,7 +1903,7 @@ Definition update_beacon_block_def:
   let accounts1 = update_account beacon_addr (a with storage := s2) accounts in
   if b.number = 0 ∨ prevHashes = [] then accounts1 else
   let blockhash_addr = 0x0000F90827F1C53a10cb7A02335B175320002935w in
-  let blockhash_buffer_length = 8192n in
+  let blockhash_buffer_length = 8191n in
   let slot = (b.number - 1) MOD blockhash_buffer_length in
   let parent_hash = HD prevHashes in
   let a2 = lookup_account blockhash_addr accounts1 in

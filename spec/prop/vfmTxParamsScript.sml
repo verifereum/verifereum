@@ -2,7 +2,7 @@
  * txParams preservation through VFM execution.
  *
  * txParams is the only field of execution_state that is never written.
- * Every monadic operation modifies only contexts, rollback, and/or msdomain.
+ * Monadic operations modify contexts, rollback, originalAccounts or msdomain.
  * Proved compositionally: monad combinators preserve the property,
  * leaf operations trivially preserve it, and all opcodes inherit it.
  *
