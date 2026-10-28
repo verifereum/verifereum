@@ -982,6 +982,88 @@ Proof
   Cases_on `m s` >> Cases_on `q` >> gvs[] >> metis_tac[]
 QED
 
+Theorem call_success_safe_consume_gas[local]:
+  call_success_safe (\s. s.contexts <> []) (consume_gas n)
+    (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+Proof
+  rewrite_tac[call_success_safe_def] >>
+  conj_tac >- simp[call_exn_safe_consume_gas] >>
+  rw[] >> gvs[consume_gas_def, bind_def, ignore_bind_def, assert_def,
+    get_current_context_def, set_current_context_def, return_def, AllCaseEqs()]
+QED
+
+Theorem call_success_safe_credit_assert[local]:
+  e <> Impossible /\ e <> Unimplemented ==>
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (assert b e) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+Proof
+  strip_tac >> ho_match_mp_tac call_success_safe_lift >>
+  simp[call_exn_safe_assert]
+QED
+
+Theorem call_success_safe_credit_readers[local]:
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    get_accounts (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    get_num_contexts (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+Proof
+  conj_tac >> ho_match_mp_tac call_success_safe_lift >> simp[call_exn_safe_state_readers]
+QED
+
+Theorem call_success_safe_credit_return[local]:
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (return v) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+Proof
+  ho_match_mp_tac call_success_safe_lift >> simp[call_exn_safe_return]
+QED
+
+Theorem call_success_safe_credit_context_effects[local]:
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    assert_not_static (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (expand_memory amount) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (read_memory off sz) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    get_callee (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (set_return_data rd) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+Proof
+  rpt conj_tac >> ho_match_mp_tac call_success_safe_lift >>
+  (conj_tac >- (rw[call_exn_safe_def] >>
+    gvs[assert_not_static_def, get_static_def, expand_memory_def, read_memory_def,
+      get_callee_def, set_return_data_def, bind_def, ignore_bind_def,
+      get_current_context_def, set_current_context_def, assert_def,
+      return_def, AllCaseEqs()]) >> simp[])
+QED
+
+Theorem call_success_safe_credit_access[local]:
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (access_address a) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
+  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+    (ensure_storage_in_domain a) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
+Proof
+  conj_tac >> ho_match_mp_tac call_success_safe_lift >>
+  (conj_tac >- (rw[call_exn_safe_def] >>
+    Cases_on `s.msdomain` >>
+    gvs[access_address_def, ensure_storage_in_domain_def, domain_check_def,
+      bind_def, ignore_bind_def, set_domain_def, return_def, fail_def, AllCaseEqs()]) >>
+  simp[])
+QED
+
+Theorem call_gas_refund_credit[local]:
+  call_gas value gas gasLeft memoryCost
+    (accessCost + (if 0 < value then call_value_cost else 0) + createCost + delegateCost) =
+      (dynamicGas,stipend) ==>
+  stipend <= static_gas op + dynamicGas + memoryCost
+Proof
+  strip_tac >>
+  `stipend <= dynamicGas + memoryCost` suffices_by simp[] >>
+  irule call_gas_stipend_le_consumed >>
+  goal_assum (drule_at Any) >>
+  Cases_on `0 < value` >> simp[call_stipend_def, call_value_cost_def]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
