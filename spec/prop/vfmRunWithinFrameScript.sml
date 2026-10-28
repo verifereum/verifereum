@@ -1472,23 +1472,13 @@ Proof
   \\ rw[same_frame_rel_def]
 QED
 
-(* Corollary of `run_within_frame_preserves` for a frame that enters with
-   nothing accrued: the frame-local statement that a rollback discards the
-   frame's accrued refunds and nothing else decreases them.  Entered at 0, the
-   counters can only stay 0 or rise, and a nested rollback can zero them and
-   let them rise again. *)
-Theorem run_within_frame_refund_monotone:
-  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
-  LENGTH es'.contexts = LENGTH es.contexts ∧
-  (FST (HD es.contexts)).addRefund = 0 ∧
-  (FST (HD es.contexts)).subRefund = 0 ⇒
-  (FST (HD es.contexts)).addRefund ≤ (FST (HD es'.contexts)).addRefund ∧
-  (FST (HD es.contexts)).subRefund ≤ (FST (HD es'.contexts)).subRefund
-Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
-QED
+(* `run_within_frame_refund_monotone` lived here.  EIP-8037's rollback zeroes
+   a failing frame's refund counters (`restore_state_gas_def`), so the
+   statement without hypotheses is false; pinning the input's counters at 0
+   makes it true but vacuous -- `0 <= _ /\\ 0 <= _` on `num` -- and a name
+   that reads as a refund result while proving nothing is worse than no
+   theorem.  `same_frame_rel`'s own refund clauses and the frame rules carry
+   what each step does to the counters. *)
 
 Theorem run_within_frame_domain_compatible:
   outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
