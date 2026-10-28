@@ -161,6 +161,97 @@ Proof
   simp[execution_state_component_equality, rollback_state_component_equality]
 QED
 
+Theorem call_entry_prepared[local]:
+  s.contexts = (c,cb)::cs /\
+  6 + v <= LENGTH c.stack /\
+  v = (if call_has_value op then 1 else 0) /\
+  w2n (EL 0 c.stack) = gas /\ w2w (EL 1 c.stack) = addr /\
+  (if 0 < v then w2n (EL 2 c.stack) else 0) = value /\
+  w2n (EL (v+2) c.stack) = ao /\ w2n (EL (v+3) c.stack) = az /\
+  w2n (EL (v+4) c.stack) = ro /\ w2n (EL (v+5) c.stack) = rz /\
+  max_expansion_range (ao,az) (ro,rz) = (offset,sz) /\
+  lookup_account addr s.rollback.accounts = ta /\
+  access_check s.msdomain addr /\
+  delegate_check ta.code (msdomain_add addr s.msdomain)
+    (accesses_add addr s.rollback) dc rb' dom' /\
+  memory_cost c.memory offset sz = mc /\
+  call_gas value gas (c.msgParams.gasLimit-c.gasUsed) mc
+    (access_cost s.rollback addr + (if 0 < value then call_value_cost else 0) +
+     (if op = Call /\ 0 < value /\ account_empty ta then new_account_cost else 0) + dc)
+    = (dg,cg) /\
+  c.gasUsed + (static_gas op + dg + mc) <= c.msgParams.gasLimit /\
+  (0 < value ==> ~c.msgParams.static) /\
+  prepared = s with <|rollback := rb'; msdomain := dom'; contexts :=
+    (c with <|stack := DROP (6+v) c.stack;
+      gasUsed := c.gasUsed + (static_gas op + dg + mc);
+      memory := expanded_memory c.memory offset sz|>,cb)::cs|> ==>
+  step_call op s =
+    if (lookup_account c.msgParams.callee s.rollback.accounts).balance < value
+    then abort_call_value cg prepared
+    else ignore_bind (set_return_data [])
+      (if LENGTH s.contexts > 1024 then abort_unuse cg
+       else proceed_call op c.msgParams.callee addr value ao az
+         (case get_delegate ta.code of NONE => ta.code
+          | SOME a => (lookup_account a s.rollback.accounts).code)
+         cg (Memory <|offset := ro; size := rz|>)) prepared
+Proof
+  strip_tac >>
+  `v+6 <= LENGTH c.stack /\
+   0 < 6+v /\ 1 < 6+v /\ 2 < 6+v /\
+   v+2 < 6+v /\ v+3 < 6+v /\ v+4 < 6+v /\ v+5 < 6+v` by decide_tac >>
+  `pop_stack (6+v) s =
+    (INL (TAKE (6+v) c.stack),
+     s with contexts := (c with stack := DROP (6+v) c.stack,cb)::cs)` by
+    (qpat_x_assum `v = _` kall_tac >>
+     simp[pop_stack_def, get_current_context_def, set_current_context_def,
+          assert_def, bind_def, ignore_bind_def, return_def]) >>
+  qpat_x_assum `prepared = _` (mk_asm "prepared") >>
+  once_rewrite_tac[step_call_def] >>
+  qpat_x_assum `v = _` (fn th => rewrite_tac[GSYM th]) >>
+  simp_tac std_ss [LET_THM] >>
+  once_rewrite_tac[bind_def] >>
+  `2+v=v+2 /\ 3+v=v+3 /\ 4+v=v+4 /\ 5+v=v+5` by decide_tac >>
+  asm_simp_tac (srw_ss()) [LET_THM, EL_TAKE] >>
+  qpat_x_assum `w2n (EL 0 _) = gas`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  asm_simp_tac (srw_ss()) [HD_TAKE] >>
+  once_rewrite_tac[bind_def] >>
+  asm_simp_tac (srw_ss()) [memory_expansion_info_split] >>
+  once_rewrite_tac[bind_def] >>
+  asm_simp_tac (srw_ss()) [access_address_split] >>
+  once_rewrite_tac[bind_def] >>
+  asm_simp_tac (srw_ss()) [get_accounts_def, get_rollback_def,
+                          return_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `bind _ _ entryState` >>
+  `delegate_check ta.code entryState.msdomain entryState.rollback dc rb' dom'`
+    by simp[Abbr `entryState`] >>
+  drule call_delegate_resolution >>
+  simp_tac (srw_ss()) [Abbr `entryState`] >>
+  disch_tac >>
+  once_rewrite_tac[bind_def] >>
+  asm_simp_tac (srw_ss()) [] >>
+  ntac 2 (pop_assum kall_tac) >>
+  once_rewrite_tac[bind_def] >>
+  asm_simp_tac (srw_ss()) [get_gas_left_def, get_current_context_def, return_def] >>
+  asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+    get_current_context_def, consume_gas_def, assert_def, fail_def,
+    set_current_context_def, get_callee_def, get_num_contexts_def,
+    expand_memory_def, expanded_memory_def, assert_not_static_def,
+    LET_THM, get_static_def] >>
+  Cases_on `op = Call /\ 0 < value` >>
+  asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+    get_current_context_def, get_static_def, assert_def, fail_def,
+    set_current_context_def, get_num_contexts_def, LET_THM] >>
+  asm_x "prepared" assume_tac >>
+  asm_simp_tac (srw_ss()) [expanded_memory_def,
+    bind_def, ignore_bind_def, return_def, set_return_data_def,
+    get_current_context_def, set_current_context_def, get_num_contexts_def,
+    LET_THM] >>
+  Cases_on `(lookup_account c.msgParams.callee s.rollback.accounts).balance < value` >>
+  asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+    get_current_context_def, set_current_context_def, get_num_contexts_def]
+QED
+
 (* The return boundary retains every unmentioned state and context field. *)
 Theorem pop_and_incorporate_context_pair[local]:
   s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
