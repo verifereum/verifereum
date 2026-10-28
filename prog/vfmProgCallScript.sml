@@ -161,6 +161,42 @@ QED
 
 Finalise step_preserves_selected_metadata
 
+Theorem run_call_reaches_selected_metadata:
+  wf_state es ∧ run_call_reaches es t ∧
+  2 ≤ n ∧ n ≤ LENGTH es.contexts ∧ n ≤ LENGTH t.contexts ⇒
+  (SND (EL (LENGTH t.contexts - n) t.contexts),
+   (FST (EL (LENGTH t.contexts - n) t.contexts)).msgParams) =
+  (SND (EL (LENGTH es.contexts - n) es.contexts),
+   (FST (EL (LENGTH es.contexts - n) es.contexts)).msgParams)
+Proof
+  strip_tac >>
+  `(λs. wf_state s ∧
+     (n ≤ LENGTH s.contexts ⇒
+      (SND (EL (LENGTH s.contexts - n) s.contexts),
+       (FST (EL (LENGTH s.contexts - n) s.contexts)).msgParams) =
+      (SND (EL (LENGTH es.contexts - n) es.contexts),
+       (FST (EL (LENGTH es.contexts - n) es.contexts)).msgParams))) t`
+    suffices_by simp[] >>
+  irule run_call_reaches_inv >> qexists_tac `es` >> simp[] >>
+  qx_genl_tac [`s`,`s'`] >> strip_tac >>
+  `wf_state s'` by metis_tac[step_preserves_wf_state, SND] >>
+  simp[] >> strip_tac >>
+  `n ≤ LENGTH s.contexts` by decide_tac >>
+  drule_all step_preserves_selected_metadata >> simp[]
+QED
+
+Theorem run_call_reaches_root_metadata:
+  wf_state es ∧ 2 ≤ LENGTH es.contexts ∧ run_call_reaches es t ∧
+  LENGTH t.contexts = LENGTH es.contexts ⇒
+  SND (HD t.contexts) = SND (HD es.contexts) ∧
+  (FST (HD t.contexts)).msgParams = (FST (HD es.contexts)).msgParams
+Proof
+  strip_tac >>
+  drule (Q.INST [`n` |-> `LENGTH es.contexts`]
+    run_call_reaches_selected_metadata) >>
+  disch_then (qspec_then `t` mp_tac) >> simp[]
+QED
+
 Theorem call_delegate_resolution[local]:
   delegate_check code s.msdomain s.rollback dc rb' dom' ==>
   (case get_delegate code of
