@@ -407,20 +407,6 @@ Definition call_exn_safe_def:
       Q t /\ (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
 End
 
-Theorem call_exn_safe_bind_probe[local]:
-  call_exn_safe (\s:execution_state. T) (fail Reverted : execution_state -> unit execution_result)
-    (\s. T) /\
-  (!x:unit. call_exn_safe (\s:execution_state. T)
-    (\s. (INL (),s with contexts := [])) (\s. s.contexts = [])) /\
-  ~call_exn_safe (\s:execution_state. T)
-    (bind (fail Reverted : execution_state -> unit execution_result)
-      (\x:unit. \s. (INL (),s with contexts := [])))
-    (\s. s.contexts = [])
-Proof
-  simp[call_exn_safe_def, fail_def, bind_def] >>
-  qexists_tac `ARB with contexts := [(ARB,ARB)]` >> simp[]
-QED
-
 Theorem call_exn_safe_consequence[local]:
   (!s. P' s ==> P s) /\ call_exn_safe P m Q /\ (!s. Q s ==> Q' s) ==>
   call_exn_safe P' m Q'
@@ -453,13 +439,6 @@ Theorem call_exn_safe_fail[local]:
   e <> Impossible /\ e <> Unimplemented ==> call_exn_safe P (fail e) P
 Proof
   simp[call_exn_safe_def, fail_def]
-QED
-
-Theorem call_exn_safe_bind_positive_probe[local]:
-  call_exn_safe P (bind (fail Reverted) (\x:unit. return x)) P
-Proof
-  irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_fail, call_exn_safe_return]
 QED
 
 Theorem call_exn_safe_assert[local]:
