@@ -404,6 +404,443 @@ Proof
   simp[call_exn_safe_fail, call_exn_safe_return]
 QED
 
+Theorem call_exn_safe_assert[local]:
+  e <> Impossible /\ e <> Unimplemented ==>
+  call_exn_safe P (assert b e) P
+Proof
+  Cases_on `b` >> simp[call_exn_safe_def, assert_def]
+QED
+
+Theorem call_exn_safe_reraise[local]:
+  e <> SOME Impossible /\ e <> SOME Unimplemented ==>
+  call_exn_safe P (reraise e) P
+Proof
+  simp[call_exn_safe_def, reraise_def]
+QED
+
+Theorem call_exn_safe_finish[local]:
+  call_exn_safe P finish P /\ call_exn_safe P revert P
+Proof
+  simp[call_exn_safe_def, finish_def, revert_def]
+QED
+
+Theorem call_exn_safe_get_current_context[local]:
+  call_exn_safe (\s. s.contexts <> []) get_current_context
+    (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def] >> gvs[get_current_context_def, return_def]
+QED
+
+Theorem call_exn_safe_set_current_context[local]:
+  call_exn_safe (\s. s.contexts <> []) (set_current_context c)
+    (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def] >> gvs[set_current_context_def, return_def]
+QED
+
+Theorem call_exn_safe_original[local]:
+  call_exn_safe (\s. s.contexts <> []) get_original
+    (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (set_original a)
+    (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def] >> gvs[get_original_def, set_original_def, return_def]
+QED
+
+Theorem call_exn_safe_state_readers[local]:
+  call_exn_safe P get_num_contexts P /\
+  call_exn_safe P get_tx_params P /\
+  call_exn_safe P get_accounts P /\
+  call_exn_safe P get_tStorage P /\
+  call_exn_safe P get_rollback P
+Proof
+  simp[call_exn_safe_def, get_num_contexts_def, get_tx_params_def,
+       get_accounts_def, get_tStorage_def, get_rollback_def, return_def]
+QED
+
+Theorem call_exn_safe_state_updates[local]:
+  call_exn_safe (\s. s.contexts <> []) (update_accounts f) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (set_tStorage ts) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (set_rollback rb) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (set_domain d) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (add_to_delete a) (\s. s.contexts <> [])
+Proof
+  rw[call_exn_safe_def] >>
+  gvs[update_accounts_def, set_tStorage_def, set_rollback_def,
+      set_domain_def, add_to_delete_def, return_def]
+QED
+
+Theorem call_exn_safe_context_readers[local]:
+  call_exn_safe (\s. s.contexts <> []) get_gas_left (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_callee (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_caller (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_value (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_output_to (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_return_data (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_static (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_current_code (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) get_call_data (\s. s.contexts <> [])
+Proof
+  rewrite_tac[get_gas_left_def, get_callee_def, get_caller_def, get_value_def,
+    get_output_to_def, get_return_data_def, get_static_def,
+    get_current_code_def, get_call_data_def] >>
+  rpt conj_tac >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_return]
+QED
+
+Theorem call_exn_safe_context_updates[local]:
+  call_exn_safe (\s. s.contexts <> []) (set_return_data rd) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (set_jump_dest jd) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (push_logs ls) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[set_return_data_def, set_jump_dest_def, push_logs_def] >>
+  rpt conj_tac >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_consume_gas[local]:
+  call_exn_safe (\s. s.contexts <> []) (consume_gas n) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[consume_gas_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_get_current_context] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_assert, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_stack[local]:
+  call_exn_safe (\s. s.contexts <> []) (pop_stack n) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (push_stack v) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[pop_stack_def, push_stack_def, ignore_bind_def] >>
+  conj_tac >> irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >- simp[call_exn_safe_get_current_context]) >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >- simp[call_exn_safe_assert]) >>
+  gen_tac >> simp[]
+  >- (irule call_exn_safe_bind_invariant >>
+      simp[call_exn_safe_set_current_context, call_exn_safe_return]) >>
+  simp[call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_inc_pc_or_jump[local]:
+  call_exn_safe (\s. s.contexts <> []) (inc_pc_or_jump op) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[inc_pc_or_jump_def] >>
+  Cases_on `is_call op` >- simp[call_exn_safe_return] >>
+  simp[] >> irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_get_current_context] >>
+  qx_gen_tac `ctx` >> simp[] >>
+  Cases_on `ctx.jumpDest` >- simp[call_exn_safe_set_current_context] >>
+  simp[ignore_bind_def] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_assert, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_step_binop[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_binop op f) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_binop_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_stack] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_consume_gas, call_exn_safe_stack]
+QED
+
+Theorem call_exn_safe_step_monop[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_monop op f) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_monop_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_stack] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_consume_gas, call_exn_safe_stack]
+QED
+
+Theorem call_exn_safe_step_modop[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_modop op f) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_modop_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_stack] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_consume_gas, call_exn_safe_stack]
+QED
+
+Theorem call_exn_safe_step_context[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_context op f) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_context_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_consume_gas] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_stack]
+QED
+
+Theorem call_exn_safe_step_txParams[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_txParams op f) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_txParams_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_consume_gas] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_state_readers, call_exn_safe_stack]
+QED
+
+Theorem call_exn_safe_domain_check[local]:
+  call_exn_safe (\s. s.contexts <> []) cont (\s. s.contexts <> []) ==>
+  call_exn_safe (\s. s.contexts <> []) (domain_check err check dom_add cont)
+    (\s. s.contexts <> [])
+Proof
+  pure_rewrite_tac[call_exn_safe_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `s.msdomain`
+  >- (gvs[domain_check_def] >> Cases_on `check d` >>
+      gvs[fail_def] >> metis_tac[]) >>
+  gvs[domain_check_def, ignore_bind_def, bind_def, set_domain_def, return_def] >>
+  first_x_assum (qspec_then `s with msdomain := Collect (dom_add d)` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem call_exn_safe_memory[local]:
+  call_exn_safe (\s. s.contexts <> []) (memory_expansion_info offset sz)
+    (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (expand_memory n) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (read_memory offset sz) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (write_memory offset bytes) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[memory_expansion_info_def, expand_memory_def,
+    read_memory_def, write_memory_def] >>
+  rpt conj_tac >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_return,
+    call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_access[local]:
+  call_exn_safe (\s. s.contexts <> []) (access_address a) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (access_slot x) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (ensure_storage_in_domain a) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[access_address_def, access_slot_def, ensure_storage_in_domain_def] >>
+  rpt conj_tac >> irule call_exn_safe_domain_check >>
+  rw[call_exn_safe_def] >> gvs[return_def]
+QED
+
+Theorem call_exn_safe_get_code[local]:
+  call_exn_safe P (get_code a) P
+Proof
+  rewrite_tac[get_code_def] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_state_readers, call_exn_safe_return]
+QED
+
+Theorem call_exn_safe_storage_updates[local]:
+  call_exn_safe (\s. s.contexts <> []) (write_storage a k v) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (write_transient_storage a k v) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[write_storage_def, write_transient_storage_def] >>
+  conj_tac >- simp[call_exn_safe_state_updates] >>
+  irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_state_readers, call_exn_safe_state_updates]
+QED
+
+Theorem call_exn_safe_get_return_data_check[local]:
+  call_exn_safe (\s. s.contexts <> []) (get_return_data_check off sz) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[get_return_data_check_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_context_readers] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_assert, call_exn_safe_return]
+QED
+
+Theorem call_exn_safe_update_gas_refund[local]:
+  call_exn_safe (\s. s.contexts <> []) (update_gas_refund deltas) (\s. s.contexts <> [])
+Proof
+  Cases_on `deltas` >> rewrite_tac[update_gas_refund_def] >>
+  irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_assert_not_static[local]:
+  call_exn_safe (\s. s.contexts <> []) assert_not_static (\s. s.contexts <> [])
+Proof
+  rewrite_tac[assert_not_static_def] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_context_readers, call_exn_safe_assert]
+QED
+
+Theorem call_exn_safe_simple_opcodes[local]:
+  call_exn_safe (\s. s.contexts <> []) step_exp (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_balance (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_call_data_load (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_ext_code_size (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_ext_code_hash (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_keccak256 (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_exp_def, step_balance_def, step_call_data_load_def,
+    step_ext_code_size_def, step_ext_code_hash_def, step_keccak256_def, ignore_bind_def] >>
+  rpt conj_tac >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_consume_gas,
+         call_exn_safe_state_readers, call_exn_safe_access,
+         call_exn_safe_context_readers, call_exn_safe_memory] >>
+       gen_tac >> simp[]) >>
+  simp[call_exn_safe_stack]
+QED
+
+Theorem call_exn_safe_environment_memory_stack[local]:
+  call_exn_safe (\s. s.contexts <> []) step_block_hash (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_blob_hash (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_self_balance (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_mload (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (step_mstore op) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_jump (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_jumpi (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (step_push n ws) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_pop (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (step_dup n) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (step_swap n) (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (step_log n) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_block_hash_def, step_blob_hash_def, step_self_balance_def,
+    step_mload_def, step_mstore_def, step_jump_def, step_jumpi_def, step_push_def,
+    step_pop_def, step_dup_def, step_swap_def, step_log_def, ignore_bind_def] >>
+  rpt conj_tac >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_consume_gas,
+         call_exn_safe_state_readers, call_exn_safe_context_readers,
+         call_exn_safe_memory, call_exn_safe_get_current_context,
+         call_exn_safe_assert, call_exn_safe_assert_not_static] >>
+       gen_tac >> simp[]) >>
+  simp[call_exn_safe_stack, call_exn_safe_consume_gas, call_exn_safe_memory,
+    call_exn_safe_context_updates, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_step_return[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_return b) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_return_def, ignore_bind_def] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_consume_gas,
+         call_exn_safe_memory, call_exn_safe_context_updates] >>
+       gen_tac >> simp[]) >>
+  Cases_on `b` >> simp[call_exn_safe_finish]
+QED
+
+Theorem call_exn_safe_copy_to_memory[local]:
+  (!reader. src = SOME reader ==>
+    call_exn_safe (\s. s.contexts <> []) reader (\s. s.contexts <> [])) ==>
+  call_exn_safe (\s. s.contexts <> []) (copy_to_memory gas off srcOff sz src)
+    (\s. s.contexts <> [])
+Proof
+  strip_tac >> Cases_on `src`
+  >- (Cases_on `max_expansion_range (off,sz) (srcOff,sz)` >>
+      simp[copy_to_memory_def, ignore_bind_def] >>
+      rpt (irule call_exn_safe_bind_invariant >>
+           reverse conj_tac >- simp[call_exn_safe_memory, call_exn_safe_consume_gas] >>
+           gen_tac >> simp[]) >> simp[call_exn_safe_memory]) >>
+  gvs[] >> simp[copy_to_memory_def, ignore_bind_def] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_memory, call_exn_safe_consume_gas] >>
+       gen_tac >> simp[]) >>
+  simp[call_exn_safe_memory]
+QED
+
+Theorem call_exn_safe_step_copy_to_memory[local]:
+  (!reader. src = SOME reader ==>
+    call_exn_safe (\s. s.contexts <> []) reader (\s. s.contexts <> [])) ==>
+  call_exn_safe (\s. s.contexts <> []) (step_copy_to_memory op src) (\s. s.contexts <> [])
+Proof
+  strip_tac >> rewrite_tac[step_copy_to_memory_def] >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac >- simp[call_exn_safe_stack] >>
+  gen_tac >> simp[] >> irule call_exn_safe_copy_to_memory >> simp[]
+QED
+
+Theorem call_exn_safe_step_return_data_copy[local]:
+  call_exn_safe (\s. s.contexts <> []) step_return_data_copy (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_return_data_copy_def] >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac >- simp[call_exn_safe_stack] >>
+  gen_tac >> simp[] >> irule call_exn_safe_copy_to_memory >>
+  simp[call_exn_safe_get_return_data_check]
+QED
+
+Theorem call_exn_safe_step_ext_code_copy[local]:
+  call_exn_safe (\s. s.contexts <> []) step_ext_code_copy (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_ext_code_copy_def] >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac >- simp[call_exn_safe_stack] >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  reverse conj_tac >- simp[call_exn_safe_access] >>
+  gen_tac >> simp[] >> irule call_exn_safe_copy_to_memory >> simp[call_exn_safe_get_code]
+QED
+
+Theorem call_exn_safe_step_sstore_gas_consumption[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_sstore_gas_consumption a k v)
+    (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_sstore_gas_consumption_def, ignore_bind_def] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_context_readers, call_exn_safe_assert,
+         call_exn_safe_state_readers, call_exn_safe_original, call_exn_safe_access,
+         call_exn_safe_update_gas_refund] >> gen_tac >> simp[]) >>
+  simp[call_exn_safe_consume_gas]
+QED
+
+Theorem call_exn_safe_step_sstore[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_sstore transient) (\s. s.contexts <> [])
+Proof
+  Cases_on `transient` >> rewrite_tac[step_sstore_def, ignore_bind_def] >> simp[] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_context_readers,
+         call_exn_safe_consume_gas, call_exn_safe_step_sstore_gas_consumption,
+         call_exn_safe_assert_not_static] >> gen_tac >> simp[]) >>
+  simp[call_exn_safe_storage_updates]
+QED
+
+Theorem call_exn_safe_step_sload[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_sload transient) (\s. s.contexts <> [])
+Proof
+  Cases_on `transient` >> rewrite_tac[step_sload_def, ignore_bind_def] >> simp[] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_context_readers,
+         call_exn_safe_return, call_exn_safe_access, call_exn_safe_consume_gas,
+         call_exn_safe_state_readers] >> gen_tac >> simp[]) >>
+  simp[call_exn_safe_stack]
+QED
+
+Theorem call_exn_safe_step_self_destruct[local]:
+  call_exn_safe (\s. s.contexts <> []) step_self_destruct (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_self_destruct_def, ignore_bind_def] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_access,
+         call_exn_safe_context_readers, call_exn_safe_context_updates,
+         call_exn_safe_state_readers, call_exn_safe_consume_gas,
+         call_exn_safe_assert_not_static, call_exn_safe_state_updates,
+         call_exn_safe_original] >> gen_tac >> simp[]) >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[call_exn_safe_return] >>
+      irule call_exn_safe_bind_invariant >>
+      simp[call_exn_safe_state_updates]) >>
+  simp[call_exn_safe_finish]
+QED
+
+Theorem call_exn_safe_step_inst_noncall[local]:
+  ~is_call op ==>
+  call_exn_safe (\s. s.contexts <> []) (step_inst op) (\s. s.contexts <> [])
+Proof
+  Cases_on `op` >> simp[is_call_def, step_inst_def, step_msgParams_def,
+    call_exn_safe_step_binop, call_exn_safe_step_monop, call_exn_safe_step_modop,
+    call_exn_safe_step_context, call_exn_safe_step_txParams, call_exn_safe_simple_opcodes,
+    call_exn_safe_environment_memory_stack, call_exn_safe_step_return,
+    call_exn_safe_step_return_data_copy, call_exn_safe_step_ext_code_copy,
+    call_exn_safe_step_sstore, call_exn_safe_step_sload, call_exn_safe_step_self_destruct,
+    call_exn_safe_fail, call_exn_safe_consume_gas] >>
+  rpt strip_tac
+  >- (rewrite_tac[ignore_bind_def] >> irule call_exn_safe_bind_invariant >>
+      simp[call_exn_safe_context_updates, call_exn_safe_finish]) >>
+  irule call_exn_safe_step_copy_to_memory >> simp[call_exn_safe_context_readers]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
