@@ -6,7 +6,7 @@ Ancestors
   vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
   vfmDecreasesGas vfmRunCall vfmContextLength vfmAccountFrame vfmStaticCalls
   vfmRunWithinFrame vfmSameFrame vfmDomainCollection vfmStepLength
-  vfmTypes vfmBuffer
+  vfmTypes vfmBuffer vfmHandleStep
   prog set_sep pred_set pair list arithmetic option finite_map combin
 
 (* ----------------------------------------------------------------------------- *)
@@ -1955,6 +1955,111 @@ Proof
   `wf_state before` by metis_tac[run_call_reaches_wf_state] >>
   drule_all step_preserves_stipend_prefix >> simp[]
 QED
+
+Theorem handle_step_noncode_rollback[local]:
+  EVERY (wf_context o FST) s.contexts ∧ stack_room_ok s ∧ gas_stack_ok s ∧
+  2 ≤ LENGTH s.contexts ∧
+  (∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a) ∧
+  handle_step e s = (INL (),t) ⇒
+  t.rollback = if e = NONE then s.rollback else SND (HD s.contexts)
+Proof
+  strip_tac >>
+  `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[]) >>
+  qpat_x_assum `handle_step e s = _` mp_tac >>
+  simp[handle_step_def] >> IF_CASES_TAC
+  >- simp[reraise_def] >>
+  simp[handle_def] >>
+  drule_all (INST_TYPE [alpha |-> ``:unit``] handle_create_reraises) >>
+  disch_then (fn th => rewrite_tac[th]) >> simp[reraise_def] >>
+  Cases_on `s.contexts` >- fs[] >>
+  rename1 `s.contexts = calleePair::cs` >>
+  Cases_on `cs` >- fs[] >>
+  PairCases_on `calleePair` >> PairCases_on `h` >>
+  gvs[] >> Cases_on `calleePair0.msgParams.outputTo` >> gvs[] >>
+  `calleePair0.gasUsed ≤ calleePair0.msgParams.gasLimit ∧
+   LENGTH h0.stack < stack_limit` by
+    (fs[wf_context_def, stack_room_ok_def]) >>
+  `calleePair0.msgParams.gasLimit - calleePair0.gasUsed ≤ h0.gasUsed` by
+    (fs[gas_stack_ok_def] >> first_x_assum (qspec_then `0` mp_tac) >>
+     simp[unused_gas_def]) >>
+  drule_all handle_exception_memory_return >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[LET_THM] >> strip_tac >> gvs[]
+QED
+
+Theorem run_call_stipend_footprint:
+  wf_state es ∧ es.contexts = (callee,saved)::cs ∧ 1 ≤ LENGTH cs ∧
+  callee.msgParams.gasLimit ≤ call_stipend ∧
+  (∀a. callee.msgParams.outputTo ≠ Code a) ∧
+  run_call es = SOME (INL (),t) ⇒
+  ∃n before err mid.
+    FUNPOW (step o SND) n (INL (),es) = (INL (),before) ∧
+    run_call_reaches es before ∧ wf_state before ∧
+    LENGTH before.contexts = LENGTH es.contexts ∧
+    TL before.contexts = TL es.contexts ∧ t.txParams = es.txParams ∧
+    step before = (INL (),t) ∧ step_inner before = (INR err,mid) ∧
+    handle_step err mid = (INL (),t) ∧
+    t.originalAccounts = es.originalAccounts ∧
+    (if err = NONE then
+       t.rollback.accounts = es.rollback.accounts ∧
+       t.rollback.toDelete = es.rollback.toDelete
+     else t.rollback = saved)
+Proof
+  strip_tac >>
+  `t.originalAccounts = es.originalAccounts` by
+    (irule run_call_stipend_originalAccounts >> metis_tac[]) >>
+  drule_all run_call_last_pop >> strip_tac >>
+  qexistsl_tac [`n`,`before`,`err`,`mid`] >> simp[] >>
+  `2 ≤ LENGTH es.contexts` by simp[] >>
+  `SND (HD before.contexts) = saved ∧
+   (FST (HD before.contexts)).msgParams = callee.msgParams` by
+    (drule_all run_call_reaches_root_metadata >> simp[]) >>
+  `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
+    es.rollback.toDelete es.originalAccounts es` by
+    (irule call_stipend_prefix_root >> simp[call_footprint_def] >> metis_tac[]) >>
+  `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
+    es.rollback.toDelete es.originalAccounts before` by
+    (drule_all run_call_reaches_stipend_prefix >> simp[]) >>
+  `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
+    es.rollback.toDelete es.originalAccounts mid` by
+    metis_tac[step_inner_preserves_stipend_prefix] >>
+  suspend "final_footprint"
+QED
+
+Resume run_call_stipend_footprint[final_footprint]:
+  `LENGTH t.contexts + 1 = LENGTH es.contexts` by
+    metis_tac[run_call_inl_length] >>
+  `same_frame_or_grow step_inner` by simp[] >>
+  `before.contexts ≠ []` by (fs[wf_state_def]) >>
+  `LENGTH before.contexts ≤ LENGTH mid.contexts` by
+    (drule_all same_frame_or_grow_length >> simp[]) >>
+  `mid.contexts ≠ []` by
+    (Cases_on `mid.contexts` >> simp[] >>
+     qpat_x_assum `LENGTH before.contexts ≤ _` mp_tac >> simp[]) >>
+  `LENGTH mid.contexts = LENGTH before.contexts` by
+    (drule_all handle_step_shrinks_by_one >>
+     qpat_x_assum `LENGTH before.contexts ≤ _` mp_tac >> simp[] >> decide_tac) >>
+  `same_frame_rel before mid` by
+    (drule_all same_frame_or_grow_eq_length >> simp[]) >>
+  `SND (HD mid.contexts) = saved ∧
+   (FST (HD mid.contexts)).msgParams = callee.msgParams` by
+    fs[same_frame_rel_def] >>
+  `stack_room_ok mid ∧ gas_stack_ok mid` by
+    metis_tac[step_inner_preserves_stack_room_gas_ok] >>
+  `EVERY (wf_context o FST) mid.contexts` by
+    (mp_tac decreases_gas_cred_step_inner >>
+     simp[decreases_gas_cred_def] >>
+     disch_then (qspec_then `before` mp_tac) >> simp[] >>
+     fs[wf_state_def]) >>
+  `2 ≤ LENGTH mid.contexts` by decide_tac >>
+  `(∀a. (FST (HD mid.contexts)).msgParams.outputTo ≠ Code a)` by simp[] >>
+  drule_all handle_step_noncode_rollback >>
+  Cases_on `err = NONE` >> simp[] >>
+  strip_tac >> simp[] >>
+  fs[call_stipend_prefix_def, call_footprint_def]
+QED
+
+Finalise run_call_stipend_footprint
 
 Theorem IMP_EVM_SPEC_FINITE:
   (!s dom. p (evm2set_on dom s) ==>
