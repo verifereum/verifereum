@@ -118,6 +118,49 @@ Proof
   rpt strip_tac >> gvs[execution_state_component_equality]
 QED
 
+Theorem call_abort_pair[local]:
+  s.contexts = (c,cb)::cs /\ cg <= c.gasUsed /\
+  LENGTH c.stack < stack_limit ==>
+  let result = (INL (), s with contexts :=
+       (c with <|stack := b2w F::c.stack; returnData := [];
+                 gasUsed := c.gasUsed-cg; pc := SUC c.pc|>,cb)::cs)
+  in abort_call_value cg s = result /\
+     ignore_bind (set_return_data []) (abort_unuse cg) s = result
+Proof
+  simp_tac std_ss [LET_THM] >> strip_tac >> fs[stack_limit_def] >>
+  simp[abort_call_value_def, abort_unuse_def, push_stack_def,
+       set_return_data_def, unuse_gas_def, inc_pc_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  cong_tac (SOME 4) >> simp[context_component_equality]
+QED
+
+Theorem proceed_call_pair[local]:
+  s.contexts = (c,cb)::cs /\ ~fIN addr precompile_addresses ==>
+  proceed_call op sender addr value ao az code cg output s =
+  let callee = if op = CallCode \/ op = DelegateCall then sender else addr;
+      tx = <|from := if op = DelegateCall then c.msgParams.caller else sender;
+             to := SOME callee;
+             value := if op = DelegateCall then c.msgParams.value else value;
+             gasLimit := cg; data := buffer_take ao az c.memory;
+             nonce := 0; gasPrice := 0; accessList := [];
+             blobVersionedHashes := []; maxFeePerGas := NONE;
+             maxFeePerBlobGas := NONE; authorizationList := []|>
+  in (INL (), s with <|
+    contexts := (initial_context callee code
+      (op = StaticCall \/ c.msgParams.static) output tx,s.rollback)::(c,cb)::cs;
+    rollback := s.rollback with accounts updated_by
+      (if op <> CallCode /\ 0 < value then transfer_value sender addr value else I)
+  |>)
+Proof
+  strip_tac >> Cases_on `op <> CallCode /\ 0 < value` >>
+  simp[proceed_call_def, get_rollback_def, read_memory_def,
+       get_current_context_def, update_accounts_def,
+       get_caller_def, get_value_def, get_static_def, push_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  simp[execution_state_component_equality, rollback_state_component_equality]
+QED
+
 (* The return boundary retains every unmentioned state and context field. *)
 Theorem pop_and_incorporate_context_pair[local]:
   s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
