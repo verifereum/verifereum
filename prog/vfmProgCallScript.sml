@@ -1064,6 +1064,91 @@ Proof
   Cases_on `0 < value` >> simp[call_stipend_def, call_value_cost_def]
 QED
 
+Theorem call_exn_safe_step_create[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_create two) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_create_def, ignore_bind_def] >> simp[] >>
+  ntac 9 (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_memory,
+         call_exn_safe_consume_gas, call_exn_safe_context_readers,
+         call_exn_safe_state_readers, call_exn_safe_assert] >> gen_tac >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `consume_gas credit` >>
+  irule call_success_safe_bind_exn >>
+  qexists_tac `\x s. s.contexts <> [] /\ credit <= (FST (HD s.contexts)).gasUsed` >>
+  reverse conj_tac >- irule call_success_safe_consume_gas >>
+  gen_tac >> simp[] >>
+  rpt (irule call_success_safe_bind_exn >>
+       qexists_tac `\x s. s.contexts <> [] /\ credit <= (FST (HD s.contexts)).gasUsed` >>
+       reverse conj_tac >- simp[call_success_safe_credit_context_effects,
+         call_success_safe_credit_readers] >> gen_tac >> simp[]) >>
+  IF_CASES_TAC >- simp[call_exn_safe_abort_unuse] >>
+  irule call_exn_safe_consequence >>
+  qexistsl_tac [`\s. s.contexts <> []`, `\s. s.contexts <> []`] >>
+  simp[] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_access] >> gen_tac >> simp[]) >>
+  IF_CASES_TAC >> simp[call_exn_safe_abort_create_exists, call_exn_safe_proceed_create]
+QED
+
+Theorem call_exn_safe_step_call[local]:
+  call_exn_safe (\s. s.contexts <> []) (step_call op) (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_call_def, ignore_bind_def] >> simp[] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_memory,
+         call_exn_safe_access, call_exn_safe_context_readers,
+         call_exn_safe_state_readers] >> gen_tac >> simp[]) >>
+  pairarg_tac >> simp[] >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_memory, call_exn_safe_access,
+         call_exn_safe_state_readers] >> gen_tac >> simp[]) >>
+  pop_assum kall_tac >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac
+  >- (BasicProvers.TOP_CASE_TAC >> simp[call_exn_safe_return] >>
+      irule call_exn_safe_bind_invariant >>
+      simp[call_exn_safe_access, call_exn_safe_return]) >>
+  qx_gen_tac `code_cost` >> PairCases_on `code_cost` >> simp[] >>
+  irule call_exn_safe_bind_invariant >> reverse conj_tac
+  >- simp[call_exn_safe_context_readers] >>
+  gen_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qmatch_asmsub_abbrev_tac `call_gas value gas available mem_cost costs` >>
+  qmatch_goalsub_abbrev_tac `consume_gas charge` >>
+  `stipend <= charge` by
+    (`stipend <= dynamicGas + mem_cost` suffices_by simp[Abbr `charge`] >>
+     irule call_gas_stipend_le_consumed >>
+     goal_assum (drule_at Any) >>
+     Cases_on `0 < value` >>
+     simp[Abbr `costs`, call_stipend_def, call_value_cost_def] >>
+     IF_CASES_TAC >> simp[] >> decide_tac) >>
+  irule call_success_safe_bind_exn >>
+  qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
+  reverse conj_tac
+  >- (irule call_success_safe_consequence >>
+      qexistsl_tac [`\s. s.contexts <> []`,
+        `\x s. s.contexts <> [] /\ charge <= (FST (HD s.contexts)).gasUsed`] >>
+      simp[call_success_safe_consume_gas] >> rpt strip_tac >> decide_tac) >>
+  gen_tac >> simp[] >>
+  irule call_success_safe_bind_exn >>
+  qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[call_success_safe_credit_context_effects,
+         call_success_safe_credit_return]) >>
+  gen_tac >> simp[] >>
+  rpt (irule call_success_safe_bind_exn >>
+       qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
+       reverse conj_tac >- simp[call_success_safe_credit_context_effects,
+         call_success_safe_credit_readers] >> gen_tac >> simp[]) >>
+  IF_CASES_TAC >- simp[call_exn_safe_abort_call_value] >>
+  rpt (irule call_success_safe_bind_exn >>
+       qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
+       reverse conj_tac >- simp[call_success_safe_credit_context_effects,
+         call_success_safe_credit_readers] >> gen_tac >> simp[]) >>
+  IF_CASES_TAC >- simp[call_exn_safe_abort_unuse] >>
+  irule call_exn_safe_consequence >>
+  qexistsl_tac [`\s. s.contexts <> []`, `\s. s.contexts <> []`] >>
+  simp[call_exn_safe_proceed_call]
+QED
+
 (* Why SPEC_Call_any holds (notes for the proof; ignore freely):
    - EVM_SPEC_SEMANTICS checks the frame only at the state it picks, so
      the proof may pick the state right after the callee's frame pops
