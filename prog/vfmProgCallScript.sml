@@ -2103,6 +2103,45 @@ QED
 
 Finalise run_call_stipend_footprint
 
+Theorem FUNPOW_guarded_prefix:
+  ∀stop f n x. (∀i. i < n ⇒ ¬stop (FUNPOW f i x)) ⇒
+  FUNPOW (λx. if stop x then x else f x) n x = FUNPOW f n x
+Proof
+  Induct_on `n` >- simp[] >> rpt gen_tac >> strip_tac >>
+  `∀i. i < n ⇒ ¬stop (FUNPOW f i x)` by
+    (gen_tac >> disch_tac >> first_x_assum irule >> decide_tac) >>
+  `¬stop (FUNPOW f n x)` by
+    (qpat_x_assum `∀i. i < SUC n ⇒ _` (qspec_then `n` mp_tac) >> simp[]) >>
+  simp[FUNPOW_SUC]
+QED
+
+Theorem guarded_steps_preserve_wf:
+  ∀n r. wf_state (SND r) ⇒
+  wf_state (SND (FUNPOW
+    (λr. if ISR (FST r) then r else step (SND r)) n r))
+Proof
+  Induct_on `n` >- simp[] >> gen_tac >> strip_tac >>
+  simp[FUNPOW_SUC] >> IF_CASES_TAC >> simp[] >>
+  metis_tac[step_preserves_wf_state]
+QED
+
+Theorem run_call_guarded_trace[local]:
+  wf_state es ∧ run_call es = SOME (INL (),t) ⇒
+  ∃k. FUNPOW (λr. if ISR (FST r) then r else step (SND r))
+    k (INL (),es) = (INL (),t) ∧ wf_state t
+Proof
+  strip_tac >> drule run_call_finite_trace >> strip_tac >>
+  `∀i. i < n ⇒ ¬ISR (FST (FUNPOW (step o SND) i (INL (),es)))` by
+    (gen_tac >> disch_tac >> first_x_assum drule >>
+     Cases_on `FST (FUNPOW (step o SND) i (INL (),es))` >> simp[]) >>
+  `FUNPOW (λr. if ISR (FST r) then r else step (SND r)) n (INL (),es) =
+    FUNPOW (step o SND) n (INL (),es)` by
+    (qspecl_then [`ISR o FST`, `step o SND`, `n`, `(INL (),es)`]
+       mp_tac FUNPOW_guarded_prefix >> simp[]) >>
+  qexists_tac `n` >> simp[] >>
+  qspecl_then [`n`, `(INL (),es)`] mp_tac guarded_steps_preserve_wf >> simp[]
+QED
+
 (* Shared entered-CALL return interface, including the conditional stipend frame. *)
 Theorem run_call_memory_returns[local]:
   wf_state es ∧ es.contexts = (callee,saved)::(caller,cb)::rest ∧
