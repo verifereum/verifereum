@@ -2542,6 +2542,47 @@ QED
    SPEC_Call's without the balance and depth checks: when those fail the
    CALL returns 0 at once, which the postcondition covers. The callee's
    CREATEs reset accounts in originalAccounts, so the rule owns it. *)
+val call_spec_entry_tac =
+  irule IMP_EVM_SPEC_FINITE_CODE >> rpt gen_tac >>
+  CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss())
+    [STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC,
+     STAR_CODE_POOL_evm2set, CODE_POOL_evm2set])) >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `ss = c.stack` >>
+  `s = (INL (),SND s)` by
+    (Cases_on `s` >> Cases_on `q` >> gvs[]) >>
+  `(SND s).contexts ≠ []` by gvs[wf_state_def] >>
+  Cases_on `(SND s).contexts` >- gvs[] >>
+  PairCases_on `h` >>
+  `h0 = c` by simp[Abbr `c`] >>
+  qpat_x_assum `Abbrev (c = _)` kall_tac >>
+  gvs[] >>
+  qpat_assum `Collect dd = _` (assume_tac o SYM) >>
+  drule_all (SIMP_RULE (boss_ss()) [] (GEN_ALL call_entry_prepared)) >>
+  strip_tac >>
+  `FUNPOW (λr. if ISR (FST r) then r else step (SND r)) k s = (INL (),t')` by
+    (qpat_assum `s = (INL (),SND s)` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  qexists_tac `k` >>
+  qpat_x_assum `FUNPOW _ k s = _` (fn th => rewrite_tac[th]);
+
+val call_spec_post_tac = fn witnesses =>
+  once_rewrite_tac[STAR_COMM] >>
+  simp[STAR_CODE_POOL_evm2set] >>
+  conj_tac >- (qpat_x_assum `_ = {HasParsed c.pc}` mp_tac >> SET_TAC[]) >>
+  CONV_TAC (REDEPTH_CONV (HO_REWR_CONV SEP_EXISTS_THM)) >>
+  qexistsl_tac witnesses >>
+  gvs[] >> Cases_on `success` >>
+  simp[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC] >>
+  qmatch_goalsub_abbrev_tac `evm2set_on rest _` >>
+  `rest = {}` by
+    (qunabbrev_tac `rest` >>
+     qpat_x_assum `_ = {HasParsed c.pc}` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> SET_TAC[]) >>
+  simp[cond_def, evm2set_on_def];
+
+val call_spec_frame_tac =
+  sym_tac >> irule caller_observation_frame >> simp[];
+
 Theorem SPEC_Call_any:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
@@ -2589,8 +2630,22 @@ Theorem SPEC_Call_any:
    evm_OriginalAccounts oa' *
    cond (gasLeft ≤ calleeGas ∧ (¬success ⇒ rb' = newRb)))
 Proof
-  cheat
+  call_spec_entry_tac >>
+  conj_tac >- suspend "post" >>
+  suspend "frame"
 QED
+
+Resume SPEC_Call_any[post]:
+  call_spec_post_tac
+    [`success`,`out`,`gasLeft`,`cc.logs`,`cc.addRefund`,`cc.subRefund`,
+     `t'.rollback`,`dd'`,`t'.originalAccounts`]
+QED
+
+Resume SPEC_Call_any[frame]:
+  call_spec_frame_tac
+QED
+
+Finalise SPEC_Call_any
 
 (* With at most the 2300-gas stipend, no frame of the callee can SSTORE
    (EIP-2200 sentry), CALL with value (9000), SELFDESTRUCT (5000) or CREATE
@@ -2649,5 +2704,19 @@ Theorem SPEC_Call_stipend:
             rb'.toDelete = rb.toDelete
           else rb' = newRb)))
 Proof
-  cheat
+  call_spec_entry_tac >>
+  conj_tac >- suspend "post" >>
+  suspend "frame"
 QED
+
+Resume SPEC_Call_stipend[post]:
+  call_spec_post_tac
+    [`success`,`out`,`gasLeft`,`cc.logs`,`cc.addRefund`,`cc.subRefund`,
+     `t'.rollback`,`dd'`]
+QED
+
+Resume SPEC_Call_stipend[frame]:
+  call_spec_frame_tac
+QED
+
+Finalise SPEC_Call_stipend
