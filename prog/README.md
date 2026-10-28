@@ -115,6 +115,17 @@ precondition would be unsatisfiable: a resource that the previous post
 hides and the next block reads (so `drop_gas` goes on the last summary
 only), and a CALL-class summary after other code.
 
+`compose_region` composes every path from a triple's exit into one
+triple. Where both sides of a JUMPI are feasible, the sides are merged
+by cases on the guard `b`: the postcondition is `if b then Q1 else Q2`,
+and the conditions only one side needs become `if b then H1 else H2`.
+A path ends at a halt (REVERT and INVALID included), at a pc already on
+the path, at a jump to a non-constant target, at a CALL-class block, or
+at a pc without summaries; the paths are returned with how each ended.
+A pc already on the path is a loop, or a second call of an internal
+function on that path. Paths that meet again are walked separately, so
+the cost grows with the number of paths.
+
 ## Memory
 
 A memory read (MLOAD, KECCAK256, the source of an MCOPY) puts the whole

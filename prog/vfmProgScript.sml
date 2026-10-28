@@ -970,6 +970,43 @@ Definition compute_transaction_fee_def:
       totalGasUsed * priorityFeePerGas
 End
 
+(* the sender's gas refund and the fee recipient's fee, as
+   post_transaction_accounting pays them *)
+Definition pay_transaction_gas_def:
+  pay_transaction_gas blk tx gasLimit gasUsed addRefund subRefund authRefund
+                      accounts =
+  let refund = compute_refund_ether tx.gasLimit tx.gasPrice tx.data gasLimit
+                 gasUsed addRefund subRefund authRefund;
+      fee = compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
+              tx.data gasLimit gasUsed addRefund subRefund authRefund;
+      accounts = update_account tx.from
+        ((lookup_account tx.from accounts) with balance updated_by $+ refund)
+        accounts
+  in update_account blk.coinBase
+       ((lookup_account blk.coinBase accounts) with balance updated_by $+ fee)
+       accounts
+End
+
+Theorem lookup_account_pay_transaction_gas:
+  lookup_account addr
+    (pay_transaction_gas blk tx gasLimit gasUsed addRefund subRefund authRefund
+       accounts) =
+  (lookup_account addr accounts) with balance :=
+    (lookup_account addr accounts).balance +
+    (if addr = tx.from then
+       compute_refund_ether tx.gasLimit tx.gasPrice tx.data gasLimit gasUsed
+         addRefund subRefund authRefund
+     else 0) +
+    (if addr = blk.coinBase then
+       compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas tx.data
+         gasLimit gasUsed addRefund subRefund authRefund
+     else 0)
+Proof
+  rewrite_tac[pay_transaction_gas_def, LET_THM]
+  \\ BETA_TAC
+  \\ rewrite_tac[lookup_account_two_credits]
+QED
+
 Theorem post_transaction_accounting_success_lookup:
   ~NULL t.contexts /\ NULL (TL t.contexts) ==>
   lookup_account addr (SND (post_transaction_accounting blk tx NONE acc t)) =
@@ -1087,6 +1124,90 @@ Proof
   \\ AP_TERM_TAC
   \\ qmatch_goalsub_abbrev_tac `_ with balance := balance + refund + fee`
   \\ simp[NoAsms, account_state_component_equality, AC ADD_ASSOC ADD_COMM]
+QED
+
+Theorem post_transaction_accounting_failure:
+  ~NULL t.contexts /\ NULL (TL t.contexts) ==>
+  (FST (post_transaction_accounting blk tx (SOME e) acc t)).result = SOME e /\
+  (FST (post_transaction_accounting blk tx (SOME e) acc t)).output =
+    (FST (HD t.contexts)).returnData /\
+  (FST (post_transaction_accounting blk tx (SOME e) acc t)).logs = [] /\
+  (FST (post_transaction_accounting blk tx (SOME e) acc t)).gasUsed =
+    compute_total_gas_used tx.gasLimit tx.data
+      (FST (HD t.contexts)).msgParams.gasLimit (FST (HD t.contexts)).gasUsed
+      0 0 t.txParams.authRefund /\
+  SND (post_transaction_accounting blk tx (SOME e) acc t) =
+  pay_transaction_gas blk tx (FST (HD t.contexts)).msgParams.gasLimit
+    (FST (HD t.contexts)).gasUsed 0 0 t.txParams.authRefund acc
+Proof
+  strip_tac
+  \\ simp[post_transaction_accounting_def, transaction_gas_accounting_def,
+          pay_transaction_gas_def, compute_refund_ether_def,
+          compute_transaction_fee_def, compute_total_gas_used_def,
+          compute_tx_gas_used_def, compute_gas_left_def]
+QED
+
+(* Bridging theorem for a message call that reverts or halts exceptionally:
+   the call's effects, value transfer included, are undone, and only the fee
+   accounting touches the accounts left by initial_state. *)
+Theorem SPEC_to_run_transaction_failure:
+  SPEC EVM_MODEL P {} Q ∧
+  tx.to = SOME callee ∧
+  ¬fIN callee precompile_addresses ∧
+  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
+  s' = s with rollback updated_by
+       (λr. r with accounts updated_by transfer_value tx.from callee tx.value) ∧
+  P (evm2set (INL (), s')) ∧
+  Q = evm_Exception (INR (SOME e)) * evm_ReturnData returnData *
+      evm_Contexts [] * evm_GasUsed gasUsed * evm_MsgParams msgParams *
+      evm_TxParams txParams * R
+  ⇒
+  ∃result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') ∧
+    result.result = SOME e ∧
+    result.output = returnData ∧
+    result.logs = [] ∧
+    result.gasUsed =
+      compute_total_gas_used tx.gasLimit tx.data msgParams.gasLimit gasUsed
+        0 0 txParams.authRefund ∧
+    accounts' =
+      pay_transaction_gas blk tx msgParams.gasLimit gasUsed 0 0
+        txParams.authRefund s.rollback.accounts
+Proof
+  strip_tac
+  \\ simp[run_transaction_def]
+  \\ `run_create dom F chainId prevHashes blk accounts tx =
+      SOME (INR (s.rollback.accounts, s', NONE))`
+       by (imp_res_tac run_create_call >> gvs[])
+  \\ simp[]
+  \\ sg `?rs2. run s' = SOME rs2 /\ Q (evm2set rs2)`
+  >- (irule run_from_SPEC
+      \\ conj_tac
+      >- (qexists_tac `evm_ReturnData returnData * evm_Contexts [] *
+            evm_GasUsed gasUsed * evm_MsgParams msgParams *
+            evm_TxParams txParams * R`
+          \\ qexists_tac `SOME e` \\ gvs[] \\ simp[STAR_ASSOC])
+      >- (qexists_tac `P` \\ simp[]))
+  \\ gvs[]
+  \\ `FST rs2 = INR (SOME e)` by
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _) _` mp_tac
+      \\ simp[evm2set_def]
+      \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+      \\ simp[])
+  \\ Cases_on `rs2` \\ gvs[]
+  \\ `r.contexts <> []` by
+     (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+      \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ simp[evm2set_def, STAR_evm2set]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+  \\ strip_tac
+  \\ `~NULL r.contexts /\ NULL (TL r.contexts)` by simp[NULL_EQ]
+  \\ qexists_tac
+       `FST (post_transaction_accounting blk tx (SOME e) s.rollback.accounts r)`
+  \\ simp[PAIR_FST_SND_EQ, post_transaction_accounting_failure]
 QED
 
 (*-------------------------------------------------------------------------------*

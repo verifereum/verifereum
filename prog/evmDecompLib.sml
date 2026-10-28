@@ -5,7 +5,8 @@
    basic block and exit, each a SPEC EVM_MODEL triple over the real semantics
    composed from the per-instruction rules of vfmProgTheory. Nothing here is
    trusted: every summary is proved by SPEC_REFL, SPEC_FRAME, SPEC_COMPOSE and
-   SPEC_MOVE_COND from those rules, so a wrong hint or a bug in the composer
+   SPEC_MOVE_COND from those rules (compose_region also uses SPEC_ADD_CODE,
+   SPEC_SUBSET_CODE and case analysis), so a wrong hint or a bug in the composer
    gives a failed summary, never a wrong theorem. What a bug can give is a
    vacuous one, whose precondition no state satisfies; compose refuses the
    two ways known to produce that (see compose).
@@ -691,6 +692,9 @@ fun resource a =
    onto th a resource that only its post hides (after drop_gas), and
    framing a rule that hides parsed pcs (a CALL-class rule) onto code,
    whose pcs that rule's evm_hide_Parsed would claim a second time. *)
+fun frame th [] = th
+  | frame th xs = SPEC (list_mk_star xs assertion_ty) (MATCH_MP SPEC_FRAME th)
+
 fun compose th r =
   let
     val qs = stars (post_of th)
@@ -712,9 +716,6 @@ fun compose th r =
             then raise ERR "compose"
                    "a rule hiding parsed pcs cannot follow other instructions"
             else ()
-    fun frame th [] = th
-      | frame th xs = SPEC (list_mk_star xs assertion_ty)
-                           (MATCH_MP SPEC_FRAME th)
     val th1 = frame th add_th
     val r1 = frame r add_r
     val eq = star_eq (post_of th1) (pre_of r1)
@@ -1039,21 +1040,25 @@ fun renumber_memory seen th =
                 List.drop (sorted_defs, Int.min (n, length sorted_defs))
   in (seen1, th1) end
 
+(* th, with the conditions seen so far, followed by the summary r; a
+   failure is raised as caller's, at the place named by at *)
+fun compose_step cfg cf caller at (th, seen) r =
+  let
+    val theta = widen_stack th r
+    val seen = map (subst theta) seen
+    val th' = apply_rule cfg cf I r (INST theta th)
+              handle HOL_ERR e =>
+                raise ERR caller (at ^ ": " ^ top_function_of e ^ ": " ^
+                                  message_of e)
+  in (th', seen @ hyp_order seen th') end
+
 fun compose_blocks cfg [] = raise ERR "compose_blocks" "no summaries"
   | compose_blocks cfg (th :: ths) =
   let
     val cf = mk_code_facts cfg
     val th0 = undisch_conds th
-    fun go ((i, r), (th, seen)) =
-      let
-        val theta = widen_stack th r
-        val seen = map (subst theta) seen
-        val th' = apply_rule cfg cf I r (INST theta th)
-                  handle HOL_ERR e =>
-                    raise ERR "compose_blocks"
-                      ("summary " ^ Int.toString i ^ ": " ^
-                       top_function_of e ^ ": " ^ message_of e)
-      in (th', seen @ hyp_order seen th') end
+    fun go ((i, r), acc) =
+      compose_step cfg cf "compose_blocks" ("summary " ^ Int.toString i) acc r
     val numbered = ListPair.zip (List.tabulate (length ths, fn i => i + 1), ths)
     val (th, seen) = foldl go (th0, hyp_order [] th0) numbered
   in #1 (uncurry close_conds (renumber_memory seen (polish cfg cf th))) end
@@ -1199,5 +1204,329 @@ fun outcome_to_string (Summary (s, _)) = block_summary_to_string s
       (if variant = "" then "" else " [" ^ variant ^ "]") ^
       ": FAILED at " ^ Int.toString pc ^ " (" ^ tm_str inst ^ "): " ^
       reason ^ "\n"
+
+
+(* ------------------------------------------------------------------------
+   Composing a region
+
+   compose_region follows every path from a triple's exit, composing at
+   each pc every summary that starts there and dropping the ones whose
+   conditions are false on the path. Where two survive (a JUMPI's take and
+   skip), the path splits; the guard b of the split is the conjunction of
+   the conditions only the first side has, and the second side's are
+   implied by ~b. Each side is walked on its own, and the two triples
+
+     H1, b  |- SPEC m P c1 Q1        H2, ~b |- SPEC m P c2 Q2
+
+   are merged by cases on b (DISJ_CASES) after weakening each to the code
+   c1 UNION c2 and to the postcondition if b then Q1 else Q2. The
+   conditions both sides have stay as they are; memory definitions stay
+   too (each side's mem<n> are renamed apart first, and a definition of a
+   variable the other side never mentions constrains nothing there); the
+   rest become one condition if b then H1' else H2'. So no side needs the
+   other's conditions, and in particular not its gas.
+
+   A path ends at a halt (STOP, RETURN, REVERT, INVALID, ...), at a pc
+   already on the path (a loop, but also a second call of an internal
+   function, which the walk does not tell apart), at a jump whose target is still not a
+   constant, at a CALL-class block, or at a pc without summaries. Only
+   halts finish the run; the others leave a postcondition at that pc, and
+   are listed. A jump target that a block reads off the stack (an
+   internal return) is a constant once the path has pushed it, so internal
+   functions are followed through, on their first call on the path.
+   Conditions the walk cannot discharge stay in the triple's cond: those of
+   a JUMPI side with no summary, say, or of a side whose other side turned
+   out infeasible only further on. Paths that meet again are not shared:
+   each is walked to its end, so the cost grows with the number of paths,
+   not of blocks.
+   ------------------------------------------------------------------------ *)
+
+(* proved on first use, as b2w_lemma *)
+val cond_cache = ref (NONE : thm option)
+fun cond_lemma () =
+  case !cond_cache of
+    SOME th => th
+  | NONE =>
+      let val th = GENL [“b:bool”, “x:'a”, “y:'a”] (prove(
+            “(b ==> ((if b then x else y) = x:'a)) /\
+             (~b ==> ((if b then x else y) = y:'a))”,
+            Cases_on `b` \\ REWRITE_TAC []))
+      in cond_cache := SOME th; th end
+
+(* |- (if b then x else y) = x under b, = y under ~b *)
+fun cond_eq side b x y =
+  let val th = ISPECL [b, x, y] (cond_lemma ())
+  in if side then MP (CONJUNCT1 th) (ASSUME b)
+     else MP (CONJUNCT2 th) (ASSUME (mk_neg b)) end
+
+fun entry_pc th =
+  case List.find (fn a => head_name a = "evm_PC") (stars (pre_of th)) of
+    SOME a => (SOME (numSyntax.int_of_term (rand a)) handle HOL_ERR _ => NONE)
+  | NONE => NONE
+
+fun halted th =
+  case post_value "evm_Exception" th of
+    SOME t => sumSyntax.is_inr t
+  | NONE => false
+
+(* a CALL-class rule names its instruction in evm_Parsed, not in the code *)
+fun is_call_block th =
+  List.exists (fn a => head_name a = "evm_hide_Parsed") (stars (post_of th))
+
+(* replace the hypotheses hs of th by the c that implies them
+   (cth : [c] |- list_mk_conj hs) *)
+fun replace_hyps hs cth th =
+  foldl (fn (h, th) => PROVE_HYP h th) th (CONJ_LIST (length hs) cth)
+
+fun conj_or_T [] = T
+  | conj_or_T cs = list_mk_conj cs
+
+(* |- ~b ==> c, for b and c the guards of the two sides *)
+fun guard_imp cfg cf b c =
+  let val tm = mk_imp (mk_neg b, c) in
+    tautLib.TAUT_PROVE tm
+    handle HOL_ERR _ => EQT_ELIM (simp_term cfg cf tm)
+    handle HOL_ERR _ => arith_decide tm
+    handle HOL_ERR _ =>
+      raise ERR "compose_region"
+        ("cannot show the branches exhaustive: " ^ term_to_string tm)
+  end
+
+(* the instantiation making a part of one precondition the corresponding
+   part of the other *)
+fun unify_pres th1 th2 =
+  let
+    fun go (th1, th2) =
+      let
+        val ps1 = stars (pre_of th1) and ps2 = stars (pre_of th2)
+        fun differ a2 =
+          case List.find (fn a1 => aconv (resource a1) (resource a2)) ps1 of
+            SOME a1 => if aconv a1 a2 then NONE else SOME (a1, a2)
+          | NONE => NONE
+      in
+        case List.mapPartial differ ps2 of
+          [] => (th1, th2)
+        | (a1, a2) :: _ =>
+            (case Lib.total (match_term a2) a1 of
+               SOME (s, []) => go (th1, INST s th2)
+             | _ =>
+               case Lib.total (match_term a1) a2 of
+                 SOME (s, []) => go (INST s th1, th2)
+               | _ => raise ERR "compose_region"
+                        ("preconditions differ: " ^ term_to_string a1 ^
+                         " and " ^ term_to_string a2))
+      end
+  in go (th1, th2) end
+
+(* merge the sides of a split with guard b (see above); base is the
+   triple before the split *)
+fun merge_sides base b ((th1, seen1), (th2, seen2)) =
+  let
+    (* side 2's own variables apart from side 1's *)
+    val base_vs = thm_frees base
+    val vs1 = thm_frees th1
+    val clash = filter (fn v => tmem v vs1 andalso not (tmem v base_vs))
+                       (thm_frees th2)
+    val avoid = ref (vs1 @ thm_frees th2)
+    val s = map (fn v => let val v' = variant (!avoid) v
+                         in avoid := v' :: !avoid; v |-> v' end) clash
+    val th2 = INST s th2
+    (* a memory definition side 2 repeats is side 1's *)
+    fun share th2 =
+      let
+        val defs1 = List.mapPartial mem_def_of (hyp th1)
+        fun same (v2, t2) =
+          if tmem v2 vs1 then NONE
+          else Option.map (fn (v1, _) => v2 |-> v1)
+                 (List.find (fn (_, t1) => aconv t1 t2) defs1)
+      in
+        case List.mapPartial same (List.mapPartial mem_def_of (hyp th2)) of
+          [] => ([], th2)
+        | r :: _ => let val (rs, th2') = share (INST [r] th2)
+                    in (r :: rs, th2') end
+      end
+    val (shared, th2) = share th2
+    val seen2 = map (subst shared) (map (subst s) seen2)
+    (* the same precondition on both sides *)
+    val (th1, th2) = unify_pres th1 th2
+    fun missing th th' =
+      filter (fn a => not (List.exists (fn x => aconv (resource x)
+                                                     (resource a))
+                                         (stars (pre_of th))))
+             (stars (pre_of th'))
+    val th1 = frame th1 (missing th1 th2)
+    val th2 = frame th2 (missing th2 th1)
+    val th2 = CONV_RULE (PRE_CONV (K (star_eq (pre_of th2) (pre_of th1)))) th2
+    (* the same code *)
+    val c1 = code_of th1 and c2 = code_of th2
+    val c = pred_setSyntax.mk_union (c1, c2)
+    val th1 = SPEC c2 (MATCH_MP SPEC_ADD_CODE th1)
+    val th2 = MP (SPEC c (MATCH_MP SPEC_SUBSET_CODE th2))
+                 (ISPECL [c2, c1] (CONJUNCT2 SUBSET_UNION))
+    (* the conditions *)
+    val h1 = filter (not o aconv b) (hyp th1)
+    val h2 = filter (not o aconv (mk_neg b)) (hyp th2)
+    val common = filter (fn h => tmem h h2) h1
+    fun own hs = filter (fn h => not (tmem h common) andalso
+                                 not (is_mem_def h)) hs
+    val d1 = own h1 and d2 = own h2
+    val k = mk_cond (b, conj_or_T d1, conj_or_T d2)
+    val th1 = if List.null d1 then th1
+              else replace_hyps d1 (EQ_MP (cond_eq true b (conj_or_T d1)
+                                                (conj_or_T d2))
+                                       (ASSUME k)) th1
+    val th2 = if List.null d2 then th2
+              else replace_hyps d2 (EQ_MP (cond_eq false b (conj_or_T d1)
+                                                (conj_or_T d2))
+                                       (ASSUME k)) th2
+    (* the postcondition *)
+    val q1 = post_of th1 and q2 = post_of th2
+    val th1 = CONV_RULE (RAND_CONV (K (SYM (cond_eq true b q1 q2)))) th1
+    val th2 = CONV_RULE (RAND_CONV (K (SYM (cond_eq false b q1 q2)))) th2
+    val th = DISJ_CASES (SPEC b EXCLUDED_MIDDLE) th1 th2
+    val seen = filter (fn h => tmem h (hyp th)) (seen1 @ seen2 @ [k])
+  in (th, op_mk_set aconv seen) end
+
+(* the code of a closed triple with each instruction once *)
+fun dedup_code th =
+  let
+    val c = code_of th
+    val elts = pred_setSyntax.strip_set c
+    val elts' = op_mk_set aconv elts
+  in
+    if length elts' = length elts then th
+    else
+      let
+        val c' = pred_setSyntax.mk_set elts'
+        val sub = EQT_ELIM (REWRITE_CONV [INSERT_SUBSET, EMPTY_SUBSET,
+                                          IN_INSERT]
+                              (pred_setSyntax.mk_subset (c, c')))
+      in MP (SPEC c' (MATCH_MP SPEC_SUBSET_CODE th)) sub end
+  end
+
+(* b decided by the guards of the splits before it on the path: a JUMPI
+   testing again what an earlier one tested *)
+fun decide [] b = NONE
+  | decide guards b =
+      let val eq = QCONV (SIMP_CONV bool_ss (map ASSUME guards)) b
+          val r = rhs (concl eq)
+      in if aconv r T orelse aconv r F then SOME eq else NONE end
+      handle HOL_ERR _ => NONE
+
+fun compose_region cfg sums start =
+  let
+    val cf = mk_code_facts cfg
+    val table =
+      foldl (fn (th, t) =>
+               case entry_pc th of
+                 SOME n => Redblackmap.insert (t, n,
+                             getOpt (Redblackmap.peek (t, n), []) @ [th])
+               | NONE => raise ERR "compose_region" "summary without a pc")
+            (Redblackmap.mkDict Int.compare) sums
+    val leaves = ref ([] : (int list * string) list)
+    fun leaf path why (th, seen) =
+      let
+        val th1 = polish cfg cf th
+        val th2 = th1 |> collapse is_gas_bound
+                      |> collapse (is_stack_bound (stack_rest th1))
+      in
+        leaves := (rev path, why) :: !leaves;
+        (th2, filter (fn h => tmem h (hyp th2)) (seen @ hyp_order seen th2))
+      end
+    fun step_one path =
+      compose_step cfg cf "compose_region"
+        ("after " ^ String.concatWith " " (map Int.toString (rev path)))
+    fun walk path guards (th, seen) =
+      if halted th then leaf path "halt" (th, seen)
+      else
+        case post_value "evm_PC" th of
+          NONE => raise ERR "compose_region" "no evm_PC"
+        | SOME t =>
+          if not (numSyntax.is_numeral t) then
+            leaf path ("jump to " ^ tm_str t) (th, seen)
+          else
+            let val n = numSyntax.int_of_term t in
+              if mem n path then
+                leaf path ("revisit " ^ Int.toString n) (th, seen)
+              else
+                case getOpt (Redblackmap.peek (table, n), []) of
+                  [] => leaf path ("no summary at " ^ Int.toString n)
+                             (th, seen)
+                | rs =>
+                  if List.exists is_call_block rs then
+                    leaf path ("call at " ^ Int.toString n) (th, seen)
+                  else
+                    let
+                      val path' = n :: path
+                      val sides =
+                        List.mapPartial
+                          (fn r => SOME (step_one path' (th, seen) r)
+                                   handle Infeasible_cond _ => NONE) rs
+                    in
+                      case sides of
+                        [] => raise Infeasible_cond F
+                      | [side] => walk path' guards side
+                      | [side1, side2] => split path' guards th side1 side2
+                      | _ => raise ERR "compose_region"
+                               ("more than two summaries feasible at " ^
+                                Int.toString n)
+                    end
+            end
+    (* th composed with the two summaries at a JUMPI. The conditions they
+       added are simplified first, with the values apply_rule kept
+       abstract, so that the guard is readable and can be decided. *)
+    and split path guards th side1 side2 =
+      let
+        fun simp_new (th', seen') =
+          SOME (simp_hyps cfg cf (filter (fn h => not (tmem h (hyp th)))
+                                         (hyp th')) th', seen')
+          handle Infeasible_cond _ => NONE
+      in
+        case (simp_new side1, simp_new side2) of
+          (NONE, NONE) => raise Infeasible_cond F
+        | (SOME s1, NONE) => walk path guards s1
+        | (NONE, SOME s2) => walk path guards s2
+        | (SOME (th1, seen1), SOME (th2, seen2)) =>
+          let
+            val d1 = filter (fn h => not (tmem h (hyp th2))) (hyp th1)
+            val d2 = filter (fn h => not (tmem h (hyp th1))) (hyp th2)
+          in
+            (* a side whose conditions the path already has is the one
+               taken: the other's contradict them *)
+            if List.null d1 then walk path guards (th1, seen1)
+            else if List.null d2 then walk path guards (th2, seen2)
+            else
+              let
+                val b = list_mk_conj d1
+                val th1 = replace_hyps d1 (ASSUME b) th1
+                (* side 2's conditions follow from ~b *)
+                fun th2_neg () =
+                  replace_hyps d2 (MP (guard_imp cfg cf b (conj_or_T d2))
+                                      (ASSUME (mk_neg b))) th2
+                fun try g side = SOME (walk path (g :: guards) side)
+                                 handle Infeasible_cond _ => NONE
+              in
+                case decide guards b of
+                  SOME eq =>
+                    if aconv (rhs (concl eq)) T
+                    then walk path guards (PROVE_HYP (EQT_ELIM eq) th1, seen1)
+                    else walk path guards
+                           (PROVE_HYP (EQF_ELIM eq) (th2_neg ()), seen2)
+                | NONE =>
+                  case (try b (th1, seen1),
+                        try (mk_neg b) (th2_neg (), seen2)) of
+                    (SOME r1, SOME r2) => merge_sides th b (r1, r2)
+                  | (SOME r1, NONE) => r1
+                  | (NONE, SOME r2) => r2
+                  | (NONE, NONE) => raise Infeasible_cond F
+              end
+          end
+      end
+    val th0 = undisch_conds start
+    val (th, seen) = walk [] [] (th0, hyp_order [] th0)
+                     handle Infeasible_cond _ =>
+                       raise ERR "compose_region" "no feasible path"
+    val (th1, _, _) = uncurry close_conds (renumber_memory seen th)
+  in (dedup_code th1, rev (!leaves)) end
 
 end
