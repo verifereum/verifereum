@@ -818,7 +818,8 @@ Theorem rlp_encode_length_thm:
   (∀rs n. rlp_encode_list_length n rs =
           n + SUM (MAP (λr. LENGTH (rlp_encode r)) rs))
 Proof
-  ho_match_mp_tac (TypeBase.induction_of “:rlp”)
+  CONV_TAC (RAND_CONV SWAP_FORALL_CONV)
+  \\ ho_match_mp_tac rlp_encode_length_ind
   \\ rw[rlp_encode_length_def]
   >- (
     rename1 `RLPB bs`
