@@ -103,6 +103,64 @@ Proof
   \\ irule DROP_pop \\ simp[]
 QED
 
+Theorem step_preserves_selected_metadata:
+  wf_state s ∧ step s = (r,t) ∧ 2 ≤ n ∧
+  n ≤ LENGTH s.contexts ∧ n ≤ LENGTH t.contexts ⇒
+  (SND (EL (LENGTH t.contexts - n) t.contexts),
+   (FST (EL (LENGTH t.contexts - n) t.contexts)).msgParams) =
+  (SND (EL (LENGTH s.contexts - n) s.contexts),
+   (FST (EL (LENGTH s.contexts - n) s.contexts)).msgParams)
+Proof
+  strip_tac >>
+  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- suspend "same_depth"
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- suspend "push_depth"
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> suspend "pop_depth"
+QED
+
+Resume step_preserves_selected_metadata[same_depth]:
+  drule_all step_same_frame_foreign >> strip_tac >>
+  qpat_x_assum `∀y. _` kall_tac >>
+  qpat_x_assum `wf_state _` kall_tac >>
+  qpat_x_assum `step _ = _` kall_tac >>
+  Cases_on `s.contexts` >- gvs[] >>
+  Cases_on `t.contexts` >- gvs[] >>
+  gvs[] >> Cases_on `SUC (LENGTH t') - n` >> gvs[]
+QED
+
+Resume step_preserves_selected_metadata[push_depth]:
+  drule_all step_push_TL_TL >> strip_tac >>
+  drule_all step_push_foreign >> strip_tac >>
+  `2 ≤ LENGTH s.contexts` by decide_tac >>
+  `LENGTH t.contexts - n = SUC (LENGTH s.contexts - n)` by decide_tac >>
+  qpat_x_assum `∀y. _` kall_tac >>
+  qpat_x_assum `wf_state _` kall_tac >>
+  qpat_x_assum `step _ = _` kall_tac >>
+  Cases_on `s.contexts` >- gvs[] >>
+  Cases_on `t.contexts` >- gvs[] >>
+  rename1 `t.contexts = a::tail` >>
+  Cases_on `tail` >- gvs[] >> gvs[] >>
+  `SUC (SUC (LENGTH t')) - n = SUC (SUC (LENGTH t') - n)`
+    by decide_tac >>
+  asm_rewrite_tac[] >> Cases_on `SUC (LENGTH t') - n` >> gvs[]
+QED
+
+Resume step_preserves_selected_metadata[pop_depth]:
+  drule_all step_pop_foreign >> strip_tac >>
+  qpat_x_assum `wf_state _` kall_tac >>
+  qpat_x_assum `step _ = _` kall_tac >>
+  qpat_x_assum `s.contexts = _` (fn th => ONCE_REWRITE_TAC[th]) >>
+  `n ≤ SUC (LENGTH rest)` by gvs[] >>
+  `SUC (SUC (LENGTH rest)) - n = SUC (SUC (LENGTH rest) - n)`
+    by decide_tac >>
+  simp[] >> asm_rewrite_tac[] >>
+  Cases_on `SUC (LENGTH rest) - n` >> gvs[]
+QED
+
+Finalise step_preserves_selected_metadata
+
 Theorem call_delegate_resolution[local]:
   delegate_check code s.msdomain s.rollback dc rb' dom' ==>
   (case get_delegate code of
