@@ -78,6 +78,15 @@ sig
      mem<n> to its definition and drops those conjuncts *)
   val inline_memory : thm -> thm
 
+  (* compose_region cfg summaries th: every path from th's exit through
+     the summaries, composed into one triple, a JUMPI whose guard the path
+     leaves open giving the postcondition if b then Q1 else Q2. Also
+     returns each path, as the entry pcs of its summaries, and how it ends:
+     "halt", or where the walk stopped ("loop back to n", "jump to t",
+     "call at n", "no summary at n"). *)
+  val compose_region : config -> thm list -> thm ->
+                       thm * (int list * string) list
+
   val exit_to_string : exit -> string
   val block_summary_to_string : block_summary -> string
   val outcome_to_string : outcome -> string
