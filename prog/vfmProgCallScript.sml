@@ -1350,6 +1350,210 @@ Proof
   simp[call_stipend_prefix_def, call_footprint_def, accesses_add_def]
 QED
 
+Theorem cp_preserves_stipend_prefix[local]:
+  cp m /\ call_stipend_prefix n A D oa s /\ m s = (r,t) ==>
+  call_stipend_prefix n A D oa t
+Proof
+  strip_tac >>
+  `s.contexts <> []` by
+    (gvs[call_stipend_prefix_def] >> strip_tac >> gvs[]) >>
+  drule (iffLR cp_def) >>
+  disch_then (qspecl_then [`s`, `r`, `t`] mp_tac) >> simp[] >>
+  strip_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  gvs[call_stipend_prefix_def, call_footprint_def] >>
+  Cases_on `SUC (LENGTH t') - n` >> gvs[]
+QED
+
+Theorem call_stipend_prefix_nonmutating_inst[local]:
+  op <> SStore /\ op <> TStore /\ (!k. op <> Log k) /\
+  op <> SelfDestruct /\ op <> Create /\ op <> Create2 /\
+  op <> Call /\ op <> CallCode /\ op <> DelegateCall /\ op <> StaticCall /\
+  call_stipend_prefix n A D oa s /\ step_inst op s = (r,t) ==>
+  call_stipend_prefix n A D oa t
+Proof
+  strip_tac >> irule (INST_TYPE [alpha |-> ``:unit``] cp_preserves_stipend_prefix) >>
+  qexistsl_tac [`step_inst op`, `r`, `s`] >> simp[]
+QED
+
+Theorem sstore_stipend_sentry[local]:
+  s.contexts <> [] /\
+  (FST (HD s.contexts)).msgParams.gasLimit <= call_stipend ==>
+  step_sstore_gas_consumption addr key value s = (INR (SOME OutOfGas),s)
+Proof
+  strip_tac >>
+  `(FST (HD s.contexts)).msgParams.gasLimit -
+    (FST (HD s.contexts)).gasUsed <= call_stipend` by decide_tac >>
+  simp[step_sstore_gas_consumption_def, get_gas_left_def,
+       get_current_context_def, bind_def, ignore_bind_def,
+       return_def, assert_def, fail_def]
+QED
+
+Theorem call_stipend_prefix_head[local]:
+  call_stipend_prefix n A D oa s ==>
+  s.contexts <> [] /\
+  (FST (HD s.contexts)).msgParams.gasLimit <= call_stipend /\
+  (!a. (FST (HD s.contexts)).msgParams.outputTo <> Code a)
+Proof
+  simp[call_stipend_prefix_def] >> strip_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+QED
+
+Theorem call_stipend_prefix_sstore[local]:
+  call_stipend_prefix n A D oa s /\ step_sstore F s = (r,t) ==>
+  call_stipend_prefix n A D oa t
+Proof
+  strip_tac >>
+  `cp (pop_stack 2)` by simp[] >>
+  Cases_on `pop_stack 2 s` >>
+  `call_stipend_prefix n A D oa r'` by
+    (drule_all cp_preserves_stipend_prefix >> simp[]) >>
+  qpat_x_assum `step_sstore F s = _` mp_tac >>
+  simp[step_sstore_def, bind_def, ignore_bind_def] >>
+  Cases_on `q` >> simp[]
+  >- (drule call_stipend_prefix_head >> strip_tac >>
+      simp[get_callee_def, get_current_context_def, bind_def, return_def] >>
+      simp[sstore_stipend_sentry] >> metis_tac[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem consume_gas_stipend_exceeded[local]:
+  s.contexts <> [] /\
+  (FST (HD s.contexts)).msgParams.gasLimit <= call_stipend /\
+  call_stipend < k ==>
+  consume_gas k s = (INR (SOME OutOfGas),s)
+Proof
+  strip_tac >>
+  `~((FST (HD s.contexts)).gasUsed + k <=
+     (FST (HD s.contexts)).msgParams.gasLimit)` by decide_tac >>
+  simp[consume_gas_def, get_current_context_def, bind_def,
+       ignore_bind_def, return_def, assert_def, fail_def]
+QED
+
+Theorem call_stipend_prefix_cp_bind[local]:
+  cp m /\
+  (!x s r t. call_stipend_prefix n A D oa s /\ f x s = (r,t) ==>
+      call_stipend_prefix n A D oa t) ==>
+  !s r t. call_stipend_prefix n A D oa s /\ bind m f s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `bind m f s = _` mp_tac >> simp[bind_def] >>
+  Cases_on `m s` >> Cases_on `q` >> simp[] >> strip_tac >> gvs[] >>
+  metis_tac[cp_preserves_stipend_prefix]
+QED
+
+Theorem call_stipend_prefix_charge_cutoff[local]:
+  call_stipend < cost ==>
+  !s r t. call_stipend_prefix n A D oa s /\
+    bind (consume_gas cost) suffix s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rpt strip_tac >> drule call_stipend_prefix_head >> strip_tac >>
+  `consume_gas cost s = (INR (SOME OutOfGas),s)` by
+    (irule consume_gas_stipend_exceeded >> simp[]) >>
+  gvs[bind_def]
+QED
+
+Theorem call_stipend_prefix_create[local]:
+  !s r t. call_stipend_prefix n A D oa s /\ step_create two s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rewrite_tac[step_create_def, ignore_bind_def] >> simp[] >>
+  ntac 2 (ho_match_mp_tac call_stipend_prefix_cp_bind >>
+    conj_tac >- simp[] >> gen_tac >> simp[]) >>
+  ho_match_mp_tac call_stipend_prefix_charge_cutoff >>
+  Cases_on `two` >> simp[call_stipend_def]
+QED
+
+Theorem call_stipend_prefix_self_destruct[local]:
+  !s r t. call_stipend_prefix n A D oa s /\ step_self_destruct s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rewrite_tac[step_self_destruct_def, ignore_bind_def] >> simp[] >>
+  ntac 5 (ho_match_mp_tac call_stipend_prefix_cp_bind >>
+    conj_tac >- simp[] >> gen_tac >> simp[]) >>
+  ho_match_mp_tac call_stipend_prefix_charge_cutoff >>
+  simp[call_stipend_def] >> decide_tac
+QED
+
+Theorem call_stipend_prefix_head_update[local]:
+  s.contexts = (c,rb)::cs /\ ctx.msgParams = c.msgParams ==>
+  (call_stipend_prefix n A D oa
+    (s with contexts := (ctx,rb)::cs) <=> call_stipend_prefix n A D oa s)
+Proof
+  strip_tac >> simp[call_stipend_prefix_def, call_footprint_def] >>
+  Cases_on `SUC (LENGTH cs) - n` >> gvs[]
+QED
+
+Theorem call_stipend_prefix_write_transient[local]:
+  !s r t. call_stipend_prefix n A D oa s /\
+    write_transient_storage addr key value s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  simp[write_transient_storage_def, get_tStorage_def, set_tStorage_def,
+       bind_def, return_def, call_stipend_prefix_def, call_footprint_def] >>
+  rpt strip_tac >>
+  `LENGTH s.contexts + 1 - n = LENGTH s.contexts - n + 1` by decide_tac >>
+  pop_assum (fn th => pure_once_rewrite_tac [th]) >> first_assum ACCEPT_TAC
+QED
+
+Theorem call_stipend_prefix_tstore[local]:
+  !s r t. call_stipend_prefix n A D oa s /\ step_sstore T s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rewrite_tac[step_sstore_def, ignore_bind_def] >> simp[] >>
+  ntac 4 (ho_match_mp_tac call_stipend_prefix_cp_bind >>
+    conj_tac >- simp[] >> gen_tac >> simp[]) >>
+  rpt strip_tac >> drule_all call_stipend_prefix_write_transient >> simp[]
+QED
+
+Theorem call_stipend_prefix_push_logs[local]:
+  !s r t. call_stipend_prefix n A D oa s /\ push_logs ls s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rpt strip_tac >>
+  `s.contexts <> []` by metis_tac[call_stipend_prefix_head] >>
+  qpat_x_assum `push_logs ls s = _` mp_tac >>
+  simp[push_logs_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def] >> strip_tac >> gvs[] >>
+  irule (iffRL call_stipend_prefix_head_update) >>
+  simp[] >> qexists_tac `FST (HD s.contexts)` >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+QED
+
+Theorem call_stipend_prefix_log[local]:
+  !s r t. call_stipend_prefix n A D oa s /\ step_log k s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  rewrite_tac[step_log_def, ignore_bind_def] >> simp[] >>
+  ntac 7 (ho_match_mp_tac call_stipend_prefix_cp_bind >>
+    conj_tac >- simp[] >> gen_tac >> simp[]) >>
+  rpt strip_tac >> drule_all call_stipend_prefix_push_logs >> simp[]
+QED
+
+Theorem call_stipend_prefix_noncall_dispatch[local]:
+  op <> Call /\ op <> CallCode /\ op <> DelegateCall /\ op <> StaticCall /\
+  call_stipend_prefix n A D oa s /\ step_inst op s = (r,t) ==>
+  call_stipend_prefix n A D oa t
+Proof
+  strip_tac >>
+  Cases_on `op = SStore`
+  >- (gvs[step_inst_def] >> drule_all call_stipend_prefix_sstore >> simp[]) >>
+  Cases_on `op = TStore`
+  >- (gvs[step_inst_def] >> drule_all call_stipend_prefix_tstore >> simp[]) >>
+  Cases_on `op = SelfDestruct`
+  >- (gvs[step_inst_def] >> drule_all call_stipend_prefix_self_destruct >> simp[]) >>
+  Cases_on `op = Create`
+  >- (gvs[step_inst_def] >> drule_all call_stipend_prefix_create >> simp[]) >>
+  Cases_on `op = Create2`
+  >- (gvs[step_inst_def] >> drule_all call_stipend_prefix_create >> simp[]) >>
+  Cases_on `?k. op = Log k`
+  >- (gvs[step_inst_def] >> metis_tac[call_stipend_prefix_log]) >>
+  irule call_stipend_prefix_nonmutating_inst >>
+  qexistsl_tac [`op`, `r`, `s`] >> simp[] >> metis_tac[]
+QED
+
 Theorem call_gas_stipend_budget[local]:
   L <= call_stipend /\ call_gas v gas L mc oc = (dg,cg) /\
   sc + dg + mc <= L /\ (0 < v ==> call_value_cost <= oc) ==>
