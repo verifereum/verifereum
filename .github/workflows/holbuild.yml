@@ -81,7 +81,9 @@ jobs:
 
       - name: Restore holbuild toolchain cache on project snapshot miss
         id: cache-holbuild-toolchain
-        if: ${{ steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
+        # The toolchain entry holds the whole cache it was saved from, theories
+        # included, so skip-snapshot skips it too.
+        if: ${{ !inputs.skip-snapshot && steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/holbuild
@@ -186,7 +188,9 @@ jobs:
         run: |
           log="$RUNNER_TEMP/holbuild.log"
           [ -f "$log" ] || exit 0
-          count() { grep -cE -- "$1" "$log" || true; }
+          # Distinct lines, so a theory built twice or a key both prefetched and
+          # hydrated counts once.
+          count() { grep -E -- "$1" "$log" | sed -E 's/ in [0-9.]+s$//; s/^remote cache (hydrated|prefetched):/remote cache fetched:/' | sort -u | grep -c . || true; }
           {
             echo '## holbuild cache'
             echo
