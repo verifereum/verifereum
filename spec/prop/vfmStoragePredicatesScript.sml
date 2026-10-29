@@ -677,6 +677,41 @@ Proof
              pairTheory.PAIR]
 QED
 
+Theorem SND_rollback_credit_new_account[simp]:
+  (SND (credit_new_account charged s)).rollback = s.rollback
+Proof
+  metis_tac [preserves_rollback_credit_new_account, preserves_rollback_def,
+             pairTheory.PAIR]
+QED
+
+(* The credit only adjusts the current frame's gas fields, so a goal that has
+   to look inside its output -- at `SND (credit_new_account ch st)` -- can read
+   the frame off with this.  An empty context list fails before any update, and
+   an uncharged credit is the identity, so both leave the list alone. *)
+Theorem credit_new_account_contexts[simp]:
+  (SND (credit_new_account charged s)).contexts =
+    (if s.contexts = [] then s.contexts
+     else if charged then
+       (FST (HD s.contexts) with
+          <|gasUsed :=
+              (FST (HD s.contexts)).gasUsed -
+              MIN new_account_state_gas (FST (HD s.contexts)).stateGasSpilled;
+            stateGasSpilled :=
+              (FST (HD s.contexts)).stateGasSpilled -
+              MIN new_account_state_gas (FST (HD s.contexts)).stateGasSpilled;
+            stateGasLeft updated_by
+              ($+ (new_account_state_gas -
+                   MIN new_account_state_gas (FST (HD s.contexts)).stateGasSpilled))|>,
+        SND (HD s.contexts)) :: TL s.contexts
+     else s.contexts)
+Proof
+  Cases_on `s.contexts` >>
+  Cases_on `charged` >>
+  rw[credit_new_account_def, credit_state_gas_refund_def,
+     get_current_context_def, set_current_context_def, bind_def,
+     ignore_bind_def, return_def, fail_def, APPLY_UPDATE_THM]
+QED
+
 Theorem preserves_storage_charge_new_account[simp]:
   preserves_storage (charge_new_account charged)
 Proof
