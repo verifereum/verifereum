@@ -861,6 +861,24 @@ Proof
   >> (rewrite_tac[restore_child_gas_def] >> psf_head_tac)
 QED
 
+(* EIP-8037: the account-creation charge and its refund are the state-gas
+   meter leaf gated by a flag, so they preserve the frame whichever way the
+   flag falls; and the create that aborts before entering its child only
+   pushes the zero and steps the pc. *)
+Theorem preserves_same_frame_new_account_charge[simp]:
+  preserves_same_frame (charge_new_account charged) /\
+  preserves_same_frame (credit_new_account charged)
+Proof
+  Cases_on `charged`
+  >> rw[charge_new_account_def, credit_new_account_def]
+QED
+
+Theorem preserves_same_frame_abort_create[simp]:
+  preserves_same_frame abort_create
+Proof
+  rw[abort_create_def]
+QED
+
 (* ================================================================ *)
 (* Pass A: Compound-helper `preserves_same_frame` lemmas.            *)
 (*                                                                   *)
@@ -2482,6 +2500,23 @@ Proof
     >> pop_assum mp_tac >> rewrite_tac[cp_def]
     >> disch_then drule >> impl_tac >- rw[] >>
     strip_tac >> gvs[Abbr`acc`,Abbr`rbc`,Abbr`pco`] ) >>
+  (* EIP-8037: the sweep's account-creation charge, between the execution
+     gas above and the static check below; it moves the meter alone, so the
+     frame the predicate pins survives it. *)
+  irule psf_ignore_bind >>
+  simp[] >>
+  qexists_tac`pco` >> simp[] >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac
+    >> qmatch_asmsub_abbrev_tac`charge_new_account chg`
+    >> `preserves_same_frame (charge_new_account chg)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule
+    >> impl_tac >- gvs[]
+    >> `cp (charge_new_account chg)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[cp_def]
+    >> disch_then drule >> impl_tac >- rw[] >>
+    strip_tac >> gvs[Abbr`acc`,Abbr`rbc`,Abbr`pco`] ) >>
   irule psf_ignore_bind >>
   simp[] >>
   qexists_tac`pco` >> simp[] >>
@@ -2564,6 +2599,9 @@ Proof
   >> gvs[proceed_call_def, bind_def, ignore_bind_def, AllCaseEqs(),
         get_rollback_def, read_memory_def, get_current_context_def,
         get_caller_def, get_value_def, get_static_def,
+        (* EIP-8037: the reader of the accounts that decides this child's
+           creation charge, before the reservoir and the push. *)
+        get_accounts_def,
         update_accounts_def, push_context_def, return_def,
         fail_def, COND_RATOR, drain_state_gas_reservoir_def,
         set_current_context_def]
@@ -2582,6 +2620,9 @@ Proof
   strip_tac
   >> gvs[proceed_create_def, bind_def, ignore_bind_def, AllCaseEqs(),
          get_rollback_def, get_original_def, set_original_def,
+         (* EIP-8037: the reader of the accounts that decides this child's
+            creation charge, before the reservoir and the push. *)
+         get_accounts_def,
          update_accounts_def, push_context_def, return_def,
          fail_def,
          set_last_accounts_def, LET_THM, drain_state_gas_reservoir_def,
