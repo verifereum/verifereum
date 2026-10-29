@@ -478,6 +478,7 @@ fun getter_lift spec =
 
 val symbol_lift = getter_lift symbol_result_spec
 val decimals_lift = getter_lift decimals_result_spec
+val totalSupply_lift = getter_lift totalSupply_result_spec
 fun getter_code_tac g =
   (rewrite_tac [SUBSET_DEF] >> Cases
    >> rewrite_tac [IN_INSERT, NOT_IN_EMPTY, PAIR_EQ]
@@ -656,7 +657,45 @@ Theorem WETH_EVM_totalSupply_run_transaction:
         (lookup_account b accounts').nonce =
           (lookup_account b s.rollback.accounts).nonce
 Proof
-  cheat
+  strip_tac
+  >> drule_all getter_call_balance >> strip_tac
+  >> drule getter_bounds >> strip_tac
+  >> `(lookup_account addr accounts).code = contract_code`
+     by gvs[WETH_EVM_def, LET_THM]
+  >> qpat_x_assum `WETH_EVM _ _ _` kall_tac
+  >> qpat_x_assum `!a. ws.balances a < _` kall_tac
+  >> qpat_x_assum `!owner spender. ws.allowances owner spender < _` kall_tac
+  >> fs[zero_value_call_def]
+  >> strip_assume_tac contract_code_not_delegation
+  >> drule_all initial_state_call_code >> strip_tac
+  >> fs[GSYM parsed_contract_code_def]
+  >> drule_all wf_initial_state >> strip_tac
+  >> `?tail. tx.data = function_selector "totalSupply" [] ++ tail`
+     by gvs[IS_PREFIX_APPEND]
+  >> mp_tac (Q.INST [`p` |-> `ctxt.msgParams`, `rb` |-> `s.rollback`,
+       `d` |-> `dom`, `rd` |-> `[]`, `logs` |-> `[]`,
+       `addRefund` |-> `0`, `subRefund` |-> `0`, `n` |-> `ws.locked`,
+       `txParams` |-> `s.txParams`, `callee` |-> `addr`,
+       `s'` |-> `s with rollback updated_by
+          (\r. r with accounts updated_by transfer_value tx.from addr tx.value)`]
+       totalSupply_lift)
+  >> (impl_tac >- getter_code_tac)
+  >> asm_rewrite_tac [buffer_to_list_of_list]
+  >> (impl_tac >- simp[])
+  >> impl_tac
+  >- (simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+      >> simp[STAR_evm2set, STAR_CODE_POOL_evm2set, cond_STAR, SEP_T_def,
+           transfer_value_zero, execution_state_component_equality,
+           rollback_state_component_equality, fmap_entries_def]
+      >> `s with rollback updated_by
+           (\r. r with accounts updated_by I) = s` by
+         simp[execution_state_component_equality, rollback_state_component_equality]
+      >> `LENGTH tail + 4 <= 16777216` by gvs[getter_selectors]
+      >> `LENGTH tail + 4 < 2 ** 256` by simp[]
+      >> gvs[getter_selectors]
+      >> rw[Balance_gas_def, access_cost_def, warm_access_cost_def,
+            cold_access_cost_def, vfmOperationTheory.static_gas_def])
+  >> strip_tac >> gvs[accesses_add_def]
 QED
 
 Theorem WETH_EVM_balanceOf_run_transaction:
