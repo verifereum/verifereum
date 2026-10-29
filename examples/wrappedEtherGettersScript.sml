@@ -41,17 +41,6 @@ Proof
               word_to_bytes_le_def, REVERSE_word_to_bytes_bytes32]
 QED
 
-Theorem getter_argument_reads[local]:
-  LENGTH (sel:word8 list) = 4 ⇒
-  word_of_bytes F 0w (REVERSE (take_pad_0 32
-    (DROP 4 (sel ++ word_to_bytes (a:bytes32) T ++ rest)))) = a ∧
-  word_of_bytes F 0w (REVERSE (take_pad_0 32
-    (DROP 36 (sel ++ word_to_bytes a T ++ word_to_bytes (b:bytes32) T ++ rest)))) = b
-Proof
-  strip_tac
-  >> simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, calldata_word]
-QED
-
 Theorem getter_bounds[local]:
   WETH_EVM addr ws accounts ⇒
   ws.locked < 2 ** 256 ∧
@@ -129,53 +118,10 @@ Proof
   >> gvs[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
 QED
 
-Theorem getter_word_output[local]:
-  n < 2 ** 256 ⇒
-  REVERSE (word_to_bytes (n2w n : bytes32) F) =
-    enc (Tuple [Uint 256]) (ListV [NumV n])
-Proof
-  simp[REVERSE_word_to_bytes_bytes32, head_lengths_def, REV_DEF]
-QED
-
-Theorem getter_decimals_output[local]:
-  REVERSE (word_to_bytes (255w && (18w:bytes32)) F) =
-    enc (Tuple [Uint 8]) (ListV [NumV 18])
-Proof
-  EVAL_TAC
-QED
-
-Theorem getter_access_gas[local]:
-  access_slot_cost rb k ≤ 2100 ∧ Balance_gas rb addr ≤ 2600
-Proof
-  simp[access_slot_cost_def, Balance_gas_def, warm_access_cost_def,
-       cold_sload_cost_def, access_cost_def, cold_access_cost_def,
-       vfmOperationTheory.static_gas_def]
-  >> conj_tac >> IF_CASES_TAC >> simp[]
-QED
-
 Theorem getter_warm_slot_gas[local]:
   access_slot_cost (accesses_add_slot k rb) k = 100
 Proof
   simp[access_slot_cost_def, accesses_add_slot_def, warm_access_cost_def]
-QED
-
-Theorem getter_path_gas_bounds[local]:
-  9 + (Balance_gas rb addr + 234) <= 4000 /\
-  9 + (access_slot_cost rb k + 335) <= 4000 /\
-  9 + (42 + (access_slot_cost rb k + 383)) <= 4000 /\
-  9 + (42 + (42 + (access_slot_cost rb k + 524))) <= 4000 /\
-  9 + (access_slot_cost rb k +
-    (3 + (2 * access_slot_cost (accesses_add_slot k rb) k + 952))) <= 4000
-Proof
-  strip_assume_tac getter_access_gas
-  >> simp[getter_warm_slot_gas]
-QED
-
-Theorem getter_account_frame[local]:
-  (accesses_add_slot k rb).accounts = rb.accounts /\
-  (accesses_add addr rb).accounts = rb.accounts
-Proof
-  simp[accesses_add_slot_def, accesses_add_def]
 QED
 
 fun weth_block n v =
@@ -408,7 +354,7 @@ val allowance_result_spec = getter_result_spec
 
 (* These conditional summaries are the boundary used by transaction lifting.
    All assumptions are explicit antecedents; the return data is ABI encoded,
-   and getter_path_gas_bounds validates every path at the 4000 call budget.
+   and the transaction proofs discharge the gas bounds at a 4000 call budget.
    Only access bookkeeping changes in the rollback state. *)
 val () = List.app (fn th => if null (hyp th) then () else
   raise mk_HOL_ERR "wrappedEtherGettersScript" "getter_result_spec" "hypotheses")
@@ -878,4 +824,3 @@ Proof
   >> qexistsl_tac [`addr`, `owner`, `spender`]
   >> gvs[WETH_EVM_def, LET_THM, wf_WETH_state_def]
 QED
-
