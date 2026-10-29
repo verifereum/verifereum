@@ -479,6 +479,8 @@ fun getter_lift spec =
 val symbol_lift = getter_lift symbol_result_spec
 val decimals_lift = getter_lift decimals_result_spec
 val totalSupply_lift = getter_lift totalSupply_result_spec
+val balanceOf_lift = getter_lift balanceOf_result_spec
+val allowance_lift = getter_lift allowance_result_spec
 fun getter_code_tac g =
   (rewrite_tac [SUBSET_DEF] >> Cases
    >> rewrite_tac [IN_INSERT, NOT_IN_EMPTY, PAIR_EQ]
@@ -588,6 +590,123 @@ Proof
       >> `LENGTH tail + 4 <= 16777216` by gvs[getter_selectors]
       >> `LENGTH tail + 4 < 2 ** 256` by simp[]
       >> gvs[getter_selectors]
+      >> rw[access_slot_cost_def, warm_access_cost_def, cold_sload_cost_def])
+  >> strip_tac >> gvs[accesses_add_slot_def]
+QED
+
+Theorem weth_balanceOf_run_transaction[local]:
+  (lookup_account addr accounts).code = contract_code /\
+  lookup_storage (balance_slot_key a) (lookup_account addr accounts).storage = n2w n /\
+  n < 2 ** 256 /\
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "balanceOf" [Address] ++
+     enc (Tuple [Address]) (ListV [NumV (w2n a)])) 4000 s /\
+  access_slot_check dom (SK addr (balance_slot_key a))
+  ==>
+  ?result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') /\
+    result.result = NONE /\
+    result.output = enc (Tuple [Uint 256]) (ListV [NumV n]) /\
+    result.logs = [] /\
+    !b. (lookup_account b accounts').code =
+          (lookup_account b s.rollback.accounts).code /\
+        (lookup_account b accounts').storage =
+          (lookup_account b s.rollback.accounts).storage /\
+        (lookup_account b accounts').nonce =
+          (lookup_account b s.rollback.accounts).nonce
+Proof
+  PURE_REWRITE_TAC [zero_value_call_def]
+  >> strip_tac
+  >> strip_assume_tac contract_code_not_delegation
+  >> drule_all initial_state_call_code >> strip_tac
+  >> fs[GSYM parsed_contract_code_def]
+  >> drule_all wf_initial_state >> strip_tac
+  >> `?tail. tx.data = (function_selector "balanceOf" [Address] ++
+       enc (Tuple [Address]) (ListV [NumV (w2n a)])) ++ tail`
+     by gvs[IS_PREFIX_APPEND]
+  >> mp_tac (Q.INST [`p` |-> `ctxt.msgParams`, `rb` |-> `s.rollback`,
+       `d` |-> `dom`, `rd` |-> `[]`, `logs` |-> `[]`,
+       `addRefund` |-> `0`, `subRefund` |-> `0`,
+       `txParams` |-> `s.txParams`, `callee` |-> `addr`,
+       `s'` |-> `s with rollback updated_by
+          (\r. r with accounts updated_by transfer_value tx.from addr tx.value)`]
+       balanceOf_lift)
+  >> (impl_tac >- getter_code_tac)
+  >> asm_rewrite_tac [buffer_to_list_of_list, APPEND_ASSOC]
+  >> (impl_tac >- simp[])
+  >> impl_tac
+  >- (simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+      >> simp[STAR_evm2set, STAR_CODE_POOL_evm2set, cond_STAR, SEP_T_def,
+           transfer_value_zero, execution_state_component_equality,
+           rollback_state_component_equality, fmap_entries_def]
+      >> `s with rollback updated_by
+           (\r. r with accounts updated_by I) = s` by
+         simp[execution_state_component_equality, rollback_state_component_equality]
+      >> `LENGTH tail + 36 <= 16777216`
+         by gvs[getter_selectors, getter_address_enc, LENGTH_word_to_bytes, REV_DEF]
+      >> `LENGTH tail + 36 < 2 ** 256` by simp[]
+      >> gvs[getter_selectors, getter_address_enc, LENGTH_word_to_bytes, REV_DEF]
+      >> rw[access_slot_cost_def, warm_access_cost_def, cold_sload_cost_def])
+  >> strip_tac >> gvs[accesses_add_slot_def]
+QED
+
+Theorem weth_allowance_run_transaction[local]:
+  (lookup_account addr accounts).code = contract_code /\
+  lookup_storage (allowance_slot_key owner spender)
+    (lookup_account addr accounts).storage = n2w n /\
+  n < 2 ** 256 /\
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "allowance" [Address; Address] ++
+     enc (Tuple [Address; Address])
+       (ListV [NumV (w2n owner); NumV (w2n spender)])) 4000 s /\
+  access_slot_check dom (SK addr (allowance_slot_key owner spender))
+  ==>
+  ?result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') /\
+    result.result = NONE /\
+    result.output = enc (Tuple [Uint 256]) (ListV [NumV n]) /\
+    result.logs = [] /\
+    !b. (lookup_account b accounts').code =
+          (lookup_account b s.rollback.accounts).code /\
+        (lookup_account b accounts').storage =
+          (lookup_account b s.rollback.accounts).storage /\
+        (lookup_account b accounts').nonce =
+          (lookup_account b s.rollback.accounts).nonce
+Proof
+  PURE_REWRITE_TAC [zero_value_call_def]
+  >> strip_tac
+  >> strip_assume_tac contract_code_not_delegation
+  >> drule_all initial_state_call_code >> strip_tac
+  >> fs[GSYM parsed_contract_code_def]
+  >> drule_all wf_initial_state >> strip_tac
+  >> `?tail. tx.data = (function_selector "allowance" [Address; Address] ++
+       enc (Tuple [Address; Address])
+         (ListV [NumV (w2n owner); NumV (w2n spender)])) ++ tail`
+     by gvs[IS_PREFIX_APPEND]
+  >> mp_tac (Q.INST [`p` |-> `ctxt.msgParams`, `rb` |-> `s.rollback`,
+       `d` |-> `dom`, `rd` |-> `[]`, `logs` |-> `[]`,
+       `addRefund` |-> `0`, `subRefund` |-> `0`,
+       `txParams` |-> `s.txParams`, `callee` |-> `addr`,
+       `s'` |-> `s with rollback updated_by
+          (\r. r with accounts updated_by transfer_value tx.from addr tx.value)`]
+       allowance_lift)
+  >> (impl_tac >- getter_code_tac)
+  >> asm_rewrite_tac [buffer_to_list_of_list, APPEND_ASSOC]
+  >> (impl_tac >- simp[])
+  >> impl_tac
+  >- (simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+      >> simp[STAR_evm2set, STAR_CODE_POOL_evm2set, cond_STAR, SEP_T_def,
+           transfer_value_zero, execution_state_component_equality,
+           rollback_state_component_equality, fmap_entries_def]
+      >> `s with rollback updated_by
+           (\r. r with accounts updated_by I) = s` by
+         simp[execution_state_component_equality, rollback_state_component_equality]
+      >> `LENGTH tail + 68 <= 16777216`
+         by gvs[getter_selectors, getter_address_enc, LENGTH_word_to_bytes, REV_DEF]
+      >> `LENGTH tail + 68 < 2 ** 256` by simp[]
+      >> gvs[getter_selectors, getter_address_enc, LENGTH_word_to_bytes, REV_DEF]
       >> rw[access_slot_cost_def, warm_access_cost_def, cold_sload_cost_def])
   >> strip_tac >> gvs[accesses_add_slot_def]
 QED
@@ -721,7 +840,10 @@ Theorem WETH_EVM_balanceOf_run_transaction:
         (lookup_account b accounts').nonce =
           (lookup_account b s.rollback.accounts).nonce
 Proof
-  cheat
+  strip_tac >> irule weth_balanceOf_run_transaction
+  >> (conj_tac >- gvs[WETH_EVM_def, LET_THM, wf_WETH_state_def])
+  >> qexistsl_tac [`a`, `addr`]
+  >> gvs[WETH_EVM_def, LET_THM, wf_WETH_state_def]
 QED
 
 Theorem WETH_EVM_allowance_run_transaction:
@@ -751,6 +873,9 @@ Theorem WETH_EVM_allowance_run_transaction:
         (lookup_account b accounts').nonce =
           (lookup_account b s.rollback.accounts).nonce
 Proof
-  cheat
+  strip_tac >> irule weth_allowance_run_transaction
+  >> (conj_tac >- gvs[WETH_EVM_def, LET_THM, wf_WETH_state_def])
+  >> qexistsl_tac [`addr`, `owner`, `spender`]
+  >> gvs[WETH_EVM_def, LET_THM, wf_WETH_state_def]
 QED
 
