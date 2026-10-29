@@ -4768,6 +4768,38 @@ Definition delegate_check_def:
        newDom = msdomain_add delegate d
 End
 
+(* Where a destination no longer matters: `handle_create` does work only for
+   a deposit's own failure, and hands every other exception straight on
+   whichever output destination the frame has.  A call rule reaches it with
+   the exception already known not to be a deposit's, so it never has to
+   split on a destination it does not use. *)
+Theorem return_destination_case_const[local]:
+  !(x : return_destination) (r : execution_state -> 'a execution_result).
+    return_destination_CASE x (\m : memory_range. r) (\a : address. r) = r
+Proof
+  Cases_on `x` \\ simp[return_destination_CASE_rator]
+QED
+
+Theorem handle_create_not_none[local]:
+  !e s. e <> NONE /\ s.contexts <> [] ==> handle_create e s = reraise e s
+Proof
+  rpt strip_tac
+  \\ Cases_on `e`
+  \\ gvs[handle_create_def, get_return_data_def, get_output_to_def,
+         reraise_def, bind_def, return_def, ignore_bind_def,
+         get_current_context_def, return_destination_case_const,
+         CaseEq"bool"]
+QED
+
+(* As a rewrite rather than a fact in the goal: a call rule's step is the
+   call's, and the simplifier reaches `step_inst op` in the state it is
+   unfolding only through the rewrite set. *)
+Theorem step_inst_call[local]:
+  !op. call_has_value op ==> step_inst op = step_call op
+Proof
+  Cases_on `op` \\ simp[step_inst_def, call_has_value_def]
+QED
+
 Theorem SPEC_Call_fail_balance:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
@@ -4795,10 +4827,12 @@ Theorem SPEC_Call_fail_balance:
            (p.gasLimit - (g + (static_gas call_inst +
               access_cost rb addr + vCost + dCost + mCost))) 0 0 =
              (dynamicGas, stipend) ∧
-         gasCost = static_gas call_inst + access_cost rb addr + vCost + dCost +
-                   mCost + dynamicGas ∧
-         g + gasCost ≤ p.gasLimit ∧
-         stipend ≤ g + gasCost - creditBack ∧
+         g + (static_gas call_inst + access_cost rb addr + vCost + dCost + mCost) ≤
+           p.gasLimit ∧
+         g + (static_gas call_inst + access_cost rb addr + vCost + dCost + mCost +
+              dynamicGas) ≤ p.gasLimit ∧
+         stipend ≤ g + (static_gas call_inst + access_cost rb addr + vCost + dCost +
+                       mCost + dynamicGas) - creditBack ∧
          ¬p.static ∧
          call_has_value call_inst ∧
          sender = lookup_account p.callee rb.accounts ∧
@@ -4806,7 +4840,8 @@ Theorem SPEC_Call_fail_balance:
   {(pc,call_inst)}
   (evm_Stack (b2w F :: DROP 7 ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + gasCost - creditBack - stipend) *
+   evm_GasUsed (g + (static_gas call_inst + access_cost rb addr + vCost + dCost +
+                     mCost + dynamicGas) - creditBack - stipend) *
    evm_StateGasLeft (sg - creditBack) *
    evm_StateGasSpilled (sp - creditBack) *
    evm_MsgParams p *
@@ -4841,13 +4876,21 @@ Proof
   \\ `step_inst call_inst = step_call call_inst` by (
        qpat_x_assum`call_has_value _`mp_tac \\
        Cases_on`call_inst` \\ simp[step_inst_def, call_has_value_def] )
-  \\ `stipend ≤ g + gasCost - creditBack` by gvs[]
+  \\ `stipend ≤ g + (static_gas call_inst + access_cost rb addr + vCost + dCost +
+                    mCost + dynamicGas) - creditBack` by gvs[]
   \\ `is_call call_inst` by (
        qpat_x_assum`call_has_value _`mp_tac \\
        Cases_on`call_inst` \\ simp[call_has_value_def, is_call_def])
   \\ `call_inst ≠ Call ⇒ 0 < value` by gvs[]
+  \\ `0 < value` by
+       (qpat_x_assum`sender.balance < value`strip_assume_tac \\ DECIDE_TAC)
+  \\ `LENGTH (DROP 7 ss) < 1024` by
+       (qpat_x_assum`LENGTH ss ≤ 1024`mp_tac \\ simp[LENGTH_DROP] \\ DECIDE_TAC)
   \\ Cases_on`call_inst = Call`
-  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
+  \\ qpat_x_assum `Abbrev (newAccountCharged ⇔ _)`
+       (strip_assume_tac o REWRITE_RULE [markerTheory.Abbrev_def])
+  \\ Cases_on `newAccountCharged`
+  \\ gvs[step_inst_call, step_call_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
@@ -4855,26 +4898,29 @@ Proof
          fail_def,
          assert_not_static_def, get_static_def, abort_call_value_def, push_stack_def,
          set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def,
-         charge_new_account_apply, credit_new_account_apply,
-         delegate_check_def]
-  \\ TRY (qpat_x_assum`step_inst _ = _`kall_tac)
-  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
-         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
-         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
-         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
-         fail_def,
-         assert_not_static_def, get_static_def, abort_call_value_def, push_stack_def,
-         set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def,
-         charge_new_account_apply, credit_new_account_apply,
-         delegate_check_def,
-         charge_new_account_def, charge_state_gas_apply, charge_state_gas_def,
-         handle_step_def, LENGTH_DROP]
-  \\ (conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def])
-  \\ (conj_tac >-
-        (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
-         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
-  \\ end_tac
+         delegate_check_def, charge_new_account_def,
+         credit_new_account_def, charge_state_gas_apply]
+  \\ gvs[handle_step_def, handle_def, handle_create_not_none, handle_exception_def,
+         get_return_data_def, get_output_to_def, reraise_def, access_address_split,
+         get_num_contexts_def, CaseEq"bool", CaseEq"sum", CaseEq"prod",
+         CaseEq"option",
+         restore_state_gas_def, forfeit_remaining_gas_def,
+         pop_and_incorporate_context_def, inc_pc_def, set_return_data_def,
+         push_stack_def, write_memory_def]
+  \\ gvs[charge_new_account_def, credit_new_account_def,
+         charge_state_gas_apply, charge_state_gas_def]
+  \\ (fn g => (let val (asms,c) = g in
+        let val f = TextIO.openAppend "/tmp/gd53.txt"
+        in (List.app (fn a => TextIO.output(f, "HYP: " ^ term_to_string a ^ "\n")) asms;
+            TextIO.output(f, "CONCL: " ^ term_to_string c ^ "\n\n");
+            TextIO.closeOut f) end end; ALL_TAC g))
+  \\ ntac 14
+       ((conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]) ORELSE
+        (conj_tac >- (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                      \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])) ORELSE
+        (conj_tac >- gvs[Abbr`stateCost`, Abbr`creditBack`]) ORELSE
+        (conj_tac >- (qpat_x_assum ‘_ = _.contexts’ kall_tac \\ gvs[])) ORELSE
+        end_tac)
 QED
 
 Theorem SPEC_Call_fail_depth:
