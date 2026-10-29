@@ -4852,12 +4852,24 @@ Proof
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
-         CaseEq"sum",CaseEq"prod",CaseEq"option",CaseEq"bool",fail_def,
+         fail_def,
          assert_not_static_def, get_static_def, abort_call_value_def, push_stack_def,
          set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def,
          charge_new_account_apply, credit_new_account_apply,
          delegate_check_def]
-  \\ qpat_x_assum`step_inst _ = _`kall_tac
+  \\ TRY (qpat_x_assum`step_inst _ = _`kall_tac)
+  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
+         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
+         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
+         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
+         access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
+         fail_def,
+         assert_not_static_def, get_static_def, abort_call_value_def, push_stack_def,
+         set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def,
+         charge_new_account_apply, credit_new_account_apply,
+         delegate_check_def,
+         charge_new_account_def, charge_state_gas_apply, charge_state_gas_def,
+         handle_step_def, LENGTH_DROP]
   \\ (conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def])
   \\ (conj_tac >-
         (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
