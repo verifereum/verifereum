@@ -532,6 +532,10 @@ val () = “restore_child_gas g sr s” |>
                     COND_RATOR] |>
   cv_auto_trans;
 
+(* EIP-8037: the top frame's own state-gas charge, as a pure function used by
+   `run_create` before any step runs. *)
+val () = cv_auto_trans charge_state_gas_context_def;
+
 val () = “pop_stack n s” |>
   SIMP_CONV std_ss [pop_stack_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
@@ -890,6 +894,17 @@ Theorem step_exchange_pre[cv_pre]:
 Proof
   rw[step_exchange_pre_def]
 QED
+(* EIP-8037's account-creation charge and credit are monadic operations over
+   the state-gas meter, so the step bodies that use them need a translation of
+   each before they can be translated themselves. *)
+val () = “charge_new_account b s” |>
+  SIMP_CONV std_ss [charge_new_account_def, COND_RATOR, bind_def] |>
+  cv_auto_trans;
+
+val () = “credit_new_account b s” |>
+  SIMP_CONV std_ss [credit_new_account_def, COND_RATOR, bind_def] |>
+  cv_auto_trans;
+
 val th = tt step_log_def;
 val th = tt step_return_def;
 val th = tt step_self_destruct_def;
@@ -897,6 +912,11 @@ val th = tt step_self_destruct_def;
 val () = “abort_unuse n s” |>
   SIMP_CONV std_ss [
     abort_unuse_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val () = “abort_create s” |>
+  SIMP_CONV std_ss [
+    abort_create_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
 val () = “abort_create_exists x s” |>
