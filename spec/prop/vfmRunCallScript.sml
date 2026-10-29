@@ -7,11 +7,83 @@ Ancestors
   combin pair option pred_set list rich_list sum
   arithmetic finite_map While vfmTypes vfmConstants
   vfmContext vfmState vfmExecution vfmExecutionProp
-  vfmStoragePredicates vfmSameFrame vfmStaticCalls
+  vfmStoragePredicates vfmSameFrame vfmPreserves vfmStaticCalls
   vfmDecreasesGas vfmStepLength vfmHandleStep vfmRunWithinFrame
   vfmHeadStack vfmHeadGas vfmJumpDest
 Libs
   dep_rewrite BasicProvers
+
+(* EIP-8037: the account-creation charge and its credit, and the create that
+   aborts before it enters a child.  Each wraps a state-gas meter action, so
+   `vfmSameFrame`'s `preserves_same_frame_state_gas_meter` and
+   `vfmStoragePredicates`' `preserves_rollback_state_gas_meter` cover the
+   bodies; these are the wrappers, named here because the charge and the
+   credit are what the call/create prefixes below peel. *)
+
+Theorem preserves_same_frame_charge_new_account[simp]:
+  preserves_same_frame (charge_new_account charged)
+Proof
+  Cases_on `charged` >> rw[charge_new_account_def]
+QED
+
+Theorem preserves_same_frame_credit_new_account[simp]:
+  preserves_same_frame (credit_new_account charged)
+Proof
+  Cases_on `charged` >> rw[credit_new_account_def]
+QED
+
+Theorem preserves_storage_charge_new_account[simp]:
+  preserves_storage (charge_new_account charged)
+Proof
+  Cases_on `charged` >> rw[charge_new_account_def]
+QED
+
+Theorem preserves_storage_credit_new_account[simp]:
+  preserves_storage (credit_new_account charged)
+Proof
+  Cases_on `charged` >> rw[credit_new_account_def]
+QED
+
+Theorem preserves_same_frame_abort_create[simp]:
+  preserves_same_frame abort_create
+Proof
+  rw[abort_create_def]
+QED
+
+(* The head-gas instance for the charge: `charge_state_gas` either moves only
+   `stateGasLeft` or spills the excess through `consume_gas`, so the head
+   frame's `gasUsed` never falls.  (The matching head-stack instance is
+   vfmHeadStack's `preserves_head_stack_state_gas_meter`; the credit is not
+   monotone in `gasUsed`, so it has no instance here.) *)
+
+Theorem preserves_head_gas_mono_charge_state_gas[simp]:
+  preserves_head_gas_mono (charge_state_gas n)
+Proof
+  rw[preserves_head_gas_mono_def, preserves_def, head_gas_mono_rel_def,
+     charge_state_gas_def, bind_def, get_current_context_def, return_def,
+     fail_def, assert_def, set_current_context_def, ignore_bind_def,
+     consume_gas_def, LET_THM]
+  (* EIP-8037: unfolding the charge leaves its whole body in a hypothesis, a
+     `case` whose branches are the two pool paths, so the frame the goal reads
+     can only be reached by taking that hypothesis into the goal and splitting
+     it there.  An empty stack fails before the body, which `Cases_on` settles
+     with the charge's own guard in hand. *)
+  >> Cases_on `s.contexts` >> gvs[]
+  >> TRY (rpt (pop_assum mp_tac) >> rpt IF_CASES_TAC >> rpt disch_tac
+          >> gvs[consume_gas_def, get_current_context_def,
+                 set_current_context_def, charge_state_gas_def,
+                 assert_def, bind_def, ignore_bind_def, return_def,
+                 fail_def, LET_THM, AllCaseEqs(),
+                 pairTheory.PAIR_FST_SND_EQ, APPLY_UPDATE_THM]
+          >> rw[] >> NO_TAC)
+  >> rpt (gvs[AllCaseEqs()] >> decide_tac)
+QED
+
+Theorem preserves_head_gas_mono_charge_new_account[simp]:
+  preserves_head_gas_mono (charge_new_account charged)
+Proof
+  Cases_on `charged` >> rw[charge_new_account_def]
+QED
 
 (* Saved frames can revert down to the entry frame, but never the root. *)
 Definition active_rollbacks_def:
@@ -123,7 +195,8 @@ Proof
   >> simp[proceed_call_def, drain_state_gas_reservoir_def,
           bind_def, ignore_bind_def, get_current_context_def,
           set_current_context_def, return_def, get_rollback_def,
-          read_memory_def, get_caller_def, get_value_def, get_static_def]
+          read_memory_def, get_caller_def, get_value_def, get_static_def,
+          get_accounts_def]
   >> Cases_on `op <> CallCode /\ 0 < value`
   >> (simp[update_accounts_def, return_def]
   >> simp[push_context_def, return_def, bind_def]
@@ -153,7 +226,8 @@ Proof
   >> simp[proceed_call_def, drain_state_gas_reservoir_def,
           bind_def, ignore_bind_def, get_current_context_def,
           set_current_context_def, return_def, get_rollback_def,
-          read_memory_def, get_caller_def, get_value_def, get_static_def]
+          read_memory_def, get_caller_def, get_value_def, get_static_def,
+          get_accounts_def]
   >> Cases_on `op <> CallCode /\ 0 < value`
   >> (simp[update_accounts_def, return_def, push_context_def, bind_def]
       >> qmatch_goalsub_abbrev_tac `(if _ then _ else _) ss`
@@ -185,7 +259,7 @@ Proof
   >> qhdtm_x_assum `proceed_create` mp_tac
   >> simp[proceed_create_def, drain_state_gas_reservoir_def,
           get_current_context_def, set_current_context_def,
-          bind_def, ignore_bind_def, return_def]
+          bind_def, ignore_bind_def, return_def, get_accounts_def]
   >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
   >> rewrite_tac[Once bind_def]
   >> simp[get_rollback_def, return_def]
@@ -214,7 +288,7 @@ Proof
           get_current_context_def, set_current_context_def,
           bind_def, ignore_bind_def, return_def, update_accounts_def,
           get_rollback_def, get_original_def, set_original_def, fail_def,
-          push_context_def]
+          push_context_def, get_accounts_def]
   >> strip_tac >> gvs[]
 QED
 
@@ -231,7 +305,8 @@ Proof
   >> simp[proceed_call_def, drain_state_gas_reservoir_def,
           bind_def, ignore_bind_def, get_current_context_def,
           set_current_context_def, return_def, get_rollback_def,
-          read_memory_def, get_caller_def, get_value_def, get_static_def]
+          read_memory_def, get_caller_def, get_value_def, get_static_def,
+          get_accounts_def]
   >> Cases_on `op <> CallCode /\ 0 < value`
   >> (simp[update_accounts_def, return_def, push_context_def, bind_def]
       >> qmatch_goalsub_abbrev_tac `(if _ then _ else _) ss`
@@ -262,7 +337,7 @@ Proof
   >> qhdtm_x_assum `proceed_create` mp_tac
   >> simp[proceed_create_def, drain_state_gas_reservoir_def,
           get_current_context_def, set_current_context_def,
-          bind_def, ignore_bind_def, return_def]
+          bind_def, ignore_bind_def, return_def, get_accounts_def]
   (* update_accounts (increment_nonce senderAddress) *)
   >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
   (* get_rollback: captures increment_nonce'd rollback. *)
@@ -396,10 +471,15 @@ Proof
   >> irule preserves_pushed_rb_storage_bind >> simp[]
   >> reverse conj_tac >- (CASE_TAC >> simp[])
   >> Cases >> simp[]
+  (* EIP-8037: the opcode's execution gas, the creation charge in state
+     gas, the static check and the memory expansion come before the
+     child's grant is read. *)
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
-  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
-  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_cond >> simp[]
@@ -432,12 +512,15 @@ Proof
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
-  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> rpt (irule preserves_pushed_rb_storage_ignore_bind >> simp[])
   >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_cond >> simp[]
   >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
   >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  (* EIP-8037: the destination's creation is charged in state gas before
+     the child's grant is withheld, so a spill thins what is withheld. *)
+  >> irule preserves_pushed_rb_storage_ignore_bind >> simp[]
+  >> irule preserves_pushed_rb_storage_bind >> simp[] >> gen_tac
   >> irule preserves_pushed_rb_storage_cond >> simp[]
 QED
 
@@ -509,17 +592,24 @@ Proof
   >> `same_frame_rel s s5` by metis_tac[same_frame_rel_trans]
   >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  >> pairarg_tac >> gvs[]
+  >> pairarg_tac >> gvs[ignore_bind_def]
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
   >> rename1`same_frame_rel s5 s6`
   >> `same_frame_rel s s6` by metis_tac[same_frame_rel_trans]
   >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  >> pairarg_tac >> gvs[ignore_bind_def]
+  (* EIP-8037: the creation charge, the static check and the memory
+     expansion come before the child's grant is read. *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
-  >> rename1`same_frame_rel s6 s7`
+  >> rename1`same_frame_rel s6 sc`
+  >> `same_frame_rel s sc` by metis_tac[same_frame_rel_trans]
+  >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sc s7`
   >> `same_frame_rel s s7` by metis_tac[same_frame_rel_trans]
   >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
@@ -529,9 +619,18 @@ Proof
   >> `same_frame_rel s s8` by metis_tac[same_frame_rel_trans]
   >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* The grant is computed after the charge, so the 63/64 rule sees the
+     execution gas a spill thinned. *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
-  >> rename1`same_frame_rel s8 s9`
+  >> rename1`same_frame_rel s8 sd`
+  >> `same_frame_rel s sd` by metis_tac[same_frame_rel_trans]
+  >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  >> pairarg_tac >> gvs[ignore_bind_def]
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sd s9`
   >> `same_frame_rel s s9` by metis_tac[same_frame_rel_trans]
   >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
@@ -542,8 +641,8 @@ Proof
   >> `same_frame_rel s s0` by metis_tac[same_frame_rel_trans]
   >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
+  >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
   >> gvs[Ntimes COND_RATOR 2]
-  >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
   >> Cases_on`bbb` >> gs[]
   >- (
     drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
@@ -564,8 +663,8 @@ Proof
   by (rpt strip_tac >> gvs[same_frame_rel_def])
   (* Now at the conditional: if value check then abort else continue *)
   (* Second conditional: if depth/code check then abort else proceed_call *)
+  >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
   >> gvs[COND_RATOR]
-  >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
   >> Cases_on`bbb` >> gs[]
   >- (
     drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
@@ -680,17 +779,10 @@ Proof
   >> `same_frame_rel s s8` by metis_tac[same_frame_rel_trans]
   >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
-  (* Peel withhold_create_gas *)
-  >> drule_at (Pat`bind`) bind_psf_grows_extract
-  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
-  >> rename1`same_frame_rel s8 s9`
-  >> `same_frame_rel s s9` by metis_tac[same_frame_rel_trans]
-  >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s.contexts`
-  by (rpt strip_tac >> gvs[same_frame_rel_def])
   (* Peel assert_not_static *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
-  >> rename1`same_frame_rel s9 s0`
+  >> rename1`same_frame_rel s8 s0`
   >> `same_frame_rel s s0` by metis_tac[same_frame_rel_trans]
   >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
@@ -709,11 +801,11 @@ Proof
   >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
   (* Split the preliminary failure condition. *)
+  >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ _ = (_, _)`
   >> gvs[COND_RATOR]
-  >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
   >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
   >> IF_CASES_TAC
-  >- ((* abort_unuse: preserves_same_frame, can't grow *)
+  >- ((* abort_create: preserves_same_frame, can't grow *)
       strip_tac >>
       drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
       >> simp[])
@@ -728,20 +820,35 @@ Proof
   (* Peel ensure_storage_in_domain *)
   >> drule_at (Pat`bind`) bind_psf_grows_extract
   >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
-  >> rename1`same_frame_rel sd se`
+  >> rename1`same_frame_rel sd sx`
+  >> `same_frame_rel s sx` by metis_tac[same_frame_rel_trans]
+  >> `sx.contexts ≠ [] ∧ LENGTH sx.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* EIP-8037: the destination's creation, charged before the child's
+     grant is withheld so a spill thins what is withheld. *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sx sy`
+  >> `same_frame_rel s sy` by metis_tac[same_frame_rel_trans]
+  >> `sy.contexts ≠ [] ∧ LENGTH sy.contexts = LENGTH s.contexts`
+  by (rpt strip_tac >> gvs[same_frame_rel_def])
+  (* Peel withhold_create_gas *)
+  >> drule_at (Pat`bind`) bind_psf_grows_extract
+  >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac >> strip_tac >> gvs[]
+  >> rename1`same_frame_rel sy se`
   >> `same_frame_rel s se` by metis_tac[same_frame_rel_trans]
   >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH s.contexts`
   by (rpt strip_tac >> gvs[same_frame_rel_def])
   (* Now at the collision conditional. *)
+  >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
   >> gvs[COND_RATOR]
-  >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
   >> qpat_x_assum`COND bbb _ _ = _`mp_tac
   >> IF_CASES_TAC
   >- ((* abort_create_exists: length_preserves, can't grow *)
       strip_tac >>
       drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists)
       >> simp[])
-  (* Now we have proceed_create sf = (_, s') with growth, and same_frame_rel s sf *)
+  (* Now we have proceed_create se = (_, s') with growth, and same_frame_rel s se *)
   >> strip_tac
   >> qpat_x_assum `s.contexts ≠ []` mp_tac
   >> qpat_x_assum `se.contexts ≠ []` mp_tac
@@ -1156,7 +1263,8 @@ Proof
     >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s4.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s5.contexts)).stack < stack_limit` by gvs[]
-    >> pairarg_tac >> gvs[]
+    >> pairarg_tac >> gvs[ignore_bind_def]
+    (* EIP-8037: the opcode's execution gas, before the creation charge. *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
@@ -1164,12 +1272,19 @@ Proof
     >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s5.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s6.contexts)).stack < stack_limit` by gvs[]
-    >> pairarg_tac >> gvs[ignore_bind_def]
+    (* EIP-8037: the account-creation charge, before the child's grant. *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[charge_new_account_def] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s6 sc`
+    >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH s6.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD sc.contexts)).stack < stack_limit` by gvs[]
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s6 s7`
-    >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH s6.contexts`
+    >> rename1`same_frame_rel sc s7`
+    >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH sc.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s7.contexts)).stack < stack_limit` by gvs[]
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
@@ -1179,6 +1294,8 @@ Proof
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s8.contexts)).stack < stack_limit` by gvs[]
+    (* The grant is computed after the charge, so the 63/64 rule sees the
+       execution gas a spill thinned. *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
@@ -1186,16 +1303,25 @@ Proof
     >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s9.contexts)).stack < stack_limit` by gvs[]
+    >> pairarg_tac >> gvs[ignore_bind_def]
+    (* EIP-8037: the child's grant, charged in execution gas too. *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s9 sd`
+    >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH s9.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD sd.contexts)).stack < stack_limit` by gvs[]
     (* Peel get_callee *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s9 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+    >> rename1`same_frame_rel sd s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH sd.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s0.contexts)).stack < stack_limit` by gvs[]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[Ntimes COND_RATOR 2]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> Cases_on`bbb` >> gs[]
     >- (
       drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
@@ -1216,8 +1342,8 @@ Proof
     >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD sb.contexts)).stack < stack_limit` by gvs[]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> Cases_on`bbb` >> gs[]
     >- (
       drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved
@@ -1317,20 +1443,12 @@ Proof
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD s8.contexts)).stack < stack_limit` by gvs[]
-    (* Peel withhold_create_gas *)
-    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> `LENGTH (FST (HD s0.contexts)).stack < stack_limit` by gvs[]
     (* Peel assert_not_static *)
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s0 sb`
-    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s0.contexts`
+    >> rename1`same_frame_rel s8 sb`
+    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD sb.contexts)).stack < stack_limit` by gvs[]
     (* Peel set_return_data *)
@@ -1350,8 +1468,8 @@ Proof
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD sd.contexts)).stack < stack_limit` by gvs[]
     (* Split the preliminary failure condition. *)
+    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
     >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
     >> IF_CASES_TAC
     >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
@@ -1368,12 +1486,29 @@ Proof
     >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sx se`
-    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sx.contexts`
+    >> rename1`same_frame_rel sx sy`
+    >> `sy.contexts ≠ [] ∧ LENGTH sy.contexts = LENGTH sx.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD sy.contexts)).stack < stack_limit` by gvs[]
+    (* EIP-8037: the destination's creation, charged before the child's
+       grant is withheld so a spill thins what is withheld. *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[charge_new_account_def] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sy sz`
+    >> `sz.contexts ≠ [] ∧ LENGTH sz.contexts = LENGTH sy.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `LENGTH (FST (HD sz.contexts)).stack < stack_limit` by gvs[]
+    (* Peel withhold_create_gas *)
+    >> drule_at (Pat`bind`) bind_psf_phs_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sz se`
+    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sz.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `LENGTH (FST (HD se.contexts)).stack < stack_limit` by gvs[]
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> qpat_x_assum`COND bbb _ _ = _`mp_tac
     >> IF_CASES_TAC
     >- (strip_tac >> drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists) >> simp[])
@@ -1444,15 +1579,19 @@ Proof
     >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s4.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s5.contexts)).gasUsed` by decide_tac
-    >> pairarg_tac >> gvs[]
+    >> pairarg_tac >> gvs[ignore_bind_def]
+    (* EIP-8037: the opcode's own execution gas, the creation charge in state
+       gas, the static check and the memory expansion all come before the
+       child's grant is read. *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> pairarg_tac >> gvs[]
+    >> strip_tac >> gvs[]
     >> rename1`same_frame_rel s5 s6`
     >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s5.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s6.contexts)).gasUsed` by decide_tac
-    >> gvs[ignore_bind_def]
+    (* EIP-8037: the recipient's creation, charged in state gas before the
+       child's grant is computed so a spill thins what the 63/64 rule sees. *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
@@ -1474,15 +1613,32 @@ Proof
     >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s9.contexts)).gasUsed` by decide_tac
+    (* The grant is computed after the charge, so the 63/64 rule sees the
+       execution gas a spill thinned. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> pairarg_tac >> gvs[ignore_bind_def]
+    >> rename1`same_frame_rel s9 sc`
+    >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH s9.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sc.contexts)).gasUsed` by decide_tac
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s9 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
+    >> rename1`same_frame_rel sc sd`
+    >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sc.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sd.contexts)).gasUsed` by decide_tac
+    (* Peel get_callee *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sd s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH sd.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s0.contexts)).gasUsed` by decide_tac
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[Ntimes COND_RATOR 2]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> Cases_on`bbb` >> gs[]
     >- (drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
@@ -1499,8 +1655,8 @@ Proof
     >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sb.contexts)).gasUsed` by decide_tac
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> Cases_on`bbb` >> gs[]
     >- (drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> drule_all proceed_call_push_structure
@@ -1598,19 +1754,15 @@ Proof
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD s8.contexts)).gasUsed` by decide_tac
-    (* withhold_create_gas consumes the capped execution gas. *)
+    (* assert_not_static *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[]
-    >> (impl_tac >- (simp[withhold_create_gas_def] >>
-         irule preserves_head_gas_mono_bind >> simp[] >> gen_tac >>
-         irule preserves_head_gas_mono_ignore_bind >> simp[]))
-    >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
     >> rename1`same_frame_rel s8 sa`
     >> `sa.contexts ≠ [] ∧ LENGTH sa.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sa.contexts)).gasUsed` by decide_tac
-    (* assert_not_static *)
+    (* set_return_data *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
@@ -1618,25 +1770,17 @@ Proof
     >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sb.contexts)).gasUsed` by decide_tac
-    (* set_return_data *)
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sb sc`
-    >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH sb.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sc.contexts)).gasUsed` by decide_tac
     (* get_num_contexts *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sc sd`
-    >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sc.contexts`
+    >> rename1`same_frame_rel sb sd`
+    >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sb.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sd.contexts)).gasUsed` by decide_tac
     (* Split the preliminary failure condition. *)
+    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
     >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
     >> IF_CASES_TAC
     >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
@@ -1653,12 +1797,34 @@ Proof
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sx se`
-    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sx.contexts`
+    >> rename1`same_frame_rel sx sy`
+    >> `sy.contexts ≠ [] ∧ LENGTH sy.contexts = LENGTH sx.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sy.contexts)).gasUsed` by decide_tac
+    (* EIP-8037: the destination's creation, charged in state gas before the
+       child's grant is withheld so a spill thins what is withheld. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sy sz`
+    >> `sz.contexts ≠ [] ∧ LENGTH sz.contexts = LENGTH sy.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD sz.contexts)).gasUsed` by decide_tac
+    (* EIP-8037: the child's grant is withheld after the charge, so the
+       63/64 rule sees the gas a spill thinned. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[]
+    >> (impl_tac >- (simp[withhold_create_gas_def] >>
+         irule preserves_head_gas_mono_bind >> simp[] >> gen_tac >>
+         irule preserves_head_gas_mono_ignore_bind >> simp[]))
+    >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sz se`
+    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sz.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> `(FST (HD s.contexts)).gasUsed ≤ (FST (HD se.contexts)).gasUsed` by decide_tac
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> qpat_x_assum`COND bbb _ _ = _`mp_tac
     >> IF_CASES_TAC
     >- (strip_tac >> drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists) >> simp[])
@@ -1699,7 +1865,7 @@ Proof
   >> qhdtm_x_assum `proceed_call` mp_tac
   >> simp[proceed_call_def, drain_state_gas_reservoir_def,
           bind_def, ignore_bind_def, get_current_context_def,
-          set_current_context_def, return_def]
+          set_current_context_def, return_def, get_accounts_def]
   >> simp[bind_def, get_rollback_def, return_def]
   >> simp[read_memory_def, bind_def, return_def, get_current_context_def]
   >> qmatch_goalsub_abbrev_tac `COND transfer _ _`
@@ -1753,7 +1919,7 @@ Proof
   >> qhdtm_x_assum `proceed_create` mp_tac
   >> simp[proceed_create_def, drain_state_gas_reservoir_def,
           get_current_context_def, set_current_context_def,
-          bind_def, ignore_bind_def, return_def]
+          bind_def, ignore_bind_def, return_def, get_accounts_def]
   >> simp[ignore_bind_def, Once bind_def, update_accounts_def, return_def]
   >> rewrite_tac[Once bind_def]
   >> simp[get_rollback_def, return_def]
@@ -1782,7 +1948,8 @@ Proof
   simp[proceed_call_def, drain_state_gas_reservoir_def,
        bind_def, ignore_bind_def, get_current_context_def,
        set_current_context_def, return_def, get_rollback_def,
-       read_memory_def, get_caller_def, get_value_def, get_static_def] >>
+       read_memory_def, get_caller_def, get_value_def, get_static_def,
+       get_accounts_def] >>
   Cases_on `op <> CallCode /\ 0 < value` >>
   (simp[update_accounts_def, return_def, push_context_def, bind_def] >>
    qmatch_goalsub_abbrev_tac `(if _ then _ else _) ss` >>
@@ -1810,7 +1977,8 @@ Proof
   simp[proceed_create_def, drain_state_gas_reservoir_def,
        get_current_context_def, set_current_context_def,
        bind_def, ignore_bind_def, return_def, update_accounts_def,
-       get_rollback_def, get_original_def, set_original_def] >>
+       get_rollback_def, get_original_def, set_original_def,
+       get_accounts_def] >>
   strip_tac >> drule push_context_effect >> strip_tac >>
   gvs[initial_context_def, initial_msg_params_def, frame_unused_gas_def] >>
   qspec_then `s.contexts` FULL_STRUCT_CASES_TAC SNOC_CASES >> gvs[] >>
@@ -1873,12 +2041,50 @@ Proof
     >> rename1`same_frame_rel s4 s5`
     >> `s5.contexts ≠ [] ∧ LENGTH s5.contexts = LENGTH s4.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> pairarg_tac >> gvs[]
+    (* EIP-8037: the opcode's own execution gas is charged before the
+       recipient's creation, so the grant the 63/64 rule applies to is what
+       is left of it. *)
+    >> pairarg_tac >> gvs[ignore_bind_def]
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s5 s6`
+    >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s5.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> qmatch_asmsub_abbrev_tac `consume_gas execCost s5 = _`
+    >> `((FST (HD s.contexts)).gasUsed + execCost ≤
+          (FST (HD s6.contexts)).gasUsed)` by (
+       qhdtm_x_assum`consume_gas`mp_tac >>
+       simp[consume_gas_def, bind_def,get_current_context_def,return_def] >>
+       simp[assert_def,ignore_bind_def,bind_def,CaseEq"bool",CaseEq"sum"] >>
+       simp[set_current_context_def,return_def] >> strip_tac >>
+       gvs[] )
+    (* EIP-8037: the recipient's creation, in state gas, before the grant. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s6 sc`
+    >> `sc.contexts ≠ [] ∧ LENGTH sc.contexts = LENGTH s6.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sc s7`
+    >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH sc.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel s7 s8`
+    >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* The grant is computed after the charge, so the 63/64 rule sees the
+       execution gas a spill thinned. *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> pairarg_tac >> gvs[]
-    >> rename1`same_frame_rel s5 s6`
-    >> `s6.contexts ≠ [] ∧ LENGTH s6.contexts = LENGTH s5.contexts`
+    >> rename1`same_frame_rel s8 s9`
+    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     >> gvs[ignore_bind_def]
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
@@ -1886,37 +2092,29 @@ Proof
     >> qpat_x_assum`_ _ = (_,stipend)`(markerLib.ASSUME_NAMED_TAC"cg")
     >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s6 s7`
-    >> `s7.contexts ≠ [] ∧ LENGTH s7.contexts = LENGTH s6.contexts`
+    >> rename1`same_frame_rel s9 sd`
+    >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH s9.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> qmatch_asmsub_abbrev_tac `consume_gas callCost s6 = _`
-    >> `((FST (HD s.contexts)).gasUsed + callCost ≤
-          (FST (HD s7.contexts)).gasUsed)` by (
+    >> qmatch_asmsub_abbrev_tac `consume_gas grantCost s9 = _`
+    >> `((FST (HD s9.contexts)).gasUsed + grantCost ≤
+          (FST (HD sd.contexts)).gasUsed)` by (
        qhdtm_x_assum`consume_gas`mp_tac >>
        simp[consume_gas_def, bind_def,get_current_context_def,return_def] >>
        simp[assert_def,ignore_bind_def,bind_def,CaseEq"bool",CaseEq"sum"] >>
        simp[set_current_context_def,return_def] >> strip_tac >>
        gvs[] )
+    (* EIP-8037: the two execution charges are additive, so what the prefix
+       spends is the opcode's own cost plus the child's grant. *)
+    >> `((FST (HD s.contexts)).gasUsed + (execCost + grantCost) ≤
+          (FST (HD sd.contexts)).gasUsed)` by decide_tac
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s7 s8`
-    >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
+    >> rename1`same_frame_rel sd s0`
+    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH sd.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 s9`
-    >> `s9.contexts ≠ [] ∧ LENGTH s9.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s9 s0`
-    >> `s0.contexts ≠ [] ∧ LENGTH s0.contexts = LENGTH s9.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[Ntimes COND_RATOR 2]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> Cases_on`bbb` >> gs[]
     >- (drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
@@ -1931,8 +2129,8 @@ Proof
     >> rename1`same_frame_rel sa sb`
     >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> Cases_on`bbb` >> gs[]
     >- (drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
     >> asm "coverage" drule
@@ -1942,18 +2140,20 @@ Proof
     >> qpat_x_assum`_ + spg <= _`mp_tac
     >> qmatch_goalsub_abbrev_tac`_ <= s7g`
     >> `s7g <= sbg` by simp[]
-    >> `stipend <= callCost` suffices_by simp[]
-    >> qunabbrev_tac`callCost`
-    >> qmatch_asmsub_abbrev_tac`call_gas value gas gasLeft memoryCost`
-    >> `static_gas op = 0` by (
-      qhdtm_x_assum`is_call`mp_tac >>
-      Cases_on`op` >> EVAL_TAC >> gs[] )
-    >> irule call_gas_stipend_le_consumed
+    (* EIP-8037: the parent spends its own execution gas and then the whole
+       grant, and the stipend the child carries is the value transfer's own
+       cost, already inside that execution gas. *)
+    >> `s7g + callGas <= sbg` by decide_tac
+    >> `stipend <= execCost + callGas` suffices_by decide_tac
+    >> qunabbrev_tac`execCost`
     >> markerLib.LABEL_ASSUM"cg"assume_tac
-    >> gvs[]
-    >> goal_assum $ drule_at Any
-    >> Cases_on`0 < value` >> simp[]
-    >> EVAL_TAC >> rw[] )
+    >> qhdtm_x_assum`call_gas`mp_tac
+    >> simp[call_gas_def, call_stipend_def, call_value_cost_def]
+    >> strip_tac
+    >> qpat_x_assum`_ = stipend`(fn th => SUBST_ALL_TAC (SYM th))
+    >> Cases_on`0 < (if 0 < if call_has_value op then 1 else 0
+                       then w2n (EL 2 args) else 0)`
+    >> gvs[] >> decide_tac )
   >> (
     qpat_x_assum `pop_stack n s = _` mp_tac
     >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
@@ -2052,31 +2252,12 @@ Proof
     >> rename1`same_frame_rel s7 s8`
     >> `s8.contexts ≠ [] ∧ LENGTH s8.contexts = LENGTH s7.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
-    (* withhold_create_gas: the additive execution-gas reservation. *)
-    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
-    >> simp[]
-    >> (impl_tac >- (simp[withhold_create_gas_def] >>
-         irule preserves_head_gas_mono_bind >> simp[] >> gen_tac >>
-         irule preserves_head_gas_mono_ignore_bind >> simp[]))
-    >> qpat_x_assum`_ _ = (_,_)`kall_tac
-    >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel s8 sa`
-    >> `sa.contexts <> [] /\ LENGTH sa.contexts = LENGTH s8.contexts`
-         by (rpt strip_tac >> gvs[same_frame_rel_def])
-    >> qpat_x_assum `withhold_create_gas s8 = (INL _, sa)` mp_tac
-    >> simp[withhold_create_gas_def, get_gas_left_def,
-            get_current_context_def, bind_def, ignore_bind_def, return_def]
-    >> strip_tac >> gvs[AllCaseEqs()]
-    >> rename1 `consume_gas cappedGas s8 = _`
-    >> `(FST (HD s8.contexts)).gasUsed + cappedGas <=
-        (FST (HD sa.contexts)).gasUsed` by
-         (drule consume_gas_head_gas_add_ge >> simp[])
     (* assert_not_static *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sa sb`
-    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH sa.contexts`
+    >> rename1`same_frame_rel s8 sb`
+    >> `sb.contexts ≠ [] ∧ LENGTH sb.contexts = LENGTH s8.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     (* set_return_data *)
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
@@ -2093,8 +2274,8 @@ Proof
     >> `sd.contexts ≠ [] ∧ LENGTH sd.contexts = LENGTH sc.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
     (* Split the preliminary failure condition. *)
+    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND preliminaryFailure _ _ = (_, _)`
     >> qpat_x_assum`COND preliminaryFailure _ _ = _`mp_tac
     >> IF_CASES_TAC
     >- (strip_tac >> drule_at (Pat`_ = (_, s')`) psf_imp_length_contexts_preserved >> simp[])
@@ -2110,11 +2291,38 @@ Proof
     >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
     >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
     >> strip_tac >> gvs[]
-    >> rename1`same_frame_rel sx se`
-    >> `se.contexts ≠ [] ∧ LENGTH se.contexts = LENGTH sx.contexts`
+    >> rename1`same_frame_rel sx sy`
+    >> `sy.contexts ≠ [] ∧ LENGTH sy.contexts = LENGTH sx.contexts`
          by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* EIP-8037: the destination's creation, charged before the child's
+       grant is withheld so a spill thins what is withheld. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[] >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sy sz`
+    >> `sz.contexts ≠ [] ∧ LENGTH sz.contexts = LENGTH sy.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    (* withhold_create_gas: the additive execution-gas reservation. *)
+    >> drule_at (Pat`bind`) bind_psf_phgm_grows_extract
+    >> simp[]
+    >> (impl_tac >- (simp[withhold_create_gas_def] >>
+         irule preserves_head_gas_mono_bind >> simp[] >> gen_tac >>
+         irule preserves_head_gas_mono_ignore_bind >> simp[]))
+    >> qpat_x_assum`_ _ = (_,_)`kall_tac
+    >> strip_tac >> gvs[]
+    >> rename1`same_frame_rel sz se`
+    >> `se.contexts <> [] /\ LENGTH se.contexts = LENGTH sz.contexts`
+         by (rpt strip_tac >> gvs[same_frame_rel_def])
+    >> qpat_x_assum `withhold_create_gas sz = (INL _, se)` mp_tac
+    >> simp[withhold_create_gas_def, get_gas_left_def,
+            get_current_context_def, bind_def, ignore_bind_def, return_def]
+    >> strip_tac >> gvs[AllCaseEqs()]
+    >> rename1 `consume_gas cappedGas sz = _`
+    >> `(FST (HD sz.contexts)).gasUsed + cappedGas <=
+        (FST (HD se.contexts)).gasUsed` by
+         (drule consume_gas_head_gas_add_ge >> simp[])
+    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ _ = (_, _)`
     >> gvs[COND_RATOR]
-    >> qmatch_asmsub_abbrev_tac`COND bbb _ _ = (_, _)`
     >> qpat_x_assum`COND bbb _ _ = _`mp_tac
     >> IF_CASES_TAC
     >- (strip_tac >> drule (REWRITE_RULE[length_preserves_def] length_preserves_abort_create_exists) >> simp[])
@@ -2122,12 +2330,9 @@ Proof
     >> asm "coverage" (irule o ONCE_REWRITE_RULE [ADD_COMM])
     >> goal_assum $ drule_at Any
     >> simp[]
-    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
-    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
-    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
-    >> irule LESS_EQ_TRANS >> goal_assum $ drule_at Any
-    >> drule consume_gas_head_gas_add_ge
-    >> simp[])
+    (* EIP-8037: the grant is withheld only after the destination's creation
+       is charged, so both come out of the same execution gas. *)
+    >> decide_tac)
   >> (
     qpat_x_assum `pop_stack n s = _` mp_tac
     >> Cases_on `s.contexts` >> gvs[pop_stack_def, get_current_context_def,
@@ -3371,7 +3576,8 @@ Proof
 QED
 
 Theorem run_call_preserves_storage_outside_accessed_slots_initial:
-    es.contexts = [(initial_context callee code static rd sg t, es.rollback)] ∧
+    es.contexts =
+      [(initial_context callee code static rd charged sg t, es.rollback)] ∧
     wf_accounts es.rollback.accounts ∧
     (∀a. rd = Code a ⇒ callee = a) ∧
     run_call es = SOME (r, es') ⇒
