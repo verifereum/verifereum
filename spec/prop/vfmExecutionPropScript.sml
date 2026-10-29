@@ -180,7 +180,7 @@ Definition wf_state_def:
 End
 
 Theorem wf_initial_context[simp]:
-  wf_context (initial_context callee c s rd sg t)
+  wf_context (initial_context callee c s rd ch sg t)
 Proof
   rw[wf_context_def, initial_msg_params_def]
 QED
@@ -256,7 +256,7 @@ QED
 
 Theorem outputTo_consistent_ctx_initial_context:
   (∀a. rd = Code a ⇒ a = callee) ⇒
-  outputTo_consistent_ctx (initial_context callee code st rd sg t)
+  outputTo_consistent_ctx (initial_context callee code st rd ch sg t)
 Proof
   rw[outputTo_consistent_ctx_def, initial_context_def,
      initial_msg_params_def]
@@ -329,11 +329,13 @@ Proof
   \\ rw [pop_and_incorporate_context_def, bind_def, ignore_bind_def,
          get_gas_left_def, get_current_context_def, set_current_context_def,
          pop_context_def, unuse_gas_def, assert_def, fail_def, return_def,
+         credit_new_account_def,
          absorb_state_gas_def, repay_state_gas_spill_def,
          push_logs_def, update_gas_refund_def, set_rollback_def]
   \\ rpt (CASE_TAC \\ gvs [AllCaseEqs(), bind_def, ignore_bind_def,
           get_current_context_def, set_current_context_def, assert_def,
           fail_def, return_def, absorb_state_gas_def,
+          credit_state_gas_refund_def, charge_state_gas_def,
           repay_state_gas_spill_def, push_logs_def, update_gas_refund_def,
           set_rollback_def])
   \\ gvs [AllCaseEqs()]
@@ -533,6 +535,44 @@ Proof
   rw[revert_def]
 QED
 
+(* `charge_state_gas`'s body branches on two gas bounds with an inline
+   `if`, rather than through `assert`, so the chain has to be unpacked
+   before the branches can be split: inside the `do` the test sits under
+   the binder of the continuation, where `IF_CASES_TAC` will not reach
+   it. *)
+Theorem charge_state_gas_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (charge_state_gas n s)).contexts ≠ []
+Proof
+  rw [charge_state_gas_def, bind_def, ignore_bind_def, COND_RATOR,
+      get_current_context_def, set_current_context_def, consume_gas_def,
+      assert_def, fail_def, return_def]
+  \\ rpt (IF_CASES_TAC \\ simp [])
+QED
+
+Theorem credit_state_gas_refund_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (credit_state_gas_refund n s)).contexts ≠ []
+Proof
+  rw[credit_state_gas_refund_def] \\ preserves_nonempty_tac
+QED
+
+Theorem charge_new_account_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (charge_new_account charged s)).contexts ≠ []
+Proof
+  Cases_on `charged` \\ rw[charge_new_account_def]
+QED
+
+Theorem credit_new_account_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (credit_new_account charged s)).contexts ≠ []
+Proof
+  Cases_on `charged` \\ rw[credit_new_account_def]
+QED
+
+Theorem abort_create_preserves_nonempty_contexts[simp]:
+  s.contexts ≠ [] ⇒ (SND (abort_create s)).contexts ≠ []
+Proof
+  rw[abort_create_def] \\ preserves_nonempty_tac
+QED
+
 Theorem handle_create_preserves_nonempty_contexts[simp]:
   st.contexts ≠ [] ⇒ (SND (handle_create e st)).contexts ≠ []
 Proof
@@ -546,12 +586,7 @@ Proof
   >- simp[reraise_def]
   \\ simp[]
   \\ Cases_on `e`
-  >- (
-    simp[]
-    \\ simp[ignore_bind_def, bind_def, assert_def, consume_gas_def,
-            update_accounts_def, reraise_def, get_current_context_def,
-            set_current_context_def, return_def, fail_def]
-    \\ rpt CASE_TAC \\ simp[] )
+  >- ( simp[ignore_bind_def] \\ preserves_nonempty_tac )
   \\ simp[reraise_def]
 QED
 
@@ -701,26 +736,6 @@ Theorem get_state_gas_left_preserves_nonempty_contexts[simp]:
   s.contexts ≠ [] ⇒ (SND (get_state_gas_left s)).contexts ≠ []
 Proof
   rw[get_state_gas_left_def] \\ preserves_nonempty_tac
-QED
-
-(* `charge_state_gas`'s body branches on two gas bounds with an inline
-   `if`, rather than through `assert`, so the chain has to be unpacked
-   before the branches can be split: inside the `do` the test sits under
-   the binder of the continuation, where `IF_CASES_TAC` will not reach
-   it. *)
-Theorem charge_state_gas_preserves_nonempty_contexts[simp]:
-  s.contexts ≠ [] ⇒ (SND (charge_state_gas n s)).contexts ≠ []
-Proof
-  rw [charge_state_gas_def, bind_def, ignore_bind_def, COND_RATOR,
-      get_current_context_def, set_current_context_def, consume_gas_def,
-      assert_def, fail_def, return_def]
-  \\ rpt (IF_CASES_TAC \\ simp [])
-QED
-
-Theorem credit_state_gas_refund_preserves_nonempty_contexts[simp]:
-  s.contexts ≠ [] ⇒ (SND (credit_state_gas_refund n s)).contexts ≠ []
-Proof
-  rw[credit_state_gas_refund_def] \\ preserves_nonempty_tac
 QED
 
 Theorem restore_state_gas_preserves_nonempty_contexts[simp]:
@@ -2077,6 +2092,18 @@ Proof
        (irule preserves_wf_accounts_ignore_bind \\ rw[]))
 QED
 
+Theorem preserves_wf_accounts_charge_new_account[simp]:
+  preserves_wf_accounts (charge_new_account charged)
+Proof
+  Cases_on `charged` \\ rw[charge_new_account_def]
+QED
+
+Theorem preserves_wf_accounts_credit_new_account[simp]:
+  preserves_wf_accounts (credit_new_account charged)
+Proof
+  Cases_on `charged` \\ rw[credit_new_account_def]
+QED
+
 Theorem preserves_wf_accounts_restore_state_gas[simp]:
   preserves_wf_accounts restore_state_gas
 Proof
@@ -2197,7 +2224,8 @@ val defs = [bind_def, ignore_bind_def, access_address_def,
         set_return_data_def, get_num_contexts_def, get_rollback_def,
         get_static_def, update_accounts_def, get_gas_left_def,
         domain_check_def, set_domain_def, push_logs_def,
-        get_original_def, get_accounts_def, consume_gas_def, return_def, fail_def]
+        get_original_def, get_accounts_def, consume_gas_def, return_def, fail_def,
+        charge_new_account_def, charge_state_gas_def, get_state_gas_left_def]
 
 Theorem wf_account_state_with_balance[simp]:
   wf_account_state (a with balance updated_by b) = wf_account_state a
@@ -2205,22 +2233,21 @@ Proof
   rw[wf_account_state_def]
 QED
 
+Theorem preserves_wf_accounts_update_accounts_transfer_value[simp]:
+  preserves_wf_accounts (update_accounts (transfer_value x y z))
+Proof
+  rw[update_accounts_def, preserves_wf_accounts_def, return_def,
+     all_accounts_def]
+QED
+
 Theorem preserves_wf_accounts_step_self_destruct[simp]:
   preserves_wf_accounts step_self_destruct
 Proof
-  rw[step_self_destruct_def]
-  \\ rw defs \\ rw[]
-  \\ rw defs \\ rw[]
-  \\ rw defs
-  \\ gs[wf_accounts_def, update_account_def, transfer_value_def,
-        all_accounts_def, lookup_account_def]
-  \\ rw[APPLY_UPDATE_THM, lookup_account_def] \\ rw[]
-  \\ Cases_on`s.contexts` \\ gs[wf_accounts_def]
-  \\ Cases_on`s.msdomain` \\ gs[] \\ rw[]
-  \\ rw defs \\ rw[]
-  \\ gs[wf_accounts_def, update_account_def, transfer_value_def,
-        all_accounts_def, lookup_account_def]
-  \\ rw[APPLY_UPDATE_THM, lookup_account_def] \\ rw[]
+  rw[step_self_destruct_def] >>
+  rpt ((irule preserves_wf_accounts_bind \\ rw[]) ORELSE
+       (irule preserves_wf_accounts_ignore_bind \\ rw[])) >>
+  (* the sweep's deletion flag, on the originator it kept its balance on *)
+  IF_CASES_TAC >> rw[]
 QED
 
 Theorem preserves_wf_accounts_unuse_gas[simp]:
@@ -2239,6 +2266,12 @@ Theorem preserves_wf_accounts_abort_unuse[simp]:
   preserves_wf_accounts (abort_unuse x)
 Proof
   rw[abort_unuse_def] >> tac
+QED
+
+Theorem preserves_wf_accounts_abort_create[simp]:
+  preserves_wf_accounts abort_create
+Proof
+  rw[abort_create_def] >> tac
 QED
 
 Theorem preserves_wf_accounts_abort_call_value[simp]:
@@ -2260,13 +2293,6 @@ Theorem preserves_wf_accounts_push_context[simp]:
 Proof
   rw[push_context_def, preserves_wf_accounts_def, return_def, all_accounts_def]
   \\ Cases_on `s.contexts` \\ gvs[]
-QED
-
-Theorem preserves_wf_accounts_update_accounts_transfer_value[simp]:
-  preserves_wf_accounts (update_accounts (transfer_value x y z))
-Proof
-  rw[update_accounts_def, preserves_wf_accounts_def, return_def,
-     all_accounts_def]
 QED
 
 Theorem preserves_wf_accounts_precompile_ecrecover[simp]:
@@ -2423,14 +2449,19 @@ Proof
   >> irule preserves_wf_accounts_bind
   >> CONJ_TAC
   >- (
-    strip_tac \\ simp[]
-    >> irule preserves_wf_accounts_bind_pred
-    >> simp[]
-    >> qexists_tac `λrb. wf_accounts rb.accounts`
-    >> rw[proceed_call_def, get_rollback_def, return_def, all_accounts_def]
-    >> tac
-    >> gvs[] )
-  >> irule preserves_wf_accounts_drain_state_gas_reservoir
+    qx_gen_tac `accounts` >> simp[]
+    >> irule preserves_wf_accounts_bind
+    >> CONJ_TAC
+    >- (
+      strip_tac \\ simp[]
+      >> irule preserves_wf_accounts_bind_pred
+      >> simp[]
+      >> qexists_tac `λrb. wf_accounts rb.accounts`
+      >> rw[proceed_call_def, get_rollback_def, return_def, all_accounts_def]
+      >> tac
+      >> gvs[] )
+    >> irule preserves_wf_accounts_drain_state_gas_reservoir )
+  >> simp[]
 QED
 
 Theorem preserves_wf_accounts_step_call[simp]:
@@ -2466,6 +2497,14 @@ Theorem preserves_wf_accounts_pred_bind_get_accounts:
 Proof
   rw[preserves_wf_accounts_pred_def, preserves_wf_accounts_def, bind_def]
   \\ gs[all_accounts_def, get_accounts_def, return_def]
+QED
+
+Theorem preserves_wf_accounts_pred_bind_get_accounts_pred:
+  (∀x. preserves_wf_accounts_pred p (f x)) ⇒
+  preserves_wf_accounts_pred p (bind get_accounts f)
+Proof
+  rw[preserves_wf_accounts_pred_def, bind_def, get_accounts_def, return_def]
+  \\ metis_tac[]
 QED
 
 Theorem preserves_wf_accounts_pred_pred_bind:
@@ -2526,6 +2565,16 @@ Proof
   \\ rpt (CASE_TAC \\ gvs[])
 QED
 
+(* So does the destination's creation charge. *)
+Theorem charge_new_account_rollback[simp]:
+  ∀st. (SND (charge_new_account charged st)).rollback = st.rollback
+Proof
+  rw[charge_new_account_def, charge_state_gas_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def, consume_gas_def,
+     assert_def, return_def, fail_def, COND_RATOR]
+  \\ rpt (CASE_TAC \\ gvs[])
+QED
+
 Theorem preserves_wf_accounts_pred_proceed_create:
   preserves_wf_accounts_pred (λs.
     SUC (s.rollback.accounts a).nonce < 2 ** 64 ∧
@@ -2534,6 +2583,9 @@ Theorem preserves_wf_accounts_pred_proceed_create:
 Proof
   simp[proceed_create_def]
   \\ simp[ignore_bind_def]
+  \\ irule preserves_wf_accounts_pred_bind_get_accounts_pred
+  \\ qx_gen_tac `accounts`
+  \\ simp[]
   \\ irule preserves_wf_accounts_pred_pred_bind
   \\ simp[]
   \\ qexists_tac`λs. SUC (s.rollback.accounts a).nonce < 2 ** 64 ∧
@@ -2616,14 +2668,6 @@ Proof
   >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
   \\ qexists_tac`λs. accounts = s.rollback.accounts`
   \\ reverse conj_tac
-  >- rw[get_gas_left_def, return_def, get_current_context_def,
-        bind_def, fail_def]
-  \\ gen_tac
-  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
-  \\ reverse conj_tac
-  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
-  \\ qexists_tac`λs. accounts = s.rollback.accounts`
-  \\ reverse conj_tac
   >- (
     rw[assert_not_static_def, return_def, get_current_context_def, ignore_bind_def,
        bind_def, fail_def, assert_def, set_current_context_def, get_static_def])
@@ -2665,6 +2709,19 @@ Proof
     rw[ensure_storage_in_domain_def, return_def, ignore_bind_def,
        bind_def, fail_def, assert_def, get_static_def, domain_check_def]
     \\ Cases_on`s.msdomain` \\ gs defs \\ rw[])
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- rw[charge_new_account_rollback]
+  \\ irule preserves_wf_accounts_pred_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( irule preserves_wf_accounts_imp_pred \\ rw[] )
+  \\ qexists_tac`λs. accounts = s.rollback.accounts`
+  \\ reverse conj_tac
+  >- rw[withhold_create_gas_rollback]
+  \\ gen_tac
   \\ IF_CASES_TAC
   >- (
     simp[abort_create_exists_def]
@@ -2735,6 +2792,11 @@ Proof
   \\ gs[all_accounts_def]
   \\ Cases_on`s.contexts` \\ gs[set_rollback_def, return_def]
   \\ Cases_on`t` \\ gs[]
+  \\ rpt (CASE_TAC \\ gvs[])
+  \\ Cases_on`(FST h).msgParams.newAccountCharged`
+  \\ gvs[credit_new_account_def, credit_state_gas_refund_def, charge_state_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def, set_current_context_def,
+         consume_gas_def, assert_def, return_def, fail_def, COND_RATOR]
 QED
 
 Theorem preserves_wf_accounts_reraise[simp]:
@@ -2785,10 +2847,14 @@ Proof
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ irule preserves_wf_accounts_ignore_bind \\ rw[]
   \\ rw[preserves_wf_accounts_def, assert_def, bind_def, update_accounts_def,
-        ignore_bind_def, return_def, reraise_def, max_code_size_def]
+        ignore_bind_def, return_def, reraise_def, max_code_size_def,
+        charge_state_gas_def, get_current_context_def, set_current_context_def,
+        consume_gas_def, fail_def, COND_RATOR]
+  \\ rpt (CASE_TAC \\ gvs[])
   \\ gs[all_accounts_def, update_account_def, lookup_account_def]
   \\ gs[wf_accounts_def, APPLY_UPDATE_THM] \\ rw[]
   \\ gs[wf_account_state_def]
+  \\ Cases_on`s.contexts` \\ gvs[]
 QED
 
 Definition limits_num_contexts_def:
@@ -3297,10 +3363,22 @@ Proof
   rw[charge_state_gas_def] >> tac
 QED
 
+Theorem limits_num_contexts_charge_new_account[simp]:
+  limits_num_contexts n n (charge_new_account charged)
+Proof
+  rw[charge_new_account_def] >> tac
+QED
+
 Theorem limits_num_contexts_credit_state_gas_refund[simp]:
   limits_num_contexts n n (credit_state_gas_refund x)
 Proof
   rw[credit_state_gas_refund_def] >> tac
+QED
+
+Theorem limits_num_contexts_credit_new_account[simp]:
+  limits_num_contexts n n (credit_new_account charged)
+Proof
+  rw[credit_new_account_def] >> tac
 QED
 
 Theorem limits_num_contexts_restore_state_gas[simp]:
@@ -3417,6 +3495,12 @@ Theorem limits_num_contexts_abort_unuse[simp]:
   limits_num_contexts n n (abort_unuse x)
 Proof
   rw[abort_unuse_def] >> tac
+QED
+
+Theorem limits_num_contexts_abort_create[simp]:
+  limits_num_contexts n n abort_create
+Proof
+  rw[abort_create_def] >> tac
 QED
 
 Theorem limits_num_contexts_abort_call_value[simp]:
@@ -3620,8 +3704,8 @@ Proof
   \\ qpat_abbrev_tac`b2 = COND _ _ _`
   \\ qpat_abbrev_tac`b3 = COND _ _ _`
   \\ qpat_abbrev_tac`b4 = COND _ _ _`
-  \\ qpat_abbrev_tac`b5 = COND _ _ _`
   \\ qpat_abbrev_tac`b6 = COND _ _ _`
+  (* the delegate lookup and the code it reads *)
   \\ irule limits_num_contexts_bind \\ qexists_tac`n`
   \\ reverse conj_tac
   >- (
@@ -3630,24 +3714,32 @@ Proof
     \\ irule limits_num_contexts_bind
     \\ qexists_tac`n` \\ simp[] )
   \\ Cases \\ simp[]
-  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
-  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[Abbr`b6`]
+  (* the child's charge, the static check and the memory expansion *)
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
-  \\ reverse conj_tac >- rw[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[Abbr`b6`]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+  (* the gas left, the child's grant and the sender *)
+  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
+  (* not enough balance: the child is never entered *)
   \\ rw[]
-  >- ( irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[] )
-  >- ( irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[] )
+  >- (
+    irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
+    \\ irule limits_num_contexts_mono \\ qexistsl_tac[`n`,`n`] \\ simp[] )
+  (* otherwise the child's frame, which is where a context is pushed *)
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ rw[]
   \\ irule limits_num_contexts_check \\ simp[]
   \\ reverse conj_tac
   >- (
     strip_tac
+    \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
     \\ irule limits_num_contexts_mono
     \\ qexistsl_tac[`n`,`n`] \\ simp[] )
   \\ gen_tac \\ strip_tac
   \\ simp[proceed_call_def]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
@@ -3718,7 +3810,6 @@ Proof
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
-  \\ irule limits_num_contexts_bind \\ qexists_tac`n` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`n` \\ simp[]
   \\ qpat_abbrev_tac`b4 = COND _ _ _`
@@ -3744,6 +3835,8 @@ Proof
   \\ `n ≤ MIN (SUC n) 1026` by gs[]
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
+  \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
   \\ IF_CASES_TAC
   >- (
     irule limits_num_contexts_mono
@@ -3753,6 +3846,7 @@ Proof
     \\ rw[limits_num_contexts_def, update_accounts_def, return_def])
   \\ simp[proceed_create_def]
   \\ qpat_abbrev_tac`b4 = COND _ _ _`
+  \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_bind \\ qexists_tac`SUC n1` \\ simp[] \\ gen_tac
   \\ irule limits_num_contexts_ignore_bind \\ qexists_tac`SUC n1` \\ simp[]
   \\ reverse conj_tac >- rw[limits_num_contexts_def, update_accounts_def, return_def]
