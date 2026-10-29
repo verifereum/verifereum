@@ -616,6 +616,25 @@ Proof
   rw[abort_create_exists_def] >> pajdn_tac
 QED
 
+Theorem preserves_all_jumpDest_NONE_abort_create[simp]:
+  preserves_all_jumpDest_NONE abort_create
+Proof
+  rw[abort_create_def] >> pajdn_tac
+QED
+
+(* EIP-8037's creation charge and credit are state-gas meter actions. *)
+Theorem preserves_all_jumpDest_NONE_charge_new_account[simp]:
+  preserves_all_jumpDest_NONE (charge_new_account charged)
+Proof
+  Cases_on `charged` >> rw[charge_new_account_def]
+QED
+
+Theorem preserves_all_jumpDest_NONE_credit_new_account[simp]:
+  preserves_all_jumpDest_NONE (credit_new_account charged)
+Proof
+  Cases_on `charged` >> rw[credit_new_account_def]
+QED
+
 (* handle_create preserves all_jumpDest_NONE *)
 Theorem preserves_all_jumpDest_NONE_handle_create[simp]:
   preserves_all_jumpDest_NONE (handle_create e)
@@ -1218,6 +1237,19 @@ Proof
   ho_match_mp_tac preserves_jumpDest_set_current_context_if >> simp[]
 QED
 
+(* EIP-8037's per-create and per-call charges and their credit. *)
+Theorem preserves_jumpDest_charge_new_account[simp]:
+  preserves_jumpDest (charge_new_account charged)
+Proof
+  Cases_on `charged` >> rw[charge_new_account_def]
+QED
+
+Theorem preserves_jumpDest_credit_new_account[simp]:
+  preserves_jumpDest (credit_new_account charged)
+Proof
+  Cases_on `charged` >> rw[credit_new_account_def]
+QED
+
 Theorem preserves_jumpDest_step_binop[simp]:
   preserves_jumpDest (step_binop op f)
 Proof
@@ -1451,6 +1483,14 @@ Proof
   >> rw[]
 QED
 
+(* EIP-8037's create abort: a zero flag and a pc step, no child.  It comes
+   after inc_pc above, which its second statement needs. *)
+Theorem preserves_jumpDest_abort_create[simp]:
+  preserves_jumpDest abort_create
+Proof
+  rw[abort_create_def] >> pjd_tac
+QED
+
 Theorem preserves_jumpDest_abort_call_value[simp]:
   preserves_jumpDest (abort_call_value x)
 Proof
@@ -1654,6 +1694,10 @@ Theorem preserves_jumpDest_NONE_proceed_call:
   (FST(HD s'.contexts)).jumpDest = NONE
 Proof
   simp[proceed_call_def] >> strip_tac >>
+  (* EIP-8037: the accounts read that decides this child's creation flag. *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1693,22 +1737,44 @@ Theorem preserves_jumpDest_NONE_step_call:
   (FST (HD s'.contexts)).jumpDest = NONE
 Proof
   simp[step_call_def] >> strip_tac >>
+  (* pop_stack *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> pairarg_tac >> gvs[] >> strip_tac >>
+  (* memory_expansion_info *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* access_address *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* get_accounts *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* the delegate lookup, which returns a pair *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
-  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[ignore_bind_def] >>
+  (* the opcode's own execution gas *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* EIP-8037: the creation charge, in state gas *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* the static check *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* expand_memory *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* get_gas_left, then the child's grant, which is a pair *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1716,12 +1782,7 @@ Proof
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
-  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
-  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  rpt gen_tac >> strip_tac >>
-  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
-  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  rpt gen_tac >> strip_tac >>
+  (* get_callee *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1730,6 +1791,10 @@ Proof
   qpat_x_assum`_ = (_,_)`kall_tac >>
   IF_CASES_TAC >> gvs[] >- (
     strip_tac >>
+    (* the child is never entered, so its creation refills *)
+    drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+    disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+    rpt gen_tac >> strip_tac >>
     drule(REWRITE_RULE[preserves_jumpDest_def]
             preserves_jumpDest_abort_call_value) >>
     rw[] ) >>
@@ -1742,6 +1807,9 @@ Proof
   gen_tac >> strip_tac >>
   IF_CASES_TAC >> gvs[] >- (
     strip_tac >>
+    drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+    disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+    rpt gen_tac >> strip_tac >>
     drule(REWRITE_RULE[preserves_jumpDest_def]
             preserves_jumpDest_abort_unuse) >>
     rw[] ) >>
@@ -1764,6 +1832,10 @@ Theorem preserves_jumpDest_NONE_proceed_create:
 Proof
   simp[proceed_create_def] >> strip_tac >>
   gvs[ignore_bind_def] >>
+  (* EIP-8037: the accounts read that decides this child's creation charge. *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
@@ -1793,39 +1865,47 @@ Theorem preserves_jumpDest_NONE_step_create:
   (FST (HD s'.contexts)).jumpDest = NONE
 Proof
   simp[step_create_def] >> strip_tac >>
+  (* pop_stack *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* memory_expansion_info *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  (* the opcode's execution gas *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* expand_memory *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* read_memory *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* get_callee *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  (* get_accounts *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
-  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
-  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  rpt gen_tac >> strip_tac >>
+  (* assert *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  (* assert_not_static *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  (* set_return_data *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* get_num_contexts *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
@@ -1833,16 +1913,27 @@ Proof
   qpat_x_assum`_ = (_,_)`mp_tac >>
   IF_CASES_TAC >- (
     strip_tac >>
+    (* no child is entered: the creation charge never happens *)
     drule(REWRITE_RULE[preserves_jumpDest_def]
-            preserves_jumpDest_abort_unuse) >>
+            preserves_jumpDest_abort_create) >>
     rw[] ) >>
   strip_tac >>
+  (* access_address *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  (* ensure_storage_in_domain *)
   drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
   disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  (* EIP-8037: the destination's creation charge, in state gas *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
+  (* the child's withheld grant *)
+  drule bind_preserves_jumpDest_NONE_imp >> simp[] >>
+  disch_then irule >> qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >> gvs[ignore_bind_def] >>
   gvs[COND_RATOR] >>
   qpat_x_assum`_ = (_,_)`mp_tac >>
   IF_CASES_TAC >- (
@@ -2358,17 +2449,14 @@ Proof
   >> rename1`handle_create _ _ = (INR eout,s1)`
   >> (* handle_create only modifies the head context's FST (via *)
   (* set_current_context) or reraise/fail. TL is preserved.          *)
+  (* EIP-8037: the deposit's state charge and the account update it is
+     followed by are two more of those, and unfolding the deposit's case
+     leaves each of them as an opaque equation in a hypothesis, where the
+     charge's own `if`s are out of the simplifier's reach.  The tail is
+     what this needs and `handle_create_preserves_tl_and_snd_hd` is stated
+     for the whole of `handle_create`, so read it off there. *)
   `TL s1.contexts = TL s.contexts` by (
-       Cases_on `s1.contexts` >> Cases_on `s.contexts` >> gvs[]
-       >> qpat_x_assum `handle_create _ _ = _` mp_tac
-       >> simp[handle_create_def, return_destination_CASE_rator,
-              bind_def, ignore_bind_def, get_return_data_def,
-              get_output_to_def, get_current_context_def,
-              return_def, fail_def, reraise_def, consume_gas_def,
-              update_accounts_def, assert_def,
-              vfmTypesTheory.option_CASE_rator,
-              set_current_context_def, AllCaseEqs()]
-       >> strip_tac >> gvs[] )
+       drule_all handle_create_preserves_tl_and_snd_hd >> gvs[] )
   >> strip_tac
   >> (* LENGTH > 1 because n ≤ 1 ⇒ reraise ⇒ INR, not INL *)
   `LENGTH s1.contexts > 1` by (
@@ -2402,8 +2490,21 @@ Proof
          restore_state_gas_def, forfeit_remaining_gas_def,
          repay_state_gas_spill_def, repay_state_gas_spill_context_def,
          absorb_state_gas_def, reraise_def]
-  >> Cases_on `s.contexts` >> fs[]
-  >> Cases_on `t` >> fs[]
+  (* EIP-8037: the failure path's refund of the child's creation charge is
+     an opaque output whose own `if` sits in a hypothesis, so the branches
+     below read the frames off a variable nothing can unfold.  Replace that
+     output by the state the credit's equation names, which leaves the head
+     frame a record update of the one already known to have
+     `jumpDest = NONE`. *)
+  >> TRY (qpat_x_assum `credit_new_account _ _ = (_,_)`
+            (fn th => SUBST_ALL_TAC
+               (SYM (CONJUNCT2
+                 (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th)))))
+  >> Cases_on `(FST (HD s1.contexts)).msgParams.newAccountCharged`
+  >> Cases_on `s.contexts`
+  >> fs[vfmStoragePredicatesTheory.credit_new_account_contexts]
+  >> Cases_on `t`
+  >> fs[vfmStoragePredicatesTheory.credit_new_account_contexts]
 QED
 
 (* Main theorem: step INL preserves all_jumpDest_NONE *)
