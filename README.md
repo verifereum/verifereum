@@ -55,14 +55,14 @@ verifereum/
 
 Verifereum is developed in the [HOL4](https://hol-theorem-prover.org) theorem prover, which is written in Standard ML, and is built with [`holbuild`](https://github.com/HOL-Theorem-Prover/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies. The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-For a local build, install `holbuild` v0.11.2 or later (`minimum_version` in `holproject.toml`) and run:
+For a local build, install `holbuild` v0.12.0 or later (`minimum_version` in `holproject.toml`) and run:
 
 ```bash
 holbuild buildhol
 holbuild -j"$(nproc)" build
 ```
 
-`holbuild buildhol` builds and caches the HOL toolchain and dependencies specified by `holproject.toml`.
+`holbuild buildhol` builds and caches the HOL toolchain and dependencies specified by `holproject.toml`. A local build checks proof steps against `tactic_timeout` in `holproject.toml`; since holbuild 0.12.0 a step that times out fails the build even inside `TRY` or `ORELSE`. CI builds with `--skip-proof-steps`, so it does not check this.
 
 Running the EEST conformance tests is described in [tests/README.md](tests/README.md).
 
