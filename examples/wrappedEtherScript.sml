@@ -166,6 +166,17 @@ Definition balance_slot_key_def:
     Keccak_256_w64 (balance_slot_word a)
 End
 
+(* WETH9's nested mapping is stored at slot 4, owner before spender. *)
+Definition allowance_slot_key_def:
+  allowance_slot_key (owner:address) (spender:address): bytes32 =
+    word_of_bytes_be $ Keccak_256_w64 $
+      REVERSE (word_to_bytes_le (w2w spender : bytes32)) ++
+      REVERSE (word_to_bytes_le
+        (word_of_bytes_be (Keccak_256_w64
+          (REVERSE (word_to_bytes_le (w2w owner : bytes32)) ++
+           REVERSE (word_to_bytes_le (4w:bytes32)))) : bytes32))
+End
+
 Definition Keccak_256_string_def:
   Keccak_256_string s =
   Keccak_256_w64 $ MAP (n2w o ORD) s
@@ -176,18 +187,20 @@ val () = cv_auto_trans Keccak_256_string_def;
 Datatype:
   WETH_state = <|
     balances : address -> num
-  ; allowances : address -> num  (* type? *)
+  ; allowances : address -> address -> num
   ; locked : num
   ; touched : address set
+  ; allowances_touched : (address # address) set
   |>
 End
 
 Definition empty_WETH_state_def:
   empty_WETH_state = <|
     balances := K 0
-  ; allowances := K 0
+  ; allowances := K (K 0)
   ; locked := 0
   ; touched := {}
+  ; allowances_touched := {}
   |>
 End
 
@@ -198,9 +211,9 @@ End
 Definition wf_WETH_state_def:
   wf_WETH_state ws ⇔
     { a | 0 < ws.balances a } SUBSET ws.touched ∧
-    { a | 0 < ws.allowances a } SUBSET ws.touched ∧
+    { p | 0 < ws.allowances (FST p) (SND p) } SUBSET ws.allowances_touched ∧
     (∀a. ws.balances a < 2 ** 256) ∧
-    (∀a. ws.allowances a < 2 ** 256) ∧
+    (∀owner spender. ws.allowances owner spender < 2 ** 256) ∧
     ws.locked < 2 ** 256 ∧
     total_balances ws ≤ ws.locked
 End
@@ -349,7 +362,17 @@ Definition WETH_EVM_def:
   (∀a. balance_slot_key a ∉ {0w; 1w; 2w} ∧
        (a ∈ ws.touched ∨ balance_slot_key a ∉ IMAGE balance_slot_key ws.touched) ⇒
        lookup_storage (balance_slot_key a) s.storage = n2w (ws.balances a)) ∧
-  (* TODO: same for allowances *)
+  (* Balance writes may mask an allowance slot on a hash collision. The
+     separate touched-pair set stays unchanged during a balance transfer. *)
+  (∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉ IMAGE balance_slot_key ws.touched ∧
+     ((owner, spender) ∈ ws.allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          ws.allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender) s.storage =
+       n2w (ws.allowances owner spender)) ∧
   lookup_storage 0w s.storage =
     0x577261707065642045746865720000000000000000000000000000000000001Aw ∧
   lookup_storage 1w s.storage =
@@ -375,16 +398,15 @@ Proof
   \\ qmatch_asmsub_abbrev_tac`addr =+ s`
   \\ simp[Abbr`ms`, lookup_account_def, APPLY_UPDATE_THM]
   \\ simp[Abbr`addr`]
-  \\ reverse conj_tac
-  >- (
-    qunabbrev_tac`s`
-    \\ rewrite_tac[account_state_accessors]
-    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
-    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
-    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
-    \\ CONV_TAC (RAND_CONV cv_eval)
-    \\ CONV_TAC (listLib.list_EQ_CONV EVAL))
-  \\ rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
+  \\ qunabbrev_tac`s`
+  \\ rewrite_tac[account_state_accessors]
+  \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+  \\ CONV_TAC (RAND_CONV cv_eval)
+  \\ CONV_TAC (listLib.list_EQ_CONV EVAL)
 QED
 
 (*
