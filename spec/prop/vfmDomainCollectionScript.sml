@@ -284,6 +284,13 @@ Proof
             irule ignore_bind_computes_minimal_domain) \\ rw[])
 QED
 
+Theorem credit_new_account_computes_minimal_domain[simp]:
+  computes_minimal_domain (credit_new_account charged)
+Proof
+  rw[credit_new_account_def]
+  \\ rpt IF_CASES_TAC \\ rw[]
+QED
+
 Theorem set_rollback_computes_minimal_domain[simp]:
   computes_minimal_domain (set_rollback x)
 Proof
@@ -377,10 +384,27 @@ Proof
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  (* The deposit path gained its state charge and its account update, so the
+     peel repeats rather than counting the statements out. *)
+  \\ rpt ((irule bind_computes_minimal_domain ORELSE
+            irule ignore_bind_computes_minimal_domain) \\ rw[])
+QED
+
+(* The deposit's state charge, like the other meter operations, reports an
+   outside-domain error to nobody: it either writes the meter back or fails
+   with out-of-gas.  The case analysis in `handle_step_computes_minimal_domain`
+   needs that fact about the charge the phase 3 deposit path adds. *)
+Theorem charge_state_gas_not_outside_domain[local,simp]:
+  charge_state_gas n s ≠ (INR (SOME (OutsideDomain x)), t)
+Proof
+  gvs[charge_state_gas_def, bind_def, ignore_bind_def, get_current_context_def,
+      set_current_context_def, consume_gas_def, get_gas_left_def, assert_def,
+      fail_def, return_def, LET_THM]
+  \\ rpt (CASE_TAC
+          \\ gvs[bind_def, ignore_bind_def, get_current_context_def,
+                 set_current_context_def, consume_gas_def, get_gas_left_def,
+                 assert_def, fail_def, return_def, LET_THM,
+                 CaseEq"prod", CaseEq"sum", CaseEq"option", CaseEq"bool"])
 QED
 
 Theorem handle_step_computes_minimal_domain[simp]:
@@ -937,6 +961,18 @@ Theorem abort_create_exists_computes_minimal_domain[simp]:
   computes_minimal_domain (abort_create_exists x)
 Proof
   rw[abort_create_exists_def] \\ tac
+QED
+
+Theorem abort_create_computes_minimal_domain[simp]:
+  computes_minimal_domain abort_create
+Proof
+  rw[abort_create_def] \\ tac
+QED
+
+Theorem charge_new_account_computes_minimal_domain[simp]:
+  computes_minimal_domain (charge_new_account charged)
+Proof
+  rw[charge_new_account_def] \\ tac
 QED
 
 Theorem get_rollback_computes_minimal_domain[simp]:
