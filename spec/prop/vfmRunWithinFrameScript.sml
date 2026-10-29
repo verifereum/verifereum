@@ -172,6 +172,20 @@ Proof
   original_tac >> simp[original_context_wrappers, original_primitives]
 QED
 
+(* EIP-8037's account-creation charge and credit, and the create abort that
+   charges nothing, touch only the state-gas meter and the stack: none of
+   them changes the original accounts. *)
+Theorem original_new_account_ops[local,simp]:
+  (!b s. (SND (charge_new_account b s)).originalAccounts = s.originalAccounts) /\
+  (!b s. (SND (credit_new_account b s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (abort_create s)).originalAccounts = s.originalAccounts)
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  rewrite_tac[charge_new_account_def, credit_new_account_def,
+    abort_create_def, LET_THM] >>
+  original_tac >> simp[original_context_wrappers, original_primitives]
+QED
+
 Theorem original_pop_and_incorporate[local]:
   !s. (SND (pop_and_incorporate_context success s)).originalAccounts = s.originalAccounts
 Proof
@@ -257,20 +271,42 @@ Theorem original_step_call[local]:
   !s. (SND (step_call op s)).originalAccounts = s.originalAccounts
 Proof
   gen_tac >> simp[step_call_def, LET_THM]
+  (* Peel the bind spine with `original_tac`, discharging each round's leaf
+     obligations with the projection lemmas.  `pairarg_tac` splits whatever
+     pair pattern the `<<-` binders leave behind, so each round is run with
+     `TRY`: a round with nothing left to split just peels and discharges.
+     The delegate the code resolves to is a `case`, which no peel rule
+     covers, so it is split at the end -- once the frame's binders are out
+     of scope and `qmatch_goalsub_abbrev_tac` can name its scrutinee. *)
   >> original_tac
   >> simp[original_context_wrappers, original_primitives,
-          original_access_address, original_call_wrappers, original_proceed_call]
-  >> pairarg_tac >> simp[] >> original_tac
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> TRY pairarg_tac >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> original_tac
   >> simp[original_context_wrappers, original_primitives,
-          original_access_address, original_call_wrappers, original_proceed_call]
-  >- (pairarg_tac >> simp[] >> original_tac
-      >> simp[original_context_wrappers, original_primitives]
-      >> pairarg_tac >> simp[] >> original_tac
-      >> simp[original_context_wrappers, original_primitives,
-              original_call_wrappers, original_proceed_call])
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> TRY pairarg_tac >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> original_tac
+  >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> TRY pairarg_tac >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> original_tac
+  >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
   >> qmatch_goalsub_abbrev_tac `get_delegate ac.code`
   >> Cases_on `get_delegate ac.code`
-  >> simp[original_primitives] >> original_tac
+  >> simp[original_primitives]
+  >> original_tac
   >> simp[original_access_address]
 QED
 
@@ -905,6 +941,7 @@ Proof
   >> simp[proceed_call_def, bind_def, ignore_bind_def,
           get_rollback_def, read_memory_def, get_caller_def,
           get_value_def, get_static_def, update_accounts_def,
+          get_accounts_def, account_empty_def,
           push_context_def, get_current_context_def, return_def,
           drain_state_gas_reservoir_def, set_current_context_def]
   >> `∀f. update_accounts f s = (INL (), s with rollback updated_by (λr. r with accounts updated_by f))`
@@ -978,6 +1015,12 @@ Theorem inr_grow_witness_step_call:
   inr_grow_witness inr_grow_P (step_call op)
 Proof
   simp[step_call_def]
+  (* Peel the prefix a statement at a time.  Every statement before the two
+     aborts and the child's entry leaves the frame alone, so each peel
+     discharges its guard from the `preserves_same_frame` rules; the two
+     aborts hand their `credit_new_account` back before unwinding.  The two
+     pair patterns the `<<-` binders leave behind -- the memory range and
+     the child's grant with its stipend -- are split with `pairarg_tac`. *)
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
@@ -985,22 +1028,28 @@ Proof
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
+  (* EIP-8037: this frame's execution charge, then the recipient's
+     account-creation charge, then the static-context check. *)
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  (* the child's own grant is paid after that charge *)
   >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  (* the balance test: the child is never entered, so its creation is
+     handed back and the frame unwinds without growing *)
   >> irule inr_grow_witness_cond >> conj_tac
-  >- (
-    (* abort_call_value is preserves_same_frame, never INR-grows *)
-    irule inr_grow_witness_of_preserves_same_frame >> simp[])
+  >- (irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+      >> irule inr_grow_witness_of_preserves_same_frame >> simp[])
   >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  (* the depth test: same, the creation is handed back before unwinding *)
   >> irule inr_grow_witness_cond >> conj_tac
-  >- (
-    (* abort_unuse is preserves_same_frame, never INR-grows *)
-    irule inr_grow_witness_of_preserves_same_frame >> simp[])
+  >- (irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+      >> irule inr_grow_witness_of_preserves_same_frame >> simp[])
   >> irule inr_grow_witness_proceed_call
 QED
 

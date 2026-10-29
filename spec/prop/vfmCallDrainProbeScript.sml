@@ -24,7 +24,8 @@ Theorem proceed_call_push_structure_counterexample:
     TL (SND out).contexts <> s0.contexts
 Proof
   simp[proceed_call_def, drain_state_gas_reservoir_def,
-       bind_def, ignore_bind_def, return_def, get_current_context_def,
+       bind_def, ignore_bind_def, return_def, get_accounts_def,
+       get_current_context_def,
        set_current_context_def, get_rollback_def, read_memory_def,
        get_caller_def, get_value_def, get_static_def, push_context_def,
        call_drain_destination_not_precompile] >>
@@ -45,7 +46,8 @@ Theorem proceed_create_push_structure_counterexample:
     MAP FST (TL (SND out).contexts) <> MAP FST s0.contexts
 Proof
   simp[proceed_create_def, drain_state_gas_reservoir_def,
-       bind_def, ignore_bind_def, return_def, get_current_context_def,
+       bind_def, ignore_bind_def, return_def, get_accounts_def,
+       get_current_context_def,
        set_current_context_def, update_accounts_def, get_rollback_def,
        get_original_def, set_original_def, push_context_def] >>
   rpt strip_tac >>
