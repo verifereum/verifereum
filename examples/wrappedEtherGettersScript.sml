@@ -415,6 +415,182 @@ val () = List.app (fn th => if null (hyp th) then () else
   [totalSupply_result_spec, decimals_result_spec, balanceOf_result_spec,
    allowance_result_spec, symbol_result_spec]
 
+Theorem transfer_value_zero[local]:
+  transfer_value f t 0 = I
+Proof
+  simp[FUN_EQ_THM, transfer_value_def]
+QED
+
+Theorem getter_model_instr[local]:
+  FST (SND (SND EVM_MODEL)) = EVM_INSTR
+Proof
+  simp[EVM_MODEL_def]
+QED
+
+fun getter_dest_star tm =
+  case strip_comb tm of
+    (f,[a,b]) =>
+      if same_const f ``STAR`` then (f,a,b)
+      else raise mk_HOL_ERR "wrappedEtherGettersScript" "dest_star" ""
+  | _ => raise mk_HOL_ERR "wrappedEtherGettersScript" "dest_star" ""
+fun getter_strip_star tm =
+  let val (_,a,b) = getter_dest_star tm
+  in getter_strip_star a @ getter_strip_star b end
+  handle HOL_ERR _ => [tm]
+
+(* Keep code inclusion as an explicit lifting premise; its finite check is
+   performed in Theorem proofs, not by a programmatic proof constructor. *)
+fun getter_lift spec =
+  let
+    val th = UNDISCH_ALL spec
+    val th = MATCH_MP SPEC_SUBSET_CODE th
+             |> Q.SPEC `fmap_entries parsed_contract_code` |> UNDISCH
+    val th = Q.SPEC `evm_Logs logs * evm_AddRefund addRefund *
+        evm_SubRefund subRefund * evm_TxParams txParams * SEP_T`
+        (MATCH_MP SPEC_FRAME th)
+      |> ONCE_REWRITE_RULE [GSYM SPEC_CODE]
+      |> REWRITE_RULE [getter_model_instr]
+    val post = rand (concl th)
+    val (star,_,_) = getter_dest_star post
+    fun mk_star (a,b) = list_mk_comb (star,[a,b])
+    fun head_name tm = fst (dest_const (fst (strip_comb tm)))
+    val factors = getter_strip_star post
+    val names = ["evm_Exception", "evm_ReturnData", "evm_Logs",
+      "evm_Rollback", "evm_Contexts", "evm_GasUsed", "evm_MsgParams",
+      "evm_AddRefund", "evm_SubRefund", "evm_TxParams"]
+    val picked = map (fn n => valOf (List.find (fn f => head_name f = n) factors)) names
+    val others = List.filter (fn f => not (Lib.mem (head_name f) names)) factors
+    val rest = List.foldl (fn (f,a) => mk_star (a,f)) (hd others) (tl others)
+    val post' = List.foldl (fn (f,a) => mk_star (a,f)) (hd picked) (tl picked @ [rest])
+    val th = CONV_RULE (RAND_CONV
+      (SIMP_CONV bool_ss [AC STAR_ASSOC STAR_COMM])) th
+    val ordered = EQT_ELIM (SIMP_CONV bool_ss [AC STAR_ASSOC STAR_COMM]
+      (mk_eq (rand (concl th),post')))
+    val th = CONV_RULE (RAND_CONV (REWR_CONV ordered)) th
+    val th = MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] SPEC_to_run_transaction) th
+    val (ants,_) = strip_imp (concl th)
+    val (q,form) = dest_eq (last ants)
+    val (tmS,tyS) = match_term form q
+    val th = INST tmS (INST_TYPE tyS th) |> REWRITE_RULE [AND_IMP_INTRO]
+    val th = INST [var_named th "s''" |-> ``s':execution_state``,
+                   var_named th "s'''" |-> ``s:execution_state``] th
+  in DISCH_ALL th end
+
+val symbol_lift = getter_lift symbol_result_spec
+val decimals_lift = getter_lift decimals_result_spec
+fun getter_code_tac g =
+  (rewrite_tac [SUBSET_DEF] >> Cases
+   >> rewrite_tac [IN_INSERT, NOT_IN_EMPTY, PAIR_EQ]
+   >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
+   >> simp [fmap_entries_def]
+   >> CONV_TAC (REWRITE_CONV [parsed_contract_code_eq] THENC EVAL)) g
+
+Theorem weth_symbol_run_transaction[local]:
+  (lookup_account addr accounts).code = contract_code /\
+  lookup_storage 1w (lookup_account addr accounts).storage =
+    0x5745544800000000000000000000000000000000000000000000000000000008w /\
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "symbol" []) 4000 s /\
+  access_slot_check dom (SK addr 1w)
+  ==>
+  ?result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') /\
+    result.result = NONE /\
+    result.output = enc (Tuple [String]) (ListV [BytesV (MAP (n2w o ORD) "WETH")]) /\
+    result.logs = [] /\
+    !b. (lookup_account b accounts').code =
+          (lookup_account b s.rollback.accounts).code /\
+        (lookup_account b accounts').storage =
+          (lookup_account b s.rollback.accounts).storage /\
+        (lookup_account b accounts').nonce =
+          (lookup_account b s.rollback.accounts).nonce
+Proof
+  PURE_REWRITE_TAC [zero_value_call_def]
+  >> strip_tac
+  >> strip_assume_tac contract_code_not_delegation
+  >> drule_all initial_state_call_code >> strip_tac
+  >> fs[GSYM parsed_contract_code_def]
+  >> drule_all wf_initial_state >> strip_tac
+  >> `?tail. tx.data = function_selector "symbol" [] ++ tail`
+     by gvs[IS_PREFIX_APPEND]
+  >> mp_tac (Q.INST [`p` |-> `ctxt.msgParams`, `rb` |-> `s.rollback`,
+       `d` |-> `dom`, `rd` |-> `[]`, `logs` |-> `[]`,
+       `addRefund` |-> `0`, `subRefund` |-> `0`,
+       `txParams` |-> `s.txParams`, `callee` |-> `addr`,
+       `s'` |-> `s with rollback updated_by
+          (\r. r with accounts updated_by transfer_value tx.from addr tx.value)`]
+       symbol_lift)
+  >> (impl_tac >- getter_code_tac)
+  >> asm_rewrite_tac [buffer_to_list_of_list]
+  >> impl_tac
+  >- (simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+      >> simp[STAR_evm2set, STAR_CODE_POOL_evm2set, cond_STAR, SEP_T_def,
+           transfer_value_zero, execution_state_component_equality,
+           rollback_state_component_equality, fmap_entries_def]
+      >> `s with rollback updated_by
+           (\r. r with accounts updated_by I) = s` by
+         simp[execution_state_component_equality, rollback_state_component_equality]
+      >> `LENGTH tail + 4 <= 16777216` by gvs[getter_selectors]
+      >> `LENGTH tail + 4 < 2 ** 256` by simp[]
+      >> gvs[getter_selectors, getter_warm_slot_gas]
+      >> rw[access_slot_cost_def, warm_access_cost_def, cold_sload_cost_def])
+  >> strip_tac >> gvs[accesses_add_slot_def]
+QED
+
+Theorem weth_decimals_run_transaction[local]:
+  (lookup_account addr accounts).code = contract_code /\
+  lookup_storage 2w (lookup_account addr accounts).storage = 18w /\
+  zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
+    (function_selector "decimals" []) 4000 s /\
+  access_slot_check dom (SK addr 2w)
+  ==>
+  ?result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') /\
+    result.result = NONE /\
+    result.output = enc (Tuple [Uint 8]) (ListV [NumV 18]) /\
+    result.logs = [] /\
+    !b. (lookup_account b accounts').code =
+          (lookup_account b s.rollback.accounts).code /\
+        (lookup_account b accounts').storage =
+          (lookup_account b s.rollback.accounts).storage /\
+        (lookup_account b accounts').nonce =
+          (lookup_account b s.rollback.accounts).nonce
+Proof
+  PURE_REWRITE_TAC [zero_value_call_def]
+  >> strip_tac
+  >> strip_assume_tac contract_code_not_delegation
+  >> drule_all initial_state_call_code >> strip_tac
+  >> fs[GSYM parsed_contract_code_def]
+  >> drule_all wf_initial_state >> strip_tac
+  >> `?tail. tx.data = function_selector "decimals" [] ++ tail`
+     by gvs[IS_PREFIX_APPEND]
+  >> mp_tac (Q.INST [`p` |-> `ctxt.msgParams`, `rb` |-> `s.rollback`,
+       `d` |-> `dom`, `rd` |-> `[]`, `logs` |-> `[]`,
+       `addRefund` |-> `0`, `subRefund` |-> `0`,
+       `txParams` |-> `s.txParams`, `callee` |-> `addr`,
+       `s'` |-> `s with rollback updated_by
+          (\r. r with accounts updated_by transfer_value tx.from addr tx.value)`]
+       decimals_lift)
+  >> (impl_tac >- getter_code_tac)
+  >> asm_rewrite_tac [buffer_to_list_of_list]
+  >> (impl_tac >- gvs[getter_selectors])
+  >> impl_tac
+  >- (simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+      >> simp[STAR_evm2set, STAR_CODE_POOL_evm2set, cond_STAR, SEP_T_def,
+           transfer_value_zero, execution_state_component_equality,
+           rollback_state_component_equality, fmap_entries_def]
+      >> `s with rollback updated_by
+           (\r. r with accounts updated_by I) = s` by
+         simp[execution_state_component_equality, rollback_state_component_equality]
+      >> `LENGTH tail + 4 <= 16777216` by gvs[getter_selectors]
+      >> `LENGTH tail + 4 < 2 ** 256` by simp[]
+      >> gvs[getter_selectors]
+      >> rw[access_slot_cost_def, warm_access_cost_def, cold_sload_cost_def])
+  >> strip_tac >> gvs[accesses_add_slot_def]
+QED
+
 Theorem WETH_EVM_symbol_run_transaction:
   WETH_EVM addr ws accounts ∧
   zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
@@ -434,7 +610,8 @@ Theorem WETH_EVM_symbol_run_transaction:
         (lookup_account b accounts').nonce =
           (lookup_account b s.rollback.accounts).nonce
 Proof
-  cheat
+  strip_tac >> irule weth_symbol_run_transaction
+  >> qexists_tac `addr` >> gvs[WETH_EVM_def, LET_THM]
 QED
 
 Theorem WETH_EVM_decimals_run_transaction:
@@ -456,7 +633,8 @@ Theorem WETH_EVM_decimals_run_transaction:
         (lookup_account b accounts').nonce =
           (lookup_account b s.rollback.accounts).nonce
 Proof
-  cheat
+  strip_tac >> irule weth_decimals_run_transaction
+  >> qexists_tac `addr` >> gvs[WETH_EVM_def, LET_THM]
 QED
 
 Theorem WETH_EVM_totalSupply_run_transaction:
