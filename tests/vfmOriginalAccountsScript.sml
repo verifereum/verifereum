@@ -90,10 +90,10 @@ QED
 
 (* EIP-8037 phase 3: the deposit is 6 execution gas a keccak word plus 1530
    state gas a byte, the latter out of the child's reservoir, so the one byte
-   here now fits the 100-gas child that EIP-170's 200 a byte ran out of gas
-   on: the create succeeds and pushes its address.  This is the positive
-   control for the case below. *)
-Theorem original_accounts_survive_code_deposit_out_of_gas:
+   here fits the 100-gas child that EIP-170's 200 a byte ran out of gas on:
+   the create succeeds and pushes its address.  The case below is the same
+   deposit on a child that cannot pay it. *)
+Theorem original_accounts_survive_code_deposit_fits_child_gas:
   original_accounts_observation
     (original_child_run F 100
       [0x60w; 0w; 0x60w; 0w; 0x53w; 0x60w; 1w; 0x60w; 0w; 0xf3w]) =
@@ -107,7 +107,7 @@ QED
    state gas is not reached, since execution gas is charged first.  The
    create fails, its destination is rolled back to the account the fixture
    gave it, and the original accounts stand. *)
-Theorem original_accounts_survive_code_deposit_child_out_of_gas:
+Theorem original_accounts_survive_code_deposit_out_of_gas:
   original_accounts_observation
     (original_child_run F 23
       [0x60w; 0w; 0x60w; 0w; 0x53w; 0x60w; 1w; 0x60w; 0w; 0xf3w]) =
