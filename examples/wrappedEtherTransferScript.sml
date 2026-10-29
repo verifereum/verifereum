@@ -62,6 +62,7 @@ Proof
       ∀a. a ≠ src ∧ a ≠ dst ⇒ ws'.balances a = ws.balances a`
      by simp[Abbr`ws'`, WETH_transfer_def, APPLY_UPDATE_THM]
   \\ `ws'.touched = dst INSERT ws.touched ∧ ws'.allowances = ws.allowances ∧
+      ws'.allowances_touched = ws.allowances_touched ∧
       ws'.locked = ws.locked`
      by simp[Abbr`ws'`, WETH_transfer_def]
   \\ `SIGMA ws'.balances T0 = SIGMA ws.balances T0`
