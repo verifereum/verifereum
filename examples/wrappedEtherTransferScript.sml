@@ -832,20 +832,22 @@ Theorem WETH_transfer_allowance_storage[local]:
           ws.allowances_touched) ⇒
      lookup_storage (allowance_slot_key owner spender) st =
        n2w (ws.allowances owner spender)) ⇒
-  let st1 = update_storage (balance_slot_key src)
-              (n2w (ws.balances src - wad)) st;
-      st2 = update_storage (balance_slot_key dst)
-              (lookup_storage (balance_slot_key dst) st1 + n2w wad) st1;
-      ws' = WETH_transfer src dst wad ws in
   ∀owner spender.
      allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
-     allowance_slot_key owner spender ∉ IMAGE balance_slot_key ws'.touched ∧
-     ((owner, spender) ∈ ws'.allowances_touched ∨
+     allowance_slot_key owner spender ∉
+       IMAGE balance_slot_key (WETH_transfer src dst wad ws).touched ∧
+     ((owner, spender) ∈ (WETH_transfer src dst wad ws).allowances_touched ∨
       allowance_slot_key owner spender ∉
         IMAGE (λ(owner, spender). allowance_slot_key owner spender)
-          ws'.allowances_touched) ⇒
-     lookup_storage (allowance_slot_key owner spender) st2 =
-       n2w (ws'.allowances owner spender)
+          (WETH_transfer src dst wad ws).allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender)
+       (update_storage (balance_slot_key dst)
+         (lookup_storage (balance_slot_key dst)
+           (update_storage (balance_slot_key src)
+             (n2w (ws.balances src - wad)) st) + n2w wad)
+         (update_storage (balance_slot_key src)
+           (n2w (ws.balances src - wad)) st)) =
+       n2w ((WETH_transfer src dst wad ws).allowances owner spender)
 Proof
   simp_tac std_ss [LET_THM, WETH_transfer_def, WETH_state_accfupds,
                    WETH_state_accessors, IMAGE_INSERT, IN_INSERT]
