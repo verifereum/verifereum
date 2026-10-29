@@ -571,6 +571,15 @@ Proof
   >> ho_match_mp_tac cp_get_set_context >> simp[]
 QED
 
+(* EIP-8037: the account-creation charge and its refund are the state-gas
+   meter leaf gated by a flag, so they are cp whichever way the flag falls. *)
+Theorem cp_new_account_charge[simp]:
+  cp (charge_new_account charged) ∧ cp (credit_new_account charged)
+Proof
+  Cases_on `charged`
+  >> rw[charge_new_account_def, credit_new_account_def]
+QED
+
 Theorem cp_step_sstore_gas[simp]:
   cp (step_sstore_gas_consumption addr key value)
 Proof
@@ -742,7 +751,15 @@ Proof
           set_current_context_def, return_def,
           update_gas_refund_def, set_rollback_def,
           absorb_state_gas_def, repay_state_gas_spill_def,
-          repay_state_gas_spill_context_def]
+          repay_state_gas_spill_context_def,
+          (* EIP-8037: the failure branch credits the child's creation
+             charge over the merged meter before it rolls the rest back. *)
+          credit_new_account_def, credit_state_gas_refund_def]
+  (* that credit is gated by the child's flag, and only writes the meter *)
+  >> Cases_on `h0.msgParams.newAccountCharged`
+  >> simp[credit_new_account_def, credit_state_gas_refund_def, bind_def,
+          get_current_context_def, set_current_context_def, return_def,
+          fail_def, set_rollback_def]
   >> gvs[listTheory.FRONT_DEF, combinTheory.C_DEF]
   >> rw[] >> gvs[]
   >> Cases_on `t'` >> gvs[listTheory.FRONT_DEF]
@@ -946,6 +963,7 @@ Proof
           get_rollback_def, read_memory_def,
           get_caller_def, get_value_def, get_static_def,
           get_current_context_def,
+          get_accounts_def,
           push_context_def,
           vfmContextTheory.initial_context_def,
           vfmContextTheory.initial_msg_params_def]
@@ -966,6 +984,14 @@ Theorem cp_abort_unuse[simp]:
   cp (abort_unuse n)
 Proof
   cp_simp_tac [abort_unuse_def]
+QED
+
+(* EIP-8037: the create that aborts before its child is entered only pushes
+   the zero and steps the pc, both cp. *)
+Theorem cp_abort_create[simp]:
+  cp abort_create
+Proof
+  cp_simp_tac [abort_create_def]
 QED
 
 (*
@@ -1192,7 +1218,13 @@ Proof
           set_current_context_def, return_def,
           update_gas_refund_def, set_rollback_def,
           absorb_state_gas_def, repay_state_gas_spill_def,
-          repay_state_gas_spill_context_def]
+          repay_state_gas_spill_context_def,
+          (* EIP-8037: the failure branch's creation credit, a meter write *)
+          credit_new_account_def, credit_state_gas_refund_def]
+  >> Cases_on `h0.msgParams.newAccountCharged`
+  >> simp[credit_new_account_def, credit_state_gas_refund_def, bind_def,
+          get_current_context_def, set_current_context_def, return_def,
+          fail_def, set_rollback_def, absorb_state_gas_def]
 QED
 
 (* General: cp preserves contexts ≠ [] *)
@@ -1338,7 +1370,17 @@ Proof
   >> gvs[ignore_bind_def, bind_def, CaseEq"prod", CaseEq"sum",
          reraise_def, assert_def, consume_gas_def, return_def, fail_def,
          set_current_context_def, CaseEq"bool",
-         update_accounts_def, get_current_context_def]
+         update_accounts_def, get_current_context_def,
+         (* EIP-8037: the deposit's state-gas charge, a head-frame write. *)
+         charge_state_gas_def]
+  >> rpt (IF_CASES_TAC
+          >> gvs[return_def, reraise_def, snc_def, fail_def,
+                 bind_def, get_current_context_def, set_current_context_def,
+                 assert_def, consume_gas_def, update_accounts_def])
+  >> rpt (BasicProvers.FULL_CASE_TAC
+          >> gvs[return_def, reraise_def, snc_def, fail_def, bind_def,
+                 get_current_context_def, set_current_context_def,
+                 assert_def, consume_gas_def, update_accounts_def])
 QED
 
 (* Pair-aware version: avoids polymorphic type mismatch on SND *)
@@ -1356,10 +1398,19 @@ Proof
   >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def, snc_def]
   >> gvs[ignore_bind_def, bind_def, assert_def, return_def, fail_def,
          consume_gas_def, get_current_context_def,
-         set_current_context_def, vfmExecutionTheory.update_accounts_def]
-  >> rpt (IF_CASES_TAC >> gvs[return_def, reraise_def, snc_def, fail_def])
+         set_current_context_def, vfmExecutionTheory.update_accounts_def,
+         (* EIP-8037: the deposit's state-gas charge, a head-frame write. *)
+         charge_state_gas_def]
+  >> rpt (IF_CASES_TAC
+          >> gvs[return_def, reraise_def, snc_def, fail_def,
+                 bind_def, get_current_context_def, set_current_context_def,
+                 assert_def, consume_gas_def,
+                 vfmExecutionTheory.update_accounts_def])
   >> rpt (BasicProvers.FULL_CASE_TAC
-          >> gvs[return_def, reraise_def, snc_def, fail_def])
+          >> gvs[return_def, reraise_def, snc_def, fail_def, bind_def,
+                 get_current_context_def, set_current_context_def,
+                 assert_def, consume_gas_def,
+                 vfmExecutionTheory.update_accounts_def])
 QED
 
 (* pop_and_incorporate_context: result has non-empty contexts when starting ≥ 2 *)
@@ -1382,7 +1433,13 @@ Proof
   >> Cases_on `success` >> gvs[return_def]
   >> gvs[push_logs_def, bind_def, get_current_context_def,
          set_current_context_def, return_def,
-         update_gas_refund_def, set_rollback_def]
+         update_gas_refund_def, set_rollback_def,
+         (* EIP-8037: the failure branch's creation credit, a meter write *)
+         credit_new_account_def, credit_state_gas_refund_def]
+  >> Cases_on `h0.msgParams.newAccountCharged`
+  >> gvs[credit_new_account_def, credit_state_gas_refund_def, bind_def,
+         get_current_context_def, set_current_context_def, return_def,
+         fail_def, set_rollback_def]
   >> qmatch_asmsub_abbrev_tac `repay_state_gas_spill st`
   >> `st.contexts <> []` by simp[Abbr `st`]
   >> `cp repay_state_gas_spill` by simp[cp_state_gas_meter]
@@ -1491,6 +1548,9 @@ Proof
        get_rollback_def, get_original_def,
        get_current_context_def,
        set_original_def, vfmExecutionTheory.update_accounts_def,
+       (* EIP-8037: the reader of the accounts that decides this child's
+          creation charge, before the reservoir and the push. *)
+       get_accounts_def,
        push_context_def, set_last_accounts_def, listTheory.SNOC_APPEND]
 QED
 
@@ -1503,6 +1563,9 @@ Proof
        get_rollback_def, read_memory_def,
        get_caller_def, get_value_def, get_static_def,
        get_current_context_def, get_callee_def,
+       (* EIP-8037: the reader of the accounts that decides this child's
+          creation charge, before the reservoir and the push. *)
+       get_accounts_def,
        push_context_def, vfmExecutionTheory.update_accounts_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
@@ -1642,6 +1705,7 @@ Proof
           get_rollback_def, read_memory_def,
           get_caller_def, get_value_def, get_static_def,
           get_current_context_def, get_callee_def,
+          get_accounts_def,
           drain_state_gas_reservoir_def, set_current_context_def,
           push_context_def,
           vfmContextTheory.initial_context_def,
@@ -1683,6 +1747,7 @@ Proof
           get_rollback_def, get_original_def,
           drain_state_gas_reservoir_def, set_current_context_def,
           get_current_context_def,
+          get_accounts_def,
           set_original_def, vfmExecutionTheory.update_accounts_def,
           push_context_def,
           vfmContextTheory.initial_context_def,
@@ -1764,14 +1829,17 @@ Theorem step_call_inner_sne[local]:
   snc (SND (do
     set_return_data [];
     sucDepth <- get_num_contexts;
-    if sucDepth > 1024 then abort_unuse b
+    (* EIP-8037: the depth abort refills the child's creation charge first *)
+    if sucDepth > 1024
+    then do credit_new_account charged; abort_unuse b od
     else proceed_call op sender addr value_arg args_off args_size code stipend
            (Memory mr)
   od s)) ∧
   (SND (do
     set_return_data [];
     sucDepth <- get_num_contexts;
-    if sucDepth > 1024 then abort_unuse b
+    if sucDepth > 1024
+    then do credit_new_account charged; abort_unuse b od
     else proceed_call op sender addr value_arg args_off args_size code stipend
            (Memory mr)
   od s)).contexts ≠ []
