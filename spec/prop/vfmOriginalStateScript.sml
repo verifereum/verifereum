@@ -216,6 +216,7 @@ Definition stack_original_run_create_def:
     let crb = HD s.contexts in
     let ctxt = FST crb in
     let calleeAddress = ctxt.msgParams.callee in
+    let rbAccounts = s.rollback.accounts in
     if IS_SOME tx.to then
       let charge = if 0 < tx.value ∧
                        account_empty (lookup_account calleeAddress
@@ -223,7 +224,7 @@ Definition stack_original_run_create_def:
                     then new_account_state_gas else 0 in
       (case charge_state_gas_context ctxt charge of
        | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
-                        accounts
+                        rbAccounts
                         (s with contexts := [
                           (ctxt with gasUsed := ctxt.msgParams.gasLimit,
                            SND crb)])
@@ -236,10 +237,10 @@ Definition stack_original_run_create_def:
              if fIN calleeAddress precompile_addresses
              then SOME calleeAddress else NONE))
     else
-      let rbAccounts = s.rollback.accounts in
       let callee = lookup_account calleeAddress rbAccounts in
       if account_already_created callee then
-        INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
+        INL $ post_transaction_accounting blk tx (SOME AddressCollision)
+              rbAccounts
               (s with contexts := [
                 (ctxt with gasUsed := ctxt.msgParams.gasLimit,
                  SND crb)
@@ -249,7 +250,7 @@ Definition stack_original_run_create_def:
                        then new_account_state_gas else 0 in
         (case charge_state_gas_context ctxt charge of
          | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
-                          accounts
+                          rbAccounts
                           (s with contexts := [
                             (ctxt with gasUsed := ctxt.msgParams.gasLimit,
                              SND crb)])

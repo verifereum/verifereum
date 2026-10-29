@@ -2347,6 +2347,11 @@ Definition run_create_def:
     let crb = HD s.contexts in
     let ctxt = FST crb in
     let calleeAddress = ctxt.msgParams.callee in
+    (* EIP-8037: the state a preparation failure settles from -- the
+       transaction's own pre-transaction updates (the sender's nonce and the
+       fee) applied, and nothing else.  The charges below are decided by the
+       account at transaction start, `accounts`, which is the parameter. *)
+    let rbAccounts = s.rollback.accounts in
     if IS_SOME tx.to then
       (* EIP-8037: a value transfer to an account that is not alive creates
          it, and the top frame pays for that out of its own meter before it
@@ -2357,7 +2362,7 @@ Definition run_create_def:
                     then new_account_state_gas else 0 in
       (case charge_state_gas_context ctxt charge of
        | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
-                        accounts
+                        rbAccounts
                         (s with contexts := [
                           (ctxt with gasUsed := ctxt.msgParams.gasLimit,
                            SND crb)])
@@ -2370,10 +2375,10 @@ Definition run_create_def:
              if fIN calleeAddress precompile_addresses
              then SOME calleeAddress else NONE))
     else
-      let rbAccounts = s.rollback.accounts in
       let callee = lookup_account calleeAddress rbAccounts in
       if account_already_created callee then
-        INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
+        INL $ post_transaction_accounting blk tx (SOME AddressCollision)
+              rbAccounts
               (s with contexts := [
                 (ctxt with gasUsed := ctxt.msgParams.gasLimit,
                  SND crb)
@@ -2388,7 +2393,7 @@ Definition run_create_def:
                        then new_account_state_gas else 0 in
         (case charge_state_gas_context ctxt charge of
          | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
-                          accounts
+                          rbAccounts
                           (s with contexts := [
                             (ctxt with gasUsed := ctxt.msgParams.gasLimit,
                              SND crb)])
