@@ -448,8 +448,8 @@ fun mk_code_facts (cfg : config) =
   in
     {code_c = code_c, parsed_c = parsed_c, length_th = length_th,
      flookup = flookup, insts = inst_table cfg,
-     simp = SIMP_CONV (srw_ss() ++ word_of_bytes_ss ++
-                       simpLib.rewrites (base_simps () @ #simps cfg)) []}
+     simp = SIMP_CONV (simpLib.&& (srw_ss() ++ word_of_bytes_ss,
+                                   base_simps () @ #simps cfg)) []}
   end
 
 val code_pat = “(p : message_parameters).code”
