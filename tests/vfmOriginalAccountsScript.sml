@@ -88,9 +88,28 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* EIP-8037 phase 3: the deposit is 6 execution gas a keccak word plus 1530
+   state gas a byte, the latter out of the child's reservoir, so the one byte
+   here now fits the 100-gas child that EIP-170's 200 a byte ran out of gas
+   on: the create succeeds and pushes its address.  This is the positive
+   control for the case below. *)
 Theorem original_accounts_survive_code_deposit_out_of_gas:
   original_accounts_observation
     (original_child_run F 100
+      [0x60w; 0w; 0x60w; 0w; 0x53w; 0x60w; 1w; 0x60w; 0w; 0xf3w]) =
+  SOME (INL (), 1, 0w, T, 0w, 1, 7, [0x300w])
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The same deposit, on a child that cannot pay it: the code runs in 18 gas,
+   so 23 leaves 5 where the deposit's 6 execution gas needs 6 -- and the
+   state gas is not reached, since execution gas is charged first.  The
+   create fails, its destination is rolled back to the account the fixture
+   gave it, and the original accounts stand. *)
+Theorem original_accounts_survive_code_deposit_child_out_of_gas:
+  original_accounts_observation
+    (original_child_run F 23
       [0x60w; 0w; 0x60w; 0w; 0x53w; 0x60w; 1w; 0x60w; 0w; 0xf3w]) =
   SOME (INL (), 1, 0w, T, 0w, 0, 7, [0w])
 Proof
