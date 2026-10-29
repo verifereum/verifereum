@@ -125,8 +125,8 @@ in
 end
 
 (* Without a cap, Poly/ML lets a test's heap grow far past its live data,
-   enough for one large test to exhaust memory. holbuild's --maxheap caps
-   only holbuild itself; --max-heap reaches the children. *)
+   enough for one large test to exhaust memory. --max-heap reaches the
+   children; --maxheap never does, and holbuild rejects it on Linux. *)
 val default_max_heap = "--max-heap=24000"
 
 fun with_max_heap options =
