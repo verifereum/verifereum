@@ -667,7 +667,8 @@ fun key_tac (g as (asl, _)) =
 
 (* withdraw(wad) with wad at most the caller's balance: either the CALL
    paying the caller succeeds, and the balance slot is debited, wad paid
-   and logged; or it fails and the transaction reverts *)
+   and logged; or it fails and the transaction reverts. A safety statement:
+   it doesn't say when the CALL fails *)
 Theorem weth_withdraw_run_transaction:
   (lookup_account addr accounts).code = contract_code ∧
   zero_value_call (Collect dd, chainId, prevHashes, blk) accounts tx addr
@@ -933,8 +934,8 @@ QED
 
 (* withdraw(wad) over the WETH_EVM relation: either the caller's balance
    and the locked ether drop by wad, or the transaction reverts and WETH is
-   unchanged; assuming the caller's balance slot doesn't collide with a
-   touched account's or with slots 0-2 *)
+   unchanged (safety only, as above); assuming the caller's balance slot
+   doesn't collide with a touched account's or with slots 0-2 *)
 Theorem WETH_EVM_withdraw_run_transaction:
   WETH_EVM addr ws accounts ∧
   zero_value_call (Collect dd, chainId, prevHashes, blk) accounts tx addr

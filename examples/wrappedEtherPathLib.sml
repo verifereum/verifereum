@@ -275,8 +275,8 @@ fun path_keys th =
   end
 
 (* a call's start: no pending exception or jump, no outer contexts, an
-   empty stack, and not a create, so no code deposit (codeCost, which only
-   a path ending in RETURN has) *)
+   empty stack, and not a create, so no code deposit (the codeCost of a
+   path ending in RETURN or REVERT) *)
 fun spec_start th =
   let
     val e = var_named th "e" and j = var_named th "j"
