@@ -108,7 +108,7 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
 
       - name: Build schema-2 HOL toolchain
         run: |
@@ -131,14 +131,6 @@ jobs:
         run: |
           set -o pipefail
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps 2>&1 | tee -a "$RUNNER_TEMP/holbuild.log"
-
-      - name: Save holbuild project snapshot
-        if: always()
-        uses: actions/cache/save@v6
-        continue-on-error: true
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.snapshot-key }}
 
       - name: Verify no successful-build checkpoints remain
         run: |
@@ -178,6 +170,17 @@ jobs:
             holbuild executable runtests_unchecked
           } 2>&1 | tee -a "$RUNNER_TEMP/holbuild.log"
 
+      # After the test runners: they request a 30 s tactic timeout, which the
+      # main build's entries (built with none) don't satisfy, so a snapshot
+      # saved before them makes every run rebuild those theories.
+      - name: Save holbuild project snapshot
+        if: always()
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
+
       - name: Write holbuild cache summary
         if: ${{ always() }}
         run: |
@@ -197,7 +200,7 @@ jobs:
             echo '| --- | ---: |'
             echo "| Theories built | $(count 'Theory built( |$)') |"
             echo "| Theories restored from cache | $(count 'Theory restored from cache') |"
-            echo "| Entries hydrated from the remote | $(count '^remote cache hydrated: ') |"
+            echo "| Entries fetched from the remote | $(count '^remote cache (hydrated|prefetched): ') |"
             echo "| Entries published to the remote | $(count '^remote cache published: ') |"
             echo "| Remote cache warnings | $(count '^holbuild: warning: .*remote') |"
           } >> "$GITHUB_STEP_SUMMARY"
