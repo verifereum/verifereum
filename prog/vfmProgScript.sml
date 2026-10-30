@@ -4800,6 +4800,516 @@ Proof
   Cases_on `op` \\ simp[step_inst_def, call_has_value_def]
 QED
 
+(* CALL prefix interfaces, independently validated in the prefix probe.
+   Use this theory's original access/delegation and memory constants. *)
+Theorem call_delegate_segment[local]:
+  s.rollback = rb /\ s.msdomain = d /\
+  delegate_check code d rb cost rb' d' ==>
+  (case get_delegate code of
+     NONE => return (code,0)
+   | SOME del => do
+       n <- access_address del;
+       return ((lookup_account del rb.accounts).code,n)
+     od) s =
+  (INL ((case get_delegate code of NONE => code
+           | SOME del => (lookup_account del rb.accounts).code),cost),
+   s with <|rollback := rb'; msdomain := d'|>)
+Proof
+  strip_tac >> Cases_on `get_delegate code` >>
+  gvs[delegate_check_def, return_def, bind_def, access_address_split,
+      execution_state_component_equality]
+QED
+
+Theorem call_access_segment[local]:
+  s.rollback = rb /\ s.msdomain = d /\ access_check d addr /\
+  delegate_check (lookup_account addr rb.accounts).code
+    (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ==>
+  (do
+     aCost <- access_address addr;
+     accounts <- get_accounts;
+     pair <- (case get_delegate (lookup_account addr accounts).code of
+       NONE => return ((lookup_account addr accounts).code,0)
+     | SOME del => do
+         n <- access_address del;
+         return ((lookup_account del accounts).code,n)
+       od);
+     return (aCost,accounts,pair)
+   od) s =
+  (INL (access_cost rb addr, rb.accounts,
+    ((case get_delegate (lookup_account addr rb.accounts).code of
+        NONE => (lookup_account addr rb.accounts).code
+      | SOME del => (lookup_account del rb.accounts).code),dCost)),
+   s with <|rollback := newRb; msdomain := newDom|>)
+Proof
+  strip_tac >>
+  simp[Once bind_def, access_address_split] >>
+  simp[get_accounts_def, bind_def, return_def, accesses_add_def] >>
+  Cases_on `get_delegate (lookup_account addr rb.accounts).code` >>
+  gvs[delegate_check_def, access_address_split, bind_def, return_def,
+      execution_state_component_equality]
+QED
+
+Theorem call_consume_gas_apply[local]:
+  s.contexts = (c,k)::cs /\ c.gasUsed + n <= c.msgParams.gasLimit ==>
+  consume_gas n s =
+  (INL (), s with contexts := (c with gasUsed := c.gasUsed + n,k)::cs)
+Proof
+  strip_tac >>
+  `n + c.gasUsed <= c.msgParams.gasLimit` by decide_tac >>
+  simp[consume_gas_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, ADD_COMM]
+QED
+
+Theorem call_static_assert_apply[local]:
+  s.contexts = (c,k)::cs /\ (doStatic ==> ~c.msgParams.static) ==>
+  (if doStatic then assert_not_static else return ()) s = (INL (),s)
+Proof
+  strip_tac >> Cases_on `doStatic` >>
+  gvs[assert_not_static_def, get_static_def, get_current_context_def,
+      bind_def, return_def, assert_def]
+QED
+
+Theorem call_expand_memory_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  expand_memory n s =
+  (INL (), s with contexts := (c with memory := buffer_extend n c.memory,k)::cs)
+Proof
+  strip_tac >> simp[expand_memory_def, get_current_context_def,
+    set_current_context_def, bind_def, return_def]
+QED
+
+Theorem call_get_gas_left_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  get_gas_left s = (INL (c.msgParams.gasLimit - c.gasUsed),s)
+Proof
+  strip_tac >> simp[get_gas_left_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem call_get_callee_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  get_callee s = (INL c.msgParams.callee,s)
+Proof
+  strip_tac >> simp[get_callee_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem call_meter_segment[local]:
+  s.contexts = (c,k)::cs /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (doStatic ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) ==>
+  (do
+     consume_gas baseCost;
+     charge_new_account charged;
+     if doStatic then assert_not_static else return ();
+     expand_memory expandBy;
+     left <- get_gas_left;
+     pair <<- call_gas value gas left 0 0;
+     consume_gas (FST pair);
+     sender <- get_callee;
+     return (sender,SND pair)
+   od) s =
+  (INL (c.msgParams.callee,stipend), s with contexts :=
+    (c with <|gasUsed := c.gasUsed + baseCost + dynamicGas;
+              memory := buffer_extend expandBy c.memory;
+              stateGasLeft := c.stateGasLeft -
+                (if charged then new_account_state_gas else 0)|>,k)::cs)
+Proof
+  strip_tac >>
+  `consume_gas baseCost s =
+    (INL (), s with contexts :=
+      (c with gasUsed := c.gasUsed + baseCost,k)::cs)` by
+    (irule call_consume_gas_apply >> simp[]) >>
+  simp[bind_def, ignore_bind_def, charge_new_account_apply] >>
+  qmatch_goalsub_abbrev_tac `(if doStatic then assert_not_static else return ()) st` >>
+  `(if doStatic then assert_not_static else return ()) st = (INL (),st)` by
+    (irule call_static_assert_apply >> simp[Abbr `st`]) >>
+  simp[] >>
+  qabbrev_tac `c1 = FST (HD st.contexts)` >>
+  `st.contexts = (c1,k)::cs` by simp[Abbr `st`, Abbr `c1`] >>
+  `expand_memory expandBy st =
+    (INL (),st with contexts :=
+      (c1 with memory := buffer_extend expandBy c1.memory,k)::cs)` by
+    (irule call_expand_memory_apply >> simp[]) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `get_gas_left st2` >>
+  `get_gas_left st2 =
+    (INL (c.msgParams.gasLimit - (c.gasUsed + baseCost)),st2)` by
+    (`st2.contexts = (c1 with memory := buffer_extend expandBy c1.memory,k)::cs`
+       by simp[Abbr `st2`] >>
+     drule call_get_gas_left_apply >>
+     simp[Abbr `c1`, Abbr `st`, ADD_COMM]) >>
+  simp[] >>
+  `call_gas value gas (c.msgParams.gasLimit - (baseCost + c.gasUsed)) 0 0 =
+    (dynamicGas,stipend)` by metis_tac[ADD_COMM] >>
+  simp[] >>
+  qabbrev_tac `c2 = FST (HD st2.contexts)` >>
+  `consume_gas dynamicGas st2 =
+    (INL (),st2 with contexts :=
+      (c2 with gasUsed := c2.gasUsed + dynamicGas,k)::cs)` by
+    (irule call_consume_gas_apply >>
+     simp[Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`] >> decide_tac) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `get_callee st3` >>
+  `get_callee st3 = (INL c.msgParams.callee,st3)` by
+    (`st3.contexts =
+       (c2 with gasUsed := c2.gasUsed + dynamicGas,k)::cs`
+       by simp[Abbr `st3`] >>
+     drule call_get_callee_apply >>
+     simp[Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`]) >>
+  simp[return_def, Abbr `st3`, Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`] >>
+  qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+  simp[call_gas_def]
+QED
+
+Theorem call_pop_stack_apply[local]:
+  s.contexts = (c,k)::cs /\ n <= LENGTH c.stack ==>
+  pop_stack n s =
+  (INL (TAKE n c.stack),s with contexts :=
+    (c with stack := DROP n c.stack,k)::cs)
+Proof
+  strip_tac >> simp[pop_stack_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, assert_def, return_def]
+QED
+
+Theorem call_pair_apply[local]:
+  !f p. (\(a,b). f a b) p = f (FST p) (SND p)
+Proof
+  rpt gen_tac >> Cases_on `p` >> simp[]
+QED
+
+Theorem call_pair_function[local]:
+  (\(a,b). f a b) = (\p. f (FST p) (SND p))
+Proof
+  simp_tac bool_ss [FUN_EQ_THM, call_pair_apply]
+QED
+
+Theorem step_call_segments[local]:
+  step_call op = do
+    valueOffset <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + valueOffset);
+    gas <<- w2n $ EL 0 args;
+    address <<- w2w $ EL 1 args;
+    value <<- if 0 < valueOffset then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + valueOffset) args;
+    argsSize <<- w2n $ EL (3 + valueOffset) args;
+    retOffset <<- w2n $ EL (4 + valueOffset) args;
+    retSize <<- w2n $ EL (5 + valueOffset) args;
+    (offset,size) <<- max_expansion_range
+      (argsOffset,argsSize) (retOffset,retSize);
+    mx <- memory_expansion_info offset size;
+    (accessCost,accounts,(code,delegateCost)) <- (do
+      aCost <- access_address address;
+      accts <- get_accounts;
+      pair <- (case get_delegate (lookup_account address accts).code of
+        NONE => return ((lookup_account address accts).code,0)
+      | SOME del => do
+          n <- access_address del;
+          return ((lookup_account del accts).code,n)
+        od);
+      return (aCost,accts,pair)
+    od);
+    toAccount <<- lookup_account address accounts;
+    charged <<- op = Call /\ 0 < value /\ account_empty toAccount;
+    (sender,stipend) <- (do
+      consume_gas (static_gas op + accessCost +
+        (if 0 < value then call_value_cost else 0) + delegateCost + mx.cost);
+      charge_new_account charged;
+      if op = Call /\ 0 < value then assert_not_static else return ();
+      expand_memory mx.expand_by;
+      left <- get_gas_left;
+      pair <<- call_gas value gas left 0 0;
+      consume_gas (FST pair);
+      sender <- get_callee;
+      return (sender,SND pair)
+    od);
+    if (lookup_account sender accounts).balance < value then do
+      credit_new_account charged;
+      abort_call_value stipend
+    od else do
+      set_return_data [];
+      sucDepth <- get_num_contexts;
+      if sucDepth > 1024 then do
+        credit_new_account charged;
+        abort_unuse stipend
+      od else proceed_call op sender address value argsOffset argsSize code stipend
+        (Memory <|offset := retOffset; size := retSize|>)
+    od
+  od
+Proof
+  simp_tac pure_ss [step_call_def, LET_THM, ignore_bind_def, bind_assoc,
+    return_bind, call_pair_function, call_pair_apply, pairTheory.FST, pairTheory.SND] >>
+  BETA_TAC >> simp_tac pure_ss [pairTheory.FST, pairTheory.SND] >> REFL_TAC
+QED
+
+Theorem call_bind_success[local]:
+  f s = (INL x,s') ==> vfmExecution$bind f cont s = cont x s'
+Proof
+  strip_tac >> simp[bind_def]
+QED
+
+Definition call_access_prog_def:
+  call_access_prog addr = do
+    aCost <- access_address addr;
+    accounts <- get_accounts;
+    pair <- (case get_delegate (lookup_account addr accounts).code of
+      NONE => return ((lookup_account addr accounts).code,0)
+    | SOME del => do
+        n <- access_address del;
+        return ((lookup_account del accounts).code,n)
+      od);
+    return (aCost,accounts,pair)
+  od
+End
+
+Theorem call_access_prog_apply[local]:
+  s.rollback = rb /\ s.msdomain = d /\ access_check d addr /\
+  delegate_check (lookup_account addr rb.accounts).code
+    (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ==>
+  call_access_prog addr s =
+  (INL (access_cost rb addr,rb.accounts,
+    ((case get_delegate (lookup_account addr rb.accounts).code of
+        NONE => (lookup_account addr rb.accounts).code
+      | SOME del => (lookup_account del rb.accounts).code),dCost)),
+    s with <|rollback := newRb; msdomain := newDom|>)
+Proof
+  strip_tac >> rewrite_tac[call_access_prog_def] >>
+  irule call_access_segment >> simp[]
+QED
+
+Definition call_meter_prog_def:
+  call_meter_prog baseCost charged doStatic expandBy value gas = do
+    consume_gas baseCost;
+    charge_new_account charged;
+    if doStatic then assert_not_static else return ();
+    expand_memory expandBy;
+    left <- get_gas_left;
+    pair <<- call_gas value gas left 0 0;
+    consume_gas (FST pair);
+    sender <- get_callee;
+    return (sender,SND pair)
+  od
+End
+
+Theorem call_meter_prog_apply[local]:
+  s.contexts = (c,k)::cs /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (doStatic ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) ==>
+  call_meter_prog baseCost charged doStatic expandBy value gas s =
+  (INL (c.msgParams.callee,stipend), s with contexts :=
+    (c with <|gasUsed := c.gasUsed + baseCost + dynamicGas;
+              memory := buffer_extend expandBy c.memory;
+              stateGasLeft := c.stateGasLeft -
+                (if charged then new_account_state_gas else 0)|>,k)::cs)
+Proof
+  strip_tac >> rewrite_tac[call_meter_prog_def] >>
+  irule call_meter_segment >> simp[]
+QED
+
+Theorem step_call_named_segments[local]:
+  step_call op = do
+    vo <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + vo);
+    gas <<- w2n $ EL 0 args;
+    address <<- w2w $ EL 1 args;
+    value <<- if 0 < vo then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + vo) args;
+    argsSize <<- w2n $ EL (3 + vo) args;
+    retOffset <<- w2n $ EL (4 + vo) args;
+    retSize <<- w2n $ EL (5 + vo) args;
+    (offset,size) <<- max_expansion_range
+      (argsOffset,argsSize) (retOffset,retSize);
+    mx <- memory_expansion_info offset size;
+    (accessCost,accounts,(code,delegateCost)) <- call_access_prog address;
+    charged <<- op = Call /\ 0 < value /\ account_empty (lookup_account address accounts);
+    (sender,stipend) <- call_meter_prog
+      (static_gas op + accessCost + (if 0 < value then call_value_cost else 0) +
+       delegateCost + mx.cost)
+      charged (op = Call /\ 0 < value) mx.expand_by value gas;
+    if (lookup_account sender accounts).balance < value then do
+      credit_new_account charged;
+      abort_call_value stipend
+    od else do
+      set_return_data [];
+      sucDepth <- get_num_contexts;
+      if sucDepth > 1024 then do
+        credit_new_account charged;
+        abort_unuse stipend
+      od else proceed_call op sender address value argsOffset argsSize code stipend
+        (Memory <|offset := retOffset; size := retSize|>)
+    od
+  od
+Proof
+  once_rewrite_tac[step_call_segments] >>
+  simp_tac pure_ss [call_access_prog_def, call_meter_prog_def, LET_THM] >>
+  REFL_TAC
+QED
+
+Definition call_prefix_prog_def:
+  call_prefix_prog op cont : execution_state -> 'a execution_result = do
+    vo <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + vo);
+    gas <<- w2n $ EL 0 args;
+    addr <<- w2w $ EL 1 args;
+    value <<- if 0 < vo then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + vo) args;
+    argsSize <<- w2n $ EL (3 + vo) args;
+    retOffset <<- w2n $ EL (4 + vo) args;
+    retSize <<- w2n $ EL (5 + vo) args;
+    (offset,sz) <<- max_expansion_range
+      (argsOffset,argsSize) (retOffset,retSize);
+    mx <- memory_expansion_info offset sz;
+    (accessCost,accounts,(code,dCost)) <- call_access_prog addr;
+    charged <<- op = Call /\ 0 < value /\ account_empty (lookup_account addr accounts);
+    (sender,stipend) <- call_meter_prog
+      (static_gas op + accessCost + (if 0 < value then call_value_cost else 0) +
+       dCost + mx.cost)
+      charged (op = Call /\ 0 < value) mx.expand_by value gas;
+    cont addr value argsOffset argsSize retOffset retSize accounts code charged sender stipend
+  od
+End
+
+Theorem step_call_prefix_bridge[local]:
+  step_call op = call_prefix_prog op
+    (\addr value argsOffset argsSize retOffset retSize accounts code charged sender stipend.
+      if (lookup_account sender accounts).balance < value then do
+        credit_new_account charged;
+        abort_call_value stipend
+      od else do
+        set_return_data [];
+        sucDepth <- get_num_contexts;
+        if sucDepth > 1024 then do
+          credit_new_account charged;
+          abort_unuse stipend
+        od else proceed_call op sender addr value argsOffset argsSize code stipend
+          (Memory <|offset := retOffset; size := retSize|>)
+      od)
+Proof
+  once_rewrite_tac[step_call_named_segments] >>
+  simp_tac pure_ss [call_prefix_prog_def, LET_THM] >> REFL_TAC
+QED
+
+Theorem call_pop_bind_apply[local]:
+  s.contexts = (c,k)::cs /\ n <= LENGTH c.stack ==>
+  vfmExecution$bind (pop_stack n)
+    (kont : (256 word) list -> execution_state -> 'a execution_result) s =
+  kont (TAKE n c.stack)
+    (s with contexts := (c with stack := DROP n c.stack,k)::cs)
+Proof
+  strip_tac >> irule call_bind_success >>
+  irule call_pop_stack_apply >> simp[]
+QED
+
+Theorem call_prefix_prog_apply[local]:
+  s.contexts = (c,k)::cs /\ s.rollback = rb /\ s.msdomain = d /\
+  vo = (if call_has_value op then 1 else 0) /\
+  6 + vo <= LENGTH c.stack /\ args = TAKE (6 + vo) c.stack /\
+  gas = w2n (EL 0 args) /\ addr = w2w (EL 1 args) /\
+  value = (if 0 < vo then w2n (EL 2 args) else 0) /\
+  ao = w2n (EL (2 + vo) args) /\ az = w2n (EL (3 + vo) args) /\
+  ro = w2n (EL (4 + vo) args) /\ rz = w2n (EL (5 + vo) args) /\
+  max_expansion_range (ao,az) (ro,rz) = (offset,sz) /\
+  access_check d addr /\
+  delegate_check (lookup_account addr rb.accounts).code
+    (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom /\
+  code = (case get_delegate (lookup_account addr rb.accounts).code of
+    NONE => (lookup_account addr rb.accounts).code
+  | SOME del => (lookup_account del rb.accounts).code) /\
+  charged = (op = Call /\ 0 < value /\ account_empty (lookup_account addr rb.accounts)) /\
+  baseCost = static_gas op + access_cost rb addr +
+    (if 0 < value then call_value_cost else 0) + dCost + memory_cost c.memory offset sz /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (op = Call /\ 0 < value ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) ==>
+  call_prefix_prog op cont s =
+  cont addr value ao az ro rz rb.accounts code charged c.msgParams.callee stipend
+    (s with <|rollback := newRb; msdomain := newDom; contexts :=
+      (c with <|stack := DROP (6 + vo) c.stack;
+                memory := expanded_memory c.memory offset sz;
+                gasUsed := c.gasUsed + baseCost + dynamicGas;
+                stateGasLeft := c.stateGasLeft -
+                  (if charged then new_account_state_gas else 0)|>,k)::cs|>)
+Proof
+  strip_tac >>
+  once_rewrite_tac[call_prefix_prog_def] >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  qpat_assum `vo = _` (fn th => rewrite_tac[GSYM th]) >>
+  qmatch_goalsub_abbrev_tac `vfmExecution$bind (pop_stack (6 + vo)) kont s` >>
+  `vfmExecution$bind (pop_stack (6 + vo)) kont s =
+    kont (TAKE (6 + vo) c.stack)
+      (s with contexts := (c with stack := DROP (6 + vo) c.stack,k)::cs)` by
+    (irule call_pop_bind_apply >> simp[]) >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  simp_tac pure_ss [Abbr `kont`, LET_THM] >> BETA_TAC >>
+  qpat_assum `args = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
+    [`gas = _`, `addr = _`, `value = _`, `ao = _`, `az = _`, `ro = _`, `rz = _`] >>
+  qpat_assum `max_expansion_range _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac pure_ss [call_pair_apply, pairTheory.FST, pairTheory.SND] >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `vfmExecution$bind (memory_expansion_info offset sz) _ st` >>
+  `memory_expansion_info offset sz st =
+    (INL <|cost := memory_cost c.memory offset sz;
+           expand_by := memory_expand_by c.memory offset sz|>,st)` by
+    simp[memory_expansion_info_split, Abbr `st`] >>
+  pop_assum (fn th => simp_tac std_ss [Once bind_def, th,
+    pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  `call_access_prog addr st =
+    (INL (access_cost rb addr,rb.accounts,(code,dCost)),
+     st with <|rollback := newRb; msdomain := newDom|>)` by
+    (qpat_assum `code = _` (fn th => pure_rewrite_tac[th]) >>
+     irule call_access_prog_apply >> gvs[Abbr `st`]) >>
+  pop_assum (fn th => simp_tac std_ss [Once bind_def, th,
+    pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `charged = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `baseCost = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qmatch_goalsub_abbrev_tac `vfmExecution$bind _ _ st2` >>
+  qabbrev_tac `c2 = c with stack := DROP (6 + vo) c.stack` >>
+  `st2.contexts = (c2,k)::cs` by simp[Abbr `st2`, Abbr `st`, Abbr `c2`] >>
+  `call_meter_prog baseCost charged (op = Call /\ 0 < value)
+      (memory_expand_by c.memory offset sz) value gas st2 =
+    (INL (c2.msgParams.callee,stipend), st2 with contexts :=
+      (c2 with <|gasUsed := c2.gasUsed + baseCost + dynamicGas;
+                 memory := buffer_extend (memory_expand_by c.memory offset sz) c2.memory;
+                 stateGasLeft := c2.stateGasLeft -
+                   (if charged then new_account_state_gas else 0)|>,k)::cs)` by
+    (irule call_meter_prog_apply >> gvs[Abbr `c2`]) >>
+  pop_assum (fn th => simp_tac std_ss [Once bind_def, th,
+    pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  simp_tac (srw_ss()) [Abbr `st2`, Abbr `st`, Abbr `c2`,
+    expanded_memory_def, execution_state_component_equality]
+QED
+
+Theorem call_refund_unuse_apply[local]:
+  cost = (if charged then new_account_state_gas else 0) /\
+  back = MIN cost c.stateGasSpilled /\
+  s.contexts = (c with stateGasLeft := c.stateGasLeft - cost,k)::cs /\
+  cost <= c.stateGasLeft /\ stipend <= c.gasUsed - back ==>
+  (do credit_new_account charged; unuse_gas stipend od) s =
+  (INL (), s with contexts :=
+    (c with <|gasUsed := c.gasUsed - back - stipend;
+              stateGasLeft := c.stateGasLeft - back;
+              stateGasSpilled := c.stateGasSpilled - back|>,k)::cs)
+Proof
+  strip_tac >>
+  `back <= cost` by simp[] >>
+  `(c.stateGasLeft - cost) + (cost - back) = c.stateGasLeft - back` by decide_tac >>
+  Cases_on `charged` >>
+  gvs[credit_new_account_def, credit_state_gas_refund_def, unuse_gas_def,
+    bind_def, ignore_bind_def, get_current_context_def, set_current_context_def,
+    return_def, assert_def, execution_state_component_equality,
+    context_component_equality]
+QED
+
 Theorem SPEC_Call_fail_balance:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *

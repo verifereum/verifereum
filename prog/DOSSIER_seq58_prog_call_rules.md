@@ -16,6 +16,8 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.3.2.1 | proved |  | E0013 |  |
 | C1.3.2.2 | proved |  | E0014 |  |
 | C1.3.2.3 | proved |  | E0015 |  |
+| C2.1 | progressed | missing_helper | E0016 | Request strategist scoped integration guidance: copy validated local helpers into main, or authorize independent theory exports plus constant transport; preserve frozen constants/statements. |
+| C2.1.1 | proved |  | E0018 |  |
 
 ## C1.1
 
@@ -236,3 +238,45 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0350_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0353_t001` (use `read_tool_output` for exact output)
+
+## C2.1
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `missing_helper`
+- latest episode: `E0016`
+- blocker: Main-theory source transfer/packaging of independently validated local prefix machinery not yet performed.
+- actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 619,575 tok (618,873 in, 702 out, 604,160 cached), 55.5s, $0.0968620
+- next: Request strategist scoped integration guidance: copy validated local helpers into main, or authorize independent theory exports plus constant transport; preserve frozen constants/statements.
+
+### Attempts / Evidence
+
+- `E0016` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 619,575 tok (618,873 in, 702 out, 604,160 cached), 55.5s, $0.0968620)
+  - Inspect frozen balance/depth proof integration sites and checked prefix/refund interfaces before editing. -> Validated prefix/refund remain only local declarations in independent probe; main theory has none. Probe also duplicates five prog boundary constants, so simply importing its exported lemma would not match frozen main constants. Need explicit authorized source transfer or shared packaging before using prefix in frozen proofs; no frozen body edited. (`TO_seq58_prog_call_rules-20261030T133624Z_m0363_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0364_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0365_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0364_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0365_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0018`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 158,927 tok (158,659 in, 268 out, 151,296 cached), 279.2s, $0.0325356
+
+### Attempts / Evidence
+
+- `E0017` (progressed, other, actual effort: 1 sessions, 2 msgs, 23 steps, 22 tools, 2 holbuild, 2,845,057 tok (2,835,938 in, 9,119 out, 2,646,144 cached), 525.9s, $0.7353924)
+  - Inventory matching native boundaries and transfer missing local dependency closure before SPEC_Call_fail_balance. -> Reused main access_address_split, charge_new_account_apply, memory_expansion_info_split and original definitions. First transferred subset through call_pop_stack_apply checks; native meter proof needed explicit call_gas stipend normalization because main imports call_gas_zero_cost[simp]. Whole build then reached pre-existing SPEC_Call_fail_depth failure. Subsequently transferred remaining block through call_refund_unuse_apply, not yet built at forced handoff. (`TO_seq58_prog_call_rules-20261030T133624Z_m0385_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0387_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0388_t001`)
+- `E0018` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 158,927 tok (158,659 in, 268 out, 151,296 cached), 279.2s, $0.0325356)
+  - Build native transferred prefix/refund helper block in vfmProgTheory and inspect explicit theorem acceptance. -> All transferred helpers including step_call_prefix_bridge, call_prefix_prog_apply, call_refund_unuse_apply accepted. Whole build reaches unchanged pre-existing depth proof failure. (`TO_seq58_prog_call_rules-20261030T133624Z_m0395_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0396_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0396_t001` (use `read_tool_output` for exact output)

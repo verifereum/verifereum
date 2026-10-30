@@ -319,23 +319,76 @@ Consumers should use concrete-state prefix/outcome equations and never reopen ac
 #### Code structure
 Edit only proof bodies of frozen declarations. Replace the obsolete commented attempted proof/debug dump near lines 4855–4954 as part of the balance proof. Keep helpers local unless existing public use requires otherwise.
 
-### C2.1: Balance and depth failure rules
-- Kind: `proof`
+### C2.1: Balance and depth failure rules with native prefix machinery
+- Kind: `proof_group`
 - Risk: 2
 - Work priority: 0
-- Work units: 5
-- Rationale: Both branches are deterministic aborts after the same prefix and refund.
-- Dependencies: C1
+- Work units: 0
+- Rationale: The semantic prefix has been independently validated; remaining work is native-constant transfer followed by deterministic abort integration.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0016
+
+#### Progress note
+E0016 identified missing integration, not a failed semantic argument. No proof continuity is claimed for the newly separated leaves.
+
+#### Summary
+First transfer the validated prefix/refund machinery into the main theory using its existing constants. Validate that transfer before editing either frozen failure proof. Then prove both balance and depth failures with the shared interfaces; statements remain unchanged.
+
+#### Not to try
+Do not import the probe theory and silently resolve frozen names to probe constants. Do not duplicate existing boundary definitions, or start frozen proof edits before the transfer checkpoint.
+
+#### Argument
+The shared prefix pops arguments, computes memory/access costs and delegation, charges execution and state gas, and returns the state at the branch point. In either never-entered branch the creation charge is credited and stipend unused. The refund identity restores stateGasLeft to its original value minus MIN cost spill, while subtracting that same credit and stipend from execution gas. Branch-specific abort handling then supplies the frozen separation postcondition.
+
+#### Definition design
+Retain the original main-theory boundary constants, including the memory functions as well as the five access/delegation functions. Introduce only missing call_access_prog, call_meter_prog and call_prefix_prog definitions. The consumer interface is step_call_prefix_bridge plus call_prefix_prog_apply and call_refund_unuse_apply; consumers must not unfold the access/meter implementations.
+
+#### Code structure
+Choose source transfer, not a new imported ancestor plus transport lemmas. Put the missing local helper block in prog/vfmProgScript.sml after its boundary definitions and before SPEC_Call_fail_balance. Keep prog/vfmProgCallPrefixProbeScript.sml unchanged as the independent validation fixture, not as a production dependency; this bounded duplication avoids changing frozen constant identities or a larger theory split. Main-theory helpers are the production implementation. No library extraction or unrelated refactor is authorized.
+
+### C2.1.1: Transfer and validate native prefix/refund interfaces
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: Source proofs already check independently; rechecking them with existing main constants is a bounded integration task.
 - Checkpoint: yes
 
 #### Summary
-Replace the only current cheat in SPEC_Call_fail_balance. Repair SPEC_Call_fail_depth with the same interfaces. Remove the obsolete attempted proof and debug-output code rather than leaving a misleading second implementation.
+Copy the validated helper dependency closure, not the duplicate boundary definitions. Preserve existing main symbols and mark new helper theorems local. Check the main build reaches and accepts the entire transferred block before starting failure proofs.
+
+#### Description
+The authorized dependency closure includes the access/delegate segments, charge/consume/static/memory/gas-left/callee applications, meter segment, pop-stack and pair/bind helpers, step_call_segments, the named access/meter/prefix programs and their applications and bridges, and refund application. Existing equivalent main lemmas should be reused; when names collide but interfaces differ give the new local helper a fresh name. Do not change any pre-existing theorem statement. If actual boundary definitions differ semantically, stop and escalate instead of inventing transport axioms or modifying the frozen interface. Validation must identify that the new declarations were checked, not merely cite a failed whole-theory exit code.
 
 #### Statement
-SPEC_Call_fail_balance and SPEC_Call_fail_depth, exactly as frozen.
+Provide main-theory versions of step_call_prefix_bridge, call_prefix_prog_apply and call_refund_unuse_apply with the displayed probe statements interpreted using the original vfmProg boundary constants; provide their missing helper definitions and theorem dependencies from the probe.
 
 #### Approach
-After IMP_EVM_SPEC expose plain field equalities and apply the prefix. Use sender.balance < value for the first rule and the frozen context-count condition for the second, then apply the refund/abort boundary and frame normalization. Audit each postcondition component, especially creditBack and returnData.
+Inventory the probe declarations against main: reuse matching access_address_split, memory_expansion_info_split and boundary definitions (msdomain_add, accesses_add, access_cost, access_check, delegate_check, memory_cost, memory_expand_by, expanded_memory), transferring only missing dependencies in source order. Recheck definitions for exact agreement rather than relying on names; port the checked proofs without semantic redesign, and run holbuild --max-heap 12000 -j8 build vfmProgTheory, recording explicit acceptance through the final transferred helper even if the untouched downstream proof fails.
+
+#### Not to try
+Do not copy the probe header or its duplicate constants, and do not add the probe as an Ancestor. Do not use a temporary cheat in a frozen proof to reach a successful build. Do not mechanically copy all 596 lines without checking existing helper collisions.
+
+### C2.1.2: Prove frozen balance and depth failure rules
+- Kind: `proof`
+- Risk: 2
+- Work priority: 1
+- Work units: 5
+- Rationale: Once native prefix and refund interfaces check, both consumers follow the already validated deterministic branch argument.
+- Dependencies: C2.1.1
+- Checkpoint: yes
+
+#### Summary
+Prove SPEC_Call_fail_balance and SPEC_Call_fail_depth without statement changes. Use the native prefix and refund interfaces, then discharge the branch-specific abort and separation bookkeeping. Record checked proof acceptance for both consumers.
+
+#### Statement
+SPEC_Call_fail_balance and SPEC_Call_fail_depth exactly as frozen in prog/vfmProgScript.sml (balance statement also frozen in TASK).
+
+#### Approach
+Use the existing IMP_EVM_SPEC proof entry and step_inst_call to expose step_call, then rewrite via step_call_prefix_bridge and apply call_prefix_prog_apply with the frozen premise aliases. Select the balance/depth branch, apply call_refund_unuse_apply to the charged context, and finish abort/exception and separation normalization with the validated common machinery; use stack-length facts to justify EL of TAKE at the argument boundary.
+
+#### Not to try
+Do not expand the complete step_call monad in either consumer or case-split opaque access_address results. Do not compensate for interface mismatch with long manual theorem plumbing; report a precise missing boundary lemma instead. Preserve all frozen statements and prohibit cheats, axioms and timeout changes.
 
 ### C2.2: Successful entry and prepared CALL equation
 - Kind: `proof`

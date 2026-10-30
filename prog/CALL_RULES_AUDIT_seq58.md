@@ -173,3 +173,17 @@ Consumer mapping (no frozen proof edited at this checkpoint):
   `step_precompile_success_exact` remains C2 composition, dependent on the
   frozen `step_call_prepared`; it was deliberately not used to certify the
   independent machinery. Its full composition is not claimed proved here.
+
+### Native prefix transfer inventory (C2.1.1)
+
+Compared the checked prefix probe with existing main declarations. Reuse
+main `access_address_split` (1457), `charge_new_account_apply` (1943) and
+`memory_expansion_info_split` (1614): statements agree with probe.
+The existing main msdomain/access/delegation and memory boundary definitions
+also agree with their probe copies (main 1428-1455, 1575, 1603-1612, 4760).
+Do not transfer these definitions or these three theorem declarations.
+Remaining probe source ranges to transfer, in dependency order, are 46-92,
+114-236, 261-596; insert before `SPEC_Call_fail_balance`, after main's
+`step_inst_call`. New program definitions use the main constants, not the
+probe theory. C2.1.1 still needs this source transfer and explicit main-build
+acceptance through `call_refund_unuse_apply`; inventory is not validation.
