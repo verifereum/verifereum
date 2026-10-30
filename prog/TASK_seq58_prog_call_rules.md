@@ -68,12 +68,17 @@ phase 3: the account-creation charge, the code-deposit charge) has broken.  The
 other statements of the same family are frozen too, and their proofs are also
 failing:
 
-| Theorem | Line (when this file was written) |
-|---------|-----------------------------------|
-| `SPEC_Call_fail_depth` | 4926 |
-| `SPEC_Call` | 5056 |
-| `step_call_prepared` | 5283 |
-| `SPEC_Call_precompile` | 5726 |
+| Theorem |
+|---------|
+| `SPEC_Call_fail_depth` |
+| `SPEC_Call` |
+| `step_call_prepared` |
+| `SPEC_Call_precompile` |
+
+The rest of the file after `SPEC_Call_fail_depth` is unverified as well: it
+carries the SELFDESTRUCT, precompile and invalid rules, whose statements were
+restated in the same change.  Every proof from `SPEC_Call_fail_balance` down
+may need rework; the build target is the whole theory.
 
 Their statements were restated deliberately (they carry `stateCost`,
 `creditBack`, `newAccountCharged` and `evm_StateGasLeft`/`evm_StateGasSpilled`);
