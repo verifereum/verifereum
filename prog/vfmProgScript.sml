@@ -5530,79 +5530,79 @@ Theorem SPEC_Call_fail_depth:
    evm_Contexts cs *
    evm_ReturnData [])
 Proof
-  irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
-  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
-  \\ reverse $ Cases_on ‘b’ >- simp[]
-  \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
-  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
-                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
-  \\ gs[]
-  \\ drule step_preserves_wf_state
-  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
-  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
-  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
-  \\ Cases_on ‘step (SND r)’ \\ fs []
-  \\ strip_tac
-  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
-  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
-    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
-  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
-          return_def, wf_context_def, SF CONJ_ss]
-  \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
-  \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
-  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
-  \\ `step_inst call_inst = step_call call_inst` by (
-       qpat_x_assum`is_call __`mp_tac \\
-       Cases_on`call_inst` \\ simp[step_inst_def, is_call_def]
-       \\ fs[])
-  \\ `stipend ≤ g + gasCost - creditBack` by gvs[]
-  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
-         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
-         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
-         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
-         CaseEq"prod", sum_CASE_rator, prod_CASE_rator,
-         charge_new_account_apply, credit_new_account_apply,
-         delegate_check_def]
-  \\ qpat_x_assum`step_inst _ = _`kall_tac
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (gdr,gds)`
-  \\ reverse $ Cases_on`gdr` \\ gvs[]
-  >- gvs[CaseEq"prod",CaseEq"sum",CaseEq"option",delegate_check_def,
-         access_address_split]
-  \\ qmatch_asmsub_abbrev_tac`access_address _ s4`
-  \\ sg `gds.contexts = s4.contexts`
-  >- (
-    qpat_x_assum`_ gds = _`kall_tac
-    \\ gvs[CaseEq"option"]
-    \\ qpat_x_assum`_ (access_address _ _) _ = _`mp_tac
-    \\ CASE_TAC \\ CASE_TAC
-    \\ drule access_address_contexts_unchanged
-    \\ rw[] \\ rw[] )
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (INL gdr,_)`
-  \\ PairCases_on`gdr`
-  \\ gvs[get_current_context_def,bind_def,Abbr`s4`,return_def]
-  \\ sg `dCost = gdr1`
-  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
-  \\ gvs[get_current_context_def,return_def,bind_def,assert_def,
-         set_current_context_def]
-  \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
-  \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
-  >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
-        bind_def, ignore_bind_def, get_static_def, assert_def,
-        get_current_context_def,Abbr`s1`]
-  \\ gvs[Abbr`s1`,bind_def,ignore_bind_def,set_return_data_def,get_current_context_def,
-         return_def,set_current_context_def,get_num_contexts_def,abort_unuse_def,
-         unuse_gas_def,assert_def, push_stack_def, inc_pc_def, inc_pc_or_jump_def,
-         Abbr`c`,delegate_check_def]
-  \\ conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
-  \\ conj_tac >-
-       (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
-        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
-  \\ gvs[CaseEq"option",access_address_split]
-  \\ end_tac
+  irule IMP_EVM_SPEC >> rpt strip_tac >>
+  rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set] >>
+  qmatch_goalsub_abbrev_tac `b ==> _` >>
+  reverse (Cases_on `b`) >- simp[] >>
+  pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  rpt (qpat_x_assum `_ = _` (assume_tac o
+    ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def])) >> gs[] >>
+  drule step_preserves_wf_state >>
+  qmatch_assum_rename_tac `wf_state (SND r)` >>
+  Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists] >>
+  pop_assum (SUBST_ALL_TAC o EQF_INTRO) >>
+  Cases_on `step (SND r)` >> fs[] >> strip_tac >>
+  `(SND r).contexts <> []` by fs[wf_state_def] >>
+  `wf_context (FST (HD (SND r).contexts))` by
+    (Cases_on `(SND r).contexts` >> gvs[wf_state_def]) >>
+  gvs[step_def,handle_def,bind_def,get_current_context_def,
+      return_def,wf_context_def,SF CONJ_ss] >>
+  qpat_x_assum `(_,_) = _` (assume_tac o SYM) >>
+  qpat_x_assum `(_,_) = _` (assume_tac o SYM) >>
+  qpat_x_assum `SOME _ = _` (assume_tac o SYM) >>
+  `step_inst call_inst = step_call call_inst` by
+    (qpat_x_assum `is_call _` mp_tac >> Cases_on `call_inst` >>
+     simp[step_inst_def,is_call_def] >> gvs[]) >>
+  gvs[] >>
+  qpat_x_assum `(case _ of (INL _,_) => _ | (INR _,_) => _) = _` mp_tac >>
+  once_rewrite_tac[step_call_prefix_bridge] >>
+  once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_def] >>
+  qmatch_goalsub_abbrev_tac `call_prefix_prog call_inst kont (SND r)` >>
+  qabbrev_tac `c = FST (HD (SND r).contexts)` >>
+  qabbrev_tac `k = SND (HD (SND r).contexts)` >>
+  `(SND r).contexts = (c,k)::cs` by
+    (Cases_on `(SND r).contexts` >> gvs[Abbr `c`,Abbr `k`,Abbr `cs`]) >>
+  `call_prefix_prog call_inst kont (SND r) =
+    kont addr value argsOffset argsSize retOffset retSize rb.accounts
+      (case get_delegate toAccount.code of NONE => toAccount.code
+       | SOME del => (lookup_account del rb.accounts).code)
+      newAccountCharged p.callee stipend
+      (SND r with <|rollback := newRb; msdomain := newDom; contexts :=
+        (c with <|stack := DROP (6 + vOff) ss; memory := em;
+          gasUsed := g + gasCost;
+          stateGasLeft := sg - stateCost|>,k)::cs|>)` by
+    (irule call_prefix_prog_apply_result >>
+     qexistsl [`addr`,`argsOffset`,`TAKE (6 + vOff) ss`,`argsSize`,
+       `static_gas call_inst + access_cost rb addr + vCost + dCost + mCost`,
+       `c`,`newAccountCharged`,
+       `(case get_delegate toAccount.code of NONE => toAccount.code
+         | SOME del => (lookup_account del rb.accounts).code)`,
+       `cs`,`d`,`dCost`,`dynamicGas`,`gas`,`k`,`newDom`,`newRb`,
+       `offset`,`rb`,`retOffset`,`retSize`,`stipend`,`sz`,`value`,`vOff`] >>
+     `vOff <= 1` by (simp[Abbr `vOff`] >> Cases_on `call_has_value call_inst` >> simp[]) >>
+     simp[EL_TAKE,Abbr `ss`,Abbr `g`,Abbr `p`,Abbr `sg`,Abbr `stateCost`,
+       Abbr `em`,Abbr `m`,Abbr `toAccount`,Abbr `d`,Abbr `rb`,
+       Abbr `vCost`,Abbr `mCost`,Abbr `gasCost`,
+       Abbr `argsOffset`,Abbr `argsSize`,Abbr `retOffset`,Abbr `retSize`,
+       Abbr `gas`,Abbr `addr`,Abbr `value`,Abbr `newAccountCharged`,
+       GSYM ADD_ASSOC] >>
+     qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [Abbr `kont`,Abbr `sender`] >>
+  simp[ignore_bind_def,bind_def,set_return_data_def,get_num_contexts_def,
+    get_current_context_def,set_current_context_def,return_def] >>
+  simp[credit_new_account_apply] >>
+  `creditBack <= stateCost` by simp[Abbr `creditBack`] >>
+  `sg - stateCost + (stateCost - creditBack) = sg - creditBack` by decide_tac >>
+  simp[credit_new_account_context_def] >>
+  `LENGTH (DROP (6 + vOff) ss) < 1024` by
+    (simp[LENGTH_DROP] >> decide_tac) >>
+  simp[abort_unuse_def,push_stack_def,unuse_gas_def,
+    inc_pc_def,inc_pc_or_jump_def,bind_def,ignore_bind_def,
+    get_current_context_def,set_current_context_def,return_def,assert_def] >>
+  strip_tac >> gvs[Abbr `pc`,Abbr `p`] >>
+  conj_tac >- SET_TAC[] >> end_tac
 QED
 
 Theorem SPEC_Call:
