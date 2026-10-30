@@ -153,3 +153,73 @@ Theorem call_get_callee_apply[local]:
 Proof
   strip_tac >> simp[get_callee_def, get_current_context_def, bind_def, return_def]
 QED
+
+Theorem call_meter_segment[local]:
+  s.contexts = (c,k)::cs /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (doStatic ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) ==>
+  (do
+     consume_gas baseCost;
+     charge_new_account charged;
+     if doStatic then assert_not_static else return ();
+     expand_memory expandBy;
+     left <- get_gas_left;
+     pair <<- call_gas value gas left 0 0;
+     consume_gas (FST pair);
+     sender <- get_callee;
+     return (sender,SND pair)
+   od) s =
+  (INL (c.msgParams.callee,stipend), s with contexts :=
+    (c with <|gasUsed := c.gasUsed + baseCost + dynamicGas;
+              memory := buffer_extend expandBy c.memory;
+              stateGasLeft := c.stateGasLeft -
+                (if charged then new_account_state_gas else 0)|>,k)::cs)
+Proof
+  strip_tac >>
+  `consume_gas baseCost s =
+    (INL (), s with contexts :=
+      (c with gasUsed := c.gasUsed + baseCost,k)::cs)` by
+    (irule call_consume_gas_apply >> simp[]) >>
+  simp[bind_def, ignore_bind_def, charge_new_account_apply] >>
+  qmatch_goalsub_abbrev_tac `(if doStatic then assert_not_static else return ()) st` >>
+  `(if doStatic then assert_not_static else return ()) st = (INL (),st)` by
+    (irule call_static_assert_apply >> simp[Abbr `st`]) >>
+  simp[] >>
+  qabbrev_tac `c1 = FST (HD st.contexts)` >>
+  `st.contexts = (c1,k)::cs` by simp[Abbr `st`, Abbr `c1`] >>
+  `expand_memory expandBy st =
+    (INL (),st with contexts :=
+      (c1 with memory := buffer_extend expandBy c1.memory,k)::cs)` by
+    (irule call_expand_memory_apply >> simp[]) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `get_gas_left st2` >>
+  `get_gas_left st2 =
+    (INL (c.msgParams.gasLimit - (c.gasUsed + baseCost)),st2)` by
+    (`st2.contexts = (c1 with memory := buffer_extend expandBy c1.memory,k)::cs`
+       by simp[Abbr `st2`] >>
+     drule call_get_gas_left_apply >>
+     simp[Abbr `c1`, Abbr `st`, ADD_COMM]) >>
+  simp[] >>
+  `call_gas value gas (c.msgParams.gasLimit - (baseCost + c.gasUsed)) 0 0 =
+    (dynamicGas,stipend)` by metis_tac[ADD_COMM] >>
+  simp[] >>
+  qabbrev_tac `c2 = FST (HD st2.contexts)` >>
+  `consume_gas dynamicGas st2 =
+    (INL (),st2 with contexts :=
+      (c2 with gasUsed := c2.gasUsed + dynamicGas,k)::cs)` by
+    (irule call_consume_gas_apply >>
+     simp[Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`] >> decide_tac) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `get_callee st3` >>
+  `get_callee st3 = (INL c.msgParams.callee,st3)` by
+    (`st3.contexts =
+       (c2 with gasUsed := c2.gasUsed + dynamicGas,k)::cs`
+       by simp[Abbr `st3`] >>
+     drule call_get_callee_apply >>
+     simp[Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`]) >>
+  simp[return_def, Abbr `st3`, Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`]
+QED
