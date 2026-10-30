@@ -272,16 +272,63 @@ Proof
   cong_tac (SOME 4) >> simp[context_component_equality]
 QED
 
+Theorem call_charge_new_account_pair[local]:
+  s.contexts = (c,cb)::cs /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  stateCost <= c.stateGasLeft ==>
+  charge_new_account charged s =
+    (INL (), s with contexts :=
+      (c with stateGasLeft := c.stateGasLeft - stateCost,cb)::cs)
+Proof
+  Cases_on `charged` >>
+  simp[charge_new_account_def, charge_state_gas_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, return_def] >> rpt strip_tac >>
+  gvs[execution_state_component_equality]
+QED
+
+Theorem call_credit_abort_pair[local]:
+  s.contexts = (c,cb)::cs /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  creditBack = MIN stateCost c.stateGasSpilled /\
+  cg <= c.gasUsed - creditBack /\ LENGTH c.stack < stack_limit ==>
+  let credited = c with <|
+        gasUsed := c.gasUsed - creditBack;
+        stateGasSpilled := c.stateGasSpilled - creditBack;
+        stateGasLeft := c.stateGasLeft + (stateCost - creditBack) |>;
+      result = (INL (), s with contexts :=
+        (credited with <|stack := b2w F::c.stack; returnData := [];
+          gasUsed := credited.gasUsed - cg; pc := SUC c.pc|>,cb)::cs)
+  in ignore_bind (credit_new_account charged) (abort_call_value cg) s = result /\
+     ignore_bind (set_return_data [])
+       (ignore_bind (credit_new_account charged) (abort_unuse cg)) s = result
+Proof
+  Cases_on `charged` >>
+  simp[LET_THM, credit_new_account_def, credit_state_gas_refund_def,
+       abort_call_value_def, abort_unuse_def, push_stack_def,
+       set_return_data_def, unuse_gas_def, inc_pc_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  rpt strip_tac >> gvs[stack_limit_def] >>
+  cong_tac (SOME 4) >> simp[context_component_equality]
+QED
+
 Theorem call_entry_failure_normalize[local]:
-  prepared.contexts = (caller,cb)::cs ∧ cg ≤ caller.gasUsed ∧
-  LENGTH caller.stack < stack_limit ⇒
-  (if balanceFail then abort_call_value cg prepared
+  prepared.contexts = (caller,cb)::cs /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  creditBack = MIN stateCost caller.stateGasSpilled /\
+  cg <= caller.gasUsed - creditBack /\
+  LENGTH caller.stack < stack_limit ==>
+  (if balanceFail then
+     ignore_bind (credit_new_account charged) (abort_call_value cg) prepared
    else ignore_bind (set_return_data [])
-     (if depthFail then abort_unuse cg else proceed) prepared) =
-  (if balanceFail ∨ depthFail then abort_call_value cg prepared
+     (if depthFail then ignore_bind (credit_new_account charged) (abort_unuse cg)
+      else proceed) prepared) =
+  (if balanceFail \/ depthFail then
+     ignore_bind (credit_new_account charged) (abort_call_value cg) prepared
    else ignore_bind (set_return_data []) proceed prepared)
 Proof
-  strip_tac >> drule_all call_abort_pair >>
+  strip_tac >> drule_all call_credit_abort_pair >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
   Cases_on `balanceFail` >> Cases_on `depthFail` >> simp[]
 QED

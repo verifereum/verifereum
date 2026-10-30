@@ -10,6 +10,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.2 | stuck | risk_mismatch | E0003 | Authorize concrete no-entry CALL probe with gas request 0, value 1, reservoir >=183600, initial gasUsed=0 and spill=183600; creation refund erases execution cost leaving gasUsed=0 before unuse stipend 2300. |
 | C1.2.1 | proved |  | E0004 |  |
 | C1.2.2 | proved |  | E0009 | Review checked frozen-export obstruction; report unprovable with tightest sufficient repair proposal, without applying it. Candidate repair obligation for no-entry path is calleeGas <= gasUsed after credit (equivalently for positive stipend, MIN stateCost initialSpill + calleeGas <= g+gasCost when charge reservoir-covered). Do not claim this alone repairs every cross-frame path. |
+| C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
 
@@ -108,3 +109,23 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261030T170049Z_m0255_t001` (use `read_tool_output` for exact output)
+
+## C1.8
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0010`
+- blocker: 
+- actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,080,488 tok (1,078,071 in, 2,417 out, 1,061,888 cached), 417.0s, $0.1627248
+- next: Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution.
+
+### Attempts / Evidence
+
+- `E0010` (proved, , actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,080,488 tok (1,078,071 in, 2,417 out, 1,061,888 cached), 417.0s, $0.1627248)
+  - Validate current source boundary prefix via vfmProgCallTheory build; add charge and post-credit abort equations, and update failure normalization to credit on both balance and depth branches. -> call_charge_new_account_pair and call_credit_abort_pair check both charged/uncharged cases, exact meter and normal return under post-credit bound. call_entry_failure_normalize now matches actual credited semantics. Builds pass all these plus proceed_call_pair, pop_and_incorporate_context_pair and handle_exception_memory_return, stopping only at pre-existing call_exn_safe_step_call in C1.3. (`TO_seq58_progcall_port-20261030T183500Z_m0281_t001`, `TO_seq58_progcall_port-20261030T183500Z_m0283_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261030T183500Z_m0283_t001` (use `read_tool_output` for exact output)
