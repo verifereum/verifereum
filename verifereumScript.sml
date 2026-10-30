@@ -12,7 +12,9 @@ open HolKernel
   (* Checked counterexamples kept as evidence for the EIP-8037 statement
      shapes.  Nothing depends on them, so without this line the root build
      would never compile them. *)
-  vfmProgCounterexampleTheory
+  vfmProgCounterexampleTheory vfmProgCallMeterProbeTheory
+  vfmProgCallPrefixProbeTheory vfmProgCallTailProbeTheory
+  vfmProgChargedRevertProbeTheory
   vfmPopGasProbeTheory vfmGasStackProbeTheory
   vfmCallDrainProbeTheory vfmSstoreGasProbeTheory
 

@@ -29,8 +29,11 @@ Definition probe_initial_def:
     originalAccounts := empty_accounts; msdomain := Collect empty_domain|>
 End
 
-(* Exactly the frozen inner_revert_spill_execution construction, instantiated
-   with the three concrete records above. The step-equality conjunct fails. *)
+(* The inner_revert_spill_execution construction as it stood before the charge
+   flag was pinned, instantiated with the three concrete records above: with a
+   charged child (newAccountCharged = T) the charge refills over the merged
+   meter, so the popped frame's reservoir is 183600 where the construction's
+   `out` prescribes 0, and the step-equality conjunct fails. *)
 Theorem inner_revert_spill_execution_charged_counterexample:
   let params = probe_params; ctx_base = probe_context; initial = probe_initial;
       p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
