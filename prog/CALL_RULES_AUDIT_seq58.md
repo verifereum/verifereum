@@ -56,3 +56,52 @@ absorb/repay. SELFDESTRUCT needs the same no-spill charge boundary and
 successful absorb/repay normalization (not failure restoration).
 Precompile helpers track exact child meters and exact parent absorb/repay;
 keep those interfaces rather than unfold their implementation at SPEC level.
+
+## Independent tail validation (2026-10-30)
+
+`vfmProgCallTailProbeTheory` copies only the inventoried semantic helpers,
+without importing `vfmProgTheory`. Its checked build validates:
+
+- `handle_create_not_none`: `e <> NONE /\ s.contexts <> []` suffices for
+  `handle_create e s = reraise e s`. This is a local helper in
+  `prog/vfmProgScript.sml:4783`, not a prerequisite-theory export.
+- `proceed_call_precompile_success_meter` and its public weaker projection:
+  the fresh child inherits the parent's reservoir and baseline, has zero
+  spill/commit, while the suspended parent reservoir becomes zero. Exact
+  dispatch behavior supplies child execution usage and return bytes.
+  The copied proof needed `get_accounts_def` added to its first rewrite set;
+  the source helper currently omits it and is not yet validated in situ.
+- `handle_step_success_memory_exact`: successful Memory output returns to
+  `repay_state_gas_spill_context (absorb_state_gas
+  (parent with gasUsed := parent.gasUsed-(childLimit-childUsed))
+  childReservoir childSpill childCommit)`, with exact memory, stack, PC,
+  return-data and log updates. Requires unused child gas <= parent usage,
+  stack room, and zero child add/sub refunds.
+- `repay_absorb_meter_fields`: successful merge refunds
+  `MIN (parentReservoir+childReservoir) (parentSpill+childSpill)` execution
+  gas and removes that same quantity from the merged reservoir/spill;
+  baseline is preserved and commitment added.
+- `restored_unused_gas`, `_bound`, `_sub`: restored unused gas includes
+  `MIN sp used`, given used <= limit; parent subtraction is exact.
+
+Remaining interface coverage questions (do not certify the machinery phase
+complete merely from the preceding helper build):
+
+- `step_precompile_success_exact` depends directly on frozen
+  `step_call_prepared` (lines 5674-5677). Validating its current proof in
+  isolation would require importing/re-proving that frozen obligation, which
+  is prohibited until the machinery phase completes. Its semantic
+  prerequisites above are checked; its full composition must be assigned
+  explicitly to the later frozen-family phase or otherwise replanned.
+- Invalid outermost/inner proof bodies use implementation reductions of
+  `restore_state_gas`, `forfeit_remaining_gas`, `handle_exception`, and
+  `pop_and_incorporate_context`; the inner branch then uses
+  `credit_new_account_context (absorb_state_gas caller baseline 0 commit)`.
+  No inventoried independent operational boundary covers these entire
+  failure-handler updates. `restored_unused_gas` is arithmetic only.
+- SELFDESTRUCT outermost/inner bodies use `access_address_split`,
+  `charge_new_account_apply`/`charge_state_gas_apply` and direct reductions
+  of `step_self_destruct` and successful handlers. Inner successful merge
+  uses repay/absorb, not failure restore/forfeit. The checked Memory-output
+  handler assumes zero child refunds; SELFDESTRUCT permits arbitrary refunds
+  and Code output as well, so it is not a complete boundary for that family.

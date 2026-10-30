@@ -12,6 +12,8 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.2.2 | proved |  | E0004 |  |
 | C1.2.3 | proved |  | E0009 |  |
 | C1.3.1 | proved |  | E0010 |  |
+| C1.3.2 | progressed | missing_helper | E0011 | Strategist classify checked subset and explicitly assign remaining frozen composition to C2; decide needed bounded handler probes for Invalid and SELFDESTRUCT. No frozen proof edits yet. |
+| C1.3.2.1 | progressed | wrong_statement | E0012 | Call plan_oracle for active C1.3.2.1 with missing child bound evidence. Do not alter frozen statements or add a parent bound. Rebuild/commit stable independent tail subset and audit when allowed; no failed theorem remains. |
 
 ## C1.1
 
@@ -146,3 +148,46 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0248_t001` (use `read_tool_output` for exact output)
+
+## C1.3.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `missing_helper`
+- latest episode: `E0011`
+- blocker: Full step_precompile_success_exact depends on frozen step_call_prepared, creating phase circularity. No inventoried independent full failure-handler boundary for Invalid, nor general Code/refund success handler for SELFDESTRUCT. PLAN requires refinement before declaring machinery complete.
+- actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 2 holbuild, 1,713,181 tok (1,708,924 in, 4,257 out, 1,670,272 cached), 444.0s, $0.2869012
+- next: Strategist classify checked subset and explicitly assign remaining frozen composition to C2; decide needed bounded handler probes for Invalid and SELFDESTRUCT. No frozen proof edits yet.
+
+### Attempts / Evidence
+
+- `E0011` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 2 holbuild, 1,713,181 tok (1,708,924 in, 4,257 out, 1,670,272 cached), 444.0s, $0.2869012)
+  - Extract dependency-closed tail helper subset into independent vfmProgCallTailProbeTheory; locate handler helper origin and inspect Invalid/SELFDESTRUCT consumers -> Nine local helpers build independently. Precompile proceed helper initially failed at context abbreviation because get_accounts was opaque; adding get_accounts_def in copied proof closes it. handle_create_not_none, exact successful Memory handler, repay/absorb fields and restore arithmetic all checked. Audit records remaining coverage gaps. (`TO_seq58_prog_call_rules-20261030T133624Z_m0264_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0266_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0266_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0267_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0262_t001` (use `read_tool_output` for exact output)
+
+## C1.3.2.1
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `wrong_statement`
+- latest episode: `E0012`
+- blocker: New PLAN helper outputs omit child execution-meter validity for forfeit_remaining_gas. Need strategist approve tight bound c.gasUsed-c.stateGasSpilled<=c.msgParams.gasLimit (or wf-available stronger used<=limit) on both Invalid helpers.
+- actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 1 holbuild, 1,480,698 tok (1,479,576 in, 1,122 out, 1,329,024 cached), 122.5s, $0.4452264
+- next: Call plan_oracle for active C1.3.2.1 with missing child bound evidence. Do not alter frozen statements or add a parent bound. Rebuild/commit stable independent tail subset and audit when allowed; no failed theorem remains.
+
+### Attempts / Evidence
+
+- `E0012` (progressed, wrong_statement, actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 1 holbuild, 1,480,698 tok (1,479,576 in, 1,122 out, 1,329,024 cached), 122.5s, $0.4452264)
+  - State proposed outermost Invalid handler equality with only singleton contexts; reduce handle_create_not_none then restore/forfeit operations -> Residual guard requires c.gasUsed - c.stateGasSpilled <= c.msgParams.gasLimit; without any child meter bound consume_gas fails on malformed contexts. This is missing helper premise, not evidence against frozen SPEC rules (which have wf_state). Removed unfinished theorem; checked nine-helper tail subset remains. (`TO_seq58_prog_call_rules-20261030T133624Z_m0278_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0280_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0278_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0280_t001` (use `read_tool_output` for exact output)

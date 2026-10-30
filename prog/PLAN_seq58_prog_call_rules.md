@@ -197,26 +197,103 @@ Prove the credit operation equation and unuse_gas success equation separately if
 #### Not to try
 Do not assume sp=0 or refund identity. Do not unfold abort handlers or the CALL continuation here; this leaf supplies only their shared meter boundary.
 
-### C1.3.2: Validate inventoried handler and tail boundaries independently
+### C1.3.2: Complete independent tail-handler interfaces
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 50
+- Work units: 0
+- Rationale: Bounded exact operational equalities separate failure settlement and successful return from SPEC reasoning; no frozen CALL theorem is needed.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0011
+
+#### Progress note
+Retain the checked nine-helper subset as evidence, not certification of the expanded obligation.
+
+#### Summary
+Preserve E0011's independent helper build. Add exact Invalid settlement and general successful return boundaries. Handle Code output separately at the handle_create boundary. Do not prove step_precompile_success_exact during the machinery phase.
+
+#### Approach
+Complete the three bounded helper outputs below, then audit consumer coverage. Full step_precompile_success_exact is later frozen-family composition using step_call_prepared, not a prerequisite for declaring independent machinery complete.
+
+#### Not to try
+Do not import or re-prove step_call_prepared to validate the tail probe. Do not generalize the zero-refund Memory handle_step lemma to Code without accounting for handle_create. Do not unfold full handlers inside SPEC goals.
+
+#### Argument
+handle_step factors through handle_create and handle_exception. InvalidOpcode skips code deposit, restores the child meter, forfeits execution gas, and either leaves an outermost exception or merges the baseline into the parent with account-credit and rollback restoration. Success instead returns unused execution gas, merges state meters, logs and arbitrary refunds, then repays spill; destination-specific stack and memory updates are a separate finite case split.
+
+#### Definition design
+Use exact execution-state equalities with premises s.contexts=(child,cb)::(parent,pb)::rest and a named merged context. Keep rollback and all untouched fields explicit via record updates. Success settlement is first stated for handle_exception NONE, not handle_step NONE: Code output can invoke deposit before settlement. Test the empty-return-data Code path needed by SELFDESTRUCT independently. No new generic normalizer is authorized.
+
+#### Code structure
+Develop local semantic helpers in prog/vfmProgCallTailProbeScript.sml without importing vfmProgTheory. Keep a source-copy/interface inventory in prog/CALL_RULES_AUDIT_seq58.md. Place corresponding local helpers before consumers in vfmProgScript.sml only after independent validation; frozen proof edits remain deferred until the enclosing machinery phase finishes.
+
+### C1.3.2.1: Exact InvalidOpcode settlement with valid restored child meter
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 5
+- Rationale: The checked residual is exactly the natural-subtraction guard discharged by the restored child meter bound. InvalidOpcode then deterministically forfeits all remaining execution gas, so no parent execution-meter bound is needed.
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0012
+
+#### Progress note
+E0012 supplies diagnostic evidence and a retained independent nine-helper subset, not a proof of the Invalid equalities. The failed experimental theorem has already been removed. Correct only auxiliary statements; frozen theorem statements remain untouched.
+
+#### Summary
+Add c.gasUsed - c.stateGasSpilled <= c.msgParams.gasLimit to both Invalid handler helpers. Keep the parent unrestricted in execution gas. First rebuild, audit and commit the retained independent tail subset; then prove the corrected Invalid helpers. This does not reopen a frozen-theorem counterexample gate.
+
+#### Description
+Scope includes validating the currently retained nine independent helpers in prog/vfmProgCallTailProbeScript.sml, then the two corrected Invalid boundary helpers. Preserve their existing successful proofs. Build that probe theory and audit the stable subset before committing it, using the TASK commit trailer; a stable-subset commit is explicitly allowed before adding the corrected helpers. Final closure needs a checked build of the completed probe and statement audit, not merely the prior residual log. At the consumer boundary document that the new premise is implied by child gasUsed <= gasLimit from the frozen SPEC's well-formed state; if extracting that invariant is not available, report the precise missing interface rather than adding a frozen premise.
+
+#### Statement
+Both handle_step_invalid_outermost_exact and the nested Invalid exact-settlement helper must assume `c.gasUsed - c.stateGasSpilled <= c.msgParams.gasLimit` in addition to their context-shape and (for nested settlement) parent-stack-room hypotheses. Outermost conclusion: if `s.contexts = [(c,cb)]`, `handle_step (SOME InvalidOpcode) s = (INR (SOME InvalidOpcode), s with contexts := [(c with <|returnData := []; gasUsed := c.msgParams.gasLimit; addRefund := 0; subRefund := 0; stateGasLeft := c.stateGasBaseline; stateGasSpilled := 0|>,cb)])`. Nested conclusion must retain the exact failed-child absorption and account-credit settlement specified by `pop_and_incorporate_context F`, restore rollback to cb, increment parent pc, push 0w and clear returnData; memory is unchanged because the output is empty. Child stateGasCommitted remains c.stateGasCommitted.
+
+#### Approach
+Use handle_create_not_none to bypass deposit handling; normalize restoration, then use the new bound to prove `limit - (used - spill) + (used - spill) = limit` before unfolding the remaining handler. In the nested case the child's remaining execution gas is now zero, so unuse_gas requires no parent bound; absorb baseline and committed fields, apply credit_new_account according to the child's flag, and finish rollback/pc/stack/empty-memory-write normalization.
+
+#### Not to try
+Do not retry unrestricted Invalid helpers with larger simplifier sets: the malformed-child case genuinely fails the consume_gas guard. Do not add a parent gas bound, change frozen SPEC statements, or infer an InvalidOpcode counterexample to those statements from this auxiliary omission. Keep restoration/forfeiture arithmetic separate from full handler unfolding; avoid manual theorem plumbing or a giant search tactic. Do not claim E0012 proves the corrected helpers.
+
+### C1.3.2.2: Successful settlement for arbitrary refunds and destinations
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: handle_exception NONE has no charging branch; its return behavior is a deterministic two-destination split.
+
+#### Summary
+Generalize successful settlement at handle_exception, not handle_step. Include arbitrary add/sub refunds and both Memory and Code. Supply singleton and inner boundaries needed by SELFDESTRUCT.
+
+#### Statement
+Prove local handle_exception_success_outermost_exact: s.contexts=[(c,cb)] ==> handle_exception NONE s=(INR NONE,s). Prove inner Memory and Code projections under s.contexts=(c,cb)::(parent,pb)::rest, c.msgParams.gasLimit-c.gasUsed <= parent.gasUsed and LENGTH parent.stack < stack_limit. Let merged=repay_state_gas_spill_context (absorb_state_gas (parent with gasUsed := parent.gasUsed-(c.msgParams.gasLimit-c.gasUsed)) c.stateGasLeft c.stateGasSpilled c.stateGasCommitted). Both results update parent logs to parent.logs++c.logs, addRefund to parent.addRefund+c.addRefund, subRefund similarly, and pc to SUC parent.pc. Memory mr also sets returnData=c.returnData, pushes 1w, and writes TAKE mr.size c.returnData at mr.offset. Code addr instead sets returnData=[] and pushes w2w addr; memory is unchanged. Rollback is unchanged.
+
+#### Approach
+Factor pop_and_incorporate_context T into an exact local equality if needed, then use handle_exception_def for the destination projections. Prove with arbitrary refunds from the outset using update_gas_refund_def; the existing zero-refund Memory helper becomes a specialization rather than the interface for SELFDESTRUCT.
+
+#### Not to try
+Do not assert handle_step NONE equals handle_exception NONE for Code output. Do not use a giant SPEC-level rewrite to hide this distinction.
+
+### C1.3.2.3: Empty-output deposit boundary and coverage checkpoint
 - Kind: `definition_probe`
 - Risk: 2
-- Work priority: 10
+- Work priority: 30
 - Work units: 3
-- Rationale: This is a bounded extraction/build and interface check of identified existing helpers, with escalation for missing semantic obligations rather than speculative handler proofs.
-- Dependencies: C1.3.1
+- Rationale: SELFDESTRUCT's empty-output Code case eliminates deposit cost but may still update accounts; a bounded computation exposes the exact state before successful settlement.
+- Dependencies: C1.3.2.1, C1.3.2.2
 - Checkpoint: yes
 
 #### Summary
-Use the existing audit to validate the exact tail normalization interfaces before frozen proofs. Check non-deposit exception handling, precompile exact meters, and successful versus failing parent-meter reconciliation. Record exact checked signatures and uncovered boundaries at the checkpoint.
+Check the empty-output handle_create path for both destinations and compose with the success boundaries. Preserve the validated precompile helper subset and its get_accounts_def fix. Audit all tail consumers without proving frozen rules.
 
-#### Description
-Inventory anchors are prog/CALL_RULES_AUDIT_seq58.md lines 53-58 and the existing helpers proceed_call_precompile_success_meter, proceed_call_precompile_success, handle_step_success_memory_exact, step_precompile_success_exact, repay_absorb_meter_fields, restored_unused_gas, restored_unused_gas_bound and restored_unused_gas_sub. Locate handle_create_not_none and its actual defining theory before using it. Validate helper proofs/dependencies in an independent prog theory (or cite checked prerequisite-theory exports where applicable), without proving or changing frozen SPEC declarations. Explicitly check which interfaces the existing Invalid and SELFDESTRUCT proof bodies consume. Record missing boundaries and request refinement of C1.3 before declaring the machinery phase complete if any are absent.
+#### Statement
+Output local handle_create_empty_output_exact (separate Memory and Code projections if clearer), with c.returnData=[] and explicit nonempty contexts. Code projection must expose update_account addr (lookup_account addr s.rollback.accounts with code := []) s.rollback.accounts, not claim an unchanged rollback. Include any gas bound needed for consume_gas 0 explicitly and show it is available from the SELFDESTRUCT use site. Output an audited map from Invalid, SELFDESTRUCT and precompile consumers to independently built helpers.
 
 #### Approach
-Read the named helper signatures and the relevant tail proof bodies, then build a minimal independent validation theory containing only the necessary existing helper dependency closure. Map each tail family to its checked interfaces and distinguish successful absorb/repay from failure restore/forfeit; report exact residual goals if a helper fails instead of growing a generic simplifier.
+Inspect step_self_destruct and its current frozen consumers to check the exact empty-data prestate and gas bound, then evaluate handle_create at empty output, including zero execution/state charge. Build the independent probe theory, propagate only validated helper proof fixes such as get_accounts_def, and record step_precompile_success_exact as deferred C2 composition depending on step_call_prepared; request a scoped C2 update later if its output inventory does not already cover that helper.
 
 #### Not to try
-Do not repair the frozen SPEC proofs during this probe, duplicate the entire vfmProgScript.sml, or certify interfaces merely because their names appear in the inventory. Do not add unplanned replacement handler lemmas; escalate the precise missing boundary at this checkpoint.
+Do not claim zero deposit cost means no account update. Do not certify machinery coverage solely from the nine original helpers, and do not edit frozen theorem bodies at this checkpoint.
 
 ### C2: Repair the frozen CALL family
 - Kind: `proof_group`
