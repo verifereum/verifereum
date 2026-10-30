@@ -21,6 +21,8 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C2.1.2 | proved |  | E0023 |  |
 | C2.1.3 | proved |  | E0020 |  |
 | C2.2 | proved |  | E0026 |  |
+| C2.3 | stuck | wrong_statement | E0032 | Authorize concrete checked-falsehood probe for baseline auxiliary execution equality, using params.newAccountCharged=T, empty parent spill and reservoir, then classify required obligation per frozen contract. Do not modify witness statement. |
+| C2.3.1 | proved |  | E0033 |  |
 
 ## C1.1
 
@@ -353,3 +355,57 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T153638Z_m0571_t001` (use `read_tool_output` for exact output)
+
+## C2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `wrong_statement`
+- latest episode: `E0032`
+- blocker: Historical auxiliary inner_revert_spill_execution exists in immutable baseline 48d42165 and quantifies freely over params.newAccountCharged; true branch credits reservoir but claimed output leaves it unchanged. PLAN forbids editing baseline witness and requires scoped falsehood probe gate.
+- actual effort: 1 sessions, 3 msgs, 48 steps, 47 tools, 10 holbuild, 5,238,728 tok (5,232,554 in, 6,174 out, 5,136,640 cached), 538.5s, $0.9212720
+- next: Authorize concrete checked-falsehood probe for baseline auxiliary execution equality, using params.newAccountCharged=T, empty parent spill and reservoir, then classify required obligation per frozen contract. Do not modify witness statement.
+
+### Attempts / Evidence
+
+- `E0027` (progressed, other, actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 1 holbuild, 827,563 tok (827,116 in, 447 out, 679,040 cached), 47.2s, $0.3685260)
+  - Add missing get_accounts_def to precompile entry meter's local unfolding. -> proceed_call_precompile_success_meter and proceed_call_precompile_success check; build reaches step_precompile_success_exact drule_all mismatch. Prepared context includes stateGasLeft subtraction, but two facts at 6122-6126 describe old parent record without that update, preventing matching. (`TO_seq58_prog_call_rules-20261030T153638Z_m0579_t001`, `TO_seq58_prog_call_rules-20261030T153638Z_m0580_t001`)
+- `E0028` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 16 steps, 15 tools, 5 holbuild, 920,063 tok (918,468 in, 1,595 out, 887,552 cached), 197.9s, $0.1665372)
+  - Align two parent-field facts with stateGasLeft subtraction. -> Meter composition now succeeds and produces child reservoir facts. (`TO_seq58_prog_call_rules-20261030T153638Z_m0590_t001`)
+  - Replace global fs with rewrite, then isolate alias equations and bounds and normalize with gvs before arithmetic. -> Goal reduced to stipend <= base+g+pg from stipend<=base, but decide_tac cannot atomize nested conditional summands. Need avoid alias expansion at boundary or isolated additive monotonicity tactic/helper. (`TO_seq58_prog_call_rules-20261030T153638Z_m0601_t001`)
+- `E0029` (progressed, other, actual effort: 1 sessions, 9 steps, 8 tools, 3 holbuild, 635,506 tok (634,426 in, 1,080 out, 616,064 cached), 159.8s, $0.1091304)
+  - Validate strategist's abbreviation arithmetic repair, then remove dead alias equalities before handle_step boundary. -> Abbreviation closes additive bound. Removing obsolete aliases before boundary avoids expansion entirely; uses popped-stack bound explicitly. step_precompile_success_exact now fully checks. Build advances to SPEC_Call_precompile simp[] timeout at line 6309. (`TO_seq58_prog_call_rules-20261030T153638Z_m0608_t001`, `TO_seq58_prog_call_rules-20261030T153638Z_m0614_t001`)
+- `E0030` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 16 steps, 15 tools, 4 holbuild, 1,183,959 tok (1,181,883 in, 2,076 out, 1,151,616 cached), 254.4s, $0.1964556)
+  - Clear obsolete aliases before handle_step boundary and use popped-stack bound explicitly. -> step_precompile_success_exact fully checked; no extra helpers/statements changed. (`TO_seq58_prog_call_rules-20261030T153638Z_m0614_t001`)
+  - Replace SPEC consumer's simp[] after result witness with targeted rewrite of ~ISR and step equation. -> Moves beyond first timeout, but simp[Abbr result] for postcondition times out with huge expanded conditional-meter terms. (`TO_seq58_prog_call_rules-20261030T153638Z_m0621_t001`)
+- `E0031` (progressed, other, actual effort: 1 sessions, 3 msgs, 41 steps, 40 tools, 10 holbuild, 4,316,856 tok (4,312,489 in, 4,367 out, 4,234,624 cached), 428.8s, $0.6228624)
+  - Use projection-only simplifier and selected alias rewrites in precompile postcondition, with GSYM SUB_PLUS rather than conditional SUB_SUB. -> SPEC_Call_precompile, witness_precompile_identity now check. wf_state result must be rewritten before result unfolding; prior timeout primarily conditional SUB_SUB simplification. Build reaches later Return-rule probes in assigned interval. (`TO_seq58_prog_call_rules-20261030T153638Z_m0656_t001`)
+  - Unfold zero stateCost abbreviation in SPEC_Return_outermost memory-output branch. -> SPEC_Return_outermost now checks; build fails in inner_revert_spill_execution on opaque credit_new_account params.newAccountCharged. Suspected stale auxiliary witness missing no-creation flag; no frozen theorem failure established. (`TO_seq58_prog_call_rules-20261030T153638Z_m0661_t001`)
+- `E0032` (stuck, wrong_statement, actual effort: 1 sessions, 3 msgs, 48 steps, 47 tools, 10 holbuild, 5,238,728 tok (5,232,554 in, 6,174 out, 5,136,640 cached), 538.5s, $0.9212720)
+  - Check provenance of local historical witness against immutable audit baseline and git -S history. -> Audit lines 19-24 includes inner_revert_spill_execution in baseline. Introduced 5027d454 before baseline; cannot specialize statement under current frozen contract. (`TO_seq58_prog_call_rules-20261030T153638Z_m0672_t001`, `TO_seq58_prog_call_rules-20261030T153638Z_m0669_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T153638Z_m0672_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T153638Z_m0661_t001` (use `read_tool_output` for exact output)
+
+## C2.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0033`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 38 steps, 37 tools, 10 holbuild, 2,400,923 tok (2,397,424 in, 3,499 out, 2,345,984 cached), 482.1s, $0.3724684
+
+### Attempts / Evidence
+
+- `E0033` (proved, , actual effort: 1 sessions, 2 msgs, 38 steps, 37 tools, 10 holbuild, 2,400,923 tok (2,397,424 in, 3,499 out, 2,345,984 cached), 482.1s, $0.3724684)
+  - Instantiate the exact frozen let construction using fully explicit probe_params, probe_context and probe_initial; normalize execution definitions and finish finite arithmetic with EVAL_TAC. -> Checked step s differs from (INL (),out): actual parent stateGasLeft is 183600, frozen out has 0. newAccountCharged=T triggers the account-creation refund on Revert. (`TO_seq58_prog_call_rules-20261030T153638Z_m0717_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T153638Z_m0717_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T153638Z_m0682_t001` (use `read_tool_output` for exact output)

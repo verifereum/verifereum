@@ -296,13 +296,14 @@ Inspect step_self_destruct and its current frozen consumers to check the exact e
 Do not claim zero deposit cost means no account update. Do not certify machinery coverage solely from the nine original helpers, and do not edit frozen theorem bodies at this checkpoint.
 
 ### C2: Repair the frozen CALL family
-- Kind: `proof_group`
-- Risk: 3
+- Kind: `unprovability_gate`
+- Risk: 5
 - Work priority: 10
 - Work units: 0
-- Rationale: Derived from child component C2.1.2 risk 3. Native prefix theorem conclusion does not match the frozen consumer's alias-normalized charged-state equality via irule.
+- Rationale: Suspected theorem falsehood: complete probe components under C2 (including C2.3.1) before any other proof work. If probes confirm a counterexample, stop/report unprovable; do not silently repair the theorem.
 - Required for completion: yes
 - Dependencies: C1
+- Checkpoint: yes
 
 #### Summary
 Repair the five explicitly named frozen CALL obligations using validated machinery. Preserve all statements including step_call_prepared. Cover intervening helper declarations and precompile witness consumers needed by the whole theory.
@@ -445,20 +446,53 @@ At the start of the prepared proof, before fs/gvs expands aliases, use the gasCo
 #### Not to try
 Do not repeatedly move and AC-normalize call_gas assumptions. Do not send expanded conditional cost expressions to ARITH_TAC, use global AC simplification, unfold semantic internals in the consumer, or replace the checked adapter. Do not change frozen statements, introduce proof-search fallbacks or raise tactic timeouts. Do not claim component closure merely because SPEC_Call checks: step_call_prepared must also check.
 
-### C2.3: Precompile CALL composition and witnesses
-- Kind: `proof`
+### C2.3: Frozen historical auxiliary falsehood gate
+- Kind: `unprovability_gate`
+- Risk: 5
+- Work priority: 0
+- Work units: 0
+- Rationale: inner_revert_spill_execution is a baseline theorem required by the unchanged-name/statement contract. Its arbitrary params.newAccountCharged appears to permit a refund absent from its claimed output; the build failure exposes this branch but is not a checked negation.
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0032
+
+#### Progress note
+E0032 supplies provenance and a failed execution-equality proof, not falsehood certification. Preserve completed CALL/precompile work without treating it as closure of the frozen tail obligation.
+
+#### Summary
+Freeze all baseline declarations, including local historical witnesses. Block ordinary proof work while checking inner_revert_spill_execution. Use a separate prog theory to test the charged branch. If falsehood is checked, report the exact failing conjunct and a sufficient repair without applying it.
+
+#### Not to try
+Do not specialize params.newAccountCharged in any baseline statement, delete the auxiliary, or infer falsehood solely from an unclosed tactic goal.
+
+#### Argument
+The baseline auxiliary universally quantifies params. Setting newAccountCharged to true reaches credit_new_account after reverting the child. The claimed output retains the parent's zero reservoir; a positive credited reservoir would refute the step equality, and hence the entire conjunction, irrespective of the later conjuncts.
+
+#### Definition design
+Reuse the exact let-bound construction at inner_revert_spill_execution, with explicit concrete records for remaining parameters. Prove the observed parent reservoir after step and its difference from out; do not change the execution semantics or auxiliary statement.
+
+#### Code structure
+Put the probe in an independent theory under prog/, reusing the existing probe imports/helpers where useful; it must not import the currently broken vfmProgTheory. Preserve the precompile composition and witnesses already checked. Ordinary completion of this subtree remains deferred until the gate is resolved.
+
+### C2.3.1: Check charged inner-revert baseline counterexample
+- Kind: `unprovability_probe`
 - Risk: 2
-- Work priority: 20
-- Work units: 8
-- Rationale: The file already decomposes precompile entry, metering and exact execution; repair their state-field compositions using the validated interfaces.
-- Dependencies: C1, C2.2
+- Work priority: 0
+- Work units: 3
+- Rationale: The failure isolates one boolean branch of a finite concrete execution. A reservoir projection suffices to refute the claimed equality without proving the whole SPEC rule.
 - Checkpoint: yes
 
 #### Summary
-Validate and repair all declarations after step_call_prepared up to SPEC_Invalid_outermost. This includes proceed_call_precompile_success_meter, proceed_call_precompile_success, step_precompile_success_exact, SPEC_Call_precompile and witness_precompile_identity, plus all declarations in that interval. Keep every frozen statement unchanged.
+Instantiate the baseline construction with newAccountCharged=T and explicit finite records. Compute the parent reservoir after the revert. Prove the baseline step equality false in an independent checked theory. Report the tightest sufficient repair only as a note.
+
+#### Statement
+For a concrete instantiation of the exact let bindings in inner_revert_spill_execution with params.newAccountCharged = T, prove step s <> (INL (),out), preferably via (FST (HD (SND (step s)).contexts)).stateGasLeft = 183600 while (FST (HD out.contexts)).stateGasLeft = 0. The value 183600 is the probe prediction, not an established fact.
 
 #### Approach
-Check the existing precompile metering/exact-execution equations in source order and compose them with step_call_prepared. Track the parent reservoir and spill separately from child execution gas; apply validated record-update and exception boundaries rather than distributing large definition sets through SPEC_Call_precompile. Rebuild all witness consumers in the covered interval.
+Choose explicit records for params, ctx_base and initial, retaining every override in the frozen construction; use computation and small normalization lemmas to evaluate the state-gas projection. Build the independent probe with holbuild and record the concrete assignment, checked negation, and baseline correspondence. If confirmed, stop task proof work and report that the step-equality conjunct fails; assess newAccountCharged=F as a sufficient repair without editing the original statement. If the prediction fails, record the actual result and request gate resolution.
+
+#### Not to try
+Do not import the broken target theory or use its unproved auxiliary. Do not raise tactic timeouts, change frozen statements, or present symbolic failed proof residuals as a concrete checked counterexample.
 
 ### C3: Validate and repair remaining tail rules
 - Kind: `proof`

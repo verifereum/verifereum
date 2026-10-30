@@ -5940,7 +5940,7 @@ Proof
   strip_tac >>
   Cases_on `op <> CallCode /\ 0 < value` >>
   simp[proceed_call_def, drain_state_gas_reservoir_def,
-       get_rollback_def, read_memory_def,
+       get_rollback_def, get_accounts_def, read_memory_def,
        update_accounts_def, get_caller_def, get_value_def, get_static_def,
        get_current_context_def, set_current_context_def, push_context_def,
        bind_def, ignore_bind_def, return_def] >>
@@ -6120,10 +6120,12 @@ Proof
     simp[Abbr `prepared`] >>
   `prepared.rollback = newRb` by simp[Abbr `prepared`] >>
   `(caller with <|stack := DROP (6 + vOff) ss;
-    memory := em; gasUsed := g + gasCost; returnData := []|>).msgParams.callee = p.callee` by simp[] >>
+    memory := em; gasUsed := g + gasCost; returnData := [];
+    stateGasLeft := caller.stateGasLeft - stateCost|>).msgParams.callee = p.callee` by simp[] >>
   `data = buffer_take argsOffset argsSize
     (caller with <|stack := DROP (6 + vOff) ss;
-    memory := em; gasUsed := g + gasCost; returnData := []|>).memory` by simp[] >>
+    memory := em; gasUsed := g + gasCost; returnData := [];
+    stateGasLeft := caller.stateGasLeft - stateCost|>).memory` by simp[] >>
   drule_all (Q.INST
     [`outputTo` |-> `Memory <|offset := retOffset; size := retSize|>`]
     proceed_call_precompile_success_meter) >>
@@ -6136,9 +6138,15 @@ Proof
      memory := em; gasUsed := g + gasCost; returnData := [];
      stateGasLeft := 0|>,cb)::cs` by
     simp[Abbr `returned`] >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`gasCost = _`, `vCost = _`, `addr = _`, `value = _`,
+     `vOff = _`, `mCost = _`, `retOffset = _`, `retSize = _`,
+     `em = _`, `stateCost = _`, `newAccountCharged = _`] >>
   drule (Q.INST [`s` |-> `returned`] handle_step_success_memory_exact) >>
   simp[] >>
-  (impl_tac >- (fs[stack_limit_def] >> decide_tac)) >>
+  (impl_tac >-
+    (qpat_x_assum `LENGTH (DROP (6 + vOff) ss) < stack_limit` mp_tac >>
+     simp[stack_limit_def])) >>
   disch_then (assume_tac o REWRITE_RULE []) >>
   `step_inst op = step_call op` by
     (map_every (fn q => qpat_x_assum q mp_tac)
@@ -6298,11 +6306,25 @@ Proof
        pure_rewrite_tac[GSYM th]) >>
      irule step_preserves_wf_state >> simp[]) >>
   qexists_tac `result` >>
-  simp[] >>
+  qpat_x_assum `~ISR (FST r)` (fn th => rewrite_tac[th]) >>
+  qpat_assum `step (SND r) = result` (fn th => rewrite_tac[th]) >>
+  qpat_assum `wf_state (SND result)` (fn th => rewrite_tac[th]) >>
+  `FST r = INL ()` by
+    (qpat_x_assum `ISL e` mp_tac >>
+     qpat_assum `e = _` (fn th => pure_rewrite_tac[th]) >>
+     Cases_on `FST r` >> simp[]) >>
   conj_tac >-
-    (simp[Abbr `result`] >>
-     Cases_on `FST r` >> gvs[] >>
-     simp[repay_absorb_meter_fields] >> decide_tac) >>
+    (simp_tac (srw_ss()) [Abbr `result`, repay_absorb_meter_fields] >>
+     rpt conj_tac >>
+     map_every (fn q => qpat_assum q (fn th => pure_rewrite_tac[th]))
+       [`gasCost = _`, `stateCost = _`, `newAccountCharged = _`,
+        `toAccount = _`, `vCost = _`, `mCost = _`, `em = _`,
+        `retOffset = _`, `retSize = _`, `addr = _`, `value = _`, `vOff = _`,
+        `ss = _`, `pc = _`, `g = _`, `sg = _`, `sp = _`,
+        `bsl = _`, `cm = _`, `FST r = INL ()`, `p = _`, `m = _`, `rb = _`, `cb = _`, `cs = _`, `l = _`] >>
+     qpat_assum `pc = _` (fn th =>
+       rule_assum_tac (PURE_REWRITE_RULE [th])) >>
+     asm_simp_tac bool_ss [GSYM SUB_PLUS, ADD_COMM]) >>
   sym_tac >> irule UPDATE_evm2set_without_original >>
   gvs[Abbr `result`]
 QED
@@ -6551,7 +6573,7 @@ Proof
   \\ Cases_on`p.outputTo` \\ gvs[reraise_def,return_def]
   >- (
     gvs[Abbr`em`, memory_cost_def, expanded_memory_def, memory_expand_by_def,
-        Abbr`gasCost`,is_code_dest_def]
+        Abbr`gasCost`, Abbr`stateCost`, is_code_dest_def]
     \\ conj_tac >-
          (qpat_assum ‘{_} = _’ $ rewrite_tac o single o GSYM
           \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
