@@ -10,7 +10,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.2 | stuck | risk_mismatch | E0002 | Strategist review meter boundary composition/normalization design before further proof work. |
 | C1.2.1 | proved |  | E0003 |  |
 | C1.2.2 | proved |  | E0004 |  |
-| C1.2.3 | stuck | risk_mismatch | E0007 | Review remaining composition interface: avoid traversing large full continuation, protect grouped access/meter programs during known-operation reduction; no frozen rules touched. |
+| C1.2.3 | stuck | risk_mismatch | E0008 | Review transport matching/type issue, preferably validate transport directly on small pop+opaque-cont expression before retrying full prefix. Request explicit acceptance and next-session actionable guidance. |
 
 ## C1.1
 
@@ -101,10 +101,10 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 - result: `stuck`
 - diagnosis: `risk_mismatch`
-- latest episode: `E0007`
-- blocker: Structural step_call_segments now proved, but concrete composition attempt still expands grouped segments prematurely and naming hypotheses normalize the wrong way.
-- actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 12 holbuild, 2,654,369 tok (2,649,136 in, 5,233 out, 2,582,272 cached), 623.5s, $0.4442852
-- next: Review remaining composition interface: avoid traversing large full continuation, protect grouped access/meter programs during known-operation reduction; no frozen rules touched.
+- latest episode: `E0008`
+- blocker: Success-bind transport rewrites do not match actual prefix after stack pop equation, despite transport lemma and named spine bridges all building.
+- actual effort: 1 sessions, 2 msgs, 28 steps, 27 tools, 11 holbuild, 3,188,496 tok (3,182,612 in, 5,884 out, 3,140,864 cached), 913.3s, $0.4564224
+- next: Review transport matching/type issue, preferably validate transport directly on small pop+opaque-cont expression before retrying full prefix. Request explicit acceptance and next-session actionable guidance.
 
 ### Attempts / Evidence
 
@@ -116,8 +116,12 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 - `E0007` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 12 holbuild, 2,654,369 tok (2,649,136 in, 5,233 out, 2,582,272 cached), 623.5s, $0.4442852)
   - Prove paired application and function equalities, then restricted simp_tac pure_ss structural reassociation, BETA_TAC and REFL_TAC -> step_call_segments builds clean. Paired function normalization required as well as application normalization; pure_ss needed explicit REFL_TAC. (`TO_seq58_prog_call_rules-20261030T113558Z_m0136_t001`)
   - State actual concrete prefix, derive pop_stack using stack=args++rest, rewrite actual segmented spine, normalize named scalar arguments -> Pop application proved, but bool_ss/std_ss leave constructor cases unreduced. srw_ss reduces them but ambient bind_assoc destroys segment grouping; broad rewrite reconstructs lets and all continuation details. Removed unfinished concrete prefix after bounded attempts, retained checked structural lemma. (`TO_seq58_prog_call_rules-20261030T113558Z_m0145_t001`, `TO_seq58_prog_call_rules-20261030T113558Z_m0149_t001`)
+- `E0008` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 28 steps, 27 tools, 11 holbuild, 3,188,496 tok (3,182,612 in, 5,884 out, 3,140,864 cached), 913.3s, $0.4564224)
+  - Opaque access/meter program wrappers and applications, call_prefix_prog wrapper, actual step_call_prefix_bridge -> All build clean, and actual step_call matches named arbitrary-continuation prefix. Concrete prefix evaluation still absent. (`TO_seq58_prog_call_rules-20261030T113558Z_m0173_t001`, `TO_seq58_prog_call_rules-20261030T113558Z_m0187_t001`)
+  - Derive pop success then drule call_bind_success and rewrite derived universal continuation equality -> No rewrite of outer prefix bind. Inspection prints monad_bind in derived transport. Qualified vfmExecution$bind and annotated prefix result type, still no match. Removed unfinished application theorem, retained checked wrappers/bridge. (`TO_seq58_prog_call_rules-20261030T113558Z_m0177_t001`, `TO_seq58_prog_call_rules-20261030T113558Z_m0185_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_prog_call_rules-20261030T113558Z_m0153_t001` (use `read_tool_output` for exact output)
-- `TO_seq58_prog_call_rules-20261030T113558Z_m0149_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T113558Z_m0187_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T113558Z_m0177_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T113558Z_m0185_t001` (use `read_tool_output` for exact output)
