@@ -319,10 +319,19 @@ Proof
   >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
   >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
+  (* EIP-8037: the opcode's execution charge and the recipient's creation
+     charge, both inert in the same-frame sense, precede the child's grant. *)
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_ignore_bind >> simp[]
   >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
   >> irule same_frame_or_grow_ignore_bind >> simp[]
-  >> irule same_frame_or_grow_ignore_bind >> simp[]
+  >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
+  (* The balance check, whose failing branch refills the charge and returns
+     the grant; then the else branch's two statements and its depth check. *)
+  >> irule same_frame_or_grow_cond >> simp[]
   >> irule same_frame_or_grow_ignore_bind >> simp[]
   >> irule same_frame_or_grow_bind >> simp[] >> gen_tac
   >> irule same_frame_or_grow_cond >> simp[]
@@ -363,27 +372,6 @@ Proof
   >> irule psf_or_grow_ignore_bind >> simp[]
   >> qexists_tac `pco` >> simp[]
   >> conj_tac >- simp[assert_def]
-  >> irule psf_or_grow_bind >> simp[] >>
-  qexists_tac `λx s. pco s` >> simp[] >>
-  conj_tac
-  >- (
-    rpt strip_tac
-    >> `preserves_same_frame get_gas_left` by simp[]
-    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
-    >> disch_then drule >> rw[]
-    >> drule same_frame_rel_callee
-    >> gvs[Abbr`pco`])
-  >> gen_tac
-  >> irule psf_or_grow_ignore_bind >> simp[] >> qexists_tac `pco` >> simp[]
-  >> conj_tac
-  >- (
-    rpt strip_tac
-    >> qmatch_asmsub_abbrev_tac`consume_gas n`
-    >> `preserves_same_frame (consume_gas n)` by simp[]
-    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
-    >> disch_then drule >> rw[]
-    >> drule same_frame_rel_callee
-    >> gvs[Abbr`pco`])
   >> irule psf_or_grow_ignore_bind >> simp[] >>
   qexists_tac `pco` >> simp[]
   >> conj_tac
@@ -416,7 +404,8 @@ Proof
   >> gen_tac
   >> irule psf_or_grow_cond >> conj_tac
   >- (
-    (* abort_unuse branch: preserves_same_frame, trivially psf_or_grow *)
+    (* EIP-8037: the preflight abort charges and refills nothing, so it is
+       preserves_same_frame and trivially psf_or_grow. *)
     simp[])
   >> irule psf_or_grow_ignore_bind >> simp[]
   >> qexists_tac `pco` >> simp[]
@@ -439,10 +428,34 @@ Proof
     >> disch_then drule >> rw[]
     >> drule same_frame_rel_callee
     >> gvs[Abbr`pco`])
+  (* EIP-8037: the destination's creation charge, a state-gas meter write. *)
+  >> irule psf_or_grow_ignore_bind >> simp[] >>
+  qexists_tac `pco` >> simp[]
+  >> conj_tac
+  >- (
+    rpt strip_tac
+    >> qmatch_asmsub_abbrev_tac`charge_new_account chg`
+    >> `preserves_same_frame (charge_new_account chg)` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> irule psf_or_grow_bind >> simp[] >>
+  qexists_tac `λx s. pco s` >> simp[] >>
+  conj_tac
+  >- (
+    rpt strip_tac
+    >> `preserves_same_frame withhold_create_gas` by simp[]
+    >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
+    >> disch_then drule >> rw[]
+    >> drule same_frame_rel_callee
+    >> gvs[Abbr`pco`])
+  >> gen_tac
   >> irule psf_or_grow_cond >> conj_tac
   >- (
     (* abort_create_exists senderAddress: where senderAddress = head's callee *)
     qunabbrev_tac`pco` >>
+    BETA_TAC >>
     irule psf_or_grow_abort_create_exists_callee)
   (* proceed_create: grows *)
   >> simp[]
@@ -493,7 +506,7 @@ Theorem same_frame_or_grow_step_inst[simp]:
   same_frame_or_grow (step_inst op)
 Proof
   Cases_on `op` >> simp[]
-  >> simp[step_inst_def]
+  >> simp[step_inst_def, same_frame_or_grow_step_create]
 QED
 
 (* The inner monad of step (before the outer handle) is composed of
@@ -559,8 +572,12 @@ Proof
   strip_tac
   >> gvs[proceed_create_def, bind_def, ignore_bind_def,
          get_rollback_def, get_original_def, set_original_def,
+         (* EIP-8037: the reader of the accounts that decides this child's
+            creation charge, before the reservoir and the push. *)
+         get_accounts_def,
          update_accounts_def, push_context_def, return_def,
-         AllCaseEqs()]
+         drain_state_gas_reservoir_def, get_current_context_def,
+         set_current_context_def, fail_def, AllCaseEqs()]
 QED
 
 Theorem proceed_call_returns_inl:
@@ -573,7 +590,11 @@ Proof
          get_rollback_def, read_memory_def, get_caller_def, COND_RATOR,
          return_def, get_caller_def, get_value_def, get_static_def,
          get_current_context_def, push_context_def, AllCaseEqs(),
-         update_accounts_def]
+         (* EIP-8037: the reader of the accounts that decides this child's
+            creation charge, before the reservoir and the push. *)
+         get_accounts_def,
+         update_accounts_def, drain_state_gas_reservoir_def,
+         set_current_context_def]
 QED
 
 (* step_create never INR-grows. Use same_frame_or_grow_step_create:
@@ -945,11 +966,8 @@ Proof
   qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
   pairarg_tac >> gvs[] >>
-  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
-  disch_then irule >> simp[] >>
-  qpat_x_assum`_ = (_,_)`kall_tac >>
-  rpt gen_tac >> strip_tac >>
-  pairarg_tac >> gvs[] >>
+  (* EIP-8037: the state-gas charge and the assert_not_static statement now
+     precede the call_gas let, so the bare statements are unfolded here. *)
   gvs[ignore_bind_def] >>
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
   disch_then irule >> simp[] >>
@@ -959,6 +977,19 @@ Proof
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >>
   rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >>
+  rpt gen_tac >> strip_tac >>
+  pairarg_tac >> gvs[] >>
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >>
@@ -1023,21 +1054,21 @@ Proof
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
-  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
-  disch_then irule >> simp[] >>
-  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   gvs[ignore_bind_def] >>
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
-  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
-  disch_then irule >> simp[] >>
-  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   gvs[COND_RATOR,CaseEq"bool"]
-  (* abort_unuse path: preserves_same_frame, can't grow *)
+  (* abort_create path: preserves_same_frame, can't grow *)
   >> TRY (
     drule_at(Pat`_ = (_,_)`)psf_imp_length_contexts_preserved >>
     simp[] >> NO_TAC ) >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
+  disch_then irule >> simp[] >>
+  qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>

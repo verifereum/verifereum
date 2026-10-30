@@ -1,0 +1,5 @@
+Theory vfmTestDefs2491[no_sig_docs]
+Libs vfmTestAuxLib vfmTestDefLib
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stStaticCall/static_ab_acalls3/static_ab_acalls3.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stStaticCall/static_ab_acalls3/static_ab_acalls3.json");
+val defs = mapi (define_test "2491") tests;

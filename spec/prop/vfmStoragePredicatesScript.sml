@@ -620,6 +620,110 @@ Proof
   rw[get_gas_left_def]
 QED
 
+Theorem preserves_rollback_unuse_gas[simp]:
+  preserves_rollback (unuse_gas n)
+Proof
+  rw[preserves_rollback_def, unuse_gas_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def, return_def,
+     fail_def, assert_def]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem preserves_rollback_state_gas_meter[simp]:
+  preserves_rollback get_state_gas_left /\
+  preserves_rollback (charge_state_gas n) /\
+  preserves_rollback (credit_state_gas_refund n) /\
+  preserves_rollback restore_state_gas /\
+  preserves_rollback commit_state_gas /\
+  preserves_rollback (restore_state_gas_to_entry sg) /\
+  preserves_rollback repay_state_gas_spill /\
+  preserves_rollback forfeit_remaining_gas /\
+  preserves_rollback withhold_create_gas /\
+  preserves_rollback drain_state_gas_reservoir /\
+  preserves_rollback (restore_child_gas gas reservoir)
+Proof
+  rw[get_state_gas_left_def, charge_state_gas_def,
+     credit_state_gas_refund_def, restore_state_gas_def,
+     commit_state_gas_def, restore_state_gas_to_entry_def,
+     repay_state_gas_spill_def, forfeit_remaining_gas_def,
+     withhold_create_gas_def, drain_state_gas_reservoir_def,
+     restore_child_gas_def] >>
+  rpt (irule preserves_rollback_bind >> rw[]
+       ORELSE irule preserves_rollback_ignore_bind >> rw[])
+QED
+
+(* EIP-8037's account-creation charge and its credit wrap a state-gas meter
+   action; neither touches rollback, so storage is preserved. *)
+Theorem preserves_rollback_charge_new_account[simp]:
+  preserves_rollback (charge_new_account charged)
+Proof
+  Cases_on `charged` >> rw[charge_new_account_def]
+QED
+
+Theorem preserves_rollback_credit_new_account[simp]:
+  preserves_rollback (credit_new_account charged)
+Proof
+  Cases_on `charged` >> rw[credit_new_account_def]
+QED
+
+(* The same fact in the form a goal can use when the charge's equation is a
+   hypothesis: the case-split shape `charge_new_account ch st = (r,s')` fixes
+   s' as a projection of the application, so the rollback rewrite has to be
+   stated about that projection, not about a bound s'. *)
+Theorem SND_rollback_charge_new_account[simp]:
+  (SND (charge_new_account charged s)).rollback = s.rollback
+Proof
+  metis_tac [preserves_rollback_charge_new_account, preserves_rollback_def,
+             pairTheory.PAIR]
+QED
+
+Theorem SND_rollback_credit_new_account[simp]:
+  (SND (credit_new_account charged s)).rollback = s.rollback
+Proof
+  metis_tac [preserves_rollback_credit_new_account, preserves_rollback_def,
+             pairTheory.PAIR]
+QED
+
+(* The credit only adjusts the current frame's gas fields, so a goal that has
+   to look inside its output -- at `SND (credit_new_account ch st)` -- can read
+   the frame off with this.  An empty context list fails before any update, and
+   an uncharged credit is the identity, so both leave the list alone. *)
+Theorem credit_new_account_contexts[simp]:
+  (SND (credit_new_account charged s)).contexts =
+    (if s.contexts = [] then s.contexts
+     else if charged then
+       (FST (HD s.contexts) with
+          <|gasUsed :=
+              (FST (HD s.contexts)).gasUsed -
+              MIN new_account_state_gas (FST (HD s.contexts)).stateGasSpilled;
+            stateGasSpilled :=
+              (FST (HD s.contexts)).stateGasSpilled -
+              MIN new_account_state_gas (FST (HD s.contexts)).stateGasSpilled;
+            stateGasLeft updated_by
+              ($+ (new_account_state_gas -
+                   MIN new_account_state_gas (FST (HD s.contexts)).stateGasSpilled))|>,
+        SND (HD s.contexts)) :: TL s.contexts
+     else s.contexts)
+Proof
+  Cases_on `s.contexts` >>
+  Cases_on `charged` >>
+  rw[credit_new_account_def, credit_state_gas_refund_def,
+     get_current_context_def, set_current_context_def, bind_def,
+     ignore_bind_def, return_def, fail_def, APPLY_UPDATE_THM]
+QED
+
+Theorem preserves_storage_charge_new_account[simp]:
+  preserves_storage (charge_new_account charged)
+Proof
+  Cases_on `charged` >> rw[charge_new_account_def]
+QED
+
+Theorem preserves_storage_credit_new_account[simp]:
+  preserves_storage (credit_new_account charged)
+Proof
+  Cases_on `charged` >> rw[credit_new_account_def]
+QED
+
 Theorem preserves_rollback_get_original[simp]:
   preserves_rollback get_original
 Proof
@@ -656,11 +760,8 @@ Proof
   >> fs[]
 QED
 
-(* step_self_destruct: each update_accounts preserves storage.
-   - transfer_value: preserves_storage_transfer_value.
-   - update_account senderAddress (sender with balance := 0):
-     sender was captured as lookup_account senderAddress accs, so
-     (sender with balance := 0).storage = accs[senderAddress].storage. *)
+(* step_self_destruct: the only update_accounts it performs is
+   transfer_value, and preserves_storage_transfer_value covers it. *)
 
 Theorem preserves_storage_step_self_destruct:
   preserves_storage step_self_destruct
@@ -683,8 +784,17 @@ Proof
       assert_def, bind_def, ignore_bind_def, get_current_context_def,
       set_current_context_def, fail_def, get_static_def, get_original_def,
       finish_def, COND_RATOR, add_to_delete_def, update_accounts_def,
-      update_account_def, APPLY_UPDATE_THM, transfer_value_preserves_storage] >>
-  simp[lookup_account_def, APPLY_UPDATE_THM] >> rw[] >>
+      update_account_def, push_logs_def, APPLY_UPDATE_THM,
+      transfer_value_preserves_storage] >>
+  (* What the case split leaves carries the creation charge's equation, and
+     the charge moves the meter alone: turn that equation into `s' = the
+     charge's output' so the rollback rewrite fires, and the goal is the
+     transfer's again. *)
+  qpat_x_assum `charge_new_account fg st = (res,s')`
+    (assume_tac o SYM o REWRITE_RULE [pairTheory.SND] o CONJUNCT2 o
+     REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ]) >>
+  gvs[SND_rollback_charge_new_account, lookup_account_def, APPLY_UPDATE_THM] >>
+  rw[] >>
   rewrite_tac[GSYM lookup_account_def] >>
   simp[transfer_value_preserves_storage]
 QED
@@ -796,7 +906,7 @@ Proof
   >> rename1 `access_slot (SK address key) sx = (INL _, sy)`
   >> `fIN (SK address key) sy.rollback.accesses.storageKeys`
        by metis_tac[access_slot_adds_to_storageKeys]
-  (* Tail: update_gas_refund followed by consume_gas, both preserves_rollback. *)
+  (* The refund and gas-meter tail preserves rollback. *)
   >> rename1 `update_gas_refund refundUpdates sy = (_, s_gr)`
   >> `s_gr.rollback = sy.rollback` by
        metis_tac[preserves_rollback_update_gas_refund,
@@ -804,7 +914,14 @@ Proof
   >> drule (preserves_rollback_consume_gas
             |> REWRITE_RULE [preserves_rollback_def])
   >> strip_tac
-  >> simp[]
+  >> drule (preserves_rollback_state_gas_meter |> cj 2
+            |> REWRITE_RULE [preserves_rollback_def])
+  >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `if noRefund then _ else _`
+  >> Cases_on `noRefund` >> gvs[return_def]
+  >> drule (preserves_rollback_state_gas_meter |> cj 3
+            |> REWRITE_RULE [preserves_rollback_def])
+  >> strip_tac >> gvs[]
 QED
 
 (* write_storage address key value: the only primitive that writes
@@ -1191,15 +1308,6 @@ Proof
   >> gvs[AllCaseEqs()]
 QED
 
-Theorem preserves_rollback_unuse_gas[simp]:
-  preserves_rollback (unuse_gas n)
-Proof
-  rw[preserves_rollback_def, unuse_gas_def, bind_def, ignore_bind_def,
-     get_current_context_def, set_current_context_def, return_def,
-     fail_def, assert_def]
-  >> gvs[AllCaseEqs()]
-QED
-
 Theorem preserves_rollback_get_num_contexts[simp]:
   preserves_rollback get_num_contexts
 Proof
@@ -1282,6 +1390,24 @@ Theorem preserves_storage_abort_create_exists[simp]:
   preserves_storage (abort_create_exists a)
 Proof
   rw[abort_create_exists_def]
+  >> rpt (irule preserves_storage_ignore_bind >> rw[]
+          ORELSE irule preserves_storage_bind >> rw[])
+QED
+
+(* A create that aborts before entering its child charges nothing and moves
+   no account: it only pushes the zero flag and advances the pc. *)
+Theorem preserves_rollback_abort_create[simp]:
+  preserves_rollback abort_create
+Proof
+  rw[abort_create_def]
+  >> rpt (irule preserves_rollback_bind >> rw[]
+          ORELSE irule preserves_rollback_ignore_bind >> rw[])
+QED
+
+Theorem preserves_storage_abort_create[simp]:
+  preserves_storage abort_create
+Proof
+  rw[abort_create_def]
   >> rpt (irule preserves_storage_ignore_bind >> rw[]
           ORELSE irule preserves_storage_bind >> rw[])
 QED
@@ -1545,10 +1671,19 @@ Proof
   irule preserves_storage_bind >> simp[] >>
   reverse conj_tac >- ( CASE_TAC >> simp[] ) >>
   Cases >> simp[] >>
+  irule preserves_storage_ignore_bind >> simp[] >>
+  (* EIP-8037: the creation charge, in state gas *)
+  irule preserves_storage_ignore_bind >> simp[] >>
+  irule preserves_storage_ignore_bind >> simp[] >>
+  irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   pairarg_tac >> simp[] >>
   irule preserves_storage_ignore_bind >> simp[] >>
-  irule preserves_storage_ignore_bind >> simp[] >>
+  irule preserves_storage_bind >> simp[] >> gen_tac >>
+  (* EIP-8037: the else branch reads the return data and the depth before
+     the inner check, so its statements are peeled here; the branches of
+     that check are then both simp-provable. *)
+  irule preserves_storage_cond >> simp[] >>
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_cond >> simp[]
@@ -1566,7 +1701,15 @@ Proof
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_ignore_bind >> simp[] >>
+  (* EIP-8037: the withheld grant now comes after the creation charge, in
+     the branch that enters a child, so it is peeled there, not here. *)
+  irule preserves_storage_ignore_bind >> simp[] >>
+  irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
+  irule preserves_storage_cond >> simp[] >>
+  (* EIP-8037: the branch that enters a child looks the address up, ensures
+     the domain and charges the creation before it withholds the grant and
+     makes the existence check, so those statements are peeled here. *)
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_ignore_bind >> simp[] >>

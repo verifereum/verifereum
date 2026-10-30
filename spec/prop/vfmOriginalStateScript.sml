@@ -1,6 +1,6 @@
 Theory vfmOriginalState
 Ancestors
-  arithmetic list rich_list pair option sum While
+  arithmetic list rich_list pair option sum While words
   vfmContext vfmExecution
 Libs
   monadsyntax
@@ -38,31 +38,16 @@ Definition stack_original_step_sstore_gas_consumption_def:
     original <- stack_original_get_original;
     originalValue <<- lookup_storage key (lookup_account address original).storage;
     accessCost <- access_slot (SK address key);
-    baseDynamicGas <<-
-      if originalValue = currentValue ∧ currentValue ≠ value
-      then if originalValue = 0w
-           then storage_set_cost
-           else storage_update_cost - cold_sload_cost
-      else warm_access_cost;
-    dynamicGas <<- baseDynamicGas + zero_warm accessCost;
-    refundUpdates <<-
-      if currentValue ≠ value then
-        let storageSetRefund =
-          if originalValue = value then
-            if originalValue = 0w then
-              storage_set_cost - warm_access_cost
-            else
-              storage_update_cost - cold_sload_cost - warm_access_cost
-          else 0
-        in
-          if originalValue ≠ 0w ∧ currentValue ≠ 0w ∧ value = 0w then
-            (storageSetRefund + storage_clear_refund, 0)
-          else if originalValue ≠ 0w ∧ currentValue = 0w then
-            (storageSetRefund, storage_clear_refund)
-          else (storageSetRefund, 0)
-      else (0, 0);
+    dynamicGas <<- sstore_base_gas originalValue currentValue value +
+                   zero_warm accessCost;
+    refundUpdates <<- sstore_refund_updates originalValue currentValue value;
     update_gas_refund refundUpdates;
+    stateGasRefund <<- sstore_state_gas_refund originalValue currentValue value;
+    if stateGasRefund = 0 then return ()
+    else credit_state_gas_refund stateGasRefund;
+    stateGas <<- sstore_state_gas originalValue currentValue value;
     consume_gas dynamicGas;
+    charge_state_gas stateGas;
   od
 End
 
@@ -95,15 +80,15 @@ Definition stack_original_step_self_destruct_def:
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty
                      then self_destruct_new_account_cost else 0;
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
+    charge_new_account (0 < balance ∧ beneficiaryEmpty);
     assert_not_static;
     update_accounts $ transfer_value senderAddress address balance;
+    push_logs $ transfer_log senderAddress address balance;
     original <- stack_original_get_original;
     originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then do
-      update_accounts $
-        update_account senderAddress (sender with balance := 0);
-      add_to_delete senderAddress
-    od else return ();
+    if account_empty originalContract
+    then add_to_delete senderAddress
+    else return ();
     finish
   od
 End
@@ -111,6 +96,9 @@ End
 Definition stack_original_proceed_create_def:
   stack_original_proceed_create senderAddress address value code cappedGas =
   do
+    accounts <- get_accounts;
+    charged <<- account_empty $ lookup_account address accounts;
+    reservoir <- drain_state_gas_reservoir;
     update_accounts $ increment_nonce senderAddress;
     subContextTx <<- <|
         from     := senderAddress
@@ -131,7 +119,8 @@ Definition stack_original_proceed_create_def:
       transfer_value senderAddress address value o
       increment_nonce address;
     push_context
-      (initial_context address code F (Code address) subContextTx, rollback)
+      (initial_context address code F (Code address) charged reservoir subContextTx with
+         logs := transfer_log senderAddress address value, rollback)
   od
 End
 
@@ -158,20 +147,20 @@ Definition stack_original_step_create_def:
                 then address_for_create2 senderAddress salt code
                 else address_for_create senderAddress nonce;
     assert (LENGTH code ≤ 2 * max_code_size) OutOfGas;
-    gasLeft <- get_gas_left;
-    cappedGas <<- gasLeft - gasLeft DIV 64;
-    consume_gas cappedGas;
     assert_not_static;
     set_return_data [];
     sucDepth <- get_num_contexts;
     if sender.balance < value ∨
        SUC nonce ≥ 2 ** 64 ∨
        sucDepth > 1024
-    then abort_unuse cappedGas
+    then abort_create
     else do
       access_address address;
       ensure_storage_in_domain address;
       toCreate <<- lookup_account address accounts;
+      newAccountCharged <<- account_empty toCreate;
+      charge_new_account newAccountCharged;
+      cappedGas <- withhold_create_gas;
       if account_already_created toCreate
       then abort_create_exists senderAddress
       else stack_original_proceed_create senderAddress address value code cappedGas
@@ -227,32 +216,53 @@ Definition stack_original_run_create_def:
     let crb = HD s.contexts in
     let ctxt = FST crb in
     let calleeAddress = ctxt.msgParams.callee in
+    let rbAccounts = s.rollback.accounts in
     if IS_SOME tx.to then
-      INR $ (s.rollback.accounts, s with rollback updated_by
+      let charge = if 0 < tx.value ∧
+                       account_empty (lookup_account calleeAddress
+                                        s.rollback.accounts)
+                    then new_account_state_gas else 0 in
+      (case charge_state_gas_context ctxt charge of
+       | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                        rbAccounts
+                        (s with contexts := [
+                          (ctxt with gasUsed := ctxt.msgParams.gasLimit,
+                           SND crb)])
+       | SOME ctxt' =>
+      INR $ (s.rollback.accounts, s with <|
+          contexts := [(ctxt', SND crb)];
+          rollback updated_by
                                    (λr. r with accounts updated_by
-             transfer_value tx.from calleeAddress tx.value),
+             transfer_value tx.from calleeAddress tx.value) |>,
              if fIN calleeAddress precompile_addresses
-             then SOME calleeAddress else NONE)
+             then SOME calleeAddress else NONE))
     else
-      let accounts = s.rollback.accounts in
-      let callee = lookup_account calleeAddress accounts in
+      let callee = lookup_account calleeAddress rbAccounts in
       if account_already_created callee then
-        INL $ post_transaction_accounting blk tx (SOME AddressCollision) accounts
+        INL $ post_transaction_accounting blk tx (SOME AddressCollision)
+              rbAccounts
               (s with contexts := [
                 (ctxt with gasUsed := ctxt.msgParams.gasLimit,
                  SND crb)
                ])
       else
-        INR $ (accounts, s with <|
+        let charge = if account_empty (lookup_account calleeAddress accounts)
+                       then new_account_state_gas else 0 in
+        (case charge_state_gas_context ctxt charge of
+         | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                          rbAccounts
+                          (s with contexts := [
+                            (ctxt with gasUsed := ctxt.msgParams.gasLimit,
+                             SND crb)])
+         | SOME ctxt' =>
+        INR $ (rbAccounts, s with <|
+            contexts := [(ctxt', SND crb with accounts :=
+                            update_account calleeAddress empty_account_state
+                              (SND crb).accounts)];
             rollback updated_by (λr. r with accounts updated_by (
               transfer_value tx.from calleeAddress tx.value o
               increment_nonce calleeAddress
-            ));
-            contexts updated_by (
-              set_last_accounts $
-              update_account calleeAddress empty_account_state
-                (SND crb).accounts
-            )|>, NONE)
+            ))|>, NONE))
 End
 
 Definition stack_original_run_transaction_def:
@@ -696,6 +706,100 @@ Proof
   Cases_on `refunds` >> simp[orig_exec_context_updates]
 QED
 
+(* EIP-8037: the state gas meter operations only read and write the head
+   frame, which the representation relation pins equal.  The three that
+   bind a value out of `get_gas_left` need the composition spelled out;
+   `simp` does not discharge the universally quantified tail on its own. *)
+Theorem orig_exec_forfeit_remaining_gas[local]:
+  orig_exec_rel forfeit_remaining_gas forfeit_remaining_gas
+Proof
+  rewrite_tac[forfeit_remaining_gas_def]
+  \\ irule orig_exec_bind \\ simp[orig_exec_get_gas_left] \\ gen_tac
+  \\ simp[orig_exec_context_updates]
+QED
+
+Theorem orig_exec_withhold_create_gas[local]:
+  orig_exec_rel withhold_create_gas withhold_create_gas
+Proof
+  rewrite_tac[withhold_create_gas_def]
+  \\ irule orig_exec_bind \\ simp[orig_exec_get_gas_left] \\ gen_tac
+  \\ irule orig_exec_ignore_bind
+  \\ simp[orig_exec_context_updates, orig_exec_return]
+QED
+
+Theorem orig_exec_restore_child_gas[local]:
+  orig_exec_rel (restore_child_gas g sr) (restore_child_gas g sr)
+Proof
+  rewrite_tac[restore_child_gas_def]
+  \\ irule orig_exec_ignore_bind \\ simp[orig_exec_context_updates]
+  \\ irule orig_exec_bind \\ simp[original_state_current] \\ gen_tac
+  \\ simp[original_state_set_current, orig_exec_return]
+QED
+
+(* `charge_state_gas` is the one meter op whose body branches into a
+   nested block, so the composition has to be spelled out branch by
+   branch: on the spill path the reservoir moves first, then the spill
+   is charged through `consume_gas`, then the frame is read back. *)
+Theorem orig_exec_charge_state_gas[local]:
+  orig_exec_rel (charge_state_gas n) (charge_state_gas n)
+Proof
+  rewrite_tac[charge_state_gas_def]
+  \\ irule orig_exec_bind
+  \\ simp[original_state_current]
+  \\ gen_tac
+  \\ irule orig_exec_cond
+  \\ simp[original_state_set_current]
+  \\ irule orig_exec_cond
+  \\ simp[orig_exec_fail]
+  \\ simp[LET_THM]
+  \\ irule orig_exec_ignore_bind
+  \\ simp[original_state_set_current]
+  \\ irule orig_exec_ignore_bind
+  \\ simp[orig_exec_context_updates]
+  \\ irule orig_exec_bind
+  \\ simp[original_state_current]
+  \\ gen_tac
+  \\ simp[original_state_set_current]
+QED
+
+Theorem orig_exec_state_gas_updates[local]:
+  !n g sr.
+  orig_exec_rel get_state_gas_left get_state_gas_left /\
+  orig_exec_rel (charge_state_gas n) (charge_state_gas n) /\
+  orig_exec_rel (credit_state_gas_refund n) (credit_state_gas_refund n) /\
+  orig_exec_rel restore_state_gas restore_state_gas /\
+  orig_exec_rel commit_state_gas commit_state_gas /\
+  orig_exec_rel (restore_state_gas_to_entry sr)
+                (restore_state_gas_to_entry sr) /\
+  orig_exec_rel repay_state_gas_spill repay_state_gas_spill /\
+  orig_exec_rel forfeit_remaining_gas forfeit_remaining_gas /\
+  orig_exec_rel withhold_create_gas withhold_create_gas /\
+  orig_exec_rel drain_state_gas_reservoir drain_state_gas_reservoir /\
+  orig_exec_rel (restore_child_gas g sr) (restore_child_gas g sr)
+Proof
+  simp[get_state_gas_left_def, charge_state_gas_def,
+       credit_state_gas_refund_def, restore_state_gas_def,
+       commit_state_gas_def, restore_state_gas_to_entry_def,
+       repay_state_gas_spill_def,
+       drain_state_gas_reservoir_def,
+       orig_exec_bind, orig_exec_ignore_bind, orig_exec_cond,
+       original_state_current, original_state_set_current,
+       orig_exec_return, orig_exec_assert, orig_exec_fail,
+       orig_exec_get_gas_left, LET_THM, orig_exec_context_updates,
+       orig_exec_charge_state_gas,
+       orig_exec_forfeit_remaining_gas, orig_exec_withhold_create_gas,
+       orig_exec_restore_child_gas]
+QED
+
+
+Theorem orig_exec_new_account[local]:
+  orig_exec_rel (charge_new_account charged) (charge_new_account charged) /\
+  orig_exec_rel (credit_new_account charged) (credit_new_account charged)
+Proof
+  Cases_on `charged` >>
+  simp[charge_new_account_def, credit_new_account_def, orig_exec_cond,
+       orig_exec_return, orig_exec_state_gas_updates]
+QED
 Theorem orig_exec_sstore_gas[local]:
   orig_exec_rel (stack_original_step_sstore_gas_consumption address key value)
                 (step_sstore_gas_consumption address key value)
@@ -705,11 +809,12 @@ Proof
   irule orig_exec_bind >> simp[orig_exec_get_gas_left] >> gen_tac >>
   irule orig_exec_ignore_bind >> simp[orig_exec_assert] >>
   irule orig_exec_bind >> simp[orig_exec_get_accounts] >> gen_tac >>
-  simp[sstore_base_gas_def,
-       sstore_refund_updates_def, orig_exec_bind, orig_exec_ignore_bind,
-       orig_exec_get_gas_left, orig_exec_get_accounts,
-       original_state_get_original, orig_exec_access_slot,
-       orig_exec_refund, orig_exec_context_updates, orig_exec_assert]
+  irule orig_exec_bind >> simp[original_state_get_original] >> gen_tac >>
+  irule orig_exec_bind >> simp[orig_exec_access_slot] >> gen_tac >>
+  irule orig_exec_ignore_bind >> simp[orig_exec_refund] >>
+  irule orig_exec_ignore_bind >>
+  simp[orig_exec_cond, orig_exec_ignore_bind, orig_exec_return,
+       orig_exec_context_updates, orig_exec_state_gas_updates]
 QED
 
 Theorem orig_exec_sstore[local]:
@@ -733,6 +838,7 @@ Proof
             orig_exec_get_accounts, orig_exec_update_accounts,
             original_state_get_original, orig_exec_access_address,
             orig_exec_simple_wrappers, orig_exec_return,
+            orig_exec_state_gas_updates, orig_exec_new_account,
             orig_exec_add_to_delete, orig_exec_finish] >> rpt gen_tac)
 QED
 
@@ -743,33 +849,49 @@ Proof
   rewrite_tac[stack_original_proceed_create_def, proceed_create_def, ignore_bind_def] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_update_accounts,
+            orig_exec_get_accounts,
             orig_exec_get_rollback, original_state_get_original,
-            original_state_set_original, original_state_push] >> rpt gen_tac)
+            original_state_set_original, original_state_push,
+            orig_exec_state_gas_updates] >> rpt gen_tac)
 QED
 
 Theorem orig_exec_create_aborts[local]:
   orig_exec_rel inc_pc inc_pc /\
   orig_exec_rel (abort_unuse n) (abort_unuse n) /\
   orig_exec_rel (abort_create_exists a) (abort_create_exists a) /\
-  orig_exec_rel (abort_call_value n) (abort_call_value n)
+  orig_exec_rel (abort_call_value n) (abort_call_value n) /\
+  orig_exec_rel abort_create abort_create
 Proof
-  simp[inc_pc_def, abort_unuse_def, abort_create_exists_def, abort_call_value_def,
+  simp[inc_pc_def, abort_unuse_def, abort_create_def,
+       abort_create_exists_def, abort_call_value_def,
        orig_exec_bind, orig_exec_ignore_bind, orig_exec_update_accounts,
        original_state_current, original_state_set_current,
        orig_exec_context_updates]
 QED
 
+
+(* Everything the create's own steps need, short of `orig_exec_cond`: the
+   opcode ends in two `if`s, which the bind loop cannot peel and which are
+   split explicitly below. *)
+val create_step_lemmas = [
+    orig_exec_bind,
+    orig_exec_context_reads, orig_exec_context_updates,
+    orig_exec_get_accounts, orig_exec_get_gas_left, orig_exec_get_num_contexts,
+    orig_exec_assert, orig_exec_simple_wrappers, orig_exec_access_address,
+    orig_exec_ensure_storage, orig_exec_create_aborts, orig_exec_proceed_create,
+    orig_exec_state_gas_updates, orig_exec_new_account];
+
 Theorem orig_exec_create[local]:
   orig_exec_rel (stack_original_step_create two) (step_create two)
 Proof
   rewrite_tac[stack_original_step_create_def, step_create_def, ignore_bind_def] >>
-  rpt (irule orig_exec_bind >>
-       simp[orig_exec_bind, orig_exec_cond,
-            orig_exec_context_reads, orig_exec_context_updates,
-            orig_exec_get_accounts, orig_exec_get_gas_left, orig_exec_get_num_contexts,
-            orig_exec_assert, orig_exec_simple_wrappers, orig_exec_access_address,
-            orig_exec_ensure_storage, orig_exec_create_aborts, orig_exec_proceed_create] >>
-       rpt gen_tac)
+  rpt (irule orig_exec_bind >> simp create_step_lemmas >> rpt gen_tac) >>
+  (* the preflight abort *)
+  irule orig_exec_cond >> conj_tac >- simp[orig_exec_create_aborts] >>
+  rpt (irule orig_exec_bind >> simp create_step_lemmas >> rpt gen_tac) >>
+  (* the collision abort *)
+  irule orig_exec_cond >> conj_tac >- simp[orig_exec_create_aborts] >>
+  simp[orig_exec_proceed_create]
 QED
 
 (* Unchanged instructions use only the compatible primitive interface. *)
@@ -806,6 +928,9 @@ Theorem orig_exec_shared_data[local]:
   orig_exec_rel step_pop step_pop /\
   orig_exec_rel (step_dup n) (step_dup n) /\
   orig_exec_rel (step_swap n) (step_swap n) /\
+  orig_exec_rel step_dupn step_dupn /\
+  orig_exec_rel step_swapn step_swapn /\
+  orig_exec_rel step_exchange step_exchange /\
   orig_exec_rel (step_log n) (step_log n) /\
   orig_exec_rel (step_return b) (step_return b)
 Proof
@@ -815,6 +940,8 @@ Proof
     step_block_hash_def, step_blob_hash_def, step_self_balance_def,
     step_mload_def, step_mstore_def, step_jump_def, step_jumpi_def,
     step_push_def, step_pop_def, step_dup_def, step_swap_def,
+    step_dupn_def, step_swapn_def, step_exchange_def, code_byte_def,
+    exchange_stack_def,
     step_log_def, step_return_def, ignore_bind_def] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_cond, orig_exec_return,
@@ -912,8 +1039,10 @@ Proof
   rewrite_tac[proceed_call_def, ignore_bind_def] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_cond, orig_exec_return,
-            orig_exec_get_rollback, orig_exec_update_accounts, original_state_push,
-            orig_exec_context_reads, orig_exec_dispatch_precompiles] >> rpt gen_tac)
+            orig_exec_get_rollback, orig_exec_get_accounts,
+            orig_exec_update_accounts, original_state_push,
+            orig_exec_context_reads, orig_exec_dispatch_precompiles,
+            orig_exec_state_gas_updates] >> rpt gen_tac)
 QED
 
 Theorem orig_exec_call[local]:
@@ -930,13 +1059,29 @@ Proof
             orig_exec_get_accounts, orig_exec_get_gas_left,
             orig_exec_get_num_contexts, orig_exec_access_address,
             orig_exec_simple_wrappers, orig_exec_create_aborts,
+            orig_exec_new_account,
             orig_exec_proceed_call] >> rpt gen_tac) >>
   pairarg_tac >> gvs[] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_cond, orig_exec_return,
             orig_exec_context_reads, orig_exec_context_updates,
             orig_exec_get_num_contexts, orig_exec_simple_wrappers,
-            orig_exec_create_aborts, orig_exec_proceed_call] >> rpt gen_tac)
+            orig_exec_get_gas_left, orig_exec_create_aborts,
+            orig_exec_new_account,
+            orig_exec_proceed_call] >> rpt gen_tac) >>
+  (* not enough balance for the value, so the creation refills *)
+  irule orig_exec_cond >>
+  conj_tac >- simp[orig_exec_bind, orig_exec_new_account, orig_exec_create_aborts] >>
+  rpt (irule orig_exec_bind >>
+       simp[orig_exec_bind, orig_exec_return,
+            orig_exec_context_reads, orig_exec_context_updates,
+            orig_exec_get_num_contexts, orig_exec_simple_wrappers,
+            orig_exec_create_aborts, orig_exec_new_account,
+            orig_exec_proceed_call] >> rpt gen_tac) >>
+  (* too deep to call, so the creation refills here too *)
+  irule orig_exec_cond >>
+  conj_tac >- simp[orig_exec_bind, orig_exec_new_account, orig_exec_create_aborts] >>
+  simp[orig_exec_proceed_call]
 QED
 
 Theorem orig_exec_inc_pc_or_jump[local]:
@@ -977,8 +1122,13 @@ Proof
   irule orig_exec_bind >> reverse conj_tac >- simp[orig_exec_context_reads] >>
   qx_gen_tac `dest` >>
   Cases_on `e` >> Cases_on `dest` >>
-  simp[ignore_bind_def, orig_exec_bind, orig_exec_reraise,
-       orig_exec_assert, orig_exec_context_updates, orig_exec_update_accounts]
+  simp[ignore_bind_def] >>
+  rpt (irule orig_exec_bind >>
+       simp[orig_exec_bind, orig_exec_assert, orig_exec_reraise,
+            orig_exec_return, orig_exec_context_reads,
+            orig_exec_context_updates, orig_exec_update_accounts,
+            orig_exec_state_gas_updates] >> rpt gen_tac) >>
+  simp[orig_exec_reraise]
 QED
 
 Theorem original_state_bind_at[local]:
@@ -1023,8 +1173,17 @@ Proof
   rewrite_tac[pop_and_incorporate_context_def] >>
   once_rewrite_tac[bind_def] >> simp[] >>
   irule original_state_pop_bind >>
-  simp[ignore_bind_def, orig_exec_bind, orig_exec_context_updates,
-       orig_exec_cond, orig_exec_set_rollback]
+  conj_tac >- (
+    rpt gen_tac >>
+    BETA_TAC >>
+    rewrite_tac[ignore_bind_def] >>
+    irule orig_exec_bind >> simp[orig_exec_context_updates] >> rpt gen_tac >>
+    irule orig_exec_bind >> simp[original_state_current] >> rpt gen_tac >>
+    irule orig_exec_bind >> simp[original_state_set_current] >> rpt gen_tac >>
+    irule orig_exec_cond >>
+    simp[orig_exec_bind, orig_exec_context_updates, orig_exec_state_gas_updates,
+         orig_exec_new_account, orig_exec_set_rollback] ) >>
+  simp[]
 QED
 
 Theorem orig_exec_exception_output[local]:
@@ -1054,24 +1213,37 @@ Theorem orig_exec_handle_exception[local]:
   orig_exec_rel (handle_exception e) (handle_exception e)
 Proof
   simp[handle_exception_def, ignore_bind_def] >>
-  irule orig_exec_bind >> reverse conj_tac
-  >- simp[orig_exec_cond, orig_exec_bind, orig_exec_get_gas_left,
-          orig_exec_context_updates, orig_exec_return] >>
-  simp[] >>
+  (* EIP-8037 hangs a longer failure prefix in front of the rereraise:
+     the frame rolls its state gas back, then forfeits its execution
+     grant.  Both are head-frame work, so the prefix composes in
+     relation form and nothing has to be unfolded to get past it. *)
+  irule orig_exec_bind >>
+  simp[orig_exec_cond, orig_exec_return, orig_exec_state_gas_updates] >>
+  irule orig_exec_bind >>
+  simp[orig_exec_cond, orig_exec_return, orig_exec_bind,
+       orig_exec_state_gas_updates, orig_exec_context_updates] >>
+  (* Read the frame count out of the states, so the branch that reaches
+     the rest of the body still knows how many frames it has. *)
   rewrite_tac[orig_exec_rel_def] >> rpt gen_tac >> strip_tac >>
   drule original_state_rel_fields >> strip_tac >>
   drule original_state_rel_length >> strip_tac >>
   drule original_state_rel_current >> strip_tac >>
   once_rewrite_tac[bind_def] >> simp[get_num_contexts_def, return_def] >>
-  Cases_on `LENGTH new.contexts <= 1`
-  >- metis_tac[orig_exec_reraise, orig_exec_rel_def] >>
+  `LENGTH new.contexts = LENGTH old.contexts` by simp[] >>
+  pop_assum (fn th => once_rewrite_tac [th]) >>
+  Cases_on `LENGTH old.contexts ≤ 1`
+  >- (* one frame: both sides rereraise, over the state the prefix left,
+        which the frame relation pins *)
+     simp[reraise_def] >>
+  `1 < LENGTH old.contexts` by metis_tac[NOT_LESS_EQUAL] >>
   `get_return_data old = (INL (FST (HD new.contexts)).returnData, old) /\
    get_return_data new = (INL (FST (HD new.contexts)).returnData, new) /\
    get_output_to old = (INL (FST (HD new.contexts)).msgParams.outputTo, old) /\
    get_output_to new = (INL (FST (HD new.contexts)).msgParams.outputTo, new)` by
     simp[get_return_data_def, get_output_to_def, get_current_context_def,
          bind_def, return_def] >>
-  simp[] >> once_rewrite_tac[bind_def] >> simp[] >>
+  once_rewrite_tac[bind_def] >> simp[] >>
+  once_rewrite_tac[bind_def] >> simp[] >>
   once_rewrite_tac[bind_def] >> simp[] >>
   irule original_state_bind_at >>
   simp[original_state_pop_incorporate, GSYM ignore_bind_def,
@@ -1224,8 +1396,20 @@ Proof
   Cases_on `initial_state dom static chainId prevHashes blk accounts tx` >> simp[] >>
   drule original_state_initial >> strip_tac >>
   Cases_on `IS_SOME tx.to`
-  >- gvs[original_state_rel_def] >>
+  >- (Cases_on `charge_state_gas_context (FST (HD x.contexts))
+                 (if 0 < tx.value /\
+                     account_empty
+                       (lookup_account (FST (HD x.contexts)).msgParams.callee
+                                       x.rollback.accounts)
+                  then new_account_state_gas else 0)` >> simp[] >>
+      `HD x.contexts = LAST x.contexts` by (Cases_on `x.contexts` >> gvs[]) >>
+      gvs[original_state_rel_def]) >>
   simp[] >> IF_CASES_TAC >> simp[] >>
+  Cases_on `charge_state_gas_context (FST (HD x.contexts))
+              (if account_empty
+                    (lookup_account (FST (HD x.contexts)).msgParams.callee
+                                    accounts)
+               then new_account_state_gas else 0)` >> simp[] >>
   Cases_on `x.contexts` >> gvs[] >>
   PairCases_on `h` >> gvs[original_state_rel_def, set_last_accounts_def] >>
   fs[rollback_state_component_equality]

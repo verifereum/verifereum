@@ -1,10 +1,51 @@
 Theory vfmDecreasesGas
 Ancestors
-  arithmetic list pair relation sum
+  arithmetic list pair relation sum words
   vfmConstants vfmState vfmContext vfmExecution vfmExecutionProp
 Libs
   BasicProvers
 
+(* Eliminate saturated subtraction before invoking Presburger arithmetic.
+   SUB_ELIM_THM gives additive constraints in both order cases. *)
+val gas_arith_tac =
+  rpt gen_tac >>
+  rpt (W (fn (_, w) =>
+    let val sub = find_term (can numSyntax.dest_minus) w in
+      CONV_TAC (UNBETA_CONV sub THENC REWR_CONV SUB_ELIM_THM) >>
+      BETA_TAC >> rpt gen_tac
+    end)) >>
+  numLib.ARITH_TAC;
+
+Theorem gas_arith_increment[local]:
+  !a k:num. 0 < k ==> a < a + k
+Proof
+  gas_arith_tac
+QED
+
+Theorem gas_arith_saturated[local]:
+  !a b:num. a <= b ==> a - b = 0
+Proof
+  gas_arith_tac
+QED
+
+Theorem gas_arith_nested[local]:
+  !a b c:num. a - b - c = a - (b + c)
+Proof
+  gas_arith_tac
+QED
+
+Theorem unused_gas_grant_bound[local]:
+  !gL gU spill:num. spill <= gU /\ gU <= gL ==>
+    gL - gU + spill <= gL
+Proof
+  gas_arith_tac
+QED
+
+(* EIP-8037: what a step must not raise is the head frame's unused gas,
+   `frame_unused_gas` (grant less spent, plus the state charge that
+   spilled into the grant).  `gasUsed` alone will not do: a state-gas
+   credit hands execution gas back to the frame, and a state charge that
+   spills spends execution gas without any charge of its own. *)
 Definition decreases_gas_def:
   decreases_gas strict (m: α execution) =
     ∀s. case s.contexts of
@@ -16,8 +57,8 @@ Definition decreases_gas_def:
         (c.gasUsed < c'.gasUsed ⇒ c'.gasUsed ≤ c'.msgParams.gasLimit) ∧
         (wf_context c ⇒ wf_context c') ∧
         if strict ∧ ISL (FST (m s))
-        then c.gasUsed < c'.gasUsed
-        else c.gasUsed ≤ c'.gasUsed
+        then frame_unused_gas c' < frame_unused_gas c
+        else frame_unused_gas c' ≤ frame_unused_gas c
 End
 
 Theorem decreases_gas_mono:
@@ -132,6 +173,104 @@ Proof
   \\ BasicProvers.TOP_CASE_TAC \\ gs[]
 QED
 
+Theorem decreases_gas_drain_state_gas_reservoir[simp]:
+  decreases_gas F drain_state_gas_reservoir
+Proof
+  rw[decreases_gas_def, drain_state_gas_reservoir_def,
+     get_current_context_def, set_current_context_def,
+     bind_def, ignore_bind_def, return_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def]
+QED
+
+(* The measure is a difference of naturals, so it saturates, and each
+   fact about it is a small case analysis on that.  The frame facts are
+   stated over the four numbers the measure reads, not over a record
+   update, so the proofs can rewrite them directly.
+
+   These four facts are handed to alan (TASK_seq58_frame_unused_gas.md,
+   next to this script).  The hand attempts are kept below each
+   statement, commented out; each got the stated goal down to a goal in
+   `num` subtraction that `simp`, `rw`, `DECIDE_TAC`, `ARITH_TAC` and
+   `metis_tac` all fail to close, and the deadline for hand-grinding them
+   passed. *)
+
+(* Spending k of execution gas strictly lowers the frame's unused gas,
+   whatever its reservoir holds: with the spill held fixed on both
+   sides, `gL - (gU + k) < gL - gU` is exactly `k` being spent out of a
+   grant that covers it.
+
+   Hand attempts that failed (the theory stops at this theorem):
+   `simp [LESS_ADD_NONZERO]`, `metis_tac [LESS_MONO_ADD, ADD_CLAUSES]`
+   (30s timeout), `rw [SUB_LESS_0, ADD_SUB2]`, `numLib.DECIDE_TAC`, and
+   `ntac 2 (pop_assum mp_tac) \\ numLib.ARITH_TAC`, which gets furthest
+   but refuses the goal: "at Gen_arith.ARITH_CONV: formula not in the
+   allowed subset" -- HOL4's ARITH_CONV decides Presburger arithmetic
+   over `num`, and truncated subtraction is outside it. *)
+val _ = numLib.temp_prefer_num ();
+
+Theorem num_consume_gas_lt[simp]:
+  !gL gU sp k. 0 < k /\ gU + k <= gL ==> gL - (gU + k) + sp < gL - gU + sp
+Proof
+  gas_arith_tac
+QED
+
+Theorem frame_unused_gas_consume[simp]:
+  !(c:context) k. 0 < k /\ c.gasUsed + k <= c.msgParams.gasLimit ==>
+    frame_unused_gas (c with gasUsed := c.gasUsed + k) < frame_unused_gas c
+Proof
+  simp[frame_unused_gas_def]
+QED
+
+(* EIP-8037's two state-gas meter operations only move gas between the
+   head frame's reservoir and its execution gas, so neither of them
+   raises the frame's unused gas:
+     - a charge that fits in the reservoir spends no execution gas;
+     - a charge that spills takes out of execution gas exactly what it
+       adds to the spill, and the measure counts both;
+     - a credit gives execution gas back out of the spill first and the
+       rest to the reservoir, again the same amount each way.
+   Both identities are identities on the pools, so they hold whatever
+   the two pools hold.  The pools are naturals, so the differences
+   saturate: a charge only keeps the measure when its frame's grant
+   covers the spill (`d <= gL - gU`, which is the guard
+   `charge_state_gas` itself carries), and a credit only when it gives
+   back no more execution gas than was spilled and the frame is within
+   its grant (`gU <= gL`, which is `wf_context`).
+
+   Hand attempt for the spill charge (never reached: the theory stops at
+   the theorem above):
+
+     rpt strip_tac
+     \\ Cases_on `d = 0` >- simp []
+     \\ `0 < d` by (qpat_x_assum `d <> 0` mp_tac \\ simp [])
+     \\ `d + gU <= gL` by
+          (qpat_x_assum `d <= gL - gU` mp_tac
+           \\ rw [SUB_LEFT_LESS_EQ, DISJ_IMP_THM])
+     \\ rw [SUB_PLUS, SUB_ADD, AC ADD_ASSOC ADD_COMM] *)
+Theorem frame_unused_gas_charge_spill[simp]:
+  !gL gU spill d. d <= gL - gU ==>
+    gL - (gU + d) + (spill + d) <= gL - gU + spill
+Proof
+  gas_arith_tac
+QED
+
+(* A credit hands execution gas back out of the spill: `gasUsed` and the
+   spill both drop by the amount credited, so the measure cannot rise.
+   The statement needs no bound on `gU` against `gL`: where the two
+   subtractions saturate, both sides saturate together and the inequality
+   still holds (`gL = 2, gU = 5, spill = 1, f = 1` is `0 <= 1`).
+   A credit can only take out of the spill what is in it, hence
+   `f <= spill` -- which is what `credit_state_gas_refund`'s
+   `MIN n stateGasSpilled` gives its caller. *)
+Theorem frame_unused_gas_credit[simp]:
+  !gL gU spill f. f <= spill ==>
+    gL - (gU - f) + (spill - f) <= gL - gU + spill
+Proof
+  gas_arith_tac
+QED
+
 Theorem decreases_gas_consume_gas:
   decreases_gas (0 < n) (consume_gas n)
 Proof
@@ -140,7 +279,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def, num_consume_gas_lt]
 QED
 
 Theorem decreases_gas_consume_gas_bind[simp]:
@@ -152,6 +291,100 @@ Proof
   \\ metis_tac []
 QED
 
+(* Handed to alan with the four facts above.  The unfold leaves two goals
+   that are both existential in the post-state's head frame, and getting
+   the two witnesses out of the monad by hand needs the same `num`
+   subtraction reasoning; the hand attempt below left the reservoir case
+   open (goal: `∃c' r'. ... frame_unused_gas c' <= frame_unused_gas q`
+   with the head frame set to `q with stateGasLeft := q.stateGasLeft - n`,
+   which is the measure unchanged).
+
+     rw [decreases_gas_def, charge_state_gas_def, get_current_context_def,
+       consume_gas_def, bind_def, return_def, assert_def, ignore_bind_def,
+       set_current_context_def, fail_def, LET_THM]
+     \\ Cases_on `s.contexts` \\ rw []
+     \\ TOP_CASE_TAC \\ gvs []
+     \\ TOP_CASE_TAC \\ gvs [wf_context_def, frame_unused_gas_def,
+                             SUB_RIGHT_LESS_EQ, frame_unused_gas_charge_spill] *)
+Theorem decreases_gas_charge_state_gas[simp]:
+  decreases_gas F (charge_state_gas n)
+Proof
+  rw[decreases_gas_def, charge_state_gas_def, get_current_context_def,
+     consume_gas_def, bind_def, return_def, assert_def, ignore_bind_def,
+     set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >> simp[] >>
+  Cases_on `n <= h0.stateGasLeft`
+  >- simp[set_current_context_def, wf_context_def, frame_unused_gas_def] >>
+  Cases_on `n <= h0.stateGasLeft + (h0.msgParams.gasLimit - h0.gasUsed)`
+  >- (simp[set_current_context_def, get_current_context_def, bind_def,
+           ignore_bind_def, assert_def, return_def, fail_def] >>
+      conj_tac
+      >- (simp[wf_context_def] >> rpt strip_tac >>
+          qpat_x_assum `n <= _` mp_tac >> gas_arith_tac) >>
+      simp[frame_unused_gas_def] >>
+      qpat_x_assum `n <= _` mp_tac >>
+      qpat_x_assum `~(n <= _)` mp_tac >> gas_arith_tac) >>
+  simp[fail_def]
+QED
+
+(* Same shape as the charge above.  Hand attempt:
+     rw [decreases_gas_def, credit_state_gas_refund_def,
+       get_current_context_def, bind_def, return_def, ignore_bind_def,
+       set_current_context_def, fail_def, LET_THM]
+     \\ Cases_on `s.contexts` \\ rw []
+     \\ TOP_CASE_TAC \\ gvs [wf_context_def, frame_unused_gas_def,
+                             frame_unused_gas_credit, MIN_DEF] *)
+Theorem decreases_gas_credit_state_gas_refund[simp]:
+  decreases_gas F (credit_state_gas_refund n)
+Proof
+  rw[decreases_gas_def, credit_state_gas_refund_def,
+     get_current_context_def, bind_def, return_def, ignore_bind_def,
+     set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def, frame_unused_gas_credit]
+QED
+
+(* EIP-8037's two account-creation operations are that charge and that
+   credit, or nothing at all when no account is being created: neither of
+   them can raise the frame's unused gas. *)
+Theorem decreases_gas_charge_new_account[simp]:
+  decreases_gas F (charge_new_account charged)
+Proof
+  Cases_on `charged` \\ rw [charge_new_account_def]
+QED
+
+Theorem decreases_gas_credit_new_account[simp]:
+  decreases_gas F (credit_new_account charged)
+Proof
+  Cases_on `charged` \\ rw [credit_new_account_def]
+QED
+
+(* The tail EIP-8037 gives SSTORE: hand back any state-gas refund, spend
+   the execution gas, then charge the state gas.  The execution charge is
+   what makes the chain strictly decreasing; the state charge, which only
+   moves gas between the two pools, cannot undo it. *)
+Theorem decreases_gas_sstore_state_gas_tail[simp]:
+  0 < g ⇒
+  decreases_gas T (do
+    (if refund = 0 then return () else credit_state_gas_refund refund);
+    consume_gas g;
+    charge_state_gas sg
+  od)
+Proof
+  strip_tac
+  \\ `decreases_gas T (do consume_gas g; charge_state_gas sg od)` by
+       (irule decreases_gas_consume_gas_bind
+        \\ (conj_tac >- simp [])
+        \\ qexists_tac `F` \\ simp [decreases_gas_charge_state_gas])
+  \\ Cases_on `refund = 0`
+  >- simp [decreases_gas_return]
+  \\ irule decreases_gas_ignore_bind_right
+  \\ conj_tac >- (qexists_tac `F` \\ simp [])
+  \\ simp []
+QED
+
 Theorem decreases_gas_pop_stack[simp]:
   decreases_gas F (pop_stack n)
 Proof
@@ -160,7 +393,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_pop[simp]:
@@ -181,7 +414,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_push[simp]:
@@ -206,6 +439,49 @@ Proof
   \\ irule_at Any decreases_gas_push_stack
 QED
 
+Theorem decreases_gas_step_dupn[simp]:
+  decreases_gas T step_dupn
+Proof
+  rw [step_dupn_def]
+  \\ irule decreases_gas_consume_gas_bind \\ rw []
+  \\ irule_at Any decreases_gas_bind_false
+  \\ irule_at Any decreases_gas_get_current_context \\ rw []
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_assert
+  \\ irule_at Any decreases_gas_ignore_bind_false
+  \\ irule_at Any decreases_gas_assert
+  \\ irule_at Any decreases_gas_push_stack
+QED
+
+Theorem decreases_gas_step_swapn[simp]:
+  decreases_gas T step_swapn
+Proof
+  rw [step_swapn_def]
+  \\ irule decreases_gas_ignore_bind_mono
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac `F` \\ rw []
+  \\ rw [decreases_gas_def, get_current_context_def, code_byte_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def, fail_def]
+  \\ rpt TOP_CASE_TAC
+  \\ gs[wf_context_def, LENGTH_TAKE_EQ, frame_unused_gas_def]
+  \\ TRY (qmatch_goalsub_rename_tac`h.stack` \\ Cases_on`h.stack` \\ gs[])
+QED
+
+Theorem decreases_gas_step_exchange[simp]:
+  decreases_gas T step_exchange
+Proof
+  rw [step_exchange_def]
+  \\ irule decreases_gas_ignore_bind_mono
+  \\ irule_at Any decreases_gas_consume_gas
+  \\ qexists_tac `F` \\ rw []
+  \\ rw [decreases_gas_def, get_current_context_def, code_byte_def,
+    bind_def, return_def, assert_def, ignore_bind_def,
+    set_current_context_def, fail_def, exchange_stack_def]
+  \\ rpt TOP_CASE_TAC
+  \\ gs[wf_context_def, frame_unused_gas_def]
+QED
+
 Theorem decreases_gas_step_swap[simp]:
   decreases_gas T (step_swap n)
 Proof
@@ -218,7 +494,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def, LENGTH_TAKE_EQ] \\ rw[]
+  \\ gs[wf_context_def, LENGTH_TAKE_EQ, frame_unused_gas_def] \\ rw[]
   \\ qmatch_goalsub_rename_tac`h.stack`
   \\ Cases_on`h.stack` \\ gs[]
 QED
@@ -242,7 +518,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_get_static[simp]:
@@ -286,7 +562,7 @@ Proof
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
   \\ TOP_CASE_TAC
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_log[simp]:
@@ -321,7 +597,7 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def]
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_reraise[simp]:
@@ -340,6 +616,16 @@ Proof
   \\ irule_at Any decreases_gas_get_current_context \\ rw []
 QED
 
+Theorem decreases_gas_withhold_create_gas[simp]:
+  decreases_gas F withhold_create_gas
+Proof
+  rw [withhold_create_gas_def, ignore_bind_def]
+  \\ irule decreases_gas_bind_right
+  \\ irule_at Any decreases_gas_get_gas_left \\ rw []
+  \\ irule decreases_gas_bind_right
+  \\ irule_at Any decreases_gas_consume_gas \\ rw []
+QED
+
 Theorem decreases_gas_set_return_data[simp]:
   decreases_gas F (set_return_data data)
 Proof
@@ -348,7 +634,7 @@ Proof
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
   \\ Cases_on `s.contexts` \\ rw []
-  \\ TOP_CASE_TAC \\ gs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_get_num_contexts[simp]:
@@ -647,7 +933,7 @@ Proof
   \\ qhdtm_x_assum `COND` mp_tac
   \\ qpat_abbrev_tac `v1 = COND a b' c` \\ strip_tac
   \\ rw [] \\ gs[EVERY_MEM]
-  \\ gs[wf_context_def]
+  \\ gs[wf_context_def, frame_unused_gas_def]
   \\ qmatch_goalsub_abbrev_tac `f s'`
   \\ qpat_abbrev_tac `n' = SUM (MAP _ (MAP _ t))`
   >- (gs []
@@ -680,6 +966,24 @@ Theorem call_gas_stipend_LE:
   call_gas v g l m e = (q,r) ⇒ e ≤ q ∧ r + 1 < q
 Proof
   simp [call_gas_def] \\ qpat_abbrev_tac `x = COND a b c` \\ rw []
+QED
+
+Theorem call_stipend_zero[simp]:
+  (if v = 0n then 0 else c) = (if 0 < v then c else 0)
+Proof
+  Cases_on `v` \\ simp []
+QED
+
+(* A call charges its child's grant with no extra cost to cover, so the
+   stipend it withholds is that grant plus the call stipend: the
+   `consume_gas` that pays the grant and the `unuse_gas` that gives the
+   stipend back on the paths that never enter the child move only the call
+   stipend between the frame's two pools. *)
+Theorem call_gas_zero_cost[simp]:
+  SND (call_gas v g l 0 0) =
+    FST (call_gas v g l 0 0) + (if 0 < v then call_stipend else 0)
+Proof
+  simp [call_gas_def]
 QED
 
 Theorem decreases_gas_update_accounts[simp]:
@@ -1026,8 +1330,19 @@ Proof
   \\ qexistsl_tac [`λ_. T`, `n0`, `F`, `F`] \\ rw []
 QED
 
+(* A pushed frame must fit under the weight `n0`, and that bounds the
+   frame's *unused* gas, which under EIP-8037 is the grant less the spend
+   plus the spill.  So the frame's spill has to be inside the grant too:
+   `stateGasSpilled <= gasUsed`, the EIP's own invariant (the spill is
+   execution gas already charged).  Every caller pushes a fresh
+   `initial_context`, whose spill is 0, so it discharges the conjunct by
+   `rw [initial_context_def]`.  Hand attempt below; the goal it leaves is
+   `~(n0 < spill + gL - gU)` from `gL < n0`, `gU <= gL` and
+   `spill <= gU`, in `num` subtraction that no decision procedure here
+   accepts. *)
 Theorem decreases_gas_cred_get_static_push_context:
   (∀st.
+    (FST(ctx st)).stateGasSpilled ≤ (FST(ctx st)).gasUsed ∧
     (FST(ctx st)).msgParams.gasLimit < n0 ∧
     (FST(ctx st)).gasUsed ≤ (FST(ctx st)).msgParams.gasLimit ∧
     (FST(ctx st)).msgParams.parsed =
@@ -1041,13 +1356,27 @@ Proof
   \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
   \\ first_x_assum (qspec_then `(FST h).msgParams.static` mp_tac)
   \\ gvs []
-  \\ rw[]
-  \\ gvs[wf_context_def]
+  \\ rw []
+  \\ gvs [wf_context_def, frame_unused_gas_def]
+  \\ drule_all unused_gas_grant_bound \\ strip_tac
+  \\ gas_arith_tac
 QED
 
+(* Hand attempt for the theorem above, kept for the record:
+
+     simp [decreases_gas_cred_def, get_static_def, push_context_def, return_def,
+       contexts_weight_def, LEX_DEF, unused_gas_def, bind_def, fail_def,
+       get_current_context_def]
+     \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
+     \\ first_x_assum (qspec_then `(FST h).msgParams.static` mp_tac)
+     \\ gvs []
+     \\ rw[]
+     \\ gvs[wf_context_def, frame_unused_gas_def]
+*)
 Theorem decreases_gas_cred_get_static_push_context_bind:
   ∀ctx.
   (∀st.
+    (FST (ctx st)).stateGasSpilled ≤ (FST (ctx st)).gasUsed ∧
     (FST (ctx st)).msgParams.gasLimit < n0 ∧
     (FST (ctx st)).gasUsed ≤ (FST (ctx st)).msgParams.gasLimit ∧
     (FST(ctx st)).msgParams.parsed =
@@ -1066,6 +1395,25 @@ Proof
   \\ metis_tac [decreases_gas_cred_get_static_push_context]
 QED
 
+(* `proceed_create`'s tail.  Unlike a call's it never reads the static flag,
+   but `set_original` fails on an empty context stack just the same, so the
+   block never pushes a frame there; and the frame it does push is the
+   child's own, whose grant bounds the weight the push adds. *)
+Theorem decreases_gas_cred_set_original_push_context[simp]:
+  wf_context (FST ctx) ∧ frame_unused_gas (FST ctx) < n0 ⇒
+  decreases_gas_cred F n0 0
+    (do _ <- set_original a;
+        _ <- update_accounts f;
+        push_context ctx
+     od)
+Proof
+  simp [decreases_gas_cred_def, set_original_def, update_accounts_def,
+    bind_def, return_def, fail_def, push_context_def, contexts_weight_def,
+    LEX_DEF, unused_gas_def, frame_unused_gas_def]
+  \\ ntac 2 strip_tac \\ Cases_on `s.contexts` \\ simp []
+  \\ rw [] \\ fs []
+QED
+
 Theorem decreases_gas_cred_proceed_call[simp]:
   stipend < r ⇒
   decreases_gas_cred F r 0 (proceed_call op sender address value
@@ -1076,6 +1424,10 @@ Proof
   \\ qpat_abbrev_tac `v2 = COND a b c`
   \\ qpat_abbrev_tac `v3 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
+  (* EIP-8037: the reader of the accounts, which decides this child's
+     creation charge, comes before the reservoir and the transfer. *)
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ reverse (rw [])
   >- (
@@ -1088,6 +1440,23 @@ Proof
   \\ qpat_abbrev_tac `v5 = COND a b c`
   \\ HO_MATCH_MP_TAC decreases_gas_cred_get_static_push_context_bind
   \\ rw [initial_context_def, initial_msg_params_def, Abbr`v3`]
+QED
+
+(* The delegate a call's code resolves to, and the cost of touching it, are
+   read before the frame charges anything, so this statement can only lower
+   the frame's unused gas. *)
+Theorem decreases_gas_get_delegate_case[simp]:
+  decreases_gas F
+    (case get_delegate code of
+       NONE => return (code,0)
+     | SOME delegate => do
+         cost <- access_address delegate;
+         return ((lookup_account delegate accounts).code,cost)
+       od)
+Proof
+  rw [get_delegate_def]
+  \\ irule_at Any decreases_gas_bind_false
+  \\ rw [decreases_gas_access_address]
 QED
 
 Theorem decreases_gas_cred_unuse_gas[simp]:
@@ -1103,8 +1472,10 @@ Proof
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ Cases_on `s.contexts` >- gs [] \\ rw [] \\ rw [] \\ gs []
-  >- gs[wf_context_def]
-  \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF]
+  >- gs[wf_context_def, frame_unused_gas_def]
+  \\ gs [contexts_weight_def, unused_gas_def, LEX_DEF, frame_unused_gas_def]
+  \\ qpat_x_assum `n <= n'` mp_tac
+  \\ gas_arith_tac
 QED
 
 Theorem decreases_gas_inc_pc[simp]:
@@ -1116,7 +1487,7 @@ Proof
     return_def, assert_def, set_current_context_def, fail_def]
   \\ strip_tac
   \\ TOP_CASE_TAC \\ gvs[]
-  \\ TOP_CASE_TAC \\ gs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_cred_abort_call_value[simp]:
@@ -1136,17 +1507,32 @@ Proof
   \\ irule_at Any decreases_gas_bind_false \\ rw []
 QED
 
+(* A create that aborts before its child is entered hands back no gas: the
+   grant it never withheld and the account it never charged were never
+   spent. *)
+Theorem decreases_gas_cred_abort_create[simp]:
+  decreases_gas_cred F n' 0 abort_create
+Proof
+  rw [abort_create_def]
+  \\ irule decreases_gas_imp \\ simp []
+  \\ irule_at Any decreases_gas_ignore_bind_mono
+  \\ irule_at Any decreases_gas_push_stack
+  \\ irule_at Any decreases_gas_inc_pc
+  \\ simp []
+QED
+
 Theorem decreases_gas_cred_step_call[simp]:
   decreases_gas_cred T 0 0 (step_call op)
 Proof
   simp [step_call_def]
-  \\ qpat_abbrev_tac `v1 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_right
   \\ irule_at Any decreases_gas_imp
   \\ irule_at Any decreases_gas_pop_stack \\ simp [] \\ gen_tac
-  \\ qpat_abbrev_tac `v2 = COND a b c`
-  \\ qpat_abbrev_tac `v3 = COND a b c`
-  \\ qpat_abbrev_tac `v4 = COND a b c`
+  (* The value this call moves, named: both charges below are offset by it,
+     through the stipend the child is offered with its grant. *)
+  \\ qpat_abbrev_tac
+       `vval = if 0 < (if call_has_value oo then 1 else 0)
+               then w2n (EL 2 aa) else 0`
   \\ qmatch_goalsub_abbrev_tac`max_expansion_range p1 p2`
   \\ Cases_on`max_expansion_range p1 p2` \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_right
@@ -1156,32 +1542,55 @@ Proof
   \\ irule_at Any decreases_gas_cred_bind_right
   \\ irule_at Any decreases_gas_imp
   \\ irule_at Any decreases_gas_get_accounts \\ simp [] \\ gen_tac
-  \\ qpat_abbrev_tac `v5 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_right
   \\ irule_at Any decreases_gas_imp
   \\ simp[FORALL_PROD]
-  \\ qexists_tac`F`
-  \\ conj_tac
-  >- (
-    rw[get_delegate_def]
-    \\ irule_at Any decreases_gas_bind_false
-    \\ rw[] )
+  \\ (qexists_tac`F`
+      \\ conj_tac
+      >- (
+        rw[get_delegate_def]
+        \\ irule_at Any decreases_gas_bind_false
+        \\ rw[] ))
   \\ rpt gen_tac
-  \\ irule_at Any decreases_gas_cred_bind_right
-  \\ irule_at Any decreases_gas_imp
-  \\ irule_at Any decreases_gas_get_gas_left \\ rw []
-  \\ qmatch_goalsub_abbrev_tac `call_gas v3 g l m e`
-  \\ Cases_on `call_gas v3 g l m e` \\ rw []
-  \\ drule_at Any call_gas_stipend_LE
-  \\ impl_tac >- fs [Abbr`e`, Abbr`v4`, call_stipend_def, call_value_cost_def]
-  \\ rw [] \\ irule decreases_gas_cred_consume_gas_debit
-  \\ qexists_tac `r'+1` \\ rw [ignore_bind_def]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw [Abbr`v2`]
+  (* The delegate the code resolved to is the only statement before this
+     charge, and it is settled in every branch. *)
+  \\ simp []
+  \\ (* EIP-8038's execution charge.  Everything after it -- the child's
+        grant, and on the paths that never enter the child the stipend
+        given back -- is covered by the value transfer this charge pays
+        for, which is why the frame's unused gas can be carried across it
+        with the stipend that transfer withholds as the offset. *)
+  irule decreases_gas_cred_consume_gas_debit_more
+  \\ (qexists_tac `(if 0 < vval then call_stipend else 0) + 1`
+      \\ conj_tac
+      >- ( rw [call_stipend_def, call_value_cost_def] \\ fs [] ))
+  \\ simp [ignore_bind_def]
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
   \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ rw []
-  \\ irule_at Any decreases_gas_cred_proceed_call \\ rw []
+  (* Branches that never take the `assert_not_static` have one statement
+     fewer here, so they are already past the `get_gas_left`. *)
+  \\ TRY (irule_at Any decreases_gas_cred_bind_g_0 \\ rw [])
+  \\ simp [ELIM_UNCURRY] \\ BETA_TAC
+  (* the pair the child's grant and its stipend come from *)
+  \\ qmatch_goalsub_abbrev_tac `call_gas vval gg ll 0 0`
+  \\ simp [GSYM ignore_bind_def]
+  \\ (* the child's grant, and the stipend withheld for it *)
+  irule decreases_gas_cred_consume_gas_debit_more
+  \\ (qexists_tac `SND (call_gas vval gg ll 0 0) + 1`
+      \\ conj_tac
+      >- ( rw [call_gas_zero_cost] \\ fs [] ))
+  \\ simp [ignore_bind_def]
+  (* The balance test: branches whose call carries no value have it already
+     settled to its second arm, and are past it. *)
+  \\ (irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac)
+  \\ TRY (IF_CASES_TAC
+           >- ( irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] ))
+  \\ (irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac)
+  \\ (irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac)
+  \\ TRY (IF_CASES_TAC
+           >- ( irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] ))
+  \\ irule decreases_gas_cred_proceed_call \\ simp []
 QED
 
 Theorem decreases_gas_step_binop[simp]:
@@ -1301,7 +1710,7 @@ Proof
   rw [write_memory_def, decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
-  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_copy_to_memory[simp]:
@@ -1534,14 +1943,13 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
-  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem sstore_base_gas_pos[simp]:
   0 < sstore_base_gas originalValue currentValue value
 Proof
-  rw[sstore_base_gas_def, warm_access_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, storage_set_cost_def]
+  simp[sstore_base_gas_def, warm_access_cost_def, ZERO_LESS_ADD]
 QED
 
 Theorem decreases_gas_step_sstore_gas_consumption[simp]:
@@ -1560,8 +1968,7 @@ Proof
   \\ irule_at Any decreases_gas_access_slot \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_update_gas_refund
-  \\ irule_at Any decreases_gas_mono
-  \\ irule_at Any decreases_gas_consume_gas
+  \\ irule_at Any decreases_gas_sstore_state_gas_tail
   \\ simp[ZERO_LESS_ADD]
 QED
 
@@ -1608,7 +2015,7 @@ Proof
   \\ rw [decreases_gas_def, get_current_context_def,
     bind_def, return_def, assert_def, ignore_bind_def,
     set_current_context_def, fail_def]
-  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def]
+  \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def, frame_unused_gas_def]
 QED
 
 Theorem decreases_gas_step_jump[simp]:
@@ -1629,63 +2036,6 @@ Proof
   \\ irule_at Any decreases_gas_pop_stack \\ rw []
   \\ irule decreases_gas_consume_gas_bind \\ rw []
   \\ irule_at Any decreases_gas_set_jump_dest
-QED
-
-Theorem step_create_lemma:
-  do
-    _ <- set_return_data [];
-    sucDepth <- get_num_contexts;
-    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else do
-      _ <- access_address v4;
-      _ <- ensure_storage_in_domain v4;
-      if b3 then m2 else
-      proceed_create senderAddress address value code cappedGas
-    od
-  od = do
-    _ <- set_return_data [];
-    sucDepth <- get_num_contexts;
-    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else do
-      _ <- access_address v4;
-      _ <- ensure_storage_in_domain v4;
-      if b3 then m2 else do
-        _ <- update_accounts $ increment_nonce senderAddress;
-        subContextTx <<- <|
-            from     := senderAddress
-          ; to       := SOME address
-          ; value    := value
-          ; gasLimit := cappedGas
-          ; data     := []
-          (* unused: for concreteness *)
-          ; nonce := 0; gasPrice := 0; accessList := []
-          ; blobVersionedHashes := []
-          ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
-          ; authorizationList := []
-        |>;
-        rollback <- get_rollback;
-        original <- get_original;
-        set_original $ update_account address empty_account_state original;
-        _ <- update_accounts $
-          transfer_value senderAddress address value o
-          increment_nonce address;
-        _ <- get_static;
-        push_context $
-          (initial_context address code F (Code address) subContextTx, rollback)
-      od
-    od
-  od
-Proof
-  simp [FUN_EQ_THM, ignore_bind_def, bind_def, set_return_data_def]
-  \\ gen_tac \\ rpt CASE_TAC
-  \\ simp [bind_def, proceed_create_def, ignore_bind_def, return_def,
-    get_static_def, get_current_context_def, fail_def] \\ rpt CASE_TAC
-  \\ `F` suffices_by rw []
-  \\ gvs [update_accounts_def, return_def, get_rollback_def, fail_def,
-          ensure_storage_in_domain_def, assert_def,
-    get_num_contexts_def, set_current_context_def, get_current_context_def]
-  \\ Cases_on `x.contexts` \\ gvs [domain_check_def]
-  \\ gvs[CaseEq"domain_mode", CaseEq"bool", return_def, fail_def,
-         ignore_bind_def, bind_def, set_domain_def, set_original_def,
-         set_last_accounts_def]
 QED
 
 Theorem decreases_gas_ensure_storage_in_domain[simp]:
@@ -1713,44 +2063,44 @@ Theorem decreases_gas_cred_step_create[simp]:
   decreases_gas_cred T 0 0 (step_create two)
 Proof
   simp [step_create_def]
-  \\ qpat_abbrev_tac `v1 = COND a b c`
-  \\ qpat_abbrev_tac `v2 = COND a b c`
   \\ irule_at Any decreases_gas_cred_bind_right
   \\ irule_at Any decreases_gas_imp
-  \\ irule_at Any decreases_gas_pop_stack \\ simp [] \\ gen_tac
-  \\ qpat_abbrev_tac `v3 = COND a b c`
+  \\ irule_at Any decreases_gas_pop_stack \\ simp [] \\ TRY gen_tac
   \\ irule_at Any decreases_gas_cred_bind_right
   \\ irule_at Any decreases_gas_imp
   \\ irule_at Any decreases_gas_memory_expansion_info \\ rw []
-  \\ irule decreases_gas_cred_consume_gas_debit
-  \\ qexists_tac`30000`
-  \\ conj_tac >- rw[Abbr`v2`]
-  \\ rw[ignore_bind_def]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
-  \\ simp[ignore_bind_def]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ qpat_abbrev_tac `v4 = COND a b c`
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[] \\ gen_tac
-  \\ simp[GSYM ignore_bind_def]
+  \\ (* EIP-8038 charges the opcode's own cost here and nothing else: the
+        destination's creation and the child's grant are charged below,
+        after the abort that settles whether there is a child at all. *)
+  irule decreases_gas_cred_consume_gas_debit
+  \\ qexists_tac `1`
+  \\ conj_tac \\ TRY (rw [] \\ fs [])
+  \\ simp [ignore_bind_def]
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ IF_CASES_TAC
+  \\ TRY (irule decreases_gas_cred_abort_create)
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp []
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp []
+  \\ simp [withhold_create_gas_def, ignore_bind_def]
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ simp [GSYM ignore_bind_def]
+  \\ (* the child's grant, and the account its creation charged for: the
+        frame pays the grant and gets it back as the child's own grant, so
+        only the account's charge leaves this frame's meter. *)
+  qmatch_goalsub_abbrev_tac `consume_gas n`
   \\ irule decreases_gas_cred_consume_gas_debit_more
-  \\ qmatch_goalsub_abbrev_tac`_ + gasLeft`
-  \\ qexists_tac`gasLeft + 1` \\ simp[]
-  \\ qpat_abbrev_tac `v5 = COND a b c`
-  \\ rw[ignore_bind_def]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ simp [Abbr `v5`, step_create_lemma]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ gen_tac
+  \\ qexists_tac `n + 1`
+  \\ conj_tac \\ TRY (simp [] \\ fs [])
   \\ IF_CASES_TAC
-  >- ( irule decreases_gas_cred_abort_unuse \\ simp[] )
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ IF_CASES_TAC
-  >- (
+  \\ TRY (
     irule decreases_gas_imp \\ rw[]
     \\ rw[abort_create_exists_def]
     \\ irule decreases_gas_ignore_bind_right
@@ -1758,15 +2108,22 @@ Proof
     \\ rw[]
     \\ qexists_tac`F` \\ rw[]
     \\ qexists_tac`F` \\ rw[] )
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ gen_tac
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ gen_tac
-  \\ irule decreases_gas_cred_bind_set_original
-  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp[]
-  \\ HO_MATCH_MP_TAC decreases_gas_cred_get_static_push_context
-  \\ rw [initial_context_def, initial_msg_params_def]
+  \\ rw [proceed_create_def]
+  (* the statements the created frame never reads are `ignore_bind`s, which
+     only unfold into the `bind` the peel below matches *)
+  \\ simp [ignore_bind_def]
+  (* who the creation was charged for and what reservoir rides with the
+     child, both read from the state the charge was decided in *)
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  (* the created frame's own grant, and its nonce and transfer; the tail
+     below fails on an empty context stack before it pushes anything *)
+  \\ irule_at Any decreases_gas_cred_bind_g_0 \\ simp [] \\ TRY gen_tac
+  \\ irule decreases_gas_cred_set_original_push_context
+  \\ rw [initial_context_def, initial_msg_params_def, frame_unused_gas_def,
+        wf_context_def]
 QED
 
 Theorem decreases_gas_step_return[simp]:
@@ -1813,15 +2170,17 @@ Proof
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_consume_gas \\ rw []
   \\ irule_at Any decreases_gas_ignore_bind_right
+  \\ irule_at Any decreases_gas_charge_new_account \\ rw []
+  \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_assert_not_static \\ rw []
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_update_accounts \\ rw []
+  \\ irule_at Any decreases_gas_ignore_bind_right
+  \\ irule_at Any decreases_gas_push_logs
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_original \\ simp [] \\ gen_tac
   \\ irule_at Any decreases_gas_ignore_bind_right \\ reverse (rw [])
   >- irule_at Any decreases_gas_return
-  \\ irule_at Any decreases_gas_ignore_bind_right
-  \\ irule_at Any decreases_gas_update_accounts \\ rw []
   \\ irule_at Any decreases_gas_add_to_delete
 QED
 
@@ -1836,7 +2195,7 @@ QED
 Theorem decreases_gas_cred_step_inst[simp]:
   decreases_gas_cred T 0 0 (step_inst inst)
 Proof
-  Cases_on `inst` \\ rw [step_inst_def]
+  Cases_on `inst` \\ rw [step_inst_def, decreases_gas_cred_step_create]
   \\ irule decreases_gas_imp \\ rw []
   >- (irule decreases_gas_ignore_bind_right \\ rw []
     \\ irule_at Any decreases_gas_set_return_data)
@@ -1852,9 +2211,9 @@ Proof
   >> irule decreases_gas_cred_bind_mono >> simp[]
   >> qexistsl_tac [`T`, `F`] >> simp[]
   >> gen_tac >> rw[]
-  >> CASE_TAC >> simp[]
+  >> CASE_TAC >> simp[decreases_gas_cred_step_inst]
   >> irule decreases_gas_cred_ignore_bind_mono
-  >> qexistsl_tac [`F`, `T`] >> simp[]
+  >> qexistsl_tac [`F`, `T`] >> simp[decreases_gas_cred_step_inst]
 QED
 
 Definition pop_helper_def:
@@ -1909,12 +2268,19 @@ Theorem handle_ex_helper_thm:
         outputTo <- get_output_to;
         callee_rb <- pop_helper;
         callee <<- FST callee_rb;
+        context <- get_current_context;
+        set_current_context (absorb_state_gas context callee.stateGasLeft
+                               callee.stateGasSpilled callee.stateGasCommitted);
         if (e = NONE) then
           do
             push_logs callee.logs;
-            update_gas_refund (callee.addRefund,callee.subRefund)
+            update_gas_refund (callee.addRefund,callee.subRefund);
+            repay_state_gas_spill
           od
-        else set_rollback (SND callee_rb);
+        else do
+          credit_new_account callee.msgParams.newAccountCharged;
+          set_rollback (SND callee_rb)
+        od;
         after_pop output outputTo (e = NONE)
       od
     od
@@ -1953,6 +2319,84 @@ Proof
     \\ irule_at Any decreases_gas_write_memory)
 QED
 
+Theorem decreases_gas_restore_state_gas[simp]:
+  decreases_gas F restore_state_gas
+Proof
+  rw[decreases_gas_def, restore_state_gas_def,
+     get_current_context_def, bind_def, return_def,
+     set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >>
+  PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def] >>
+  mp_tac (Q.SPECL [`h0.msgParams.gasLimit`, `h0.gasUsed`,
+                  `h0.stateGasSpilled`, `h0.stateGasSpilled`]
+                 frame_unused_gas_credit) >> simp[]
+QED
+
+Theorem decreases_gas_forfeit_remaining_gas[simp]:
+  decreases_gas F forfeit_remaining_gas
+Proof
+  rw[decreases_gas_def, forfeit_remaining_gas_def, get_gas_left_def,
+     consume_gas_def, get_current_context_def, bind_def, return_def,
+     ignore_bind_def, assert_def, set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  IF_CASES_TAC >> simp[wf_context_def, frame_unused_gas_def] >>
+  rpt strip_tac >> gas_arith_tac
+QED
+
+Theorem decreases_gas_repay_state_gas_spill[simp]:
+  decreases_gas F repay_state_gas_spill
+Proof
+  rw[decreases_gas_def, repay_state_gas_spill_def,
+     repay_state_gas_spill_context_def, get_current_context_def,
+     bind_def, return_def, set_current_context_def, fail_def] >>
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[wf_context_def, frame_unused_gas_def, frame_unused_gas_credit]
+QED
+
+Theorem decreases_gas_cred_pop_absorb:
+  decreases_gas_cred T 0 0
+    (do callee_rb <- pop_helper;
+        context <- get_current_context;
+        set_current_context (absorb_state_gas context
+          (FST callee_rb).stateGasLeft (FST callee_rb).stateGasSpilled
+          (FST callee_rb).stateGasCommitted);
+        return callee_rb od)
+Proof
+  simp[pop_helper_def, bind_def, decreases_gas_cred_def, get_gas_left_def,
+       get_current_context_def, return_def, pop_context_def,
+       unuse_gas_def, ignore_bind_def, fail_def, assert_def,
+       set_current_context_def, get_num_contexts_def] >>
+  gen_tac >> Cases_on `s.contexts` >> simp[] >>
+  Cases_on `t` >> simp[] >- metis_tac lexs >>
+  IF_CASES_TAC >>
+  simp[absorb_state_gas_def, contexts_weight_def, LEX_DEF,
+       unused_gas_def, wf_context_def, frame_unused_gas_def]
+QED
+
+Theorem decreases_gas_cred_pop_absorb_bind:
+  (!child. decreases_gas_cred F 0 0 (k child)) ==>
+  decreases_gas_cred T 0 0
+    (do child <- pop_helper;
+        context <- get_current_context;
+        set_current_context (absorb_state_gas context
+          (FST child).stateGasLeft (FST child).stateGasSpilled
+          (FST child).stateGasCommitted);
+        k child od)
+Proof
+  strip_tac >>
+  `decreases_gas_cred T 0 0
+    (bind (do child <- pop_helper;
+              context <- get_current_context;
+              set_current_context (absorb_state_gas context
+                (FST child).stateGasLeft (FST child).stateGasSpilled
+                (FST child).stateGasCommitted);
+              return child od) k)` by
+    (irule decreases_gas_cred_bind_false >>
+     simp[decreases_gas_cred_pop_absorb]) >>
+  gvs[ignore_bind_def, bind_assoc]
+QED
+
 Theorem decreases_gas_cred_step[simp]:
   decreases_gas_cred T 0 0 step
 Proof
@@ -1967,54 +2411,39 @@ Proof
       \\ CONV_TAC SWAP_EXISTS_CONV \\ qexists_tac `F`
       \\ simp []
       \\ CONJ_TAC >- (rw []
-        \\ irule decreases_gas_imp \\ rw []
-        \\ irule decreases_gas_bind_right
-        \\ irule_at Any decreases_gas_get_gas_left \\ rw []
-        \\ irule decreases_gas_ignore_bind_mono
-        \\ irule_at Any decreases_gas_consume_gas \\ rw []
-        \\ irule_at Any decreases_gas_set_return_data)
+        \\ irule decreases_gas_imp
+        \\ simp[decreases_gas_restore_state_gas])
       \\ simp[GSYM after_pop_def, GSYM handle_ex_helper_def]
       \\ simp[handle_ex_helper_thm]
+      \\ irule decreases_gas_cred_ignore_bind_mono
+      \\ CONV_TAC SWAP_EXISTS_CONV \\ qexistsl_tac [`F`, `T`] \\ simp[]
+      \\ conj_tac >- (
+        irule decreases_gas_imp \\ rw[]
+        \\ irule_at Any decreases_gas_ignore_bind_false
+        \\ irule_at Any decreases_gas_forfeit_remaining_gas
+        \\ irule_at Any decreases_gas_set_return_data)
       \\ irule decreases_gas_cred_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_num_contexts \\ rw []
       \\ irule decreases_gas_cred_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_return_data \\ rw []
       \\ irule decreases_gas_cred_bind_right \\ irule_at Any decreases_gas_imp
       \\ irule_at Any decreases_gas_get_output_to \\ rw []
-      \\ irule_at Any decreases_gas_cred_bind_mono
-      \\ qexistsl_tac[`F`,`T`]
-      \\ simp[]
-      \\ conj_tac >- (
-        rw[] >- (
-          irule decreases_gas_imp \\ rw []
-          \\ irule decreases_gas_ignore_bind_false
-          \\ conj_tac
-          >- (
-            qexists_tac`F`
-            \\ irule decreases_gas_ignore_bind_false
-            \\ conj_tac
-            >- ( qexists_tac`F` \\ irule decreases_gas_push_logs)
-            \\ qexists_tac`F` \\ irule decreases_gas_update_gas_refund
-          )
-          \\ irule_at Any decreases_gas_after_pop
-        )
-        \\ irule decreases_gas_imp \\ rw []
-        \\ irule_at Any decreases_gas_ignore_bind_false
-        \\ irule_at Any decreases_gas_set_rollback
-        \\ irule_at Any decreases_gas_after_pop
-      )
-      \\ rw[pop_helper_def]
-      \\ simp[bind_def, decreases_gas_cred_def, get_gas_left_def,
-              get_current_context_def, return_def, pop_context_def,
-              unuse_gas_def, ignore_bind_def, fail_def, assert_def,
-              set_current_context_def, get_num_contexts_def,
-              assert_def]
-      \\ gen_tac
-      \\ Cases_on`s.contexts` \\ gvs []
-      \\ Cases_on`t` \\ gvs[] >- metis_tac lexs
-      \\ reverse IF_CASES_TAC \\ fs [DISJ_IMP_THM, FORALL_AND_THM,
-        contexts_weight_def, LEX_DEF, unused_gas_def]
-      \\ gvs[wf_context_def]
+      \\ ho_match_mp_tac decreases_gas_cred_pop_absorb_bind
+      \\ gen_tac \\ irule decreases_gas_imp
+      \\ irule_at Any decreases_gas_ignore_bind_false
+      \\ irule_at Any decreases_gas_after_pop
+      \\ rw[] \\ qexists_tac `F` \\ simp[]
+      \\ irule_at Any decreases_gas_ignore_bind_false
+      (* EIP-8037 gives the other arm of the merge a credit instead of a log
+         push: a failed child never made the account its parent charged to
+         enter it, so the charge refills as the parent's accounts roll
+         back.  The arm that merges a child unchanged is the one below. *)
+      \\ TRY (irule_at Any decreases_gas_push_logs
+              \\ irule_at Any decreases_gas_ignore_bind_false
+              \\ irule_at Any decreases_gas_update_gas_refund
+              \\ irule_at Any decreases_gas_repay_state_gas_spill)
+      \\ (conj_tac >- irule_at Any decreases_gas_credit_new_account
+          \\ irule_at Any decreases_gas_set_rollback)
     )
     \\ simp [handle_create_def]
     \\ irule decreases_gas_imp \\ rw []
@@ -2031,6 +2460,11 @@ Proof
     \\ qexists_tac`T` \\ simp[]
     \\ irule_at Any decreases_gas_ignore_bind_mono
     \\ irule_at Any decreases_gas_ignore_bind
+    (* EIP-8037 puts the deposit's state charge between the opcode's
+       execution charge and the account update, so the tail splits once
+       more, and the charge it adds is the one that must give its flag. *)
+    \\ irule_at Any decreases_gas_ignore_bind
+    \\ irule_at Any decreases_gas_charge_state_gas
     \\ irule_at Any decreases_gas_reraise
     \\ irule_at Any decreases_gas_assert
     \\ irule_at Any decreases_gas_update_accounts

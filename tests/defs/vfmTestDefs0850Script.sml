@@ -1,5 +1,5 @@
 Theory vfmTestDefs0850[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stLogTests/log4_log_memsize_too_high/log4_log_memsize_too_high.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stLogTests/log4_log_memsize_too_high/log4_log_memsize_too_high.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8282_builder_execution_requests/builder_exit_disable/builder_exit_inhibited.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8282_builder_execution_requests/builder_exit_disable/builder_exit_inhibited.json");
 val defs = mapi (define_test "0850") tests;

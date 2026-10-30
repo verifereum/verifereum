@@ -11,6 +11,7 @@ Datatype:
    ; baseFeePerGas  : num
    ; baseFeePerBlobGas : num
    ; blockNumber    : num
+   ; slotNumber     : num (* EIP-7843 *)
    ; blockTimeStamp : num
    ; blockCoinBase  : address
    ; blockGasLimit  : num
@@ -19,6 +20,11 @@ Datatype:
    ; blobHashes     : bytes32 list
    ; chainId        : num
    ; authRefund     : num
+   (* EIP-8037: the transaction's state gas grant, what the top frame's
+      reservoir is filled from and what settlement measures the state
+      dimension against.  The frame's own state-gas meter is on the
+      context, where EIP-8037 keeps it. *)
+   ; stateGasReservoir : num
    |>
 End
 
@@ -80,9 +86,23 @@ Datatype:
    ; data      : buffer
    ; static    : bool
    ; outputTo  : return_destination
+   (* EIP-8037: the frame the parent entered charged this frame's account
+      creation to its own meter before the frame started, `new_account_charged`
+      in EELS.  A failed frame never made that change, so the parent credits
+      the charge back when it pops this frame. *)
+   ; newAccountCharged : bool
    |>
 End
 
+(* EIP-8037: the frame's state gas meter, alongside its execution gas
+   (`gasUsed` against `msgParams.gasLimit`, which the split at transaction
+   entry makes the execution grant rather than the transaction's gas
+   limit).  `stateGasLeft` is the reservoir the frame's state charges draw
+   from first; `stateGasSpilled` is the execution gas that covered a state
+   charge once the reservoir was empty and has not been credited back yet
+   (EIP-8037's `state_gas_from_gas_left`); `stateGasBaseline` is the
+   reservoir level a rollback refills to, moved down by a commit;
+   `stateGasCommitted` is the spill a commit marked non-refillable. *)
 Datatype:
   context =
   <| stack      : bytes32 list
@@ -93,6 +113,10 @@ Datatype:
    ; gasUsed    : num
    ; addRefund  : num
    ; subRefund  : num
+   ; stateGasLeft      : num
+   ; stateGasSpilled   : num
+   ; stateGasBaseline  : num
+   ; stateGasCommitted : num
    ; logs       : event list
    ; msgParams  : message_parameters
    |>
@@ -155,6 +179,8 @@ Datatype:
    ; rlpSize               : num (* length of the block's RLP encoding *)
    ; parentBeaconBlockRoot : bytes32
    ; requestsHash          : bytes32
+   ; blockAccessListHash   : bytes32 (* EIP-7928 *)
+   ; slotNumber            : num     (* EIP-7843 *)
    ; stateRoot             : bytes32
    ; withdrawalsRoot       : bytes32
    ; transactions          : transaction list
@@ -196,7 +222,7 @@ Definition callee_from_tx_to_def:
 End
 
 Definition initial_msg_params_def:
-  initial_msg_params callee code static rd t =
+  initial_msg_params callee code static rd charged t =
   <| caller    := t.from
    ; callee    := callee
    ; code      := code
@@ -206,6 +232,7 @@ Definition initial_msg_params_def:
    ; gasLimit  := t.gasLimit
    ; static    := static
    ; outputTo  := rd
+   ; newAccountCharged := charged
    |>
 End
 
@@ -227,12 +254,13 @@ Definition base_fee_per_blob_gas_def:
 End
 
 Definition initial_tx_params_def:
-  initial_tx_params c h b t ar =
+  initial_tx_params c h b t ar sr =
   <| origin         := t.from
    ; gasPrice       := t.gasPrice
    ; baseFeePerGas  := b.baseFeePerGas
    ; baseFeePerBlobGas := base_fee_per_blob_gas b.excessBlobGas
    ; blockNumber    := b.number
+   ; slotNumber     := b.slotNumber
    ; blockTimeStamp := b.timeStamp
    ; blockCoinBase  := b.coinBase
    ; blockGasLimit  := b.gasLimit
@@ -241,11 +269,15 @@ Definition initial_tx_params_def:
    ; blobHashes     := t.blobVersionedHashes
    ; chainId        := c
    ; authRefund     := ar
+   ; stateGasReservoir := sr
    |>
 End
 
+(* EIP-8037: a frame starts with the state gas reservoir it was handed --
+   the pool its state charges draw on -- as both the reservoir and the
+   baseline a rollback refills it to. *)
 Definition initial_context_def:
-  initial_context callee code static rd t =
+  initial_context callee code static rd charged sg t =
   <| stack      := []
    ; memory     := empty_buffer
    ; pc         := 0
@@ -254,22 +286,30 @@ Definition initial_context_def:
    ; gasUsed    := 0
    ; addRefund  := 0
    ; subRefund  := 0
+   ; stateGasLeft      := sg
+   ; stateGasSpilled   := 0
+   ; stateGasBaseline  := sg
+   ; stateGasCommitted := 0
    ; logs       := []
-   ; msgParams  := initial_msg_params callee code static rd t
+   ; msgParams  := initial_msg_params callee code static rd charged t
    |>
 End
 
 Theorem initial_context_simp[simp]:
-  (initial_context fr c s rd t).stack = [] ∧
-  (initial_context fr c s rd t).memory = empty_buffer ∧
-  (initial_context fr c s rd t).pc = 0 ∧
-  (initial_context fr c s rd t).jumpDest = NONE ∧
-  (initial_context fr c s rd t).returnData = [] ∧
-  (initial_context fr c s rd t).gasUsed = 0 ∧
-  (initial_context fr c s rd t).addRefund = 0 ∧
-  (initial_context fr c s rd t).subRefund = 0 ∧
-  (initial_context fr c s rd t).logs = [] ∧
-  (initial_context fr c s rd t).msgParams  = initial_msg_params fr c s rd t
+  (initial_context fr c s rd ch sg t).stack = [] ∧
+  (initial_context fr c s rd ch sg t).memory = empty_buffer ∧
+  (initial_context fr c s rd ch sg t).pc = 0 ∧
+  (initial_context fr c s rd ch sg t).jumpDest = NONE ∧
+  (initial_context fr c s rd ch sg t).returnData = [] ∧
+  (initial_context fr c s rd ch sg t).gasUsed = 0 ∧
+  (initial_context fr c s rd ch sg t).addRefund = 0 ∧
+  (initial_context fr c s rd ch sg t).subRefund = 0 ∧
+  (initial_context fr c s rd ch sg t).stateGasLeft = sg ∧
+  (initial_context fr c s rd ch sg t).stateGasSpilled = 0 ∧
+  (initial_context fr c s rd ch sg t).stateGasBaseline = sg ∧
+  (initial_context fr c s rd ch sg t).stateGasCommitted = 0 ∧
+  (initial_context fr c s rd ch sg t).logs = [] ∧
+  (initial_context fr c s rd ch sg t).msgParams  = initial_msg_params fr c s rd ch t
 Proof
   rw[initial_context_def]
 QED
@@ -300,12 +340,9 @@ Definition get_delegate_def:
     else NONE
 End
 
-Definition per_auth_base_cost_def:
-  per_auth_base_cost = 12500n
-End
-
 Definition process_authorization_def:
-  process_authorization chainId (auth: authorization) (accs, accesses: access_sets, refund) =
+  process_authorization chainId (auth: authorization)
+                        (accs, accesses: access_sets, refund: num) =
     let authority = auth.authority in
     let delegate = auth.delegate in
     let authChainId = auth.authChainId in
@@ -322,9 +359,10 @@ Definition process_authorization_def:
     let newCode = if delegate = 0w then [] else make_delegation delegate in
     let newAcc = acc with <| code := newCode; nonce := SUC acc.nonce |> in
     let newAccs = update_account authority newAcc accs in
-    let newRefund = if account_empty acc then refund
-                    else refund + (new_account_cost - per_auth_base_cost) in
-    (newAccs, newAccesses, newRefund)
+    (* EIP-2780: the intrinsic charge for an authorization no longer includes
+       the new-account cost, so an existing authority has nothing to refund.
+       What a new one costs is state gas, charged at the top frame. *)
+    (newAccs, newAccesses, refund)
 End
 
 Definition process_authorizations_def:
@@ -347,28 +385,58 @@ Definition initial_access_sets_def:
    |>
 End
 
+(* EIP-7976: the floor counts every calldata byte the same, as four
+   tokens.  The execution-gas calldata cost still distinguishes bytes. *)
 Definition call_data_tokens_def:
-  call_data_tokens data =
-  SUM (MAP (λb. if b = 0w then 1n else 4) data)
+  call_data_tokens data = 4n * LENGTH data
+End
+
+(* EIP-7981: the data of the access list counts as floor tokens too, on
+   top of what the entries themselves cost. *)
+Definition access_list_floor_tokens_def:
+  access_list_floor_tokens accessList =
+  access_list_address_floor_tokens * LENGTH accessList +
+  access_list_storage_key_floor_tokens *
+    SUM (MAP (λx. LENGTH x.keys) accessList)
+End
+
+Definition access_list_data_cost_def:
+  access_list_data_cost accessList =
+  floor_call_data_cost * access_list_floor_tokens accessList
+End
+
+(* EIP-2780: the intrinsic base, decomposed.  The transaction's own bytes,
+   its calldata and its access list are not part of it.  The floor charges
+   this and nothing else of the execution cost, so it shares the definition
+   rather than repeating which recipient and value charges apply. *)
+Definition tx_intrinsic_base_def:
+  tx_intrinsic_base isCreate isSelfTransfer (value:num) =
+  base_cost +
+  (if isCreate then create_cost
+   else if isSelfTransfer then 0
+   else cold_access_cost + (if value = 0 then 0 else tx_value_cost))
 End
 
 Definition calldata_floor_cost_def:
-  calldata_floor_cost data =
-  base_cost + floor_call_data_cost * call_data_tokens data
+  calldata_floor_cost accessList isCreate isSelfTransfer (value:num) data =
+  tx_intrinsic_base isCreate isSelfTransfer value +
+  floor_call_data_cost * call_data_tokens data +
+  access_list_data_cost accessList
 End
 
 Definition intrinsic_cost_def:
   intrinsic_cost accessList authListLen p =
   let isCreate = is_code_dest p.outputTo in
   let data = if isCreate then p.code else buffer_to_list p.data in
-    base_cost
+    tx_intrinsic_base isCreate (p.callee = p.caller) p.value
     + SUM (MAP (λb. call_data_cost (b = 0w)) data)
     + (if isCreate
-       then create_cost + init_code_word_cost * (word_size $ LENGTH data)
+       then init_code_word_cost * (word_size $ LENGTH data)
        else 0)
     + access_list_address_cost * LENGTH accessList
     + access_list_storage_key_cost * SUM (MAP (λx. LENGTH x.keys) accessList)
-    + new_account_cost * authListLen
+    + access_list_data_cost accessList
+    + execution_per_auth_base_cost * authListLen
 End
 
 Definition apply_intrinsic_cost_def:
@@ -394,14 +462,19 @@ End
 
 Definition pre_transaction_updates_def:
   pre_transaction_updates a blobBaseFee t =
+  let floorCost = calldata_floor_cost t.accessList (IS_NONE t.to)
+                                       (t.to = SOME t.from) t.value t.data in
   if (case t.maxFeePerBlobGas of SOME mf =>
            mf < blobBaseFee ∨
            NULL t.blobVersionedHashes ∨
            LENGTH t.blobVersionedHashes > max_blobs_per_tx
          | _ => F) then NONE else
   if ¬EVERY versioned_hash_correct t.blobVersionedHashes then NONE else
-  if t.gasLimit > 2 ** 24 then NONE else
-  if t.gasLimit < calldata_floor_cost t.data then NONE else
+  (* EIP-8037 caps the transaction's two dimensions together; EIP-7825
+     bounds the calldata floor, which is execution gas, on its own.  The
+     intrinsic's own bound is checked once it is known, in `initial_state`. *)
+  if t.gasLimit > tx_max_total_gas_limit then NONE else
+  if t.gasLimit < floorCost ∨ tx_max_gas_limit < floorCost then NONE else
   if IS_NONE t.to ∧ LENGTH t.data > 2 * max_code_size then NONE else
   let sender = lookup_account t.from a in
   if sender.balance < max_total_cost t then NONE else
@@ -442,12 +515,34 @@ Definition initial_state_def:
     let (code, accesses) = code_from_tx postAuthAccounts postAuthAccesses tx in
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback postAuthAccounts accesses in
-    let ctxt = initial_context callee code static rd tx in
+    (* The state gas reservoir is only known once the intrinsic is, below,
+       so the frame is built with an empty one and filled in with it.  The
+       top frame charges its own account creation (below, in `run_create`),
+       so no parent ever credits it back and its flag is clear. *)
+    let ctxt = initial_context callee code static rd F 0 tx in
     let authListLen = LENGTH tx.authorizationList in
     case apply_intrinsic_cost tx.accessList authListLen ctxt of NONE => NONE | SOME ctxt =>
+    (* EIP-8037: what is left of the transaction's gas after its intrinsic
+       splits into the execution grant, capped at `tx_max_gas_limit` less
+       the intrinsic, and the state gas reservoir holding the rest.  The
+       frame's `gasLimit` becomes the grant, so `GAS` and everything that
+       reads the frame's execution budget keep their meaning. *)
+    let intrinsic = tx.gasLimit - ctxt.msgParams.gasLimit in
+    if tx_max_gas_limit < intrinsic then NONE else
+    let evmGas = ctxt.msgParams.gasLimit in
+    let executionGas = MIN (tx_max_gas_limit - intrinsic) evmGas in
+    let reservoir = evmGas - executionGas in
+    let ctxt = ctxt with <|
+        msgParams updated_by (λp. p with gasLimit := executionGas);
+        stateGasLeft := reservoir;
+        stateGasBaseline := reservoir |>
+    in
+    (* EIP-7708: the top-level frame logs the transaction's own transfer,
+       and a failed transaction takes the log down with it. *)
+    let ctxt = ctxt with logs := transfer_log tx.from callee tx.value in
     SOME $
     <| contexts := [(ctxt, rb)]
-     ; txParams := initial_tx_params chainId prevHashes blk tx authRefund
+     ; txParams := initial_tx_params chainId prevHashes blk tx authRefund reservoir
      ; rollback := rb
      ; originalAccounts := postAuthAccounts
      ; msdomain := dom

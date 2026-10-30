@@ -307,6 +307,8 @@ Definition deploy_block_def:
   ; transactions := [deploy_tx] (* not true, many others *)
   ; withdrawals := []
   ; requestsHash := 0w (* fake *)
+  ; blockAccessListHash := 0w (* fake *)
+  ; slotNumber := 0 (* fake *)
   ; withdrawalsRoot := word_of_bytes_be (withdrawals_root [])
   |>
 End
@@ -1103,9 +1105,32 @@ Proof
   \\ REWRITE_TAC [SPEC_MOVE_COND]
   \\ impl_tac
   >- (qpat_x_assum ‘(_,_,_) = _’ (assume_tac o SYM)
-      \\ fs[memory_cost_0_128])
-  \\ impl_tac >- simp[LESS_MOD]
+      (* EIP-8037: the SSTORE step reports its state-gas refund beside its
+         execution-gas one, so the goal carries FST and SND of
+         SStore_state_gas where the composition's hypothesis has the pair.
+         Substituting it is the same move the line above makes for
+         SStore_gas. *)
+      \\ qpat_x_assum ‘(stateGasRefund,stateGas) = _’ (assume_tac o SYM)
+      \\ fs[memory_cost_0_128, pairTheory.FST, pairTheory.SND])
+  \\ impl_tac
+  >- (simp[LESS_MOD]
+      \\ qpat_x_assum ‘(stateGasRefund,stateGas) = _’ (fn th => rewrite_tac [SYM th])
+      \\ simp[LESS_MOD, pairTheory.FST, pairTheory.SND])
   \\ qpat_x_assum ‘(_,_,_) = _’ (fn th => rewrite_tac [SYM th])
+  (* the same substitution as the branches above: the composition's side
+     names the SSTORE step's state-gas refund with a variable, the
+     hand-composed side inlines SStore_state_gas. *)
+  \\ qpat_x_assum ‘(stateGasRefund,stateGas) = _’ (fn th => rewrite_tac [SYM th])
   \\ rewrite_tac [pairTheory.FST, pairTheory.SND, memory_cost_0_128]
-  \\ simp_tac std_ss [AC STAR_ASSOC STAR_COMM, AC ADD_ASSOC ADD_COMM]
+  (* The two compositions write the post-SSTORE gas the same way up to
+     arithmetic: the reservoir as `a - b - c` against `a - (b + c)`, and
+     the block's instruction costs folded into 1453 against the same costs
+     listed one by one.  ARITH_NORM canonicalises sums at term level, which
+     folds the listed costs and puts both reservoirs in one form; ARITH_ss
+     would do it too but its decision procedure times out on a goal this
+     size.  SUB_RIGHT_SUB is the named form of the regrouping, kept because
+     the canonicaliser does not reach through a subtraction. *)
+  \\ CONV_TAC (SIMP_CONV (std_ss ++ numSimps.ARITH_NORM_ss) [])
+  \\ simp_tac std_ss [AC STAR_ASSOC STAR_COMM, AC ADD_ASSOC ADD_COMM,
+                      arithmeticTheory.SUB_RIGHT_SUB]
 QED

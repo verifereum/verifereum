@@ -177,6 +177,8 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
       rlpSize = ML.Num (Arbnum.fromInt ((String.size rlp - hex_start rlp) div 2)),
       parentBeaconBlockRoot = bytes32 (#parentBeaconBlockRoot header),
       requestsHash = bytes32 (#requestsHash header),
+      blockAccessListHash = bytes32 (#blockAccessListHash header),
+      slotNumber = num (#slotNumber header),
       stateRoot = bytes32 (#stateRoot header),
       withdrawalsRoot = bytes32 (#withdrawalsRoot header),
       transactions = list_cv (transaction base_fee) (#transactions value),
@@ -194,7 +196,8 @@ structure vfmUncheckedFixtureLib :> vfmUncheckedFixtureLib = struct
     val header = #genesisBlockHeader test
     val genesis : Fixture.block = {
       rlp = #genesisRLP test, blockHeader = header, blocknumber = #number header,
-      transactions = [], uncleHeaders = [], withdrawals = []
+      transactions = [], uncleHeaders = [], withdrawals = [],
+      blockAccessList = NONE
     }
   in
     ML.result_string

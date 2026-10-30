@@ -208,9 +208,12 @@ fun instructions (cfg : config) =
     |> Listsort.sort (fn ((n, _), (m, _)) => Int.compare (n, m))
   end
 
+(* EIP-8024's DUPN, SWAPN and EXCHANGE carry a one-byte immediate, the way
+   `inst_length_def` says. *)
 fun inst_length inst =
   if opname inst = "Push" then
     1 + length (fst (listSyntax.dest_list (rand inst)))
+  else if mem (opname inst) ["DupN", "SwapN", "Exchange"] then 2
   else 1
 
 val call_class =

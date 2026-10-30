@@ -515,6 +515,7 @@ val transfer_lift =
   transfer_spec_start |> spec_code |> spec_pool
   |> spec_ordered ["evm_Exception", "evm_ReturnData", "evm_Logs",
                    "evm_Rollback", "evm_Contexts", "evm_GasUsed",
+                   "evm_StateGasLeft",
                    "evm_MsgParams", "evm_AddRefund", "evm_SubRefund",
                    "evm_TxParams"]
   |> spec_lift SPEC_to_run_transaction
@@ -522,7 +523,8 @@ val transfer_lift =
 val revert_lift =
   revert_spec_start |> spec_code |> spec_pool
   |> spec_ordered ["evm_Exception", "evm_ReturnData", "evm_Contexts",
-                   "evm_GasUsed", "evm_MsgParams", "evm_TxParams"]
+                   "evm_GasUsed", "evm_StateGasLeft",
+                   "evm_MsgParams", "evm_TxParams"]
   |> spec_lift SPEC_to_run_transaction_failure
 
 Theorem transfer_value_zero[local]:
@@ -569,17 +571,44 @@ QED
 Theorem sstore_base_gas_le[local]:
   sstore_base_gas ov cv v ≤ 20000
 Proof
-  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, warm_access_cost_def]
+  rw[sstore_base_gas_def, storage_write_cost_def, warm_access_cost_def]
 QED
 
-(* the first write to a slot that was nonzero, or that isn't changed *)
+(* EIP-8038 prices the write itself, whether the slot was set or updated, so
+   this is the warm access plus one `STORAGE_WRITE`, not the old
+   `storage_update_cost - cold_sload_cost`. *)
 Theorem sstore_base_gas_same_le[local]:
-  (c = 0w ⇒ v = c) ⇒ sstore_base_gas c c v ≤ 2900
+  (c = 0w ⇒ v = c) ⇒
+  sstore_base_gas c c v ≤ warm_access_cost + storage_write_cost
 Proof
-  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, warm_access_cost_def]
+  rw[sstore_base_gas_def, storage_write_cost_def, warm_access_cost_def]
   \\ gvs[]
+QED
+
+(* EIP-8037's state-gas side of the two writes.
+
+   The first write cannot create a slot: `wad` is bounded by the sender's
+   balance, so a zero sender balance forces `wad = 0` and the write leaves
+   the slot as it was.
+
+   The second creates one exactly when the recipient's balance slot is
+   zero, which is what the statement's hypothesis covers.  Its current
+   value is read from the accounts the first write already touched, so the
+   two lookups are not syntactically equal and the bound has to be stated
+   for the general pair. *)
+Theorem sstore_state_gas_sender[local]:
+  wad ≤ w2n c ⇒ sstore_state_gas c c (-1w * n2w wad + c) = 0
+Proof
+  rw[sstore_state_gas_def]
+  \\ Cases_on `c = 0w` \\ gvs[]
+QED
+
+Theorem sstore_state_gas_le_reservoir[local]:
+  (ov = 0w ⇒ storage_set_state_gas ≤ sl) ⇒ sstore_state_gas ov cv v ≤ sl
+Proof
+  rw[sstore_state_gas_def]
+  \\ Cases_on `ov = 0w` \\ gvs[]
+  \\ Cases_on `ov = cv ∧ cv ≠ v` \\ gvs[]
 QED
 
 (* bounds the path's access and SSTORE costs in the goal by their worst case *)
@@ -601,9 +630,20 @@ Theorem weth_transfer_run_transaction:
   zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
     (function_selector "transfer" [Address; Uint 256] ++
      enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad]))
-    29962 s ∧
+    37162 s ∧
   wad ≤ w2n (lookup_storage (balance_slot_key tx.from)
                (lookup_account addr accounts).storage) ∧
+  (* EIP-8037: a write that creates a slot charges its state gas to the
+     frame's reservoir, and `SPEC_SStore`'s rule requires the reservoir to
+     cover that charge -- a charge the reservoir cannot cover spills into
+     execution gas, which the rule does not describe yet.  The transfer's
+     first write never creates a slot (`wad` is bounded by the sender's
+     balance, so a zero balance means a zero `wad`); the second creates one
+     exactly when the recipient's balance slot is zero, which is when the
+     reservoir has to hold a slot's worth of state gas. *)
+  (lookup_storage (balance_slot_key dst)
+     (lookup_account addr accounts).storage = 0w ⇒
+   storage_set_state_gas ≤ s.txParams.stateGasReservoir) ∧
   access_slot_check dom (SK addr (balance_slot_key tx.from)) ∧
   access_slot_check dom (SK addr (balance_slot_key dst)) ∧
   blk.coinBase ≠ addr
@@ -663,6 +703,15 @@ Proof
   \\ mp_tac (Q.INST [‘p’ |-> ‘ctxt.msgParams’, ‘rb’ |-> ‘s.rollback’,
                      ‘d’ |-> ‘dom’, ‘rd’ |-> ‘[]’, ‘l’ |-> ‘[]’,
                      ‘ar’ |-> ‘0’, ‘sr’ |-> ‘0’,
+                     (* the outermost frame's own meter: the path carries it
+                        through, and only the SSTORE's state gas moves it.  A
+                        fresh frame has nothing spilled or committed.  `sl` is
+                        the reservoir the SSTORE rule itself names. *)
+                     ‘sg’ |-> ‘ctxt.stateGasLeft’,
+                     ‘sl’ |-> ‘ctxt.stateGasLeft’,
+                     ‘sp’ |-> ‘0’,
+                     ‘bsl’ |-> ‘ctxt.stateGasBaseline’,
+                     ‘cm’ |-> ‘0’,
                      ‘original’ |-> ‘s.originalAccounts’,
                      ‘txParams’ |-> ‘s.txParams’, ‘callee’ |-> ‘addr’,
                      ‘s'’ |-> ‘s with rollback updated_by
@@ -676,6 +725,9 @@ Proof
             cond_STAR, SEP_T_def,
             transfer_value_zero, execution_state_component_equality,
             rollback_state_component_equality, fmap_entries_def,
+            (* EIP-7708: the frame's first log is the transaction's own
+               transfer, which a zero-value call does not emit. *)
+            transfer_log_def,
             SIMP_RULE std_ss [APPEND] transfer_selector_calldata,
             DROP_APPEND, DROP_LENGTH_TOO_LONG, calldata_word, mask_and_w2w,
             balance_slot_key_bytes]
@@ -685,11 +737,45 @@ Proof
     \\ qpat_assum `lookup_account addr s.rollback.accounts = _`
          (fn th => rewrite_tac[th])
     \\ qmatch_goalsub_abbrev_tac `sstore_base_gas c0 c0 v0`
-    \\ `sstore_base_gas c0 c0 v0 ≤ 2900`
+    \\ `sstore_base_gas c0 c0 v0 ≤ warm_access_cost + storage_write_cost`
     by (irule sstore_base_gas_same_le \\ qunabbrevl_tac [`c0`, `v0`]
         \\ strip_tac \\ gvs[])
+    \\ simp[warm_access_cost_def, storage_write_cost_def]
     \\ gas_bounds_tac
-    \\ gvs[call_stipend_def])
+    (* EIP-8037: the path's remaining condition is what state gas the two
+       writes create.  The first creates nothing (`sstore_state_gas_sender`),
+       and the second's creation is what the statement's hypothesis puts
+       inside the reservoir. *)
+    \\ `FST (HD s.contexts) = ctxt`
+         by (qpat_assum `s.contexts = _` (fn th => rewrite_tac[th])
+             \\ simp[])
+    \\ `ctxt.msgParams.caller = tx.from`
+         by (qpat_assum `FST (HD s.contexts) = _`
+               (fn th => rewrite_tac [GSYM th])
+             \\ simp[])
+    \\ `sstore_state_gas c0 c0 v0 = 0`
+         by (qunabbrevl_tac [`c0`, `v0`]
+             \\ irule sstore_state_gas_sender \\ simp[])
+    \\ simp[SStore_state_gas_def]
+    \\ qmatch_goalsub_abbrev_tac
+         `sstore_state_gas (lookup_storage (balance_slot_key dst) _) ov0 vv0`
+    \\ `sstore_state_gas (lookup_storage (balance_slot_key dst)
+                            (lookup_account ctxt.msgParams.callee accounts).storage)
+            ov0 vv0 ≤ ctxt.stateGasLeft`
+         by (irule sstore_state_gas_le_reservoir \\ strip_tac
+             \\ Cases_on `lookup_storage (balance_slot_key dst)
+                           (lookup_account ctxt.msgParams.callee accounts).storage = 0w`
+             \\ gvs[])
+    \\ gvs[call_stipend_def, SStore_state_gas_def,
+           sstore_state_gas_refund_def]
+    (* EIP-8037: the two writes' state-gas refunds are the last `if`s in the
+       goal.  Splitting them lets the arithmetic close on the reservoir bound
+       the facts above give; the sender's refund condition is contradictory
+       (`c0 ≠ v0 ∧ c0 = v0`), so that branch is empty. *)
+    (* the bounds left are `storage_write_cost + warm_access_cost`, which the
+       arithmetic needs as numbers *)
+    \\ rpt (IF_CASES_TAC
+            \\ gvs[warm_access_cost_def, storage_write_cost_def]))
   \\ strip_tac
   \\ qexistsl_tac [`result`, `accounts'`]
   \\ qpat_assum `∀a. lookup_account a accounts' = _`
@@ -698,6 +784,10 @@ Proof
          accesses_add_slot_def, lookup_account_def, update_account_def,
          APPLY_UPDATE_THM, calldata_word, mask_and_w2w,
          DROP_APPEND, DROP_LENGTH_TOO_LONG, balance_slot_key_bytes]
+  (* the accounting wraps the accounts in `clear_deleted` now, and this
+     transaction deletes nothing, so it comes straight back off -- after the
+     definitions above, which are heavy enough as it is *)
+  \\ gvs[clear_deleted_def]
   \\ simp[REVERSE_word_to_bytes_bytes32]
   \\ qmatch_goalsub_abbrev_tac `cc * n2w wad + _`
   \\ `cc * n2w wad = -n2w wad`
@@ -827,8 +917,11 @@ Theorem WETH_EVM_transfer_run_transaction:
   zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
     (function_selector "transfer" [Address; Uint 256] ++
      enc (Tuple [Address; Uint 256]) (ListV [NumV (w2n dst); NumV wad]))
-    29962 s ∧
+    37162 s ∧
   wad ≤ ws.balances tx.from ∧
+  (lookup_storage (balance_slot_key dst)
+     (lookup_account addr accounts).storage = 0w ⇒
+   storage_set_state_gas ≤ s.txParams.stateGasReservoir) ∧
   (∀a b. (a = tx.from ∨ a = dst) ∧
          (b = tx.from ∨ b = dst ∨ b ∈ ws.touched) ∧
          balance_slot_key a = balance_slot_key b ⇒ a = b) ∧
@@ -950,6 +1043,14 @@ Proof
       \\ strip_tac \\ simp[REV_DEF, w2w_def])
   \\ mp_tac (Q.INST [‘p’ |-> ‘ctxt.msgParams’, ‘rb’ |-> ‘s.rollback’,
                      ‘d’ |-> ‘dom’, ‘rd’ |-> ‘[]’, ‘returnCode’ |-> ‘F’,
+                     ‘ar’ |-> ‘0’, ‘sr’ |-> ‘0’,
+                     (* the outermost frame's own meter: the reverting path
+                        only reads, so nothing moves it and a fresh frame has
+                        nothing spilled or committed *)
+                     ‘sg’ |-> ‘ctxt.stateGasLeft’,
+                     ‘sp’ |-> ‘0’,
+                     ‘bsl’ |-> ‘ctxt.stateGasBaseline’,
+                     ‘cm’ |-> ‘0’,
                      ‘txParams’ |-> ‘s.txParams’, ‘callee’ |-> ‘addr’,
                      ‘s'’ |-> ‘s with rollback updated_by
                        (λr. r with accounts updated_by

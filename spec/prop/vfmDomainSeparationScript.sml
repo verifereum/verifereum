@@ -247,6 +247,14 @@ val ignores_extra_domain_def =
   SIMP_RULE std_ss [ignores_extra_domain_pred_def]
   ignores_extra_domain_def
 
+Theorem ignores_extra_domain_msdomain:
+  !m s r t d. ignores_extra_domain m /\ m s = (r,t) /\
+    s.msdomain = Enforce d ==> t.msdomain = s.msdomain
+Proof
+  simp[ignores_extra_domain_def, ignores_extra_domain_pred_def]
+  \\ metis_tac[]
+QED
+
 Theorem handle_ignores_extra_domain_pred_allow:
   ignores_extra_domain_pred p f ∧
   (∀s. p s ⇒ p (SND (f s))) ∧
@@ -364,6 +372,14 @@ Proof
   \\ metis_tac[]
 QED
 
+Theorem ignores_extra_domain_pred_mono:
+  ignores_extra_domain_pred q f ∧ (∀s. p s ⇒ q s) ⇒
+  ignores_extra_domain_pred p f
+Proof
+  rw[ignores_extra_domain_pred_def]
+  \\ metis_tac[]
+QED
+
 Theorem ignores_extra_domain_imp_pred_bind:
   (∀s s'. p s ⇒ p (SND (g s))) ∧
   ignores_extra_domain g ∧
@@ -455,6 +471,89 @@ Proof
   rw[consume_gas_def] \\ tac
 QED
 
+Theorem fail_ignores_extra_domain[simp]:
+  ignores_extra_domain (fail x)
+Proof
+  rw[ignores_extra_domain_def, fail_def]
+QED
+
+(* EIP-8037: the state gas meter reads and writes the head frame, which
+   `domain_compatible` carries along, so it touches no extra domain. *)
+Theorem get_state_gas_left_ignores_extra_domain[simp]:
+  ignores_extra_domain get_state_gas_left
+Proof
+  rw[get_state_gas_left_def] \\ tac
+QED
+
+Theorem charge_state_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (charge_state_gas n)
+Proof
+  rw[charge_state_gas_def, LET_THM] \\ tac
+QED
+
+Theorem credit_state_gas_refund_ignores_extra_domain[simp]:
+  ignores_extra_domain (credit_state_gas_refund n)
+Proof
+  rw[credit_state_gas_refund_def, LET_THM] \\ tac
+QED
+
+(* EIP-8037: the two wrappers the account creation charge and its credit
+   go through, over the meter above. *)
+Theorem charge_new_account_ignores_extra_domain[simp]:
+  ignores_extra_domain (charge_new_account charged)
+Proof
+  rw[charge_new_account_def] \\ tac
+QED
+
+Theorem credit_new_account_ignores_extra_domain[simp]:
+  ignores_extra_domain (credit_new_account charged)
+Proof
+  rw[credit_new_account_def] \\ tac
+QED
+
+Theorem restore_state_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain restore_state_gas
+Proof
+  rw[restore_state_gas_def] \\ tac
+QED
+
+Theorem commit_state_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain commit_state_gas
+Proof
+  rw[commit_state_gas_def] \\ tac
+QED
+
+Theorem restore_state_gas_to_entry_ignores_extra_domain[simp]:
+  ignores_extra_domain (restore_state_gas_to_entry sg)
+Proof
+  rw[restore_state_gas_to_entry_def] \\ tac
+QED
+
+Theorem repay_state_gas_spill_ignores_extra_domain[simp]:
+  ignores_extra_domain repay_state_gas_spill
+Proof
+  rw[repay_state_gas_spill_def, repay_state_gas_spill_context_def] \\ tac
+QED
+
+Theorem forfeit_remaining_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain forfeit_remaining_gas
+Proof
+  rw[forfeit_remaining_gas_def] \\ tac
+QED
+
+Theorem withhold_create_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain withhold_create_gas
+Proof
+  rw[withhold_create_gas_def, LET_THM] \\ tac
+QED
+
+Theorem drain_state_gas_reservoir_ignores_extra_domain[simp]:
+  ignores_extra_domain drain_state_gas_reservoir
+Proof
+  rw[drain_state_gas_reservoir_def] \\ tac
+QED
+
+
 Theorem set_return_data_ignores_extra_domain[simp]:
   ignores_extra_domain (set_return_data n)
 Proof
@@ -496,6 +595,12 @@ Theorem unuse_gas_ignores_extra_domain[simp]:
   ignores_extra_domain (unuse_gas n)
 Proof
   rw[unuse_gas_def] \\ tac
+QED
+
+Theorem restore_child_gas_ignores_extra_domain[simp]:
+  ignores_extra_domain (restore_child_gas g sr)
+Proof
+  rw[restore_child_gas_def] \\ tac
 QED
 
 Theorem push_logs_ignores_extra_domain[simp]:
@@ -567,9 +672,18 @@ Proof
     \\ tac )
   \\ rw[bind_def, ignores_extra_domain_def, ignore_bind_def,
         pop_context_def, unuse_gas_def, set_rollback_def, return_def,
+        credit_new_account_def, credit_state_gas_refund_def,
         fail_def, get_current_context_def, set_current_context_def,
         assert_def, CaseEq"prod", CaseEq"sum", CaseEq"bool"]
   \\ srw_tac[DNF_ss][] \\ gvs[]
+  \\ TRY (gvs[return_def, bind_def, get_current_context_def,
+             set_current_context_def, fail_def, ignore_bind_def,
+             assert_def, COND_RAND, COND_RATOR, CaseEq"bool",
+             CaseEq"prod", CaseEq"sum"] \\ NO_TAC)
+  \\ TRY (qpat_x_assum `(if _ then _ else _) _ = (INL (),_)` mp_tac
+          \\ rw[return_def, bind_def, get_current_context_def,
+                set_current_context_def, fail_def, ignore_bind_def,
+                assert_def] \\ gvs[] \\ NO_TAC)
   \\ drule domain_compatible_lengths \\ rw[]
   \\ TRY (strip_tac \\ gvs[])
   \\ TRY (Cases_on`s.contexts` \\ gvs[])
@@ -591,10 +705,16 @@ Proof
   \\ Cases_on`p` \\ gvs[]
   \\ TRY (qmatch_goalsub_rename_tac`FST p`
           \\ Cases_on`p` \\ gvs[])
-  \\ gvs[domain_compatible_def, domain_check_def]
+  \\ gvs[domain_compatible_def, domain_check_def, return_def, bind_def,
+        get_current_context_def, set_current_context_def, fail_def,
+        ignore_bind_def, CaseEq"bool", CaseEq"prod", CaseEq"sum"]
   \\ TRY TOP_CASE_TAC
   \\ gvs[states_agree_modulo_accounts_def]
   \\ gvs[domain_accounts_def]
+  \\ TRY (qpat_x_assum `_ = (INL (),_)` mp_tac
+          \\ rw[return_def, bind_def, get_current_context_def,
+                set_current_context_def, fail_def, ignore_bind_def]
+          \\ gvs[] \\ NO_TAC)
 QED
 
 Theorem write_memory_ignores_extra_domain[simp]:
@@ -611,6 +731,7 @@ Proof
   \\ conj_tac
   >- ( rw[] \\ tac )
   \\ tac
+  \\ TRY (irule pop_and_incorporate_context_ignores_extra_domain)
   \\ BasicProvers.TOP_CASE_TAC
   >- tac
   \\ rw[]
@@ -641,15 +762,17 @@ Proof
   rw[handle_step_def]
   \\ irule handle_ignores_extra_domain
   \\ rw[]
+  \\ TRY (irule handle_create_ignores_extra_domain)
+  \\ TRY (irule handle_exception_ignores_extra_domain)
   \\ rw[handle_create_def, bind_def, ignore_bind_def, get_return_data_def,
         get_output_to_def, get_current_context_def, fail_def, return_def]
-  \\ BasicProvers.TOP_CASE_TAC \\ rw[reraise_def]
-  >- (strip_tac \\ gs[])
-  \\ BasicProvers.TOP_CASE_TAC \\ rw[reraise_def]
-  \\ rw[assert_def, bind_def, reraise_def, consume_gas_def,
-        get_current_context_def, return_def, ignore_bind_def,
-        set_current_context_def, update_accounts_def]
-  >- (strip_tac \\ gs[])
+  \\ Cases_on`(FST (HD s.contexts)).msgParams.outputTo`
+  \\ Cases_on`e`
+  \\ rw[reraise_def, assert_def, bind_def, ignore_bind_def, consume_gas_def,
+        charge_state_gas_def, update_accounts_def, get_current_context_def,
+        return_def, set_current_context_def, fail_def, vfm_abort_def]
+  \\ TRY (strip_tac \\ gs[])
+  \\ gvs[vfm_abort_def]
 QED
 
 Theorem inc_pc_or_jump_ignores_extra_domain[simp]:
@@ -1098,6 +1221,15 @@ Proof
   \\ rw[]
 QED
 
+Theorem SND_withhold_create_gas_msdomain[simp]:
+  (SND (withhold_create_gas s)).msdomain = s.msdomain
+Proof
+  rw[withhold_create_gas_def, bind_def, get_gas_left_def, consume_gas_def,
+     get_current_context_def, return_def, fail_def, assert_def,
+     ignore_bind_def, set_current_context_def, LET_THM]
+  \\ rw[]
+QED
+
 Theorem step_ext_code_copy_ignore_extra_domain[simp]:
   ignores_extra_domain step_ext_code_copy
 Proof
@@ -1305,6 +1437,24 @@ Theorem step_swap_ignores_extra_domain[simp]:
   ignores_extra_domain (step_swap n)
 Proof
   rw[step_swap_def] \\ tac
+QED
+
+Theorem step_dupn_ignores_extra_domain[simp]:
+  ignores_extra_domain step_dupn
+Proof
+  rw[step_dupn_def] \\ tac
+QED
+
+Theorem step_swapn_ignores_extra_domain[simp]:
+  ignores_extra_domain step_swapn
+Proof
+  rw[step_swapn_def] \\ tac
+QED
+
+Theorem step_exchange_ignores_extra_domain[simp]:
+  ignores_extra_domain step_exchange
+Proof
+  rw[step_exchange_def] \\ tac
 QED
 
 Theorem revert_ignores_extra_domain[simp]:
@@ -1531,71 +1681,6 @@ Proof
   \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def]
 QED
 
-Theorem self_destruct_helper:
-  do
-    accounts <- get_accounts;
-    sender <<- lookup_account senderAddress accounts;
-    balance <<- sender.balance;
-    beneficiaryEmpty <<- account_empty (lookup_account address accounts);
-    transferCost <<-
-      if 0 < balance ∧ beneficiaryEmpty then
-        self_destruct_new_account_cost
-      else 0;
-    consume_gas
-      (static_gas SelfDestruct + zero_warm accessCost + transferCost);
-    assert_not_static;
-    update_accounts (transfer_value senderAddress address balance);
-    original <- get_original;
-    originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then
-      do
-        update_accounts
-          (update_account senderAddress (sender with balance := 0));
-        add_to_delete senderAddress
-      od
-    else return ();
-    finish
-  od =
-  do
-    accounts <- get_accounts;
-    sender <<- lookup_account senderAddress accounts;
-    balance <<- sender.balance;
-    beneficiaryEmpty <<- account_empty (lookup_account address accounts);
-    transferCost <<-
-      if 0 < balance ∧ beneficiaryEmpty then
-        self_destruct_new_account_cost
-      else 0;
-    consume_gas
-      (static_gas SelfDestruct + zero_warm accessCost + transferCost);
-    assert_not_static;
-    update_accounts (transfer_value senderAddress address balance);
-    original <- get_original;
-    originalContract <<- lookup_account senderAddress original;
-    if account_empty originalContract then
-      do
-        update_accounts
-          (λa. (senderAddress =+ a senderAddress with balance := 0) a);
-        add_to_delete senderAddress
-      od
-    else return ();
-    finish
-  od
-Proof
-  rw[FUN_EQ_THM, bind_def, ignore_bind_def,
-     assert_not_static_def, update_accounts_def,
-     return_def, fail_def, consume_gas_def, get_original_def,
-     update_accounts_def, get_static_def, get_current_context_def,
-     set_current_context_def, assert_def, get_accounts_def]
-  \\ rw[] \\ gvs[return_def, bind_def]
-  \\ rw[] \\ gvs[return_def, bind_def, update_accounts_def, add_to_delete_def]
-  \\ rw[] \\ gvs[finish_def]
-  \\ gvs[execution_state_component_equality, rollback_state_component_equality]
-  \\ gvs[update_account_def, transfer_value_def, lookup_account_def,
-         APPLY_UPDATE_THM, FUN_EQ_THM]
-  \\ rw[account_state_component_equality, APPLY_UPDATE_THM]
-  \\ rw[]
-QED
-
 Theorem ignores_extra_domain_update_accounts_transfer_value[simp]:
   ignores_extra_domain (update_accounts (transfer_value x y z))
 Proof
@@ -1666,7 +1751,7 @@ Proof
          fail_def, set_current_context_def]
       \\ Cases_on`s.contexts` \\ gvs[]
       \\ Cases_on`h` \\ gvs[])
-  \\ simp[SIMP_RULE(srw_ss())[LET_THM, AC ADD_ASSOC ADD_COMM]self_destruct_helper]
+  \\ simp[]
   \\ irule get_accounts_ignore_extra_domain_pred_bind
   \\ simp[]
   \\ conj_tac
@@ -1681,8 +1766,6 @@ Proof
     \\ rpt strip_tac
     \\ qmatch_goalsub_abbrev_tac`consume_gas n1`
     \\ qmatch_goalsub_abbrev_tac`update_accounts a1`
-    \\ qmatch_goalsub_abbrev_tac`ignore_bind (update_accounts u1)
-                                   (add_to_delete _)`
     \\ qmatch_goalsub_abbrev_tac`lhs = _`
     \\ qmatch_goalsub_abbrev_tac`consume_gas n2`
     \\ qmatch_goalsub_abbrev_tac`update_accounts a2`
@@ -1696,6 +1779,14 @@ Proof
       simp[Abbr`a1`,Abbr`a2`]
       \\ gvs[fIN_IN, accounts_agree_modulo_storage_def,
              account_state_component_equality, account_empty_def])
+    \\ `(x senderAddress).balance = (y senderAddress).balance`
+    by (
+      gvs[fIN_IN, accounts_agree_modulo_storage_def,
+          account_state_component_equality, account_empty_def] )
+    \\ `account_empty (x address) = account_empty (y address)`
+    by (
+      gvs[fIN_IN, accounts_agree_modulo_storage_def,
+          account_state_component_equality, account_empty_def] )
     \\ simp[Abbr`lhs`] )
   \\ qx_gen_tac`balance`
   \\ simp[ignore_bind_def]
@@ -1713,6 +1804,16 @@ Proof
   >- (
     gen_tac
     \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`charge_new_account nn`
+    \\ simp[charge_new_account_def, charge_state_gas_def, consume_gas_def,
+            bind_def, ignore_bind_def, get_current_context_def, assert_def,
+            return_def, fail_def, set_current_context_def, COND_RATOR]
+    \\ rw[] \\ rw[] )
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    gen_tac
+    \\ strip_tac
     \\ simp[assert_not_static_def, bind_def, ignore_bind_def, get_current_context_def,
             assert_def, get_static_def, return_def, fail_def,
             set_current_context_def])
@@ -1724,6 +1825,13 @@ Proof
     \\ simp[update_accounts_def, bind_def, ignore_bind_def, get_current_context_def,
             assert_def, get_static_def, return_def, fail_def,
             set_current_context_def] )
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    rw[push_logs_def, get_current_context_def, bind_def, ignore_bind_def,
+       return_def, fail_def, set_current_context_def]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[] )
   \\ irule get_original_ignores_extra_domain_pred_bind
   \\ simp[]
   \\ conj_tac
@@ -1741,13 +1849,7 @@ Proof
   \\ rw[]
   \\ irule ignores_extra_domain_pred_imp
   \\ tac \\ rw[]
-  \\ rw[update_accounts_def, ignores_extra_domain_def, return_def]
-  \\ gvs[domain_compatible_def, domain_accounts_def,
-         states_agree_modulo_accounts_def, rollback_state_component_equality,
-         rollback_states_agree_modulo_accounts_def, APPLY_UPDATE_THM,
-         accounts_agree_modulo_storage_def, domain_check_def]
-  \\ TOP_CASE_TAC
-  \\ gvs[account_state_component_equality] \\ rw[]
+  \\ rw[add_to_delete_def, ignores_extra_domain_def, return_def]
 QED
 
 Theorem abort_unuse_ignores_extra_domain[simp]:
@@ -1760,6 +1862,12 @@ Theorem abort_call_value_ignores_extra_domain[simp]:
   ignores_extra_domain (abort_call_value x)
 Proof
   rw[abort_call_value_def] \\ tac
+QED
+
+Theorem abort_create_ignores_extra_domain[simp]:
+  ignores_extra_domain abort_create
+Proof
+  rw[abort_create_def] \\ tac
 QED
 
 Theorem abort_create_exists_ignores_extra_domain[simp]:
@@ -1789,11 +1897,6 @@ Proof
   rw[get_value_def] \\ tac
 QED
 
-Theorem fail_ignores_extra_domain[simp]:
-  ignores_extra_domain (fail x)
-Proof
-  rw[ignores_extra_domain_def, fail_def]
-QED
 
 Theorem precompile_ecrecover_ignores_extra_domain[simp]:
   ignores_extra_domain precompile_ecrecover
@@ -2039,10 +2142,33 @@ Proof
   \\ gs[]
 QED
 
-Theorem proceed_call_ignores_extra_domain[simp]:
-  ignores_extra_domain (proceed_call a b c d e f g h i)
+(* proceed_call reads the destination's account to decide the creation
+   charge, and stores it on the child's message parameters.  Only a
+   destination the domain already pins is decided the same way on both
+   sides of `domain_compatible`, which is what its caller establishes by
+   running `access_address` on it first. *)
+Theorem proceed_call_ignores_extra_domain:
+  ignores_extra_domain_pred
+    (λs. ∀d. s.msdomain = Enforce d ⇒ address ∈ toSet d.addresses)
+    (proceed_call op sender address value argsOffset argsSize code stipend outputTo)
 Proof
-  simp[proceed_call_def]
+  simp[proceed_call_def, LET_THM]
+  \\ irule get_accounts_ignore_extra_domain_pred_bind \\ simp[]
+  \\ conj_tac >- (
+    rw[domain_compatible_def, states_agree_modulo_accounts_def] ) 
+  \\ conj_tac >- (
+    rpt gen_tac \\ strip_tac
+    \\ `account_empty (lookup_account address x) =
+        account_empty (lookup_account address y)`
+    by ( gs[accounts_agree_modulo_storage_def, lookup_account_def,
+            account_state_component_equality, fIN_IN, account_empty_def] )
+    \\ gvs[] )
+  \\ qx_gen_tac`accounts`
+  \\ irule ignores_extra_domain_pred_imp
+  \\ simp[LET_THM]
+  \\ irule bind_ignores_extra_domain
+  \\ reverse conj_tac >- simp[]
+  \\ qx_gen_tac `reservoir` \\ BETA_TAC
   \\ irule get_rollback_ignores_extra_domain_bind
   \\ reverse conj_asm2_tac
   >- ( simp[] \\ gen_tac \\ tac )
@@ -2069,7 +2195,7 @@ Proof
         |> qspecl_then[`c`,`s1`]mp_tac)
     \\ qmatch_goalsub_abbrev_tac`FST p`
     \\ Cases_on`p` \\ simp[]
-    \\ disch_then(qspec_then`d'`mp_tac)
+    \\ disch_then(qspec_then`d`mp_tac)
     \\ impl_keep_tac
     >- (
        gvs[Abbr`s1`,get_static_def,bind_def,CaseEq"prod",CaseEq"sum",return_def,
@@ -2106,7 +2232,7 @@ Proof
         |> qspecl_then[`c`,`s1`]mp_tac)
     \\ qmatch_goalsub_abbrev_tac`SND p`
     \\ Cases_on`p` \\ simp[]
-    \\ disch_then(qspec_then`d'`mp_tac)
+    \\ disch_then(qspec_then`d`mp_tac)
     \\ impl_keep_tac
     >- (
        gvs[Abbr`s1`,get_static_def,bind_def,CaseEq"prod",CaseEq"sum",return_def,
@@ -2129,7 +2255,7 @@ Proof
     \\ rw[] \\ rw[] )
   \\ simp[domain_compatible_def, domain_check_def]
   \\ qmatch_goalsub_rename_tac`s1.msdomain`
-  \\ `s1.msdomain = Enforce d'` by (
+  \\ `s1.msdomain = Enforce d` by (
        gvs[get_static_def,bind_def,CaseEq"prod",CaseEq"sum",return_def,
            get_current_context_def,CaseEq"bool",fail_def,get_value_def,
            get_caller_def,COND_RATOR,update_accounts_def,read_memory_def] )
@@ -2182,10 +2308,28 @@ Proof
     \\ first_assum ACCEPT_TAC )
 QED
 
-Theorem proceed_create_ignores_extra_domain[simp]:
-  ignores_extra_domain (proceed_create a b c d e)
+Theorem proceed_create_ignores_extra_domain:
+  ignores_extra_domain_pred
+    (λs. ∀d. s.msdomain = Enforce d ⇒ address ∈ toSet d.addresses)
+    (proceed_create senderAddress address value code cappedGas)
 Proof
-  simp[proceed_create_def]
+  simp[proceed_create_def, LET_THM]
+  \\ irule get_accounts_ignore_extra_domain_pred_bind \\ simp[]
+  \\ conj_tac >- (
+    rw[domain_compatible_def, states_agree_modulo_accounts_def] ) 
+  \\ conj_tac >- (
+    rpt gen_tac \\ strip_tac
+    \\ `account_empty (lookup_account address x) =
+        account_empty (lookup_account address y)`
+    by ( gs[accounts_agree_modulo_storage_def, lookup_account_def,
+            account_state_component_equality, fIN_IN, account_empty_def] )
+    \\ gvs[] )
+  \\ qx_gen_tac`accounts`
+  \\ irule ignores_extra_domain_pred_imp
+  \\ simp[LET_THM]
+  \\ irule bind_ignores_extra_domain
+  \\ reverse conj_tac >- simp[]
+  \\ qx_gen_tac `reservoir` \\ BETA_TAC
   \\ irule ignore_bind_ignores_extra_domain \\ rw[]
   \\ irule get_rollback_ignores_extra_domain_bind
   \\ reverse conj_asm2_tac
@@ -2220,6 +2364,38 @@ Proof
   \\ rw[]
   \\ Cases_on `s'.contexts` \\ gvs[]
   \\ irule EVERY2_refl \\ rw[]
+QED
+
+(* EIP-8037: the account creation charge rewrites the head frame's state-gas
+   fields and nothing else, so the two things a domain predicate can be about
+   -- which frame is at the head, and which domain is enforced -- survive it. *)
+Theorem SND_charge_new_account_msdomain[simp]:
+  ∀charged s. (SND (charge_new_account charged s)).msdomain = s.msdomain
+Proof
+  rw[charge_new_account_def, charge_state_gas_def, consume_gas_def,
+     get_gas_left_def, unuse_gas_def, bind_def, ignore_bind_def,
+     get_current_context_def, set_current_context_def, return_def, fail_def,
+     assert_def, LET_THM]
+  \\ rw[]
+  \\ IF_CASES_TAC >- gvs[set_current_context_def, return_def, LET_THM]
+  \\ IF_CASES_TAC >- (
+       gvs[set_current_context_def, get_current_context_def, bind_def,
+           ignore_bind_def, return_def, fail_def, assert_def, LET_THM,
+           CaseEq"prod", CaseEq"sum", CaseEq"bool", COND_RATOR]
+       \\ Cases_on`s.contexts` \\ gvs[]
+       \\ rpt (CASE_TAC \\ gvs[]) )
+  \\ gvs[fail_def]
+QED
+
+(* The refill the charge above gives back touches the same head frame's
+   state-gas fields, so the domain predicate survives it the same way. *)
+Theorem SND_credit_new_account_msdomain[simp]:
+  ∀charged s. (SND (credit_new_account charged s)).msdomain = s.msdomain
+Proof
+  rw[credit_new_account_def, credit_state_gas_refund_def, LET_THM,
+     get_current_context_def, set_current_context_def, bind_def,
+     return_def, fail_def]
+  \\ rpt (CASE_TAC \\ gvs[])
 QED
 
 Theorem step_call_ignores_extra_domain:
@@ -2298,14 +2474,15 @@ Proof
       \\ gvs[account_state_component_equality] )
     \\ gvs[]
     \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
-    \\ qmatch_goalsub_abbrev_tac`FST pp`
     \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
     \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
     \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
     \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
-    \\ qmatch_goalsub_abbrev_tac`n1 < b1`
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
+    \\ qmatch_goalsub_abbrev_tac`n1 < b2`
     \\ qmatch_abbrev_tac`lhs = _`
-    \\ qmatch_goalsub_abbrev_tac`n2 < b1`
+    \\ qmatch_goalsub_abbrev_tac`n2 < b2`
     \\ qunabbrev_tac`lhs`
     \\ `n1 = n2`
     by (
@@ -2320,33 +2497,29 @@ Proof
         \\ gvs[CaseEq"prod",CaseEq"sum"]
         \\ gvs[access_address_def, domain_check_def]
         \\ gvs[COND_RATOR,CaseEq"bool",return_def,fail_def] )
-      \\ gvs[get_callee_def, bind_def, get_current_context_def, CaseEq"prod",
-             CaseEq"sum", return_def, CaseEq"bool", fail_def]
-      \\ gvs[expand_memory_def, bind_def, get_current_context_def, CaseEq"prod",
-             CaseEq"sum", return_def, CaseEq"bool", fail_def]
-      \\ gvs[set_current_context_def, bind_def, get_current_context_def, CaseEq"prod",
-             CaseEq"sum", return_def, CaseEq"bool", fail_def]
-      \\ gvs[Abbr`b3`, assert_not_static_def, bind_def, set_current_context_def,
-             get_current_context_def, CaseEq"prod", ignore_bind_def, assert_def,
-             CaseEq"sum", return_def, CaseEq"bool", fail_def, COND_RATOR,
-             get_static_def, consume_gas_def, get_gas_left_def]
-      \\ Cases_on`HD s.contexts` \\ gvs[]
-      \\ Cases_on`s.contexts` \\ gvs[] )
-    \\ gs[]
-    \\ IF_CASES_TAC \\ gs[]
-    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
-    \\ irule bind_eq \\ simp[] \\ rpt gen_tac \\ strip_tac
-    \\ IF_CASES_TAC \\ gs[]
-    \\ `la.code = lb.code`
-    by (
-      gs[Abbr`la`,Abbr`lb`,lookup_account_def, accounts_agree_modulo_storage_def]
-      \\ gvs[account_state_component_equality, fIN_IN] )
-    \\ simp[]
-    \\ simp[get_delegate_def]
-    \\ IF_CASES_TAC \\ simp[]
-    \\ ntac 4 (AP_TERM_TAC ORELSE AP_THM_TAC)
-    \\ gvs[lookup_account_def, accounts_agree_modulo_storage_def]
-    \\ gvs[account_state_component_equality, fIN_IN])
+      \\ gvs[get_callee_def, bind_def, get_current_context_def, return_def,
+             fail_def, CaseEq"prod", CaseEq"sum", CaseEq"bool"]
+      \\ gvs[consume_gas_def, assert_def, set_current_context_def,
+             get_current_context_def, bind_def, return_def, fail_def,
+             CaseEq"prod", CaseEq"sum", CaseEq"bool", COND_RATOR]
+      \\ gvs[get_gas_left_def, bind_def, get_current_context_def, return_def,
+             fail_def, CaseEq"prod", CaseEq"sum", CaseEq"bool"]
+      \\ gvs[expand_memory_def, bind_def, get_current_context_def,
+             set_current_context_def, return_def, fail_def, CaseEq"prod",
+             CaseEq"sum", CaseEq"bool"]
+      \\ gvs[Abbr`b3`, assert_not_static_def, get_static_def, assert_def,
+             set_current_context_def, get_current_context_def, bind_def,
+             ignore_bind_def, return_def, fail_def, CaseEq"prod",
+             CaseEq"sum", CaseEq"bool", COND_RATOR]
+      \\ gvs[charge_new_account_def, charge_state_gas_def, consume_gas_def,
+             assert_def, set_current_context_def, get_current_context_def,
+             bind_def, ignore_bind_def, return_def, fail_def, CaseEq"prod",
+             CaseEq"sum", CaseEq"bool", COND_RATOR]
+      \\ Cases_on`s.contexts` \\ gvs[]
+      \\ first_x_assum irule
+      \\ TRY (Cases_on`h` \\ gvs[])
+      \\ metis_tac[PAIR] )
+    \\ gvs[])
   \\ gen_tac
   \\ simp[]
   \\ irule ignores_extra_domain_imp_pred_bind
@@ -2370,12 +2543,6 @@ Proof
   \\ Cases
   \\ simp[ignore_bind_def]
   \\ irule ignores_extra_domain_imp_pred_bind
-  \\ simp[]
-  \\ reverse conj_tac
-  >- ( rw[get_gas_left_def, bind_def, get_current_context_def,
-          fail_def, return_def] )
-  \\ gen_tac
-  \\ irule ignores_extra_domain_imp_pred_bind
   \\ reverse conj_tac
   >- (
     simp[consume_gas_def, bind_def, get_current_context_def,
@@ -2386,6 +2553,28 @@ Proof
     \\ simp[set_current_context_def, return_def]
     \\ Cases_on`s.contexts` \\ gvs[]
     \\ Cases_on`h` \\ gvs[])
+  \\ simp[]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- (
+    reverse conj_tac
+    >- gvs[]
+    \\ gen_tac \\ gen_tac \\ strip_tac
+    \\ fs[]
+    (* The charge keeps the domain, so `fs` has already closed the half of
+       the preservation that the operand address pins. *)
+    \\ TRY (reverse conj_tac
+           >- ( strip_tac \\ metis_tac[SND_charge_new_account_msdomain] ))
+    \\ strip_tac \\ fs[]
+    \\ gvs[charge_new_account_def, charge_state_gas_def, consume_gas_def,
+           get_gas_left_def, unuse_gas_def, bind_def, ignore_bind_def,
+           get_current_context_def, set_current_context_def, return_def,
+           fail_def, assert_def, LET_THM, CaseEq"prod", CaseEq"sum",
+           CaseEq"bool", COND_RATOR]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ rpt (CASE_TAC \\ gvs[])
+    \\ rpt (strip_tac \\ gvs[])
+    \\ metis_tac[PAIR] )
   \\ simp[]
   \\ irule ignores_extra_domain_imp_pred_bind
   \\ reverse conj_tac
@@ -2406,13 +2595,49 @@ Proof
     \\ Cases_on`s.contexts` \\ gvs[]
     \\ Cases_on`h` \\ gvs[])
   \\ simp[]
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- ( rw[get_gas_left_def, bind_def, get_current_context_def,
+          fail_def, return_def] )
+  \\ simp[]
+  \\ gen_tac
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ reverse conj_tac
+  >- (
+    simp[consume_gas_def, bind_def, get_current_context_def,
+         ignore_bind_def, return_def, fail_def, assert_def, COND_RATOR]
+    \\ gen_tac \\ strip_tac
+    \\ IF_CASES_TAC \\ gs[]
+    \\ IF_CASES_TAC \\ gs[]
+    \\ simp[set_current_context_def, return_def]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ Cases_on`h` \\ gvs[])
+  \\ simp[]
   \\ irule get_callee_ignores_extra_domain_pred_bind
   \\ simp[] \\ gen_tac
   \\ IF_CASES_TAC
-  >- ( irule ignores_extra_domain_pred_imp \\ simp[] )
-  \\ irule ignores_extra_domain_pred_imp
-  \\ tac
-  \\ simp[proceed_call_ignores_extra_domain]
+  >- ( irule ignores_extra_domain_pred_imp \\ simp[]
+       \\ TRY (irule bind_ignores_extra_domain \\ simp[]) )
+  \\ simp[ignore_bind_def]
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- (
+    simp[set_return_data_def, get_current_context_def, set_current_context_def,
+         bind_def, return_def, fail_def]
+    \\ rw[] \\ gvs[] )
+  \\ BETA_TAC
+  \\ irule ignores_extra_domain_imp_pred_bind \\ simp[]
+  \\ reverse conj_tac
+  >- ( simp[get_num_contexts_def] \\ rw[] \\ gvs[] )
+  \\ gen_tac \\ BETA_TAC
+  \\ IF_CASES_TAC
+  >- ( irule ignores_extra_domain_pred_imp \\ simp[]
+       \\ TRY (irule bind_ignores_extra_domain \\ simp[]) )
+  \\ irule ignores_extra_domain_pred_mono
+  \\ qexists_tac `λs. ∀d. s.msdomain = Enforce d ⇒
+                          w2w x'❲1❳ ∈ toSet d.addresses`
+  \\ conj_tac >- (simp[] \\ metis_tac[])
+  \\ irule proceed_call_ignores_extra_domain
 QED
 
 Theorem ensure_storage_in_domain_ignores_extra_domain[simp]:
@@ -2519,7 +2744,37 @@ Proof
             domain_check_def,
             get_current_context_def, assert_def, fail_def, CaseEq"prod",
             CaseEq"sum", set_current_context_def, CaseEq"bool", consume_gas_def,
-            CaseEq"domain_mode", get_gas_left_def, access_address_def, set_domain_def] )
+            CaseEq"domain_mode", get_gas_left_def, access_address_def, set_domain_def]
+        \\ assume_tac withhold_create_gas_ignores_extra_domain
+        \\ drule_all ignores_extra_domain_msdomain
+        \\ simp[] )
+      \\ gvs[fail_def, return_def, CaseEq"bool"]
+      \\ `toCreate ∈ toSet d.addresses`
+      by (
+        gvs[access_address_def, return_def, fail_def, CaseEq"prod",
+            CaseEq"bool", CaseEq"domain_mode", fIN_IN, domain_check_def,
+            set_domain_def, bind_def, ignore_bind_def] )
+      \\ gs[])
+    \\ sg`account_empty la1 = account_empty la2`
+    >- (
+      qmatch_asmsub_abbrev_tac`ensure_storage_in_domain toCreate`
+      \\ gvs[Abbr`la1`, Abbr`la2`, account_empty_def, lookup_account_def]
+      \\ gvs[accounts_agree_modulo_storage_def, fIN_IN,
+             ensure_storage_in_domain_def, assert_def]
+      \\ gvs[account_state_component_equality]
+      \\ rw[] \\ gvs[domain_check_def]
+      \\ qmatch_asmsub_rename_tac`domain_mode_CASE st.msdomain`
+      \\ `st.msdomain = s.msdomain`
+      by (
+        gvs[get_num_contexts_def, set_return_data_def, assert_not_static_def,
+            bind_def, return_def, ignore_bind_def, get_static_def,
+            domain_check_def,
+            get_current_context_def, assert_def, fail_def, CaseEq"prod",
+            CaseEq"sum", set_current_context_def, CaseEq"bool", consume_gas_def,
+            CaseEq"domain_mode", get_gas_left_def, access_address_def, set_domain_def]
+        \\ assume_tac withhold_create_gas_ignores_extra_domain
+        \\ drule_all ignores_extra_domain_msdomain
+        \\ simp[] )
       \\ gvs[fail_def, return_def, CaseEq"bool"]
       \\ `toCreate ∈ toSet d.addresses`
       by (
@@ -2529,8 +2784,117 @@ Proof
       \\ gs[])
     \\ gs[] )
   \\ gen_tac
-  \\ irule ignores_extra_domain_pred_imp
-  \\ tac
+  \\ simp[ignore_bind_def]
+  (* From the code-size assert down to the abort test the steps only touch
+     the meter and the current frame's own fields, so the callee's place on
+     the stack -- which is what pins the sender the creation charge reads --
+     survives them.  `simp[]` cannot see that through each step's
+     definition, so each step is peeled on its own, with the preservation
+     of the predicate proved by hand. *)
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac >- ( simp[assert_def] \\ rw[] \\ gvs[] )
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac >- (
+    simp[assert_not_static_def, get_static_def, assert_def, bind_def,
+         get_current_context_def, return_def, fail_def]
+    \\ rw[] \\ gvs[] )
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac >- (
+    simp[set_return_data_def, get_current_context_def, set_current_context_def,
+         bind_def, return_def, fail_def]
+    \\ rw[] \\ gvs[] )
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac >- ( simp[get_num_contexts_def, return_def] \\ rw[] \\ gvs[] )
+  \\ gen_tac \\ BETA_TAC
+  \\ IF_CASES_TAC
+  >- ( irule ignores_extra_domain_pred_imp \\ simp[]
+       \\ TRY (irule bind_ignores_extra_domain \\ simp[]) )
+  (* The destination `step_create` warms is pinned by the domain, which is
+     what the reads below need; the peel cannot carry that, so the else
+     branch is peeled from `access_address` on with the predicate it
+     establishes. *)
+  \\ irule access_address_ignore_extra_domain_pred_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (
+    rw[access_address_def, bind_def, get_current_context_def, fail_def,
+       return_def, domain_check_def, ignore_bind_def, set_domain_def]
+    \\ Cases_on`s.msdomain` \\ gvs[]
+    (* The predicate's own `∀` has to be instantiated with the domain the
+       goal arrives at, which neither `rw` nor `gvs` does. *)
+    \\ rpt (pop_assum mp_tac) \\ rw[] \\ rpt (metis_tac[]) )
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac >- (
+    rw[ensure_storage_in_domain_def, domain_check_def, set_domain_def,
+       ignore_bind_def, bind_def, return_def, fail_def, assert_def]
+    \\ Cases_on`s.msdomain` \\ gvs[]
+    \\ rpt (pop_assum mp_tac) \\ rw[] \\ rpt (metis_tac[]) )
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac >- (
+    (* The charge rewrites the head frame's state-gas fields alone, so the
+       frame stack keeps its shape -- with a possibly different head -- and
+       the enforced domain is untouched: the callee, and with it the address
+       the later steps read, survives it. *)
+    gen_tac \\ strip_tac
+    \\ fs[]
+    (* The domain half of the preservation is in the hypotheses already; the
+       frame-stack half needs the stack split, because the peel puts the
+       step's result in an assumption, where the guard in
+       `get_current_context` cannot be decided by simplification. *)
+    \\ TRY (reverse conj_tac
+           >- ( strip_tac \\ metis_tac[SND_charge_new_account_msdomain] ))
+    \\ strip_tac \\ fs[]
+    \\ gvs[charge_new_account_def, charge_state_gas_def, consume_gas_def,
+           get_gas_left_def, unuse_gas_def, bind_def, ignore_bind_def,
+           get_current_context_def, set_current_context_def, return_def,
+           fail_def, assert_def, LET_THM, CaseEq"prod", CaseEq"sum",
+           CaseEq"bool", COND_RATOR, CaseEq"domain_mode"]
+    \\ Cases_on`s.contexts` \\ gvs[]
+    \\ rpt (CASE_TAC \\ gvs[])
+    \\ rpt (strip_tac \\ gvs[])
+    \\ metis_tac[PAIR] )
+  \\ irule ignores_extra_domain_imp_pred_bind
+  \\ simp[]
+  \\ reverse conj_tac >- (
+    (* The withholding moves the meter alone, so the frame stack keeps its
+       shape -- with a head whose `gasUsed` has moved -- and the enforced
+       domain is untouched.  The stack and the `case` its `assert` reduces to
+       both have to be split by hand: the peel leaves the step's result in an
+       assumption, where nothing decides them. *)
+    TRY (rw[withhold_create_gas_def, consume_gas_def, get_gas_left_def,
+            unuse_gas_def, get_current_context_def, set_current_context_def,
+            get_static_def, bind_def, ignore_bind_def, return_def, fail_def,
+            assert_def, LET_THM, COND_RATOR, CaseEq"bool", CaseEq"prod",
+            CaseEq"sum", CaseEq"domain_mode"]
+         \\ Cases_on`s.contexts` \\ gvs[] \\ rpt (pop_assum mp_tac)
+         \\ rw[] \\ rpt (metis_tac[]))
+    \\ TRY (rw[withhold_create_gas_def, consume_gas_def, get_gas_left_def,
+            unuse_gas_def, get_current_context_def, set_current_context_def,
+            get_static_def, bind_def, ignore_bind_def, return_def, fail_def,
+            assert_def, LET_THM, COND_RATOR, CaseEq"bool", CaseEq"prod",
+            CaseEq"sum", CaseEq"domain_mode"]
+         \\ Cases_on`s.contexts` \\ gvs[] \\ rpt (CASE_TAC \\ gvs[])
+         \\ rpt (strip_tac \\ gvs[])
+         \\ rpt (first_x_assum irule ORELSE metis_tac[PAIR])) )
+  \\ gen_tac \\ BETA_TAC
+  (* `IF_CASES_TAC` splits the first conditional in the goal, and the first one
+     here is the Create/Create2 choice the predicate writes its address with.
+     Naming that one leaves the collision check below as the one to split. *)
+  \\ qpat_abbrev_tac`ad = COND _ _ _`
+  \\ IF_CASES_TAC
+  >- ( irule ignores_extra_domain_pred_imp \\ simp[]
+       \\ TRY (irule bind_ignores_extra_domain \\ simp[]) )
+  \\ qmatch_goalsub_abbrev_tac`proceed_create _ a2 _ _ _`
+  \\ irule ignores_extra_domain_pred_mono
+  \\ qexists_tac `λs. ∀d. s.msdomain = Enforce d ⇒ a2 ∈ toSet d.addresses`
+  \\ conj_tac >- simp[]
+  \\ irule proceed_create_ignores_extra_domain
 QED
 
 Theorem step_inst_ignores_extra_domain:
@@ -3064,6 +3428,93 @@ Proof
   \\ rw[]
 QED
 
+Theorem preserves_domain_has_callee_fail[simp]:
+  preserves_domain_has_callee (K T) (fail x)
+Proof
+  rw[fail_def, preserves_domain_has_callee_def]
+QED
+
+Theorem preserves_domain_has_callee_unuse_gas[simp]:
+  preserves_domain_has_callee (K T) (unuse_gas x)
+Proof
+  rw[unuse_gas_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_state_gas_meter[simp]:
+  preserves_domain_has_callee (K T) get_state_gas_left /\
+  preserves_domain_has_callee (K T) (charge_state_gas n) /\
+  preserves_domain_has_callee (K T) (credit_state_gas_refund n) /\
+  preserves_domain_has_callee (K T) restore_state_gas /\
+  preserves_domain_has_callee (K T) commit_state_gas /\
+  preserves_domain_has_callee (K T) (restore_state_gas_to_entry sg) /\
+  preserves_domain_has_callee (K T) repay_state_gas_spill /\
+  preserves_domain_has_callee (K T) forfeit_remaining_gas /\
+  preserves_domain_has_callee (K T) withhold_create_gas /\
+  preserves_domain_has_callee (K T) drain_state_gas_reservoir /\
+  preserves_domain_has_callee (K T) (restore_child_gas gas reservoir)
+Proof
+  conj_tac >- (
+    rw[get_state_gas_left_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[] )
+  \\ conj_tac >- suspend "charge"
+  \\ conj_tac >- (
+    rw[credit_state_gas_refund_def, LET_THM]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[restore_state_gas_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[commit_state_gas_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[restore_state_gas_to_entry_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ conj_tac >- (
+    rw[repay_state_gas_spill_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_set_current_context
+    \\ rw[repay_state_gas_spill_context_def] )
+  \\ conj_tac >- (
+    rw[forfeit_remaining_gas_def]
+    \\ irule preserves_domain_has_callee_bind \\ rw[] )
+  \\ conj_tac >- (
+    rw[withhold_create_gas_def]
+    \\ irule preserves_domain_has_callee_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_ignore_bind \\ rw[] )
+  \\ conj_tac >- (
+    rw[drain_state_gas_reservoir_def]
+    \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+    \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+    \\ irule preserves_domain_has_callee_set_current_context \\ rw[] )
+  \\ rw[restore_child_gas_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Resume preserves_domain_has_callee_state_gas_meter[charge]:
+  simp[charge_state_gas_def]
+  \\ irule preserves_domain_has_callee_get_current_context_bind
+  \\ rw[]
+  >- (irule preserves_domain_has_callee_set_current_context \\ rw[])
+  \\ irule preserves_domain_has_callee_ignore_bind
+  \\ simp[]
+  \\ conj_tac
+  >- (irule preserves_domain_has_callee_set_current_context \\ rw[])
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Finalise preserves_domain_has_callee_state_gas_meter
+
 Theorem preserves_domain_has_callee_get_original[simp]:
   preserves_domain_has_callee (K T) get_original
 Proof
@@ -3093,6 +3544,10 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind
+  \\ simp[COND_RAND, COND_RATOR, preserves_domain_has_callee_state_gas_meter]
+  \\ irule preserves_domain_has_callee_ignore_bind
+  \\ simp[preserves_domain_has_callee_state_gas_meter]
 QED
 
 Theorem preserves_domain_has_callee_update_accounts[simp]:
@@ -3172,6 +3627,38 @@ Proof
   \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
 QED
 
+Theorem preserves_domain_has_callee_step_dupn[simp]:
+  preserves_domain_has_callee (K T) step_dupn
+Proof
+  simp[step_dupn_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_swapn[simp]:
+  preserves_domain_has_callee (K T) step_swapn
+Proof
+  simp[step_swapn_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
+Theorem preserves_domain_has_callee_step_exchange[simp]:
+  preserves_domain_has_callee (K T) step_exchange
+Proof
+  simp[step_exchange_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
+  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
+QED
+
 Theorem preserves_domain_has_callee_push_logs[simp]:
   preserves_domain_has_callee (K T) (push_logs y)
 Proof
@@ -3218,6 +3705,24 @@ Proof
   \\ gs[domain_has_callee_def]
 QED
 
+Theorem preserves_domain_has_callee_charge_new_account[simp]:
+  preserves_domain_has_callee (K T) (charge_new_account charged)
+Proof
+  rw[charge_new_account_def]
+  \\ rpt IF_CASES_TAC
+  \\ simp[preserves_domain_has_callee_state_gas_meter,
+          preserves_domain_has_callee_return]
+QED
+
+Theorem preserves_domain_has_callee_credit_new_account[simp]:
+  preserves_domain_has_callee (K T) (credit_new_account charged)
+Proof
+  rw[credit_new_account_def]
+  \\ rpt IF_CASES_TAC
+  \\ simp[preserves_domain_has_callee_state_gas_meter,
+          preserves_domain_has_callee_return]
+QED
+
 Theorem preserves_domain_has_callee_step_self_destruct[simp]:
   preserves_domain_has_callee (K T) step_self_destruct
 Proof
@@ -3230,18 +3735,11 @@ Proof
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ rw[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
-QED
-
-Theorem preserves_domain_has_callee_unuse_gas[simp]:
-  preserves_domain_has_callee (K T) (unuse_gas x)
-Proof
-  rw[unuse_gas_def]
-  \\ irule preserves_domain_has_callee_get_current_context_bind \\ rw[]
-  \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
-  \\ irule preserves_domain_has_callee_set_current_context \\ rw[]
 QED
 
 Theorem preserves_domain_has_callee_inc_pc[simp]:
@@ -3368,12 +3866,6 @@ Proof
   rw[push_context_def]
 QED
 
-Theorem preserves_domain_has_callee_fail[simp]:
-  preserves_domain_has_callee (K T) (fail x)
-Proof
-  rw[fail_def, preserves_domain_has_callee_def]
-QED
-
 Theorem preserves_domain_has_callee_precompiles[simp]:
     preserves_domain_has_callee (K T) precompile_ecrecover
   ∧ preserves_domain_has_callee (K T) precompile_sha2_256
@@ -3429,6 +3921,13 @@ Proof
   rw[dispatch_precompiles_def]
 QED
 
+Theorem SND_drain_state_gas_reservoir_msdomain[simp]:
+  (SND (drain_state_gas_reservoir s)).msdomain = s.msdomain
+Proof
+  rw[drain_state_gas_reservoir_def, ignore_bind_def, bind_def,
+     get_current_context_def, set_current_context_def, return_def, fail_def]
+QED
+
 Theorem preserves_domain_has_callee_proceed_call[simp]:
   (∀s d. p s ∧ s.msdomain = Enforce d ⇒
            b ∈ toSet d.addresses ∧
@@ -3440,27 +3939,35 @@ Theorem preserves_domain_has_callee_proceed_call[simp]:
   preserves_domain_has_callee p (proceed_call a b c d e f g h i)
 Proof
   strip_tac
+  \\ irule preserves_domain_has_callee_mono
+  \\ qexists_tac `\s. !dom. s.msdomain = Enforce dom ==>
+       b IN toSet dom.addresses /\ c IN toSet dom.addresses`
+  \\ conj_tac >- (simp[] \\ metis_tac[])
   \\ simp[proceed_call_def]
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
-  \\ conj_tac >- rw[]
-  \\ conj_tac >- rw[]
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind
+  (* The parent reads the accounts first, to decide whether it charged this
+     child's creation; the pin has to survive that read before the rest of the
+     spine can be peeled. *)
   \\ conj_tac
   >- (
-    gen_tac \\ strip_tac
-    \\ first_x_assum irule
-    \\ rw[initial_msg_params_def] )
-  \\ conj_tac
-  >- (
-    irule preserves_domain_has_callee_push_context
-    \\ rw[initial_msg_params_def]
-    \\ first_x_assum (drule_then drule) \\ rw[])
-  \\ rw[]
+    gen_tac \\ BETA_TAC
+    \\ irule preserves_domain_has_callee_bind
+    \\ simp[preserves_domain_has_callee_state_gas_meter] \\ gen_tac
+    \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+    \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+    \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+    \\ conj_tac >- rw[]
+    \\ conj_tac >- rw[]
+    \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+    \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+    \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
+    \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+    \\ conj_tac
+    >- (
+      irule preserves_domain_has_callee_push_context
+      \\ rw[initial_msg_params_def] \\ gvs[])
+    \\ rw[] )
+  \\ rw[get_accounts_def] \\ metis_tac[]
 QED
 
 Theorem preserves_domain_has_callee_access_address_bind:
@@ -3568,19 +4075,23 @@ Proof
     \\ TOP_CASE_TAC \\ rw[] \\ gvs[fail_def, return_def,
          bind_def, ignore_bind_def, set_domain_def])
   \\ Cases \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+  \\ conj_tac >- rw[]
+  \\ conj_tac >- rw[]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
-  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
-  \\ conj_tac >- rw[]
-  \\ conj_tac >- rw[]
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ qmatch_goalsub_abbrev_tac`SND cg`
   \\ irule preserves_domain_has_callee_get_callee_bind \\ simp[]
   \\ gen_tac
-  \\ IF_CASES_TAC >- rw[]
+  \\ IF_CASES_TAC >- (
+       irule preserves_domain_has_callee_ignore_bind \\ simp[] )
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ IF_CASES_TAC >- rw[]
+  \\ IF_CASES_TAC >- (
+       irule preserves_domain_has_callee_ignore_bind \\ simp[] )
   \\ irule preserves_domain_has_callee_proceed_call
   \\ simp[]
 QED
@@ -3608,7 +4119,19 @@ Theorem preserves_domain_has_callee_proceed_create:
   preserves_domain_has_callee p (proceed_create a b c d e)
 Proof
   strip_tac
-  \\ rw[proceed_create_def]
+  \\ irule preserves_domain_has_callee_mono
+  \\ qexists_tac `\s. !dom. s.msdomain = Enforce dom ==>
+       b IN toSet dom.addresses`
+  \\ conj_tac >- (simp[] \\ metis_tac[])
+  \\ `!s. (SND (get_original s)).msdomain = s.msdomain` by
+       rw[get_original_def]
+  \\ `!s a. (SND (set_original a s)).msdomain = s.msdomain` by
+       rw[set_original_def, set_last_accounts_def, return_def, fail_def]
+  \\ simp[proceed_create_def]
+  \\ irule preserves_domain_has_callee_bind
+  \\ simp[] \\ gen_tac
+  \\ irule preserves_domain_has_callee_bind
+  \\ simp[preserves_domain_has_callee_state_gas_meter] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
@@ -3636,6 +4159,13 @@ Proof
   \\ irule preserves_domain_has_callee_ignore_bind \\ rw[]
 QED
 
+Theorem preserves_domain_has_callee_abort_create[simp]:
+  preserves_domain_has_callee (K T) abort_create
+Proof
+  rw[abort_create_def]
+  \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
+QED
+
 Theorem SND_ensure_storage_in_domain_msdomain_eq_Enforce[simp]:
   ((SND (ensure_storage_in_domain x y)).msdomain = Enforce d) =
   (y.msdomain = Enforce d)
@@ -3648,7 +4178,7 @@ QED
 Theorem preserves_domain_has_callee_step_create[simp]:
   preserves_domain_has_callee (K T) (step_create x)
 Proof
-  simp[step_create_def]
+  simp[step_create_def, preserves_domain_has_callee_state_gas_meter]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
@@ -3658,8 +4188,6 @@ Proof
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
   \\ irule preserves_domain_has_callee_ignore_bind \\ simp[]
   \\ simp[ignore_bind_def]
-  \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
-  \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[] \\ gen_tac
@@ -3667,6 +4195,9 @@ Proof
   \\ IF_CASES_TAC >- rw[]
   \\ irule preserves_domain_has_callee_access_address_bind \\ simp[]
   \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind \\ simp[]
+  \\ irule preserves_domain_has_callee_bind
+  \\ simp[preserves_domain_has_callee_state_gas_meter] \\ gen_tac
   \\ IF_CASES_TAC >- rw[]
   \\ irule preserves_domain_has_callee_proceed_create
   \\ rw[]

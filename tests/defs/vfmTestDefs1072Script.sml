@@ -1,5 +1,5 @@
 Theory vfmTestDefs1072[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRandom/random_statetest122/random_statetest122.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRandom/random_statetest122/random_statetest122.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/frontier/opcodes/call_and_callcode_gas_calculation/value_transfer_gas_calculation.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/frontier/opcodes/call_and_callcode_gas_calculation/value_transfer_gas_calculation.json");
 val defs = mapi (define_test "1072") tests;

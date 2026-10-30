@@ -1,5 +1,5 @@
 Theory vfmTestDefs1183[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRandom/random_statetest257/random_statetest257.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRandom/random_statetest257/random_statetest257.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/osaka/eip7883_modexp_gas_increase/modexp_thresholds/modexp_variable_gas_cost.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/osaka/eip7883_modexp_gas_increase/modexp_thresholds/modexp_variable_gas_cost.json");
 val defs = mapi (define_test "1183") tests;

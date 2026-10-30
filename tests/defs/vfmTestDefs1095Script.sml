@@ -1,5 +1,5 @@
 Theory vfmTestDefs1095[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRandom/random_statetest15/random_statetest15.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRandom/random_statetest15/random_statetest15.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/frontier/validation/header/block_gas_limit_below_minimum.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/frontier/validation/header/block_gas_limit_below_minimum.json");
 val defs = mapi (define_test "1095") tests;

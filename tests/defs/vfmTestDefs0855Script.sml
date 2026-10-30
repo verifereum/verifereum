@@ -1,5 +1,5 @@
 Theory vfmTestDefs0855[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stLogTests/log4_non_empty_mem_log_mem_size1_log_mem_start31/log4_non_empty_mem_log_mem_size1_log_mem_start31.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stLogTests/log4_non_empty_mem_log_mem_size1_log_mem_start31/log4_non_empty_mem_log_mem_size1_log_mem_start31.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8282_builder_execution_requests/modified_builder_contract/extra_builder_exits.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8282_builder_execution_requests/modified_builder_contract/extra_builder_exits.json");
 val defs = mapi (define_test "0855") tests;
