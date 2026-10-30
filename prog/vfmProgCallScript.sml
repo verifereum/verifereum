@@ -52,6 +52,8 @@ Proof
   \\ drule step_create_reaches_proceed_create \\ simp[] \\ strip_tac
   \\ gvs[cp_rel_def, proceed_create_def, update_accounts_def, get_rollback_def,
          get_original_def, set_original_def, push_context_def,
+         get_accounts_def, drain_state_gas_reservoir_def,
+         get_current_context_def, set_current_context_def,
          ignore_bind_def, bind_def, return_def, fail_def, AllCaseEqs()]
 QED
 
@@ -297,13 +299,18 @@ Theorem proceed_call_pair[local]:
              maxFeePerBlobGas := NONE; authorizationList := []|>
   in (INL (), s with <|
     contexts := (initial_context callee code
-      (op = StaticCall \/ c.msgParams.static) output tx,s.rollback)::(c,cb)::cs;
+      (op = StaticCall \/ c.msgParams.static) output
+      (op = Call /\ 0 < value /\
+       account_empty (lookup_account addr s.rollback.accounts)) c.stateGasLeft tx
+        with logs := transfer_log sender callee value,s.rollback)::
+      (c with stateGasLeft := 0,cb)::cs;
     rollback := s.rollback with accounts updated_by
       (if op <> CallCode /\ 0 < value then transfer_value sender addr value else I)
   |>)
 Proof
   strip_tac >> Cases_on `op <> CallCode /\ 0 < value` >>
-  simp[proceed_call_def, get_rollback_def, read_memory_def,
+  simp[proceed_call_def, get_accounts_def, drain_state_gas_reservoir_def,
+       set_current_context_def, get_rollback_def, read_memory_def,
        get_current_context_def, update_accounts_def,
        get_caller_def, get_value_def, get_static_def, push_context_def,
        bind_def, ignore_bind_def, return_def] >>
@@ -316,20 +323,31 @@ Theorem pop_and_incorporate_context_pair[local]:
   s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
   callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed ==>
   pop_and_incorporate_context success s =
-    (INL (), s with <|
-      contexts :=
-        (caller with <|
-          gasUsed := caller.gasUsed -
-            (callee.msgParams.gasLimit - callee.gasUsed);
-          logs := caller.logs ++ (if success then callee.logs else []);
-          addRefund := caller.addRefund + (if success then callee.addRefund else 0);
-          subRefund := caller.subRefund + (if success then callee.subRefund else 0)
-        |>, callerSaved)::rest;
+    let merged = absorb_state_gas
+          (caller with gasUsed := caller.gasUsed -
+             (callee.msgParams.gasLimit - callee.gasUsed))
+          callee.stateGasLeft callee.stateGasSpilled callee.stateGasCommitted;
+        credit = if callee.msgParams.newAccountCharged then new_account_state_gas else 0;
+        settled = if success then
+          repay_state_gas_spill_context (merged with <|
+            logs := caller.logs ++ callee.logs;
+            addRefund := caller.addRefund + callee.addRefund;
+            subRefund := caller.subRefund + callee.subRefund |>)
+          else merged with <|
+            gasUsed := merged.gasUsed - MIN credit merged.stateGasSpilled;
+            stateGasSpilled := merged.stateGasSpilled - MIN credit merged.stateGasSpilled;
+            stateGasLeft := merged.stateGasLeft + (credit - MIN credit merged.stateGasSpilled) |>
+    in (INL (), s with <|
+      contexts := (settled, callerSaved)::rest;
       rollback := if success then s.rollback else saved
     |>)
 Proof
   strip_tac >> Cases_on `success` >>
-  simp[pop_and_incorporate_context_def, get_gas_left_def,
+  Cases_on `callee.msgParams.newAccountCharged` >>
+  simp[LET_THM, repay_state_gas_spill_def, credit_new_account_def,
+       credit_state_gas_refund_def, absorb_state_gas_def,
+       repay_state_gas_spill_context_def,
+       pop_and_incorporate_context_def, get_gas_left_def,
        get_current_context_def, pop_context_def, unuse_gas_def,
        push_logs_def, update_gas_refund_def, set_rollback_def,
        set_current_context_def, bind_def, ignore_bind_def, return_def,
@@ -342,29 +360,47 @@ Theorem handle_exception_memory_return[local]:
   s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
   callee.msgParams.outputTo = Memory r /\
   callee.gasUsed <= callee.msgParams.gasLimit /\
-  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed /\
+  callee.msgParams.gasLimit -
+    (callee.gasUsed - (if e = NONE then 0 else callee.stateGasSpilled))
+      <= caller.gasUsed /\
   LENGTH caller.stack < stack_limit ==>
   handle_exception e s =
   let success = (e = NONE);
-      gasLeft = if e = NONE \/ e = SOME Reverted then
-                  callee.msgParams.gasLimit - callee.gasUsed else 0;
-      out = if e = NONE \/ e = SOME Reverted then callee.returnData else []
+      gasLeft = if e = NONE then callee.msgParams.gasLimit - callee.gasUsed
+                else if e = SOME Reverted then
+                  callee.msgParams.gasLimit - (callee.gasUsed - callee.stateGasSpilled)
+                else 0;
+      out = if e = NONE \/ e = SOME Reverted then callee.returnData else [];
+      merged = absorb_state_gas (caller with gasUsed := caller.gasUsed - gasLeft)
+        (if success then callee.stateGasLeft else callee.stateGasBaseline)
+        (if success then callee.stateGasSpilled else 0) callee.stateGasCommitted;
+      credit = if callee.msgParams.newAccountCharged then new_account_state_gas else 0;
+      settled = if success then
+        repay_state_gas_spill_context (merged with <|
+          logs := caller.logs ++ callee.logs;
+          addRefund := caller.addRefund + callee.addRefund;
+          subRefund := caller.subRefund + callee.subRefund |>)
+        else merged with <|
+          gasUsed := merged.gasUsed - MIN credit merged.stateGasSpilled;
+          stateGasSpilled := merged.stateGasSpilled - MIN credit merged.stateGasSpilled;
+          stateGasLeft := merged.stateGasLeft + (credit - MIN credit merged.stateGasSpilled) |>
   in (INL (), s with <|
-    contexts := (caller with <|
+    contexts := (settled with <|
       stack := b2w success :: caller.stack;
       pc := SUC caller.pc;
-      gasUsed := caller.gasUsed - gasLeft;
       memory := buffer_write r.offset (TAKE r.size out) caller.memory;
-      returnData := out;
-      logs := caller.logs ++ (if success then callee.logs else []);
-      addRefund := caller.addRefund + (if success then callee.addRefund else 0);
-      subRefund := caller.subRefund + (if success then callee.subRefund else 0)
+      returnData := out
     |>, callerSaved)::rest;
     rollback := if success then s.rollback else saved
   |>)
 Proof
   strip_tac >> Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-  gvs[handle_exception_def, pop_and_incorporate_context_def,
+  Cases_on `callee.msgParams.newAccountCharged` >>
+  gvs[LET_THM, restore_state_gas_def, forfeit_remaining_gas_def,
+      repay_state_gas_spill_def, credit_new_account_def,
+      credit_state_gas_refund_def, absorb_state_gas_def,
+      repay_state_gas_spill_context_def,
+      handle_exception_def, pop_and_incorporate_context_def,
       get_gas_left_def, get_num_contexts_def, get_output_to_def,
       get_return_data_def, get_current_context_def, pop_context_def,
       consume_gas_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
