@@ -1,0 +1,110 @@
+# DOSSIER: seq58_progcall_port
+
+PLAN: `prog/PLAN_seq58_progcall_port.md`
+
+## Component Index
+
+| Component | Status | Diagnosis | Latest Episode | Next |
+|---|---|---|---|---|
+| C1.1 | proved |  | E0001 |  |
+| C1.2 | stuck | risk_mismatch | E0003 | Authorize concrete no-entry CALL probe with gas request 0, value 1, reservoir >=183600, initial gasUsed=0 and spill=183600; creation refund erases execution cost leaving gasUsed=0 before unuse stipend 2300. |
+| C1.2.1 | proved |  | E0004 |  |
+| C1.2.2 | proved |  | E0009 | Review checked frozen-export obstruction; report unprovable with tightest sufficient repair proposal, without applying it. Candidate repair obligation for no-entry path is calleeGas <= gasUsed after credit (equivalently for positive stipend, MIN stateCost initialSpill + calleeGas <= g+gasCost when charge reservoir-covered). Do not claim this alone repairs every cross-frame path. |
+
+## C1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0001`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 25 steps, 24 tools, 5 holbuild, 1,650,987 tok (1,646,392 in, 4,595 out, 1,583,488 cached), 315.2s, $0.5035996
+
+### Attempts / Evidence
+
+- `E0001` (proved, , actual effort: 1 sessions, 1 msgs, 25 steps, 24 tools, 5 holbuild, 1,650,987 tok (1,646,392 in, 4,595 out, 1,583,488 cached), 315.2s, $0.5035996)
+  - Add get_accounts/drain getter/setter normalization to step_push_TL_TL CREATE branch. -> Unchanged structural statement checked; build reaches boundary equations. (`TO_seq58_progcall_port-20261030T170049Z_m0014_t001`)
+  - Restate proceed_call_pair with charged flag, reservoir, drained parent and incoming transfer log; restate pop/handler equations via absorb/repay or creation credit, restoration before unused gas. -> All five boundary equations checked. Local handler bound now covers restored spill before unuse. Build progresses past boundary and Collect helpers to C1.2 sstore safety failure. (`TO_seq58_progcall_port-20261030T170049Z_m0018_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0022_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0026_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261030T170049Z_m0026_t001` (use `read_tool_output` for exact output)
+
+## C1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0003`
+- blocker: call_exn_safe_step_call may be false for arbitrary initial spill: CALL with value, empty account and balance failure credits MIN creation-cost spill from full caller gasUsed before stipend unuse. wf_context does not constrain spill either. Need concrete probe and strategist assessment of frozen exports.
+- actual effort: 1 sessions, 2 msgs, 35 steps, 34 tools, 6 holbuild, 3,101,424 tok (3,097,462 in, 3,962 out, 3,045,760 cached), 394.2s, $0.4476000
+- next: Authorize concrete no-entry CALL probe with gas request 0, value 1, reservoir >=183600, initial gasUsed=0 and spill=183600; creation refund erases execution cost leaving gasUsed=0 before unuse stipend 2300.
+
+### Attempts / Evidence
+
+- `E0002` (progressed, other, actual effort: 1 sessions, 2 msgs, 34 steps, 33 tools, 6 holbuild, 3,000,283 tok (2,996,680 in, 3,603 out, 2,946,304 cached), 382.9s, $0.4314124)
+  - Prove credit/charge/new-account/drain safety at primitive boundary; compose sstore/selfdestruct/proceed safety; cover new DUPN/SWAPN/EXCHANGE opcodes; rewrite CREATE safety for charge before withhold. -> Build verifies all additions and proceeds through call_exn_safe_step_create. Next failure is old step_call consumption spine. (`TO_seq58_progcall_port-20261030T170049Z_m0061_t001`)
+- `E0003` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 35 steps, 34 tools, 6 holbuild, 3,101,424 tok (3,097,462 in, 3,962 out, 3,045,760 cached), 394.2s, $0.4476000)
+  - Port primitive safety and opcode consumers; inspect changed CALL spine before adapting old consumed-credit proof. -> Checked prefix through CREATE. Old CALL safety only assumes nonempty contexts, but creation refund can reduce gasUsed below stipend before abort_unuse, because initial spill is unconstrained. This is a structural invariant issue not a tactic failure. (`TO_seq58_progcall_port-20261030T170049Z_m0061_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0062_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0065_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261030T170049Z_m0061_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261030T170049Z_m0062_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261030T170049Z_m0065_t001` (use `read_tool_output` for exact output)
+
+## C1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0004`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 35 steps, 34 tools, 11 holbuild, 4,082,776 tok (4,079,550 in, 3,226 out, 4,034,688 cached), 841.2s, $0.5254528
+
+### Attempts / Evidence
+
+- `E0004` (proved, , actual effort: 1 sessions, 3 msgs, 35 steps, 34 tools, 11 holbuild, 4,082,776 tok (4,079,550 in, 3,226 out, 4,034,688 cached), 841.2s, $0.5254528)
+  - Standalone prog/vfmCallRefundProbeTheory evaluates concrete CALL with zero gas request, value one, recipient 256, empty accounts, caller used=0/spill=reservoir=183600. -> Checked result INR(SOME Impossible), caller gasUsed/left/spilled all zero, stack [0w] and pc still zero. Exact cost 14300; grant computation (0,2300). Derived falsity of universal nonempty-context CALL safety. No export falsehood claimed yet. (`TO_seq58_progcall_port-20261030T170049Z_m0097_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0105_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261030T170049Z_m0105_t001` (use `read_tool_output` for exact output)
+
+## C1.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0009`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 43 steps, 42 tools, 11 holbuild, 2,986,655 tok (2,981,254 in, 5,401 out, 2,917,120 cached), 1017.3s, $0.4739900
+- next: Review checked frozen-export obstruction; report unprovable with tightest sufficient repair proposal, without applying it. Candidate repair obligation for no-entry path is calleeGas <= gasUsed after credit (equivalently for positive stipend, MIN stateCost initialSpill + calleeGas <= g+gasCost when charge reservoir-covered). Do not claim this alone repairs every cross-frame path.
+
+### Attempts / Evidence
+
+- `E0005` (progressed, other, actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 2 holbuild, 1,350,690 tok (1,349,599 in, 1,091 out, 1,194,496 cached), 293.4s, $0.4405656)
+  - Check wf_state for concrete refund probe, then begin relating step to checked step_call result. -> refund_probe_wf proved and standalone build clean. step dispatch lemma first attempt named nonexistent parse_code_aux_def; latest edit replaces it with small EVAL FLOOKUP fact and checked result premises, not yet built; ends with intentional FAIL_TAC. (`TO_seq58_progcall_port-20261030T170049Z_m0114_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0116_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0117_t001`)
+- `E0006` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 20 steps, 19 tools, 4 holbuild, 1,169,029 tok (1,167,433 in, 1,596 out, 1,134,208 cached), 292.7s, $0.1958308)
+  - EVAL_TAC FLOOKUP parse_code singleton -> 30s timeout on parse_opcode choice definition. (`TO_seq58_progcall_port-20261030T170049Z_m0124_t001`)
+  - simp parse_code with parse_opcode_cond_thm -> 30s timeout; split parse_opcode computation out. (`TO_seq58_progcall_port-20261030T170049Z_m0135_t001`)
+  - rewrite parse_opcode_cond_thm then EVAL or word_eq_n2w simp -> Leaves concrete word comparisons / MOD_2EXP_EQ dimindex(:8) unresolved; two goals reported at branch close. Step and SPEC probes remain pending. (`TO_seq58_progcall_port-20261030T170049Z_m0137_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0142_t001`)
+- `E0007` (stuck, wrong_statement, actual effort: 1 sessions, 3 msgs, 39 steps, 38 tools, 10 holbuild, 3,199,843 tok (3,196,074 in, 3,769 out, 3,145,600 cached), 994.4s, $0.4531980)
+  - Load wordsLib; isolate opcode fact; derive singleton parse_code lookup using FLOOKUP_UPDATE; normalize step via checked Impossible result. -> refund_probe_opcode and refund_probe_step proved. Earlier ground word failures were missing wordsLib computation registration. (`TO_seq58_progcall_port-20261030T170049Z_m0163_t001`)
+  - Induct on guarded next-state FUNPOW -> refund_probe_next_iterates proved: after positive steps exception always SOME Impossible. (`TO_seq58_progcall_port-20261030T170049Z_m0172_t001`)
+  - Check all state-gas-ported numeric/export cond clauses for witness. -> All arithmetic and delegate/coverage/stipend clauses check, but non-precompile clause fails. EVAL-checked refund_probe_destination_is_precompile proves fIN 256w precompile_addresses. No exported falsehood claimed. (`TO_seq58_progcall_port-20261030T170049Z_m0178_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0184_t001`)
+- `E0008` (progressed, other, actual effort: 1 sessions, 1 msgs, 14 steps, 13 tools, 5 holbuild, 1,428,377 tok (1,424,358 in, 4,019 out, 1,405,440 cached), 483.9s, $0.2185700)
+  - Separate 100w witness, nonprecompile check first, then wf and bounded CALL computation. -> refund_candidate_not_precompile, refund_candidate_impossible and refund_candidate_wf build clean. (`TO_seq58_progcall_port-20261030T170049Z_m0193_t001`)
+  - Step dispatch via get_current_context observation instead of unfolding full state; guarded FUNPOW and all concrete rule cond clauses. -> refund_candidate_step, refund_candidate_next_iterates and refund_candidate_rule_conditions checked. StateCost coverage, exact14300 gas cost, stipend2300 and nonprecompile premise all pass. (`TO_seq58_progcall_port-20261030T170049Z_m0201_t001`)
+  - Exclude normal final state at PC1, including zero-step case. -> refund_candidate_no_normal_successor_pc proved. Remaining work is full separation observation precondition and SPEC-model bridge, not computational execution. (`TO_seq58_progcall_port-20261030T170049Z_m0203_t001`)
+- `E0009` (proved, , actual effort: 1 sessions, 3 msgs, 43 steps, 42 tools, 11 holbuild, 2,986,655 tok (2,981,254 in, 5,401 out, 2,917,120 cached), 1017.3s, $0.4739900)
+  - Construct explicit evm domain owning all state-gas-ported CALL pre resources and singleton CALL code; combine with checked concrete cond clauses. -> refund_candidate_pre_holds checks resource/code ownership including originalAccounts and four meters; refund_candidate_rule_conditions checks full numeric/delegate/nonprecompile/coverage clauses and stipend bound. (`TO_seq58_progcall_port-20261030T170049Z_m0241_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0255_t001`)
+  - Bridge SPEC_CODE and EVM_SPEC_SEMANTICS to guarded FUNPOW; exclude normal PC1 return including existentially hidden resources. -> refund_candidate_spec_obstruction and refund_candidate_existential_spec_obstruction proved: no SPEC with this admissible pre and normal PC1 post, regardless of arbitrary remaining post resources. Thus both frozen postconditions are obstructed independently of meter port details. (`TO_seq58_progcall_port-20261030T170049Z_m0251_t001`, `TO_seq58_progcall_port-20261030T170049Z_m0255_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261030T170049Z_m0255_t001` (use `read_tool_output` for exact output)
