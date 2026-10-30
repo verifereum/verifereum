@@ -884,6 +884,53 @@ Proof
 QED
 
 (* the storage write of a withdrawal keeps the WETH_EVM relation *)
+Theorem WETH_withdraw_allowance_fields[local]:
+  (WETH_withdraw a n ws).allowances = ws.allowances ∧
+  (WETH_withdraw a n ws).allowances_touched = ws.allowances_touched
+Proof
+  rw[WETH_withdraw_def]
+QED
+
+(* a withdrawal's balance write keeps the allowance slots: if the caller's
+   balance slot is an allowance slot the relation covers, the caller is
+   untouched, so its balance and wad are 0 and the write is a no-op *)
+Theorem WETH_withdraw_allowance_storage[local]:
+  wf_WETH_state ws ∧ n ≤ ws.balances src ∧
+  lookup_storage (balance_slot_key src) st = n2w (ws.balances src) ∧
+  (∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉ IMAGE balance_slot_key ws.touched ∧
+     ((owner, spender) ∈ ws.allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          ws.allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender) st =
+       n2w (ws.allowances owner spender)) ⇒
+  (∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉ IMAGE balance_slot_key (WETH_withdraw src n ws).touched ∧
+     ((owner, spender) ∈ (WETH_withdraw src n ws).allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          (WETH_withdraw src n ws).allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender) (update_storage (balance_slot_key src) (lookup_storage (balance_slot_key src) st - n2w n) st) =
+       n2w ((WETH_withdraw src n ws).allowances owner spender))
+Proof
+  rewrite_tac[WETH_withdraw_fields, WETH_withdraw_allowance_fields]
+  \\ strip_tac \\ rpt gen_tac
+  \\ disch_then (fn th => assume_tac th
+       \\ first_x_assum (assume_tac o C MATCH_MP th))
+  \\ rewrite_tac[lookup_update_storage]
+  \\ Cases_on `balance_slot_key src = allowance_slot_key owner spender`
+  >- (
+    `src ∉ ws.touched` by metis_tac[IN_IMAGE]
+    \\ `ws.balances src = 0`
+       by (gvs[wf_WETH_state_def, SUBSET_DEF] \\ metis_tac[NOT_ZERO_LT_ZERO])
+    \\ `n = 0` by decide_tac
+    \\ gvs[])
+  \\ asm_rewrite_tac[]
+QED
+
 Theorem WETH_withdraw_storage[local]:
   wf_WETH_state ws ∧ n ≤ ws.balances src ∧
   (∀a. balance_slot_key a ∉ {0w; 1w; 2w} ∧
@@ -1016,6 +1063,11 @@ Proof
                       WETH_withdraw_storage)
     \\ impl_tac >- asm_rewrite_tac[]
     \\ simp_tac std_ss [LET_THM] \\ strip_tac
+    \\ mp_tac (Q.INST [`src` |-> `(tx:transaction).from`, `n` |-> `wad`,
+                       `st` |-> `(lookup_account addr accounts).storage`]
+                      WETH_withdraw_allowance_storage)
+    \\ impl_tac >- asm_rewrite_tac[]
+    \\ strip_tac
     \\ qpat_x_assum `lookup_storage (balance_slot_key tx.from) _ = _` kall_tac
     \\ asm_rewrite_tac[account_state_accfupds, K_THM,
                        CONJUNCT2 (CONJUNCT2 WETH_withdraw_fields)])

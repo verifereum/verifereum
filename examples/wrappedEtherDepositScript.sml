@@ -323,6 +323,39 @@ Proof
   \\ metis_tac[IN_IMAGE, IN_INSERT]
 QED
 
+(* a deposit's balance write keeps the allowance slots: the caller becomes
+   touched, so an allowance slot the relation covers is not its balance
+   slot *)
+Theorem WETH_deposit_allowance_storage[local]:
+  (∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉ IMAGE balance_slot_key ws.touched ∧
+     ((owner, spender) ∈ ws.allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          ws.allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender) st =
+       n2w (ws.allowances owner spender)) ⇒
+  (∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉ IMAGE balance_slot_key (WETH_deposit src n ws).touched ∧
+     ((owner, spender) ∈ (WETH_deposit src n ws).allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          (WETH_deposit src n ws).allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender) (update_storage (balance_slot_key src) v st) =
+       n2w ((WETH_deposit src n ws).allowances owner spender))
+Proof
+  simp_tac std_ss [WETH_deposit_def, WETH_state_accfupds, IMAGE_INSERT,
+                   IN_INSERT, DE_MORGAN_THM, lookup_update_storage]
+  \\ rpt strip_tac
+  \\ `balance_slot_key src ≠ allowance_slot_key owner spender`
+     by (strip_tac \\ fs[])
+  \\ asm_rewrite_tac[]
+  \\ first_x_assum irule
+  \\ asm_rewrite_tac[]
+QED
+
 (* deposit() over the WETH_EVM relation: the caller's balance and the
    locked ether grow by tx.value, assuming the caller's balance slot doesn't
    collide with a touched account's or with slots 0-2 *)
@@ -372,6 +405,9 @@ Proof
                     WETH_deposit_storage)
   \\ impl_tac >- asm_rewrite_tac[]
   \\ simp_tac std_ss [LET_THM] \\ strip_tac
+  \\ drule (Q.INST [`src` |-> `(tx:transaction).from`,
+                    `n` |-> `(tx:transaction).value`]
+                   WETH_deposit_allowance_storage) \\ strip_tac
   \\ asm_rewrite_tac[account_state_accfupds, K_THM]
   \\ simp[WETH_deposit_def]
 QED
@@ -423,6 +459,9 @@ Proof
                     WETH_deposit_storage)
   \\ impl_tac >- asm_rewrite_tac[]
   \\ simp_tac std_ss [LET_THM] \\ strip_tac
+  \\ drule (Q.INST [`src` |-> `(tx:transaction).from`,
+                    `n` |-> `(tx:transaction).value`]
+                   WETH_deposit_allowance_storage) \\ strip_tac
   \\ asm_rewrite_tac[account_state_accfupds, K_THM]
   \\ simp[WETH_deposit_def]
 QED
