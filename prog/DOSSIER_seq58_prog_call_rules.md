@@ -14,6 +14,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.3.1 | proved |  | E0010 |  |
 | C1.3.2 | progressed | missing_helper | E0011 | Strategist classify checked subset and explicitly assign remaining frozen composition to C2; decide needed bounded handler probes for Invalid and SELFDESTRUCT. No frozen proof edits yet. |
 | C1.3.2.1 | proved |  | E0013 |  |
+| C1.3.2.2 | proved |  | E0014 |  |
 
 ## C1.1
 
@@ -193,3 +194,23 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0311_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0314_t001` (use `read_tool_output` for exact output)
+
+## C1.3.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0014`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 309,323 tok (307,962 in, 1,361 out, 302,976 cached), 50.6s, $0.0538796
+
+### Attempts / Evidence
+
+- `E0014` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 309,323 tok (307,962 in, 1,361 out, 302,976 cached), 50.6s, $0.0538796)
+  - Direct operation reduction for singleton success and inner Memory/Code success with arbitrary refunds. -> All three exact handle_exception NONE equalities build; no deposit conflation, no frozen statement edits. Audit updated. (`TO_seq58_prog_call_rules-20261030T133624Z_m0322_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0322_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0323_t001` (use `read_tool_output` for exact output)

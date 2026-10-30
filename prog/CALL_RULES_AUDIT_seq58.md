@@ -124,3 +124,16 @@ The probe copies `credit_new_account_context_def` unchanged from vfmProg;
 it does not import the unfinished SPEC theory. Both proofs bypass deposit
 with `handle_create_not_none`, and normalize forfeiture arithmetic before
 settlement. Checked build: tool output TO_seq58_prog_call_rules-20261030T133624Z_m0311_t001.
+
+### Checked general successful settlement
+
+The independent probe also proves `handle_exception_success_outermost_exact`,
+`handle_exception_success_memory_exact` and
+`handle_exception_success_code_exact` for arbitrary child add/sub refunds.
+The inner boundaries require parent stack room and enough parent used gas to
+return the child's unused grant. They repay spill after absorbing the child
+meter and preserve rollback. Code returns the address and clears return data;
+Memory returns child data and writes the requested slice. These boundaries
+are deliberately about `handle_exception NONE`, not `handle_step NONE`:
+Code deposit still precedes settlement in the latter. Checked build:
+TO_seq58_prog_call_rules-20261030T133624Z_m0322_t001.
