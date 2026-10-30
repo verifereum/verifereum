@@ -169,3 +169,74 @@ Proof
        execution_state_component_equality, context_component_equality]
 QED
 
+
+Theorem handle_step_invalid_outermost_exact[local]:
+  s.contexts = [(c,cb)] /\
+  c.gasUsed - c.stateGasSpilled <= c.msgParams.gasLimit ==>
+  handle_step (SOME InvalidOpcode) s =
+    (INR (SOME InvalidOpcode), s with contexts :=
+      [(c with <|returnData := []; gasUsed := c.msgParams.gasLimit;
+         addRefund := 0; subRefund := 0;
+         stateGasLeft := c.stateGasBaseline; stateGasSpilled := 0|>,cb)])
+Proof
+  strip_tac >>
+  `c.msgParams.gasLimit - (c.gasUsed - c.stateGasSpilled) +
+     (c.gasUsed - c.stateGasSpilled) = c.msgParams.gasLimit` by decide_tac >>
+  simp[handle_step_def, vfm_abort_def, handle_create_not_none,
+       handle_def, reraise_def, handle_exception_def,
+       restore_state_gas_def, forfeit_remaining_gas_def,
+       get_gas_left_def, consume_gas_def, set_return_data_def,
+       get_num_contexts_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def,
+       execution_state_component_equality, context_component_equality]
+QED
+
+(* Independent copy of the context refill interface from vfmProg. *)
+Definition credit_new_account_context_def:
+  credit_new_account_context ctxt charged =
+    ctxt with <|
+      gasUsed := ctxt.gasUsed -
+                 MIN (if charged then new_account_state_gas else 0)
+                     ctxt.stateGasSpilled;
+      stateGasSpilled := ctxt.stateGasSpilled -
+                 MIN (if charged then new_account_state_gas else 0)
+                     ctxt.stateGasSpilled;
+      stateGasLeft := ctxt.stateGasLeft +
+                 ((if charged then new_account_state_gas else 0) -
+                  MIN (if charged then new_account_state_gas else 0)
+                      ctxt.stateGasSpilled) |>
+End
+
+Theorem handle_step_invalid_inner_exact[local]:
+  s.contexts = (c,cb)::(parent,pb)::rest /\
+  c.gasUsed - c.stateGasSpilled <= c.msgParams.gasLimit /\
+  LENGTH parent.stack < stack_limit /\
+  merged = credit_new_account_context
+    (absorb_state_gas parent c.stateGasBaseline 0 c.stateGasCommitted)
+    c.msgParams.newAccountCharged ==>
+  handle_step (SOME InvalidOpcode) s =
+    (INL (), s with <|rollback := cb; contexts :=
+      (merged with <|pc := SUC parent.pc; stack := 0w::parent.stack;
+                      returnData := []|>,pb)::rest|>)
+Proof
+  strip_tac >> qpat_x_assum `merged = _` SUBST1_TAC >>
+  `c.msgParams.gasLimit - (c.gasUsed - c.stateGasSpilled) +
+     (c.gasUsed - c.stateGasSpilled) = c.msgParams.gasLimit` by decide_tac >>
+  simp[handle_step_def, vfm_abort_def, handle_create_not_none,
+       handle_def, reraise_def, handle_exception_def,
+       restore_state_gas_def, forfeit_remaining_gas_def,
+       get_gas_left_def, consume_gas_def, set_return_data_def,
+       get_num_contexts_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def] >>
+  Cases_on `c.msgParams.outputTo` >>
+  Cases_on `c.msgParams.newAccountCharged` >>
+  simp[pop_and_incorporate_context_def, get_return_data_def, get_output_to_def,
+       get_gas_left_def, pop_context_def, unuse_gas_def,
+       absorb_state_gas_def, credit_new_account_def, credit_state_gas_refund_def,
+       credit_new_account_context_def, set_rollback_def, stack_limit_def,
+       AC ADD_ASSOC ADD_COMM,
+       inc_pc_def, set_return_data_def, push_stack_def, write_memory_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def,
+       execution_state_component_equality, context_component_equality]
+QED

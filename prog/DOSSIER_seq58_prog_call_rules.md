@@ -13,7 +13,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.2.3 | proved |  | E0009 |  |
 | C1.3.1 | proved |  | E0010 |  |
 | C1.3.2 | progressed | missing_helper | E0011 | Strategist classify checked subset and explicitly assign remaining frozen composition to C2; decide needed bounded handler probes for Invalid and SELFDESTRUCT. No frozen proof edits yet. |
-| C1.3.2.1 | progressed | wrong_statement | E0012 | Call plan_oracle for active C1.3.2.1 with missing child bound evidence. Do not alter frozen statements or add a parent bound. Rebuild/commit stable independent tail subset and audit when allowed; no failed theorem remains. |
+| C1.3.2.1 | proved |  | E0013 |  |
 
 ## C1.1
 
@@ -175,19 +175,21 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `wrong_statement`
-- latest episode: `E0012`
-- blocker: New PLAN helper outputs omit child execution-meter validity for forfeit_remaining_gas. Need strategist approve tight bound c.gasUsed-c.stateGasSpilled<=c.msgParams.gasLimit (or wf-available stronger used<=limit) on both Invalid helpers.
-- actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 1 holbuild, 1,480,698 tok (1,479,576 in, 1,122 out, 1,329,024 cached), 122.5s, $0.4452264
-- next: Call plan_oracle for active C1.3.2.1 with missing child bound evidence. Do not alter frozen statements or add a parent bound. Rebuild/commit stable independent tail subset and audit when allowed; no failed theorem remains.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0013`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 28 steps, 27 tools, 7 holbuild, 1,776,807 tok (1,774,073 in, 2,734 out, 1,737,600 cached), 2055.3s, $0.2740460
 
 ### Attempts / Evidence
 
 - `E0012` (progressed, wrong_statement, actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 1 holbuild, 1,480,698 tok (1,479,576 in, 1,122 out, 1,329,024 cached), 122.5s, $0.4452264)
   - State proposed outermost Invalid handler equality with only singleton contexts; reduce handle_create_not_none then restore/forfeit operations -> Residual guard requires c.gasUsed - c.stateGasSpilled <= c.msgParams.gasLimit; without any child meter bound consume_gas fails on malformed contexts. This is missing helper premise, not evidence against frozen SPEC rules (which have wf_state). Removed unfinished theorem; checked nine-helper tail subset remains. (`TO_seq58_prog_call_rules-20261030T133624Z_m0278_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0280_t001`)
+- `E0013` (proved, , actual effort: 1 sessions, 1 msgs, 28 steps, 27 tools, 7 holbuild, 1,776,807 tok (1,774,073 in, 2,734 out, 1,737,600 cached), 2055.3s, $0.2740460)
+  - Rebuild and commit independent nine-helper tail subset; add corrected singleton Invalid equality with restored child meter bound. -> Subset committed 332bc979; outermost equality builds by separate forfeiture arithmetic then handler reduction. (`TO_seq58_prog_call_rules-20261030T133624Z_m0288_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0296_t001`)
+  - Prove inner Invalid equality for both output destinations and account-charge flags; independently copy existing context refill definition. -> Checked exact settlement with no parent gas bound. Final simplification uses stack_limit_def and AC addition; wf_context child gas bound implies new helper premise. Frozen statements untouched; audit updated. (`TO_seq58_prog_call_rules-20261030T133624Z_m0311_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0313_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_prog_call_rules-20261030T133624Z_m0278_t001` (use `read_tool_output` for exact output)
-- `TO_seq58_prog_call_rules-20261030T133624Z_m0280_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0311_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0314_t001` (use `read_tool_output` for exact output)

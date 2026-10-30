@@ -105,3 +105,22 @@ complete merely from the preceding helper build):
   uses repay/absorb, not failure restore/forfeit. The checked Memory-output
   handler assumes zero child refunds; SELFDESTRUCT permits arbitrary refunds
   and Code output as well, so it is not a complete boundary for that family.
+
+### Checked Invalid settlement boundary
+
+`vfmProgCallTailProbeTheory` now independently checks
+`handle_step_invalid_outermost_exact` and `handle_step_invalid_inner_exact`.
+Both require the restored child execution-meter bound
+`c.gasUsed - c.stateGasSpilled <= c.msgParams.gasLimit`.
+This follows by natural subtraction from `wf_context`'s
+`c.gasUsed <= c.msgParams.gasLimit`
+(`spec/prop/vfmExecutionPropScript.sml:118-121`); consumers must extract that
+existing well-formedness fact, not add a frozen SPEC hypothesis.
+The inner boundary needs only parent stack room, not a parent gas bound.
+It absorbs the child's baseline and commitment, credits the account charge,
+restores rollback, pushes zero and clears return data for either destination.
+The outer boundary retains commitment and resets spill and refunds.
+The probe copies `credit_new_account_context_def` unchanged from vfmProg;
+it does not import the unfinished SPEC theory. Both proofs bypass deposit
+with `handle_create_not_none`, and normalize forfeiture arithmetic before
+settlement. Checked build: tool output TO_seq58_prog_call_rules-20261030T133624Z_m0311_t001.
