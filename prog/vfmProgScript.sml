@@ -7205,7 +7205,7 @@ Proof
          get_current_context_def,reraise_def,handle_exception_def,
          get_num_contexts_def,consume_gas_def,assert_def,
          set_current_context_def,push_logs_def,charge_state_gas_apply,
-         CaseEq"prod",CaseEq"sum"]
+         word_size_def, CaseEq"prod",CaseEq"sum"]
   \\ (conj_tac >-
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
@@ -7329,7 +7329,7 @@ Proof
          absorb_state_gas_def, Abbr `merged`, bind_def, ignore_bind_def,
          get_current_context_def, set_current_context_def, return_def,
          inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
-         assert_def]
+         assert_def, word_size_def]
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH

@@ -26,6 +26,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C2.3.2 | proved |  | E0034 |  |
 | C2.3.3 | proved |  | E0035 |  |
 | C2.4 | proved |  | E0036 |  |
+| C3 | proved |  | E0037 |  |
 
 ## C1.1
 
@@ -471,3 +472,22 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T162928Z_m0759_t001` (use `read_tool_output` for exact output)
+
+## C3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0037`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 486,822 tok (486,434 in, 388 out, 476,544 cached), 85.2s, $0.0713144
+
+### Attempts / Evidence
+
+- `E0037` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 486,822 tok (486,434 in, 388 out, 476,544 cached), 85.2s, $0.0713144)
+  - Normalize word_size 0 in SELFDESTRUCT outermost and inner final semantic simplifications. -> Whole vfmProgTheory builds, including unchanged Invalid and EOF declarations. Only proof bodies changed. (`TO_seq58_prog_call_rules-20261030T162928Z_m0769_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0769_t001` (use `read_tool_output` for exact output)
