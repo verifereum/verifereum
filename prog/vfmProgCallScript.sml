@@ -582,6 +582,57 @@ Proof
   simp[call_exn_safe_assert, call_exn_safe_set_current_context]
 QED
 
+Theorem call_exn_safe_credit_state_gas_refund[local]:
+  call_exn_safe (\s. s.contexts <> []) (credit_state_gas_refund n)
+    (\s. s.contexts <> [])
+Proof
+  rewrite_tac[credit_state_gas_refund_def] >>
+  irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_charge_state_gas[local]:
+  call_exn_safe (\s. s.contexts <> []) (charge_state_gas n)
+    (\s. s.contexts <> [])
+Proof
+  rewrite_tac[charge_state_gas_def] >>
+  irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >- simp[call_exn_safe_get_current_context]) >>
+  gen_tac >> simp[] >> rpt IF_CASES_TAC >>
+  simp[call_exn_safe_set_current_context, call_exn_safe_fail] >>
+  rewrite_tac[ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >- simp[call_exn_safe_set_current_context]) >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >- simp[call_exn_safe_consume_gas]) >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
+QED
+
+Theorem call_exn_safe_new_account[local]:
+  call_exn_safe (\s. s.contexts <> []) (charge_new_account charged)
+    (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) (credit_new_account charged)
+    (\s. s.contexts <> [])
+Proof
+  Cases_on `charged` >>
+  simp[charge_new_account_def, credit_new_account_def,
+       call_exn_safe_return, call_exn_safe_charge_state_gas,
+       call_exn_safe_credit_state_gas_refund]
+QED
+
+Theorem call_exn_safe_drain_state_gas_reservoir[local]:
+  call_exn_safe (\s. s.contexts <> []) drain_state_gas_reservoir
+    (\s. s.contexts <> [])
+Proof
+  rewrite_tac[drain_state_gas_reservoir_def] >>
+  irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >- simp[call_exn_safe_get_current_context]) >>
+  gen_tac >> simp[ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_set_current_context, call_exn_safe_return]
+QED
+
 Theorem call_exn_safe_stack[local]:
   call_exn_safe (\s. s.contexts <> []) (pop_stack n) (\s. s.contexts <> []) /\
   call_exn_safe (\s. s.contexts <> []) (push_stack v) (\s. s.contexts <> [])
@@ -855,8 +906,12 @@ Proof
   rpt (irule call_exn_safe_bind_invariant >>
        reverse conj_tac >- simp[call_exn_safe_context_readers, call_exn_safe_assert,
          call_exn_safe_state_readers, call_exn_safe_original, call_exn_safe_access,
-         call_exn_safe_update_gas_refund] >> gen_tac >> simp[]) >>
-  simp[call_exn_safe_consume_gas]
+         call_exn_safe_update_gas_refund, call_exn_safe_consume_gas] >> gen_tac >> simp[]) >>
+  irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >-
+    (IF_CASES_TAC >> simp[call_exn_safe_return, call_exn_safe_credit_state_gas_refund])) >>
+  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_consume_gas, call_exn_safe_charge_state_gas]
 QED
 
 Theorem call_exn_safe_step_sstore[local]:
@@ -890,12 +945,24 @@ Proof
          call_exn_safe_context_readers, call_exn_safe_context_updates,
          call_exn_safe_state_readers, call_exn_safe_consume_gas,
          call_exn_safe_assert_not_static, call_exn_safe_state_updates,
-         call_exn_safe_original] >> gen_tac >> simp[]) >>
+         call_exn_safe_original, call_exn_safe_new_account] >> gen_tac >> simp[]) >>
   irule call_exn_safe_bind_invariant >> reverse conj_tac
-  >- (IF_CASES_TAC >> simp[call_exn_safe_return] >>
-      irule call_exn_safe_bind_invariant >>
-      simp[call_exn_safe_state_updates]) >>
+  >- (IF_CASES_TAC >> simp[call_exn_safe_return, call_exn_safe_state_updates]) >>
   simp[call_exn_safe_finish]
+QED
+
+Theorem call_exn_safe_extended_stack[local]:
+  call_exn_safe (\s. s.contexts <> []) step_dupn (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_swapn (\s. s.contexts <> []) /\
+  call_exn_safe (\s. s.contexts <> []) step_exchange (\s. s.contexts <> [])
+Proof
+  rewrite_tac[step_dupn_def, step_swapn_def, step_exchange_def, ignore_bind_def] >>
+  rpt conj_tac >>
+  rpt (irule call_exn_safe_bind_invariant >>
+       reverse conj_tac >- simp[call_exn_safe_consume_gas,
+         call_exn_safe_get_current_context, call_exn_safe_assert] >>
+       gen_tac >> simp[]) >>
+  simp[call_exn_safe_stack, call_exn_safe_set_current_context]
 QED
 
 Theorem call_exn_safe_step_inst_noncall[local]:
@@ -908,7 +975,8 @@ Proof
     call_exn_safe_environment_memory_stack, call_exn_safe_step_return,
     call_exn_safe_step_return_data_copy, call_exn_safe_step_ext_code_copy,
     call_exn_safe_step_sstore, call_exn_safe_step_sload, call_exn_safe_step_self_destruct,
-    call_exn_safe_fail, call_exn_safe_consume_gas] >>
+    call_exn_safe_fail, call_exn_safe_consume_gas, call_exn_safe_extended_stack,
+    call_exn_safe_step_copy_to_memory, call_exn_safe_context_readers] >>
   rpt strip_tac
   >- (rewrite_tac[ignore_bind_def] >> irule call_exn_safe_bind_invariant >>
       simp[call_exn_safe_context_updates, call_exn_safe_finish]) >>
@@ -964,7 +1032,7 @@ Proof
   rewrite_tac[proceed_create_def, ignore_bind_def] >>
   rpt (irule call_exn_safe_bind_invariant >>
        reverse conj_tac >- simp[call_exn_safe_state_updates, call_exn_safe_state_readers,
-         call_exn_safe_original] >> gen_tac >> simp[]) >>
+         call_exn_safe_original, call_exn_safe_drain_state_gas_reservoir] >> gen_tac >> simp[]) >>
   simp[call_exn_safe_push_context]
 QED
 
@@ -995,7 +1063,8 @@ Theorem call_exn_safe_proceed_call[local]:
 Proof
   rewrite_tac[proceed_call_def, ignore_bind_def] >>
   rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_state_readers, call_exn_safe_memory] >>
+       reverse conj_tac >- simp[call_exn_safe_state_readers, call_exn_safe_memory,
+         call_exn_safe_drain_state_gas_reservoir] >>
        gen_tac >> simp[]) >>
   irule call_exn_safe_bind_invariant >> reverse conj_tac
   >- (IF_CASES_TAC >> simp[call_exn_safe_state_updates, call_exn_safe_return]) >>
@@ -1138,29 +1207,39 @@ Proof
   Cases_on `0 < value` >> simp[call_stipend_def, call_value_cost_def]
 QED
 
+Theorem call_exn_safe_withhold_create_gas[local]:
+  call_exn_safe (\s. s.contexts <> []) withhold_create_gas (\s. s.contexts <> [])
+Proof
+  rewrite_tac[withhold_create_gas_def] >>
+  irule call_exn_safe_bind_invariant >>
+  (reverse conj_tac >- simp[call_exn_safe_context_readers]) >>
+  gen_tac >> simp[ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_consume_gas, call_exn_safe_return]
+QED
+
+Theorem call_exn_safe_abort_create[local]:
+  call_exn_safe (\s. s.contexts <> []) abort_create (\s. s.contexts <> [])
+Proof
+  rewrite_tac[abort_create_def, ignore_bind_def] >>
+  irule call_exn_safe_bind_invariant >>
+  simp[call_exn_safe_stack, call_exn_safe_inc_pc]
+QED
+
 Theorem call_exn_safe_step_create[local]:
   call_exn_safe (\s. s.contexts <> []) (step_create two) (\s. s.contexts <> [])
 Proof
   rewrite_tac[step_create_def, ignore_bind_def] >> simp[] >>
-  ntac 9 (irule call_exn_safe_bind_invariant >>
+  rpt (irule call_exn_safe_bind_invariant >>
        reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_memory,
          call_exn_safe_consume_gas, call_exn_safe_context_readers,
-         call_exn_safe_state_readers, call_exn_safe_assert] >> gen_tac >> simp[]) >>
-  qmatch_goalsub_abbrev_tac `consume_gas credit` >>
-  irule call_success_safe_bind_exn >>
-  qexists_tac `\x s. s.contexts <> [] /\ credit <= (FST (HD s.contexts)).gasUsed` >>
-  reverse conj_tac >- irule call_success_safe_consume_gas >>
-  gen_tac >> simp[] >>
-  rpt (irule call_success_safe_bind_exn >>
-       qexists_tac `\x s. s.contexts <> [] /\ credit <= (FST (HD s.contexts)).gasUsed` >>
-       reverse conj_tac >- simp[call_success_safe_credit_context_effects,
-         call_success_safe_credit_readers] >> gen_tac >> simp[]) >>
-  IF_CASES_TAC >- simp[call_exn_safe_abort_unuse] >>
-  irule call_exn_safe_consequence >>
-  qexistsl_tac [`\s. s.contexts <> []`, `\s. s.contexts <> []`] >>
-  simp[] >>
+         call_exn_safe_state_readers, call_exn_safe_assert,
+         call_exn_safe_assert_not_static, call_exn_safe_context_updates] >>
+       gen_tac >> simp[]) >>
+  IF_CASES_TAC >- simp[call_exn_safe_abort_create] >>
   rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_access] >> gen_tac >> simp[]) >>
+       reverse conj_tac >- simp[call_exn_safe_access, call_exn_safe_new_account,
+         call_exn_safe_withhold_create_gas] >> gen_tac >> simp[]) >>
   IF_CASES_TAC >> simp[call_exn_safe_abort_create_exists, call_exn_safe_proceed_create]
 QED
 
