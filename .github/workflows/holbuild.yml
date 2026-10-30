@@ -2,14 +2,20 @@ name: holbuild
 
 on:
   workflow_dispatch:
+    inputs:
+      skip-snapshot:
+        description: 'Start without the Actions cache project snapshot, so theories come from the remote cache or are built'
+        type: boolean
+        default: false
   pull_request:
   merge_group:
   push:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Only a PR's runs share a group; runs on main never cancel each other.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -65,6 +71,7 @@ jobs:
 
       - name: Restore latest compatible project snapshot
         id: cache-holbuild-project
+        if: ${{ !inputs.skip-snapshot }}
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/holbuild
@@ -74,7 +81,9 @@ jobs:
 
       - name: Restore holbuild toolchain cache on project snapshot miss
         id: cache-holbuild-toolchain
-        if: ${{ steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
+        # The toolchain entry holds the whole cache it was saved from, theories
+        # included, so skip-snapshot skips it too.
+        if: ${{ !inputs.skip-snapshot && steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/holbuild
@@ -92,10 +101,26 @@ jobs:
           echo "toolchain cache hit: ${TOOLCHAIN_CACHE_HIT:-false}"
           echo "toolchain cache key: ${TOOLCHAIN_CACHE_KEY:-<none>}"
 
+      # After the restores, so holbuild looks in the restored local cache first.
+      # With no Actions toolchain either, buildhol restores the published HOL
+      # toolchain instead of building one whose bytes no remote entry has.
+      # Only runs on main, merge groups and pull requests from branches of this
+      # repository get the login. Fork PRs get no secrets and build from the
+      # Actions cache alone.
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+
       - name: Build schema-2 HOL toolchain
-        run: holbuild buildhol
+        run: |
+          set -o pipefail
+          holbuild buildhol 2>&1 | tee -a "$RUNNER_TEMP/holbuild.log"
 
       - name: Save holbuild toolchain cache after buildhol
+        # Every branch can restore main's entries, so other branches' copies
+        # only fill the 10 GB cache.
+        if: ${{ github.event_name == 'push' }}
         uses: actions/cache/save@v6
         continue-on-error: true
         with:
@@ -106,15 +131,8 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
-
-      - name: Save holbuild project snapshot
-        if: always()
-        uses: actions/cache/save@v6
-        continue-on-error: true
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.snapshot-key }}
+          set -o pipefail
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps 2>&1 | tee -a "$RUNNER_TEMP/holbuild.log"
 
       - name: Verify no successful-build checkpoints remain
         run: |
@@ -147,9 +165,49 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild executable runtests
-          holbuild build --skip-checkpoints --skip-proof-steps vfmUncheckedEmitTheory
-          holbuild executable runtests_unchecked
+          set -o pipefail
+          {
+            holbuild executable runtests
+            holbuild build --skip-checkpoints --skip-proof-steps vfmUncheckedEmitTheory
+            holbuild executable runtests_unchecked
+          } 2>&1 | tee -a "$RUNNER_TEMP/holbuild.log"
+
+      # After the test runners: they request a 30 s tactic timeout, which the
+      # main build's entries (built with none) don't satisfy, so a snapshot
+      # saved before them makes every run rebuild those theories.
+      - name: Save holbuild project snapshot
+        if: always()
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
+
+      - name: Write holbuild cache summary
+        if: ${{ always() }}
+        run: |
+          log="$RUNNER_TEMP/holbuild.log"
+          [ -f "$log" ] || exit 0
+          # Distinct lines, so a theory built twice or a key both prefetched and
+          # hydrated counts once.
+          count() { grep -E -- "$1" "$log" | sed -E 's/ in [0-9.]+s$//; s/^remote cache (hydrated|prefetched):/remote cache fetched:/' | sort -u | grep -c . || true; }
+          {
+            echo '## holbuild cache'
+            echo
+            if [ -n "${HOLBUILD_REMOTE_CACHE_URL:-}" ]; then
+              echo 'Remote cache: on'
+            else
+              echo 'Remote cache: off for this run'
+            fi
+            echo
+            echo '| | Count |'
+            echo '| --- | ---: |'
+            echo "| Theories built | $(count 'Theory built( |$)') |"
+            echo "| Theories restored from cache | $(count 'Theory restored from cache') |"
+            echo "| Entries fetched from the remote | $(count '^remote cache (hydrated|prefetched): ') |"
+            echo "| Entries published to the remote | $(count '^remote cache published: ') |"
+            echo "| Remote cache warnings | $(count '^holbuild: warning: .*remote') |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check test runners
         working-directory: tests
