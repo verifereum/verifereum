@@ -1052,7 +1052,10 @@ Proof
          inc_pc_def, push_stack_def, write_memory_def,
          pop_and_incorporate_context_def, pop_context_def,
          set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+         update_gas_refund_def, push_logs_def]
+  (* Split off the datatype case analysis: with it in the same step the
+     unfolding and the splits together run over the per-step budget. *)
+  >> gvs[AllCaseEqs()]
   (* EIP-8037: the credit is left opaque by the blast above, so its output is
      the variable `s''` and nothing can split the branch inside it.  Replace
      `s''` by the credit's second component, unfold the credit in the goal,
