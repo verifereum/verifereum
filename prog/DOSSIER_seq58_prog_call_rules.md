@@ -27,7 +27,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C2.3.3 | proved |  | E0035 |  |
 | C2.4 | proved |  | E0036 |  |
 | C3 | proved |  | E0037 |  |
-| C4 | proved |  | E0039 | Oracle review then scoped final commit with required trailers and final clean-status/build check. |
+| C4 | proved |  | E0040 | Accept final evidence; commit generated episode/review memory then complete. |
 
 ## C1.1
 
@@ -499,10 +499,10 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0039`
+- latest episode: `E0040`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 13 steps, 12 tools, 1 holbuild, 699,042 tok (697,595 in, 1,447 out, 677,248 cached), 67.9s, $0.1228888
-- next: Oracle review then scoped final commit with required trailers and final clean-status/build check.
+- actual effort: 1 sessions, 7 steps, 6 tools, 1 holbuild, 437,442 tok (436,831 in, 611 out, 428,288 cached), 32.9s, $0.0660248
+- next: Accept final evidence; commit generated episode/review memory then complete.
 
 ### Attempts / Evidence
 
@@ -511,9 +511,13 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
   - Audit diff scope, frozen declarations and warnings. -> Correct baseline is 48d42165 (per CALL_RULES_AUDIT); only prog paths differ. Source diff preserves original statements apart from owner-authorized two local p constructions. No cheat. Existing TRY/ORELSE sites predate task; no new search wrappers. Build.log has eight Type.mk_vartype non-standard %%gen_tyvar%% warnings, requiring classification/resolution before final no-parser-warning claim. (`TO_seq58_prog_call_rules-20261030T162928Z_m0802_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0780_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0804_t001`)
 - `E0039` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 12 tools, 1 holbuild, 699,042 tok (697,595 in, 1,447 out, 677,248 cached), 67.9s, $0.1228888)
   - Final whole-theory build and trust/scope audit. -> vfmProgTheory succeeds; exported oracle tags checked during build; no cheat or prohibited trust constructs; only prog paths changed. Eight internal generated-type diagnostics precede creation of vfmProg, not source parser warnings. Final audit documented; task status file protected, left unchanged. (`TO_seq58_prog_call_rules-20261030T162928Z_m0811_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0813_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0818_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0819_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0820_t001`)
+- `E0040` (proved, , actual effort: 1 sessions, 7 steps, 6 tools, 1 holbuild, 437,442 tok (436,831 in, 611 out, 428,288 cached), 32.9s, $0.0660248)
+  - Commit final audit then recheck final committed source. -> Commit 683c98c2 uses exact required trailers. Worktree clean; committed changes since 48d42165 exclusively prog/. vfmProgTheory successful on committed source. Statement comparison evidence retained: m0781 shows only two owner-authorized local child constructions changed, newAccountCharged := F; all public frozen rules unchanged. (`TO_seq58_prog_call_rules-20261030T162928Z_m0829_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0830_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0831_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0832_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0825_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_prog_call_rules-20261030T162928Z_m0811_t001` (use `read_tool_output` for exact output)
-- `TO_seq58_prog_call_rules-20261030T162928Z_m0813_t001` (use `read_tool_output` for exact output)
-- `TO_seq58_prog_call_rules-20261030T162928Z_m0821_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0829_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0830_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0831_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0832_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0825_t001` (use `read_tool_output` for exact output)
