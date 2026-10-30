@@ -10,7 +10,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.2 | stuck | risk_mismatch | E0002 | Strategist review meter boundary composition/normalization design before further proof work. |
 | C1.2.1 | proved |  | E0003 |  |
 | C1.2.2 | proved |  | E0004 |  |
-| C1.2.3 | progressed | other | E0005 | State a full step_call prefix equation exposing the balance/depth continuation; peel pop/memory-info/access then derive instantiated meter equation. Do not touch frozen rules until C1 validation complete. |
+| C1.2.3 | stuck | risk_mismatch | E0007 | Review remaining composition interface: avoid traversing large full continuation, protect grouped access/meter programs during known-operation reduction; no frozen rules touched. |
 
 ## C1.1
 
@@ -99,18 +99,25 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `other`
-- latest episode: `E0005`
-- blocker: 
-- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 987,621 tok (985,996 in, 1,625 out, 971,520 cached), 82.4s, $0.1423540
-- next: State a full step_call prefix equation exposing the balance/depth continuation; peel pop/memory-info/access then derive instantiated meter equation. Do not touch frozen rules until C1 validation complete.
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0007`
+- blocker: Structural step_call_segments now proved, but concrete composition attempt still expands grouped segments prematurely and naming hypotheses normalize the wrong way.
+- actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 12 holbuild, 2,654,369 tok (2,649,136 in, 5,233 out, 2,582,272 cached), 623.5s, $0.4442852
+- next: Review remaining composition interface: avoid traversing large full continuation, protect grouped access/meter programs during known-operation reduction; no frozen rules touched.
 
 ### Attempts / Evidence
 
 - `E0005` (progressed, other, actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 987,621 tok (985,996 in, 1,625 out, 971,520 cached), 82.4s, $0.1423540)
   - Validate stack-pop boundary and mirror existing memory-info boundary for actual CALL-spine composition -> Independent prefix probe builds clean, including prior access/meter composition and new pop/memory-info application equations. Actual step_call prefix theorem remains to be stated/proved. (`TO_seq58_prog_call_rules-20261030T113558Z_m0095_t001`)
+- `E0006` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 4 holbuild, 904,438 tok (902,375 in, 2,063 out, 872,960 cached), 300.4s, $0.1667560)
+  - Regroup actual step_call into existing access and meter segments, then simp[step_call_def,ignore_bind_def,bind_assoc] -> Pair binding in source versus returned tuple destructuring in segments leaves nonidentical continuation lambdas; no semantic counterexample indicated. (`TO_seq58_prog_call_rules-20261030T113558Z_m0113_t001`)
+  - Add UNCURRY_DEF in simp, then separately pure_rewrite UNCURRY_DEF -> Both leave paired lambda form unchanged/reconstructed by final simp. Three attempts terminated; experimental theorem removed. (`TO_seq58_prog_call_rules-20261030T113558Z_m0115_t001`, `TO_seq58_prog_call_rules-20261030T113558Z_m0117_t001`)
+- `E0007` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 12 holbuild, 2,654,369 tok (2,649,136 in, 5,233 out, 2,582,272 cached), 623.5s, $0.4442852)
+  - Prove paired application and function equalities, then restricted simp_tac pure_ss structural reassociation, BETA_TAC and REFL_TAC -> step_call_segments builds clean. Paired function normalization required as well as application normalization; pure_ss needed explicit REFL_TAC. (`TO_seq58_prog_call_rules-20261030T113558Z_m0136_t001`)
+  - State actual concrete prefix, derive pop_stack using stack=args++rest, rewrite actual segmented spine, normalize named scalar arguments -> Pop application proved, but bool_ss/std_ss leave constructor cases unreduced. srw_ss reduces them but ambient bind_assoc destroys segment grouping; broad rewrite reconstructs lets and all continuation details. Removed unfinished concrete prefix after bounded attempts, retained checked structural lemma. (`TO_seq58_prog_call_rules-20261030T113558Z_m0145_t001`, `TO_seq58_prog_call_rules-20261030T113558Z_m0149_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_prog_call_rules-20261030T113558Z_m0095_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T113558Z_m0153_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T113558Z_m0149_t001` (use `read_tool_output` for exact output)

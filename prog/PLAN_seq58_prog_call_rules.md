@@ -44,10 +44,10 @@ Do not interpret a prior cheat-backed whole-theory build as validation. Do not c
 
 ### C1.2: Validate CALL prefix through small operation boundaries
 - Kind: `proof_group`
-- Risk: 2
+- Risk: 3
 - Work priority: 20
 - Work units: 0
-- Rationale: The failed residual has known-success operations on an explicit nonempty context. Separate operation equations eliminate nested continuations before arithmetic normalization.
+- Rationale: Derived from child component C1.2.3 risk 3. Actual-spine regrouping still unvalidated; broad bind_assoc normalization leaves paired-lambda eta mismatch and >4KiB goal.
 - Dependencies: C1.1
 - Checkpoint: yes
 - Progress transition: `refinement`
@@ -113,23 +113,31 @@ Derive the two required charge inequalities in the exact operand order before un
 #### Not to try
 Do not simplify arithmetic over unresolved operation applications or branch on their results; the operation equations already establish success.
 
-### C1.2.3: Validate access and meter composition against the CALL spine
+### C1.2.3: Compose the CALL prefix using opaque segments and arbitrary continuations
 - Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 30
 - Work units: 5
-- Rationale: Access/delegate effects are already evaluated; composition now uses their explicit state and the validated meter interface.
-- Dependencies: C1.2.2
+- Rationale: The structural regrouping now builds. The remaining work is finite success-bind composition of checked pop, memory, access and meter equations; opaque segment wrappers and an arbitrary continuation prevent ambient simplification from destroying that grouping.
+- Dependencies: C1.2.1, C1.2.2
 - Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0007
+
+#### Progress note
+Retain step_call_segments and the checked structural helpers as partial source evidence only. E0007 does not certify the still-unproved prefix application obligation; a new checked composition proof is required.
 
 #### Summary
-Complete the originally required reusable CALL prefix boundary. Match the actual step_call order and expose the state at the balance/depth or child-entry branch. Recheck access/delegate equations and the no-spill meter together. Frozen rule proofs remain untouched until shared machinery validation is complete.
+Keep the checked step_call_segments regrouping and operation boundaries. Give the access and meter programs opaque local names so simplification cannot flatten their internals. Prove success-bind transport once, with an arbitrary continuation. Evaluate the prefix independently of its failure/depth/proceed tail, then instantiate the tail only in the final bridge. No frozen rule proof starts before this validation builds.
+
+#### Statement
+Required outputs: (1) local success-bind transport: f s = (INL x,s') ==> (do y <- f; K y od) s = K x s'; (2) named local access/meter segment definitions with application equations equivalent to call_access_segment and call_meter_segment; (3) a prefix-with-arbitrary-continuation application theorem evaluating pop_stack, memory_expansion_info, access, and meter to the explicit updated state and values; (4) the actual step_call prefix bridge, retaining precisely the balance/depth/proceed continuation of step_call_segments. Preserve the existing prefix side conditions and explicit gas/state-gas update conclusions; do not strengthen or change any frozen theorem.
 
 #### Approach
-Read the actual step_call spine and peel only to the prefix boundary. For call_access_segment or call_delegate_segment, first derive the specific application equality via irule against the current state and delegate_check premise, then rewrite that equality; do not ask simp to infer newRb/newDom/cost. Apply call_meter_segment after access effects, preserving its rollback/domain result, and validate the prefix on the actual expression rather than only an invented stand-alone program.
+In prog/vfmProgCallPrefixProbeScript.sml, introduce opaque names for exactly the access and meter do-blocks already checked, and transport their application equations by unfolding each wrapper only in its own boundary proof. Use the checked step_call_segments equality to obtain a bridge with these names, using pure_ss and explicit pair beta reduction, not the ambient simplifier. Prove the prefix evaluation with a universally quantified tail K (taking all values the tail needs); eliminate one outer bind via success-bind transport at a time, applying the checked operation boundary before proceeding. Keep scalar extraction expressions in their original EL form until the small operation goal needs a supplied equality; normalize records separately from the program. Finally instantiate K with the existing tail, which must not be traversed or simplified during prefix evaluation. Build vfmProgCallPrefixProbeTheory before claiming completion.
 
 #### Not to try
-Do not duplicate delegation case analysis at every frozen consumer. Do not treat an independent probe build as a proof of the frozen SPEC rules, or silently alter call_gas ordering to ease composition.
+Do not apply srw_ss or unrestricted simp to the whole step_call continuation: ambient bind_assoc destroys the segment interface and EL-to-HD normalization spoils scalar naming. Do not recreate a multi-kilobyte ASSUME-quoted continuation or seven reverse-naming rewrite chains across the tail. Do not unfold named segment definitions in consumers; use their success equations. Do not count the proved regrouping equality alone as closure of actual-spine composition. No new deeper child components are needed.
 
 ### C1.3: Validate refund, exception and tail normalization interfaces
 - Kind: `boundary_lemma`

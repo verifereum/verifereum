@@ -257,3 +257,74 @@ Proof
   rw[memory_expansion_info_def, bind_def, ignore_bind_def,
      get_current_context_def, return_def, memory_cost_def, memory_expand_by_def]
 QED
+
+Theorem call_pair_apply[local]:
+  !f p. (\(a,b). f a b) p = f (FST p) (SND p)
+Proof
+  rpt gen_tac >> Cases_on `p` >> simp[]
+QED
+
+Theorem call_pair_function[local]:
+  (\(a,b). f a b) = (\p. f (FST p) (SND p))
+Proof
+  simp_tac bool_ss [FUN_EQ_THM, call_pair_apply]
+QED
+
+Theorem step_call_segments[local]:
+  step_call op = do
+    valueOffset <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + valueOffset);
+    gas <<- w2n $ EL 0 args;
+    address <<- w2w $ EL 1 args;
+    value <<- if 0 < valueOffset then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + valueOffset) args;
+    argsSize <<- w2n $ EL (3 + valueOffset) args;
+    retOffset <<- w2n $ EL (4 + valueOffset) args;
+    retSize <<- w2n $ EL (5 + valueOffset) args;
+    (offset,size) <<- max_expansion_range
+      (argsOffset,argsSize) (retOffset,retSize);
+    mx <- memory_expansion_info offset size;
+    (accessCost,accounts,(code,delegateCost)) <- (do
+      aCost <- access_address address;
+      accts <- get_accounts;
+      pair <- (case get_delegate (lookup_account address accts).code of
+        NONE => return ((lookup_account address accts).code,0)
+      | SOME del => do
+          n <- access_address del;
+          return ((lookup_account del accts).code,n)
+        od);
+      return (aCost,accts,pair)
+    od);
+    toAccount <<- lookup_account address accounts;
+    charged <<- op = Call /\ 0 < value /\ account_empty toAccount;
+    (sender,stipend) <- (do
+      consume_gas (static_gas op + accessCost +
+        (if 0 < value then call_value_cost else 0) + delegateCost + mx.cost);
+      charge_new_account charged;
+      if op = Call /\ 0 < value then assert_not_static else return ();
+      expand_memory mx.expand_by;
+      left <- get_gas_left;
+      pair <<- call_gas value gas left 0 0;
+      consume_gas (FST pair);
+      sender <- get_callee;
+      return (sender,SND pair)
+    od);
+    if (lookup_account sender accounts).balance < value then do
+      credit_new_account charged;
+      abort_call_value stipend
+    od else do
+      set_return_data [];
+      sucDepth <- get_num_contexts;
+      if sucDepth > 1024 then do
+        credit_new_account charged;
+        abort_unuse stipend
+      od else proceed_call op sender address value argsOffset argsSize code stipend
+        (Memory <|offset := retOffset; size := retSize|>)
+    od
+  od
+Proof
+  simp_tac pure_ss [step_call_def, LET_THM, ignore_bind_def, bind_assoc,
+    return_bind, call_pair_function, call_pair_apply, pairTheory.FST, pairTheory.SND] >>
+  BETA_TAC >> simp_tac pure_ss [pairTheory.FST, pairTheory.SND] >> REFL_TAC
+QED
+
