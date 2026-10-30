@@ -297,10 +297,10 @@ Do not claim zero deposit cost means no account update. Do not certify machinery
 
 ### C2: Repair the frozen CALL family
 - Kind: `proof_group`
-- Risk: 2
+- Risk: 3
 - Work priority: 10
 - Work units: 0
-- Rationale: The shared prefix and outcome boundaries remove the repeated monadic reduction; remaining work is SPEC framing and existing continuations.
+- Rationale: Derived from child component C2.1.2 risk 3. Native prefix theorem conclusion does not match the frozen consumer's alias-normalized charged-state equality via irule.
 - Required for completion: yes
 - Dependencies: C1
 
@@ -324,27 +324,29 @@ Edit only proof bodies of frozen declarations. Replace the obsolete commented at
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: The semantic prefix has been independently validated; remaining work is native-constant transfer followed by deterministic abort integration.
+- Rationale: The missing interface is an equality-result adapter derived directly from the checked prefix equation; no new semantic induction is required.
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0016
 
 #### Progress note
-E0016 identified missing integration, not a failed semantic argument. No proof continuity is claimed for the newly separated leaves.
+E0019 establishes a consumer matching defect; E0018 native transfer remains unchanged.
 
 #### Summary
-First transfer the validated prefix/refund machinery into the main theory using its existing constants. Validate that transfer before editing either frozen failure proof. Then prove both balance and depth failures with the shared interfaces; statements remain unchanged.
+Keep the validated native prefix and refund lemmas. Add a result-variable adapter so backward application does not match nested record updates. Validate its use at the balance-rule charged-state goal before completing the balance and depth consumers.
+
+#### Approach
+Validate the adapter against the existing balance charged-state equality first. Then reuse this boundary for depth rather than specializing the native theorem manually.
 
 #### Not to try
-Do not import the probe theory and silently resolve frozen names to probe constants. Do not duplicate existing boundary definitions, or start frozen proof edits before the transfer checkpoint.
+Do not repeatedly specialize vo and unfold field aliases hoping MATCH_MP_TAC normalizes arithmetic or record expressions. Do not reopen access or metering internals in consumers.
 
 #### Argument
-The shared prefix pops arguments, computes memory/access costs and delegation, charges execution and state gas, and returns the state at the branch point. In either never-entered branch the creation charge is credited and stipend unused. The refund identity restores stateGasLeft to its original value minus MIN cost spill, while subtracting that same credit and stipend from execution gas. Branch-specific abort handling then supplies the frozen separation postcondition.
+The native prefix equation already computes the charged state. A transitivity adapter moves comparison with a consumer's chosen result from theorem matching into an explicit equality goal, where aliases, arithmetic and record updates can be normalized. Both failure continuations then use the existing refund equation.
 
 #### Definition design
-Retain the original main-theory boundary constants, including the memory functions as well as the five access/delegation functions. Introduce only missing call_access_prog, call_meter_prog and call_prefix_prog definitions. The consumer interface is step_call_prefix_bridge plus call_prefix_prog_apply and call_refund_unuse_apply; consumers must not unfold the access/meter implementations.
+Do not change definitions or frozen statements. Retain call_prefix_prog_apply as the semantic equation. Expose a new boundary with schematic result on its right-hand side and an explicit equality premise relating that result to the native continuation application.
 
 #### Code structure
-Choose source transfer, not a new imported ancestor plus transport lemmas. Put the missing local helper block in prog/vfmProgScript.sml after its boundary definitions and before SPEC_Call_fail_balance. Keep prog/vfmProgCallPrefixProbeScript.sml unchanged as the independent validation fixture, not as a production dependency; this bounded duplication avoids changing frozen constant identities or a larger theory split. Main-theory helpers are the production implementation. No library extraction or unrelated refactor is authorized.
+Place the local adapter next to call_prefix_prog_apply in prog/vfmProgScript.sml. Replace failed specialization plumbing in the balance proof. Keep all changes within prog/ and retain the independently checked native proofs.
 
 ### C2.1.1: Transfer and validate native prefix/refund interfaces
 - Kind: `infrastructure_lemma`
@@ -372,23 +374,48 @@ Do not copy the probe header or its duplicate constants, and do not add the prob
 ### C2.1.2: Prove frozen balance and depth failure rules
 - Kind: `proof`
 - Risk: 2
-- Work priority: 1
+- Work priority: 10
 - Work units: 5
-- Rationale: Once native prefix and refund interfaces check, both consumers follow the already validated deterministic branch argument.
+- Rationale: The new prerequisite validates conclusion matching before these consumers resume; native prefix and refund equations supply the semantic computations.
+- Dependencies: C2.1.1, C2.1.3
+- Checkpoint: yes
+- Progress transition: `refinement`
+
+#### Progress note
+E0019 is a valid stuck report, not a proof of these rules. Retain the checked entry work; replace the failed boundary application.
+
+#### Summary
+Complete SPEC_Call_fail_balance and SPEC_Call_fail_depth without statement changes. Use the validated result adapter for the charged prefix and the native refund helper for never-entered continuations. Remove the failed matching experiment and validate both proofs in the main theory.
+
+#### Approach
+Preserve the checked step-entry peeling. Replace SPEC_ALL/Q.INST matching with the validated result-variable adapter, then reduce the appropriate balance/depth branch and use call_refund_unuse_apply before the existing frame finish machinery. Handle depth's general value offset through premises, not a copied vo=1 specialization.
+
+#### Not to try
+Do not reconstruct access or gas internals in either consumer. Do not attempt further direct irule call_prefix_prog_apply against an alias-rich chosen RHS. No changes to frozen theorem statements or timeout configuration.
+
+### C2.1.3: Expose and validate a result-variable prefix adapter
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: An equality transitivity corollary of the checked native equation removes all RHS matching constraints; remaining comparisons are explicit normalization obligations.
 - Dependencies: C2.1.1
 - Checkpoint: yes
 
+#### Progress note
+New boundary required by E0019; no existing proof is claimed for this output.
+
 #### Summary
-Prove SPEC_Call_fail_balance and SPEC_Call_fail_depth without statement changes. Use the native prefix and refund interfaces, then discharge the branch-specific abort and separation bookkeeping. Record checked proof acceptance for both consumers.
+Add call_prefix_prog_apply_result as a local corollary. Its conclusion has an unconstrained result variable. Check application and discharge all premises at the existing balance charged-state subgoal before further consumer work.
 
 #### Statement
-SPEC_Call_fail_balance and SPEC_Call_fail_depth exactly as frozen in prog/vfmProgScript.sml (balance statement also frozen in TASK).
+Let H be exactly the antecedent of call_prefix_prog_apply and R its displayed native RHS (the continuation applied to the computed charged state). Prove locally: H /\ R = result ==> call_prefix_prog op cont s = result. Preserve every parameter and premise of H; result is a fresh variable of the RHS type.
 
 #### Approach
-Use the existing IMP_EVM_SPEC proof entry and step_inst_call to expose step_call, then rewrite via step_call_prefix_bridge and apply call_prefix_prog_apply with the frozen premise aliases. Select the balance/depth branch, apply call_refund_unuse_apply to the charged context, and finish abort/exception and separation normalization with the validated common machinery; use stack-length facts to justify EL of TAKE at the argument boundary.
+Derive the adapter by stripping assumptions, applying call_prefix_prog_apply to H, and equality transitivity (a small metis_tac with that one theorem is acceptable). At the current balance equality use irule call_prefix_prog_apply_result without SPEC_ALL/Q.INST: only the LHS and result now participate in conclusion matching. Solve H using the existing aliases and stack bound; solve the separate R=result equality by targeted alias rewrites, numeral reduction, arithmetic associativity and record normalization. Use explicit witnesses for antecedent-only variables if necessary, rather than manual theorem instantiation.
 
 #### Not to try
-Do not expand the complete step_call monad in either consumer or case-split opaque access_address results. Do not compensate for interface mismatch with long manual theorem plumbing; report a precise missing boundary lemma instead. Preserve all frozen statements and prohibit cheats, axioms and timeout changes.
+Do not add hypotheses to frozen SPEC statements. Do not unfold call_prefix_prog_def or access/meter internals. Do not retain failed FAIL_TAC placeholders in the completed adapter/application. If remaining premises fail, report the exact residual goal, not another No match experiment.
 
 ### C2.2: Successful entry and prepared CALL equation
 - Kind: `proof`

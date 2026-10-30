@@ -18,6 +18,8 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.3.2.3 | proved |  | E0015 |  |
 | C2.1 | progressed | missing_helper | E0016 | Request strategist scoped integration guidance: copy validated local helpers into main, or authorize independent theory exports plus constant transport; preserve frozen constants/statements. |
 | C2.1.1 | proved |  | E0018 |  |
+| C2.1.2 | progressed | other | E0021 | Commit adapter plus checked balance proof; then repair depth with same prefix adapter and refund/context normalization. |
+| C2.1.3 | proved |  | E0020 |  |
 
 ## C1.1
 
@@ -280,3 +282,46 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0396_t001` (use `read_tool_output` for exact output)
+
+## C2.1.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0021`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 23 steps, 22 tools, 6 holbuild, 2,640,792 tok (2,638,857 in, 1,935 out, 2,596,352 cached), 215.0s, $0.3639952
+- next: Commit adapter plus checked balance proof; then repair depth with same prefix adapter and refund/context normalization.
+
+### Attempts / Evidence
+
+- `E0019` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 18 steps, 17 tools, 7 holbuild, 1,310,542 tok (1,307,316 in, 3,226 out, 1,259,136 cached), 340.5s, $0.2545336)
+  - Expose step_call through IMP_EVM_SPEC then step_call_prefix_bridge. -> Verified entry prefix; required moving the exact step case equation to goal and peeling ignore_bind then bind (not complete step_call). Continuation and c/k/cs now abbreviated. (`TO_seq58_prog_call_rules-20261030T133624Z_m0415_t001`)
+  - irule call_prefix_prog_apply on explicit expected charged-state equality; then normalize field aliases and specialize vo=1. -> Repeated No match, including SPEC_ALL/Q.INST vo=1/SIMP_RULE std_ss. This interface forces a large copied output equality before even producing premises; no semantic counterexample observed. Stop instead of further theorem plumbing. (`TO_seq58_prog_call_rules-20261030T133624Z_m0418_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0420_t001`)
+- `E0021` (progressed, other, actual effort: 1 sessions, 2 msgs, 23 steps, 22 tools, 6 holbuild, 2,640,792 tok (2,638,857 in, 1,935 out, 2,596,352 cached), 215.0s, $0.3639952)
+  - Apply result adapter then native credit_new_account_apply; normalize credit context, execute abort_call_value and finish frame with end_tac. -> SPEC_Call_fail_balance now checks without cheat or statement changes. Build reaches unchanged SPEC_Call_fail_depth. Adjacent credit+unuse helper not applicable because abort pushes stack/sets returnData between them, so used already validated credit_new_account_apply and explicit refund arithmetic. (`TO_seq58_prog_call_rules-20261030T133624Z_m0467_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0467_t001` (use `read_tool_output` for exact output)
+
+## C2.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0020`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 18 steps, 17 tools, 7 holbuild, 1,724,017 tok (1,721,537 in, 2,480 out, 1,685,888 cached), 322.3s, $0.2646868
+
+### Attempts / Evidence
+
+- `E0020` (proved, , actual effort: 1 sessions, 1 msgs, 18 steps, 17 tools, 7 holbuild, 1,724,017 tok (1,721,537 in, 2,480 out, 1,685,888 cached), 322.3s, $0.2646868)
+  - Result-variable adapter via drule_all native theorem, qspec cont, gvs; validate in charged-state subgoal of balance rule. -> Adapter checks and balance charged-state equality fully proved with explicit antecedent witnesses, targeted aliases and EL_TAKE. Final residual call_gas argument differs only by AC addition, closed by moving call_gas assumption and simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]. Build reaches subsequent prefix-applied probe with equality in context. (`TO_seq58_prog_call_rules-20261030T133624Z_m0442_t001`)
+  - Unconstrained metis adapter proof and global gvs AC closure. -> Each timed out; replaced by controlled forward theorem application and narrow bool_ss normalization; neither remains in source. (`TO_seq58_prog_call_rules-20261030T133624Z_m0430_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0438_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0442_t001` (use `read_tool_output` for exact output)
