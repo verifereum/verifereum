@@ -7,7 +7,9 @@ sig
      `code = [bytes]` for a constant code; parsed_eq is
      `parsed = FEMPTY |+ ...`, the evaluated `parse_code 0 FEMPTY code` for
      a constant parsed. hints are extra block starts (pcs); simps are extra
-     rewrites used when simplifying stack values and side conditions.
+     rewrites used when simplifying stack values and side conditions (the
+     simpset is built once per run, so a Once or Ntimes in simps counts
+     across the whole run, not per simplification).
      strip_metadata leaves out the compiler's CBOR metadata at the end of
      the code (see metadata_start). *)
   type config = {code_eq : thm, parsed_eq : thm, hints : int list,
