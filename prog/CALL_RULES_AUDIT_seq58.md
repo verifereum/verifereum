@@ -137,3 +137,39 @@ Memory returns child data and writes the requested slice. These boundaries
 are deliberately about `handle_exception NONE`, not `handle_step NONE`:
 Code deposit still precedes settlement in the latter. Checked build:
 TO_seq58_prog_call_rules-20261030T133624Z_m0322_t001.
+
+### Empty-output deposit and final tail coverage map
+
+The independent probe checks `handle_create_empty_memory_exact` (identity
+apart from reraising NONE) and `handle_create_empty_code_exact` (explicit
+empty-code account update). It also checks `handle_step_empty_memory_exact`
+and `handle_step_empty_code_exact`, factoring successful handling into these
+deposit boundaries followed by the already checked success settlement
+boundaries. Code's zero gas charge still requires `c.gasUsed <= gasLimit`.
+These create equations are typed at unit execution_result to avoid an
+unconstrained polymorphic reraise result when chaining them into handle_step.
+Final checked probe build: TO_seq58_prog_call_rules-20261030T133624Z_m0350_t001.
+
+Consumer mapping (no frozen proof edited at this checkpoint):
+- Invalid outermost/inner: the exact Invalid settlement boundaries above;
+  child meter bound comes from wf_context, with parent stack room for inner.
+- SELFDESTRUCT outermost/inner: `step_self_destruct_def` explicitly clears
+  returnData before consuming execution gas, then charges state gas. Frozen
+  consumers assume `g + gasCost <= p.gasLimit` and `stateCost <= sg`, so this
+  charge has no spill and leaves used gas `g + gasCost <= p.gasLimit`.
+  Thus both empty-output deposit boundaries apply. Compose the corresponding
+  handle_step bridge with singleton success or inner Memory/Code success.
+  Inner unused-grant and stack-room guards are explicit frozen premises;
+  arbitrary refunds/logs and both output destinations are covered.
+  Code updates accounts even though its deposit costs are zero. The named
+  frozen inner merge subtracts unused child gas after repayment, whereas the
+  helper subtracts before repayment; natural truncated-subtraction
+  commutation reconciles these presentations, without a new gas bound.
+- CALL precompile entry: `proceed_call_precompile_success_meter` plus its
+  zero-refund specialization independently validate drained parent reservoir,
+  child baseline, zero spill and commitment, transfer logs and output grant.
+  `handle_step_success_memory_exact` supplies its successful Memory tail.
+  `restored_unused_gas`, `_bound`, `_sub` supply failed-child grant arithmetic.
+  `step_precompile_success_exact` remains C2 composition, dependent on the
+  frozen `step_call_prepared`; it was deliberately not used to certify the
+  independent machinery. Its full composition is not claimed proved here.

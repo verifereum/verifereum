@@ -15,6 +15,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.3.2 | progressed | missing_helper | E0011 | Strategist classify checked subset and explicitly assign remaining frozen composition to C2; decide needed bounded handler probes for Invalid and SELFDESTRUCT. No frozen proof edits yet. |
 | C1.3.2.1 | proved |  | E0013 |  |
 | C1.3.2.2 | proved |  | E0014 |  |
+| C1.3.2.3 | proved |  | E0015 |  |
 
 ## C1.1
 
@@ -214,3 +215,24 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0322_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0323_t001` (use `read_tool_output` for exact output)
+
+## C1.3.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0015`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 25 steps, 24 tools, 8 holbuild, 2,221,338 tok (2,218,511 in, 2,827 out, 2,180,736 cached), 316.8s, $0.3218936
+
+### Attempts / Evidence
+
+- `E0015` (proved, , actual effort: 1 sessions, 2 msgs, 25 steps, 24 tools, 8 holbuild, 2,221,338 tok (2,218,511 in, 2,827 out, 2,180,736 cached), 316.8s, $0.3218936)
+  - Check empty Memory/Code deposit operational equations and factor handle_step through successful settlement. -> All four new local helpers build. Code explicitly updates account code to [] and assumes child used<=limit; Memory is unchanged. Unit result annotation prevents unconstrained polymorphic reraise mismatch in composition. (`TO_seq58_prog_call_rules-20261030T133624Z_m0350_t001`)
+  - Inspect SELFDESTRUCT semantics/frozen consumers and map tail coverage. -> Semantics clears returnData before gas charge; frozen execution and reservoir bounds supply zero-charge deposit guard. Audit maps Invalid, SELFDESTRUCT and precompile boundaries, explicitly deferring step_precompile_success_exact to C2. (`TO_seq58_prog_call_rules-20261030T133624Z_m0337_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0352_t001`, `TO_seq58_prog_call_rules-20261030T133624Z_m0353_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0350_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0353_t001` (use `read_tool_output` for exact output)

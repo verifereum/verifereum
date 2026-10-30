@@ -315,3 +315,56 @@ Proof
        assert_def, stack_limit_def,
        execution_state_component_equality, context_component_equality]
 QED
+
+Theorem handle_create_empty_memory_exact[local]:
+  s.contexts = (c,cb)::rest /\ c.returnData = [] /\
+  c.msgParams.outputTo = Memory mr ==>
+  (handle_create NONE s : unit execution_result) = (INR NONE,s)
+Proof
+  simp[handle_create_def, get_return_data_def, get_output_to_def,
+       get_current_context_def, bind_def, return_def, reraise_def]
+QED
+
+Theorem handle_create_empty_code_exact[local]:
+  s.contexts = (c,cb)::rest /\ c.returnData = [] /\
+  c.msgParams.outputTo = Code addr /\ c.gasUsed <= c.msgParams.gasLimit ==>
+  (handle_create NONE s : unit execution_result) =
+    (INR NONE,s with rollback := s.rollback with accounts :=
+      update_account addr
+        (lookup_account addr s.rollback.accounts with code := [])
+        s.rollback.accounts)
+Proof
+  simp[handle_create_def, get_return_data_def, get_output_to_def,
+       get_current_context_def, set_current_context_def,
+       consume_gas_def, charge_state_gas_def, update_accounts_def,
+       get_accounts_def, bind_def, ignore_bind_def, return_def,
+       assert_def, reraise_def, word_size_def, max_code_size_def,
+       rollback_state_component_equality,
+       execution_state_component_equality, context_component_equality]
+QED
+
+Theorem handle_step_empty_memory_exact[local]:
+  s.contexts = (c,cb)::rest /\ c.returnData = [] /\
+  c.msgParams.outputTo = Memory mr ==>
+  handle_step NONE s = handle_exception NONE s
+Proof
+  strip_tac >>
+  simp[handle_step_def, vfm_abort_def, handle_create_empty_memory_exact,
+       handle_def]
+QED
+
+Theorem handle_step_empty_code_exact[local]:
+  s.contexts = (c,cb)::rest /\ c.returnData = [] /\
+  c.msgParams.outputTo = Code addr /\ c.gasUsed <= c.msgParams.gasLimit ==>
+  handle_step NONE s =
+    handle_exception NONE
+      (s with rollback := s.rollback with accounts :=
+        update_account addr
+          (lookup_account addr s.rollback.accounts with code := [])
+          s.rollback.accounts)
+Proof
+  strip_tac >>
+  drule_all handle_create_empty_code_exact >>
+  strip_tac >>
+  simp[handle_step_def, vfm_abort_def, handle_def]
+QED
