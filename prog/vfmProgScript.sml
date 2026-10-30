@@ -6598,7 +6598,8 @@ QED
    stateGasSpilled 1, popped into a parent at gasUsed 11, and the negated rule
    instance at that state. *)
 Theorem inner_revert_spill_execution[local]:
-  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+  let p = params with <|newAccountCharged := F;
+          code := [253w]; parsed := parse_code 0 FEMPTY [253w];
           gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
       q = params with <|code := []; parsed := FEMPTY; gasLimit := 20;
           outputTo := Memory <|offset := 0; size := 0|> |>;
@@ -6638,7 +6639,7 @@ Proof
           handle_exception_def, get_num_contexts_def, restore_state_gas_def,
           pop_and_incorporate_context_def, get_gas_left_def, pop_context_def,
           unuse_gas_def, set_rollback_def, inc_pc_def, push_stack_def,
-          write_memory_def, absorb_state_gas_def,
+          write_memory_def, absorb_state_gas_def, credit_new_account_def,
           bind_def, ignore_bind_def, return_def, get_current_context_def,
           set_current_context_def, handle_def, assert_def,
           empty_buffer_def, buffer_length_def]
@@ -6651,7 +6652,8 @@ Proof
 QED
 
 Theorem SPEC_Return_inner_spill_counterexample[local]:
-  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+  let p = params with <|newAccountCharged := F;
+          code := [253w]; parsed := parse_code 0 FEMPTY [253w];
           gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
       q = params with <|code := []; parsed := FEMPTY; gasLimit := 20;
           outputTo := Memory <|offset := 0; size := 0|> |>;

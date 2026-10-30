@@ -23,6 +23,8 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C2.2 | proved |  | E0026 |  |
 | C2.3 | stuck | wrong_statement | E0032 | Authorize concrete checked-falsehood probe for baseline auxiliary execution equality, using params.newAccountCharged=T, empty parent spill and reservoir, then classify required obligation per frozen contract. Do not modify witness statement. |
 | C2.3.1 | proved |  | E0033 |  |
+| C2.3.2 | proved |  | E0034 |  |
+| C2.3.3 | proved |  | E0035 |  |
 
 ## C1.1
 
@@ -409,3 +411,43 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 - `TO_seq58_prog_call_rules-20261030T153638Z_m0717_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_prog_call_rules-20261030T153638Z_m0682_t001` (use `read_tool_output` for exact output)
+
+## C2.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0034`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 415,167 tok (414,584 in, 583 out, 397,952 cached), 294.5s, $0.0788892
+
+### Attempts / Evidence
+
+- `E0034` (proved, , actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 415,167 tok (414,584 in, 583 out, 397,952 cached), 294.5s, $0.0788892)
+  - Pin child newAccountCharged := F and add credit_new_account_def to concrete execution normalization. -> inner_revert_spill_execution passes; whole build advances to expected consumer construction mismatch. (`TO_seq58_prog_call_rules-20261030T162928Z_m0742_t001`)
+  - Audit witness constructions by grep. -> Only other inner failing-child construction is SPEC_Return_inner_spill_counterexample, covered by C2.3.3; earlier witnesses are outermost and do not pop into a parent. (`TO_seq58_prog_call_rules-20261030T162928Z_m0743_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0742_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0743_t001` (use `read_tool_output` for exact output)
+
+## C2.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0035`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 195,859 tok (195,566 in, 293 out, 188,800 cached), 24.8s, $0.0353420
+
+### Attempts / Evidence
+
+- `E0035` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 195,859 tok (195,566 in, 293 out, 188,800 cached), 24.8s, $0.0353420)
+  - Pin identical newAccountCharged := F in negative-SPEC witness, reusing execution boundary unchanged. -> Build passes both repaired witnesses and proceeds to SPEC_Return_inner arithmetic failure at lines 6907-6908. No sibling proof edits performed. (`TO_seq58_prog_call_rules-20261030T162928Z_m0748_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0748_t001` (use `read_tool_output` for exact output)

@@ -295,30 +295,34 @@ Inspect step_self_destruct and its current frozen consumers to check the exact e
 #### Not to try
 Do not claim zero deposit cost means no account update. Do not certify machinery coverage solely from the nine original helpers, and do not edit frozen theorem bodies at this checkpoint.
 
-### C2: Repair the frozen CALL family
-- Kind: `unprovability_gate`
-- Risk: 5
-- Work priority: 10
+### C2: Complete CALL-family integration and inner-return consumer
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 20
 - Work units: 0
-- Rationale: Suspected theorem falsehood: complete probe components under C2 (including C2.3.1) before any other proof work. If probes confirm a counterexample, stop/report unprovable; do not silently repair the theorem.
+- Rationale: E0034 and E0035 resolve the witness-construction issue by the authorized uncharged-child repair. No frozen CALL rule was disproved. The present return failure exposes Abbrev(stateCost = 0) rather than a semantic counterexample; existing restored-unused-gas lemmas supply exactly the missing scalar interface.
 - Required for completion: yes
-- Dependencies: C1
-- Checkpoint: yes
+- Supersedes: C2
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0034, E0035
+
+#### Progress note
+Release only the obsolete suspected-falsehood gate. All omitted children, their accepted evidence, and the historical counterexample remain unchanged. This is not a claim that the uncharged witness repairs prove SPEC_Return_inner.
 
 #### Summary
-Repair the five explicitly named frozen CALL obligations using validated machinery. Preserve all statements including step_call_prepared. Cover intervening helper declarations and precompile witness consumers needed by the whole theory.
+The native CALL prefix and failure/entry rules retain their completed proofs. The charged witness counterexample remains historical, with the authorized uncharged constructions now checked. Resume at SPEC_Return_inner using the already proved restoration arithmetic. Subsequent Invalid and SELFDESTRUCT rules remain C3 work, and final audit remains C4 work.
 
 #### Not to try
-Do not use TRY/ORELSE around search, change tactic timeouts, or turn a long residual-goal dispatcher into the shared abstraction.
+Do not reopen the charged witness counterexample or change frozen statements. Do not treat the released gate as a whole-theory success certificate.
 
 #### Argument
-Apply IMP_EVM_SPEC to expose the concrete state and frame. Normalize precondition abbreviations to field equalities once, apply the common CALL prefix, select the branch using balance or context-count hypotheses, then use its outcome boundary. Successful calls retain the creation charge in the parent and enter proceed_call; never-entered paths use the refund arithmetic. Existing semantic framing and end_tac discharge unrelated resources after record updates are explicit.
+CALL rules compose the checked native prefix with refund or entry interfaces. The witness repairs select the intended uncharged-child path and do not alter any frozen rule. For inner Revert, normalize its zero code/state costs before translating restored unused gas into calleeGasLeft plus spillRefund; the well-formed gas-stack bound controls returning that gas to the caller. Successful Return instead uses absorb_state_gas followed by spill repayment and the existing destination split.
 
 #### Definition design
-Consumers should use concrete-state prefix/outcome equations and never reopen access/delegation internals. The no-spill premise is essential and already frozen in these rules. If a consumer needs an additional boundary not validated in C1, pause and extend C1 before continuing rule proofs.
+No new semantic definitions are needed. restored_unused_gas, restored_unused_gas_bound and restored_unused_gas_sub provide the scalar restoration boundary with premise x <= limit. Keep zero-cost aliases normalized at this boundary; do not let abbreviation rewriting replace every literal zero in semantic terms with stateCost. Existing charge/credit application equations remain the meter interface.
 
 #### Code structure
-Edit only proof bodies of frozen declarations. Replace the obsolete commented attempted proof/debug dump near lines 4855–4954 as part of the balance proof. Keep helpers local unless existing public use requires otherwise.
+Keep local arithmetic and any necessary consumer-boundary lemmas in prog/vfmProgScript.sml immediately before SPEC_Return_inner. Preserve all completed CALL and witness code. C2.4 owns only SPEC_Return_inner and strict local prerequisites; the already planned C3 owns the later Invalid/SELFDESTRUCT rules and remaining tail validation.
 
 ### C2.1: Balance and depth failure rules with native prefix machinery
 - Kind: `proof_group`
@@ -446,53 +450,113 @@ At the start of the prepared proof, before fs/gvs expands aliases, use the gasCo
 #### Not to try
 Do not repeatedly move and AC-normalize call_gas assumptions. Do not send expanded conditional cost expressions to ARITH_TAC, use global AC simplification, unfold semantic internals in the consumer, or replace the checked adapter. Do not change frozen statements, introduce proof-search fallbacks or raise tactic timeouts. Do not claim component closure merely because SPEC_Call checks: step_call_prepared must also check.
 
-### C2.3: Frozen historical auxiliary falsehood gate
-- Kind: `unprovability_gate`
-- Risk: 5
-- Work priority: 0
-- Work units: 0
-- Rationale: inner_revert_spill_execution is a baseline theorem required by the unchanged-name/statement contract. Its arbitrary params.newAccountCharged appears to permit a refund absent from its claimed output; the build failure exposes this branch but is not a checked negation.
-- Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0032
-
-#### Progress note
-E0032 supplies provenance and a failed execution-equality proof, not falsehood certification. Preserve completed CALL/precompile work without treating it as closure of the frozen tail obligation.
-
-#### Summary
-Freeze all baseline declarations, including local historical witnesses. Block ordinary proof work while checking inner_revert_spill_execution. Use a separate prog theory to test the charged branch. If falsehood is checked, report the exact failing conjunct and a sufficient repair without applying it.
-
-#### Not to try
-Do not specialize params.newAccountCharged in any baseline statement, delete the auxiliary, or infer falsehood solely from an unclosed tactic goal.
-
-#### Argument
-The baseline auxiliary universally quantifies params. Setting newAccountCharged to true reaches credit_new_account after reverting the child. The claimed output retains the parent's zero reservoir; a positive credited reservoir would refute the step equality, and hence the entire conjunction, irrespective of the later conjuncts.
-
-#### Definition design
-Reuse the exact let-bound construction at inner_revert_spill_execution, with explicit concrete records for remaining parameters. Prove the observed parent reservoir after step and its difference from out; do not change the execution semantics or auxiliary statement.
-
-#### Code structure
-Put the probe in an independent theory under prog/, reusing the existing probe imports/helpers where useful; it must not import the currently broken vfmProgTheory. Preserve the precompile composition and witnesses already checked. Ordinary completion of this subtree remains deferred until the gate is resolved.
-
-### C2.3.1: Check charged inner-revert baseline counterexample
-- Kind: `unprovability_probe`
+### C2.3: Repair authorized uncharged inner-revert witnesses
+- Kind: `proof_group`
 - Risk: 2
 - Work priority: 0
+- Work units: 0
+- Rationale: The counterexample concerns an unconstrained construction flag, not a frozen CALL rule. Pinning the child flag to F removes precisely the extra account-creation refund identified by accepted E0033; the remaining work is concrete execution and witness integration.
+- Supersedes: C2.3
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0033
+
+#### Progress note
+Replaces the human-decision gate following M0001. E0033 remains evidence against the old unrestricted auxiliary, not a proof of either repaired witness.
+
+#### Summary
+Set newAccountCharged := F in the authorized child witness constructions. Retain the checked charged-child counterexample as historical evidence. Validate concrete execution first, then the negative-SPEC witness and its direct consumers. Do not change any frozen SPEC rule.
+
+#### Not to try
+Do not repair the old universally quantified witness using tactics: it is false. Do not infer that the negative-SPEC auxiliary disproves the current frozen SPEC_Return rules; it concerns its explicitly constructed pre/post pair. Do not use this authorization to alter public theorem statements.
+
+#### Argument
+The failing child restores its state gas and may additionally credit account creation when its message carries newAccountCharged. The intended spill witness isolates spill accounting, so its child must explicitly have newAccountCharged = F. With that choice the existing concrete execution target remains parent gasUsed = 1; the negative-SPEC witness still distinguishes this execution from its claimed gasUsed = 0 postcondition.
+
+#### Definition design
+Do not change semantics or introduce a new general abstraction. Repair only record constructions in local witnesses: add newAccountCharged := F to child message p, consistently in the execution lemma and its consumer. Do not constrain the parent's message unless a separately checked failing-child witness requires that change. The concrete step equation is the boundary interface for the separation-logic consumer.
+
+#### Code structure
+All edits remain in prog/. Keep the two local lemmas at their current positions in vfmProgScript.sml. Retain prog/vfmProgChargedRevertProbeScript.sml as evidence of the original charged case, rather than rewriting its counterexample into an uncharged case. No edits to spec/ or frozen SPEC statements.
+
+### C2.3.1: Retained checked charged inner-revert counterexample
+- Kind: `historical_evidence`
+- Risk: 1
+- Work priority: 0
+- Work units: 0
+- Rationale: Accepted E0033 establishes the charged-child mismatch; it is retained only as evidence explaining the construction repair.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: E0033, C2.3.1
+
+#### Progress note
+Historical evidence remains valid against the original unrestricted construction. It does not certify the newly restricted auxiliary.
+
+#### Summary
+Retain the accepted charged-child counterexample. The old construction allowed params.newAccountCharged = T and therefore an additional refund. No executable work or task falsehood conclusion follows from this historical leaf.
+
+### C2.3.2: Pin child flag and validate concrete witness execution
+- Kind: `proof`
+- Risk: 2
+- Work priority: 10
 - Work units: 3
-- Rationale: The failure isolates one boolean branch of a finite concrete execution. A reservoir projection suffices to refute the claimed equality without proving the whole SPEC rule.
+- Rationale: The existing proof already computes both steps and well-formedness; fixing the child flag selects the intended refund branch.
 - Checkpoint: yes
 
 #### Summary
-Instantiate the baseline construction with newAccountCharged=T and explicit finite records. Compute the parent reservoir after the revert. Prove the baseline step equality false in an independent checked theory. Report the tightest sufficient repair only as a note.
+Repair inner_revert_spill_execution with an explicitly uncharged child. Audit other local witness constructions for the same unconstrained failing-child flag. Prove the concrete execution boundary before resuming consumers.
 
 #### Statement
-For a concrete instantiation of the exact let bindings in inner_revert_spill_execution with params.newAccountCharged = T, prove step s <> (INL (),out), preferably via (FST (HD (SND (step s)).contexts)).stateGasLeft = 183600 while (FST (HD out.contexts)).stateGasLeft = 0. The value 183600 is the probe prediction, not an established fact.
+inner_revert_spill_execution retains its current conclusion wf_state s /\ step s = (INL (),out) /\ FST (step out) = INR NONE /\ (FST (HD (SND (step out)).contexts)).gasUsed = 1; the sole construction change is newAccountCharged := F in p. Apply the same owner-authorized construction repair to any other local witness whose failing child pops with an unconstrained flag.
 
 #### Approach
-Choose explicit records for params, ctx_base and initial, retaining every override in the frozen construction; use computation and small normalization lemmas to evaluate the state-gas projection. Build the independent probe with holbuild and record the concrete assignment, checked negation, and baseline correspondence. If confirmed, stop task proof work and report that the step-equality conjunct fails; assess newAccountCharged=F as a sufficient repair without editing the original statement. If the prediction fails, record the actual result and request gate resolution.
+Add the field to p at lines 6601–6602 and compute the existing two-step execution with the state-gas refund branch explicitly reduced. Audit local concrete witnesses in this file and their direct uses for the same pattern; report the names and exact construction changes, with checked equations for each changed execution witness. Keep the concrete charged probe unchanged.
 
 #### Not to try
-Do not import the broken target theory or use its unproved auxiliary. Do not raise tactic timeouts, change frozen statements, or present symbolic failed proof residuals as a concrete checked counterexample.
+Do not change output gas values to accommodate an unconstrained charged case. Do not change any SPEC rule or general-purpose helper statement under the witness authorization.
+
+### C2.3.3: Integrate repaired negative-SPEC witness and validate consumers
+- Kind: `proof`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: The consumer already invokes the execution boundary; matching the child construction restores that interface without changing its separation-logic argument.
+- Dependencies: C2.3.2
+- Checkpoint: yes
+
+#### Summary
+Add the identical child flag assignment in SPEC_Return_inner_spill_counterexample. Revalidate this lemma and direct consumers of all repaired witnesses. Run the whole-theory build to establish that this auxiliary blocker is removed; unrelated remaining failures return to their existing components.
+
+#### Description
+Audit the diff to ensure the only statement changes are the owner-authorized local witness constructions. Preserve all frozen SPEC theorem text and task prohibitions. Any commit must use the required task trailer; final whole-task clean-status certification remains with the existing completion component.
+
+#### Approach
+Update p at lines 6654–6655 to match the repaired execution lemma and retain the existing irule boundary at line 6722. Keep the trace and gas discrepancy argument unchanged; update any direct witness consumer found by the audit consistently. Run holbuild --max-heap 12000 -j8 build vfmProgTheory, using an adequate wall-clock timeout without changing tactic_timeout; record whether these lemmas passed and the next failure if any.
+
+#### Not to try
+Do not unfold the complete execution semantics again inside the negative-SPEC consumer; use inner_revert_spill_execution. Do not fix sibling theorem failures in this component or claim whole-task completion merely because these witnesses pass.
+
+### C2.4: Normalize zero-cost Revert branch and finish SPEC_Return_inner
+- Kind: `proof`
+- Risk: 2
+- Work priority: 40
+- Work units: 5
+- Rationale: The failure log contains Abbrev(stateCost = 0) and the required execution bound with stateCost still present. The checked arithmetic lemmas already prove the restoration identity; no new invariant or induction is required.
+- Dependencies: C2.3.3
+- Checkpoint: yes
+
+#### Summary
+Prove SPEC_Return_inner without changing its statement. Normalize the Revert branch's zero-valued aliases before using restored_unused_gas. Reuse the existing scalar bound/subtraction interfaces for settlement rather than asking the separation context to solve arithmetic. Validate all Return destination branches and build through this theorem; later tail failures belong to C3.
+
+#### Description
+The current branch has substituted the alias stateCost for literal zeros even inside parse_code and absorb_state_gas. Eliminate that alias once at branch entry, rather than patching each consequence independently. Existing arithmetic helpers at lines 6756–6773 are sufficient for the reported failure. Build validation should report the first subsequent theorem if the whole theory still fails; this component closes only when all of SPEC_Return_inner checks.
+
+#### Statement
+SPEC_Return_inner exactly as currently stated at prog/vfmProgScript.sml:6776–6839; no premise or postcondition changes.
+
+#### Approach
+In the Revert branch immediately after selecting inst = Revert, explicitly eliminate Abbr `stateCost` (and the zero codeCost/gasCost/returnCode aliases as needed) before applying restored_unused_gas; the log's assumption 60 then gives g + memory_cost m offset sz <= p.gasLimit. Normalize calleeGasLeft and spillRefund to obtain the identity with x = g + memory_cost m offset sz, and use restored_unused_gas_bound/sub for the caller guard and subtraction instead of broad arithmetic search. Finish the existing Revert, Return-Memory and Return-Code branches with the checked charge/credit/repayment interfaces and UPDATE_evm2set_without_original; if another semantic boundary is missing, escalate with its small residual statement before adding unplanned machinery.
+
+#### Not to try
+Do not run asm_simp_tac pure_ss on the restoration identity while stateCost = 0 is still hidden by Abbrev: the bound will not match. Do not unfold the entire separation context to prove scalar arithmetic, copy giant assumptions into theorem plumbing, or introduce TRY/ORELSE proof-search dispatch. Do not edit later C3 rules in this component.
 
 ### C3: Validate and repair remaining tail rules
 - Kind: `proof`
