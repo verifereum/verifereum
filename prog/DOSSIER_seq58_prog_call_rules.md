@@ -10,7 +10,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.2 | stuck | risk_mismatch | E0002 | Strategist review meter boundary composition/normalization design before further proof work. |
 | C1.2.1 | proved |  | E0003 |  |
 | C1.2.2 | proved |  | E0004 |  |
-| C1.2.3 | stuck | risk_mismatch | E0008 | Review transport matching/type issue, preferably validate transport directly on small pop+opaque-cont expression before retrying full prefix. Request explicit acceptance and next-session actionable guidance. |
+| C1.2.3 | proved |  | E0009 |  |
 
 ## C1.1
 
@@ -99,12 +99,11 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch`
-- latest episode: `E0008`
-- blocker: Success-bind transport rewrites do not match actual prefix after stack pop equation, despite transport lemma and named spine bridges all building.
-- actual effort: 1 sessions, 2 msgs, 28 steps, 27 tools, 11 holbuild, 3,188,496 tok (3,182,612 in, 5,884 out, 3,140,864 cached), 913.3s, $0.4564224
-- next: Review transport matching/type issue, preferably validate transport directly on small pop+opaque-cont expression before retrying full prefix. Request explicit acceptance and next-session actionable guidance.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0009`
+- blocker: 
+- actual effort: 2 sessions, 2 msgs, 36 steps, 35 tools, 15 holbuild, 2,585,795 tok (2,580,724 in, 5,071 out, 2,436,352 cached), 3647.2s, $0.5830892
 
 ### Attempts / Evidence
 
@@ -119,9 +118,11 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 - `E0008` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 28 steps, 27 tools, 11 holbuild, 3,188,496 tok (3,182,612 in, 5,884 out, 3,140,864 cached), 913.3s, $0.4564224)
   - Opaque access/meter program wrappers and applications, call_prefix_prog wrapper, actual step_call_prefix_bridge -> All build clean, and actual step_call matches named arbitrary-continuation prefix. Concrete prefix evaluation still absent. (`TO_seq58_prog_call_rules-20261030T113558Z_m0173_t001`, `TO_seq58_prog_call_rules-20261030T113558Z_m0187_t001`)
   - Derive pop success then drule call_bind_success and rewrite derived universal continuation equality -> No rewrite of outer prefix bind. Inspection prints monad_bind in derived transport. Qualified vfmExecution$bind and annotated prefix result type, still no match. Removed unfinished application theorem, retained checked wrappers/bridge. (`TO_seq58_prog_call_rules-20261030T113558Z_m0177_t001`, `TO_seq58_prog_call_rules-20261030T113558Z_m0185_t001`)
+- `E0009` (proved, , actual effort: 2 sessions, 2 msgs, 36 steps, 35 tools, 15 holbuild, 2,585,795 tok (2,580,724 in, 5,071 out, 2,436,352 cached), 3647.2s, $0.5830892)
+  - Typed opaque continuation diagnostic via backward irule call_bind_success and call_pop_stack_apply -> call_pop_bind_apply builds with actual stack type (256 word) list. No forward polymorphic specialization needed. (`TO_seq58_prog_call_rules-20261030T113558Z_m0209_t001`)
+  - Compose opaque prefix by pop transport, restricted memory/access bind reductions, matched meter equation and record normalization -> call_prefix_prog_apply proved for arbitrary cont, all 6+vo operands and explicit final gas/memory/stateGasLeft/context/domain updates. Frozen rules untouched. Explicit pair_case_thm and sum_case_def were needed with std_ss; final srw_ss without assumptions avoids operand-name expansion. (`TO_seq58_prog_call_rules-20261030T133624Z_m0236_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_prog_call_rules-20261030T113558Z_m0187_t001` (use `read_tool_output` for exact output)
-- `TO_seq58_prog_call_rules-20261030T113558Z_m0177_t001` (use `read_tool_output` for exact output)
-- `TO_seq58_prog_call_rules-20261030T113558Z_m0185_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T113558Z_m0209_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0236_t001` (use `read_tool_output` for exact output)

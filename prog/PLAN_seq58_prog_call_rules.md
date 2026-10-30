@@ -113,31 +113,37 @@ Derive the two required charge inequalities in the exact operand order before un
 #### Not to try
 Do not simplify arithmetic over unresolved operation applications or branch on their results; the operation equations already establish success.
 
-### C1.2.3: Compose the CALL prefix using opaque segments and arbitrary continuations
+### C1.2.3: Validate typed opaque transport and compose the CALL prefix
 - Kind: `boundary_lemma`
 - Risk: 2
-- Work priority: 30
+- Work priority: 0
 - Work units: 5
-- Rationale: The structural regrouping now builds. The remaining work is finite success-bind composition of checked pop, memory, access and meter equations; opaque segment wrappers and an arbitrary continuation prevent ambient simplification from destroying that grouping.
-- Dependencies: C1.2.1, C1.2.2
+- Rationale: Pop, access and metering equations and the bridge already build. The remaining work is composition of success equations; a minimal typed transport check isolates the reported matching problem without unfolding the CALL continuation.
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0007
+- Carries progress/evidence from: E0008
 
 #### Progress note
-Retain step_call_segments and the checked structural helpers as partial source evidence only. E0007 does not certify the still-unproved prefix application obligation; a new checked composition proof is required.
+Retain the checked wrappers and structural bridge from E0008 as source evidence, not a certificate for the still-unproved prefix application. Replace the unsuccessful forward-transport recipe with a typed opaque diagnostic; the obligation remains prefix composition.
 
 #### Summary
-Keep the checked step_call_segments regrouping and operation boundaries. Give the access and meter programs opaque local names so simplification cannot flatten their internals. Prove success-bind transport once, with an arbitrary continuation. Evaluate the prefix independently of its failure/depth/proceed tail, then instantiate the tail only in the final bridge. No frozen rule proof starts before this validation builds.
+Keep all checked segment wrappers and step_call_prefix_bridge. First validate pop_stack followed by a polymorphic opaque continuation, with the result type present in the goal. Then prove the arbitrary-continuation prefix application by composing pop, memory-info, access and metering success equations. Do not begin frozen rule proofs in this component. Build the probe theory and checkpoint the resulting application lemma.
+
+#### Description
+The diagnostic is authorized work within this leaf, not a new descendant or a replacement semantic model. The result type 'a occurs only in the continuation/result, so forward application to a success premise can leave it specialized independently of the use site. Backward application from the typed bind goal avoids that possible mismatch; a direct restricted bind_def reduction avoids transport entirely. Keep the successful diagnostic as a small local lemma only if used by the final proof. Exact types must be taken from the source rather than assuming the illustrative evm_word name exists. If matching still fails on the minimal expression, report that tiny goal and theorem types instead of attempting another full-spine normalization.
 
 #### Statement
-Required outputs: (1) local success-bind transport: f s = (INL x,s') ==> (do y <- f; K y od) s = K x s'; (2) named local access/meter segment definitions with application equations equivalent to call_access_segment and call_meter_segment; (3) a prefix-with-arbitrary-continuation application theorem evaluating pop_stack, memory_expansion_info, access, and meter to the explicit updated state and values; (4) the actual step_call prefix bridge, retaining precisely the balance/depth/proceed continuation of step_call_segments. Preserve the existing prefix side conditions and explicit gas/state-gas update conclusions; do not strengthen or change any frozen theorem.
+First prove a local diagnostic, explicitly typing K : evm_word list -> execution_state -> 'a execution_result (use the actual stack element type from the source):
+ s.contexts = (c,k)::cs /\ n <= LENGTH c.stack ==>
+ vfmExecution$bind (pop_stack n) K s =
+ K (TAKE n c.stack) (s with contexts := (c with stack := DROP n c.stack,k)::cs).
+Then prove call_prefix_prog_apply for arbitrary cont under the existing prefix premises: sufficient stack length (6 + vo), vo = if call_has_value op then 1 else 0, named stack operands, max expansion range, access_check/delegate_check, and the exact metering premises of call_meter_prog_apply. Its conclusion is call_prefix_prog op cont s = cont addr value argsOffset argsSize retOffset retSize rb.accounts code charged c.msgParams.callee stipend sFinal, where code is the case expression in call_access_prog_apply and sFinal updates rollback/newDom and the top context's stack, memory, gasUsed and stateGasLeft exactly as the existing apply lemmas specify; all other fields and contexts are preserved.
 
 #### Approach
-In prog/vfmProgCallPrefixProbeScript.sml, introduce opaque names for exactly the access and meter do-blocks already checked, and transport their application equations by unfolding each wrapper only in its own boundary proof. Use the checked step_call_segments equality to obtain a bridge with these names, using pure_ss and explicit pair beta reduction, not the ambient simplifier. Prove the prefix evaluation with a universally quantified tail K (taking all values the tail needs); eliminate one outer bind via success-bind transport at a time, applying the checked operation boundary before proceeding. Keep scalar extraction expressions in their original EL form until the small operation goal needs a supplied equality; normalize records separately from the program. Finally instantiate K with the existing tail, which must not be traversed or simplified during prefix evaluation. Build vfmProgCallPrefixProbeTheory before claiming completion.
+In prog/vfmProgCallPrefixProbeScript.sml, first prove the minimal displayed pop/opaque-K diagnostic using call_pop_stack_apply and a restricted bind_def rewrite, or backward irule call_bind_success with the continuation/result type fixed by the goal. Check it before composing: if it fails, inspect the actual head constants and types of the goal and transport theorem (monad_bind versus vfmExecution$bind); normalize only that alias, and do not speculate that qualifying the name resolves a type mismatch. For the prefix application unfold call_prefix_prog_def only, keep cont opaque, and peel one outer bind at a time using the checked pop, memory_expansion_info_split, call_access_prog_apply and call_meter_prog_apply equations; use pure_ss with explicit constructor projections/LET_THM and record-update normalization, and close the final continuation equality by congruence/reflexivity. Validate the probe theory with holbuild under the unchanged timeout; record the exact resulting theorem and build evidence for checkpoint review.
 
 #### Not to try
-Do not apply srw_ss or unrestricted simp to the whole step_call continuation: ambient bind_assoc destroys the segment interface and EL-to-HD normalization spoils scalar naming. Do not recreate a multi-kilobyte ASSUME-quoted continuation or seven reverse-naming rewrite chains across the tail. Do not unfold named segment definitions in consumers; use their success equations. Do not count the proved regrouping equality alone as closure of actual-spine composition. No new deeper child components are needed.
+Do not drule a polymorphic success theorem from only the producer equation and expect its conclusion-only result type to match a later continuation. Do not expand access/meter wrapper definitions during composition, invoke broad srw_ss normalization on the whole spine, or expose the concrete balance/depth/proceed continuation. Avoid manual MATCH_MP/CONJ plumbing and quoted copies of large premises. Do not change frozen statements, semantics, tactic timeouts, or files outside prog/.
 
 ### C1.3: Validate refund, exception and tail normalization interfaces
 - Kind: `boundary_lemma`
