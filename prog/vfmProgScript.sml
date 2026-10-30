@@ -7387,3 +7387,10 @@ Definition zero_value_call_def:
     initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
     gas ≤ (FST (HD s.contexts)).msgParams.gasLimit
 End
+
+(* Build-time integrity audit: exported facts must have no proof-search oracle. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail ("Unexpected oracle in " ^ name)
+  end) (DB.thms "vfmProg");

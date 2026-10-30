@@ -187,3 +187,33 @@ Remaining probe source ranges to transfer, in dependency order, are 46-92,
 `step_inst_call`. New program definitions use the main constants, not the
 probe theory. C2.1.1 still needs this source transfer and explicit main-build
 acceptance through `call_refund_unuse_apply`; inventory is not validation.
+
+## Final whole-theory audit (2026-10-30)
+
+All CALL, precompile, Return, Invalid and SELFDESTRUCT rules now build in
+`vfmProgTheory`. Independent probe theories were validated before the frozen
+rules were repaired. The original declarations are retained; the only
+statement exceptions are the two local witness constructions explicitly
+authorized by the owner, setting the child `newAccountCharged := F`.
+No public SPEC statement was weakened. Baseline for the scoped diff remains
+`48d421654525f06680177d4f5d64374cd56f6320`; all changed paths are under `prog/`.
+
+The whole theory has no `cheat`, `mk_thm`, `axiom`, `hh`, or timeout override.
+No new TRY/ORELSE search wrappers were introduced. A build-time audit at EOF
+checks the tags of every exported fact, rejecting any oracle other than
+`DISK_THM` (the current build produces no generated Theory.txt index).
+
+Final build: `holbuild(targets=["vfmProgTheory"], timeout=1800)` succeeds.
+The public build log contains eight `Type.mk_vartype` diagnostics for internal
+`%%gen_tyvar%%` names, all *before* `Created theory "vfmProg"`; these arise
+while loading dependencies, not while parsing this source. HOL's
+`src/0/Type.sml` uses precisely that prefix for `gen_tyvar` (lines 353-359),
+while `mk_vartype` warns for non-user variable syntax (lines 212-220).
+There are no source-parser warnings and no proof/cheat warnings. No warning
+suppression or change to dependencies was applied.
+
+Audit evidence: TO_seq58_prog_call_rules-20261030T162928Z_m0811_t001
+(successful final build), m0813_t001 (diagnostics precede theory creation),
+m0818_t001 (kernel generated-variable naming), m0819_t001 (trust/timeout
+construct scan), m0820_t001 (prog-only diff). Earlier statement audit and
+owner-authorized witness repairs are recorded in episodes E0034-E0038.

@@ -27,6 +27,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C2.3.3 | proved |  | E0035 |  |
 | C2.4 | proved |  | E0036 |  |
 | C3 | proved |  | E0037 |  |
+| C4 | proved |  | E0039 | Oracle review then scoped final commit with required trailers and final clean-status/build check. |
 
 ## C1.1
 
@@ -491,3 +492,28 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T162928Z_m0769_t001` (use `read_tool_output` for exact output)
+
+## C4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0039`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 13 steps, 12 tools, 1 holbuild, 699,042 tok (697,595 in, 1,447 out, 677,248 cached), 67.9s, $0.1228888
+- next: Oracle review then scoped final commit with required trailers and final clean-status/build check.
+
+### Attempts / Evidence
+
+- `E0038` (progressed, other, actual effort: 1 sessions, 3 msgs, 32 steps, 31 tools, 1 holbuild, 3,965,155 tok (3,962,092 in, 3,063 out, 3,751,808 cached), 568.0s, $0.8263788)
+  - Rebuild complete theory with build-time Tag.dest_tag check on DB.thms vfmProg. -> Whole theory builds in 341s; exported facts carry no oracle other than DISK_THM. Generated Theory.txt absent, so source-level audit enforces tags directly. Audit code is the only uncommitted source diff. (`TO_seq58_prog_call_rules-20261030T162928Z_m0797_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0798_t001`)
+  - Audit diff scope, frozen declarations and warnings. -> Correct baseline is 48d42165 (per CALL_RULES_AUDIT); only prog paths differ. Source diff preserves original statements apart from owner-authorized two local p constructions. No cheat. Existing TRY/ORELSE sites predate task; no new search wrappers. Build.log has eight Type.mk_vartype non-standard %%gen_tyvar%% warnings, requiring classification/resolution before final no-parser-warning claim. (`TO_seq58_prog_call_rules-20261030T162928Z_m0802_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0780_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0804_t001`)
+- `E0039` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 12 tools, 1 holbuild, 699,042 tok (697,595 in, 1,447 out, 677,248 cached), 67.9s, $0.1228888)
+  - Final whole-theory build and trust/scope audit. -> vfmProgTheory succeeds; exported oracle tags checked during build; no cheat or prohibited trust constructs; only prog paths changed. Eight internal generated-type diagnostics precede creation of vfmProg, not source parser warnings. Final audit documented; task status file protected, left unchanged. (`TO_seq58_prog_call_rules-20261030T162928Z_m0811_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0813_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0818_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0819_t001`, `TO_seq58_prog_call_rules-20261030T162928Z_m0820_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0811_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0813_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0821_t001` (use `read_tool_output` for exact output)
