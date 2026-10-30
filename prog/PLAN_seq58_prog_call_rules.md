@@ -4,10 +4,10 @@
 
 ### C1: Validate shared state-gas proof machinery before repairing frozen rules
 - Kind: `proof_group`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: The frozen CALL hypotheses explicitly exclude a new spill; charging and refunding therefore have direct record-update proofs. The known obstruction is abbreviation normalization, not a missing semantic invariant.
+- Rationale: Derived from child component C1.2 risk 3. Access and delegation segments validated, but full prefix composition and meter segment not validated; broad normalization times out and staged charge leaves nested monadic continuation requiring better boundary interface.
 - Required for completion: yes
 
 #### Summary
@@ -42,26 +42,94 @@ Record whitespace-normalized statements before edits and compare SPEC_Call_fail_
 #### Not to try
 Do not interpret a prior cheat-backed whole-theory build as validation. Do not change statement text to make a helper apply.
 
-### C1.2: Prove access/delegation and CALL prefix boundaries
+### C1.2: Validate CALL prefix through small operation boundaries
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 20
+- Work units: 0
+- Rationale: The failed residual has known-success operations on an explicit nonempty context. Separate operation equations eliminate nested continuations before arithmetic normalization.
+- Dependencies: C1.1
+- Checkpoint: yes
+- Progress transition: `refinement`
+
+#### Progress note
+E0002 supplies partial access/delegate and no-spill charge evidence, not a completed prefix proof. Retain that source and validate it with the new composition obligations.
+
+#### Summary
+Retain the build-clean access and delegate segments. Prove short meter operation equations before composing any bind spine. Normalize arithmetic only on scalar goals. Validate the complete reusable CALL prefix before touching frozen rules.
+
+#### Approach
+Build short scalar and primitive-operation boundaries first, then meter composition, then the actual access-plus-meter prefix. Existing successful helpers remain source prerequisites, not certification of new descendants.
+
+#### Not to try
+Do not run gvs with AC ADD_ASSOC ADD_COMM across nested bind cases. Do not unfold consume_gas/get_current_context globally through the remaining continuation. Do not compensate for RHS-only schematic parameters with long qspecl/ASSUME/MATCH_MP plumbing.
+
+#### Argument
+Under stateCost <= stateGasLeft the creation charge cannot spill into execution gas. The base execution charge therefore determines the gas_left supplied to call_gas; static checking and memory expansion preserve that meter. A successful dynamic charge and sender lookup finish the prefix. Each operation is evaluated on an explicit head context so the next bind reduces immediately, rather than exposing the entire continuation to rewriting.
+
+#### Definition design
+Use operation application equalities with s.contexts = (c,k)::cs as their interface. Conclusions must expose INL and the updated state, preserving rollback/domain fields. Conditional equations with parameters only in premises/RHS are elimination facts: establish their instantiated equation using irule and assumptions, then rewrite with that equation; do not expect simp to guess such parameters. No new semantic definitions or changed frozen statements.
+
+#### Code structure
+Validate helpers in prog/vfmProgCallPrefixProbeScript.sml. Keep definitions mirrored only for this independent probe; later integration must use the actual vfmProg boundary definitions. Mark helper theorems local. Do not edit frozen rule proofs during this subtree.
+
+### C1.2.1: Small meter operation application equations
 - Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 10
-- Work units: 8
-- Rationale: Each segment is straight-line monadic evaluation with access_check hypotheses and explicit state fields.
-- Dependencies: C1.1
+- Work units: 3
+- Rationale: Each equation evaluates a single operation on an explicit nonempty context; arithmetic is confined to one charge guard.
+
+#### Summary
+Keep charge_new_account_apply. Add explicit-head-context equations for successful consume_gas, optional static assertion, expand_memory, get_gas_left and get_callee. Validate these individually in the probe theory. Retain the existing access/delegate proofs unchanged unless interface use requires a small wrapper.
+
+#### Statement
+Required interfaces: s.contexts=(c,k)::cs /\ c.gasUsed+n <= c.msgParams.gasLimit ==> consume_gas n s = (INL (), s with contexts := (c with gasUsed := c.gasUsed+n,k)::cs); optional static assertion succeeds without state change when doStatic ==> ~c.msgParams.static; expand_memory updates only c.memory to buffer_extend expandBy c.memory; get_gas_left returns c.msgParams.gasLimit-c.gasUsed without state change; get_callee returns c.msgParams.callee without state change. Use actual source operation types and parenthesized record/pair syntax.
+
+#### Approach
+Prove each by unfolding only that operation and its primitive getters/setters. Resolve the addition-order guard on a separate scalar subgoal, using arithmetic or a narrowly directed equality; no AC normalization of a monadic continuation.
+
+#### Not to try
+Do not combine these into a single large normalization theorem whose proof expands the whole meter spine.
+
+### C1.2.2: Compose the no-spill meter segment
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: Once each operation returns an explicit INL/state pair, composition is finite bind reduction and scalar arithmetic.
+- Dependencies: C1.2.1
 - Checkpoint: yes
 
 #### Summary
-Prove a reusable access/delegate boundary with newRb/newDom outputs. Prove a CALL prefix equation through stack popping, access, execution charge, no-spill creation charge, memory expansion and dynamic gas charge. Leave the balance/depth continuation visible so the same equation serves all CALL outcomes.
+Restore call_meter_segment with the premises from E0002. Compose successful base charge, creation charge, static check, expansion, gas grant charge and sender lookup. Preserve all non-context state fields. Build the probe theory with no failing diagnostic fragment.
 
 #### Statement
-New local outputs: (1) the address/delegate segment computes the code selected by get_delegate and the cost dCost, updating only rollback/msdomain as specified by delegate_check; (2) under the frozen operand, access, gas and no-spill premises, the prefix reaches a caller with stack DROP (6+vOff) ss, memory em, gasUsed g+B+dynamicGas and stateGasLeft sg-stateCost, leaving stateGasSpilled unchanged. The remainder is exactly the balance test and subsequent set_return_data/depth/proceed_call continuation of step_call_def.
+call_meter_segment: use the attempted E0002 segment and premises s.contexts=(c,k)::cs, c.gasUsed+baseCost <= c.msgParams.gasLimit, c.gasUsed+baseCost+dynamicGas <= c.msgParams.gasLimit, (if charged then new_account_state_gas else 0)<=c.stateGasLeft, doStatic ==> ~c.msgParams.static, and call_gas value gas (c.msgParams.gasLimit-(c.gasUsed+baseCost)) 0 0=(dynamicGas,stipend). Result is INL(c.msgParams.callee,stipend), with memory extended, gasUsed=c.gasUsed+baseCost+dynamicGas, stateGasLeft reduced by the conditional creation charge; other fields unchanged.
 
 #### Approach
-Peel step_call_def in execution order using one bind at a time. Prove delegation by cases on get_delegate, normalize field equalities before applying access_address_split, and hide this expansion behind its boundary equation. Prove the prefix in short segments with explicit state equality interfaces; validate both value-offset cases and the charged/noncharged cases.
+Derive the two required charge inequalities in the exact operand order before unfolding binds. Peel one bind, use its operation equation, reduce its result case, and repeat; use the call_gas premise only after get_gas_left is reduced. Reconcile final update order on a separate record-equality goal.
 
 #### Not to try
-Do not copy the long nested qpat_assum/manual theorem plumbing of the existing step_call_prepared proof. Do not add sender-balance or depth-success premises to the common prefix.
+Do not simplify arithmetic over unresolved operation applications or branch on their results; the operation equations already establish success.
+
+### C1.2.3: Validate access and meter composition against the CALL spine
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 30
+- Work units: 5
+- Rationale: Access/delegate effects are already evaluated; composition now uses their explicit state and the validated meter interface.
+- Dependencies: C1.2.2
+- Checkpoint: yes
+
+#### Summary
+Complete the originally required reusable CALL prefix boundary. Match the actual step_call order and expose the state at the balance/depth or child-entry branch. Recheck access/delegate equations and the no-spill meter together. Frozen rule proofs remain untouched until shared machinery validation is complete.
+
+#### Approach
+Read the actual step_call spine and peel only to the prefix boundary. For call_access_segment or call_delegate_segment, first derive the specific application equality via irule against the current state and delegate_check premise, then rewrite that equality; do not ask simp to infer newRb/newDom/cost. Apply call_meter_segment after access effects, preserving its rollback/domain result, and validate the prefix on the actual expression rather than only an invented stand-alone program.
+
+#### Not to try
+Do not duplicate delegation case analysis at every frozen consumer. Do not treat an independent probe build as a proof of the frozen SPEC rules, or silently alter call_gas ordering to ease composition.
 
 ### C1.3: Validate refund, exception and tail normalization interfaces
 - Kind: `boundary_lemma`
