@@ -20,6 +20,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C2.1.1 | proved |  | E0018 |  |
 | C2.1.2 | proved |  | E0023 |  |
 | C2.1.3 | proved |  | E0020 |  |
+| C2.2 | proved |  | E0026 |  |
 
 ## C1.1
 
@@ -328,3 +329,27 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0442_t001` (use `read_tool_output` for exact output)
+
+## C2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0026`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 13 steps, 12 tools, 5 holbuild, 1,642,927 tok (1,641,201 in, 1,726 out, 1,614,720 cached), 146.2s, $0.2316940
+
+### Attempts / Evidence
+
+- `E0024` (progressed, other, actual effort: 2 sessions, 2 msgs, 40 steps, 39 tools, 10 holbuild, 3,507,236 tok (3,503,365 in, 3,871 out, 3,332,992 cached), 595.2s, $0.7127552)
+  - Port depth prefix-result application into SPEC_Call and retain proceed_call/frame tail; remove obsolete delegation residual branches. -> SPEC_Call now checks; call_gas_cost_covers_stipend checks after explicit MIN case split; build reaches existing step_call_prepared proof failure. (`TO_seq58_prog_call_rules-20261030T153638Z_m0538_t001`)
+- `E0025` (stuck, risk_mismatch, actual effort: 2 sessions, 3 msgs, 55 steps, 54 tools, 16 holbuild, 5,171,581 tok (5,164,687 in, 6,894 out, 4,968,576 cached), 1059.6s, $0.9580196)
+  - Reuse prefix adapter and successful continuation in SPEC_Call; remove old delegation result plumbing and update frame branch order. -> SPEC_Call fully checks; stipend cost helper checks after MIN split. Build reaches step_call_prepared. (`TO_seq58_prog_call_rules-20261030T153638Z_m0538_t001`)
+  - Replace prepared proof's obsolete semantic expansion with prefix adapter; simp/fs/gvs aliases then isolate call_gas and bound for narrow AC. -> Adapter witnesses accepted, but simplification yields 4 alias-expanded leaves. Global fs AC timed out; narrow AC plus decide_tac/ARITH_TAC failed on nested-if cost bound. Need better normalization of prepared theorem's explicit equalities rather than consumer aliases. (`TO_seq58_prog_call_rules-20261030T153638Z_m0548_t001`, `TO_seq58_prog_call_rules-20261030T153638Z_m0554_t001`)
+- `E0026` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 12 tools, 5 holbuild, 1,642,927 tok (1,641,201 in, 1,726 out, 1,614,720 cached), 146.2s, $0.2316940)
+  - Introduce local elementary base-cost bound; derive before alias expansion, then gvs EL_TAKE and split call_has_value for stack selectors. Normalize final continuation assumptions together with goal via gvs. -> SPEC_Call, all intervening helpers, and step_call_prepared check. Build advances to proceed_call_precompile_success_meter, outside this component. (`TO_seq58_prog_call_rules-20261030T153638Z_m0571_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T153638Z_m0571_t001` (use `read_tool_output` for exact output)

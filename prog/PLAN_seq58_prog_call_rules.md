@@ -420,20 +420,30 @@ Do not add hypotheses to frozen SPEC statements. Do not unfold call_prefix_prog_
 ### C2.2: Successful entry and prepared CALL equation
 - Kind: `proof`
 - Risk: 2
-- Work priority: 10
-- Work units: 5
-- Rationale: The successful continuation is exactly the remainder exposed by the validated prefix.
-- Dependencies: C1, C2.1
+- Work priority: 20
+- Work units: 3
+- Rationale: The checked prefix/result-variable adapter supplies the semantic equation. The review identifies a bounded local repair: establish the base execution bound while cost aliases are still named, then normalize that fact with the adapter premises. No new semantic invariant or definition is needed.
+- Dependencies: C2.1.2, C2.1.3
 - Checkpoint: yes
+- Progress transition: `refinement`
+
+#### Progress note
+Retain the current SPEC_Call proof and stipend repair as source progress, but do not certify the rejected C2.2 closure. Recheck both outputs after repairing step_call_prepared. E0025 and the subsequent review identify the remaining local arithmetic/normalization issue; they are not proof certificates.
 
 #### Summary
-Repair SPEC_Call and step_call_prepared without changing their statements. Validate every intervening helper declaration, including call_gas_cost_covers_stipend, call_stack_after_pop_has_room and call_static_check_success. Reuse the common prefix instead of duplicating its expansion.
+Preserve the frozen SPEC_Call and step_call_prepared statements. Keep the existing successful-entry proof and stipend repair. Repair the prepared consumer by deriving its base execution bound before expanding cost aliases. Rebuild and require step_call_prepared to check before claiming closure.
+
+#### Description
+This component owns the local arithmetic helper, if needed, as well as the prepared consumer repair. The helper is elementary infrastructure for this one proof, not a new semantic prerequisite. Preserve the validated prefix and result-variable adapter rather than reopening CALL semantics.
 
 #### Statement
-Frozen SPEC_Call and step_call_prepared and all intervening declarations through step_call_prepared.
+Prove the existing frozen statements of SPEC_Call and step_call_prepared in prog/vfmProgScript.sml without any hypothesis or conclusion changes.
 
 #### Approach
-Use balance sufficiency and LENGTH cs < 1024 to select proceed_call after the prefix. For step_call_prepared derive the base execution-cost bound from g+gasCost ≤ gasLimit and expose exactly its frozen updated-state argument; for SPEC_Call finish the existing separation-logic entry/frame argument.
+At the start of the prepared proof, before fs/gvs expands aliases, use the gasCost equality and total bound to establish `g + (static_gas op + access_cost rb addr + vCost + dCost + mCost) <= p.gasLimit`. If needed, first prove a [local] lemma `!a b c d e f h n:num. a + (b + c + d + e + f + h) <= n ==> a + (b + c + d + e + f) <= n` by elementary arithmetic, and apply it by matching to named quantities; retain the resulting base bound through exactly the normalization used for adapter obligations. Apply the existing result-variable adapter with narrowly targeted rewrites, run `holbuild --max-heap 12000 -j8 build vfmProgTheory`, and if it still fails report every remaining goal and the checked boundary, not only the first goal.
+
+#### Not to try
+Do not repeatedly move and AC-normalize call_gas assumptions. Do not send expanded conditional cost expressions to ARITH_TAC, use global AC simplification, unfold semantic internals in the consumer, or replace the checked adapter. Do not change frozen statements, introduce proof-search fallbacks or raise tactic timeouts. Do not claim component closure merely because SPEC_Call checks: step_call_prepared must also check.
 
 ### C2.3: Precompile CALL composition and witnesses
 - Kind: `proof`
