@@ -10,6 +10,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.2 | stuck | risk_mismatch | E0002 | Strategist review meter boundary composition/normalization design before further proof work. |
 | C1.2.1 | proved |  | E0003 |  |
 | C1.2.2 | proved |  | E0004 |  |
+| C1.2.3 | progressed | other | E0005 | State a full step_call prefix equation exposing the balance/depth continuation; peel pop/memory-info/access then derive instantiated meter equation. Do not touch frozen rules until C1 validation complete. |
 
 ## C1.1
 
@@ -93,3 +94,23 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T113558Z_m0083_t001` (use `read_tool_output` for exact output)
+
+## C1.2.3
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0005`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 987,621 tok (985,996 in, 1,625 out, 971,520 cached), 82.4s, $0.1423540
+- next: State a full step_call prefix equation exposing the balance/depth continuation; peel pop/memory-info/access then derive instantiated meter equation. Do not touch frozen rules until C1 validation complete.
+
+### Attempts / Evidence
+
+- `E0005` (progressed, other, actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 987,621 tok (985,996 in, 1,625 out, 971,520 cached), 82.4s, $0.1423540)
+  - Validate stack-pop boundary and mirror existing memory-info boundary for actual CALL-spine composition -> Independent prefix probe builds clean, including prior access/meter composition and new pop/memory-info application equations. Actual step_call prefix theorem remains to be stated/proved. (`TO_seq58_prog_call_rules-20261030T113558Z_m0095_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T113558Z_m0095_t001` (use `read_tool_output` for exact output)

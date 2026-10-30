@@ -223,3 +223,37 @@ Proof
      simp[Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`]) >>
   simp[return_def, Abbr `st3`, Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`]
 QED
+
+Theorem call_pop_stack_apply[local]:
+  s.contexts = (c,k)::cs /\ n <= LENGTH c.stack ==>
+  pop_stack n s =
+  (INL (TAKE n c.stack),s with contexts :=
+    (c with stack := DROP n c.stack,k)::cs)
+Proof
+  strip_tac >> simp[pop_stack_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, assert_def, return_def]
+QED
+
+Definition memory_cost_def:
+  memory_cost (m:buffer) offset size =
+    memory_expansion_cost (buffer_length m)
+      (if 0 < size then word_size (offset + size) * 32 else 0)
+End
+Definition memory_expand_by_def:
+  memory_expand_by (m:buffer) offset size =
+    MAX (buffer_length m) (if 0 < size then word_size (offset + size) * 32 else 0)
+      - buffer_length m
+End
+Definition expanded_memory_def:
+  expanded_memory (m:buffer) offset size =
+    buffer_extend (memory_expand_by m offset size) m
+End
+Theorem memory_expansion_info_split[local]:
+  s.contexts <> [] ==>
+  memory_expansion_info offset sz s =
+  (INL <|cost := memory_cost (FST (HD s.contexts)).memory offset sz;
+          expand_by := memory_expand_by (FST (HD s.contexts)).memory offset sz|>,s)
+Proof
+  rw[memory_expansion_info_def, bind_def, ignore_bind_def,
+     get_current_context_def, return_def, memory_cost_def, memory_expand_by_def]
+QED
