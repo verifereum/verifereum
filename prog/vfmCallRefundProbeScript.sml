@@ -1,6 +1,6 @@
 Theory vfmCallRefundProbe
 Ancestors vfmProg vfmExecution vfmExecutionProp vfmContext vfmState
-  vfmConstants vfmTypes finite_map list
+  vfmConstants vfmTypes finite_map list set_sep prog pred_set
 Libs wordsLib
 
 Definition refund_probe_context_def:
@@ -279,7 +279,8 @@ Proof
                   (INL (), refund_candidate_state)` >> gvs[]
 QED
 
-Theorem refund_candidate_rule_conditions:
+Definition refund_candidate_conditions_def:
+  refund_candidate_conditions =
   let ss = refund_candidate_context.stack;
       p = refund_candidate_context.msgParams;
       rb = refund_probe_rollback;
@@ -308,8 +309,12 @@ Theorem refund_candidate_rule_conditions:
   is_call Call /\ Call <> Create /\ Call <> Create2 /\
   (0 < 1 ==> ~p.static) /\ ~fIN (100w:address) precompile_addresses /\
   d = Collect empty_domain /\ 2300 <= call_stipend
+End
+
+Theorem refund_candidate_rule_conditions:
+  refund_candidate_conditions
 Proof
-  simp[refund_candidate_not_precompile,
+  simp[refund_candidate_conditions_def, refund_candidate_not_precompile,
        refund_candidate_context_def, refund_probe_context_def,
        refund_probe_rollback_def, LET_THM,
        call_has_value_def, max_expansion_range_def, expanded_memory_def,
@@ -331,4 +336,90 @@ Proof
   >- simp[refund_candidate_state_def, refund_candidate_context_def,
           refund_probe_context_def] >>
   simp[LET_THM, refund_candidate_next_iterates]
+QED
+
+(* The entire resource part of the state-gas-ported any-callee precondition. *)
+Definition refund_candidate_pre_def:
+  refund_candidate_pre =
+    evm_Stack refund_candidate_context.stack * evm_PC 0 * evm_GasUsed 0 *
+    evm_StateGasLeft 183600 * evm_StateGasSpilled 183600 *
+    evm_StateGasBaseline 183600 * evm_StateGasCommitted 0 *
+    evm_MsgParams refund_candidate_context.msgParams *
+    evm_Memory empty_buffer * evm_Rollback refund_probe_rollback *
+    evm_Msdomain (Collect empty_domain) * evm_ReturnData [] *
+    evm_Exception (INL ()) * evm_AddRefund 0 * evm_SubRefund 0 *
+    evm_Logs [] * evm_OriginalAccounts (K empty_account_state)
+End
+
+Definition refund_candidate_domain_def:
+  refund_candidate_domain =
+    {HasStack; HasPC; HasGasUsed; HasStateGasLeft; HasStateGasSpilled;
+     HasStateGasBaseline; HasStateGasCommitted; HasMsgParams; HasMemory;
+     HasRollback; HasMsdomain; HasReturnData; HasException; HasAddRefund;
+     HasSubRefund; HasLogs; HasOriginalAccounts; HasParsed 0}
+End
+
+Theorem refund_candidate_pre_holds:
+  (refund_candidate_pre * (evm_Parsed 0 Call * emp))
+    (evm2set_on refund_candidate_domain (INL (), refund_candidate_state))
+Proof
+  rewrite_tac[refund_candidate_pre_def, GSYM STAR_ASSOC] >>
+  rewrite_tac[STAR_evm2set_with_original] >>
+  simp[refund_candidate_wf, refund_candidate_domain_def, IN_DELETE] >>
+  simp[refund_candidate_state_def, refund_candidate_context_def,
+       refund_probe_context_def, refund_probe_state_def] >>
+  conj_tac
+  >- (once_rewrite_tac[parse_code_def] >>
+      simp[vfmOperationTheory.opcode_def, refund_probe_opcode] >>
+      once_rewrite_tac[parse_code_def] >> simp[FLOOKUP_UPDATE]) >>
+  simp[emp_def, evm2set_on_def, EXTENSION, IN_DELETE]
+QED
+
+Theorem refund_candidate_code_rule[local]:
+  SPEC EVM_MODEL (evm_Parsed 0 Call * p) {} (evm_Parsed 0 Call * q) =
+  SPEC EVM_MODEL p {(0,Call)} q
+Proof
+  rewrite_tac[evm_Parsed_CODE_POOL] >>
+  qspec_then `EVM_MODEL` mp_tac SPEC_CODE >>
+  simp[EVM_MODEL_def] >> metis_tac[]
+QED
+
+(* Even a postcondition which observes only normal return at PC 1 is impossible.
+   Any other returned resources may be hidden in q. *)
+Theorem refund_candidate_spec_obstruction:
+  !q. ~SPEC EVM_MODEL
+    (refund_candidate_pre * cond refund_candidate_conditions) {(0,Call)}
+    (evm_PC 1 * evm_Exception (INL ()) * q)
+Proof
+  gen_tac >> rewrite_tac[GSYM refund_candidate_code_rule, EVM_SPEC_SEMANTICS] >>
+  strip_tac >>
+  first_x_assum (qspecl_then
+    [`refund_candidate_domain`, `(INL (), refund_candidate_state)`,
+     `\n. FUNPOW (\x. if ISR (FST x) then x else step (SND x)) n
+                  (INL (), refund_candidate_state)`] mp_tac) >>
+  ` (evm_Parsed 0 Call * (refund_candidate_pre * cond refund_candidate_conditions))
+      (evm2set_on refund_candidate_domain (INL (), refund_candidate_state))` by
+    (mp_tac refund_candidate_pre_holds >>
+     simp[SEP_CLAUSES, STAR_COMM, cond_STAR, refund_candidate_rule_conditions]) >>
+  simp[rel_sequence_EVM_NEXT_REL_FUNPOW] >>
+  gen_tac >> strip_tac >>
+  rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set_with_original] >>
+  strip_tac >>
+  qspec_then `k` mp_tac refund_candidate_no_normal_successor_pc >>
+  gvs[LET_THM]
+QED
+
+(* Existentially hiding any return meters, accounts, logs and other resources
+   cannot repair the obstruction. This includes the frozen rules' posts. *)
+Theorem refund_candidate_existential_spec_obstruction:
+  !q:'a -> evm_el set -> bool.
+  ~SPEC EVM_MODEL
+    (refund_candidate_pre * cond refund_candidate_conditions) {(0,Call)}
+    (SEP_EXISTS x. evm_PC 1 * evm_Exception (INL ()) * q x)
+Proof
+  gen_tac >>
+  ` (SEP_EXISTS x. evm_PC 1 * evm_Exception (INL ()) * q x) =
+    evm_PC 1 * evm_Exception (INL ()) * (SEP_EXISTS x. q x)` by
+      simp[SEP_CLAUSES, GSYM STAR_ASSOC] >>
+  simp[refund_candidate_spec_obstruction]
 QED
