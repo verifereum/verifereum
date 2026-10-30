@@ -11,6 +11,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C1.2.1 | proved |  | E0003 |  |
 | C1.2.2 | proved |  | E0004 |  |
 | C1.2.3 | proved |  | E0009 |  |
+| C1.3.1 | proved |  | E0010 |  |
 
 ## C1.1
 
@@ -126,3 +127,22 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 
 - `TO_seq58_prog_call_rules-20261030T113558Z_m0209_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_prog_call_rules-20261030T133624Z_m0236_t001` (use `read_tool_output` for exact output)
+
+## C1.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0010`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 1 holbuild, 489,589 tok (488,991 in, 598 out, 479,232 cached), 150.5s, $0.0734212
+
+### Attempts / Evidence
+
+- `E0010` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 1 holbuild, 489,589 tok (488,991 in, 598 out, 479,232 cached), 150.5s, $0.0734212)
+  - Explicit conditional cost/back interface, isolate MIN bound and reservoir cancellation; charged flag split with single-context primitive reductions -> call_refund_unuse_apply proves exact gasUsed, stateGasLeft and stateGasSpilled updates with arbitrary pre-existing spill. Independent probe theory builds clean. (`TO_seq58_prog_call_rules-20261030T133624Z_m0248_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T133624Z_m0248_t001` (use `read_tool_output` for exact output)

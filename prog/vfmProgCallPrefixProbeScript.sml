@@ -573,3 +573,24 @@ Proof
   simp_tac (srw_ss()) [Abbr `st2`, Abbr `st`, Abbr `c2`,
     expanded_memory_def, execution_state_component_equality]
 QED
+
+Theorem call_refund_unuse_apply[local]:
+  cost = (if charged then new_account_state_gas else 0) /\
+  back = MIN cost c.stateGasSpilled /\
+  s.contexts = (c with stateGasLeft := c.stateGasLeft - cost,k)::cs /\
+  cost <= c.stateGasLeft /\ stipend <= c.gasUsed - back ==>
+  (do credit_new_account charged; unuse_gas stipend od) s =
+  (INL (), s with contexts :=
+    (c with <|gasUsed := c.gasUsed - back - stipend;
+              stateGasLeft := c.stateGasLeft - back;
+              stateGasSpilled := c.stateGasSpilled - back|>,k)::cs)
+Proof
+  strip_tac >>
+  `back <= cost` by simp[] >>
+  `(c.stateGasLeft - cost) + (cost - back) = c.stateGasLeft - back` by decide_tac >>
+  Cases_on `charged` >>
+  gvs[credit_new_account_def, credit_state_gas_refund_def, unuse_gas_def,
+    bind_def, ignore_bind_def, get_current_context_def, set_current_context_def,
+    return_def, assert_def, execution_state_component_equality,
+    context_component_equality]
+QED

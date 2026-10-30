@@ -4,26 +4,30 @@
 
 ### C1: Validate shared state-gas proof machinery before repairing frozen rules
 - Kind: `proof_group`
-- Risk: 3
+- Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Derived from child component C1.2 risk 3. Access and delegation segments validated, but full prefix composition and meter segment not validated; broad normalization times out and staged charge leaves nested monadic continuation requiring better boundary interface.
+- Rationale: The prefix integration uncertainty is resolved by the checked call_prefix_prog_apply in accepted E0009. Remaining work is finite refund normalization and a bounded audit/validation of existing tail interfaces.
 - Required for completion: yes
+- Progress transition: `refinement`
+
+#### Progress note
+Only parent guidance and risk are revised; completed descendants retain their obligations and accepted episodes.
 
 #### Summary
-Build and validate reusable semantic interfaces before attempting any frozen rule. Preserve all existing theorem statements and semantics. Isolate access/delegation reduction and no-spill charge/refund arithmetic from separation-logic consumers.
+Validate semantic interfaces independently of the unfinished SPEC theory. The access, meter and arbitrary-continuation CALL prefix are now checked. Finish the refund interface and validate the existing tail normalization vocabulary before attempting frozen rules. Preserve every frozen statement.
 
 #### Not to try
-Do not begin frozen theorem proofs until all needed machinery is validated. Do not unfold bind, access_address and exception handling in a single broad gvs. Do not assume Abbrev equations rewrite ordinary field expressions.
+Do not start frozen proofs before machinery validation. Do not broadly unfold bind, access and handlers together, assume charge/refill is identity when sp>0, or raise tactic timeouts.
 
 #### Argument
-Write B for static_gas op + access_cost rb addr + vCost + dCost + mCost and N for stateCost. The bound N ≤ sg makes charge_new_account reduce sg to sg-N without changing gasUsed or sp; hence the frozen call_gas input is correct despite the semantics charging creation before computing the grant. After both execution charges gasUsed is g+B+dynamicGas. On never-entry, refund returns MIN N sp to execution gas and the remainder to the reservoir, giving sg-N+(N-MIN N sp)=sg-MIN N sp. The final stipend subtraction matches the frozen postcondition. Access and delegate operations preserve accounts and context fields while producing precisely newRb/newDom. Package these facts before unfolding handle_step or separation assertions.
+CALL prefix execution is composition of successful operation equations, leaving the continuation opaque. With stateCost <= sg, charging uses only the reservoir; subsequent credit refunds MIN stateCost sp to execution gas and the remainder to the reservoir. Thus the never-entered path ends with reservoir sg-creditBack, spill sp-creditBack, and execution usage reduced by creditBack and then stipend. Tail handlers must use explicit context equations rather than unfold entire monadic branches inside SPEC.
 
 #### Definition design
-Do not change definitions. Use the existing charge_new_account_apply, credit_new_account_apply, charge_state_gas_no_spill_apply and credit_state_gas_refund_apply interfaces after checking their exact signatures. New local boundary lemmas must expose concrete (INL result, updated-state) equations, with explicit contexts/rollback/msdomain equalities, not opaque abbreviation premises. A peeled CALL prefix must stop before the balance/depth decision and permit both outcomes; do not use successful-entry step_call_prepared as the only interface to failure rules.
+Keep the checked prefix wrappers and bridge unchanged. Refund helpers expose concrete head-context updates and preserve all other state fields. Validate existing handler and child-meter interfaces independently before consumers rely on them; any missing semantic boundary discovered by the bounded tail audit must be planned before frozen proofs begin.
 
 #### Code structure
-Keep all changes under prog/. Put new [local] semantic helpers before SPEC_Call_fail_balance in vfmProgScript.sml, adjacent to existing charge/access helpers or the CALL block. Validate helper proofs in a prog-only temporary theory or checkpoint that does not depend on the unfinished rules. Do not port vfmProgCallScript.sml or alter spec/. Retain existing public theorem names and statements.
+All edits stay in prog/. Use independent probe theories for semantic validation without importing unfinished vfmProgTheory. Keep existing frozen declarations untouched; record tail validation results in the existing CALL_RULES_AUDIT_seq58.md.
 
 ### C1.1: Establish statement baseline and shared boundary inventory
 - Kind: `definition_probe`
@@ -44,34 +48,34 @@ Do not interpret a prior cheat-backed whole-theory build as validation. Do not c
 
 ### C1.2: Validate CALL prefix through small operation boundaries
 - Kind: `proof_group`
-- Risk: 3
+- Risk: 2
 - Work priority: 20
 - Work units: 0
-- Rationale: Derived from child component C1.2.3 risk 3. Actual-spine regrouping still unvalidated; broad bind_assoc normalization leaves paired-lambda eta mismatch and >4KiB goal.
+- Rationale: All three children are proved and reviewed; E0009 validates typed opaque transport and the complete generic prefix, eliminating the former integration risk.
 - Dependencies: C1.1
 - Checkpoint: yes
 - Progress transition: `refinement`
 
 #### Progress note
-E0002 supplies partial access/delegate and no-spill charge evidence, not a completed prefix proof. Retain that source and validate it with the new composition obligations.
+Risk-only strategy release backed by accepted E0009 and commit e55685ad; no changed child obligations or new continuity claims.
 
 #### Summary
-Retain the build-clean access and delegate segments. Prove short meter operation equations before composing any bind spine. Normalize arithmetic only on scalar goals. Validate the complete reusable CALL prefix before touching frozen rules.
+The primitive meter equations, meter composition and complete CALL prefix are checked. Preserve the existing access/delegation wrappers and bridge. Consumers should use call_prefix_prog_apply with an opaque continuation rather than reopen the prefix.
 
 #### Approach
-Build short scalar and primitive-operation boundaries first, then meter composition, then the actual access-plus-meter prefix. Existing successful helpers remain source prerequisites, not certification of new descendants.
+Retain all completed children unchanged. Use the accepted generic application equation in subsequent machinery validation.
 
 #### Not to try
-Do not run gvs with AC ADD_ASSOC ADD_COMM across nested bind cases. Do not unfold consume_gas/get_current_context globally through the remaining continuation. Do not compensate for RHS-only schematic parameters with long qspecl/ASSUME/MATCH_MP plumbing.
+Do not reopen completed prefix proofs or unfold their access and meter implementations in consumers.
 
 #### Argument
-Under stateCost <= stateGasLeft the creation charge cannot spill into execution gas. The base execution charge therefore determines the gas_left supplied to call_gas; static checking and memory expansion preserve that meter. A successful dynamic charge and sender lookup finish the prefix. Each operation is evaluated on an explicit head context so the next bind reduces immediately, rather than exposing the entire continuation to rewriting.
+Each operation yields an explicit successful result and updated state. Typed bind transport composes these equations, and final record normalization reconciles context, rollback and domain updates. The checked application theorem establishes this argument for arbitrary continuations.
 
 #### Definition design
-Use operation application equalities with s.contexts = (c,k)::cs as their interface. Conclusions must expose INL and the updated state, preserving rollback/domain fields. Conditional equations with parameters only in premises/RHS are elimination facts: establish their instantiated equation using irule and assumptions, then rewrite with that equation; do not expect simp to guess such parameters. No new semantic definitions or changed frozen statements.
+The producer equations and typed call_pop_bind_apply are the proof boundary. call_prefix_prog_apply exposes precisely the final stack, memory, meters, rollback and domain needed by later continuations.
 
 #### Code structure
-Validate helpers in prog/vfmProgCallPrefixProbeScript.sml. Keep definitions mirrored only for this independent probe; later integration must use the actual vfmProg boundary definitions. Mark helper theorems local. Do not edit frozen rule proofs during this subtree.
+Keep prog/vfmProgCallPrefixProbeScript.sml and its checked helpers; no further prefix refactoring is required.
 
 ### C1.2.1: Small meter operation application equations
 - Kind: `boundary_lemma`
@@ -145,26 +149,74 @@ In prog/vfmProgCallPrefixProbeScript.sml, first prove the minimal displayed pop/
 #### Not to try
 Do not drule a polymorphic success theorem from only the producer equation and expect its conclusion-only result type to match a later continuation. Do not expand access/meter wrapper definitions during composition, invoke broad srw_ss normalization on the whole spine, or expose the concrete balance/depth/proceed continuation. Avoid manual MATCH_MP/CONJ plumbing and quoted copies of large premises. Do not change frozen statements, semantics, tactic timeouts, or files outside prog/.
 
-### C1.3: Validate refund, exception and tail normalization interfaces
+### C1.3: Validate refund and remaining tail interfaces
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 30
+- Work units: 0
+- Rationale: Refund is a direct explicit-state operation equation; tail work is bounded validation of inventoried existing interfaces rather than an unspecified new handler architecture.
+- Dependencies: C1.2
+- Progress transition: `refinement`
+
+#### Progress note
+Decomposes the unstarted bundled leaf into a refund boundary and a tail validation checkpoint. No proved work is invalidated.
+
+#### Summary
+First establish refund followed by stipend unuse on a post-charge context. Then validate the existing exception, precompile and SELFDESTRUCT boundary vocabulary in isolation. Missing boundaries trigger a scoped plan update rather than ad hoc frozen-proof attempts.
+
+#### Not to try
+Do not combine all tail handlers into one large normalization lemma. Do not treat an inventory or a cheat-backed whole-theory build as semantic validation.
+
+#### Argument
+Credit uses MIN against the existing spill, not the amount spilled by the latest charge. The reservoir arithmetic cancels the original no-spill debit except for creditBack. The stipend guard is exactly stipend <= used-creditBack; this allows unuse_gas to succeed after credit. The remainder of the tail should reuse its already explicit restore/forfeit and absorb/repay interfaces.
+
+#### Definition design
+Expose refund-plus-unuse as an INL unit/state equation with arbitrary underlying state and head context. Tail validation must identify exact source signatures and build their proof dependencies without the unfinished SPEC rules.
+
+#### Code structure
+Place the refund boundary in an independent prog probe theory. Tail validation may extract unchanged helper statements/proofs into a separate prog probe theory; avoid introducing a dependency on unfinished vfmProgTheory.
+
+### C1.3.1: Validate creation refund followed by stipend unuse
 - Kind: `boundary_lemma`
 - Risk: 2
-- Work priority: 20
-- Work units: 8
-- Rationale: Refund arithmetic follows from MIN ≤ stateCost ≤ sg; existing record-update helpers provide the semantic operations.
-- Dependencies: C1.1, C1.2
+- Work priority: 0
+- Work units: 3
+- Rationale: credit_state_gas_refund and unuse_gas have explicit single-context definitions. Only MIN inequalities and truncated subtraction cancellation are required.
+- Dependencies: C1.2
 - Checkpoint: yes
 
 #### Summary
-Package the never-entered charge/refund calculation and abort outcomes. Validate exception/handler boundaries needed by inner and outermost rules. Validate precompile and SELFDESTRUCT shared normalization identified by the inventory before frozen proofs begin.
+Add a reusable equation for the meters after credit and stipend unuse. Cover both charged flags and arbitrary pre-existing spill. Build independently of the unfinished SPEC rules.
 
 #### Statement
-For N ≤ sg and c = MIN N sp, charging N then refunding N leaves stateGasLeft = sg-c, stateGasSpilled = sp-c, and gasUsed = G-c; abort then subtracts stipend under stipend ≤ G-c. Include local operational equations for the balance/depth abort continuations and exact preservation of unrelated state fields.
+Let cost = (if charged then new_account_state_gas else 0), back = MIN cost c.stateGasSpilled, and chargedContext = c with stateGasLeft := c.stateGasLeft-cost. Under s.contexts=(chargedContext,k)::cs, cost<=c.stateGasLeft and stipend<=c.gasUsed-back, prove (do credit_new_account charged; unuse_gas stipend od) s = (INL (), s with contexts := (c with <|gasUsed := c.gasUsed-back-stipend; stateGasLeft := c.stateGasLeft-back; stateGasSpilled := c.stateGasSpilled-back|>,k)::cs). Express these abbreviations with actual HOL let bindings or explicit premises. All other c and s fields are preserved.
 
 #### Approach
-Use the existing charge/refund helpers and elementary natural arithmetic instead of unfolding them in consumers. Check handle_create_not_none and return_destination_case_const against the tail handler paths, and extract any missing local normalizations there. For precompile and SELFDESTRUCT reuse existing helper bodies where possible, isolating only new state-gas record calculations; checkpoint completion requires a checked build of all machinery used downstream.
+Prove the credit operation equation and unuse_gas success equation separately if needed, then compose one successful bind. Isolate (sg-cost)+(cost-MIN cost sp)=sg-MIN cost sp under cost<=sg as scalar arithmetic; use the stipend premise only for the unuse guard.
 
 #### Not to try
-Do not cancel truncated subtraction without its bound. Do not assume refund restores sg when sp is positive. If a concrete probe contradicts a frozen rule, escalate for a counterexample gate rather than adjusting it.
+Do not assume sp=0 or refund identity. Do not unfold abort handlers or the CALL continuation here; this leaf supplies only their shared meter boundary.
+
+### C1.3.2: Validate inventoried handler and tail boundaries independently
+- Kind: `definition_probe`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: This is a bounded extraction/build and interface check of identified existing helpers, with escalation for missing semantic obligations rather than speculative handler proofs.
+- Dependencies: C1.3.1
+- Checkpoint: yes
+
+#### Summary
+Use the existing audit to validate the exact tail normalization interfaces before frozen proofs. Check non-deposit exception handling, precompile exact meters, and successful versus failing parent-meter reconciliation. Record exact checked signatures and uncovered boundaries at the checkpoint.
+
+#### Description
+Inventory anchors are prog/CALL_RULES_AUDIT_seq58.md lines 53-58 and the existing helpers proceed_call_precompile_success_meter, proceed_call_precompile_success, handle_step_success_memory_exact, step_precompile_success_exact, repay_absorb_meter_fields, restored_unused_gas, restored_unused_gas_bound and restored_unused_gas_sub. Locate handle_create_not_none and its actual defining theory before using it. Validate helper proofs/dependencies in an independent prog theory (or cite checked prerequisite-theory exports where applicable), without proving or changing frozen SPEC declarations. Explicitly check which interfaces the existing Invalid and SELFDESTRUCT proof bodies consume. Record missing boundaries and request refinement of C1.3 before declaring the machinery phase complete if any are absent.
+
+#### Approach
+Read the named helper signatures and the relevant tail proof bodies, then build a minimal independent validation theory containing only the necessary existing helper dependency closure. Map each tail family to its checked interfaces and distinguish successful absorb/repay from failure restore/forfeit; report exact residual goals if a helper fails instead of growing a generic simplifier.
+
+#### Not to try
+Do not repair the frozen SPEC proofs during this probe, duplicate the entire vfmProgScript.sml, or certify interfaces merely because their names appear in the inventory. Do not add unplanned replacement handler lemmas; escalate the precise missing boundary at this checkpoint.
 
 ### C2: Repair the frozen CALL family
 - Kind: `proof_group`
