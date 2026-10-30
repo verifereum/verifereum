@@ -6901,7 +6901,7 @@ Proof
       \\ decide_tac)
   \\ Cases_on`inst = Revert`
   >- (
-    gvs[Abbr`is_ret`, Abbr`returnCode`, Abbr`gasCost`]
+    gvs[Abbr`is_ret`, Abbr`returnCode`, Abbr`gasCost`, Abbr`stateCost`]
     \\ `p.gasLimit - (g + memory_cost m offset sz - sp) =
           calleeGasLeft + spillRefund` by
          (asm_simp_tac pure_ss [restored_unused_gas] >>

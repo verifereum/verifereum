@@ -25,6 +25,7 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 | C2.3.1 | proved |  | E0033 |  |
 | C2.3.2 | proved |  | E0034 |  |
 | C2.3.3 | proved |  | E0035 |  |
+| C2.4 | proved |  | E0036 |  |
 
 ## C1.1
 
@@ -451,3 +452,22 @@ PLAN: `prog/PLAN_seq58_prog_call_rules.md`
 ### Evidence refs
 
 - `TO_seq58_prog_call_rules-20261030T162928Z_m0748_t001` (use `read_tool_output` for exact output)
+
+## C2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0036`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 294,954 tok (294,651 in, 303 out, 286,336 cached), 84.5s, $0.0482936
+
+### Attempts / Evidence
+
+- `E0036` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 294,954 tok (294,651 in, 303 out, 286,336 cached), 84.5s, $0.0482936)
+  - Eliminate Abbr stateCost at entry to Revert branch. -> SPEC_Return_inner now passes all branches. Build advances through Invalid rules and fails in SPEC_SelfDestruct_outermost on word_size 0 normalization. (`TO_seq58_prog_call_rules-20261030T162928Z_m0759_t001`)
+
+### Evidence refs
+
+- `TO_seq58_prog_call_rules-20261030T162928Z_m0759_t001` (use `read_tool_output` for exact output)
