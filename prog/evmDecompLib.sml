@@ -234,9 +234,10 @@ fun block_starts cfg =
     Listsort.sort Int.compare (mk_set (filter (fn n => mem n pcs) all))
   end
 
-fun block_instructions cfg starts start =
+fun inst_table cfg = Redblackmap.fromList Int.compare (instructions cfg)
+
+fun block_insts tbl starts start =
   let
-    val tbl = Redblackmap.fromList Int.compare (instructions cfg)
     fun go pc acc =
       case Redblackmap.peek (tbl, pc) of
         NONE => rev acc
@@ -248,6 +249,8 @@ fun block_instructions cfg starts start =
             then rev acc else go next acc
           end
   in go start [] end
+
+fun block_instructions cfg = block_insts (inst_table cfg)
 
 (* Stack slots an instruction reads and writes, used only to guess the
    entry depth d; a wrong guess makes the summary fail to reach the
@@ -381,9 +384,21 @@ fun b2w_lemma () =
             Cases_on `b` \\ EVAL_TAC)
       in b2w_cache := SOME th; th end
 
+(* memoised: the same constant words recur in every block *)
 val word_of_bytes_conv =
-  REWR_CONV (SRULE [FUN_EQ_THM] (GSYM byteTheory.word_of_bytes_le_def))
-  THENC cv_transLib.cv_eval
+  let
+    val conv =
+      REWR_CONV (SRULE [FUN_EQ_THM] (GSYM byteTheory.word_of_bytes_le_def))
+      THENC cv_transLib.cv_eval
+    val cache = ref (Redblackmap.mkDict Term.compare)
+  in
+    fn tm =>
+      case Redblackmap.peek (!cache, tm) of
+        SOME th => th
+      | NONE =>
+          let val th = conv tm
+          in cache := Redblackmap.insert (!cache, tm, th); th end
+  end
 
 val word_of_bytes_ss = simpLib.conv_ss
   {name = "word_of_bytes_ss", trace = 3,
@@ -403,15 +418,14 @@ fun base_simps () =
    vfmConstantsTheory.log_topic_cost_def,
    vfmConstantsTheory.log_data_cost_def]
 
-fun simp_conv (cfg : config) =
-  SIMP_CONV (srw_ss() ++ word_of_bytes_ss) (base_simps () @ #simps cfg)
-
 (* Facts about the contract's code. A condition or value mentioning p.code or
    p.parsed is rewritten under the assumption that they are the contract's
-   code and parsed code; that assumption becomes a condition of the block. *)
+   code and parsed code; that assumption becomes a condition of the block.
+   insts is the instructions by pc and simp the simplifier, built once
+   since building a simpset is a large part of each call's cost. *)
 type code_facts =
   {code_c : term, parsed_c : term, length_th : thm,
-   flookup : term -> thm}
+   flookup : term -> thm, insts : (int, term) Redblackmap.dict, simp : conv}
 
 fun mk_code_facts (cfg : config) =
   let
@@ -433,7 +447,9 @@ fun mk_code_facts (cfg : config) =
       end
   in
     {code_c = code_c, parsed_c = parsed_c, length_th = length_th,
-     flookup = flookup}
+     flookup = flookup, insts = inst_table cfg,
+     simp = SIMP_CONV (simpLib.&& (srw_ss() ++ word_of_bytes_ss,
+                                   base_simps () @ #simps cfg)) []}
   end
 
 val code_pat = “(p : message_parameters).code”
@@ -455,14 +471,14 @@ fun flookup_conv (cf : code_facts) tm =
   end
 
 (* simplify a term, using the code facts when it mentions p.code/p.parsed *)
-fun simp_term cfg (cf : code_facts) tm =
+fun simp_term (cf : code_facts) tm =
   let
     val assums = code_assumptions cf tm
     val c1 = (if List.null assums then ALL_CONV
               else PURE_REWRITE_CONV assums
                    THENC PURE_REWRITE_CONV [#length_th cf])
              THENC DEPTH_CONV (flookup_conv cf)
-  in QCONV (c1 THENC simp_conv cfg) tm end
+  in QCONV (c1 THENC #simp cf) tm end
 
 (* ------------------------------------------------------------------------
    Conditions as hypotheses
@@ -488,7 +504,7 @@ fun undisch_conds th =
 (* simplify hypothesis c of th; T is discharged, F raises *)
 fun simp_hyp cfg cf c th =
   let
-    val eq = simp_term cfg cf c
+    val eq = simp_term cf c
     val c' = rhs (concl eq)
   in
     if aconv c' T then PROVE_HYP (EQT_ELIM eq) th
@@ -761,7 +777,7 @@ fun apply_rule cfg cf prep rule th =
     val fixed = fixed0 @ free_vars (pre_of r3)
     val r4 = simp_hyps cfg cf (hyp r3) r3
     val r5 = eliminate_locals cfg cf fixed r4
-    val r6 = CONV_RULE (RAND_CONV (simp_term cfg cf)) r5
+    val r6 = CONV_RULE (RAND_CONV (simp_term cf)) r5
   in compose th (INST later r6) end
 
 fun mentions_gas t =
@@ -808,7 +824,7 @@ val arith_decide = skeleton_conv DECIDE
 fun polish cfg cf th =
   let
     val th1 = simp_hyps cfg cf (hyp th) th
-    val th2 = CONV_RULE (RAND_CONV (simp_term cfg cf)) th1
+    val th2 = CONV_RULE (RAND_CONV (simp_term cf)) th1
     fun norm_hyp (h, th) =
       let val eq = arith_norm h in
         if aconv (rhs (concl eq)) h then th
@@ -876,11 +892,41 @@ fun find_max imp [] = NONE
   | find_max imp (t :: ts) =
       SOME (foldl (fn (t, m) => if can imp (t, m) then m else t) t ts)
 
+(* For bounds f (k + xs) r, with k a numeral and xs the other summands:
+   one with a smaller k does not in general imply one with a larger k and
+   the same f, xs and r, so collapse does not try to prove it. The failing
+   arith_decide calls this saves were most of collapse's cost. A case
+   where it would follow anyway (say, from facts about xs and r) only
+   leaves both bounds in the summary. *)
+fun bound_parts t =
+  let
+    fun summands t =
+      if numSyntax.is_plus t then
+        let val (a, b) = numSyntax.dest_plus t in summands a @ summands b end
+      else [t]
+    val (f, l, r) = case strip_comb t of
+                      (f, [l, r]) => (f, l, r)
+                    | _ => raise ERR "bound_parts" "not binary"
+    val (ns, xs) = partition numSyntax.is_numeral (summands l)
+    val k = foldl (fn (n, a) => Arbnum.+ (numSyntax.dest_numeral n, a))
+                  Arbnum.zero ns
+  in SOME (f, r, Listsort.sort Term.compare xs, k) end
+  handle HOL_ERR _ => NONE
+
+fun not_implied (t, m) =
+  case (bound_parts t, bound_parts m) of
+    (SOME (f1, r1, xs1, k1), SOME (f2, r2, xs2, k2)) =>
+      aconv f1 f2 andalso aconv r1 r2 andalso
+      ListPair.allEq (uncurry aconv) (xs1, xs2) andalso Arbnum.< (k2, k1)
+  | _ => false
+
 (* keep the strongest of a family of bounds, discharging the others *)
 fun collapse pred th =
   let
     val hs = filter pred (hyp th)
-    fun imp (t, m) = arith_decide (mk_imp (m, t))
+    fun imp (t, m) =
+      if not_implied (t, m) then raise ERR "collapse" "not implied"
+      else arith_decide (mk_imp (m, t))
   in
     case find_max imp hs of
       NONE => th
@@ -1134,7 +1180,7 @@ fun is_stack_failure (Failed {reason, ...}) = reason = "stack not canonical"
 
 fun summarize_with cfg cf starts entry =
   let
-    val insts = block_instructions cfg starts entry
+    val insts = block_insts (#insts cf) starts entry
     fun try d tries =
       let val res = summarize_variant cfg cf entry insts d in
         if tries > 0 andalso List.exists is_stack_failure res
@@ -1285,7 +1331,7 @@ fun conj_or_T [] = T
 fun guard_imp cfg cf b c =
   let val tm = mk_imp (mk_neg b, c) in
     tautLib.TAUT_PROVE tm
-    handle HOL_ERR _ => EQT_ELIM (simp_term cfg cf tm)
+    handle HOL_ERR _ => EQT_ELIM (simp_term cf tm)
     handle HOL_ERR _ => arith_decide tm
     handle HOL_ERR _ =>
       raise ERR "compose_region"
