@@ -7,8 +7,8 @@ open HolKernel
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
   vfmOriginalStateTheory vfmOriginalAccountsTheory
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
-  vfmProgTheory wrappedEtherTheory wrappedEtherNameTheory
-  wrappedEtherTransferTheory wrappedEtherBranchesTheory
+  vfmProgTheory vfmProgCallTheory wrappedEtherTheory wrappedEtherNameTheory
+  wrappedEtherTransferTheory wrappedEtherBranchesTheory wrappedEtherGettersTheory
   (* Checked counterexamples kept as evidence for the EIP-8037 statement
      shapes.  Nothing depends on them, so without this line the root build
      would never compile them. *)

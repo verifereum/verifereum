@@ -166,6 +166,17 @@ Definition balance_slot_key_def:
     Keccak_256_w64 (balance_slot_word a)
 End
 
+(* WETH9's nested mapping is stored at slot 4, owner before spender. *)
+Definition allowance_slot_key_def:
+  allowance_slot_key (owner:address) (spender:address): bytes32 =
+    word_of_bytes_be $ Keccak_256_w64 $
+      REVERSE (word_to_bytes_le (w2w spender : bytes32)) ++
+      REVERSE (word_to_bytes_le
+        (word_of_bytes_be (Keccak_256_w64
+          (REVERSE (word_to_bytes_le (w2w owner : bytes32)) ++
+           REVERSE (word_to_bytes_le (4w:bytes32)))) : bytes32))
+End
+
 Definition Keccak_256_string_def:
   Keccak_256_string s =
   Keccak_256_w64 $ MAP (n2w o ORD) s
@@ -176,18 +187,20 @@ val () = cv_auto_trans Keccak_256_string_def;
 Datatype:
   WETH_state = <|
     balances : address -> num
-  ; allowances : address -> num  (* type? *)
+  ; allowances : address -> address -> num
   ; locked : num
   ; touched : address set
+  ; allowances_touched : (address # address) set
   |>
 End
 
 Definition empty_WETH_state_def:
   empty_WETH_state = <|
     balances := K 0
-  ; allowances := K 0
+  ; allowances := K (K 0)
   ; locked := 0
   ; touched := {}
+  ; allowances_touched := {}
   |>
 End
 
@@ -198,9 +211,9 @@ End
 Definition wf_WETH_state_def:
   wf_WETH_state ws ⇔
     { a | 0 < ws.balances a } SUBSET ws.touched ∧
-    { a | 0 < ws.allowances a } SUBSET ws.touched ∧
+    { p | 0 < ws.allowances (FST p) (SND p) } SUBSET ws.allowances_touched ∧
     (∀a. ws.balances a < 2 ** 256) ∧
-    (∀a. ws.allowances a < 2 ** 256) ∧
+    (∀owner spender. ws.allowances owner spender < 2 ** 256) ∧
     ws.locked < 2 ** 256 ∧
     total_balances ws ≤ ws.locked
 End
@@ -351,7 +364,17 @@ Definition WETH_EVM_def:
   (∀a. balance_slot_key a ∉ {0w; 1w; 2w} ∧
        (a ∈ ws.touched ∨ balance_slot_key a ∉ IMAGE balance_slot_key ws.touched) ⇒
        lookup_storage (balance_slot_key a) s.storage = n2w (ws.balances a)) ∧
-  (* TODO: same for allowances *)
+  (* Balance writes may mask an allowance slot on a hash collision. The
+     separate touched-pair set stays unchanged during a balance transfer. *)
+  (∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉ IMAGE balance_slot_key ws.touched ∧
+     ((owner, spender) ∈ ws.allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          ws.allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender) s.storage =
+       n2w (ws.allowances owner spender)) ∧
   lookup_storage 0w s.storage =
     0x577261707065642045746865720000000000000000000000000000000000001Aw ∧
   lookup_storage 1w s.storage =
@@ -377,16 +400,15 @@ Proof
   \\ qmatch_asmsub_abbrev_tac`addr =+ s`
   \\ simp[Abbr`ms`, lookup_account_def, APPLY_UPDATE_THM]
   \\ simp[Abbr`addr`]
-  \\ reverse conj_tac
-  >- (
-    qunabbrev_tac`s`
-    \\ rewrite_tac[account_state_accessors]
-    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
-    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
-    \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
-    \\ CONV_TAC (RAND_CONV cv_eval)
-    \\ CONV_TAC (listLib.list_EQ_CONV EVAL))
-  \\ rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[Abbr`s`, lookup_storage_def, APPLY_UPDATE_THM]
+  \\ qunabbrev_tac`s`
+  \\ rewrite_tac[account_state_accessors]
+  \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+  \\ conj_tac >- rw[lookup_storage_def, APPLY_UPDATE_THM]
+  \\ CONV_TAC (RAND_CONV cv_eval)
+  \\ CONV_TAC (listLib.list_EQ_CONV EVAL)
 QED
 
 (*
@@ -691,62 +713,6 @@ val th10x = th10w
   |> SIMP_RULE (srw_ss() ++ ARITH_ss)
        [AND_IMP_INTRO, GSYM SPEC_MOVE_COND,
         AC CONJ_ASSOC CONJ_COMM, conj_repeat]
-
-(* --- *)
-
-(*
-val th = spec14
-val prefix = "v0_"
-*)
-
-(* Unused exploration helpers, kept for reference.
-fun prepare prefix th = let
-  val th1 = th |> REWRITE_RULE [SPEC_MOVE_COND] |> UNDISCH_ALL
-  val (_,pre,_,post) = th1 |> concl |> dest_spec
-  fun add_prime v = variant [v] v (* TODO improve? *)
-  val part_names = list_dest dest_star pre
-                     |> map (fn tm => dest_comb tm)
-  val parts = list_dest dest_star post
-  (*
-  val p = hd parts
-  *)
-  fun update_one p = let
-    val (a,e) = dest_comb p
-    val v = snd (first (aconv a o fst) part_names)
-    in if aconv e v then (p,[]) else let
-      val v' = add_prime v
-      val new_eq = mk_eq(v',e)
-      in (mk_comb(a,v'), [new_eq]) end
-    end
-  fun update_all [] = ([],[])
-    | update_all (p::ps) = let
-        val (p,aux1) = update_one p
-        val (ps,aux2) = update_all ps
-        in (p::ps, aux1 @ aux2) end
-  val (ps,aux) = update_all parts
-  val new_post = list_mk_star ps evm_domain_ty
-  val new_assums = list_mk_conj aux
-  val goal = mk_imp(new_assums, mk_eq(post,new_post))
-  val lemma = prove(goal,rpt strip_tac \\ asm_rewrite_tac [])
-  fun D th = if is_imp (concl th) then th else DISCH T th
-  val th2 = th1 |> CONV_RULE (RAND_CONV (REWR_CONV (UNDISCH lemma)))
-  val th3 = th2 |> DISCH new_assums |> DISCH_ALL
-                |> REWRITE_RULE [AND_IMP_INTRO,GSYM CONJ_ASSOC]
-  val vs = free_vars (concl th3)
-  (* val prefix = "_0_" *)
-  fun add_prefix prefix v = mk_var(prefix ^ fst (dest_var v), type_of v)
-  val s = map (fn v => v |-> add_prefix prefix v) vs
-  val th4 = INST s th3
-  in UNDISCH_ALL th4 end
-
-fun prepare_list thms = let
-  val xs = mapi (fn i => fn th => ("v" ^ Int.toString i ^ "_", (th:thm))) thms
-  in map (fn (prefix,th) => prepare prefix th) xs end
-
-val res =
-  [spec10,spec11,spec12,spec13,spec14,spec15,spec16,spec17]
-  |> prepare_list |> SPEC_COMPOSE_RULE;
-*)
 
 (* --- *)
 
@@ -1190,123 +1156,3 @@ Proof
   \\ simp_tac std_ss [AC STAR_ASSOC STAR_COMM, AC ADD_ASSOC ADD_COMM,
                       arithmeticTheory.SUB_RIGHT_SUB]
 QED
-
-(*
-evc “FLOOKUP parsed_contract_code 0”
-evc “FLOOKUP parsed_contract_code 2”
-evc “FLOOKUP parsed_contract_code 4”
-evc “FLOOKUP parsed_contract_code 5”
-evc “FLOOKUP parsed_contract_code 7”
-evc “FLOOKUP parsed_contract_code 8”
-evc “FLOOKUP parsed_contract_code 9”
-evc “FLOOKUP parsed_contract_code 12”
-evc “FLOOKUP parsed_contract_code 175”
-evc “FLOOKUP parsed_contract_code 176”
-evc “FLOOKUP parsed_contract_code 179”
-evc “FLOOKUP parsed_contract_code 182”
-evc “FLOOKUP parsed_contract_code 1088”
-evc “FLOOKUP parsed_contract_code 1089”
-evc “FLOOKUP parsed_contract_code 1090”
-evc “FLOOKUP parsed_contract_code 1092”
-evc “FLOOKUP parsed_contract_code 1094”
-evc “FLOOKUP parsed_contract_code 1095”
-evc “FLOOKUP parsed_contract_code 1116”
-evc “FLOOKUP parsed_contract_code 1138”
-evc “FLOOKUP parsed_contract_code 1139”
-evc “FLOOKUP parsed_contract_code 1140”
-evc “FLOOKUP parsed_contract_code 1141”
-evc “FLOOKUP parsed_contract_code 1143”
-evc “FLOOKUP parsed_contract_code 1144”
-evc “FLOOKUP parsed_contract_code 1145”
-evc “FLOOKUP parsed_contract_code 1146”
-evc “FLOOKUP parsed_contract_code 1147”
-evc “FLOOKUP parsed_contract_code 1149”
-evc “FLOOKUP parsed_contract_code 1150”
-evc “FLOOKUP parsed_contract_code 1152”
-evc “FLOOKUP parsed_contract_code 1153”
-evc “FLOOKUP parsed_contract_code 1155”
-evc “FLOOKUP parsed_contract_code 1156”
-evc “FLOOKUP parsed_contract_code 1157”
-evc “FLOOKUP parsed_contract_code 1158”
-evc “FLOOKUP parsed_contract_code 1159”
-evc “FLOOKUP parsed_contract_code 1160”
-evc “FLOOKUP parsed_contract_code 1161”
-evc “FLOOKUP parsed_contract_code 1162”
-evc “FLOOKUP parsed_contract_code 1163”
-evc “FLOOKUP parsed_contract_code 1164”
-evc “FLOOKUP parsed_contract_code 1165”
-evc “FLOOKUP parsed_contract_code 1166”
-evc “FLOOKUP parsed_contract_code 1167”
-evc “FLOOKUP parsed_contract_code 1188”
-evc “FLOOKUP parsed_contract_code 1189”
-evc “FLOOKUP parsed_contract_code 1222”
-evc “FLOOKUP parsed_contract_code 1223”
-evc “FLOOKUP parsed_contract_code 1225”
-evc “FLOOKUP parsed_contract_code 1226”
-evc “FLOOKUP parsed_contract_code 1227”
-evc “FLOOKUP parsed_contract_code 1228”
-evc “FLOOKUP parsed_contract_code 1229”
-evc “FLOOKUP parsed_contract_code 1230”
-evc “FLOOKUP parsed_contract_code 1232”
-evc “FLOOKUP parsed_contract_code 1233”
-evc “FLOOKUP parsed_contract_code 1234”
-evc “FLOOKUP parsed_contract_code 1235”
-evc “FLOOKUP parsed_contract_code 1236”
-evc “FLOOKUP parsed_contract_code 1238”
-evc “FLOOKUP parsed_contract_code 1239”
-evc “FLOOKUP parsed_contract_code 1240”
-evc “FLOOKUP parsed_contract_code 1241”
-evc “FLOOKUP parsed_contract_code 1242”
-evc “FLOOKUP parsed_contract_code 1243”
-evc “FLOOKUP parsed_contract_code 1244”
-evc “FLOOKUP parsed_contract_code 183”
-evc “FLOOKUP parsed_contract_code 184”
-*)
-
-(* TODO: false as stated, so left unproved: calldata with no known selector
-   (empty, under 4 bytes, or an unknown selector) falls through to the
-   fallback, which deposits and succeeds (see SPEC_fallback); it needs a
-   restatement first. *)
-(*
-Theorem call_follows_abi_4bytes:
-  tx.to = SOME addr ∧
-  (lookup_account addr ms).code = contract_code ∧
-  run_transaction F 1 ph bk ms tx = SOME (res, ms2) ∧
-  res.result ≠ SOME Reverted ∧ res.result ≠ SOME OutOfGas
-  ⇒
-  ∃sel.
-    sel ∈ set abi_4bytes ∧
-    sel ≼ tx.data
-Proof
-  rw[run_transaction_def, run_create_def]
-  \\ gvs[CaseEq"option", CaseEq"prod", CaseEq"sum"]
-  \\ qhdtm_x_assum `run` mp_tac
-  \\ simp[run_def]
-  \\ simp[Once OWHILE_THM]
-  \\ qmatch_goalsub_abbrev_tac`OWHILE _ f`
-  \\ simp[Once step_def]
-  \\ simp[handle_def]
-  \\ `s.contexts <> []` by gvs[initial_state_def, CaseEq"option"]
-  \\ simp[Once bind_def, get_current_context_def, return_def]
-  \\ qhdtm_x_assum`initial_state`mp_tac
-  \\ simp[initial_state_def, CaseEq"option"]
-  \\ strip_tac
-  \\ qmatch_asmsub_abbrev_tac`[ctxt]`
-  \\ gvs[]
-  \\ `ctxt.msgParams.code = contract_code ∧ ctxt.pc = 0`
-  by gvs[Abbr`ctxt`, apply_intrinsic_cost_def,
-         initial_msg_params_def, code_from_tx_def]
-  \\ gvs[]
-  \\ IF_CASES_TAC
-  >- ( pop_assum mp_tac \\ rewrite_tac[contract_code_eq] \\ rw[] )
-  \\ `ctxt.msgParams.parsed = parsed_contract_code`
-  by gvs[Abbr`ctxt`, apply_intrinsic_cost_def, initial_msg_params_def,
-         parsed_contract_code_def]
-  \\ simp[FLOOKUP_parsed_contract_code_0]
-  \\ simp[step_inst_def]
-  \\ qmatch_goalsub_abbrev_tac`pair_CASE (_ s)`
-  \\ qmatch_goalsub_abbrev_tac`g s`
-  \\ `valid_result_eq ((=) s) g ((=) (update_cc uu s)) ()`
-  by (
-    qunabbrev_tac`g`
-*)

@@ -8,7 +8,6 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
   fun ss f = Substring.string o f o Substring.full
   fun trimr n = ss $ Substring.trimr n
   fun triml n = ss $ Substring.triml n
-  val trim2 = triml 2
 
   val string_less = curry (equal LESS o String.compare)
 

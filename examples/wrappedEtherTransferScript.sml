@@ -62,6 +62,7 @@ Proof
       ∀a. a ≠ src ∧ a ≠ dst ⇒ ws'.balances a = ws.balances a`
      by simp[Abbr`ws'`, WETH_transfer_def, APPLY_UPDATE_THM]
   \\ `ws'.touched = dst INSERT ws.touched ∧ ws'.allowances = ws.allowances ∧
+      ws'.allowances_touched = ws.allowances_touched ∧
       ws'.locked = ws.locked`
      by simp[Abbr`ws'`, WETH_transfer_def]
   \\ `SIGMA ws'.balances T0 = SIGMA ws.balances T0`
@@ -909,6 +910,51 @@ Proof
   \\ metis_tac[IN_IMAGE, IN_INSERT]
 QED
 
+Theorem WETH_transfer_allowance_storage[local]:
+  wf_WETH_state ws ∧ wad ≤ ws.balances src ∧
+  lookup_storage (balance_slot_key src) st = n2w (ws.balances src) ∧
+  (∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉ IMAGE balance_slot_key ws.touched ∧
+     ((owner, spender) ∈ ws.allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          ws.allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender) st =
+       n2w (ws.allowances owner spender)) ⇒
+  ∀owner spender.
+     allowance_slot_key owner spender ∉ {0w; 1w; 2w} ∧
+     allowance_slot_key owner spender ∉
+       IMAGE balance_slot_key (WETH_transfer src dst wad ws).touched ∧
+     ((owner, spender) ∈ (WETH_transfer src dst wad ws).allowances_touched ∨
+      allowance_slot_key owner spender ∉
+        IMAGE (λ(owner, spender). allowance_slot_key owner spender)
+          (WETH_transfer src dst wad ws).allowances_touched) ⇒
+     lookup_storage (allowance_slot_key owner spender)
+       (update_storage (balance_slot_key dst)
+         (lookup_storage (balance_slot_key dst)
+           (update_storage (balance_slot_key src)
+             (n2w (ws.balances src - wad)) st) + n2w wad)
+         (update_storage (balance_slot_key src)
+           (n2w (ws.balances src - wad)) st)) =
+       n2w ((WETH_transfer src dst wad ws).allowances owner spender)
+Proof
+  simp_tac std_ss [LET_THM, WETH_transfer_def, WETH_state_accfupds,
+                   WETH_state_accessors, IMAGE_INSERT, IN_INSERT]
+  >> strip_tac >> rpt gen_tac
+  >> disch_then (map_every assume_tac o CONJUNCTS)
+  >> `lookup_storage (allowance_slot_key owner spender) st =
+        n2w (ws.allowances owner spender)` by metis_tac[]
+  >> Cases_on `balance_slot_key src = allowance_slot_key owner spender`
+  >- (`src ∉ ws.touched` by metis_tac[IN_IMAGE]
+      >> `ws.balances src = 0`
+         by (gvs[wf_WETH_state_def, SUBSET_DEF]
+             >> metis_tac[NOT_ZERO_LT_ZERO])
+      >> `wad = 0` by decide_tac
+      >> gvs[lookup_update_storage])
+  >> simp[lookup_update_storage]
+QED
+
 (* the same from the WETH_EVM relation: the abstract state moves wad from
    the caller to dst, assuming the two balance slots involved don't collide
    with each other, with any touched account's slot, or with slots 0-2 *)
@@ -985,6 +1031,11 @@ Proof
        (fn th => rewrite_tac[th])
   \\ qpat_assum `wad ≤ ws.balances tx.from`
        (rewrite_tac o single o GSYM o MATCH_MP n2w_sub)
+  \\ mp_tac (Q.INST [`src` |-> `tx.from`, `dst` |-> `dst`,
+                     `st` |-> `(lookup_account addr accounts).storage`]
+                    WETH_transfer_allowance_storage)
+  \\ (impl_tac >- asm_rewrite_tac[])
+  \\ simp_tac std_ss [LET_THM] \\ strip_tac
   \\ mp_tac (Q.INST [`src` |-> `tx.from`,
                      `st` |-> `(lookup_account addr accounts).storage`]
                     WETH_transfer_storage)
@@ -1132,5 +1183,5 @@ Proof
   \\ asm_rewrite_tac[]
   \\ strip_tac
   \\ asm_simp_tac std_ss []
-  \\ first_assum ACCEPT_TAC
+  \\ conj_tac \\ first_assum ACCEPT_TAC
 QED

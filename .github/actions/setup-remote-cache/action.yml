@@ -1,0 +1,43 @@
+name: 'Setup holbuild remote cache'
+description: 'Points holbuild at the remote cache when a login is given and the cache accepts it'
+
+inputs:
+  curl-config:
+    description: 'curl config holding the cache login; empty leaves the remote cache off'
+    required: false
+    default: ''
+  url:
+    description: 'Remote cache URL'
+    required: false
+    default: 'https://bazel-cache.dev.sequent.inc'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure remote cache
+      shell: bash
+      env:
+        CURL_CONFIG: ${{ inputs.curl-config }}
+        CACHE_URL: ${{ inputs.url }}
+      run: |
+        if [ -z "$CURL_CONFIG" ]; then
+          echo 'No remote cache login for this run; using snapshot/local cache only'
+          exit 0
+        fi
+        config="$RUNNER_TEMP/holbuild-remote-cache.curl"
+        install -m 600 /dev/null "$config"
+        printf '%s\n' "$CURL_CONFIG" > "$config"
+        # holbuild treats an unreachable cache or a rejected login as a miss on
+        # every lookup, at up to 30 s each, so check once here. A missing key
+        # returns 404 to a valid login and 401 to a wrong one.
+        status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -K "$config" \
+          "$CACHE_URL/ac/$(printf '%064d' 0)" || true)
+        if [ "$status" != 404 ] && [ "$status" != 200 ]; then
+          echo "::warning::Remote cache probe returned HTTP $status; using snapshot/local cache only"
+          exit 0
+        fi
+        {
+          echo "HOLBUILD_REMOTE_CACHE_CURL_CONFIG=$config"
+          echo "HOLBUILD_REMOTE_CACHE_URL=$CACHE_URL"
+          echo 'HOLBUILD_CACHE_TRACE=1'
+        } >> "$GITHUB_ENV"

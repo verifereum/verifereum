@@ -230,7 +230,8 @@ another cap, pass your own, e.g. `./runtests.exe -o --max-heap=32000`; `-o`
 takes a single argument, so use the `=` form.
 
 Use `--max-heap`, not `--maxheap`: holbuild's own Poly/ML runtime consumes
-`--maxheap`, which then caps holbuild rather than the tests
+`--maxheap` before holbuild sees it, so it never reaches the tests, and on
+Linux holbuild rejects it
 ([HOL-Theorem-Prover/holbuild#237](https://github.com/HOL-Theorem-Prover/holbuild/issues/237)).
 
 At 21.0.1, `intrinsic_gas_cost.json` grew past 55 GB without a cap, and

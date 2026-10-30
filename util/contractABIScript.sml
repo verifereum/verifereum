@@ -1632,14 +1632,6 @@ End
 
 val () = cv_trans dest_ListV_def;
 
-(* TODO: move *)
-Theorem INDEX_OF_pre[cv_pre]:
-  ∀x y. INDEX_OF_pre x y
-Proof
-  Induct_on`y` \\ rw[Once INDEX_OF_pre_cases]
-QED
-(* -- *)
-
 Definition dec_calldata_def:
   dec_calldata fif bs = let
     four = TAKE 4 bs;
