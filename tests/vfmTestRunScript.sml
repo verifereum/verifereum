@@ -29,6 +29,13 @@ Datatype:
   | InvalidBlock string (byte list list) (block option)
 End
 
+(* The chain the conformance fixtures are signed for. *)
+Definition test_chain_id_def:
+  test_chain_id = 1n
+End
+
+val () = cv_auto_trans test_chain_id_def;
+
 (* Runs the blocks in order from the chain state (dom, hashes, parent,
    state). A valid block must decode from its RLP and execute; an invalid
    block must be rejected, and leaves the chain state unchanged. At the end
@@ -39,18 +46,18 @@ Definition run_test_blocks_def:
      if state <> postState then StateMismatch else Passed) ∧
   run_test_blocks lastBlockHash postState dom hashes parent state
     (ValidBlock blk rlpbs :: blocks) =
-    (case OPTION_BIND (rlp_decode_chunks rlpbs) block_from_rlp
+    (case OPTION_BIND (rlp_decode_chunks rlpbs) (block_from_rlp test_chain_id)
      of NONE => BlockDecodeFailure
       | SOME decoded =>
         if decoded with hash := blk.hash <> blk then BlockDecodeMismatch else
-        case run_block dom 1 hashes parent state blk
+        case run_block dom test_chain_id hashes parent state blk
         of NONE => UnexpectedException
          | SOME (_, state', dom') =>
            run_test_blocks lastBlockHash postState
              dom' (blk.hash::hashes) blk state' blocks) ∧
   run_test_blocks lastBlockHash postState dom hashes parent state
     (InvalidBlock msg rlpbs optblock :: blocks) =
-    case OPTION_BIND (rlp_decode_chunks rlpbs) block_from_rlp
+    case OPTION_BIND (rlp_decode_chunks rlpbs) (block_from_rlp test_chain_id)
     of NONE => (* TODO: check exception msg *)
        run_test_blocks lastBlockHash postState dom hashes parent state blocks
      | SOME decoded =>
@@ -60,7 +67,7 @@ Definition run_test_blocks_def:
        | SOME invalidBlock =>
          if decoded with hash := invalidBlock.hash <> invalidBlock
          then BlockDecodeMismatch else
-         case run_block dom 1 hashes parent state invalidBlock
+         case run_block dom test_chain_id hashes parent state invalidBlock
          of NONE => (* TODO: check exception msg *)
             run_test_blocks lastBlockHash postState dom hashes parent state
               blocks
@@ -78,7 +85,7 @@ Proof
   \\ rw[]
   \\ rw[Once run_test_blocks_pre_def]
   \\ gvs[]
-  \\ rename1 `block_from_rlp _ = SOME decoded`
+  \\ rename1 `block_from_rlp _ _ = SOME decoded`
   \\ Cases_on `decoded`
   \\ gvs[block_component_equality]
 QED
@@ -98,7 +105,7 @@ Definition run_test_with_root_def:
     case rlp_decode_chunks genesisRLP
     of NONE => GenesisBlockDecodeFailure |
     SOME rlp =>
-    case block_from_rlp rlp
+    case block_from_rlp test_chain_id rlp
     of NONE => GenesisBlockDecodeFailure |
     SOME decodedGenesisBlock =>
     if decodedGenesisBlock with hash := genesisBlock.hash <> genesisBlock

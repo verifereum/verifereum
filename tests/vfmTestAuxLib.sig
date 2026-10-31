@@ -19,6 +19,5 @@ signature vfmTestAuxLib = sig
 
   val fixtures_version : string
   val fork_name : string
-  val chain_id : int
 
 end

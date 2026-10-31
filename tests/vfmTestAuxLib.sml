@@ -54,7 +54,6 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
 
   val fixtures_version = "21.0.1"
   val fork_name = "Osaka"
-  val chain_id = 1
 
   val time_limit = Option.getOpt
     (Option.mapPartial Time.fromString
