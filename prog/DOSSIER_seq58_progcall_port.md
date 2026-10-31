@@ -20,6 +20,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6.1 | proved |  | E0018 | Review/commit bounded entry facts, then C1.3.6.2 composition probes. |
 | C1.3.6.2 | proved |  | E0019 | Review then commit safe-contract theory; continue scheduled neutral-operation adapters. |
 | C1.3.6.3 | proved |  | E0020 | Review adapters then commit; next scheduled precompile preservation. |
+| C1.3.6.4 | proved |  | E0021 | Review and commit precompile boundaries, then scheduled whole entry composition. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -333,6 +334,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T123059Z_m0613_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0021`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,453,734 tok (1,452,843 in, 891 out, 1,437,696 cached), 154.3s, $0.1829736
+- next: Review and commit precompile boundaries, then scheduled whole entry composition.
+
+### Attempts / Evidence
+
+- `E0021` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,453,734 tok (1,452,843 in, 891 out, 1,437,696 cached), 154.3s, $0.1829736)
+  - Lift fixed-tail primitive safe contracts over prior call_meter_result spends; factor read/consume and optional-output precompile skeletons, prove separate safe contracts for all 18 precompiles. -> All cryptographic computations remain opaque; only option/pair/boolean outcomes are split. Composition preserves all failure result states. ()
+  - Enumerate finite precompile address set, combine separate contracts under membership and derive raw result and rooted budget corollaries. -> vfmCallPrecompileTheory builds clean. Address-membership premise retained; no unsafe Impossible default admitted. (`TO_seq58_progcall_port-20261031T133309Z_m0655_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T133309Z_m0655_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
