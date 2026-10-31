@@ -24,7 +24,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6.5 | progressed | missing_helper | E0023 | Request strategist guidance on surplus-preserving composition before unfolding any whole opcode. |
 | C1.3.6.5.1 | proved |  | E0024 | Review reservation interface and commit; then reservation acquisition/discharge leaf. |
 | C1.3.6.5.2 | proved |  | E0026 |  |
-| C1.3.6.5.3 | progressed | other | E0028 | Layer charge_new_account, conditional assert_not_static and expand_memory over gas_tail using reserved_budget_bind; then opcode consume margin and initial readers/pop_stack. Keep all primitive bodies opaque. |
+| C1.3.6.5.3 | proved |  | E0030 |  |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -427,12 +427,11 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `other`
-- latest episode: `E0028`
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0030`
 - blocker: 
-- actual effort: 2 sessions, 4 msgs, 56 steps, 54 tools, 21 holbuild, 5,410,348 tok (5,403,036 in, 7,312 out, 5,220,352 cached), 827.9s, $0.9605232
-- next: Layer charge_new_account, conditional assert_not_static and expand_memory over gas_tail using reserved_budget_bind; then opcode consume margin and initial readers/pop_stack. Keep all primitive bodies opaque.
+- actual effort: 3 sessions, 7 msgs, 97 steps, 94 tools, 32 holbuild, 8,850,274 tok (8,839,131 in, 11,143 out, 8,431,616 cached), 4733.9s, $1.7696216
 
 ### Attempts / Evidence
 
@@ -440,10 +439,14 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
   - Built CallStepsTheory with credit+abort contracts, anchor-result-to-budget lifting, reservation/budget bind, depth tail, balance/callee tail and fixed-context grant-payment tail. -> All seven suffix/composition theorems build clean. Whole step_call remains unwritten; next is get_gas_left and variable call_gas bind then charge/static/expand prefix and initial readers/payment. No opcode or precompile internals unfolded. (`TO_seq58_progcall_port-20261031T140620Z_m0858_t001`, `TO_seq58_progcall_port-20261031T140620Z_m0862_t001`)
 - `E0028` (progressed, other, actual effort: 2 sessions, 4 msgs, 56 steps, 54 tools, 21 holbuild, 5,410,348 tok (5,403,036 in, 7,312 out, 5,220,352 cached), 827.9s, $0.9605232)
   - Composed get_gas_left success-sensitive reader with call_gas pair split and checked payment_tail. -> call_meter_reserved_gas_tail builds. Reasserted n<=LENGTH u.contexts after gvs before directed boundary application. All CallSteps suffix lemmas are now checked; whole opcode prefix still pending. (`TO_seq58_progcall_port-20261031T142258Z_m0875_t001`)
+- `E0029` (progressed, other, actual effort: 2 sessions, 3 msgs, 44 steps, 42 tools, 15 holbuild, 3,303,904 tok (3,299,743 in, 4,161 out, 3,180,032 cached), 2160.6s, $0.5990352)
+  - Compose opaque charge/static/memory reservation adapters, consume-success stipend acquisition, and checked gas_tail. -> Three new lemmas build: charge_memory_bind, consume_budget_bind, cost_tail. cost_tail covers all meter-changing CALL entry and abort/proceed suffixes. Initial pop/read/access/delegate prefix remains. (`TO_seq58_progcall_port-20261031T142943Z_m0928_t001`)
+- `E0030` (proved, , actual effort: 3 sessions, 7 msgs, 97 steps, 94 tools, 32 holbuild, 8,850,274 tok (8,839,131 in, 11,143 out, 8,431,616 cached), 4733.9s, $1.7696216)
+  - Compose reservation-preserving charge/static/memory prefix, stipend-acquiring consume, zero-reservation initial pop/read/access/delegate prefix and checked grant suffix. -> call_meter_reserved_step_call proves all-result whole-opcode safety with opaque primitive interfaces. call_meter_step_call_budget initializes zero reservation from wf_state, positive protected depth and rooted budget; proves budget preservation and excludes Impossible/Unimplemented. (`TO_seq58_progcall_port-20261031T152132Z_m0981_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_progcall_port-20261031T142258Z_m0875_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T152132Z_m0981_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

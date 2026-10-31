@@ -107,3 +107,13 @@ works_when: Reader result type differs from the generic theorem's free type vari
 evidence:
 - tool_output:TO_seq58_progcall_port-20261031T134530Z_m0751_t001
 - source:prog/vfmCallReserveScript.sml
+
+## L0013 scope='C1.3.6.5' tags=call_meter_safe,eta,bind,reservation,budget
+shape: Safe bind continuation introduces eta-expanded reservation preconditions that resist direct boundary matching.
+pattern: Apply antecedent-bearing boundary via drule_all, then rewrite/simp call_meter_safe_def and BETA_TAC to normalize pre/post predicates; use a small metis or disch_then drule_all to specialize the remaining universal contract. Reassert n<=LENGTH anchor.contexts after gvs if it normalized away. For neutral prefix-to-budget composition reuse call_meter_reserved_budget_bind, which forgets reservation only on early errors.
+works_when: Checked safe contracts share the same fixed anchor and context tail; no implementation unfolding is needed.
+evidence:
+- episode:E0027
+- episode:E0028
+- source:prog/vfmCallStepsScript.sml
+- tool_output:TO_seq58_progcall_port-20261031T142258Z_m0875_t001

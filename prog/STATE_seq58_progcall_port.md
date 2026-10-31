@@ -2,64 +2,57 @@
 Updated: 2026-10-31
 
 ## Cursor
-- component: C1.3.6.5.2
+- component: C1.3.6.5.3
 - status: in_progress
-- active_file: prog/vfmCallGrantScript.sml
-- next_action: Build vfmCallGrantTheory to check the last edit restoring literal n <= LENGTH u.contexts before drule_all in call_meter_reserved_proceed_call. The analogous proceed_create wrapper may need the same repair. Then implement abort_unuse/abort_call_value reservation discharge and abort_create/abort_create_exists ordinary-result adapters. GrantScript is new uncommitted partial work. EntryStep and Reserve are checked and committed (d473563a, dd601956); E0024 was reviewed and accepted.
-- expected_goal_shape: Last failure: all proceed_call budget premises held, but gvs had rewritten the length premise to n <= SUC (LENGTH rest), so drule_all did not match. Last edit reasserts n <= LENGTH u.contexts by simp, not yet built. CALL payment was checked before that failure. CREATE wrapper has not yet been reached. Abort composition must preserve ordinary results on early errors, not claim unconditional refund.
-- verify_with: holbuild(targets=["vfmCallGrantTheory"], timeout=1800)
+- active_file: prog/vfmCallStepsScript.sml
+- next_action: Build vfmCallStepsTheory to confirm current clean suffixes, then layer charge_new_account, conditional assert_not_static and expand_memory over call_meter_reserved_gas_tail using call_meter_reserved_budget_bind. Next acquire stipend reservation from opcode consume cost and compose initial pop_stack/readers. Grant component was proved/reviewed and committed 41906ccf; CallSteps checked partial work committed 33d9f96a and 085fbfef.
+- expected_goal_shape: No current failing proof. gas_tail covers get_gas_left, call_gas pair, payment, balance/depth aborts and proceed_call. New prefix contracts should preserve reserved c margin on every result, lifting early errors to anchor budget. Whole step_call remains unwritten.
+- verify_with: holbuild(targets=["vfmCallStepsTheory"], timeout=1800)
 
 ## If This Fails
-- Inspect the actual wrapper premise mismatch; use directed matching and restore literal boundary premises. Keep checked scalar/reservation interfaces opaque. Record useful partial evidence via checkpoint_progress; close stuck and request review only for structural interface failure or false margin. No further export weakening.
+- Inspect actual safe-contract and beta/eta matching before unfolding primitives. checkpoint_progress for useful partial proof; close stuck and request review only for structural interface/decomposition failure. Do not add export hypotheses.
 
 ## Do Not Retry
-- Infer reservation or paid stipend surplus from call_meter_result.: That interface has forgotten the surplus; use call_meter_reserved and its transport laws.
+- Recover paid stipend/grant reservation from call_meter_result.: It forgets surplus; retain call_meter_reserved until refund or entry spends it.
   - evidence: episode:E0023
   - evidence: episode:E0024
-- Unrestricted nonempty-context CALL safety or constrain external caller beyond the authorized amendment.: Historical checked counterexamples require rooted fresh-callee budget. No further exported guards are authorized.
-  - evidence: episode:E0011
+- Unrestricted nonempty-context CALL safety or additional exported caller backing guards.: Historical counterexamples require scoped fresh-callee budget. No further export weakening is authorized.
   - evidence: episode:E0013
   - evidence: tool_output:TO_seq58_progcall_port-20261030T183500Z_m0272_t001
-- Unfold whole step_call, proceed_call, dispatch and crypto together.: Checked entry/reservation/dispatch boundaries now provide the intended compositional interface.
-  - evidence: episode:E0021
-  - evidence: episode:E0023
-  - evidence: episode:E0024
+- Repeated direct irule/ho_match_mp_tac variants on safe precondition eta mismatch.: Use directed boundary premises and normalize call_meter_safe_def instead; tested on proceed/payment tails.
+  - evidence: episode:E0027
+  - evidence: source:prog/vfmCallStepsScript.sml
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box isolation in EntryStep/Reserve/Grant theories remains effective. The unconsidered alternative is a more generic state-preserving reader/neutral interface, but current reservation transport already avoids opcode unfolding; do not redesign it merely for routine matching.
-- The original result contract was the wrong abstraction for paid stipends: it discards surplus. The strategist's reserved predicate now retains exactly the needed backing and claim credit. This decomposition is still appropriate.
-- A fresh expert should first scrutinize abort ordering and error states: abort_unuse refunds before push, whereas some other abort paths can fail before refund. Never infer unconditional refund from an ordinary-result contract.
-- Reader specialization consumed too many tactical retries. Inspect polymorphism and beta normalization earlier rather than varying match tactics.
+- The reservation decomposition remains valid: grant acquisition/discharge and all semantic suffixes now build without reopening precompile internals. We are not optimizing the wrong meter invariant.
+- Outside-the-box option not tried: a compact semantic suffix definition to avoid repeatedly quoting the long monadic continuation. Current named suffix lemmas suffice, but ask strategist for source refactor if statement duplication obstructs prefix assembly.
+- A fresh expert should first check that initial reader adapters retain return values and that zero-reservation early errors lift to the original anchor budget; do not demand success-only meter facts on errors.
+- Too many direct matching retries were spent on eta-expanded preconditions. Use the checked directed safe_def boundary application pattern early rather than repeatedly trying irule/ho_match_mp_tac.
 
 ### What Went Wrong
-- call_meter_result could not transport the paid stipend surplus; this was escalated before whole-opcode unfolding. Oracle introduced call_meter_reserved and transport laws, now checked.
-- Broad metis on arithmetic-reordered margin inequalities timed out. Explicitly establish the theorem-shaped sum inequality by decide_tac, then drule_all and normalize AC sums.
-- Polymorphic context reader Q.SPEC_THEN could not instantiate its result type; Q.ISPEC_THEN with MATCH_ACCEPT_TAC o BETA_RULE resolved it. Lowercase match_accept_tac does not exist.
-- The last Grant wrapper failure is a syntactic boundary mismatch: simplification removed n <= LENGTH u.contexts. Reintroduce literal boundary facts before directed application rather than unfolding budget internals.
+- Partial predicate versus eta-expanded lambda caused direct irule and ho_match_mp_tac failures even when the mathematical contract matched. Directed drule_all followed by simp[call_meter_safe_def] and small metis proved the corresponding instantiated boundary.
+- irule reordered conjunctions and inferred many existential parameters; guessed qexistsl argument orders failed. Read the live goal and supply only the remaining existential u.
+- gvs again normalized n<=LENGTH u.contexts to n<=SUC(LENGTH rest), preventing drule_all. Reassert the literal boundary premise before application.
+- Used wrong reader name once: correct lemma is call_meter_reserved_gas_left_reader.
 
 ### Ignored Signals
-- Safe adapters whose post is call_meter_ready cannot be rewritten as result-post adapters without consequence/transport; retain exact postconditions.
-- Automatic existential witness names changed after strip_tac. goal_assum (drule_at Any) was more robust than guessing d'.
-- Free theorem variables under mp_tac do not automatically specialize to the current d/cost. GEN_ALL plus beta normalization enabled drule_all in the consume adapter.
+- Beta reduction and ready-to-result consequence are separate obligations. BETA_TAC is required after specializing bind continuation lambdas; ready-post does not syntactically match result-post.
+- The persistent safe-contract mismatch was syntactic, not missing arithmetic or a false grant contract. Unfold only call_meter_safe_def at that boundary, not neutral monadic operations.
 
 ### Strategy Adjustments
-- Keep reservation acquisition and discharge separate from whole opcode assembly. Error paths may forget the reservation, but successful grant payment/entry must retain and spend it.
-- EntryStep proves arbitrary-address proceed_call by guarded dispatch, with all crypto opaque. ReserveTheory proves all requested C1.3.6.5.1 transport/adapters/readers and is committed.
-- GrantTheory has checked consume acquisition, withholding and restore-child discharge; CALL payment was also checked in the latest failing build. Remaining work is wrapper normalization and abort adapters.
+- Continue suffix-to-prefix assembly. call_meter_reserved_budget_bind now packages reserved-neutral computation followed by a budget-post continuation, including error-state reservation forgetting.
+- All new CallSteps proofs remain small and primitive bodies opaque. Keep this level; a growing monolithic step_call proof should trigger refactoring/escalation.
+- Stable source checkpoints are committed. Latest CallSteps build is clean; whole-entry progress remains partial, not a claimed completion.
 
 ### Oracle Feedback
-- TO_m0710 introduced a fixed-anchor reservation rather than more per-opcode arithmetic plumbing; its zero, weakening, neutral and charge/credit probes all succeeded.
-- E0024 accepted the reservation interface without changing frozen exports. This is infrastructure completion only, not final CALL-rule completion.
+- E0026 accepted: grant boundary source covers consume acquisition, withholding, CALL payment, entry wrappers and all abort discharge adapters. No statement repair or PLAN changes were needed.
 
 ## Evidence Pointers
-- episode:E0023 - checked scalar margins and general proceed_call; missing surplus interface identified
-- episode:E0024 - reservation interface proved
-- tool_output:TO_seq58_progcall_port-20261031T134530Z_m0763_t001 - E0024 accepted
-- tool_output:TO_seq58_progcall_port-20261031T134530Z_m0765_t001 - Reserve checkpoint commit dd601956
-- episode:E0025 - partial Grant evidence and exact resume point
-- tool_output:TO_seq58_progcall_port-20261031T134530Z_m0775_t001 - first four Grant theorems build clean
-- tool_output:TO_seq58_progcall_port-20261031T134530Z_m0777_t001 - latest failure, after CALL payment checked
-- tool_output:TO_seq58_progcall_port-20261031T134530Z_m0778_t001 - last unbuilt literal-length edit
-- source:prog/vfmCallReserveScript.sml
-- source:prog/vfmCallGrantScript.sml
+- episode:E0026 - grant component proved and reviewed
+- tool_output:TO_seq58_progcall_port-20261031T140620Z_m0816_t001 - strategist acceptance
+- episode:E0027 - checked CallSteps suffix/composition progress
+- episode:E0028 - gas reader tail checked
+- tool_output:TO_seq58_progcall_port-20261031T142258Z_m0875_t001 - latest clean vfmCallStepsTheory build
+- tool_output:TO_seq58_progcall_port-20261031T142258Z_m0879_t001 - latest stable source commit 085fbfef
+- source:prog/vfmCallStepsScript.sml
