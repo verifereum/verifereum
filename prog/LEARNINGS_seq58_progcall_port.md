@@ -236,3 +236,12 @@ evidence:
 - episode:E0055
 - episode:E0056
 - source:prog/vfmProgCallScript.sml:1112
+
+## L0028 scope='C1.6' tags=SIMP_RULE,existential,opaque,Abbrev,beta
+shape: A normalized entry theorem loses existential output names needed by consumer tactics
+pattern: Wrap output equalities and derived projection facts in an opaque result predicate before simplifying the theorem. Eliminate existential witnesses first, then unpack the predicate once with SIMP_RULE (srw_ss()) [predicate_def,LET_THM], which beta-normalizes let applications; REWRITE_RULE alone may leave an unapplied lambda that strip_assume_tac cannot decompose.
+works_when: Existential output witnesses occur in equalities that whole-theorem simplification would eliminate; consumers need their names and projections.
+evidence:
+- episode:E0060
+- episode:E0061
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1828_t001

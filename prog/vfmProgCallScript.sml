@@ -1422,63 +1422,24 @@ val call_spec_entry_tac =
   qpat_x_assum `Abbrev (c = _)` kall_tac >>
   gvs[] >>
   qpat_assum `Collect dd = _` (assume_tac o SYM) >>
-  drule_all (SIMP_RULE (boss_ss()) [] (GEN_ALL call_entry_prepared)) >>
+  drule_all (SIMP_RULE (boss_ss()) [] (GEN_ALL call_entry_ready_prepared)) >>
   strip_tac >>
-  qmatch_asmsub_abbrev_tac `(if failed then calleeGas else call_return_gas err cc) <= calleeGas` >>
-  qmatch_asmsub_abbrev_tac `call_abort_context charged calleeGas caller` >>
-  qmatch_asmsub_abbrev_tac `t'.contexts = (final,cb)::cs` >>
-  qabbrev_tac `success = (~failed /\ err = NONE)` >>
-  qabbrev_tac `gasLeft = if failed then calleeGas else call_return_gas err cc` >>
-  qabbrev_tac `out = if failed then [] else call_return_data err cc` >>
-  `final.stack = b2w success::caller.stack /\
-   final.pc = SUC caller.pc /\
-   final.memory = buffer_write
-     (w2n (EL ((if call_has_value call_inst then 1 else 0)+4) c.stack))
-     (TAKE (w2n (EL ((if call_has_value call_inst then 1 else 0)+5) c.stack)) out) caller.memory /\
-   final.returnData = out /\ final.msgParams = caller.msgParams /\
-   final.jumpDest = caller.jumpDest /\
-   final.logs = caller.logs ++ (if success then cc.logs else []) /\
-   final.addRefund = caller.addRefund + (if success then cc.addRefund else 0) /\
-   final.subRefund = caller.subRefund + (if success then cc.subRefund else 0)` by
-    (Cases_on `failed` >>
-     simp[Abbr `final`, Abbr `success`, Abbr `out`, Abbr `caller`,
-       call_abort_context_def, call_return_context_observations]) >>
-  qabbrev_tac `entered = ~failed` >>
-  qabbrev_tac `childSG = if err = NONE then cc.stateGasLeft else cc.stateGasBaseline` >>
-  qabbrev_tac `merged =
-    (let base = (ARB with <|gasUsed := caller.gasUsed;
-      stateGasLeft := (if entered then 0 else caller.stateGasLeft);
-      stateGasSpilled := caller.stateGasSpilled; stateGasBaseline := caller.stateGasBaseline;
-      stateGasCommitted := caller.stateGasCommitted|>)
-     in if ~entered then credit_new_account_context base charged
-        else if success then repay_state_gas_spill_context
-          (absorb_state_gas base childSG cc.stateGasSpilled cc.stateGasCommitted)
-        else credit_new_account_context
-          (absorb_state_gas base childSG 0 cc.stateGasCommitted) charged)` >>
-  `final.gasUsed = merged.gasUsed - gasLeft /\
-   final.stateGasLeft = merged.stateGasLeft /\
-   final.stateGasSpilled = merged.stateGasSpilled /\
-   final.stateGasBaseline = merged.stateGasBaseline /\
-   final.stateGasCommitted = merged.stateGasCommitted` by
-    (irule call_final_context_meters >>
-     simp[Abbr `final`, Abbr `success`, Abbr `gasLeft`,
-       Abbr `merged`, Abbr `entered`, Abbr `childSG`] >>
-     Cases_on `failed` >> Cases_on `err = NONE` >> gvs[]) >>
+  qpat_x_assum `call_entry_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [call_entry_ready_def, LET_THM]) >>
   `FUNPOW (λr. if ISR (FST r) then r else step (SND r)) k s = (INL (),t')` by
     (qpat_assum `s = (INL (),SND s)` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   qexists_tac `k` >>
   qpat_x_assum `FUNPOW _ k s = _` (fn th => rewrite_tac[th]);
 
 val call_spec_post_tac = fn witnesses =>
+  qpat_x_assum `final = _` kall_tac >>
   once_rewrite_tac[STAR_COMM] >>
   simp[STAR_CODE_POOL_evm2set] >>
   conj_tac >- (qpat_x_assum `_ = {HasParsed c.pc}` mp_tac >> SET_TAC[]) >>
   CONV_TAC (REDEPTH_CONV (HO_REWR_CONV SEP_EXISTS_THM)) >>
   qexistsl_tac witnesses >>
-  gvs[] >> Cases_on `success` >>
   simp[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC,
-       call_return_context_observations, call_return_context_meter,
-       call_abort_context_def, LET_THM] >>
+       IgnAsm `merged = _`] >>
   qmatch_goalsub_abbrev_tac `evm2set_on rest _` >>
   `rest = {}` by
     (qunabbrev_tac `rest` >>
@@ -1487,6 +1448,7 @@ val call_spec_post_tac = fn witnesses =>
   simp[cond_def, evm2set_on_def];
 
 val call_spec_frame_tac =
+  qpat_x_assum `final = _` kall_tac >>
   sym_tac >> irule caller_observation_frame >> simp[];
 
 (* CALL to any code at a non-precompile, in a Collect domain (the

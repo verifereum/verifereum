@@ -42,6 +42,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.5 | proved |  | E0058 | Review bounded C1.5 closure and authorize commit; C1.6 must restate both exports and validate shared tactics against actual new semantic meter relations. |
 | C1.6 | progressed | missing_helper | E0059 | Escalate interface quality to strategist rather than add more manual existential instantiations or copy large assumptions. |
 | C1.6.1 | proved |  | E0060 | Review bounded closure, authorize checkpoint commit despite known downstream export failure as previous boundaries; C1.6.2 replace experimental tactic with opaque wrapper consumption. |
+| C1.6.2 | proved |  | E0062 |  |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -841,6 +842,28 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T211644Z_m1817_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0062`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 32 steps, 31 tools, 8 holbuild, 2,220,262 tok (2,217,969 in, 2,293 out, 2,156,416 cached), 218.3s, $0.3616776
+
+### Attempts / Evidence
+
+- `E0061` (progressed, other, actual effort: 1 sessions, 2 msgs, 11 steps, 10 tools, 2 holbuild, 1,478,616 tok (1,477,443 in, 1,173 out, 1,358,720 cached), 83.1s, $0.3850480)
+  - Replace experimental shared entry with normalized opaque wrapper, explicit existential elimination, one predicate elimination -> Entry application now checks in SPEC_Call_any and reaches Resume post. REWRITE_RULE predicate elimination left beta-redex from let and did not unpack; SIMP_RULE (srw_ss()) [call_entry_ready_def,LET_THM] fixed this. All old reconstruction blocks removed. (`TO_seq58_progcall_port-20261031T211644Z_m1828_t001`)
+  - Run existing shared post tactic with newly appended meter witnesses -> Fails with goal not an exists during witness selection. Exact inner stage not yet isolated. Shared post still uses legacy simp/SEP_EXISTS conversion and semantic unfolding; must inspect after conversion before changing witnesses or formulas. (`TO_seq58_progcall_port-20261031T211644Z_m1828_t001`)
+- `E0062` (proved, , actual effort: 1 sessions, 2 msgs, 32 steps, 31 tools, 8 holbuild, 2,220,262 tok (2,217,969 in, 2,293 out, 2,156,416 cached), 218.3s, $0.3616776)
+  - Inspect converted post and remove final's implementation equality before post/frame simplification; preserve merged while simplifying projections -> Legacy failure was a residual parsed-code conjunction caused by expanding final before using final.msgParams projection. Dropping final equality enables interface rewrites; IgnAsm merged prevents meter expression expansion during separation normalization. Both exports now share checked entry/post/frame tactics without semantic unfolding. (`TO_seq58_progcall_port-20261031T211644Z_m1852_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1868_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T211644Z_m1868_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
