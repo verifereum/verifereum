@@ -1090,3 +1090,89 @@ Proof
   simp[call_meter_safe_source_readers_inv]
 QED
 
+
+Theorem call_meter_pop_internal_budget:
+  call_meter_budget n ceiling s /\ n < LENGTH s.contexts /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  parent.gasUsed <= parent.msgParams.gasLimit /\
+  pop_and_incorporate_context success s = (r,t) ==>
+  r = INL () /\ call_meter_budget n ceiling t
+Proof
+  strip_tac >>
+  `parent.stateGasSpilled + parent.stateGasCommitted + call_meter_claim child <=
+    parent.gasUsed` by (drule_all call_meter_budget_parent_margin >> simp[]) >>
+  `child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed` by
+    (gvs[call_meter_claim_def] >> decide_tac) >>
+  drule_all call_meter_pop_settle_pair >>
+  disch_then (qspec_then `success` assume_tac) >> gvs[LET_THM] >>
+  irule call_meter_budget_pop >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[call_meter_settle_pop_backed, call_meter_settle_pop_claim, ADD_COMM]
+QED
+
+Theorem call_meter_pop_root_budget:
+  LENGTH s.contexts = n /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed /\
+  pop_and_incorporate_context success s = (r,t) ==>
+  r = INL () /\ call_meter_budget n ceiling t
+Proof
+  strip_tac >> drule_all call_meter_pop_settle_pair >>
+  disch_then (qspec_then `success` assume_tac) >> gvs[LET_THM] >>
+  irule call_meter_budget_root_exit >> qexists `s` >> simp[]
+QED
+
+Theorem call_meter_handle_create_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  0 < n /\ n <= LENGTH s.contexts /\
+  e <> SOME Impossible /\ e <> SOME Unimplemented /\
+  handle_create e s = (r,t) ==>
+  call_meter_budget n ceiling t /\
+  (!ex. r = INR ex ==> ex <> SOME Impossible /\ ex <> SOME Unimplemented)
+Proof
+  strip_tac >>
+  `s.contexts <> []` by (strip_tac >> gvs[]) >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  `n <= LENGTH s.contexts` by simp[] >>
+  `call_meter_backed h0` by (drule_all call_meter_budget_top >> simp[]) >>
+  `h0.gasUsed <= h0.msgParams.gasLimit` by
+    gvs[wf_state_def, wf_context_def] >>
+  `call_meter_result h0 h1 t' s` by simp[call_meter_result_same] >>
+  drule call_meter_safe_handle_create_inv >>
+  disch_then (qspecl_then [`t'`, `h1`, `h0`] mp_tac) >>
+  simp[call_meter_safe_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[] >>
+  drule_all call_meter_result_budget >> simp[]
+QED
+
+Theorem call_meter_safe_restore_inv:
+  call_meter_safe (call_meter_result c rb rest) restore_state_gas
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> simp[call_meter_safe_restore]
+QED
+
+Theorem call_meter_safe_forfeit_inv:
+  call_meter_safe (call_meter_result c rb rest) forfeit_remaining_gas
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> simp[call_meter_safe_forfeit]
+QED
+
+Theorem call_meter_safe_exception_prepare_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (ignore_bind (if success then return () else restore_state_gas)
+      (if ~success /\ e <> SOME Reverted then
+        ignore_bind forfeit_remaining_gas (set_return_data [])
+       else return ()))
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- (Cases_on `success`
+      >- simp[call_meter_safe_def, return_def] >>
+      simp[call_meter_safe_restore_inv]) >>
+  Cases_on `~success /\ e <> SOME Reverted`
+  >- (simp[] >> irule call_meter_safe_ignore_invariant >>
+      simp[call_meter_safe_forfeit_inv, call_meter_safe_return_data_inv]) >>
+  simp[call_meter_safe_def, return_def]
+QED

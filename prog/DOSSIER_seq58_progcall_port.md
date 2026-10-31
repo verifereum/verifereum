@@ -34,6 +34,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.7.5 | proved |  | E0039 | Review and commit dispatch and inner execution; proceed to handler/finite return components. |
 | C1.3.8 | stuck | risk_mismatch | E0041 | Review handler decomposition: expose settled-context backing and claim contracts without expanding full context records inside semantic consumer. |
 | C1.3.8.1 | proved |  | E0042 |  |
+| C1.3.8.2 | progressed | other | E0044 | Prove post-pop inc_pc/output operations budget preservation (root-exit insensitive to meter changes), then combine prepare prefix, pop and outputs into handle_exception, handle_step and step. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -644,6 +645,28 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1260_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_progcall_port-20261031T152132Z_m1262_t001` (use `read_tool_output` for exact output)
+
+## C1.3.8.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0044`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 21 steps, 20 tools, 6 holbuild, 1,847,045 tok (1,844,788 in, 2,257 out, 1,822,208 cached), 339.9s, $0.2499508
+- next: Prove post-pop inc_pc/output operations budget preservation (root-exit insensitive to meter changes), then combine prepare prefix, pop and outputs into handle_exception, handle_step and step.
+
+### Attempts / Evidence
+
+- `E0043` (progressed, other, actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 3 holbuild, 942,777 tok (941,412 in, 1,365 out, 926,848 cached), 268.8s, $0.1354628)
+  - Compose compact pop_settle_pair with parent_margin, budget_pop and settlement corollaries; use root_exit for final pop; lift checked handle_create fixed-tail contract. -> Internal pop ordinary-result/budget, root pop ordinary-result/budget and handle_create all-result budget plus forbidden-exception exclusion build cleanly. New compact settlement eliminates earlier timeout. (`TO_seq58_progcall_port-20261031T152132Z_m1270_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1272_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1278_t001`)
+- `E0044` (progressed, other, actual effort: 1 sessions, 1 msgs, 21 steps, 20 tools, 6 holbuild, 1,847,045 tok (1,844,788 in, 2,257 out, 1,822,208 cached), 339.9s, $0.2499508)
+  - Lift restore and forfeit fixed-tail contracts, then compose the initial exception-handler restore/forfeit/clear-data prefix. -> call_meter_safe_exception_prepare_inv builds; branches split before unfolding call_meter_safe_def to preserve contract rewrites. Full exception handler and post-pop output remain unfinished. (`TO_seq58_progcall_port-20261031T152132Z_m1288_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1288_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
