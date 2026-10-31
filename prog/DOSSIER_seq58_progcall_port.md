@@ -35,6 +35,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.8 | stuck | risk_mismatch | E0041 | Review handler decomposition: expose settled-context backing and claim contracts without expanding full context records inside semantic consumer. |
 | C1.3.8.1 | proved |  | E0042 |  |
 | C1.3.8.2 | proved |  | E0048 | Ancestor review should schedule remaining nonabort/finite-return interface using authorized caller grant bound, not unconditional root safety. |
+| C1.3.9 | proved |  | E0049 | Review whether finite-return boundary suffices to close this leaf and schedule replacement/removal of old unrestricted local chain when integrating call_returns_summary. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -675,6 +676,26 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1450_t001` (use `read_tool_output` for exact output)
+
+## C1.3.9
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0049`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 3 holbuild, 2,157,141 tok (2,153,696 in, 3,445 out, 2,126,592 cached), 609.7s, $0.3013172
+- next: Review whether finite-return boundary suffices to close this leaf and schedule replacement/removal of old unrestricted local chain when integrating call_returns_summary.
+
+### Attempts / Evidence
+
+- `E0049` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 3 holbuild, 2,157,141 tok (2,153,696 in, 3,445 out, 2,126,592 cached), 609.7s, $0.3013172)
+  - Place finite-return boundary in prog/vfmCallReturnScript.sml over checked vfmCallInnerTheory; combine scoped inner nonforbidden with existing handler-state and handle_step_not_abort_returns_inl facts; propagate budget/wf/Collect/ISL by OWHILE_INV_IND and apply unconditional run_call_eq_tr. -> call_meter_step_collect_inl, call_meter_run_call_collect_inl, call_meter_run_call_collect_returns build without cheats. Existing spec gas_stack_ok/stack_room preservation plus handle_step_not_abort_returns_inl discharge handler safety including root pop. No extra caller backing was added. New theory isolates valid scoped infrastructure from the old unrestricted safety chain still awaiting consumer integration in vfmProgCallScript.sml; run_call_last_pop left untouched. (`TO_seq58_progcall_port-20261031T152132Z_m1470_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1472_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1472_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
