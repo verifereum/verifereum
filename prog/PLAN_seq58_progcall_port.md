@@ -467,25 +467,134 @@ Compose the zero-reservation prefix using ordinary adapters, including code-size
 #### Not to try
 Do not import CALL stipend reasoning into CREATE or refund its collision grant. No whole-semantics simplifier expansion and no timeout overrides.
 
-### C1.3.7: Lift primitive and entry contracts to inner execution
+### C1.3.7: Complete inner execution meter coverage
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 50
+- Work units: 0
+- Rationale: Existing checked compositions validate the fixed-tail interface; remaining work separates neutral updates, state-meter effects, and finite dispatch.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0033
+
+#### Progress note
+E0033 supplies checked partial helpers, not a proof of full dispatch or any new child obligation. Retain those helpers unchanged; no continuity certification is requested.
+
+#### Summary
+Preserve the checked arithmetic, context-reader, exponentiation and memory helpers in vfmCallInner. Complete remaining ordinary instructions with fixed-tail call_meter_result contracts. Separate saved-context updates from state-charge/refund operations. Assemble step_inst with the already checked CALL/CREATE budget contracts, then lift to inner execution.
+
+#### Not to try
+Do not give CALL/CREATE a fixed-tail ordinary-result postcondition. Do not use arbitrary set_current_context as invariant-preserving. Do not unfold meter internals in final dispatch or use a single large all-opcode proof search.
+
+#### Argument
+Ordinary instructions preserve call_meter_result c rb rest on every result, including exceptional results. Its fixed-tail abstraction permits sequential composition without reopening budget arithmetic. CALL/CREATE can extend the context stack and therefore use the existing budget-level entry contracts instead. At dispatch, lift ordinary results to the anchored budget using call_meter_safe_anchor_budget; combine that with entry cases, then account for the fetch/PC plumbing of inner execution.
+
+#### Definition design
+Keep call_meter_safe and call_meter_result unchanged. Reader boundaries used with saved contexts must retain the returned value's equality to the current head; an invariant-only reader loses information required for safe record replacement. Every state-gas operation must have an all-result interface before storage or terminal dispatch uses it. No new hypotheses on exported rules are authorized.
+
+#### Code structure
+Keep additions in prog/vfmCallInnerScript.sml, after the existing checked helpers and before final dispatch. Family helpers are independently timed theorems. Retain existing source proofs; avoid unrelated cleanup or changes below prog/. A shared combinator is warranted only where it removes repeated semantic sequencing, not merely nested tactic syntax.
+
+### C1.3.7.1: Neutral context, stack and control-flow family
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: These operations change only non-meter fields; saved-context provenance is the essential boundary.
+
+#### Summary
+Add a value-sensitive current-context reader boundary. Cover Pop, Push, Dup, Swap, DupN, SwapN, Exchange, Jump, JumpI, and inc_pc_or_jump. Include assertions and invalid-jump failures on all-result paths.
+
+#### Statement
+For each ordinary operation m in this family prove call_meter_safe (call_meter_result c rb rest) m (\r t. call_meter_result c rb rest t). Reader boundary: call_meter_safe (call_meter_result c rb rest) get_current_context (\r t. ?ctx. r = INL ctx /\ ctx = FST (HD t.contexts) /\ call_meter_result c rb rest t).
+
+#### Approach
+Prove the reader boundary directly from get_current_context, then retain its equality through the local context-update sequence using call_meter_safe_bind. Alternatively prove a dedicated neutral projection lemma for a complete saved-context operation; updates must preserve all meter fields and the message gas limit, not merely gasUsed.
+
+#### Not to try
+The existing current_inv theorem deliberately forgets the read value; it cannot justify writing back an arbitrary saved context. Never assert an unconditional invariant for set_current_context.
+
+### C1.3.7.2: Remaining read, memory, copy and log operations
+- Kind: `proof`
+- Risk: 2
+- Work priority: 20
+- Work units: 8
+- Rationale: Composition uses the checked memory/spend and result-lift interfaces and neutral state effects.
+- Dependencies: C1.3.7.1
+
+#### Summary
+Retain existing keccak256/mload/mstore proofs and adapters. Cover Balance, SelfBalance, call-data load, all copy variants including MCOPY and external/return-data copies, external-code size/hash, BlockHash, BlobHash and Log. Cover remaining pure environmental reader instances through existing context/transaction helpers.
+
+#### Statement
+For each ordinary operation m in this family, prove call_meter_safe (call_meter_result c rb rest) m (\r t. call_meter_result c rb rest t). Parameterized copy helpers must state the reader contract actually required by their optional source reader.
+
+#### Approach
+Follow each definition's monadic sequence, reusing consume_inv, memory_info_inv, expand_inv, read_memory_inv and write_inv. If adding another copy repeats the same expansion/spend/read sequence, extract a parameterized sequencing helper with an explicit invariant-preserving continuation, and use it for new consumers; refactoring already checked keccak/mload is optional and only if directly useful.
+
+#### Not to try
+Do not expand all memory and account definitions at every use site. Domain-check failures must remain covered rather than assuming successful access.
+
+### C1.3.7.3: Storage charge and refund family
+- Kind: `proof`
+- Risk: 2
+- Work priority: 30
+- Work units: 5
+- Rationale: Storage's non-neutral effects are precisely charge/refund meter transitions; the surrounding account operations are meter-neutral.
+- Dependencies: C1.3.7.1
+- Checkpoint: yes
+
+#### Summary
+Prove SLoad/TLoad and SStore/TStore all-result interfaces. Give step_sstore_gas_consumption its own checked theorem. Expose any missing charge_state_gas and credit_state_gas_refund adapters as local family outputs before composing storage.
+
+#### Statement
+call_meter_safe (call_meter_result c rb rest) (step_sstore_gas_consumption address key value) (\r t. call_meter_result c rb rest t); analogous contracts for step_sload transient and step_sstore transient. Required local primitive adapters have the same pre/post shape for charge_state_gas amount and credit_state_gas_refund amount.
+
+#### Approach
+Follow the explicit storage sequence: stipend assertion, reads/access, refund-counter update, optional state refund, execution spend, state charge. Use checked primitive interfaces where available; prove missing invariant adapters by result-lift from the existing meter transition layer, then compose without unfolding its arithmetic in the storage theorem.
+
+#### Not to try
+Do not discard the state after an OutOfGas branch or assume a successful state charge. The stipend sentry constrains execution gas, not execution plus reservoir.
+
+### C1.3.7.4: Terminal and selfdestruct operations
 - Kind: `proof`
 - Risk: 2
 - Work priority: 40
-- Work units: 8
-- Rationale: Finite opcode dispatch using dedicated transition contracts; non-meter operations preserve the budget by context projection.
-- Dependencies: C1.3.6
+- Work units: 5
+- Rationale: Terminal results remain within the current frame until exception handling; meter effects need explicit interfaces, not a success-only argument.
+- Dependencies: C1.3.7.2, C1.3.7.3
+- Checkpoint: yes
 
 #### Summary
-Prove inner execution preserves the rooted budget on its result states. Derive exclusion of Impossible and Unimplemented from scoped backing. Cover all dispatched opcodes, including state-changing and terminal ones. Reuse existing non-CALL safety combinators where their statements remain sound.
+Cover Stop, Return, Revert, Invalid and SelfDestruct. Prove finish and step_return success-flag interfaces where needed. Isolate selfdestruct's charge/refund and account-update tail before composing its full instruction.
 
 #### Statement
-For wf_state s /\ budget n cg s /\ 2<=n /\ n<=LENGTH s.contexts, prove the step_inner result-state budget and handler-needed structural facts; if step_inner s=(INR e,t), prove e<>SOME Impossible /\ e<>SOME Unimplemented. Provide corresponding step_inst contracts used by this proof.
+For each operation in this family prove call_meter_safe (call_meter_result c rb rest) m (\r t. call_meter_result c rb rest t), covering both flags of step_return and every terminal exception result.
 
 #### Approach
-Split opcode dispatch into meter-neutral operations, primitive consumers, frame-entry operations and terminal operations. Give any hard opcode its own local named lemma instead of one timed tactic; lift untouched-tail facts via the list boundary interface.
+Inspect each terminal definition and prove its all-result contract before dispatch. Separate selfdestruct's meter-changing primitives from account/state updates; reuse storage-family charge/refund adapters when applicable and prove any additional primitive adapter locally with the existing transition layer.
 
 #### Not to try
-Do not expand every opcode inside one metis or simplification call. Do not treat collection mode as excluding Impossible; it only supplies the domain-side exclusion.
+Do not conflate a terminal INR result with frame popping: frame merging belongs to the outer handler, not this instruction family. Do not infer all-result safety from success-only preservation.
+
+### C1.3.7.5: Assemble opcode dispatch and inner execution
+- Kind: `proof`
+- Risk: 2
+- Work priority: 50
+- Work units: 5
+- Rationale: Finite constructor dispatch after family contracts; entry branches already have budget-level proofs.
+- Dependencies: C1.3.7.1, C1.3.7.2, C1.3.7.3, C1.3.7.4
+- Checkpoint: yes
+
+#### Summary
+Complete step_inst coverage for every constructor in step_inst_def. Use existing Steps entry contracts for CALL and CREATE and ordinary-result lifting for other constructors. Prove the inner-execution budget and forbidden-exception contract required by the parent strategy, and check vfmCallInnerTheory.
+
+#### Statement
+All-result preservation of call_meter_budget n ceiling through step_inst and inner execution under the existing entry contracts' wf_state, budget and active-depth assumptions; INR results exclude SOME Impossible and SOME Unimplemented. Match the current parent consumer's exact inner-execution interface, without introducing new exported-rule hypotheses.
+
+#### Approach
+Read the current inner-execution definition and the checked Steps theorem signatures before stating this boundary. Case-split instruction constructors, lift ordinary family contracts with call_meter_safe_anchor_budget, and use the checked CALL/CREATE contracts directly; then compose instruction fetch and inc_pc_or_jump with the correct value-sensitive boundary. Audit every step_inst_def constructor, including JumpDest's consume_gas and pure environmental instances, rather than leaving implicit residual coverage.
+
+#### Not to try
+Do not force stack-extending entry branches through call_meter_result. Do not mix exception-handler unwind proofs into inner execution. If the consumer interface requires an assumption not implied at its existing call sites, escalate rather than weaken the frozen rule.
 
 ### C1.3.8: Prove deposit and exception-handler budget preservation
 - Kind: `boundary_lemma`

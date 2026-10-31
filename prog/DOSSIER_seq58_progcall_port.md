@@ -26,6 +26,8 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6.5.2 | proved |  | E0026 |  |
 | C1.3.6.5.3 | proved |  | E0030 |  |
 | C1.3.6.5.4 | proved |  | E0032 |  |
+| C1.3.7 | progressed | other | E0033 | Continue finite opcode coverage with memory/storage/terminal families, then dispatch and step_inner lift. New vfmCallInnerScript.sml is build-clean and untracked until stable checkpoint commit. |
+| C1.3.7.1 | proved |  | E0034 |  |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -469,6 +471,45 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1037_t001` (use `read_tool_output` for exact output)
+
+## C1.3.7
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0033`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 21 steps, 20 tools, 2 holbuild, 2,013,390 tok (2,010,941 in, 2,449 out, 1,972,096 cached), 175.9s, $0.2993896
+- next: Continue finite opcode coverage with memory/storage/terminal families, then dispatch and step_inner lift. New vfmCallInnerScript.sml is build-clean and untracked until stable checkpoint commit.
+
+### Attempts / Evidence
+
+- `E0033` (progressed, other, actual effort: 1 sessions, 1 msgs, 21 steps, 20 tools, 2 holbuild, 2,013,390 tok (2,010,941 in, 2,449 out, 1,972,096 cached), 175.9s, $0.2993896)
+  - Start downstream vfmCallInner theory and compose ordinary-result invariant adapters for pop, arithmetic and context/transaction-reader opcode families. -> Ten interface-based helper theorems build cleanly, covering binop, monop, modop, exp, context/msgParams/txParams families. No whole opcode dispatch theorem yet. (`TO_seq58_progcall_port-20261031T152132Z_m1063_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1063_t001` (use `read_tool_output` for exact output)
+
+## C1.3.7.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0034`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 20 steps, 19 tools, 9 holbuild, 2,437,417 tok (2,433,383 in, 4,034 out, 2,406,272 cached), 268.2s, $0.3351892
+
+### Attempts / Evidence
+
+- `E0034` (proved, , actual effort: 1 sessions, 1 msgs, 20 steps, 19 tools, 9 holbuild, 2,437,417 tok (2,433,383 in, 4,034 out, 2,406,272 cached), 268.2s, $0.3351892)
+  - Introduce value-sensitive current reader and saved-context continuation boundary; compose stack/control-flow consumers using neutral set, ready assertion prefix, and ordinary-result invariant adapters. -> Pop, Push, Dup, DupN, Swap, SwapN, Exchange, Jump, JumpI, and inc_pc_or_jump all proved with all-result meter/safety contracts. Saved-context operations require exact current-frame provenance; neutral field updates preserve all four claim dimensions and gasLimit. vfmCallInnerTheory builds cleanly. (`TO_seq58_progcall_port-20261031T152132Z_m1091_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1091_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
