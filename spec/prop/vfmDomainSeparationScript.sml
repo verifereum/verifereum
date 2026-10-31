@@ -2514,12 +2514,13 @@ Proof
       \\ qmatch_asmsub_rename_tac`domain_mode_CASE st.msdomain`
       \\ `st.msdomain = s.msdomain`
       by (
-        gvs[get_num_contexts_def, set_return_data_def, assert_not_static_def,
-            bind_def, return_def, ignore_bind_def, get_static_def,
-            domain_check_def,
-            get_current_context_def, assert_def, fail_def, CaseEq"prod",
-            CaseEq"sum", set_current_context_def, CaseEq"bool", consume_gas_def,
-            CaseEq"domain_mode", get_gas_left_def, access_address_def, set_domain_def] )
+        qpat_x_assum `access_address _ _ = _` mp_tac
+        \\ gvs[get_num_contexts_def, set_return_data_def, assert_not_static_def,
+               bind_def, return_def, ignore_bind_def, get_static_def,
+               get_current_context_def, assert_def, fail_def, CaseEq"prod",
+               CaseEq"sum", set_current_context_def, CaseEq"bool", consume_gas_def,
+               get_gas_left_def]
+        \\ rw[access_address_def, domain_check_def, fail_def, return_def] \\ simp[] )
       \\ gvs[fail_def, return_def, CaseEq"bool"]
       \\ `toCreate ∈ toSet d.addresses`
       by (

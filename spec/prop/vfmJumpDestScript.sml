@@ -2086,9 +2086,11 @@ QED
 Theorem preserves_all_jumpDest_NONE_step_create[simp]:
   preserves_all_jumpDest_NONE (step_create two)
 Proof
-  rw[step_create_def] >> pajdn_tac >>
-  rpt (IF_CASES_TAC >> gvs[] >> pajdn_tac) >>
-  simp[preserves_all_jumpDest_NONE_proceed_create]
+  simp[step_create_def]
+  >> rpt (FIRST [irule preserves_all_jumpDest_NONE_bind,
+                 irule preserves_all_jumpDest_NONE_ignore_bind, IF_CASES_TAC]
+          >> rpt conj_tac >> rpt gen_tac >> BETA_TAC)
+  >> simp[preserves_all_jumpDest_NONE_proceed_create]
 QED
 
 (* step_inst preserves all_jumpDest_NONE for all opcodes *)
@@ -2139,6 +2141,36 @@ Theorem same_frame_rel_TL:
   same_frame_rel s s' ⇒ TL s'.contexts = TL s.contexts
 Proof
   rw[same_frame_rel_def]
+QED
+
+(* Popping a context whose callers all have jumpDest = NONE establishes
+   all_jumpDest_NONE, and a preserving continuation keeps it. *)
+Theorem pop_and_incorporate_context_all_jumpDest_NONE[local]:
+  pop_and_incorporate_context b s = (r, s') ∧
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ⇒
+  all_jumpDest_NONE s'
+Proof
+  strip_tac >> Cases_on `s.contexts`
+  >- gvs[pop_and_incorporate_context_def, bind_def, get_gas_left_def,
+         get_current_context_def, fail_def, all_jumpDest_NONE_def]
+  >> gvs[pop_and_incorporate_context_def, bind_def, get_gas_left_def,
+         get_current_context_def, pop_context_def, return_def]
+  >> qmatch_asmsub_abbrev_tac `m (s with contexts updated_by TL) = _`
+  >> `preserves_all_jumpDest_NONE m` by (Cases_on `b` >> simp[Abbr`m`])
+  >> gvs[preserves_all_jumpDest_NONE_def, all_jumpDest_NONE_def]
+  >> first_x_assum drule >> simp[]
+QED
+
+Theorem pop_and_incorporate_context_then_all_jumpDest_NONE[local]:
+  do pop_and_incorporate_context b; k od s = (r, s') ∧
+  preserves_all_jumpDest_NONE k ∧
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ⇒
+  all_jumpDest_NONE s'
+Proof
+  rw[ignore_bind_def, bind_def, AllCaseEqs()]
+  >> drule_all pop_and_incorporate_context_all_jumpDest_NONE
+  >> gvs[preserves_all_jumpDest_NONE_def]
+  >> metis_tac[]
 QED
 
 (*) handle_step INL establishes all_jumpDest_NONE given only TL has jumpDest NONE.
@@ -2196,25 +2228,26 @@ Proof
       (fn th => CHANGED_TAC(mp_tac th >>
                 impl_tac >- (gvs[] >> strip_tac >> gvs[]) >> rw[]))
       psf_imp_length_contexts_preserved))
-  >> (* handle_exception pops the head (n > 1), exposing position 1 which has
-       jumpDest = NONE. After pop, every remaining context had jumpDest = NONE.
-       The subsequent inc_pc, push_stack, set_return_data, write_memory,
-       set_rollback, update_gas_refund, push_logs don't touch jumpDest. *)
-  `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> gvs[])
-  >> gvs[handle_exception_def]
-  >> simp[all_jumpDest_NONE_def]
-  >> gvs[bind_def, ignore_bind_def, AllCaseEqs(),
-         get_gas_left_def, consume_gas_def, set_return_data_def,
-         get_current_context_def, return_def, set_current_context_def,
-         fail_def, get_return_data_def, get_output_to_def,
-         get_num_contexts_def, COND_RATOR, vfmTypesTheory.option_CASE_rator,
-         assert_def, get_current_context_def, unuse_gas_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, inc_pc_def, push_stack_def,
-         write_memory_def, update_gas_refund_def, push_logs_def,
-         outputTo_consistent_def, return_destination_CASE_rator]
-  >> Cases_on `s.contexts` >> fs[]
-  >> Cases_on `t` >> fs[]
+  >> `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> gvs[])
+  >> (* The gas charge and the reads before the pop only touch the head, so
+       TL is unchanged when handle_exception pops the head (n > 1). *)
+  qpat_x_assum `handle_exception _ _ = _` mp_tac
+  >> simp[handle_exception_def, Once ignore_bind_def, Once bind_def,
+          CaseEq"prod", CaseEq"sum", PULL_EXISTS]
+  >> rpt gen_tac >> strip_tac
+  >> qmatch_asmsub_abbrev_tac `m0 s1 = (INL (), _)`
+  >> rename1 `m0 s1 = (INL (), s2)`
+  >> `same_frame_rel s1 s2` by (
+       `preserves_same_frame m0` by rw[Abbr`m0`]
+       >> gvs[preserves_same_frame_def])
+  >> gvs[same_frame_rel_def]
+  >> `s2.contexts ≠ []` by (strip_tac >> gvs[])
+  >> gvs[bind_def, get_num_contexts_def, get_return_data_def,
+         get_output_to_def, get_current_context_def, return_def]
+  >> drule pop_and_incorporate_context_then_all_jumpDest_NONE
+  >> disch_then irule >> simp[]
+  >> irule preserves_all_jumpDest_NONE_ignore_bind >> simp[]
+  >> TOP_CASE_TAC >> rw[]
 QED
 
 (* Main theorem: step INL preserves all_jumpDest_NONE *)
