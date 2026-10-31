@@ -797,24 +797,70 @@ Prove the local observation theorem by Cases_on failed using call_abort_context_
 #### Not to try
 Do not test the new entry tactic against the old new_account_cost/no-meter statements and interpret failure as a machinery defect. Do not add duplicate probe SPEC rules merely to validate an ML tactic before the real statements exist. Do not conflate gasLeft with spill repayment or creation-credit recovery: the scalar old post gas formula omits settlement. Do not unfold the entire execution semantics in post/frame consumers; use the exact context observation boundary. Do not claim end-to-end tactic validation from an ML val declaration or from reaching the first obsolete export.
 
-### C1.6: Restate and prove the two narrowly amended exports
-- Kind: `proof`
+### C1.6: Package prepared entry observations before simplifying the public rules
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 50
-- Work units: 5
-- Rationale: After checked machinery these are packaging proofs, with the no-entry obstruction explicitly excluded by the authorized guard.
-- Dependencies: C1.5
-- Checkpoint: yes
+- Work priority: 60
+- Work units: 0
+- Rationale: No new semantic invariant is needed. Existing entry, observation and meter theorems supply the result by forward elimination; the remaining work is a local abstraction boundary and shared tactic integration.
 - Progress transition: `refinement`
+- Carries progress/evidence from: E0059
+
+#### Progress note
+Retain the checked charged-bit conclusion and call_final_context_meters as source progress, not as certification of the new leaves. The exports remain unproved.
 
 #### Summary
-Prove SPEC_Call_any and SPEC_Call_stipend using checked shared tactics. Add the state-gas charge triplet, all four meter resources, creditBack = MIN stateCost sp, and calleeGas <= g + gasCost - creditBack. Keep all other content, including the stipend bound and stronger stipend footprint. State returned meters via the actual semantic transformations, not an invented gas-credit abbreviation.
-
-#### Approach
-Copy the sibling literal cost and charge convention, deleting the obsolete creation execution-cost term. Use semantic meter witnesses from call_entry_prepared in post packaging, retaining gasLeft <= calleeGas as a bound on child unused gas only; inspect all newly introduced cond premises against the owner's limited authorization.
+Keep the public formulas unchanged. Package entry witnesses and all final-context observations in a local boundary before simplification. Remove the duplicated observation proofs from call_spec_entry_tac. Validate both export applications using the same boundary.
 
 #### Not to try
-No extra entry balance/depth, spill-zero, caller-account, or callee-code hypotheses. If another obstruction appears, provide concrete checked evidence and stop for owner review; the current exception is not blanket permission to weaken.
+Do not backward-irule call_final_context_meters against the projection conjunction: mr and other premise-only parameters cannot be inferred. Do not simplify the entire unprotected existential result using SIMP_RULE or gvs. Do not repair this by copying full observation conjunctions into by-blocks or manually specializing seven-plus parameters.
+
+#### Argument
+call_entry_prepared already gives the concrete final context, charged-bit retention, gas bound, rollback and stipend facts. Its final-context equality determines all ordinary observations by call_final_context_observations and all five meter projections by call_final_context_meters. These consequences must be derived while caller, final, mr and the Boolean aliases are still named; public separation-logic packaging then uses only projections, not semantic context constructors.
+
+#### Definition design
+Introduce a local opaque result predicate call_entry_ready containing the named output equalities, run/context facts, ordinary observations, five meter projections, merged-carrier equation, gas bound, rollback fact and stipend implications. Its arguments must retain the witnesses needed by the public postcondition, including caller/final and cc/err, not merely success. The precise argument order is local implementation detail. Simplification of the entry theorem must not unfold this predicate: it protects existential witnesses from existential-equality elimination. Provide a named elimination theorem obtained from its definition, used once immediately after explicit existential elimination. No new semantic definition or change to public statements is authorized.
+
+#### Code structure
+All changes stay in prog/vfmProgCallScript.sml immediately before the three shared tactics. Keep call_entry_prepared as the semantic spine. Add the local result predicate and wrapper there; replace the experimental alias reconstruction and inline conjunction proofs in call_spec_entry_tac. Keep settlement unfolding confined to the existing local projection lemmas.
+
+### C1.6.1: Protected prepared-entry result boundary
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: The wrapper is a logical consequence of three existing local theorems and requires no execution reasoning.
+- Checkpoint: yes
+
+#### Summary
+Define the protected entry-result predicate and prove call_entry_ready_prepared with exactly the premises of call_entry_prepared. Retain explicit output names through simplification. Derive ordinary and meter observations forward, before constructing the protected result. Check the wrapper and its elimination interface in the theory build.
+
+#### Statement
+call_entry_ready_prepared: the unchanged premises of call_entry_prepared imply existentially named entry outputs satisfying call_entry_ready. The predicate contains every current call_entry_prepared conclusion plus the nine conclusions of call_final_context_observations and the five conclusions of call_final_context_meters. Use entered = ~failed, success = (~failed /\ err = NONE), gasLeft = (if failed then cg else call_return_gas err cc), out = (if failed then [] else call_return_data err cc), childSG = (if err = NONE then cc.stateGasLeft else cc.stateGasBaseline), and the exact merged carrier currently at lines 1305–1314. Preserve rollback and stipend implications verbatim. These are local strengthening outputs, not additional premises.
+
+#### Approach
+Prove the wrapper in a small symbolic context: forward-apply call_entry_prepared without whole-theorem simplification, eliminate its existentials explicitly, and introduce local aliases for the final context, failed flag and merged carrier. Forward-apply call_final_context_observations and call_final_context_meters from the final-context equality and alias equations (drule followed by discharge of the remaining premises); all parameters, especially mr, are then determined by the equality rather than by projection goals. Package the derived facts into the opaque predicate; prove its elimination lemma by rewriting the definition, and verify that simplifying the wrapper leaves its existential witnesses present.
+
+#### Not to try
+Do not reconstruct the entry semantic proof, add hypotheses, or change call_entry_prepared's established result. Do not unfold the result predicate while normalizing the wrapper for drule_all. Avoid a monolithic metis invocation over all entry and observation facts; derive the two projection groups separately before packaging.
+
+### C1.6.2: Replace the experimental shared tactic and discharge both export applications
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: The protected boundary supplies exactly the facts currently reconstructed by the failing shared tactic; the remaining separation and frame steps are unchanged in purpose.
+- Dependencies: C1.6.1
+- Checkpoint: yes
+
+#### Summary
+Consume call_entry_ready_prepared in the shared entry tactic. Delete the experimental reconstruction and duplicate conjunction proofs. Use the boundary's named witnesses for both public posts and its projections for framing. Build both exports without changing their current formulas.
+
+#### Approach
+Retain the existing initial SPEC/state decomposition, then drule_all the normalized protected wrapper, explicitly eliminate existential witnesses, and unfold only the ready-result predicate once using its elimination theorem. Use strip_tac rather than global gvs to preserve the named equations until the public existential witnesses are chosen; only then simplify the postcondition using the supplied projections. Delete the line-1284–1323 experiment and adjust call_spec_post_tac to stop unfolding call_abort_context/call_return_context internals; check both exports and their frame branches with holbuild --max-heap 12000 -j8 build vfmProgCallTheory.
+
+#### Not to try
+Do not change public postcondition carriers or add assumptions. Do not reintroduce final-context observation by-blocks into the shared tactic. If a postcondition needs a missing projection, extend the local ready-result boundary rather than unfolding semantic definitions in the consumer.
 
 ### C1.7: Build, audit and commit the completed scoped port
 - Kind: `build_probe`

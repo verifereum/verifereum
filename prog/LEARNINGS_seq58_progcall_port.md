@@ -227,3 +227,12 @@ works_when: unspecified
 evidence:
 - source:prog/vfmProgCallScript.sml:948-962
 - episode:E0054
+
+## L0027 scope='C1.4' tags=COND_RATOR,gvs,conditional,alias
+shape: Conditional monadic function applied to state equals conditional execution results
+pattern: Normalize with COND_RATOR before expanding branches. After gvs eliminates scalar aliases, split only the actual goal guard (e.g. IF_CASES_TAC), not a stale named expression. This avoids duplicate continuations and unrelated branch assumptions.
+works_when: unspecified
+evidence:
+- episode:E0055
+- episode:E0056
+- source:prog/vfmProgCallScript.sml:1112

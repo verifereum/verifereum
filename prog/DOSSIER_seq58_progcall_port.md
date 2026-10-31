@@ -40,6 +40,8 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.9 | proved |  | E0049 | Review whether finite-return boundary suffices to close this leaf and schedule replacement/removal of old unrestricted local chain when integrating call_returns_summary. |
 | C1.4 | proved |  | E0056 | Review bounded proof and authorize checkpoint commit despite downstream caller_observation_frame failure; proceed to shared frame/export component. |
 | C1.5 | proved |  | E0058 | Review bounded C1.5 closure and authorize commit; C1.6 must restate both exports and validate shared tactics against actual new semantic meter relations. |
+| C1.6 | progressed | missing_helper | E0059 | Escalate interface quality to strategist rather than add more manual existential instantiations or copy large assumptions. |
+| C1.6.1 | proved |  | E0060 | Review bounded closure, authorize checkpoint commit despite known downstream export failure as previous boundaries; C1.6.2 replace experimental tactic with opaque wrapper consumption. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -796,6 +798,49 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T211644Z_m1738_t001` (use `read_tool_output` for exact output)
+
+## C1.6
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `missing_helper`
+- latest episode: `E0059`
+- blocker: Meter boundary application interface not aligned to simplified prepared-entry output; large shared tactic proof state.
+- actual effort: 1 sessions, 3 msgs, 40 steps, 39 tools, 9 holbuild, 3,136,374 tok (3,126,361 in, 10,013 out, 3,023,744 cached), 611.6s, $1.0842392
+- next: Escalate interface quality to strategist rather than add more manual existential instantiations or copy large assumptions.
+
+### Attempts / Evidence
+
+- `E0059` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 40 steps, 39 tools, 9 holbuild, 3,136,374 tok (3,126,361 in, 10,013 out, 3,023,744 cached), 611.6s, $1.0842392)
+  - Retain entered child's charged bit in call_entry_prepared; prove call_final_context_meters by semantic settlement unfolding in local boundary -> Both checked: latest builds pass these theorems. Boundary initially used conjunctive call_return_context_meter as rewrite, which did not fire; direct settlement unfolding inside this boundary works. (`TO_seq58_progcall_port-20261031T211644Z_m1766_t001`)
+  - Restate both exports exactly per new strategist meter-carrier statement; reconstruct aliases in shared entry after SIMP_RULE -> Statements parse. Inline entry diagnostic verifies drule_all prepared-entry succeeds. SIMP_RULE eliminates success/out/gasLeft existentials and normalizes caller into updates; old shared framing tactic had never handled this. New alias reconstruction checks non-meter observations but meter helper backward application leaves uninstantiated variables and fails. (`TO_seq58_progcall_port-20261031T211644Z_m1782_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1791_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T211644Z_m1766_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T211644Z_m1782_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T211644Z_m1791_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0060`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 24 steps, 23 tools, 10 holbuild, 2,686,464 tok (2,679,163 in, 7,301 out, 2,622,720 cached), 415.3s, $0.4481680
+- next: Review bounded closure, authorize checkpoint commit despite known downstream export failure as previous boundaries; C1.6.2 replace experimental tactic with opaque wrapper consumption.
+
+### Attempts / Evidence
+
+- `E0060` (proved, , actual effort: 1 sessions, 2 msgs, 24 steps, 23 tools, 10 holbuild, 2,686,464 tok (2,679,163 in, 7,301 out, 2,622,720 cached), 415.3s, $0.4481680)
+  - Introduce opaque call_entry_ready and wrapper with exactly prepared-entry premises; apply checked entry and observation/meter boundaries forward -> Wrapper checks. Clear input premises immediately after entry elimination to keep symbolic context small. A small Boolean carrier normalization supplies exact forward meter premise. Normalize each result assumption independently (not fs against entire context), unfold ready predicate, split and close trivial packaging conjuncts. (`TO_seq58_progcall_port-20261031T211644Z_m1817_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T211644Z_m1817_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

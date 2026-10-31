@@ -1015,6 +1015,8 @@ Theorem call_entry_prepared[local]:
       else call_return_context err cc
         (caller with <|returnData := []; stateGasLeft := 0|>)
         <|offset := ro; size := rz|>),cb)::cs ∧
+    (~((lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+        LENGTH s.contexts > 1024) ==> cc.msgParams.newAccountCharged = charged) /\
     (¬success ⇒ t.rollback = rb') ∧
     (cg ≤ call_stipend ⇒
       t.originalAccounts = s.originalAccounts ∧
@@ -1229,6 +1231,181 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem call_final_context_meters[local]:
+  final = (if failed then call_abort_context charged cg caller
+    else call_return_context err cc
+      (caller with <|returnData := []; stateGasLeft := 0|>) mr) /\
+  success = (~failed /\ err = NONE) /\
+  gasLeft = (if failed then cg else call_return_gas err cc) /\
+  (~failed ==> cc.msgParams.newAccountCharged = charged) /\
+  merged = (let base = (ARB with <|
+      gasUsed := caller.gasUsed;
+      stateGasLeft := (if failed then caller.stateGasLeft else 0);
+      stateGasSpilled := caller.stateGasSpilled;
+      stateGasBaseline := caller.stateGasBaseline;
+      stateGasCommitted := caller.stateGasCommitted|>)
+    in if failed then credit_new_account_context base charged
+       else if success then repay_state_gas_spill_context
+         (absorb_state_gas base cc.stateGasLeft cc.stateGasSpilled cc.stateGasCommitted)
+       else credit_new_account_context
+         (absorb_state_gas base cc.stateGasBaseline 0 cc.stateGasCommitted) charged) ==>
+  final.gasUsed = merged.gasUsed - gasLeft /\
+  final.stateGasLeft = merged.stateGasLeft /\
+  final.stateGasSpilled = merged.stateGasSpilled /\
+  final.stateGasBaseline = merged.stateGasBaseline /\
+  final.stateGasCommitted = merged.stateGasCommitted
+Proof
+  Cases_on `failed` >> Cases_on `err = NONE` >>
+  simp[call_abort_context_def, call_return_context_def,
+    vfmCallMeterProbeTheory.call_meter_settle_def, LET_THM,
+    credit_new_account_context_def, absorb_state_gas_def,
+    repay_state_gas_spill_context_def] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+(* This predicate shields the output names from existential-equality
+   simplification while the public precondition is normalized. *)
+Definition call_entry_ready_def[local]:
+  call_entry_ready s c op addr value cg caller charged ro rz rb cb cs
+      k t dd cc err gasLeft out success entered childSG merged final <=>
+  let failed = ((lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+               LENGTH s.contexts > 1024)
+  in
+    FUNPOW (\r. if ISR (FST r) then r else step (SND r)) k (INL (),s) = (INL (),t) /\
+    wf_state t /\ t.msdomain = Collect dd /\ t.txParams = s.txParams /\
+    gasLeft <= cg /\ success = (~failed /\ err = NONE) /\
+    gasLeft = (if failed then cg else call_return_gas err cc) /\
+    out = (if failed then [] else call_return_data err cc) /\
+    entered = ~failed /\
+    childSG = (if err = NONE then cc.stateGasLeft else cc.stateGasBaseline) /\
+    final = (if failed then call_abort_context charged cg caller
+      else call_return_context err cc
+        (caller with <|returnData := []; stateGasLeft := 0|>) <|offset := ro; size := rz|>) /\
+    t.contexts = (final,cb)::cs /\
+    (~failed ==> cc.msgParams.newAccountCharged = charged) /\
+    (~success ==> t.rollback = rb) /\
+    (cg <= call_stipend ==>
+      t.originalAccounts = s.originalAccounts /\
+      (success ==> t.rollback.accounts =
+        (if op <> CallCode /\ 0 < value then
+           transfer_value c.msgParams.callee addr value s.rollback.accounts
+         else s.rollback.accounts) /\ t.rollback.toDelete = s.rollback.toDelete)) /\
+    merged = (let base = (ARB with <|gasUsed := caller.gasUsed;
+      stateGasLeft := (if entered then 0 else caller.stateGasLeft);
+      stateGasSpilled := caller.stateGasSpilled;
+      stateGasBaseline := caller.stateGasBaseline;
+      stateGasCommitted := caller.stateGasCommitted|>)
+      in if ~entered then credit_new_account_context base charged
+         else if success then repay_state_gas_spill_context
+           (absorb_state_gas base childSG cc.stateGasSpilled cc.stateGasCommitted)
+         else credit_new_account_context
+           (absorb_state_gas base childSG 0 cc.stateGasCommitted) charged) /\
+    final.stack = b2w success::caller.stack /\
+    final.pc = SUC caller.pc /\
+    final.memory = buffer_write ro (TAKE rz out) caller.memory /\
+    final.returnData = out /\ final.msgParams = caller.msgParams /\
+    final.jumpDest = caller.jumpDest /\
+    final.logs = caller.logs ++ (if success then cc.logs else []) /\
+    final.addRefund = caller.addRefund + (if success then cc.addRefund else 0) /\
+    final.subRefund = caller.subRefund + (if success then cc.subRefund else 0) /\
+    final.gasUsed = merged.gasUsed - gasLeft /\
+    final.stateGasLeft = merged.stateGasLeft /\
+    final.stateGasSpilled = merged.stateGasSpilled /\
+    final.stateGasBaseline = merged.stateGasBaseline /\
+    final.stateGasCommitted = merged.stateGasCommitted
+End
+
+Theorem call_entry_ready_prepared[local]:
+  wf_state s /\ s.contexts = (c,cb)::cs /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME op /\
+  is_call op /\ op <> Create /\ op <> Create2 /\
+  s.msdomain = Collect dd /\ ~fIN addr precompile_addresses /\
+  6 + v <= LENGTH c.stack /\
+  v = (if call_has_value op then 1 else 0) /\
+  w2n (EL 0 c.stack) = gas /\ w2w (EL 1 c.stack) = addr /\
+  (if 0 < v then w2n (EL 2 c.stack) else 0) = value /\
+  w2n (EL (v+2) c.stack) = ao /\ w2n (EL (v+3) c.stack) = az /\
+  w2n (EL (v+4) c.stack) = ro /\ w2n (EL (v+5) c.stack) = rz /\
+  max_expansion_range (ao,az) (ro,rz) = (offset,sz) /\
+  lookup_account addr s.rollback.accounts = ta /\
+  delegate_check ta.code (msdomain_add addr s.msdomain)
+    (accesses_add addr s.rollback) dc rb' dom' /\
+  memory_cost c.memory offset sz = mc /\
+  charged = (op = Call /\ 0 < value /\ account_empty ta) /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  call_gas value gas
+    (c.msgParams.gasLimit - (c.gasUsed + (static_gas op +
+      access_cost s.rollback addr + (if 0 < value then call_value_cost else 0) + dc + mc)))
+    0 0 = (dg,cg) /\
+  c.gasUsed + (static_gas op + access_cost s.rollback addr +
+    (if 0 < value then call_value_cost else 0) + dc + mc + dg) <= c.msgParams.gasLimit /\
+  creditBack = MIN stateCost c.stateGasSpilled /\
+  cg <= c.gasUsed + (static_gas op + access_cost s.rollback addr +
+    (if 0 < value then call_value_cost else 0) + dc + mc + dg) - creditBack /\
+  (0 < value ==> ~c.msgParams.static) /\
+  caller = c with <|stack := DROP (6+v) c.stack;
+    gasUsed := c.gasUsed + (static_gas op + access_cost s.rollback addr +
+      (if 0 < value then call_value_cost else 0) + dc + mc + dg);
+    stateGasLeft := c.stateGasLeft - stateCost;
+    memory := expanded_memory c.memory offset sz|> /\
+  prepared = s with <|rollback := rb'; msdomain := dom';
+                      contexts := (caller,cb)::cs|> ==>
+  ?k t dd' cc err gasLeft out success entered childSG merged final.
+    call_entry_ready s c op addr value cg caller charged ro rz rb' cb cs
+      k t dd' cc err gasLeft out success entered childSG merged final
+Proof
+  strip_tac >> drule_all (GEN_ALL call_entry_prepared) >>
+  POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `success = (~failed /\ err = NONE)` >>
+  qmatch_asmsub_abbrev_tac `t.contexts = (final,cb)::cs` >>
+  qpat_assum `Abbrev (final = _)`
+    (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_all call_final_context_observations >> strip_tac >>
+  qabbrev_tac `entered = ~failed` >>
+  qabbrev_tac `childSG = if err = NONE then cc.stateGasLeft else cc.stateGasBaseline` >>
+  qabbrev_tac `merged = (let base = (ARB with <|gasUsed := caller.gasUsed;
+    stateGasLeft := (if entered then 0 else caller.stateGasLeft);
+    stateGasSpilled := caller.stateGasSpilled;
+    stateGasBaseline := caller.stateGasBaseline;
+    stateGasCommitted := caller.stateGasCommitted|>)
+    in if ~entered then credit_new_account_context base charged
+       else if success then repay_state_gas_spill_context
+         (absorb_state_gas base childSG cc.stateGasSpilled cc.stateGasCommitted)
+       else credit_new_account_context
+         (absorb_state_gas base childSG 0 cc.stateGasCommitted) charged)` >>
+  `merged = (let base = (ARB with <|gasUsed := caller.gasUsed;
+      stateGasLeft := (if failed then caller.stateGasLeft else 0);
+      stateGasSpilled := caller.stateGasSpilled;
+      stateGasBaseline := caller.stateGasBaseline;
+      stateGasCommitted := caller.stateGasCommitted|>)
+    in if failed then credit_new_account_context base charged
+       else if success then repay_state_gas_spill_context
+         (absorb_state_gas base cc.stateGasLeft cc.stateGasSpilled cc.stateGasCommitted)
+       else credit_new_account_context
+         (absorb_state_gas base cc.stateGasBaseline 0 cc.stateGasCommitted) charged)` by
+    (qpat_x_assum `Abbrev (merged = _)` mp_tac >>
+     qpat_x_assum `Abbrev (entered = _)` mp_tac >>
+     qpat_x_assum `Abbrev (childSG = _)` mp_tac >>
+     qpat_x_assum `success = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac std_ss [markerTheory.Abbrev_def] >> rpt strip_tac >>
+     Cases_on `failed` >> Cases_on `err = NONE` >> fs[]) >>
+  `success = (~failed /\ err = NONE)` by
+    (qpat_x_assum `success = _` mp_tac >> simp[Abbr `entered`]) >>
+  `~failed ==> cc.msgParams.newAccountCharged = charged` by
+    (qpat_x_assum `entered ==> _` mp_tac >> simp[Abbr `entered`]) >>
+  drule_all call_final_context_meters >> strip_tac >>
+  qexistsl_tac [`k`,`t`,`dd'`,`cc`,`err`,`gasLeft`,`out`,`success`,
+    `entered`,`childSG`,`merged`,`final`] >>
+  pure_rewrite_tac[call_entry_ready_def, LET_THM] >>
+  qpat_x_assum `Abbrev (failed = _)`
+    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  rule_assum_tac (SIMP_RULE (srw_ss()) [markerTheory.Abbrev_def, LET_THM]) >>
+  simp_tac (srw_ss()) [] >>
+  rpt conj_tac >> metis_tac[]
+QED
+
 val call_spec_entry_tac =
   irule IMP_EVM_SPEC_FINITE_CODE >> rpt gen_tac >>
   CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss())
@@ -1247,10 +1424,46 @@ val call_spec_entry_tac =
   qpat_assum `Collect dd = _` (assume_tac o SYM) >>
   drule_all (SIMP_RULE (boss_ss()) [] (GEN_ALL call_entry_prepared)) >>
   strip_tac >>
+  qmatch_asmsub_abbrev_tac `(if failed then calleeGas else call_return_gas err cc) <= calleeGas` >>
+  qmatch_asmsub_abbrev_tac `call_abort_context charged calleeGas caller` >>
   qmatch_asmsub_abbrev_tac `t'.contexts = (final,cb)::cs` >>
-  qpat_assum `Abbrev (final = _)`
-    (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_all call_final_context_observations >> strip_tac >>
+  qabbrev_tac `success = (~failed /\ err = NONE)` >>
+  qabbrev_tac `gasLeft = if failed then calleeGas else call_return_gas err cc` >>
+  qabbrev_tac `out = if failed then [] else call_return_data err cc` >>
+  `final.stack = b2w success::caller.stack /\
+   final.pc = SUC caller.pc /\
+   final.memory = buffer_write
+     (w2n (EL ((if call_has_value call_inst then 1 else 0)+4) c.stack))
+     (TAKE (w2n (EL ((if call_has_value call_inst then 1 else 0)+5) c.stack)) out) caller.memory /\
+   final.returnData = out /\ final.msgParams = caller.msgParams /\
+   final.jumpDest = caller.jumpDest /\
+   final.logs = caller.logs ++ (if success then cc.logs else []) /\
+   final.addRefund = caller.addRefund + (if success then cc.addRefund else 0) /\
+   final.subRefund = caller.subRefund + (if success then cc.subRefund else 0)` by
+    (Cases_on `failed` >>
+     simp[Abbr `final`, Abbr `success`, Abbr `out`, Abbr `caller`,
+       call_abort_context_def, call_return_context_observations]) >>
+  qabbrev_tac `entered = ~failed` >>
+  qabbrev_tac `childSG = if err = NONE then cc.stateGasLeft else cc.stateGasBaseline` >>
+  qabbrev_tac `merged =
+    (let base = (ARB with <|gasUsed := caller.gasUsed;
+      stateGasLeft := (if entered then 0 else caller.stateGasLeft);
+      stateGasSpilled := caller.stateGasSpilled; stateGasBaseline := caller.stateGasBaseline;
+      stateGasCommitted := caller.stateGasCommitted|>)
+     in if ~entered then credit_new_account_context base charged
+        else if success then repay_state_gas_spill_context
+          (absorb_state_gas base childSG cc.stateGasSpilled cc.stateGasCommitted)
+        else credit_new_account_context
+          (absorb_state_gas base childSG 0 cc.stateGasCommitted) charged)` >>
+  `final.gasUsed = merged.gasUsed - gasLeft /\
+   final.stateGasLeft = merged.stateGasLeft /\
+   final.stateGasSpilled = merged.stateGasSpilled /\
+   final.stateGasBaseline = merged.stateGasBaseline /\
+   final.stateGasCommitted = merged.stateGasCommitted` by
+    (irule call_final_context_meters >>
+     simp[Abbr `final`, Abbr `success`, Abbr `gasLeft`,
+       Abbr `merged`, Abbr `entered`, Abbr `childSG`] >>
+     Cases_on `failed` >> Cases_on `err = NONE` >> gvs[]) >>
   `FUNPOW (λr. if ISR (FST r) then r else step (SND r)) k s = (INL (),t')` by
     (qpat_assum `s = (INL (),SND s)` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   qexists_tac `k` >>
@@ -1284,6 +1497,8 @@ val call_spec_frame_tac =
 Theorem SPEC_Call_any:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_OriginalAccounts oa *
@@ -1300,24 +1515,34 @@ Theorem SPEC_Call_any:
          em = expanded_memory m offset sz ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         newAccountCharged = (call_inst = Call /\ 0 < value /\ account_empty toAccount) /\
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) /\
+         (if newAccountCharged then new_account_state_gas else 0) <= sg /\
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, calleeGas) ∧
-         gasCost = static_gas call_inst + dynamicGas + mCost ∧
-         g + gasCost ≤ p.gasLimit ∧
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst + access_cost rb addr +
+             (if 0 < value then call_value_cost else 0) + dCost + mCost)))
+           0 0 = (dynamicGas, calleeGas) /\
+         gasCost = static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas /\
+         g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) <= p.gasLimit /\
+         creditBack = MIN stateCost sp /\
+         calleeGas <= g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) - creditBack /\
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
          ¬fIN addr precompile_addresses ∧
          d = Collect dd))
   {(pc,call_inst)}
-  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd' oa'.
+  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd' oa' entered childSG childSP childCM merged.
    evm_Stack (b2w success :: DROP (6 + vOff) ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + gasCost - gasLeft) *
+   evm_GasUsed (merged.gasUsed - gasLeft) *
+   evm_StateGasLeft merged.stateGasLeft * evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline * evm_StateGasCommitted merged.stateGasCommitted *
    evm_MsgParams p *
    evm_Memory (buffer_write retOffset (TAKE retSize out) em) *
    evm_Rollback rb' * evm_Msdomain (Collect dd') * evm_ReturnData out *
@@ -1326,7 +1551,19 @@ Theorem SPEC_Call_any:
    evm_SubRefund (sr + if success then calleeSr else 0) *
    evm_Logs (l ++ if success then calleeLogs else []) *
    evm_OriginalAccounts oa' *
-   cond (gasLeft ≤ calleeGas ∧ (¬success ⇒ rb' = newRb)))
+   cond ((success ==> entered) /\
+         (~entered ==> gasLeft = calleeGas /\ out = []) /\
+         merged =
+           (let base = (ARB with <|gasUsed := g + gasCost;
+              stateGasLeft := (if entered then 0 else sg - stateCost);
+              stateGasSpilled := sp; stateGasBaseline := bsl;
+              stateGasCommitted := cm|>)
+            in if ~entered then credit_new_account_context base newAccountCharged
+               else if success then repay_state_gas_spill_context
+                 (absorb_state_gas base childSG childSP childCM)
+               else credit_new_account_context
+                 (absorb_state_gas base childSG 0 childCM) newAccountCharged) /\
+         gasLeft ≤ calleeGas ∧ (¬success ⇒ rb' = newRb)))
 Proof
   call_spec_entry_tac >>
   conj_tac >- suspend "post" >>
@@ -1336,7 +1573,8 @@ QED
 Resume SPEC_Call_any[post]:
   call_spec_post_tac
     [`success`,`out`,`gasLeft`,`cc.logs`,`cc.addRefund`,`cc.subRefund`,
-     `t'.rollback`,`dd'`,`t'.originalAccounts`]
+     `t'.rollback`,`dd'`,`t'.originalAccounts`,`entered`,`childSG`,
+     `cc.stateGasSpilled`,`cc.stateGasCommitted`,`merged`]
 QED
 
 Resume SPEC_Call_any[frame]:
@@ -1352,6 +1590,8 @@ Finalise SPEC_Call_any
 Theorem SPEC_Call_stipend:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    cond (6 + vOff ≤ LENGTH ss ∧
@@ -1367,25 +1607,35 @@ Theorem SPEC_Call_stipend:
          em = expanded_memory m offset sz ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         newAccountCharged = (call_inst = Call /\ 0 < value /\ account_empty toAccount) /\
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) /\
+         (if newAccountCharged then new_account_state_gas else 0) <= sg /\
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, calleeGas) ∧
-         gasCost = static_gas call_inst + dynamicGas + mCost ∧
-         g + gasCost ≤ p.gasLimit ∧
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst + access_cost rb addr +
+             (if 0 < value then call_value_cost else 0) + dCost + mCost)))
+           0 0 = (dynamicGas, calleeGas) /\
+         gasCost = static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas /\
+         g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) <= p.gasLimit /\
+         creditBack = MIN stateCost sp /\
+         calleeGas <= g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) - creditBack /\
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
          ¬fIN addr precompile_addresses ∧
          d = Collect dd ∧
          calleeGas ≤ call_stipend))
   {(pc,call_inst)}
-  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd'.
+  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd' entered childSG childSP childCM merged.
    evm_Stack (b2w success :: DROP (6 + vOff) ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + gasCost - gasLeft) *
+   evm_GasUsed (merged.gasUsed - gasLeft) *
+   evm_StateGasLeft merged.stateGasLeft * evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline * evm_StateGasCommitted merged.stateGasCommitted *
    evm_MsgParams p *
    evm_Memory (buffer_write retOffset (TAKE retSize out) em) *
    evm_Rollback rb' * evm_Msdomain (Collect dd') * evm_ReturnData out *
@@ -1393,7 +1643,19 @@ Theorem SPEC_Call_stipend:
    evm_AddRefund (ar + if success then calleeAr else 0) *
    evm_SubRefund (sr + if success then calleeSr else 0) *
    evm_Logs (l ++ if success then calleeLogs else []) *
-   cond (gasLeft ≤ calleeGas ∧
+   cond ((success ==> entered) /\
+         (~entered ==> gasLeft = calleeGas /\ out = []) /\
+         merged =
+           (let base = (ARB with <|gasUsed := g + gasCost;
+              stateGasLeft := (if entered then 0 else sg - stateCost);
+              stateGasSpilled := sp; stateGasBaseline := bsl;
+              stateGasCommitted := cm|>)
+            in if ~entered then credit_new_account_context base newAccountCharged
+               else if success then repay_state_gas_spill_context
+                 (absorb_state_gas base childSG childSP childCM)
+               else credit_new_account_context
+                 (absorb_state_gas base childSG 0 childCM) newAccountCharged) /\
+         gasLeft ≤ calleeGas ∧
          (if success then
             rb'.accounts =
               (if call_inst ≠ CallCode ∧ 0 < value
@@ -1410,7 +1672,8 @@ QED
 Resume SPEC_Call_stipend[post]:
   call_spec_post_tac
     [`success`,`out`,`gasLeft`,`cc.logs`,`cc.addRefund`,`cc.subRefund`,
-     `t'.rollback`,`dd'`]
+     `t'.rollback`,`dd'`,`entered`,`childSG`,
+     `cc.stateGasSpilled`,`cc.stateGasCommitted`,`merged`]
 QED
 
 Resume SPEC_Call_stipend[frame]:
