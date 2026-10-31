@@ -1710,7 +1710,7 @@ Theorem SPEC_Stop_outermost:
 Proof
   start_tac
   \\ gvs [step_inst_def,bind_def,ignore_bind_def,set_return_data_def,
-         get_current_context_def,return_def,set_current_context_def,
+          get_current_context_def,return_def,set_current_context_def,
           finish_def,handle_step_def,handle_def,handle_create_def,
           get_return_data_def,get_output_to_def,handle_exception_def,
           reraise_def,get_num_contexts_def,NULL_EQ,assert_def,
