@@ -937,7 +937,7 @@ Resume call_returns_summary[entered]:
      Cases_on `op ≠ CallCode ∧ 0 < value` >> simp[]) >>
   `call_meter_budget (LENGTH entry.contexts) cg entry` by
     simp[call_meter_budget_def, call_meter_prefix_def, call_meter_chain_def,
-         vfmCallMeterProbeTheory.call_meter_claim_def, Abbr `callee`, initial_context_def,
+         vfmCallMeterBaseTheory.call_meter_claim_def, Abbr `callee`, initial_context_def,
          initial_msg_params_def] >>
   `cg <= (caller with <|returnData := []; stateGasLeft := 0|>).gasUsed` by simp[] >>
   drule_all run_call_memory_returns >> strip_tac >>
@@ -1257,7 +1257,7 @@ Theorem call_final_context_meters[local]:
 Proof
   Cases_on `failed` >> Cases_on `err = NONE` >>
   simp[call_abort_context_def, call_return_context_def,
-    vfmCallMeterProbeTheory.call_meter_settle_def, LET_THM,
+    vfmCallMeterBaseTheory.call_meter_settle_def, LET_THM,
     credit_new_account_context_def, absorb_state_gas_def,
     repay_state_gas_spill_context_def] >>
   rpt strip_tac >> gvs[] >> decide_tac

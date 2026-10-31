@@ -1,6 +1,6 @@
 Theory vfmCallPrecompile
 Ancestors vfmCallMeterOps vfmCallMeterSafe vfmCallMeter vfmCallBudget
-          vfmCallMeterProbe vfmExecution vfmContext vfmState vfmTypes arithmetic list
+          vfmCallMeterBase vfmExecution vfmContext vfmState vfmTypes arithmetic list
 
 Theorem call_meter_result_trans:
   call_meter_result c rb rest s /\ s.contexts = (d,rb)::rest /\

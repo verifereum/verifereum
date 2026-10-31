@@ -1,5 +1,5 @@
 Theory vfmCallMeterSafe
-Ancestors vfmCallMeter vfmCallMeterProbe vfmExecution vfmContext vfmState vfmTypes
+Ancestors vfmCallMeter vfmCallMeterBase vfmExecution vfmContext vfmState vfmTypes
           arithmetic list
 
 Definition call_meter_safe_def:

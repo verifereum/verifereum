@@ -1,5 +1,5 @@
 Theory vfmCallEntry
-Ancestors vfmCallMeter vfmCallBudget vfmCallMeterProbe vfmExecution vfmContext
+Ancestors vfmCallMeter vfmCallBudget vfmCallMeterBase vfmExecution vfmContext
           vfmState vfmTypes arithmetic list
 
 Theorem call_meter_proceed_create_shape:

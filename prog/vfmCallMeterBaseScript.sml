@@ -1,4 +1,4 @@
-Theory vfmCallMeterProbe
+Theory vfmCallMeterBase
 Ancestors vfmExecution vfmContext vfmState vfmTypes vfmConstants arithmetic list
 
 (* Internal callee invariant: no claim is made about a suspended external

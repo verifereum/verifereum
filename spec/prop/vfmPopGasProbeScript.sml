@@ -1,8 +1,13 @@
 Theory vfmPopGasProbe
 Ancestors vfmExecution
 
-(* Diagnostic witness for the frozen handle_exception_pop_generic_gen.
-   Unspecified record fields are arbitrary: the failure uses only gas fields. *)
+(* Witnesses that `handle_exception_pop_generic_gen`'s old gas bound is
+   false on the state-gas model: a failed child the creator charged refunds
+   the charge through `credit_new_account`, which drops the merged frame's
+   `gasUsed` by up to `new_account_state_gas`.  Unspecified record fields
+   are arbitrary: the failure uses only gas fields.  The
+   `_corrected_instance` theorems are the instances the shipped statement
+   covers. *)
 Definition pop_gas_child_def:
   pop_gas_child c = c with <|
     msgParams := c.msgParams with <| gasLimit := 0; newAccountCharged := F;

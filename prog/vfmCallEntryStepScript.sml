@@ -1,6 +1,6 @@
 Theory vfmCallEntryStep
 Ancestors vfmCallEntry vfmCallPrecompile vfmCallMeterSafe vfmCallMeterOps
-          vfmCallBudget vfmCallMeter vfmCallMeterProbe vfmExecution vfmContext vfmState vfmTypes
+          vfmCallBudget vfmCallMeter vfmCallMeterBase vfmExecution vfmContext vfmState vfmTypes
           arithmetic list
 
 Theorem call_meter_proceed_call_all_budget:

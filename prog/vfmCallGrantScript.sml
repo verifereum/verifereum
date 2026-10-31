@@ -1,7 +1,7 @@
 Theory vfmCallGrant
 Ancestors vfmCallReserve vfmCallEntryStep vfmCallEntry vfmCallPrecompile
           vfmCallMeterOps vfmCallMeterSafe vfmCallMeter vfmCallBudget
-          vfmCallMeterProbe vfmExecution vfmContext vfmState vfmTypes arithmetic list
+          vfmCallMeterBase vfmExecution vfmContext vfmState vfmTypes arithmetic list
 
 Theorem call_meter_reserved_consume_success:
   call_meter_reserved c 0 rb rest s /\ margin <= cost /\

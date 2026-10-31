@@ -1,5 +1,5 @@
 Theory vfmCallMeter
-Ancestors vfmCallBudget vfmCallMeterProbe vfmExecution vfmContext vfmState vfmTypes arithmetic list
+Ancestors vfmCallBudget vfmCallMeterBase vfmExecution vfmContext vfmState vfmTypes arithmetic list
 
 (* All result states, not only INL results, retain the suspended tail. *)
 Definition call_meter_result_def:

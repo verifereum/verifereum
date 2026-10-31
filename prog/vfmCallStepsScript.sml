@@ -1,7 +1,7 @@
 Theory vfmCallSteps
 Ancestors vfmCallGrant vfmCallReserve vfmCallEntryStep vfmCallEntry
           vfmCallPrecompile vfmCallMeterOps vfmCallMeterSafe vfmCallMeter
-          vfmCallBudget vfmCallMeterProbe vfmExecution vfmContext vfmState
+          vfmCallBudget vfmCallMeterBase vfmExecution vfmContext vfmState
           vfmTypes vfmExecutionProp arithmetic list
 
 Theorem call_meter_reserved_credit_abort_value:

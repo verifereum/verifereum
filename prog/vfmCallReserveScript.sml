@@ -1,6 +1,6 @@
 Theory vfmCallReserve
 Ancestors vfmCallEntryStep vfmCallMeterOps vfmCallMeterSafe vfmCallMeter
-          vfmCallMeterProbe vfmExecution vfmContext vfmState vfmTypes arithmetic list
+          vfmCallMeterBase vfmExecution vfmContext vfmState vfmTypes arithmetic list
 
 Definition call_meter_reserved_def:
   call_meter_reserved c k rb rest s <=>

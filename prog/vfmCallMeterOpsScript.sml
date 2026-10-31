@@ -1,5 +1,5 @@
 Theory vfmCallMeterOps
-Ancestors vfmCallMeterSafe vfmCallMeter vfmCallMeterProbe vfmExecution
+Ancestors vfmCallMeterSafe vfmCallMeter vfmCallMeterBase vfmExecution
           vfmContext vfmState vfmTypes arithmetic list
 
 (* Reservoir and ordinary context fields are intentionally unconstrained. *)

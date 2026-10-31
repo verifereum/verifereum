@@ -1,7 +1,7 @@
 Theory vfmCallInner
 Ancestors vfmCallSteps vfmCallGrant vfmCallPrecompile vfmCallMeterOps
           vfmCallMeterSafe vfmCallMeter vfmCallBudget vfmExecution vfmContext
-          vfmState vfmTypes vfmExecutionProp vfmCallMeterProbe vfmHandleStep vfmDecreasesGas vfmStepLength arithmetic list
+          vfmState vfmTypes vfmExecutionProp vfmCallMeterBase vfmHandleStep vfmDecreasesGas vfmStepLength arithmetic list
 Libs BasicProvers
 
 Theorem call_meter_safe_pop_inv:

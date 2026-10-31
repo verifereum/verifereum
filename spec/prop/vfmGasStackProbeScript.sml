@@ -1,6 +1,10 @@
 Theory vfmGasStackProbe
 Ancestors vfmSameFrame vfmExecutionProp
 
+(* Witness that `same_frame_rel_preserves_gas_stack_ok` is false once a frame
+   can refund state gas: the frames below the parent keep an `EL (SUC i)`
+   that the credit moves.  The measure the shipped statement carries instead
+   is the one that survives. *)
 Theorem same_frame_rel_preserves_gas_stack_ok_counterexample:
   !s c p rb.
     let c0 = c with <| msgParams := c.msgParams with gasLimit := 0;

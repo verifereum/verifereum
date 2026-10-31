@@ -3,6 +3,10 @@ Ancestors vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
   vfmTypes vfmBuffer vfmOperation words list arithmetic finite_map
 Libs wordsLib
 
+(* Witness that the inner-revert spill construction is false with the
+   create's `newAccountCharged` left free: with the flag set, the pop's
+   failure branch credits the creation charge back, so the reservoir it
+   claims the step leaves is wrong.  The shipped witnesses pin the flag. *)
 Definition probe_params_def:
   probe_params = <|caller := 0w; callee := 0w; code := []; parsed := FEMPTY;
     value := 0; gasLimit := 0; data := empty_buffer; static := F;

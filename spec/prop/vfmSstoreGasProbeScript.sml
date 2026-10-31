@@ -2,6 +2,10 @@ Theory vfmSstoreGasProbe
 Ancestors vfmSameFrame vfmExecutionProp vfmExecution vfmState
 Libs wordsLib
 
+(* Witness that `step_inst_same_frame_gas_monotone` is false under the
+   state-gas model: a slot-clearing SSTORE on a frame that has already
+   spilled ends below its starting `gasUsed`.  `sstore_probe_gas_decreases`
+   is the weakened form the shipped statements use. *)
 Definition sstore_probe_frame_def:
   sstore_probe_frame c = c with <|
     stack := [0w; 0w]; gasUsed := 30000; stateGasSpilled := 30000;

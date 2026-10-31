@@ -1,5 +1,5 @@
 Theory vfmCallBudget
-Ancestors vfmCallMeterProbe vfmContext vfmState vfmTypes arithmetic list
+Ancestors vfmCallMeterBase vfmContext vfmState vfmTypes arithmetic list
 
 (* The accumulator is the total claim of descendants above this frame. *)
 Definition call_meter_chain_def:

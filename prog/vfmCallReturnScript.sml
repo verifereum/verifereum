@@ -1,5 +1,5 @@
 Theory vfmCallReturn
-Ancestors vfmCallInner vfmCallBudget vfmCallMeterProbe vfmRunCall vfmContextLength vfmDomainCollection
+Ancestors vfmCallInner vfmCallBudget vfmCallMeterBase vfmRunCall vfmContextLength vfmDomainCollection
           vfmExecutionProp vfmExecution vfmState vfmContext vfmTypes
           vfmDecreasesGas vfmStepLength vfmHandleStep vfmBuffer
           vfmConstants vfmSameFrame vfmTxParams vfmRunWithinFrame

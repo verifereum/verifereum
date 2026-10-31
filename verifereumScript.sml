@@ -9,14 +9,14 @@ open HolKernel
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
   vfmProgTheory vfmProgCallTheory wrappedEtherTheory wrappedEtherNameTheory
   wrappedEtherTransferTheory wrappedEtherBranchesTheory wrappedEtherGettersTheory
-  (* Checked counterexamples kept as evidence for the EIP-8037 statement
-     shapes.  Nothing depends on them, so without this line the root build
-     would never compile them. *)
-  vfmProgCounterexampleTheory vfmProgCallMeterProbeTheory
-  vfmProgCallPrefixProbeTheory vfmProgCallTailProbeTheory
-  vfmProgChargedRevertProbeTheory
-  vfmPopGasProbeTheory vfmGasStackProbeTheory
-  vfmCallDrainProbeTheory vfmSstoreGasProbeTheory
+  (* Checked counterexamples, evidence for the state-gas hypotheses this
+     series added to published theorems: each one is a witness that its
+     namesake is false without the hypothesis its comment points at.
+     Nothing depends on them, so without these lines the root build would
+     never compile them. *)
+  vfmProgCounterexampleTheory vfmProgChargedRevertProbeTheory
+  vfmPopGasProbeTheory vfmGasStackProbeTheory vfmSstoreGasProbeTheory
+  vfmCallDrainProbeTheory
 
 val () = new_theory "verifereum";
 
