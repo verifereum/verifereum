@@ -126,71 +126,11 @@ Proof
   simp[head_lengths_def, REV_DEF]
 QED
 
-(* the lift's hypotheses at a call's initial state s, after the value is
-   paid in; the call data facts are given by calldata *)
-fun deposit_tac lift calldata =
-  PURE_REWRITE_TAC [cv_eval “word_of_bytes_be (Keccak_256_string
-                       "Deposit(address,uint256)") : bytes32”,
-                    transfer_value_enc, contract_call_def]
-  \\ strip_tac
-  \\ strip_assume_tac contract_code_not_delegation
-  \\ drule_all initial_state_call_code \\ strip_tac
-  \\ drule initial_state_contract
-  \\ disch_then (qspec_then `addr` mp_tac)
-  \\ impl_tac >- gvs[]
-  \\ strip_tac
-  \\ fs[GSYM parsed_contract_code_def]
-  \\ drule_all wf_initial_state \\ strip_tac
-  \\ calldata
-  \\ `tx.from ≠ addr` by gvs[]
-  \\ mp_tac (Q.INST [‘p’ |-> ‘ctxt.msgParams’,
-                     ‘rb’ |-> ‘s.rollback with accounts updated_by
-                                 transfer_value tx.from addr tx.value’,
-                     ‘d’ |-> ‘dom’, ‘rd’ |-> ‘[]’, ‘l’ |-> ‘[]’,
-                     ‘ar’ |-> ‘0’, ‘sr’ |-> ‘0’,
-                     ‘original’ |-> ‘s.originalAccounts’,
-                     ‘txParams’ |-> ‘s.txParams’, ‘callee’ |-> ‘addr’,
-                     ‘s' : execution_state’ |-> ‘s : execution_state’,
-                     ‘s’ |-> ‘s with rollback updated_by
-                       (λr. r with accounts updated_by
-                              transfer_value tx.from addr tx.value)’]
-                    lift)
-  \\ impl_tac
-  >- (
-    simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
-    \\ simp[STAR_evm2set, STAR_evm_OriginalAccounts, STAR_CODE_POOL_evm2set,
-            cond_STAR, SEP_T_def,
-            execution_state_component_equality,
-            rollback_state_component_equality, fmap_entries_def,
-            SIMP_RULE std_ss [APPEND] deposit_selector_calldata,
-            lookup_account_transfer_value_fields,
-            lookup_account_transfer_value_to,
-            balance_slot_key_bytes]
-    \\ simp[access_slot_cost_add_slot, SStore_gas_add_slot,
-            accesses_add_slot_accounts, lookup_account_transfer_value_fields]
-    \\ qpat_assum `s.originalAccounts = _` (fn th => rewrite_tac[th])
-    \\ qpat_assum `lookup_account addr s.rollback.accounts = _`
-         (fn th => rewrite_tac[th])
-    \\ gas_bounds_tac
-    \\ gvs[call_stipend_def, wf_state_def, all_accounts_def,
-           stack_room_ok_def, gas_stack_ok_def,
-           outputTo_consistent_stack_def])
-  \\ strip_tac
-  \\ qexistsl_tac [`result`, `accounts'`]
-  \\ qpat_assum `∀a. lookup_account a accounts' = _`
-       (qspec_then `addr` assume_tac)
-  \\ gvs[lookup_account_transfer_value_fields,
-         lookup_account_transfer_value_to]
-  \\ Cases_on `ctxt.msgParams.outputTo` \\ gvs[is_code_dest_def]
-  \\ CONV_TAC (QCONV (with_ground_div reads_conv))
-  \\ PURE_REWRITE_TAC [balance_slot_key_bytes]
-  \\ gvs[transfer_value_fields, transfer_value_to, SStore_write_def,
-         sstore_write_accounts_updater_def, accesses_add_slot_def,
-         lookup_account_def, update_account_def, APPLY_UPDATE_THM,
-         balance_slot_key_bytes]
-  \\ simp[REVERSE_word_to_bytes_bytes32]
-  \\ simp[account_state_component_equality]
-  \\ rw[FUN_EQ_THM]
+Theorem not_is_code_dest[local]:
+  ¬is_code_dest d ⇒ ∃m. d = Memory m
+Proof
+  Cases_on `d` \\ rw[is_code_dest_def]
+QED
 
 (* deposit() pays tx.value into the caller's balance slot and logs it *)
 Theorem weth_deposit_run_transaction:
@@ -227,10 +167,77 @@ Theorem weth_deposit_run_transaction:
                        (n2w tx.value + lookup_storage ks acc.storage)
                        acc.storage |>
 Proof
-  deposit_tac deposit_lift
-    (`∃rest. tx.data = [0xD0w; 0xE3w; 0x0Dw; 0xB0w] ++ rest`
+  PURE_REWRITE_TAC [cv_eval “word_of_bytes_be (Keccak_256_string
+                       "Deposit(address,uint256)") : bytes32”,
+                    transfer_value_enc, contract_call_def]
+  \\ strip_tac
+  \\ strip_assume_tac contract_code_not_delegation
+  \\ drule_all initial_state_call_code \\ strip_tac
+  \\ drule initial_state_contract
+  \\ disch_then (qspec_then `addr` mp_tac)
+  \\ impl_tac >- gvs[]
+  \\ strip_tac
+  \\ fs[GSYM parsed_contract_code_def]
+  \\ drule_all wf_initial_state \\ strip_tac
+  \\ `∃rest. tx.data = [0xD0w; 0xE3w; 0x0Dw; 0xB0w] ++ rest`
      by (qpat_x_assum `_ ≼ tx.data` mp_tac
-         \\ rewrite_tac[deposit_selector_eq, IS_PREFIX_APPEND]))
+         \\ rewrite_tac[deposit_selector_eq, IS_PREFIX_APPEND])
+  \\ `tx.from ≠ addr` by gvs[]
+  \\ mp_tac (Q.INST [‘p’ |-> ‘ctxt.msgParams’,
+                     ‘rb’ |-> ‘s.rollback with accounts updated_by
+                                 transfer_value tx.from addr tx.value’,
+                     ‘d’ |-> ‘dom’, ‘rd’ |-> ‘[]’, ‘l’ |-> ‘[]’,
+                     ‘ar’ |-> ‘0’, ‘sr’ |-> ‘0’,
+                     ‘original’ |-> ‘s.originalAccounts’,
+                     ‘txParams’ |-> ‘s.txParams’, ‘callee’ |-> ‘addr’,
+                     ‘s' : execution_state’ |-> ‘s : execution_state’,
+                     ‘s’ |-> ‘s with rollback updated_by
+                       (λr. r with accounts updated_by
+                              transfer_value tx.from addr tx.value)’]
+                    deposit_lift)
+  \\ impl_tac
+  >- (
+    simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+    \\ simp[STAR_evm2set, STAR_evm_OriginalAccounts, STAR_CODE_POOL_evm2set,
+            cond_STAR, SEP_T_def,
+            execution_state_component_equality,
+            rollback_state_component_equality, fmap_entries_def,
+            SIMP_RULE std_ss [APPEND] deposit_selector_calldata,
+            lookup_account_transfer_value_fields,
+            lookup_account_transfer_value_to,
+            balance_slot_key_bytes]
+    \\ simp[access_slot_cost_add_slot, SStore_gas_add_slot,
+            accesses_add_slot_accounts, lookup_account_transfer_value_fields]
+    \\ qpat_assum `s.originalAccounts = _` (fn th => rewrite_tac[th])
+    \\ qpat_assum `lookup_account addr s.rollback.accounts = _`
+         (fn th => rewrite_tac[th])
+    \\ gas_bounds_tac
+    \\ gvs[call_stipend_def, wf_state_def, all_accounts_def,
+           stack_room_ok_def, gas_stack_ok_def,
+           outputTo_consistent_stack_def])
+  \\ strip_tac
+  \\ qexistsl_tac [`result`, `accounts'`]
+  \\ qpat_x_assum `¬is_code_dest _`
+       (strip_assume_tac o MATCH_MP not_is_code_dest)
+  \\ qpat_assum `ctxt.msgParams.outputTo = _` (fn th =>
+       RULE_ASSUM_TAC (PURE_REWRITE_RULE
+         [th, TypeBase.case_def_of “:return_destination”]))
+  \\ qmatch_asmsub_abbrev_tac `word_of_bytes T 0w (Keccak_256_w64 kb)`
+  \\ qpat_assum `∀a. lookup_account a accounts' = _`
+       (qspec_then `addr` assume_tac)
+  \\ gvs[lookup_account_transfer_value_fields,
+         lookup_account_transfer_value_to]
+  \\ qpat_x_assum `∀a. lookup_account a accounts' = _` kall_tac
+  \\ qunabbrev_tac `kb`
+  \\ CONV_TAC (QCONV (with_ground_div reads_conv))
+  \\ PURE_REWRITE_TAC [balance_slot_key_bytes]
+  \\ gvs[transfer_value_fields, transfer_value_to, SStore_write_def,
+         sstore_write_accounts_updater_def, accesses_add_slot_def,
+         lookup_account_def, update_account_def, APPLY_UPDATE_THM,
+         balance_slot_key_bytes]
+  \\ simp[REVERSE_word_to_bytes_bytes32]
+  \\ simp[account_state_component_equality]
+  \\ rw[FUN_EQ_THM]
 QED
 
 (* with calldata under 4 bytes, the fallback does the same *)
@@ -268,7 +275,74 @@ Theorem weth_fallback_run_transaction:
                        (n2w tx.value + lookup_storage ks acc.storage)
                        acc.storage |>
 Proof
-  deposit_tac fallback_lift ALL_TAC
+  PURE_REWRITE_TAC [cv_eval “word_of_bytes_be (Keccak_256_string
+                       "Deposit(address,uint256)") : bytes32”,
+                    transfer_value_enc, contract_call_def]
+  \\ strip_tac
+  \\ strip_assume_tac contract_code_not_delegation
+  \\ drule_all initial_state_call_code \\ strip_tac
+  \\ drule initial_state_contract
+  \\ disch_then (qspec_then `addr` mp_tac)
+  \\ impl_tac >- gvs[]
+  \\ strip_tac
+  \\ fs[GSYM parsed_contract_code_def]
+  \\ drule_all wf_initial_state \\ strip_tac
+  \\ `tx.from ≠ addr` by gvs[]
+  \\ mp_tac (Q.INST [‘p’ |-> ‘ctxt.msgParams’,
+                     ‘rb’ |-> ‘s.rollback with accounts updated_by
+                                 transfer_value tx.from addr tx.value’,
+                     ‘d’ |-> ‘dom’, ‘rd’ |-> ‘[]’, ‘l’ |-> ‘[]’,
+                     ‘ar’ |-> ‘0’, ‘sr’ |-> ‘0’,
+                     ‘original’ |-> ‘s.originalAccounts’,
+                     ‘txParams’ |-> ‘s.txParams’, ‘callee’ |-> ‘addr’,
+                     ‘s' : execution_state’ |-> ‘s : execution_state’,
+                     ‘s’ |-> ‘s with rollback updated_by
+                       (λr. r with accounts updated_by
+                              transfer_value tx.from addr tx.value)’]
+                    fallback_lift)
+  \\ impl_tac
+  >- (
+    simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
+    \\ simp[STAR_evm2set, STAR_evm_OriginalAccounts, STAR_CODE_POOL_evm2set,
+            cond_STAR, SEP_T_def,
+            execution_state_component_equality,
+            rollback_state_component_equality, fmap_entries_def,
+            SIMP_RULE std_ss [APPEND] deposit_selector_calldata,
+            lookup_account_transfer_value_fields,
+            lookup_account_transfer_value_to,
+            balance_slot_key_bytes]
+    \\ simp[access_slot_cost_add_slot, SStore_gas_add_slot,
+            accesses_add_slot_accounts, lookup_account_transfer_value_fields]
+    \\ qpat_assum `s.originalAccounts = _` (fn th => rewrite_tac[th])
+    \\ qpat_assum `lookup_account addr s.rollback.accounts = _`
+         (fn th => rewrite_tac[th])
+    \\ gas_bounds_tac
+    \\ gvs[call_stipend_def, wf_state_def, all_accounts_def,
+           stack_room_ok_def, gas_stack_ok_def,
+           outputTo_consistent_stack_def])
+  \\ strip_tac
+  \\ qexistsl_tac [`result`, `accounts'`]
+  \\ qpat_x_assum `¬is_code_dest _`
+       (strip_assume_tac o MATCH_MP not_is_code_dest)
+  \\ qpat_assum `ctxt.msgParams.outputTo = _` (fn th =>
+       RULE_ASSUM_TAC (PURE_REWRITE_RULE
+         [th, TypeBase.case_def_of “:return_destination”]))
+  \\ qmatch_asmsub_abbrev_tac `word_of_bytes T 0w (Keccak_256_w64 kb)`
+  \\ qpat_assum `∀a. lookup_account a accounts' = _`
+       (qspec_then `addr` assume_tac)
+  \\ gvs[lookup_account_transfer_value_fields,
+         lookup_account_transfer_value_to]
+  \\ qpat_x_assum `∀a. lookup_account a accounts' = _` kall_tac
+  \\ qunabbrev_tac `kb`
+  \\ CONV_TAC (QCONV (with_ground_div reads_conv))
+  \\ PURE_REWRITE_TAC [balance_slot_key_bytes]
+  \\ gvs[transfer_value_fields, transfer_value_to, SStore_write_def,
+         sstore_write_accounts_updater_def, accesses_add_slot_def,
+         lookup_account_def, update_account_def, APPLY_UPDATE_THM,
+         balance_slot_key_bytes]
+  \\ simp[REVERSE_word_to_bytes_bytes32]
+  \\ simp[account_state_component_equality]
+  \\ rw[FUN_EQ_THM]
 QED
 
 (* ---------------------------------------------------------------- *)

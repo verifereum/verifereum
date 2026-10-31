@@ -544,6 +544,8 @@ fun is_gas_goal t =
   can (find_term (fn u => is_comb u andalso same_const (rator u) gasLimit_sel)) t
   orelse mentions "call_gas" t
 fun on_goals p tac (g as (_, w)) = if p w then tac g else ALL_TAC g
+(* the domain side conditions: a field in the domain left after the code *)
+fun is_domain_goal t = pred_setSyntax.is_in t orelse pred_setSyntax.is_subset t
 
 val withdraw_rest_tac =
   simp[transfer_value_zero, rollback_accounts_I,
@@ -650,6 +652,25 @@ Proof
   simp[]
 QED
 
+(* evaluates the largest w2n of a memory read in the goal, so that the
+   reads of a log's offset and length are separate steps *)
+fun read_w2n_tac (g as (_, w)) =
+  let
+    fun reads_memory t =
+      is_app "w2n" 1 t andalso can (find_term (is_app "expanded_memory" 3)) t
+    val ts = find_terms reads_memory w
+    val t = hd (Listsort.sort (fn (a, b) =>
+                  Int.compare (term_size b, term_size a)) ts)
+  in
+    PURE_REWRITE_TAC [QCONV (with_ground_div reads_conv) t] g
+  end
+
+(* the leading SEP_EXISTSs of an assertion applied to a state, as ∃s,
+   without rewriting inside the (large) assertion *)
+fun sep_exists_conv t =
+  ((HO_REWR_CONV SEP_EXISTS_THM THENC BINDER_CONV sep_exists_conv)
+   ORELSEC ALL_CONV) t
+
 fun is_key_term t =
   is_app "word_of_bytes" 3 t andalso
   can (find_term (is_app "Keccak_256_w64" 1)) t
@@ -751,6 +772,10 @@ Proof
     simp_tac pure_ss [evm2set_def, GSYM STAR_ASSOC]
     \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts,
                    STAR_CODE_POOL_evm2set, cond_STAR, SEP_T_def]
+    \\ PURE_REWRITE_TAC [execution_state_accfupds]
+    \\ qpat_assum `s.contexts = _` (fn th => PURE_REWRITE_TAC [th, HD, FST])
+    \\ rpt conj_tac
+    \\ on_goals is_domain_goal (simp_tac (srw_ss()) [])
     \\ simp_tac (srw_ss()) [call_has_value_def, is_call_def,
                             w2w_w2w_address, w2w_id]
     \\ rpt conj_tac
@@ -760,7 +785,7 @@ Proof
     \\ on_goals is_gas_goal withdraw_gas_tac)
   \\ strip_tac
   \\ qpat_x_assum `$SEP_EXISTS _ _`
-       (strip_assume_tac o Ho_Rewrite.PURE_REWRITE_RULE [SEP_EXISTS_THM])
+       (strip_assume_tac o CONV_RULE sep_exists_conv)
   \\ qpat_assum `ctxt.msgParams.parsed = _` (fn th1 =>
        qpat_assum `ctxt.msgParams.code = _` (fn th2 =>
          qpat_x_assum `(if _ then _ else _) _`
@@ -818,6 +843,7 @@ Proof
     \\ conj_tac
     >- (qexists_tac `calleeLogs`
         \\ qpat_x_assum `result.logs = _` SUBST1_TAC
+        \\ read_w2n_tac \\ read_w2n_tac
         \\ CONV_TAC (QCONV (with_ground_div reads_conv))
         \\ rewrite_tac[REVERSE_word_to_bytes_bytes32])
     \\ conj_tac
@@ -850,7 +876,7 @@ Proof
   \\ conj_tac >- first_assum ACCEPT_TAC
   \\ qpat_x_assum `accounts' = _` SUBST_ALL_TAC
   \\ conj_tac
-  >- simp_tac (srw_ss()) [lookup_account_pay_transaction_gas]
+  >- rewrite_tac[lookup_account_pay_transaction_gas, account_state_accfupds]
   \\ disj2_tac
   \\ rpt conj_tac
   >- first_assum ACCEPT_TAC
