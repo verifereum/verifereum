@@ -2,32 +2,32 @@
 
 ## Structured Components
 
-### C1: Complete the CALL port under the explicitly amended contract
+### C1: Complete the CALL port and final repository validation
 - Kind: `proof_group`
-- Risk: 3
+- Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Derived from child component C1.3.6 risk 3. Nested entry scalar/list boundaries are checked, but full step_call/step_create and precompile execution need compositional meter/safety interfaces not supplied by preceding components. proceed_call dispatches precompiles immediately after push; its general budget contract therefore requires precompile preservation before step_call, not only later all-opcode work.
+- Rationale: All mathematical and source-audit children are accepted, including E0064 for C1.7. The former uncertainty about compositional entry and precompile preservation was discharged by completed descendants. Remaining work is committing generated bookkeeping and repeating the target build and clean-status check.
 - Required for completion: yes
 - Progress transition: `refinement`
 
 #### Progress note
-Preserve the narrow amendment authorized in TO_seq58_progcall_port-20261030T183500Z_m0272_t001. E0009 continues to refute the original contract; no new permission to weaken exports is inferred.
+Remove the stale parent-only integration risk. Preserve all descendants and their proof obligations without revision; this parent update does not certify a new or altered theorem contract.
 
 #### Summary
-Retain only the already-authorized reservoir cover, creditBack = MIN stateCost sp, and calleeGas <= g + gasCost - creditBack amendment. All other exported content remains frozen except for the required state-gas port. Preserve historical counterexamples and checked boundary work. Build scoped callee safety before entry, framing or export proofs. The existing C1.4-.7 dependency path remains in force.
+All existing mathematical descendants remain unchanged and complete. E0064 supplies accepted final audit and postcommit build evidence. Only subsequently generated dossier bookkeeping and final repository validation remain. No theorem, definition, hypothesis, or proof redesign is authorized.
 
 #### Not to try
-Do not reopen the original counterexample against the authorized replacement. Do not add backing conditions on the external caller, sp=0, callee-code restrictions or further export guards. Do not use unrestricted nonempty-context CALL safety. No timeout overrides, TRY/ORELSE proof search, or edits outside prog/.
+Do not reopen completed proofs or interpret an obsolete parent risk rationale as an unresolved semantic obligation. Do not modify exported contracts or introduce new assumptions.
 
 #### Argument
-Never-entered calls use the checked guarded charge/credit equation. Entered calls initialize a budget over the fresh callee and its descendants, excluding the external caller; this budget pays internal refunds and forbids impossible inner operations. Unconditional run_call totality plus scoped non-abort safety gives a finite ordinary return. Exact semantic restore/forfeit/absorb/credit/repay equations describe the final meters; observation and stipend results then feed the existing prepared-entry and SPEC machinery.
+The checked primitive, entry, finite-return and observation interfaces have already been composed into the exported CALL rules by the accepted descendants. C1.7 supplies the source audit and target-build integration evidence. No mathematical inference remains to be supplied by this update; completion now requires preserving that checked source while restoring clean repository status.
 
 #### Definition design
-Use call_meter_claim = remaining execution gas + spilled + committed as the budget currency. Exclude suspended external frames and discharge the budget after the root returns. Keep final meter transforms context-valued and separate actual refundable gas bounds from reservoir fields. New helper preconditions must be discharged at fresh entry, never exported as extra hypotheses.
+Retain all checked definitions and theorem interfaces unchanged. This administrative authorization cannot repair or amend any frozen exported contract or add hypotheses.
 
 #### Code structure
-All changes stay under prog/. Keep reusable local budget infrastructure in a prog theory if separation improves build isolation, importing existing spec theories unchanged. Keep semantic boundary lemmas before finite-return consumers in vfmProgCallScript.sml. Preserve checked probes and audit as evidence. Finish via existing C1.7 build/audit/commit obligations and required commit trailer.
+Keep all proof source unchanged. The only expected tracked edit is the generated prog/DOSSIER_seq58_progcall_port.md. Retain all existing child components and their accepted evidence.
 
 ### C1.1: Retain checked primitive-boundary progress
 - Kind: `historical_evidence`
@@ -900,3 +900,21 @@ Use the sibling guarded failure rules as the arithmetic template and preserve th
 
 #### Not to try
 Do not use the old cg <= caller.gasUsed premise before credit as if it sufficed after credit. Do not collapse creditBack into child gasLeft or claim gasLeft <= calleeGas bounds all meter refunds.
+
+### C1.9: Commit generated dossier and verify final clean target build
+- Kind: `build_probe`
+- Risk: 1
+- Work priority: 100
+- Work units: 1
+- Rationale: The target already built and clean status was checked in accepted E0064; the only reported subsequent change is generated documentation.
+- Dependencies: C1.7
+- Checkpoint: yes
+
+#### Summary
+Inspect and commit the generated dossier change only. Repeat the required target build without a tactic-timeout override. Verify clean git status and unchanged proof source. Report completion with the final commit and build evidence.
+
+#### Approach
+Confirm the pending diff is only generated prog/DOSSIER_seq58_progcall_port.md bookkeeping, then commit it with the task's exact required trailers. Run `holbuild --max-heap 12000 -j8 build vfmProgCallTheory`, verify no parser warnings and empty `git status --porcelain`, and record final evidence without editing proof sources; if closure bookkeeping generates another tracked dossier change, commit that documentation and repeat the final status/build check before ending the session.
+
+#### Not to try
+Do not change tactic_timeout, use forbidden proof devices, touch files outside prog/, or redo the accepted mathematical audit. Unexpected proof-source changes require inspection rather than folding them into a bookkeeping commit.
