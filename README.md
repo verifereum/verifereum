@@ -62,7 +62,7 @@ holbuild buildhol
 holbuild -j"$(nproc)" build
 ```
 
-`holbuild buildhol` builds and caches the HOL toolchain and dependencies specified by `holproject.toml`. A local build checks proof steps against `tactic_timeout` in `holproject.toml`; since holbuild 0.12.0 a step that times out fails the build even inside `TRY` or `ORELSE`. CI builds with `--skip-proof-steps`, so it does not check this.
+`holbuild buildhol` builds and caches the HOL toolchain and dependencies specified by `holproject.toml`. A local build checks proof steps against holbuild's default 2.5 s tactic timeout; since holbuild 0.12.0 a step that times out fails the build even inside `TRY` or `ORELSE`. CI builds with `--skip-proof-steps`, so it does not check this.
 
 Running the EEST conformance tests is described in [tests/README.md](tests/README.md).
 

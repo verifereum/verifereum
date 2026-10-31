@@ -69,9 +69,9 @@ Proof
      by (irule SUM_IMAGE_CONG \\ simp[Abbr`T0`])
   \\ gvs[wf_WETH_state_def, total_balances_def, SUBSET_DEF, SUM_IMAGE_INSERT]
   \\ rw[]
-  \\ Cases_on `a = src` \\ Cases_on `a = dst`
-  \\ Cases_on `x = src` \\ Cases_on `x = dst`
-  \\ gvs[Abbr`T0`]
+  >~ [`ws'.balances a < _`]
+  >- (Cases_on `a = src` \\ Cases_on `a = dst` \\ gvs[])
+  \\ Cases_on `x = src` \\ Cases_on `x = dst` \\ gvs[Abbr`T0`]
   \\ metis_tac[]
 QED
 
@@ -597,6 +597,25 @@ fun gas_bounds_tac (asl, w) =
     MAP_EVERY (assume_tac o bound) ts (asl, w)
   end
 
+(* the accounts after the lift's settlement, apart from the gas payments,
+   when the call's output does not go to a code deposit *)
+Theorem lookup_account_settled[local]:
+  (∀a. lookup_account a accs' =
+       if MEM a (if b then r1 else r2).toDelete then empty_account_state else
+       lookup_account a (if b then r1 else r2).accounts with balance :=
+         (lookup_account a (if b then r1 else r2).accounts).balance +
+         (if a = f then x else 0) + (if a = c then y else 0)) ⇒
+  ¬b ⇒
+  ∀a. ¬MEM a r2.toDelete ⇒
+      (lookup_account a accs').code = (lookup_account a r2.accounts).code ∧
+      (lookup_account a accs').storage =
+        (lookup_account a r2.accounts).storage ∧
+      (lookup_account a accs').nonce = (lookup_account a r2.accounts).nonce ∧
+      (a ≠ f ∧ a ≠ c ⇒ lookup_account a accs' = lookup_account a r2.accounts)
+Proof
+  rw[account_state_component_equality]
+QED
+
 Theorem weth_transfer_run_transaction:
   (lookup_account addr accounts).code = contract_code ∧
   zero_value_call (dom, chainId, prevHashes, blk) accounts tx addr
@@ -693,8 +712,8 @@ Proof
     \\ gvs[call_stipend_def])
   \\ strip_tac
   \\ qexistsl_tac [`result`, `accounts'`]
-  \\ qpat_assum `∀a. lookup_account a accounts' = _`
-       (qspec_then `addr` assume_tac)
+  \\ qpat_x_assum `∀a. lookup_account a accounts' = _`
+       (assume_tac o MATCH_MP lookup_account_settled)
   \\ gvs[SStore_write_def, sstore_write_accounts_updater_def,
          accesses_add_slot_def, lookup_account_def, update_account_def,
          APPLY_UPDATE_THM, calldata_word, mask_and_w2w,
