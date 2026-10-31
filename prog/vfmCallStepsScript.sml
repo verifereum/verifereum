@@ -376,3 +376,199 @@ Proof
   drule_all call_meter_reserved_step_call >>
   simp[call_meter_safe_def] >> disch_then drule_all >> simp[]
 QED
+
+Theorem call_meter_reserved_create_grant_tail:
+  call_meter_budget n ceiling u /\ n <= LENGTH u.contexts /\
+  u.contexts = (c,rb)::rest ==>
+  call_meter_safe (call_meter_reserved c 0 rb rest)
+    (bind withhold_create_gas (\grant.
+      if collision then abort_create_exists sender
+      else proceed_create sender addr value code grant))
+    (\r t. call_meter_budget n ceiling t)
+Proof
+  strip_tac >> irule call_meter_safe_bind >>
+  qexists `\grant s. call_meter_reserved c grant rb rest s` >> reverse conj_tac
+  >- (mp_tac (GEN_ALL call_meter_reserved_withhold) >>
+      simp[call_meter_safe_def] >> rpt strip_tac >>
+      first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  gen_tac >> BETA_TAC >> IF_CASES_TAC
+  >- (irule call_meter_safe_anchor_budget >>
+      qexistsl [`c`, `rb`, `rest`, `u`] >> simp[] >>
+      irule call_meter_safe_consequence >>
+      qexistsl [`call_meter_result c rb rest`, `\r t. call_meter_result c rb rest t`] >>
+      simp[call_meter_result_abort_create_exists] >>
+      rpt strip_tac >> metis_tac[call_meter_reserved_forget]) >>
+  drule_all call_meter_reserved_proceed_create >>
+  simp[call_meter_safe_def] >> metis_tac[]
+QED
+
+Theorem call_meter_reserved_create_charge_tail:
+  call_meter_budget n ceiling u /\ n <= LENGTH u.contexts /\
+  u.contexts = (c,rb)::rest ==>
+  call_meter_safe (call_meter_reserved c 0 rb rest)
+    (ignore_bind (access_address addr)
+      (ignore_bind (ensure_storage_in_domain addr)
+        (ignore_bind (charge_new_account charged)
+          (bind withhold_create_gas (\grant.
+            if collision then abort_create_exists sender
+            else proceed_create sender addr value code grant)))))
+    (\r t. call_meter_budget n ceiling t)
+Proof
+  strip_tac >> rewrite_tac[ignore_bind_def] >>
+  irule call_meter_reserved_budget_bind >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      irule call_meter_reserved_budget_bind >> conj_tac
+      >- (gen_tac >> BETA_TAC >>
+          irule call_meter_reserved_budget_bind >> conj_tac
+          >- (gen_tac >> BETA_TAC >>
+              drule_all call_meter_reserved_create_grant_tail >>
+              simp[call_meter_safe_def] >> metis_tac[]) >>
+          conj_tac >- (qexists `u` >> simp[]) >>
+          simp[call_meter_reserved_charge_account]) >>
+      conj_tac >- (qexists `u` >> simp[]) >>
+      simp[call_meter_reserved_ensure_storage]) >>
+  conj_tac >- (qexists `u` >> simp[]) >>
+  simp[call_meter_reserved_access_address]
+QED
+
+Theorem call_meter_reserved_create_depth_tail:
+  call_meter_budget n ceiling u /\ n <= LENGTH u.contexts /\
+  u.contexts = (c,rb)::rest ==>
+  call_meter_safe (call_meter_reserved c 0 rb rest)
+    (bind get_num_contexts (\depth.
+      if bad \/ depth > 1024 then abort_create
+      else ignore_bind (access_address addr)
+        (ignore_bind (ensure_storage_in_domain addr)
+          (ignore_bind (charge_new_account charged)
+            (bind withhold_create_gas (\grant.
+              if collision then abort_create_exists sender
+              else proceed_create sender addr value code grant))))))
+    (\r t. call_meter_budget n ceiling t)
+Proof
+  strip_tac >> irule call_meter_reserved_budget_bind >> conj_tac
+  >- (gen_tac >> BETA_TAC >> IF_CASES_TAC
+      >- (irule call_meter_safe_anchor_budget >>
+          qexistsl [`c`, `rb`, `rest`, `u`] >> simp[] >>
+          irule call_meter_safe_consequence >>
+          qexistsl [`call_meter_result c rb rest`, `\r t. call_meter_result c rb rest t`] >>
+          simp[call_meter_result_abort_create] >>
+          rpt strip_tac >> metis_tac[call_meter_reserved_forget]) >>
+      drule_all call_meter_reserved_create_charge_tail >>
+      simp[call_meter_safe_def] >> metis_tac[]) >>
+  conj_tac >- (qexists `u` >> simp[]) >>
+  irule call_meter_safe_consequence >>
+  qexistsl [`call_meter_reserved c 0 rb rest`,
+    `\r t. r = INL (LENGTH t.contexts) /\ call_meter_reserved c 0 rb rest t`] >>
+  simp[call_meter_reserved_num_contexts_reader] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem call_meter_reserved_read_memory:
+  call_meter_safe (call_meter_reserved c k rb rest) (read_memory offset len)
+    (\r t. call_meter_reserved c k rb rest t)
+Proof
+  irule call_meter_safe_reserved_ready_lift >>
+  mp_tac (GEN_ALL call_meter_safe_read_memory) >>
+  simp[call_meter_safe_def] >> metis_tac[]
+QED
+
+Theorem call_meter_reserved_create_checks_tail:
+  call_meter_budget n ceiling u /\ n <= LENGTH u.contexts /\
+  u.contexts = (c,rb)::rest ==>
+  call_meter_safe (call_meter_reserved c 0 rb rest)
+    (ignore_bind (assert sizeOK OutOfGas)
+      (ignore_bind assert_not_static
+        (ignore_bind (set_return_data [])
+          (bind get_num_contexts (\depth.
+            if bad \/ depth > 1024 then abort_create
+            else ignore_bind (access_address addr)
+              (ignore_bind (ensure_storage_in_domain addr)
+                (ignore_bind (charge_new_account charged)
+                  (bind withhold_create_gas (\grant.
+                    if collision then abort_create_exists sender
+                    else proceed_create sender addr value code grant)))))))))
+    (\r t. call_meter_budget n ceiling t)
+Proof
+  strip_tac >> rewrite_tac[ignore_bind_def] >>
+  irule call_meter_reserved_budget_bind >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      irule call_meter_reserved_budget_bind >> conj_tac
+      >- (gen_tac >> BETA_TAC >>
+          irule call_meter_reserved_budget_bind >> conj_tac
+          >- (gen_tac >> BETA_TAC >>
+              drule_all call_meter_reserved_create_depth_tail >>
+              simp[call_meter_safe_def, ignore_bind_def] >> metis_tac[]) >>
+          conj_tac >- (qexists `u` >> simp[]) >>
+          simp[call_meter_reserved_set_return_data]) >>
+      conj_tac >- (qexists `u` >> simp[]) >>
+      simp[call_meter_reserved_assert_not_static]) >>
+  conj_tac >- (qexists `u` >> simp[]) >>
+  simp[call_meter_safe_assert]
+QED
+
+Theorem call_meter_reserved_callee:
+  call_meter_safe (call_meter_reserved c k rb rest) get_callee
+    (\r t. call_meter_reserved c k rb rest t)
+Proof
+  irule call_meter_safe_consequence >>
+  qexistsl [`call_meter_reserved c k rb rest`,
+    `\r t. ?d. t.contexts = (d,rb)::rest /\ r = INL d.msgParams.callee /\ call_meter_reserved c k rb rest t`] >>
+  simp[call_meter_reserved_callee_reader] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem call_meter_reserved_step_create:
+  call_meter_budget n ceiling u /\ n <= LENGTH u.contexts /\
+  u.contexts = (c,rb)::rest ==>
+  call_meter_safe (call_meter_reserved c 0 rb rest) (step_create two)
+    (\r t. call_meter_budget n ceiling t)
+Proof
+  strip_tac >> rewrite_tac[step_create_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_reserved_budget_bind >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      irule call_meter_reserved_budget_bind >> conj_tac
+      >- (gen_tac >> BETA_TAC >>
+          irule call_meter_reserved_consume_budget_bind >>
+          conj_tac >- (qexists `u` >> simp[]) >>
+          qexists `0` >> simp[] >> rewrite_tac[ignore_bind_def] >>
+          irule call_meter_reserved_budget_bind >> conj_tac
+          >- (gen_tac >> BETA_TAC >>
+              irule call_meter_reserved_budget_bind >> conj_tac
+              >- (gen_tac >> BETA_TAC >>
+                  irule call_meter_reserved_budget_bind >> conj_tac
+                  >- (gen_tac >> BETA_TAC >>
+                      irule call_meter_reserved_budget_bind >> conj_tac
+                      >- (gen_tac >> BETA_TAC >>
+                          rewrite_tac[DISJ_ASSOC] >>
+                          irule (SRULE [ignore_bind_def] call_meter_reserved_create_checks_tail) >>
+                          qexists `u` >> simp[]) >>
+                      conj_tac >- (qexists `u` >> simp[]) >>
+                      simp[call_meter_reserved_accounts]) >>
+                  conj_tac >- (qexists `u` >> simp[]) >>
+                  simp[call_meter_reserved_callee]) >>
+              conj_tac >- (qexists `u` >> simp[]) >>
+              simp[call_meter_reserved_read_memory]) >>
+          conj_tac >- (qexists `u` >> simp[]) >>
+          simp[call_meter_reserved_expand_memory]) >>
+      conj_tac >- (qexists `u` >> simp[]) >>
+      simp[call_meter_reserved_memory_info]) >>
+  conj_tac >- (qexists `u` >> simp[]) >>
+  simp[call_meter_reserved_pop_stack_zero]
+QED
+
+Theorem call_meter_step_create_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  0 < n /\ n <= LENGTH s.contexts /\ step_create two s = (r,t) ==>
+  call_meter_budget n ceiling t /\
+  (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
+Proof
+  strip_tac >>
+  `s.contexts <> []` by gvs[wf_state_def] >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  `n <= LENGTH s.contexts` by simp[] >>
+  `call_meter_backed h0` by (drule_all call_meter_budget_top >> simp[]) >>
+  `h0.gasUsed <= h0.msgParams.gasLimit` by
+    gvs[wf_state_def, wf_context_def] >>
+  `call_meter_reserved h0 0 h1 t' s` by
+    simp[call_meter_reserved_zero, call_meter_result_same] >>
+  drule_all call_meter_reserved_step_create >>
+  simp[call_meter_safe_def] >> disch_then drule_all >> simp[]
+QED

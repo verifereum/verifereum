@@ -25,6 +25,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6.5.1 | proved |  | E0024 | Review reservation interface and commit; then reservation acquisition/discharge leaf. |
 | C1.3.6.5.2 | proved |  | E0026 |  |
 | C1.3.6.5.3 | proved |  | E0030 |  |
+| C1.3.6.5.4 | proved |  | E0032 |  |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -447,6 +448,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m0981_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.5.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0032`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 39 steps, 38 tools, 13 holbuild, 2,686,683 tok (2,682,394 in, 4,289 out, 2,622,592 cached), 499.4s, $0.4247532
+
+### Attempts / Evidence
+
+- `E0031` (progressed, other, actual effort: 1 sessions, 2 msgs, 8 steps, 7 tools, 1 holbuild, 1,081,872 tok (1,080,985 in, 887 out, 926,720 cached), 131.3s, $0.4100720)
+  - Start CREATE suffix with withhold_create_gas then collision abort_create_exists or proceed_create using reservation interfaces. -> Withholding bind prefix checks. Collision consequence leaves reservation-forgetting implication unsolved by simp; stopped for forced handoff before adding explicit strip/metis. Whole CREATE not yet composed; uncommitted suffix theorem is currently failing. (`TO_seq58_progcall_port-20261031T152132Z_m0993_t001`)
+- `E0032` (proved, , actual effort: 1 sessions, 3 msgs, 39 steps, 38 tools, 13 holbuild, 2,686,683 tok (2,682,394 in, 4,289 out, 2,622,592 cached), 499.4s, $0.4247532)
+  - Compose CREATE grant, charge, depth/abort and check suffixes with reservation-safe bind; assemble whole step_create and lift fresh zero reservation to rooted budget. -> call_meter_reserved_step_create and call_meter_step_create_budget build cleanly. Collision forgets reservation without refund; early abort uses ordinary result. Whole assembly uses checked interfaces and DISJ_ASSOC to normalize the two early-abort conditions. (`TO_seq58_progcall_port-20261031T152132Z_m1037_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1037_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

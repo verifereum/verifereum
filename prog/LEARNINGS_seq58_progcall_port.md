@@ -117,3 +117,13 @@ evidence:
 - episode:E0028
 - source:prog/vfmCallStepsScript.sml
 - tool_output:TO_seq58_progcall_port-20261031T142258Z_m0875_t001
+
+## L0014 scope='C1.3.6.5' tags=UNCURRY,pair_CASE,BETA_TAC,eta,record-selector
+shape: Whole opcode LET/paired-lambda suffix fails to match checked case-based reservation contract.
+pattern: Normalize paired lambda with rewrite_tac[pairTheory.UNCURRY_pair_CASE,combinTheory.C_DEF] then BETA_TAC. For eta-shortened predicates normalize both goal and theorem, e.g. simp[SF ETA_ss] then irule (SRULE [SF ETA_ss] boundary). If .code still mismatches inspect inferred record type: annotate account_state explicitly rather than searching harder.
+works_when: Composing state-gas entry suffix contracts with step_call/step_create monadic spines; matching issue is representational, not missing arithmetic.
+evidence:
+- episode:E0030
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m0969_t001
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m0973_t001
+- source:prog/vfmCallStepsScript.sml
