@@ -1176,3 +1176,157 @@ Proof
       simp[call_meter_safe_forfeit_inv, call_meter_safe_return_data_inv]) >>
   simp[call_meter_safe_def, return_def]
 QED
+
+(* Observation-only top updates also preserve the discharged root budget. *)
+Theorem call_meter_budget_observation:
+  call_meter_budget n ceiling s /\
+  s.contexts = (c,rb)::rest /\ t.contexts = (d,db)::rest /\
+  (call_meter_backed d <=> call_meter_backed c) /\
+  call_meter_claim d = call_meter_claim c /\ 0 < n ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >> Cases_on `n <= LENGTH s.contexts`
+  >- (irule call_meter_budget_replace >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      drule_all call_meter_budget_top >> simp[]) >>
+  irule call_meter_budget_exit >> gvs[]
+QED
+
+Theorem call_meter_set_context_observation_budget:
+  (!c. call_meter_backed (f c) <=> call_meter_backed c) /\
+  (!c. call_meter_claim (f c) = call_meter_claim c) /\
+  call_meter_budget n ceiling s /\ 0 < n /\ s.contexts <> [] /\
+  bind get_current_context (\c. set_current_context (f c)) s = (r,t) ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >> Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  gvs[get_current_context_def, set_current_context_def, bind_def, return_def] >>
+  irule call_meter_budget_observation >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem call_meter_output_observation_budget:
+  call_meter_budget n ceiling s /\ 0 < n /\ s.contexts <> [] ==>
+  (!r t. inc_pc s = (r,t) ==> call_meter_budget n ceiling t) /\
+  (!bytes r t. set_return_data bytes s = (r,t) ==> call_meter_budget n ceiling t) /\
+  (!offset bytes r t. write_memory offset bytes s = (r,t) ==>
+     call_meter_budget n ceiling t)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> irule call_meter_set_context_observation_budget >> simp[] >>
+      qexists `\c. c with pc updated_by SUC` >>
+      simp[call_meter_backed_def, call_meter_claim_def] >>
+      metis_tac[inc_pc_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule call_meter_set_context_observation_budget >> simp[] >>
+      qexists `\c. c with returnData := bytes` >>
+      simp[call_meter_backed_def, call_meter_claim_def] >>
+      gvs[set_return_data_def] >> metis_tac[]) >>
+  rpt strip_tac >> irule call_meter_set_context_observation_budget >> simp[] >>
+  qexists `\c. c with memory := buffer_write offset bytes c.memory` >>
+  simp[call_meter_backed_def, call_meter_claim_def] >>
+  metis_tac[write_memory_def]
+QED
+
+Theorem call_meter_push_observation_budget:
+  call_meter_budget n ceiling s /\ 0 < n /\ s.contexts <> [] /\
+  push_stack w s = (r,t) ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >> Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  qpat_x_assum `push_stack _ _ = _` mp_tac >>
+  simp[push_stack_def, get_current_context_def, bind_def, ignore_bind_def,
+       return_def, assert_def] >>
+  Cases_on `LENGTH h0.stack < stack_limit` >>
+  simp[fail_def, bind_def, set_current_context_def, return_def] >>
+  strip_tac >> gvs[] >>
+  irule call_meter_budget_observation >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[call_meter_backed_def, call_meter_claim_def]
+QED
+
+Theorem call_meter_safe_observation_update:
+  0 < n /\
+  (!c. call_meter_backed (f c) <=> call_meter_backed c) /\
+  (!c. call_meter_claim (f c) = call_meter_claim c) ==>
+  call_meter_safe (\s. call_meter_budget n ceiling s /\ s.contexts <> [])
+    (bind get_current_context (\c. set_current_context (f c)))
+    (\r t. call_meter_budget n ceiling t /\ t.contexts <> [])
+Proof
+  strip_tac >> rewrite_tac[call_meter_safe_def] >> BETA_TAC >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (conj_tac
+      >- metis_tac[call_meter_set_context_observation_budget] >>
+      Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+      gvs[get_current_context_def, set_current_context_def, bind_def, return_def]) >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  gvs[get_current_context_def, set_current_context_def, bind_def, return_def]
+QED
+
+Theorem call_meter_safe_output_observation:
+  0 < n ==>
+  call_meter_safe (\s. call_meter_budget n ceiling s /\ s.contexts <> []) inc_pc
+    (\r t. call_meter_budget n ceiling t /\ t.contexts <> []) /\
+  call_meter_safe (\s. call_meter_budget n ceiling s /\ s.contexts <> [])
+    (set_return_data bytes)
+    (\r t. call_meter_budget n ceiling t /\ t.contexts <> []) /\
+  call_meter_safe (\s. call_meter_budget n ceiling s /\ s.contexts <> [])
+    (write_memory offset bytes)
+    (\r t. call_meter_budget n ceiling t /\ t.contexts <> [])
+Proof
+  strip_tac >> rpt conj_tac >>
+  (rewrite_tac[call_meter_safe_def] >> BETA_TAC >>
+   rpt gen_tac >> strip_tac >> conj_tac
+   >- (conj_tac
+       >- metis_tac[call_meter_output_observation_budget] >>
+       Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+       gvs[inc_pc_def, set_return_data_def, write_memory_def,
+           get_current_context_def, set_current_context_def, bind_def, return_def]) >>
+   Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+   gvs[inc_pc_def, set_return_data_def, write_memory_def,
+       get_current_context_def, set_current_context_def, bind_def, return_def])
+QED
+
+Theorem call_meter_safe_push_observation:
+  0 < n ==>
+  call_meter_safe (\s. call_meter_budget n ceiling s /\ s.contexts <> [])
+    (push_stack w) (\r t. call_meter_budget n ceiling t /\ t.contexts <> [])
+Proof
+  strip_tac >> rewrite_tac[call_meter_safe_def] >> BETA_TAC >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (conj_tac
+      >- metis_tac[call_meter_push_observation_budget] >>
+      metis_tac[push_stack_preserves_nonempty_contexts, pairTheory.SND]) >>
+  qpat_x_assum `push_stack _ _ = _` mp_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  simp[push_stack_def, get_current_context_def, bind_def, ignore_bind_def,
+       return_def, assert_def] >>
+  Cases_on `LENGTH h0.stack < stack_limit` >>
+  gvs[vfmConstantsTheory.stack_limit_def, fail_def, bind_def, set_current_context_def, return_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem call_meter_safe_exception_output:
+  0 < n ==>
+  call_meter_safe (\s. call_meter_budget n ceiling s /\ s.contexts <> [])
+    (ignore_bind inc_pc
+      (case outputTo of
+       | Code address => if success then
+           ignore_bind (set_return_data []) (push_stack (w2w address))
+         else ignore_bind (set_return_data output) (push_stack (b2w F))
+       | Memory r => ignore_bind (set_return_data output)
+           (ignore_bind (push_stack (b2w success))
+             (write_memory r.offset (TAKE r.size output)))))
+    (\r t. call_meter_budget n ceiling t /\ t.contexts <> [])
+Proof
+  strip_tac >> ho_match_mp_tac call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_output_observation] >>
+  Cases_on `outputTo`
+  >- (simp[] >> ho_match_mp_tac call_meter_safe_ignore_invariant >> conj_tac
+      >- simp[call_meter_safe_output_observation] >>
+      ho_match_mp_tac call_meter_safe_ignore_invariant >>
+      simp[call_meter_safe_push_observation, call_meter_safe_output_observation]) >>
+  Cases_on `success` >> simp[] >>
+  ho_match_mp_tac call_meter_safe_ignore_invariant >>
+  simp[call_meter_safe_output_observation, call_meter_safe_push_observation]
+QED
