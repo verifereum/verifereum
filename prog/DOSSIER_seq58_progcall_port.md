@@ -18,6 +18,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.5 | proved |  | E0016 | Review primitive boundary component, commit stable theory, then scheduled fresh CALL/CREATE push/entry proofs. |
 | C1.3.6 | stuck | missing_helper | E0017 | Review scoped missing dependency: preserve entry shape/budget partial work, introduce or assign compositional meter+exception-safety interface and ordinary primitive/precompile laws before whole step_call/step_create, avoiding a flat 1500-line duplicated local safety library. |
 | C1.3.6.1 | proved |  | E0018 | Review/commit bounded entry facts, then C1.3.6.2 composition probes. |
+| C1.3.6.2 | proved |  | E0019 | Review then commit safe-contract theory; continue scheduled neutral-operation adapters. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -289,6 +290,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T123059Z_m0518_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0019`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 21 steps, 20 tools, 8 holbuild, 1,218,376 tok (1,216,396 in, 1,980 out, 1,189,504 cached), 169.7s, $0.1925344
+- next: Review then commit safe-contract theory; continue scheduled neutral-operation adapters.
+
+### Attempts / Evidence
+
+- `E0019` (proved, , actual effort: 1 sessions, 1 msgs, 21 steps, 20 tools, 8 holbuild, 1,218,376 tok (1,216,396 in, 1,980 out, 1,189,504 cached), 169.7s, $0.1925344)
+  - Defined result-indexed safe contract and proved return/fail/consequence/bind/ignore-bind/invariant/from-result laws; explicitly specialize first bind contract before sum splitting. -> All contract laws verified. Both successful and failed intermediate result states retain their postcondition. ()
+  - Added consume adapter and composition probes for consume-return, early OutOfGas, and backed restore_child_gas. -> vfmCallMeterSafeTheory builds clean; restoration probe obtains INL and meter result from existing grant premise. (`TO_seq58_progcall_port-20261031T123059Z_m0551_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T123059Z_m0551_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

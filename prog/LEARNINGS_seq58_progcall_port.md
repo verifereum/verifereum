@@ -52,3 +52,22 @@ evidence:
 - episode:E0014
 - source:prog/AUDIT_seq58_call_safety.md
 - tool_output:TO_seq58_progcall_port-20261031T123059Z_m0365_t001
+
+## L0007 scope='C1.3' tags=budget,chain,TAKE,push,pop,grant
+shape: Lift meter scalar contracts through a rooted selected context prefix
+pattern: Use call_meter_chain above cs with accumulated descendant claim; its indexed equivalence gives the intended EL/TAKE budget. Top replacement needs backing and claim nonincrease; insertion/removal needs combined claim and local backing margins. Use call_meter_budget_push/pop and call_meter_entry_budget rather than redoing prefix arithmetic. At push compare with original pre-grant state, not already depleted parent. Root exit discharges without constraining external caller.
+works_when: Infrastructure in vfmCallBudgetTheory and bounded entry shape contracts are available.
+evidence:
+- episode:E0015
+- episode:E0018
+- source:prog/vfmCallBudgetScript.sml
+- source:prog/vfmCallEntryScript.sml
+
+## L0008 scope='C1.3.6' tags=primitive,error,grant,claim,refund
+shape: Primitive result-state meters versus refundable execution-grant transfer
+pattern: call_meter_result fixes context tail, backing, gas bound and claim nonincrease for every result, including errors; call_meter_result_budget lifts it. Grants require call_meter_grant_result instead: own meter plus grant <= used and new claim + grant = old claim. Return-grant composition restores original claim using backed restore_child_gas boundary. These meter predicates do not themselves exclude Impossible; add separately checked safety adapters.
+works_when: Composing CALL/CREATE or handler primitives using checked vfmCallMeterTheory boundaries.
+evidence:
+- episode:E0016
+- source:prog/vfmCallMeterScript.sml
+- episode:E0017
