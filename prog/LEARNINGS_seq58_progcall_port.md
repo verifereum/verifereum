@@ -127,3 +127,12 @@ evidence:
 - tool_output:TO_seq58_progcall_port-20261031T152132Z_m0969_t001
 - tool_output:TO_seq58_progcall_port-20261031T152132Z_m0973_t001
 - source:prog/vfmCallStepsScript.sml
+
+## L0015 scope='C1.3.7' tags=saved_context,reader,neutral,assert,call_meter_safe
+shape: Opcode reads a context, asserts guards, then writes a record update of the saved context.
+pattern: Use call_meter_safe_saved_context to retain the exact live head through a continuation with precondition call_meter_ready d; use ready_assert_prefix and set_neutral to finish. Invariant-only current_inv cannot justify writing back the saved value. For ready-to-ready primitive boundaries, convert post to result explicitly with call_meter_ready_result before result_lift.
+works_when: No meter-changing operation intervenes between saved read and neutral replacement; neutral preserves gasLimit, gasUsed, spilled and committed.
+evidence:
+- episode:E0034
+- source:prog/vfmCallInnerScript.sml
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1106_t001

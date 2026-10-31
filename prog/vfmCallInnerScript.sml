@@ -351,3 +351,286 @@ Proof
   simp[LET_THM] >> irule call_meter_safe_ready_assert_prefix >> simp[] >>
   irule call_meter_safe_set_neutral >> simp[call_meter_neutral_def]
 QED
+
+Theorem call_meter_safe_accounts_inv:
+  call_meter_safe (call_meter_result c rb rest) get_accounts
+    (\r t. call_meter_result c rb rest t)
+Proof
+  mp_tac (GEN_ALL call_meter_safe_accounts_reader) >>
+  simp[call_meter_safe_def] >> metis_tac[]
+QED
+
+Theorem call_meter_safe_callee_inv:
+  call_meter_safe (call_meter_result c rb rest) get_callee
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[get_callee_def] >> irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_current_inv, call_meter_safe_def, return_def]
+QED
+
+Theorem call_meter_safe_access_inv:
+  call_meter_safe (call_meter_result c rb rest) (access_address a)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> gen_tac >>
+  mp_tac (GEN_ALL call_meter_safe_access_address) >>
+  simp[call_meter_safe_def] >> metis_tac[call_meter_ready_result]
+QED
+
+Theorem call_meter_safe_source_readers_inv:
+  call_meter_safe (call_meter_result c rb rest) get_current_code
+    (\r t. call_meter_result c rb rest t) /\
+  call_meter_safe (call_meter_result c rb rest) get_return_data
+    (\r t. call_meter_result c rb rest t) /\
+  call_meter_safe (call_meter_result c rb rest) (get_code a)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[get_current_code_def, get_return_data_def, get_code_def] >>
+  rpt conj_tac >> irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_current_inv, call_meter_safe_accounts_inv,
+       call_meter_safe_def, return_def]
+QED
+
+Theorem call_meter_safe_checked_data_inv:
+  call_meter_safe (call_meter_result c rb rest) (get_return_data_check offset len)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[get_return_data_check_def, ignore_bind_def] >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+      simp[call_meter_safe_assert, call_meter_safe_def, return_def]) >>
+  simp[call_meter_safe_source_readers_inv]
+QED
+
+Theorem call_meter_safe_copy_source_inv:
+  (!f. source = SOME f ==>
+    call_meter_safe (call_meter_result c rb rest) f
+      (\r t. call_meter_result c rb rest t)) ==>
+  call_meter_safe (call_meter_result c rb rest)
+    (case source of
+       SOME f => bind f (\bytes. ignore_bind (expand_memory amount)
+                   (return (take_pad_0 len (DROP offset bytes))))
+     | NONE => ignore_bind (expand_memory amount) (read_memory offset len))
+    (\r t. call_meter_result c rb rest t)
+Proof
+  strip_tac >> Cases_on `source` >> simp[]
+  >- (irule call_meter_safe_ignore_invariant >>
+      simp[call_meter_safe_expand_inv, call_meter_safe_read_memory_inv]) >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_ignore_invariant >>
+      simp[call_meter_safe_expand_inv, call_meter_safe_def, return_def]) >>
+  metis_tac[]
+QED
+
+Theorem call_meter_safe_copy_memory_inv:
+  (!f. source = SOME f ==>
+    call_meter_safe (call_meter_result c rb rest) f
+      (\r t. call_meter_result c rb rest t)) ==>
+  call_meter_safe (call_meter_result c rb rest)
+    (copy_to_memory gas offset sourceOffset len source)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  strip_tac >> rewrite_tac[copy_to_memory_def, LET_THM] >> BETA_TAC >>
+  pairarg_tac >> simp[] >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> simp[LET_THM] >> irule call_meter_safe_ignore_invariant >> conj_tac
+      >- simp[call_meter_safe_consume_inv] >>
+      irule call_meter_safe_bind_invariant >>
+      simp[call_meter_safe_copy_source_inv, call_meter_safe_write_inv]) >>
+  simp[call_meter_safe_memory_info_inv]
+QED
+
+Theorem call_meter_safe_call_data_inv:
+  call_meter_safe (call_meter_result c rb rest) get_call_data
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[get_call_data_def] >> irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_current_inv, call_meter_safe_def, return_def]
+QED
+
+Theorem call_meter_safe_step_copy_inv:
+  (!f. source = SOME f ==>
+    call_meter_safe (call_meter_result c rb rest) f
+      (\r t. call_meter_result c rb rest t)) ==>
+  call_meter_safe (call_meter_result c rb rest) (step_copy_to_memory op source)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  strip_tac >> rewrite_tac[step_copy_to_memory_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_copy_memory_inv, call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_return_data_copy_inv:
+  call_meter_safe (call_meter_result c rb rest) step_return_data_copy
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_return_data_copy_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_copy_memory_inv, call_meter_safe_checked_data_inv,
+       call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_ext_code_copy_inv:
+  call_meter_safe (call_meter_result c rb rest) step_ext_code_copy
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_ext_code_copy_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+      simp[call_meter_safe_access_inv, call_meter_safe_copy_memory_inv,
+           call_meter_safe_source_readers_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_balance_inv:
+  call_meter_safe (call_meter_result c rb rest) step_balance
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_balance_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+              simp[call_meter_safe_accounts_inv, call_meter_result_push_stack]) >>
+          simp[call_meter_safe_consume_inv]) >>
+      simp[call_meter_safe_access_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_ext_code_size_inv:
+  call_meter_safe (call_meter_result c rb rest) step_ext_code_size
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_ext_code_size_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+              simp[call_meter_safe_accounts_inv, call_meter_result_push_stack]) >>
+          simp[call_meter_safe_consume_inv]) >>
+      simp[call_meter_safe_access_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_ext_code_hash_inv:
+  call_meter_safe (call_meter_result c rb rest) step_ext_code_hash
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_ext_code_hash_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+              simp[call_meter_safe_accounts_inv, call_meter_result_push_stack]) >>
+          simp[call_meter_safe_consume_inv]) >>
+      simp[call_meter_safe_access_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_call_data_load_inv:
+  call_meter_safe (call_meter_result c rb rest) step_call_data_load
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_call_data_load_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+          simp[call_meter_safe_call_data_inv, call_meter_result_push_stack]) >>
+      simp[call_meter_safe_consume_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_block_hash_inv:
+  call_meter_safe (call_meter_result c rb rest) step_block_hash
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_block_hash_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+          simp[call_meter_safe_tx_inv, call_meter_result_push_stack]) >>
+      simp[call_meter_safe_consume_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_blob_hash_inv:
+  call_meter_safe (call_meter_result c rb rest) step_blob_hash
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_blob_hash_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+          simp[call_meter_safe_tx_inv, call_meter_result_push_stack]) >>
+      simp[call_meter_safe_consume_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_self_balance_inv:
+  call_meter_safe (call_meter_result c rb rest) step_self_balance
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_self_balance_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+          simp[call_meter_safe_callee_inv, call_meter_result_push_stack]) >>
+      simp[call_meter_safe_accounts_inv]) >>
+  simp[call_meter_safe_consume_inv]
+QED
+
+Theorem call_meter_safe_not_static_inv:
+  call_meter_safe (call_meter_result c rb rest) assert_not_static
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[assert_not_static_def] >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- simp[call_meter_safe_assert] >>
+  rewrite_tac[get_static_def] >> irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_current_inv, call_meter_safe_def, return_def]
+QED
+
+Theorem call_meter_safe_logs_inv:
+  call_meter_safe (call_meter_result c rb rest) (push_logs ls)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> gen_tac >>
+  rewrite_tac[push_logs_def] >> irule call_meter_safe_context_update >>
+  simp[call_meter_neutral_def]
+QED
+
+Theorem call_meter_safe_log_inv:
+  call_meter_safe (call_meter_result c rb rest) (step_log n)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_log_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+              >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+                  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+                      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+                          simp[call_meter_safe_read_memory_inv, call_meter_safe_logs_inv]) >>
+                      simp[call_meter_safe_callee_inv]) >>
+                  simp[call_meter_safe_not_static_inv]) >>
+              simp[call_meter_safe_expand_inv]) >>
+          simp[call_meter_safe_consume_inv]) >>
+      simp[call_meter_safe_memory_info_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_copy_instances_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (step_copy_to_memory CallDataCopy (SOME get_call_data))
+    (\r t. call_meter_result c rb rest t) /\
+  call_meter_safe (call_meter_result c rb rest)
+    (step_copy_to_memory CodeCopy (SOME get_current_code))
+    (\r t. call_meter_result c rb rest t) /\
+  call_meter_safe (call_meter_result c rb rest)
+    (step_copy_to_memory MCopy NONE)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rpt conj_tac >> irule call_meter_safe_step_copy_inv >>
+  simp[call_meter_safe_call_data_inv, call_meter_safe_source_readers_inv]
+QED

@@ -2,58 +2,55 @@
 Updated: 2026-10-31
 
 ## Cursor
-- component: C1.3.6.5.4
+- component: C1.3.7.2
 - status: in_progress
-- active_file: prog/vfmCallStepsScript.sml
-- next_action: Finish call_meter_reserved_create_grant_tail collision consequence near line 399: after simp add rpt strip_tac and metis_tac[call_meter_reserved_forget], inspecting the second residual goal if present. Build. Then compose CREATE charge/domain and early-abort suffixes and zero-reservation reader/check prefix. CALL is proved/reviewed and committed as 37466077; current uncommitted CREATE suffix is failing.
-- expected_goal_shape: Collision branch leaves !s. call_meter_reserved c x rb rest s ==> call_meter_result c rb rest s. holbuild reports two residual goals; inspect the other if explicit forgetting does not close both. Withholding success bind prefix already checks.
-- verify_with: holbuild(targets=["vfmCallStepsTheory"], timeout=1800)
+- active_file: prog/vfmCallInnerScript.sml
+- next_action: Fix call_meter_safe_access_inv near line 375: after result_lift/gen_tac, forward-introduce GEN_ALL call_meter_safe_access_address, unfold call_meter_safe_def and discharge with call_meter_ready_result (as in memory_info_inv). Build; subsequent source readers and copy_source/copy_memory helpers are unverified. Then finish family opcode consumers.
+- expected_goal_shape: forall d. call_meter_safe (call_meter_ready d rb rest) (access_address a) (lambda r t. call_meter_result d rb rest t). Existing access boundary returns ready, not result.
+- verify_with: holbuild(targets=["vfmCallInnerTheory"], timeout=1800)
 
 ## If This Fails
-- Inspect actual consequence residual and use checked reservation-forgetting/result-abort boundaries; no primitive unfolding needed. checkpoint_progress for useful partial evidence; close stuck/review only for structural interface failure.
+- Inspect actual postcondition and use consequence or forward chaining to convert ready to result; checkpoint partial progress. Escalate only on structural interface failure, not routine beta/LET or postcondition matching.
 
 ## Do Not Retry
-- Recover paid stipend/grant reservation from ordinary call_meter_result.: It forgets backing surplus; retain reservation until refund or entry spends it.
+- Treat arbitrary set_current_context as preserving fixed-anchor result.: Saved context must be proven to be current; use saved_context boundary and neutral replacement.
+  - evidence: episode:E0034
+  - evidence: source:prog/vfmCallInnerScript.sml
+- Infer paid grant reservation from ordinary call_meter_result or add external caller backing guards.: Result forgets surplus; rooted fresh-callee accounting and checked reservation are required. No further export weakening authorized.
   - evidence: episode:E0023
   - evidence: episode:E0024
-- Repeated generalized metis searches on overloaded .code record-selector mismatches.: The delegate helper needed account_state annotation; inspect direct matcher type diagnostics first.
-  - evidence: tool_output:TO_seq58_progcall_port-20261031T152132Z_m0969_t001
-  - evidence: source:prog/vfmCallStepsScript.sml
-- Unrestricted nonempty-context CALL safety or more caller-facing backing guards.: Historical counterexamples require rooted fresh-callee budget; no further export weakening authorized.
-  - evidence: episode:E0013
-  - evidence: tool_output:TO_seq58_progcall_port-20261030T183500Z_m0272_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- The reservation decomposition is validated by whole CALL proof; CREATE uses the same abstraction without stipend, so do not redesign meters or optimize a different invariant.
-- Outside-the-box option still untried: semantic suffix definitions could shrink duplicated long statements, but current named suffix contracts permit a 30-line whole CALL assembly and remain adequate.
-- A fresh expert should check overloaded record selectors and beta/eta normalization before treating a failed matcher as a missing mathematical lemma.
-- Current CREATE failure is only consequence transport, not evidence of falsehood or a failed architecture. Do not reopen precompile internals or add exported guards.
+- The fixed-tail ordinary-result abstraction remains appropriate; CALL/CREATE retain separate rooted-budget contracts. Do not try to force stack-extending entry into fixed tails.
+- Outside-the-box option: generic reader-to-result adapter could replace repeated mp_tac/ready_result conversions. No need to redesign semantics or meter definitions.
+- Fresh expert should inspect exact postconditions before using simp: a ready-preserving operation does not syntactically match a result-returning boundary.
+- Remaining copy helpers explicitly parameterize source safety; verify their types and source case normalization rather than expanding every account/memory primitive.
 
 ### What Went Wrong
-- Delegate helper initially inferred account as message_parameters because .code is overloaded. This caused repeated matching failures and metis timeouts; explicit (account:account_state) fixed the real mismatch.
-- Paired lambdas from step_call LET rewriting did not match case-based suffix contracts until rewriting UNCURRY_pair_CASE and C_DEF followed by BETA_TAC.
-- gvs can normalize away n<=LENGTH u.contexts; reassert literal premise before drule_all budget lifting.
-- simp does not necessarily use call_meter_reserved_forget as an implication-closing rule; the current CREATE consequence requires explicit reasoning.
+- Current access_inv proof assumed call_meter_safe_access_address returns call_meter_result; it actually preserves call_meter_ready. Build stops before the new copy helpers.
+- CREATE condition normalization initially used GSYM DISJ_ASSOC, but HOL's DISJ_ASSOC associates right-nested disjunction to the left. Correct direction fixed whole CREATE matching.
+- Saved-context proof needed gvs after stripping hypotheses; simp before introducing equalities cannot reduce conditional context readers/writers.
 
 ### Ignored Signals
-- Delayed inspecting the direct irule error exposed a concrete record-selector type mismatch only after several unnecessary generalized metis attempts.
-- irule rearranges conjunctions: do not assume existential anchor is first; read live goal before qexists.
-- Eta-normalizing only the goal can cause different-constructor matching. Normalize the boundary theorem as well.
+- Exact ready-versus-result postconditions were underweighted again when composing access_address. Inspect signatures rather than guessing from theorem names.
+- New suffixes after a failed earlier theorem are not checked: do not describe source-reader or copy combinators as proved yet.
 
 ### Strategy Adjustments
-- Continue CREATE suffix-to-prefix, reusing call_meter_reserved_budget_bind for neutral prefixes and call_meter_safe_anchor_budget for abort branches.
-- CALL whole-opcode proof is committed and builds; do not include unfinished CREATE suffix in a stable commit.
-- Keep metis small; use first_x_assum drule_all on isolated universal safe contracts where exact types match.
+- CREATE whole entry is proved, reviewed and committed as 4912672c.
+- Neutral stack/control-flow plus existing arithmetic/memory helper coverage is proved, reviewed and committed as 07009dd6.
+- Continue only C1.3.7.2; C1.3.7.3 is a queued independent storage family, not current work.
+- Use saved_context plus ready_assert_prefix/set_neutral for genuine saved-context updates; invariant-only current_inv suffices only when returned contexts are read but not written back.
 
 ### Oracle Feedback
-- E0030 accepted with no PLAN changes: whole CALL safety wrapper uses existing wf_state/positive protected-depth premises, does not weaken exports, and leaves semantics behind checked interfaces. CREATE is authorized next.
+- E0032 and E0034 accepted without contract changes. Reservation and saved-context boundary designs validated.
+- Strategist refined broad C1.3.7 into five bounded family/dispatch children. Final dispatch waits for memory/read/log, storage, and terminal families.
 
 ## Evidence Pointers
-- episode:E0030 - whole CALL proved and reviewed
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m0981_t001 - clean CALL build
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m0983_t001 - strategist acceptance
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m0987_t001 - stable commit 37466077
-- episode:E0031 - partial CREATE suffix attempt
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m0993_t001 - current failure and residual collision consequence
-- source:prog/vfmCallStepsScript.sml
+- episode:E0032 - whole CREATE proof
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1042_t001 - CREATE stable commit
+- episode:E0034 - neutral/control-flow family proved
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1096_t001 - stable Inner checkpoint commit
+- episode:E0035 - current partial copy-family attempt
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1103_t001 - current access adapter failure
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1106_t001 - exact ready-preserving access signature

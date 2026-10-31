@@ -28,6 +28,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6.5.4 | proved |  | E0032 |  |
 | C1.3.7 | progressed | other | E0033 | Continue finite opcode coverage with memory/storage/terminal families, then dispatch and step_inner lift. New vfmCallInnerScript.sml is build-clean and untracked until stable checkpoint commit. |
 | C1.3.7.1 | proved |  | E0034 |  |
+| C1.3.7.2 | proved |  | E0036 | Review and commit read/memory/copy/log family; proceed to scheduled storage family. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -510,6 +511,30 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1091_t001` (use `read_tool_output` for exact output)
+
+## C1.3.7.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0036`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 24 steps, 23 tools, 7 holbuild, 1,565,171 tok (1,561,227 in, 3,944 out, 1,517,696 cached), 222.8s, $0.2782716
+- next: Review and commit read/memory/copy/log family; proceed to scheduled storage family.
+
+### Attempts / Evidence
+
+- `E0035` (progressed, other, actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 1 holbuild, 1,359,877 tok (1,358,192 in, 1,685 out, 1,244,416 cached), 86.9s, $0.3688436)
+  - Add account/callee/access invariant adapters, source readers and generalized copy_source/copy_memory composition. -> Account/callee adapters pass; access_inv currently fails because ready-to-ready access_address contract is not directly a ready-to-result contract. Need explicit conversion with call_meter_ready_result before result_lift. Source-reader and copy helpers after that point remain unchecked, not proved. (`TO_seq58_progcall_port-20261031T152132Z_m1103_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1106_t001`)
+- `E0036` (proved, , actual effort: 1 sessions, 2 msgs, 24 steps, 23 tools, 7 holbuild, 1,565,171 tok (1,561,227 in, 3,944 out, 1,517,696 cached), 222.8s, $0.2782716)
+  - Convert ready-preserving access boundary to result; verify source reader and generalized copy helpers. -> Access adapter and entire copy_source/copy_memory suffix build. (`TO_seq58_progcall_port-20261031T152132Z_m1114_t001`)
+  - Compose ordinary balance, code size/hash, data load/copy, block/blob hash, self balance and log contracts from fixed-tail interfaces. -> All family helpers and explicit CallDataCopy/CodeCopy/MCopy instances build; environmental operations remain covered by existing generic context/msgParams/txParams contracts. (`TO_seq58_progcall_port-20261031T152132Z_m1130_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1133_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1114_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T152132Z_m1133_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
