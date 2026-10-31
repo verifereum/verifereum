@@ -21,6 +21,9 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6.2 | proved |  | E0019 | Review then commit safe-contract theory; continue scheduled neutral-operation adapters. |
 | C1.3.6.3 | proved |  | E0020 | Review adapters then commit; next scheduled precompile preservation. |
 | C1.3.6.4 | proved |  | E0021 | Review and commit precompile boundaries, then scheduled whole entry composition. |
+| C1.3.6.5 | progressed | missing_helper | E0023 | Request strategist guidance on surplus-preserving composition before unfolding any whole opcode. |
+| C1.3.6.5.1 | proved |  | E0024 | Review reservation interface and commit; then reservation acquisition/discharge leaf. |
+| C1.3.6.5.2 | proved |  | E0026 |  |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -355,6 +358,69 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T133309Z_m0655_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.5
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `missing_helper`
+- latest episode: `E0023`
+- blocker: Whole-entry composition needs a surplus-preserving contract: current safe neutral adapters return call_meter_result, dropping the margin and claim+margin facts needed after opcode payment. This is an interface gap, not a failed scalar inequality.
+- actual effort: 2 sessions, 3 msgs, 43 steps, 41 tools, 14 holbuild, 3,033,257 tok (3,027,819 in, 5,438 out, 2,870,784 cached), 498.7s, $0.6555284
+- next: Request strategist guidance on surplus-preserving composition before unfolding any whole opcode.
+
+### Attempts / Evidence
+
+- `E0022` (progressed, other, actual effort: 1 sessions, 2 msgs, 27 steps, 26 tools, 11 holbuild, 1,724,261 tok (1,721,739 in, 2,522 out, 1,675,008 cached), 268.4s, $0.2861828)
+  - Added general proceed_call all-result budget boundary in isolated EntryStepTheory; split transfer and precompile membership, use entry_budget then dispatch_budget. -> Build clean. Covers immediate dispatch and forbidden errors, no opcode consumer unfolding of crypto. Initial witness and abbreviation normalization issues resolved. (`TO_seq58_progcall_port-20261031T133309Z_m0692_t001`)
+- `E0023` (progressed, missing_helper, actual effort: 2 sessions, 3 msgs, 43 steps, 41 tools, 14 holbuild, 3,033,257 tok (3,027,819 in, 5,438 out, 2,870,784 cached), 498.7s, $0.6555284)
+  - Proved consume_margin, charge_margin and credit_margin; proved call_gas zero-cost grant arithmetic with stipend explicitly backed by a paid margin. -> EntryStepTheory builds all five new boundary theorems. Account charging/refunding preserve paid surplus over spill+committed. call_gas bounds use zero cost arguments and do not assume old call_gas cost treatment. (`TO_seq58_progcall_port-20261031T134530Z_m0706_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T134530Z_m0706_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0024`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 49 steps, 48 tools, 18 holbuild, 5,421,597 tok (5,413,531 in, 8,066 out, 5,352,704 cached), 615.4s, $0.7375844
+- next: Review reservation interface and commit; then reservation acquisition/discharge leaf.
+
+### Attempts / Evidence
+
+- `E0024` (proved, , actual effort: 1 sessions, 3 msgs, 49 steps, 48 tools, 18 holbuild, 5,421,597 tok (5,413,531 in, 8,066 out, 5,352,704 cached), 615.4s, $0.7375844)
+  - Defined call_meter_reserved with fixed anchor; proved zero/result equivalence, weakening, forget, ready, neutral and margin transport; proved neutral adapters, value-retaining readers, charge/credit account adapters. -> All requested interfaces build clean in ReserveTheory. All-result preservation and forbidden-error exclusion included. Polymorphic context reader specialization requires Q.ISPEC_THEN and beta normalization; primitive margin matching uses explicit arithmetic normalization rather than broad metis. (`TO_seq58_progcall_port-20261031T134530Z_m0761_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T134530Z_m0761_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0026`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 8 holbuild, 2,060,753 tok (2,057,622 in, 3,131 out, 2,009,984 cached), 309.7s, $0.3275844
+
+### Attempts / Evidence
+
+- `E0025` (progressed, other, actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 4 holbuild, 2,010,740 tok (2,007,541 in, 3,199 out, 1,847,936 cached), 213.5s, $0.5359936)
+  - Added GrantTheory with consume-success/all-result acquisition, CREATE withholding, child refund discharge; then CALL payment and proceed wrappers. -> First four theorems built clean in TO_m0775. Last build checked CALL payment but failed proceed_call wrapper because gvs normalized n<=LENGTH u.contexts into n<=SUC LENGTH rest, so drule_all lacked literal premise. Added original length inequality by simp; this last edit is unbuilt. CREATE wrapper likely needs same repair. Abort adapters remain unwritten. (`TO_seq58_progcall_port-20261031T134530Z_m0775_t001`, `TO_seq58_progcall_port-20261031T134530Z_m0777_t001`, `TO_seq58_progcall_port-20261031T134530Z_m0778_t001`)
+- `E0026` (proved, , actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 8 holbuild, 2,060,753 tok (2,057,622 in, 3,131 out, 2,009,984 cached), 309.7s, $0.3275844)
+  - Completed GrantTheory acquisition, grant-payment, entry wrappers and abort adapters using reserved predicate, safe bind and consequence. -> vfmCallGrantTheory builds clean. Unuse discharges surplus directly via checked pair boundary; early push failures forget reservation rather than assert refund. CREATE collision preserves ordinary result without refund. Fixed literal length premises, partial predicate rewrite mismatch, beta reduction and ready/result post mismatch. (`TO_seq58_progcall_port-20261031T140620Z_m0814_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T140620Z_m0814_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

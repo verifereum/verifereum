@@ -358,27 +358,114 @@ Inspect each precompile body and prove a separate contract using composition, co
 #### Not to try
 Never drop the address-membership premise. Do not expand all precompile bodies in a single dispatch proof.
 
-### C1.3.6.5: Assemble backed CALL and CREATE entry contracts
-- Kind: `boundary_lemma`
+### C1.3.6.5: Compose reserved-budget CALL and CREATE entry
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 4
-- Work units: 8
-- Rationale: With neutral and precompile boundaries available the remaining work is scalar grant accounting and compositional finite branches.
-- Dependencies: C1.3.6.1, C1.3.6.3, C1.3.6.4
-- Checkpoint: yes
+- Work priority: 50
+- Work units: 0
+- Rationale: A single reserved-claim invariant retains exactly the paid stipend and grant information lost by ordinary result adapters. Existing scalar and entry boundaries discharge its arithmetic.
 - Progress transition: `refinement`
+- Carries progress/evidence from: E0023
+
+#### Progress note
+E0023 checked proceed_call including immediate precompiles and four margin lemmas. Retain their proofs unchanged; the whole opcode obligations remain unfinished and no continuity certificate is requested for new outputs.
 
 #### Summary
-Complete the original whole-entry obligation, including error states. Prove general proceed_call preservation with immediate precompile dispatch. Prove step_call and step_create preserve rooted budget and exclude forbidden errors under the existing backed-budget invariant.
-
-#### Statement
-Provide step_call and step_create rooted-budget preservation on every result and Impossible/Unimplemented exclusion under the existing rooted-budget/nonempty-prefix entry premises. Preserve the original C1.3.6 scope: these are internal invariant-conditioned replacements for unrestricted safety, not extra exported hypotheses.
-
-#### Approach
-Extract scalar margin lemmas at the payment point before composing the opcode suffix: CALL pays opcode costs before account charge and computes call_gas with zero cost arguments; carry the stipend margin through charge/credit explicitly. Use call_meter_entry_budget against the original pre-grant frame, apply the precompile budget corollary after push, and use grant-restoration boundaries for balance/depth and CREATE abort branches. Separate CALL and CREATE theorems and provide simple result-pair corollaries for C1.3.7.
+Retain the checked proceed_call and scalar margin boundaries. Introduce a fixed-tail reservation predicate tracking both backing surplus and claim credit. Transport this predicate through neutral operations and credit before releasing it at abort or child entry. Assemble CALL and CREATE as separate consumers, with errors included and no new exported premises.
 
 #### Not to try
-Do not infer the stipend bound from call_gas with old nonzero cost arguments. Do not compare child-plus-parent budget only against the already grant-depleted parent. If margin fails, report the concrete arithmetic branch rather than add an exported premise.
+Do not infer reservation preservation from call_meter_result: it has forgotten the surplus. Do not unfold whole opcodes and all neutral operations together. Do not add backing premises to exported rules or change spec files.
+
+#### Argument
+For an anchor context c, a reservation k in current context d means spilled(d)+committed(d)+k <= used(d), gas-boundedness, and claim(d)+k <= claim(c), with the same rollback and tail. Paying the opcode cost establishes a stipend reservation. State charging preserves it. The call_gas margin lemma changes that reservation into the actual grant after payment, since its claim bound spends at most the already reserved stipend. Refund consumes the grant reservation; child entry spends it on the new child. All early errors can forget the reservation and retain ordinary budget. CREATE has no stipend: its withholding boundary directly establishes its grant reservation.
+
+#### Definition design
+Define call_meter_reserved c k rb rest s by an existential current d, fixed contexts, gas bound, backing surplus >= k, and claim d+k <= claim c. Keep the anchor c fixed across composition. Define a success-reserved post only as a convenience: INL results carry a possibly value-dependent reservation and INR results carry call_meter_result c rb rest. First test zero reservation, weakening, neutral transport, charge/credit and grant payment; do not add reservoir or account restrictions. Readers must retain returned values as well as the reservation.
+
+#### Code structure
+Keep checked EntryStep lemmas in place. Put the reservation definition and reusable adapters in a new prog/vfmCallReserveScript.sml importing EntryStep and Ops; put whole entry assembly in a downstream prog theory to avoid circular imports. Use named semantic suffix lemmas for grant/abort/entry rather than an ML tactic library that unfolds neutral definitions in every consumer.
+
+### C1.3.6.5.1: Reservation interface and transport laws
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: These are existential fixed-tail wrappers around checked margin arithmetic and neutral field equalities.
+- Checkpoint: yes
+
+#### Summary
+Define the fixed-anchor reserved predicate. Prove zero, forgetting and neutral transport laws. Supply value-retaining readers and reservation-preserving neutral, charge and credit adapters. Check the abstraction before opcode assembly.
+
+#### Statement
+call_meter_reserved c k rb rest s <=> ?d. s.contexts = (d,rb)::rest /\ d.gasUsed <= d.msgParams.gasLimit /\ d.stateGasSpilled + d.stateGasCommitted + k <= d.gasUsed /\ call_meter_claim d + k <= call_meter_claim c. Outputs: reserved at k=0 iff call_meter_result; reserved implies ordinary result; neutral fixed-tail transport; reservation-preserving safe adapters for assert_not_static, expand_memory, set_return_data, push_stack, inc_pc, access_address and ensure_storage_in_domain; readers get_gas_left/get_callee/get_num_contexts retaining values; charge_new_account and credit_new_account preserving reservation on all results and excluding forbidden errors.
+
+#### Approach
+Prove neutral transport once from call_meter_neutral_def, then establish relational neutral boundaries for the listed primitives by their small definitions, reusing existing safety proofs for error exclusion. Lift charge_margin and credit_margin through the existential current context, retaining the fixed anchor claim inequality; reader adapters must expose the current context when arithmetic needs it.
+
+#### Not to try
+Do not duplicate long concrete context records at use sites. Do not require successful results for neutral preservation: stack overflow or write protection still leave the meter neutral.
+
+### C1.3.6.5.2: Reservation acquisition and discharge at grant boundaries
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: Checked consume/call_gas margins and entry budgets give the scalar steps; aborts consist of neutral operations plus one grant refund.
+- Dependencies: C1.3.6.5.1
+
+#### Summary
+Acquire a stipend reservation on successful opcode payment. Convert it into a child grant reservation after call_gas and consume_gas. Release reservations on abort or spend them on child entry. Include CREATE withholding and the no-refund collision branch.
+
+#### Statement
+Provide success/error-sensitive consume adapters: from reserved c 0 and margin <= cost, successful consume_gas cost yields reserved c margin, and failure yields ordinary result. Provide a CALL grant-payment adapter from reserved c margin with (if value=0 then 0 else call_stipend)<=margin, computing call_gas with zero cost arguments and returning reserved c grant after payment. Provide reserved c grant -> ordinary-result safety for abort_call_value grant and abort_unuse grant; reserved c grant -> rooted-budget safety for proceed_call and proceed_create with the original anchor budget. Lift withhold_create_gas to return reserved c grant on success. Provide ordinary-result safety for abort_create and abort_create_exists.
+
+#### Approach
+Use the checked scalar lemmas to establish reservation changes, and expose these as call_meter_safe contracts so bind composition does not manually track records. Refund uses surplus >= grant to justify natural subtraction and claim increase by grant; compose neutral push/return-data/pc operations around it, forgetting reservation on failures before refund. For CREATE collision, forget the withheld reservation rather than refunding it: the semantics leaves that grant paid.
+
+#### Not to try
+Do not assert an abort always refunds: push_stack can fail before the refund. Ordinary result on that error is sufficient. Do not use CREATE's ordinary withholding adapter if it discards the returned grant or its surplus.
+
+### C1.3.6.5.3: Assemble whole step_call budget and safety
+- Kind: `proof`
+- Risk: 2
+- Work priority: 30
+- Work units: 5
+- Rationale: All meter-changing segments now have reservation contracts; remaining structure is finite monadic branching.
+- Dependencies: C1.3.6.5.2
+- Checkpoint: yes
+
+#### Summary
+Prove step_call preserves the existing rooted budget on all results. Exclude Impossible and Unimplemented. Keep immediate precompile execution behind the checked proceed_call boundary. No caller-facing assumptions are introduced.
+
+#### Statement
+Under the existing rooted-budget and nonempty protected-prefix entry premises, step_call op s = (r,t) implies call_meter_budget n ceiling t and (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented). Use the same internal premises as the original whole-entry obligation.
+
+#### Approach
+Peel step_call only to primitive boundaries and compose via call_meter_safe_bind. Ordinary prefix operations preserve zero reservation; successful opcode consumption reserves (if value=0 then 0 else call_stipend), justified by the positive-value cost and constants. Charge, static check and memory expansion preserve it; grant payment converts it to grant, then credit/abort or proceed spends it. Lift ordinary early-error results back to the anchor rooted budget.
+
+#### Not to try
+Do not reopen dispatch_precompiles or unfold neutral primitives in this proof. Do not assume call_has_value op: the semantics' valueOffset already determines zero value on other operations.
+
+### C1.3.6.5.4: Assemble whole step_create budget and safety
+- Kind: `proof`
+- Risk: 2
+- Work priority: 40
+- Work units: 5
+- Rationale: CREATE has no stipend subsidy; withholding establishes the grant directly, and each branch is covered by the preceding boundaries.
+- Dependencies: C1.3.6.5.2
+- Checkpoint: yes
+
+#### Summary
+Prove step_create preserves rooted budget and excludes forbidden errors on all results. Handle early abort before charging and collision after withholding separately. Use the existing proceed_create entry boundary. Build the entry theory and its consumers without changing exports.
+
+#### Statement
+Under the existing rooted-budget and nonempty protected-prefix entry premises, step_create two s = (r,t) implies call_meter_budget n ceiling t and (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented).
+
+#### Approach
+Compose the zero-reservation prefix using ordinary adapters, including code-size/static/domain checks and memory read. The insufficient-balance/nonce/depth branch uses abort_create without grant accounting; the other branch charges then withholds, exposing the grant reservation. Collision forgets it and uses abort_create_exists; successful entry spends it through proceed_create_budget. Build the new assembly theory and downstream target with normal checkpoint resumption.
+
+#### Not to try
+Do not import CALL stipend reasoning into CREATE or refund its collision grant. No whole-semantics simplifier expansion and no timeout overrides.
 
 ### C1.3.7: Lift primitive and entry contracts to inner execution
 - Kind: `proof`

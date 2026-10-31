@@ -71,3 +71,39 @@ evidence:
 - episode:E0016
 - source:prog/vfmCallMeterScript.sml
 - episode:E0017
+
+## L0009 scope='C1.3.6' tags=call_meter_safe,bind,error,neutral,result,precompile
+shape: Compose all-result fixed-tail contracts through meter-changing frame-local computations.
+pattern: call_meter_safe tracks postconditions on every result and excludes forbidden errors independently. Lift a contract quantified over ready current frames to precondition call_meter_result using call_meter_safe_result_lift and result transitivity. Keep result abstract; extract only the current context witness. Neutral updates preserve gasLimit/gasUsed/spilled/committed, allowing other fields to change. Use BETA_TAC after LET/function rewriting before HO matching.
+works_when: Frame tail remains fixed and claims only decrease; grant transfer/push require separate stronger interfaces.
+evidence:
+- episode:E0019
+- episode:E0020
+- episode:E0021
+- source:prog/vfmCallPrecompileScript.sml
+
+## L0010 scope='C1.3.6.4' tags=precompile,crypto,dispatch,SIZES_ss,option
+shape: Spend-only precompile and guarded finite dispatch preservation.
+pattern: Factor read/consume and optional-output skeletons; split only opaque crypto return cases. Combine individual contracts after enumerating precompile_addresses, using SF wordsLib.SIZES_ss for word-literal comparisons. Retain membership to exclude dispatch's Impossible default. Lift final result to rooted budget with call_meter_result_budget.
+works_when: unspecified
+evidence:
+- episode:E0021
+- source:prog/vfmCallPrecompileScript.sml
+- tool_output:TO_seq58_progcall_port-20261031T133309Z_m0655_t001
+
+## L0011 scope='C1.3.6.5' tags=reservation,margin,stipend,charge,credit,claim
+shape: Transport paid stipend/grant credit through frame-local operations before abort or child entry.
+pattern: Use fixed-anchor reserved c k: current spill+committed+k <= used, gas bound, and claim(current)+k <= claim(c). Zero equals ordinary result; neutral updates and charge/credit preserve k. Ordinary result cannot recover k. Successful opcode cost payment acquires margin; zero-cost call_gas converts stipend margin into full grant reservation; restore/entry spends it.
+works_when: Using checked EntryStep scalar boundaries and Reserve transport laws; ordinary early-error paths may forget reservations.
+evidence:
+- episode:E0023
+- episode:E0024
+- source:prog/vfmCallReserveScript.sml
+
+## L0012 scope='C1.3.6.5.1' tags=reader,polymorphism,ISPEC_THEN,beta
+shape: Instantiate a polymorphic context-reader boundary with numeric or address projections.
+pattern: Explicitly quantify the reader f; specialize with Q.ISPEC_THEN on the small projection lambda, then MATCH_ACCEPT_TAC o BETA_RULE. Q.SPEC_THEN cannot instantiate the result type, and unnormalized beta redexes prevent direct matching.
+works_when: Reader result type differs from the generic theorem's free type variable.
+evidence:
+- tool_output:TO_seq58_progcall_port-20261031T134530Z_m0751_t001
+- source:prog/vfmCallReserveScript.sml
