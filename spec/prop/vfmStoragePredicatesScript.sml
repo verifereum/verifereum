@@ -1566,6 +1566,79 @@ Proof
   irule preserves_storage_cond >> simp[]
 QED
 
+(* A cp prefix cannot account for a changed storage object. *)
+Theorem bind_storage_change_extract[local]:
+  cp g /\
+  bind g f s = (r,s') /\ s.contexts <> [] /\
+  (lookup_account a s'.rollback.accounts).storage <>
+    (lookup_account a s.rollback.accounts).storage ==>
+  ?x u. g s = (INL x,u) /\ u.rollback.accounts = s.rollback.accounts /\
+    LENGTH u.contexts = LENGTH s.contexts /\ u.contexts <> [] /\
+    f x u = (r,s')
+Proof
+  rw[bind_def, cp_def]
+  >> gvs[AllCaseEqs()]
+  >> first_x_assum drule >> simp[] >> rpt strip_tac
+  >> gvs[] >> Cases_on `s.contexts` >> gvs[]
+QED
+
+val storage_create_peel =
+  drule_at (Pat `bind`) bind_storage_change_extract
+  >> simp[] >> disch_then (qspec_then `a` mp_tac) >> simp[]
+  >> qpat_x_assum `bind _ _ _ = _` kall_tac
+  >> strip_tac >> gvs[];
+
+Theorem step_create_storage_object:
+  step_create two s = (r,s') ==>
+  !a. (lookup_account a s'.rollback.accounts).storage =
+        (lookup_account a s.rollback.accounts).storage \/
+      r = INL () /\ LENGTH s'.contexts = SUC (LENGTH s.contexts) /\
+      (lookup_account a s'.rollback.accounts).storage = empty_storage /\
+      ~account_already_created (lookup_account a s.rollback.accounts)
+Proof
+  strip_tac >> gen_tac
+  >> Cases_on `s.contexts = []`
+  >- gvs[step_create_def, pop_stack_def, get_current_context_def,
+         bind_def, ignore_bind_def, fail_def, return_def]
+  >> Cases_on `(lookup_account a s'.rollback.accounts).storage =
+               (lookup_account a s.rollback.accounts).storage` >> simp[]
+  >> gvs[step_create_def, ignore_bind_def]
+  >> storage_create_peel >> storage_create_peel >> storage_create_peel
+  >> storage_create_peel >> storage_create_peel >> storage_create_peel
+  >> gvs[get_accounts_def, Once bind_def, return_def]
+  >> qpat_x_assum `pop_stack _ _ = _` kall_tac
+  >> qpat_x_assum `memory_expansion_info _ _ _ = _` kall_tac
+  >> qpat_x_assum `consume_gas _ _ = _` kall_tac
+  >> qpat_x_assum `expand_memory _ _ = _` kall_tac
+  >> qpat_x_assum `read_memory _ _ _ = _` kall_tac
+  >> qpat_x_assum `get_callee _ = _` kall_tac
+  >> storage_create_peel >> storage_create_peel >> storage_create_peel
+  >> storage_create_peel >> storage_create_peel >> storage_create_peel
+  >> qmatch_asmsub_abbrev_tac `(if guard then abort_unuse _ else _) _ = _`
+  >> Cases_on `guard`
+  >- (gvs[COND_RATOR]
+      >> drule (REWRITE_RULE[preserves_rollback_def] preserves_rollback_abort_unuse)
+      >> strip_tac >> gvs[])
+  >> gvs[COND_RATOR]
+  >> storage_create_peel >> storage_create_peel
+  >> qmatch_asmsub_abbrev_tac `account_already_created (lookup_account address _)`
+  >> Cases_on `account_already_created (lookup_account address s.rollback.accounts)`
+  >> gvs[COND_RATOR]
+  >- (gvs[abort_create_exists_def, update_accounts_def, bind_def,
+          ignore_bind_def, return_def, get_current_context_def,
+          set_current_context_def, push_stack_def, inc_pc_def, fail_def, assert_def,
+          increment_nonce_def, lookup_account_def, update_account_def,
+          combinTheory.APPLY_UPDATE_THM, AllCaseEqs()]
+      >> gvs[COND_RAND])
+  >> gvs[proceed_create_def, update_accounts_def, get_rollback_def,
+         get_original_def, set_original_def, push_context_def,
+         bind_def, ignore_bind_def, return_def, fail_def, AllCaseEqs()]
+  >> gvs[transfer_value_preserves_storage, increment_nonce_def,
+         clear_storage_def, lookup_account_def, update_account_def,
+         combinTheory.APPLY_UPDATE_THM]
+  >> Cases_on `a = address` >> gvs[COND_RAND]
+QED
+
 (* step_create changes a storage slot only by creating a new frame at an
    address that had no nonce and no code, whose storage it clears. *)
 Theorem step_create_storage:
@@ -1577,7 +1650,10 @@ Theorem step_create_storage:
     lookup_storage k (lookup_account a s'.rollback.accounts).storage = 0w ∧
     ¬account_already_created (lookup_account a s.rollback.accounts)
 Proof
-  cheat
+  strip_tac >> drule step_create_storage_object
+  >> rpt strip_tac
+  >> first_x_assum (qspec_then `a` strip_assume_tac)
+  >> gvs[lookup_storage_def, empty_storage_def]
 QED
 
 Theorem step_call_same_frame_preserves_storage:
