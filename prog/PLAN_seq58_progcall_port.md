@@ -763,24 +763,39 @@ At the end of normalize_entry replace the stale Cases_on balance expression and 
 #### Not to try
 Do not continue expanding both arms of conditional monadic functions: this duplicates irrelevant charge and continuation implementations. Do not split on value after gvs has substituted it away; the displayed assumption about value then has no relation to the goal's w2n expression. Do not use global AC simplification, add hypotheses, expose sibling local prefix infrastructure, or retain the old existential list that omits err.
 
-### C1.5: Port observation framing and shared SPEC machinery
+### C1.5: Check observation packaging and prepare shared SPEC tactics
 - Kind: `proof`
 - Risk: 2
-- Work priority: 40
-- Work units: 5
-- Rationale: This is finite observation case analysis and adaptation of existing SPEC conversion proofs to four additional owned meter components.
+- Work priority: 50
+- Work units: 3
+- Rationale: The exact return-context observation and meter theorems are already proved. The missing interface is a finite conditional combining credited abort with entered return, not another execution invariant or SPEC proof.
 - Dependencies: C1.4
 - Checkpoint: yes
 - Progress transition: `refinement`
+- Carries progress/evidence from: E0057
+
+#### Progress note
+Retain the framing edit and checked prefix reported by E0057 as partial progress, not as a certificate of completed tactic integration. Replace the requirement to validate against obsolete exports with a checked conditional observation boundary; actual export applications remain downstream.
 
 #### Summary
-Check caller_observation_frame with all four meter observations owned. Preserve IMP_EVM_SPEC_FINITE and IMP_EVM_SPEC_FINITE_CODE names and non-meter content. Adapt call_spec_entry_tac, call_spec_post_tac and call_spec_frame_tac to the new semantic return interface. Validate their interface before applying them to exported rules.
+Keep the four new observation-frame hypotheses and the unchanged finite SPEC conversion helpers. Prove a local conditional post-observation interface for the exact context returned by call_entry_prepared. Prepare shared tactics to consume that interface, keeping execution-gas refunds distinct from state-gas settlement. C1.5 completion requires a checked prefix through these helpers, not successful application to the old exported statements. Full shared-tactic validation belongs to the existing C1.6 export proofs.
+
+#### Description
+The intended post packaging keeps the old non-meter existential observations: success, out, gasLeft, cc.logs/addRefund/subRefund, final rollback/domain/originalAccounts as appropriate. Add semantic child/error/no-entry witnesses only as needed to express the exact meter transformation; never use unconstrained existential final meters as a replacement for the semantic relation. gasLeft remains the bounded child refund from call_entry_prepared (cg on no-entry, call_return_gas err cc otherwise), not total execution-gas recovery including state-gas settlement. The prepared caller already has the creation charge deducted from stateGasLeft; the entered caller additionally has its reservoir drained to zero. Existing call_return_context_meter and call_abort_context_def determine all further settlement. This component does not authorize additional preconditions or decide whether any previously planned export guard is permitted by the frozen TASK: any conflict at export restatement must be reported rather than silently inherited from PLAN prose.
+
+#### Statement
+Add local call_final_context_observations, with abbreviations (either let bindings or antecedent equalities):
+  final = (if failed then call_abort_context charged cg caller else call_return_context err cc (caller with <|returnData := []; stateGasLeft := 0|>) mr),
+  success = (~failed /\ err = NONE),
+  out = (if failed then [] else call_return_data err cc).
+Conclusions: final.stack = b2w success::caller.stack; final.pc = SUC caller.pc; final.memory = buffer_write mr.offset (TAKE mr.size out) caller.memory; final.returnData = out; final.msgParams = caller.msgParams; final.jumpDest = caller.jumpDest; final.logs = caller.logs ++ (if success then cc.logs else []); final.addRefund = caller.addRefund + (if success then cc.addRefund else 0); final.subRefund = caller.subRefund + (if success then cc.subRefund else 0). These may be exported as a conjunctive simp theorem, since the consumer rewrites projections rather than manually unpacking the conjunction.
+The meter packaging interface is exact projections of final: gasUsed, stateGasLeft, stateGasSpilled, stateGasBaseline, stateGasCommitted. Do not identify final.gasUsed with caller.gasUsed - gasLeft.
 
 #### Approach
-Use observation-constructor cases for framing and the existing finite-execution conversion argument for the IMP theorems. Make the post tactic consume projected boundary facts and semantic meter witnesses directly, extracting small projection lemmas locally if needed rather than unfolding the semantic operations at each export.
+Prove the local observation theorem by Cases_on failed using call_abort_context_def and call_return_context_observations; the abort memory equality reduces to writing the empty buffer. Use call_return_context_meter for entered meter projections: gasUsed is caller.gasUsed - call_return_gas err cc - paid, whereas abort gasUsed is caller.gasUsed - MIN (if charged then new_account_state_gas else 0) caller.stateGasSpilled - cg. Update shared post/frame tactics to name the exact final context, rewrite non-meter projections using the new boundary, and retain semantic meter expressions; prepare the entry tactic against call_entry_prepared's current interface without forcing it through old exports. Run the normal target build to check the prefix and document the expected obsolete-export failure; after that C1.5 can close and C1.6 can restate and validate actual consumers.
 
 #### Not to try
-Do not leave a changed meter field in the arbitrary frame. Avoid large manual theorem instantiations and MATCH_MP/CONJ plumbing to compensate for a mismatched helper conclusion.
+Do not test the new entry tactic against the old new_account_cost/no-meter statements and interpret failure as a machinery defect. Do not add duplicate probe SPEC rules merely to validate an ML tactic before the real statements exist. Do not conflate gasLeft with spill repayment or creation-credit recovery: the scalar old post gas formula omits settlement. Do not unfold the entire execution semantics in post/frame consumers; use the exact context observation boundary. Do not claim end-to-end tactic validation from an ML val declaration or from reaching the first obsolete export.
 
 ### C1.6: Restate and prove the two narrowly amended exports
 - Kind: `proof`

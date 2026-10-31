@@ -39,6 +39,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.8.2 | proved |  | E0048 | Ancestor review should schedule remaining nonabort/finite-return interface using authorized caller grant bound, not unconditional root safety. |
 | C1.3.9 | proved |  | E0049 | Review whether finite-return boundary suffices to close this leaf and schedule replacement/removal of old unrestricted local chain when integrating call_returns_summary. |
 | C1.4 | proved |  | E0056 | Review bounded proof and authorize checkpoint commit despite downstream caller_observation_frame failure; proceed to shared frame/export component. |
+| C1.5 | proved |  | E0058 | Review bounded C1.5 closure and authorize commit; C1.6 must restate both exports and validate shared tactics against actual new semantic meter relations. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -773,6 +774,28 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T211644Z_m1717_t001` (use `read_tool_output` for exact output)
+
+## C1.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0058`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 7 tools, 2 holbuild, 976,532 tok (974,926 in, 1,606 out, 961,536 cached), 125.4s, $0.1389936
+- next: Review bounded C1.5 closure and authorize commit; C1.6 must restate both exports and validate shared tactics against actual new semantic meter relations.
+
+### Attempts / Evidence
+
+- `E0057` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 1 holbuild, 567,133 tok (566,543 in, 590 out, 555,904 cached), 43.5s, $0.0827684)
+  - Added all four state-gas observation equality conditions to caller_observation_frame; built target. -> Frame theorem now checked without proof tactic changes. IMP finite conversion helpers also check unchanged. Build reaches SPEC_Call_any, whose old precondition cannot instantiate new call_entry_prepared. (`TO_seq58_progcall_port-20261031T211644Z_m1727_t001`)
+- `E0058` (proved, , actual effort: 1 sessions, 8 steps, 7 tools, 2 holbuild, 976,532 tok (974,926 in, 1,606 out, 961,536 cached), 125.4s, $0.1389936)
+  - Ported caller_observation_frame to four meter observations, proved call_final_context_observations by failed cases, prepared shared entry to name exact final context and derive non-meter observations, post uses context boundary/meter lemmas. -> Checked prefix through both local theorem proofs and ML tactic declarations. Target fails at first obsolete SPEC_Call_any as expected by repaired PLAN. Actual shared tactic application remains unvalidated pending C1.6 restatement; no full-target claim. (`TO_seq58_progcall_port-20261031T211644Z_m1738_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T211644Z_m1738_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

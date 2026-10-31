@@ -1178,6 +1178,10 @@ Theorem caller_observation_frame:
   (HasException ∉ dom ⇒ FST r' = FST r) ∧
   (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
   (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
+  (HasStateGasLeft NOTIN dom ==> ctxt'.stateGasLeft = ctxt.stateGasLeft) /\
+  (HasStateGasSpilled NOTIN dom ==> ctxt'.stateGasSpilled = ctxt.stateGasSpilled) /\
+  (HasStateGasBaseline NOTIN dom ==> ctxt'.stateGasBaseline = ctxt.stateGasBaseline) /\
+  (HasStateGasCommitted NOTIN dom ==> ctxt'.stateGasCommitted = ctxt.stateGasCommitted) /\
   (HasMsgParams ∉ dom ⇒ ctxt'.msgParams = ctxt.msgParams) ∧
   (HasLogs ∉ dom ⇒ ctxt'.logs = ctxt.logs) ∧
   (HasSubRefund ∉ dom ⇒ ctxt'.subRefund = ctxt.subRefund) ∧
@@ -1204,6 +1208,27 @@ Proof
   rw[Once EQ_IMP_THM] >> gvs[]
 QED
 
+Theorem call_final_context_observations[local]:
+  final = (if failed then call_abort_context charged cg caller
+    else call_return_context err cc
+      (caller with <|returnData := []; stateGasLeft := 0|>) mr) /\
+  success = (~failed /\ err = NONE) /\
+  out = (if failed then [] else call_return_data err cc) ==>
+  final.stack = b2w success::caller.stack /\
+  final.pc = SUC caller.pc /\
+  final.memory = buffer_write mr.offset (TAKE mr.size out) caller.memory /\
+  final.returnData = out /\
+  final.msgParams = caller.msgParams /\
+  final.jumpDest = caller.jumpDest /\
+  final.logs = caller.logs ++ (if success then cc.logs else []) /\
+  final.addRefund = caller.addRefund + (if success then cc.addRefund else 0) /\
+  final.subRefund = caller.subRefund + (if success then cc.subRefund else 0)
+Proof
+  Cases_on `failed` >>
+  simp[call_abort_context_def, call_return_context_observations] >>
+  rpt strip_tac >> gvs[]
+QED
+
 val call_spec_entry_tac =
   irule IMP_EVM_SPEC_FINITE_CODE >> rpt gen_tac >>
   CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss())
@@ -1222,6 +1247,10 @@ val call_spec_entry_tac =
   qpat_assum `Collect dd = _` (assume_tac o SYM) >>
   drule_all (SIMP_RULE (boss_ss()) [] (GEN_ALL call_entry_prepared)) >>
   strip_tac >>
+  qmatch_asmsub_abbrev_tac `t'.contexts = (final,cb)::cs` >>
+  qpat_assum `Abbrev (final = _)`
+    (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_all call_final_context_observations >> strip_tac >>
   `FUNPOW (λr. if ISR (FST r) then r else step (SND r)) k s = (INL (),t')` by
     (qpat_assum `s = (INL (),SND s)` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   qexists_tac `k` >>
@@ -1234,7 +1263,9 @@ val call_spec_post_tac = fn witnesses =>
   CONV_TAC (REDEPTH_CONV (HO_REWR_CONV SEP_EXISTS_THM)) >>
   qexistsl_tac witnesses >>
   gvs[] >> Cases_on `success` >>
-  simp[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC] >>
+  simp[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC,
+       call_return_context_observations, call_return_context_meter,
+       call_abort_context_def, LET_THM] >>
   qmatch_goalsub_abbrev_tac `evm2set_on rest _` >>
   `rest = {}` by
     (qunabbrev_tac `rest` >>
