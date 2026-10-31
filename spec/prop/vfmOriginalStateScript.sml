@@ -39,7 +39,7 @@ Definition stack_original_step_sstore_gas_consumption_def:
     originalValue <<- lookup_storage key (lookup_account address original).storage;
     accessCost <- access_slot (SK address key);
     dynamicGas <<- sstore_base_gas originalValue currentValue value +
-                   zero_warm accessCost;
+                   accessCost;
     refundUpdates <<- sstore_refund_updates originalValue currentValue value;
     update_gas_refund refundUpdates;
     stateGasRefund <<- sstore_state_gas_refund originalValue currentValue value;

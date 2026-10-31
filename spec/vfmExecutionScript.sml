@@ -1007,9 +1007,8 @@ End
    slot off its transaction-start value. *)
 Definition sstore_base_gas_def:
   sstore_base_gas originalValue currentValue (value:bytes32) =
-    warm_access_cost +
-    (if originalValue = currentValue ∧ currentValue ≠ value
-     then storage_write_cost else 0)
+    if originalValue = currentValue ∧ currentValue ≠ value
+    then storage_write_cost else 0
 End
 
 (* EIP-8037: the state gas the write creates, charged before it happens:
@@ -1042,7 +1041,7 @@ Definition step_sstore_gas_consumption_def:
     originalValue <<- lookup_storage key (lookup_account address original).storage;
     accessCost <- access_slot (SK address key);
     dynamicGas <<- sstore_base_gas originalValue currentValue value +
-                   zero_warm accessCost;
+                   accessCost;
     refundUpdates <<- sstore_refund_updates originalValue currentValue value;
     update_gas_refund refundUpdates;
     stateGasRefund <<- sstore_state_gas_refund originalValue currentValue value;

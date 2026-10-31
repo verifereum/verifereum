@@ -14,7 +14,7 @@ Definition sstore_gas_consumption_inline_def:
     originalValue <<- lookup_storage key (lookup_account address original).storage;
     accessCost <- access_slot (SK address key);
     dynamicGas <<- sstore_base_gas originalValue currentValue value +
-                   zero_warm accessCost;
+                   accessCost;
     refundUpdates <<- sstore_refund_updates originalValue currentValue value;
     update_gas_refund refundUpdates;
     stateGasRefund <<- sstore_state_gas_refund originalValue currentValue value;
@@ -92,17 +92,17 @@ Proof
 QED
 
 (* Clean/dirty slots, clearing, undoing a clear and restoring original
-   values.  The warm access cost is in every one of these; the cold
-   surcharge is a separate term of the charge. *)
+   values: what the write itself creates, on top of the slot access the
+   step charges separately (100 warm, 2100 cold). *)
 Theorem sstore_cost_cases:
-  sstore_base_gas 0w 0w 0w = 100 ∧
-  sstore_base_gas 0w 0w 1w = 10100 ∧
-  sstore_base_gas 1w 1w 0w = 10100 ∧
-  sstore_base_gas 1w 1w 2w = 10100 ∧
-  sstore_base_gas 1w 0w 1w = 100 ∧
-  sstore_base_gas 0w 1w 0w = 100 ∧
-  sstore_base_gas 1w 2w 1w = 100 ∧
-  sstore_base_gas 1w 2w 0w = 100
+  sstore_base_gas 0w 0w 0w = 0 ∧
+  sstore_base_gas 0w 0w 1w = 10000 ∧
+  sstore_base_gas 1w 1w 0w = 10000 ∧
+  sstore_base_gas 1w 1w 2w = 10000 ∧
+  sstore_base_gas 1w 0w 1w = 0 ∧
+  sstore_base_gas 0w 1w 0w = 0 ∧
+  sstore_base_gas 1w 2w 1w = 0 ∧
+  sstore_base_gas 1w 2w 0w = 0
 Proof
   CONV_TAC cv_eval
 QED

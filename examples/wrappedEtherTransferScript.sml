@@ -558,29 +558,31 @@ Proof
   rw[access_slot_cost_def, accesses_add_slot_def, warm_access_cost_def]
 QED
 
-(* an SSTORE to a slot just read pays no cold surcharge *)
+(* an SSTORE to a slot just read pays the warm access, not the cold one *)
 Theorem SStore_gas_add_slot[local]:
   FST (SStore_gas original (accesses_add_slot (SK a k) rb) a k v) =
   sstore_base_gas (lookup_storage k (lookup_account a original).storage)
-                  (lookup_storage k (lookup_account a rb.accounts).storage) v
+                  (lookup_storage k (lookup_account a rb.accounts).storage) v +
+  warm_access_cost
 Proof
-  rw[SStore_gas_def, access_slot_cost_add_slot, zero_warm_def,
+  rw[SStore_gas_def, access_slot_cost_add_slot,
      warm_access_cost_def, accesses_add_slot_accounts]
   \\ pairarg_tac \\ gvs[]
 QED
 
 Theorem sstore_base_gas_le[local]:
-  sstore_base_gas ov cv v ≤ 20000
+  sstore_base_gas ov cv v ≤ storage_write_cost
 Proof
   rw[sstore_base_gas_def, storage_write_cost_def, warm_access_cost_def]
 QED
 
 (* EIP-8038 prices the write itself, whether the slot was set or updated, so
-   this is the warm access plus one `STORAGE_WRITE`, not the old
-   `storage_update_cost - cold_sload_cost`. *)
+   this is at most one `STORAGE_WRITE`, not the old
+   `storage_update_cost - cold_sload_cost`; the slot's access is a separate
+   term of the charge. *)
 Theorem sstore_base_gas_same_le[local]:
   (c = 0w ⇒ v = c) ⇒
-  sstore_base_gas c c v ≤ warm_access_cost + storage_write_cost
+  sstore_base_gas c c v ≤ storage_write_cost
 Proof
   rw[sstore_base_gas_def, storage_write_cost_def, warm_access_cost_def]
   \\ gvs[]
@@ -738,7 +740,7 @@ Proof
     \\ qpat_assum `lookup_account addr s.rollback.accounts = _`
          (fn th => rewrite_tac[th])
     \\ qmatch_goalsub_abbrev_tac `sstore_base_gas c0 c0 v0`
-    \\ `sstore_base_gas c0 c0 v0 ≤ warm_access_cost + storage_write_cost`
+    \\ `sstore_base_gas c0 c0 v0 ≤ storage_write_cost`
     by (irule sstore_base_gas_same_le \\ qunabbrevl_tac [`c0`, `v0`]
         \\ strip_tac \\ gvs[])
     \\ simp[warm_access_cost_def, storage_write_cost_def]

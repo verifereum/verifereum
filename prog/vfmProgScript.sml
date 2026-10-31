@@ -1750,7 +1750,7 @@ Definition SStore_gas_def:
     originalValue = lookup_storage key orig_account.storage;
     baseDynamicGas = sstore_base_gas originalValue currentValue value;
     accessCost = access_slot_cost rb (SK address key);
-    dynamicGas = baseDynamicGas + zero_warm accessCost;
+    dynamicGas = baseDynamicGas + accessCost;
     (add,sub) = sstore_refund_updates originalValue currentValue value;
   in (dynamicGas, add, sub)
 End
