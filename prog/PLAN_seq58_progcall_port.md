@@ -4,10 +4,10 @@
 
 ### C1: Complete the CALL port under the explicitly amended contract
 - Kind: `proof_group`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: The persisted owner-amendment ruling is authoritative evidence and has not been withdrawn. The invalid unrestricted local safety claim is replaced by scoped prefix safety initialized in a fresh child, with explicit boundary and preservation obligations.
+- Rationale: Derived from child component C1.3.6 risk 3. Nested entry scalar/list boundaries are checked, but full step_call/step_create and precompile execution need compositional meter/safety interfaces not supplied by preceding components. proceed_call dispatches precompiles immediately after push; its general budget contract therefore requires precompile preservation before step_call, not only later all-opcode work.
 - Required for completion: yes
 - Progress transition: `refinement`
 
@@ -63,10 +63,10 @@ E0009 refutes the original frozen unguarded CALL rules. E0004 supplies the earli
 
 ### C1.3: Prove scoped callee safety and exact finite-return summaries
 - Kind: `proof_group`
-- Risk: 2
+- Risk: 3
 - Work priority: 20
 - Work units: 0
-- Rationale: The claim currency is checked at the difficult algebraic boundaries; remaining work is split into list lifting, primitive contracts, opcode transitions, handlers and finite-run consumers instead of one unrestricted safety induction.
+- Rationale: Derived from child component C1.3.6 risk 3. Nested entry scalar/list boundaries are checked, but full step_call/step_create and precompile execution need compositional meter/safety interfaces not supplied by preceding components. proceed_call dispatches precompiles immediately after push; its general budget contract therefore requires precompile preservation before step_call, not only later all-opcode work.
 - Dependencies: C1.8
 - Checkpoint: yes
 - Progress transition: `refinement`
@@ -248,26 +248,137 @@ Lift the checked claim algebra from the probe into reusable boundary lemmas. Spl
 #### Not to try
 Do not assume an operation failed without changing its state. Do not conflate nonincrease of claim with preservation of backing; prove both.
 
-### C1.3.6: Replace unrestricted CALL safety and prove nested entry contracts
-- Kind: `boundary_lemma`
+### C1.3.6: Compositional CALL/CREATE entry preservation
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 30
-- Work units: 8
-- Rationale: CALL and CREATE are finite semantic branches; backing supplies refund safety and the checked stipend-push inequality supplies internal grant margins.
+- Work priority: 6
+- Work units: 0
+- Rationale: Separate all-result monadic composition, neutral operations, immediate precompile execution, and grant accounting. Each is finite semantic decomposition using checked meter and rooted-budget boundaries.
+- Progress transition: `refinement`
+
+#### Progress note
+E0017 remains partial evidence only; no whole-entry proof continuity claimed.
+
+#### Summary
+Preserve the checked shape and push facts. Introduce a reusable contract that tracks error states as well as success. Prove precompile dispatch before general proceed_call. Assemble CALL and CREATE without changing exported hypotheses.
+
+#### Not to try
+Do not unfold whole step_call/proceed_call/precompile bodies together. Do not use unrestricted old call_exn_safe_step_call. Do not claim arbitrary-address dispatch is safe: dispatch_precompiles ends in fail Impossible outside its domain.
+
+#### Argument
+Meter-neutral prefixes and primitive meter contracts preserve backing and claim on every result. A successful grant payment reserves the child's full claim against the original pre-grant context; child push is justified by call_meter_entry_budget, not by comparing with the depleted intermediate parent. Immediate precompile execution only spends that child claim. Abort paths refund only a backed grant margin, including the value stipend paid from the opcode cost.
+
+#### Definition design
+Use a result-indexed contract call_meter_safe P m Q defined by !s r t. P s /\ m s = (r,t) ==> Q r t /\ (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented). Prove bind with an intermediate success predicate R x and an explicit error-post implication; never infer a meter property on error from a success-only triple. Keep call_meter_result as the fixed-tail primitive boundary, and use rooted call_meter_budget at pushes. Test bind on consume followed by refund and on an early failure before using it across opcode spines.
+
+#### Code structure
+Keep bounded entry facts in prog/vfmCallEntryScript.sml. Put generic composition and primitive adapters in a new prog theory below entry integration; put precompile preservation in a separate prog theory depending on those adapters. Integrate whole opcode contracts in a new entry-step theory if adding imports to vfmCallEntry would make a cycle. Do not copy the production local safety library wholesale.
+
+### C1.3.6.1: Retain and audit bounded entry boundaries
+- Kind: `boundary_lemma`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: The six boundaries are already checked in E0017; this leaf audits their bounded scope and commits them.
+- Dependencies: C1.3.4, C1.3.5
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0017
+
+#### Progress note
+Reuses partial source evidence, not automatic certification of a new leaf.
+
+#### Summary
+Retain proceed_create and nonprecompile proceed_call shapes. Retain the original-frame budget push and its two proceed corollaries. Check and commit the theory without implying whole-opcode closure.
+
+#### Statement
+Outputs: call_meter_proceed_create_shape, call_meter_proceed_call_shape, call_meter_entry_budget, call_meter_proceed_create_budget, call_meter_proceed_call_budget as currently in vfmCallEntryScript.sml.
+
+#### Approach
+Build vfmCallEntryTheory and inspect the nonprecompile premise and pre-grant comparison. Commit the stable partial file with required trailers.
+
+### C1.3.6.2: All-result contract and composition probes
+- Kind: `definition_probe`
+- Risk: 2
+- Work priority: 1
+- Work units: 3
+- Rationale: Contract laws follow by splitting monadic result pairs; small primitive probes test the error boundary.
 - Dependencies: C1.3.5
 - Checkpoint: yes
 
 #### Summary
-Restate local step_call safety with top-frame backing. Prove nested CALL and CREATE grant/entry budget transitions, including no-entry and precompile branches. Remove uses of the false merely-nonempty-context implication. Discharge internal refund guards from backing rather than adding export hypotheses.
+Define result-indexed safe contracts. Prove return, allowed fail, consequence, bind and ignore-bind laws. Probe error-state propagation and successful grant restoration.
 
 #### Statement
-Outputs: backed-context step_call non-Impossible/non-Unimplemented contract; scoped budget preservation/result-state contracts for step_call, proceed_call and CREATE entry paths, including stipend and failed entry. Include the intermediate-state facts needed by handlers.
+Bind interface: safe P g (\r s. case r of INL x => R x s | INR e => Q (INR e) s) /\ (!x. safe (R x) (f x) Q) ==> safe P (bind g f) Q. Include invariant specialization and conversion from primitive call_meter_result contracts with separately proved exception exclusions.
 
 #### Approach
-Follow current semantic branches and consume the primitive contracts. For pushes use call_meter_stipend_push_budget with actual opcode cost covering stipend; derive post-credit unuse_gas safety from top backing and the semantic grant formula, not from an assumption on the suspended external caller.
+Case split g s and its sum result once in the library. Validate consumers on consume_gas followed by return, early fail OutOfGas, and call_meter_return_grant under its existing grant premise.
 
 #### Not to try
-Do not reuse the refuted call_exn_safe_step_call statement. If a branch needs a new export premise, stop and report a concrete witness instead of strengthening exports.
+Do not bake exact stack length or exact rollback into the generic contract; these belong in instantiated predicates. A meter result alone does not exclude Impossible.
+
+### C1.3.6.3: Neutral-operation and primitive safe adapters
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 2
+- Work units: 8
+- Rationale: Finite reader/updater computations and already proved primitive meter laws, with exception exclusions checked separately.
+- Dependencies: C1.3.6.2
+
+#### Summary
+Supply compositional adapters needed by CALL, CREATE and precompiles. Cover readers, stack, memory, access and non-meter context updates. Combine primitive meter laws with their actual error exclusions.
+
+#### Statement
+For the operations occurring in step_call, step_create and precompile bodies, prove fixed-tail call_meter_result preservation under nonempty backed gas-bounded input, together with forbidden-error exclusion where valid. Grant-consuming and grant-refunding operations retain their stronger margin premises rather than receiving an unrestricted adapter.
+
+#### Approach
+Prove a neutral lifting boundary from preservation of contexts tail and top gasLimit/gasUsed/stateGasSpilled/stateGasCommitted to call_meter_result; other fields may change. Instantiate for readers, stack/memory/access/account operations, allowed assertions and terminal finish/revert; wrap existing vfmCallMeter results rather than unfolding meter arithmetic in each consumer.
+
+#### Not to try
+Do not duplicate 1500 lines of safety-only helpers or assert that arbitrary set_current_context preserves meters.
+
+### C1.3.6.4: Immediate precompile preservation
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 3
+- Work units: 8
+- Rationale: Finite address dispatch and spend-only computations; cryptographic functions are opaque and their return cases suffice.
+- Dependencies: C1.3.6.3
+- Checkpoint: yes
+
+#### Summary
+Prove a safe fixed-tail meter contract for each dispatched precompile. Combine under membership in precompile_addresses. Lift to rooted budget so the theorem can follow child push.
+
+#### Statement
+s.contexts = (c,rb)::rest /\ call_meter_backed c /\ c.gasUsed <= c.msgParams.gasLimit /\ fIN addr precompile_addresses /\ dispatch_precompiles addr s = (r,t) ==> call_meter_result c rb rest t /\ (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented). Also provide its call_meter_budget corollary via call_meter_result_budget.
+
+#### Approach
+Inspect each precompile body and prove a separate contract using composition, consume_gas, return-data updates, allowed failures and finish. Split pure cryptographic result cases without evaluating algorithms; then unfold only dispatch_precompiles and the finite address set to exclude its Impossible default.
+
+#### Not to try
+Never drop the address-membership premise. Do not expand all precompile bodies in a single dispatch proof.
+
+### C1.3.6.5: Assemble backed CALL and CREATE entry contracts
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 4
+- Work units: 8
+- Rationale: With neutral and precompile boundaries available the remaining work is scalar grant accounting and compositional finite branches.
+- Dependencies: C1.3.6.1, C1.3.6.3, C1.3.6.4
+- Checkpoint: yes
+- Progress transition: `refinement`
+
+#### Summary
+Complete the original whole-entry obligation, including error states. Prove general proceed_call preservation with immediate precompile dispatch. Prove step_call and step_create preserve rooted budget and exclude forbidden errors under the existing backed-budget invariant.
+
+#### Statement
+Provide step_call and step_create rooted-budget preservation on every result and Impossible/Unimplemented exclusion under the existing rooted-budget/nonempty-prefix entry premises. Preserve the original C1.3.6 scope: these are internal invariant-conditioned replacements for unrestricted safety, not extra exported hypotheses.
+
+#### Approach
+Extract scalar margin lemmas at the payment point before composing the opcode suffix: CALL pays opcode costs before account charge and computes call_gas with zero cost arguments; carry the stipend margin through charge/credit explicitly. Use call_meter_entry_budget against the original pre-grant frame, apply the precompile budget corollary after push, and use grant-restoration boundaries for balance/depth and CREATE abort branches. Separate CALL and CREATE theorems and provide simple result-pair corollaries for C1.3.7.
+
+#### Not to try
+Do not infer the stipend bound from call_gas with old nonzero cost arguments. Do not compare child-plus-parent budget only against the already grant-depleted parent. If margin fails, report the concrete arithmetic branch rather than add an exported premise.
 
 ### C1.3.7: Lift primitive and entry contracts to inner execution
 - Kind: `proof`

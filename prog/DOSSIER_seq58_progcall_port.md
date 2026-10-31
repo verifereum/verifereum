@@ -16,6 +16,8 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.3 | proved |  | E0014 | Mandatory scoped PLAN update before accepting parent complete or beginning C1.4: evaluate proposed budget and add executable preservation, safety, collection-return, final-pop/summary and stipend leaves. Commit checked audit/probe changes after review. |
 | C1.3.4 | proved |  | E0015 | Review C1.3.4, commit new budget theory with required trailer, then scheduled semantic primitive contracts C1.3.5. |
 | C1.3.5 | proved |  | E0016 | Review primitive boundary component, commit stable theory, then scheduled fresh CALL/CREATE push/entry proofs. |
+| C1.3.6 | stuck | missing_helper | E0017 | Review scoped missing dependency: preserve entry shape/budget partial work, introduce or assign compositional meter+exception-safety interface and ordinary primitive/precompile laws before whole step_call/step_create, avoiding a flat 1500-line duplicated local safety library. |
+| C1.3.6.1 | proved |  | E0018 | Review/commit bounded entry facts, then C1.3.6.2 composition probes. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -243,6 +245,50 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T123059Z_m0483_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `missing_helper`
+- latest episode: `E0017`
+- blocker: Nested entry scalar/list boundaries are checked, but full step_call/step_create and precompile execution need compositional meter/safety interfaces not supplied by preceding components. proceed_call dispatches precompiles immediately after push; its general budget contract therefore requires precompile preservation before step_call, not only later all-opcode work.
+- actual effort: 1 sessions, 2 msgs, 23 steps, 22 tools, 5 holbuild, 2,615,372 tok (2,611,287 in, 4,085 out, 2,567,040 cached), 267.5s, $0.3860480
+- next: Review scoped missing dependency: preserve entry shape/budget partial work, introduce or assign compositional meter+exception-safety interface and ordinary primitive/precompile laws before whole step_call/step_create, avoiding a flat 1500-line duplicated local safety library.
+
+### Attempts / Evidence
+
+- `E0017` (stuck, missing_helper, actual effort: 1 sessions, 2 msgs, 23 steps, 22 tools, 5 holbuild, 2,615,372 tok (2,611,287 in, 4,085 out, 2,567,040 cached), 267.5s, $0.3860480)
+  - Expose exact proceed_create and non-precompile proceed_call push shapes, with zero child gasUsed, child claim=grant and backed child; lift to rooted budget against original pre-grant frame. -> vfmCallEntryTheory clean. Checked shape/budget proofs use scalar grant-margin and total-claim premises. These are meaningful partial C1.3.6 outputs, not step_call preservation. (`TO_seq58_progcall_port-20261031T123059Z_m0508_t001`)
+  - Audit whole step_call composition and precompile branch against current interfaces. -> Current production call_exn_safe_step_call relies on local safety-only bind rules and false nonempty precondition (source 1293-1357). Primitive call_meter_result facts preserve meters/tail but do not yet compose through stack/memory/access readers or expose forbidden-error exclusion; precompile contracts also absent. Direct unfolding proceed_call with unresolved condition produced >4KB goal, fixed locally by split; repeating that approach for step_call violates abstraction hygiene. ()
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T123059Z_m0508_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T123059Z_m0500_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T123059Z_m0493_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T123059Z_m0496_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0018`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 262,622 tok (262,398 in, 224 out, 258,432 cached), 13.9s, $0.0360152
+- next: Review/commit bounded entry facts, then C1.3.6.2 composition probes.
+
+### Attempts / Evidence
+
+- `E0018` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 262,622 tok (262,398 in, 224 out, 258,432 cached), 13.9s, $0.0360152)
+  - Audit current five entry boundaries and rebuild vfmCallEntryTheory. -> Shape/budget CALL facts explicitly exclude precompiles; both budget corollaries compare with original frame u before grant, using scalar pair ceiling/margin. No whole-step preservation claimed. Build clean. (`TO_seq58_progcall_port-20261031T123059Z_m0518_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T123059Z_m0518_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
