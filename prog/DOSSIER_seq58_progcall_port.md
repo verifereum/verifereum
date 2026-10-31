@@ -15,6 +15,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.2 | proved |  | E0013 | Review bounded nested-frame probes and commit. Then C1.3.3 finite-run strategy checkpoint before authorizing full invariant/finite-return machinery. Remaining integration must prove margin before push (including stipend), ancestor-budget preservation, and exceptional-return restore/forfeit branches. |
 | C1.3.3 | proved |  | E0014 | Mandatory scoped PLAN update before accepting parent complete or beginning C1.4: evaluate proposed budget and add executable preservation, safety, collection-return, final-pop/summary and stipend leaves. Commit checked audit/probe changes after review. |
 | C1.3.4 | proved |  | E0015 | Review C1.3.4, commit new budget theory with required trailer, then scheduled semantic primitive contracts C1.3.5. |
+| C1.3.5 | proved |  | E0016 | Review primitive boundary component, commit stable theory, then scheduled fresh CALL/CREATE push/entry proofs. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -221,6 +222,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T123059Z_m0441_t001` (use `read_tool_output` for exact output)
+
+## C1.3.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0016`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 36 steps, 35 tools, 16 holbuild, 3,167,786 tok (3,160,790 in, 6,996 out, 3,116,288 cached), 376.8s, $0.4705928
+- next: Review primitive boundary component, commit stable theory, then scheduled fresh CALL/CREATE push/entry proofs.
+
+### Attempts / Evidence
+
+- `E0016` (proved, , actual effort: 1 sessions, 3 msgs, 36 steps, 35 tools, 16 holbuild, 3,167,786 tok (3,160,790 in, 6,996 out, 3,116,288 cached), 376.8s, $0.4705928)
+  - Build call_meter_result boundary contracts for consume, charge, credit, account charge/credit, restore, restore-to-entry, commit, drain, forfeit, repay, restore-forfeit. -> All results retain exact context tail, backing and gasUsed<=gasLimit, and nonincrease of claim. Consume/charge cover returned errors, not only INL states. New standalone vfmCallMeterTheory builds. ()
+  - Separate grant transfer contracts from nonincrease: exact unuse/restore-child pairs, consume grant margin/claim conservation, withhold grant, return-grant composition, budget lifting. -> Checked grant exchange interfaces permit claim increases only by the recorded returned grant. Composite consumer return_grant uses boundary theorem rather than semantic unfolding. (`TO_seq58_progcall_port-20261031T123059Z_m0483_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T123059Z_m0483_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
