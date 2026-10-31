@@ -1643,3 +1643,10 @@ Resume SPEC_Call_stipend[frame]:
 QED
 
 Finalise SPEC_Call_stipend
+
+(* Audit the public proof boundary, including transitive oracle tags. *)
+val _ = List.app (fn th =>
+  if Tag.isDisk (Thm.tag th) orelse Tag.isEmpty (Thm.tag th) then ()
+  else raise Fail "CALL export has a non-kernel dependency")
+  [SPEC_Call_any, SPEC_Call_stipend, caller_observation_frame,
+   IMP_EVM_SPEC_FINITE, IMP_EVM_SPEC_FINITE_CODE];

@@ -164,3 +164,38 @@ scoped inner CALL safety, all-opcode/handler preservation, reachable collection
 return, final-pop meter summary and stipend observations. These are proposals
 for strategist evaluation, not an executor-created proof queue. C1.4 must not
 start merely because the probes build.
+
+## Final port validation (C1.7)
+
+Both public CALL rules and all three shared specification tactics now build.
+Compared with the original exports at `5f53d9b6`:
+
+- `IMP_EVM_SPEC_FINITE` and `IMP_EVM_SPEC_FINITE_CODE` retain their statements.
+- `caller_observation_frame` adds only the four state-gas projection guards.
+- Both CALL preconditions retain all original stack, memory, delegation,
+  static-mode, non-precompile and Collect-domain conditions. Creation is charged
+  by the state-gas triplet; execution cost is written literally and has no
+  `new_account_cost`. The only additional admissibility condition beyond reservoir
+  coverage is the explicitly authorized `creditBack = MIN stateCost sp` and
+  `calleeGas <= g + gasCost - creditBack` amendment (E0009 remains historical
+  evidence against the original unamended contract).
+- Existing rollback, return-data, unused-child-gas, logs and refund observations
+  are retained. The stipend rule retains its successful account/toDelete
+  footprint and frames originalAccounts. The general rule still owns
+  originalAccounts. The new merged carrier specifies exact semantic settlement,
+  independently of the child unused execution-gas witness.
+- No external-caller backing assumption, zero-spill restriction, balance/depth
+  check, or callee-code hypothesis was added.
+
+The complete target rebuilt from dependencies in the final proof checkpoint.
+A subsequent successful build checks an explicit kernel-tag assertion for all
+five required exports: only empty tags or DISK_THM are accepted, including
+transitive dependencies. This installation emits Theory.dat rather than
+Theory.txt; the assertion checks the actual theorem tags directly. No parser or
+cheat warning was emitted. The main script contains no cheat, axiom, mk_thm,
+TRY/ORELSE search, or raw automation probe. All task changes are under prog/;
+no tactic-timeout setting or semantics source was modified.
+
+The old STATE cursor describes the pre-completion resume location; it is
+superseded by reviewed component evidence E0062 and this final audit, not a
+remaining proof obligation.

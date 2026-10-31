@@ -43,6 +43,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.6 | progressed | missing_helper | E0059 | Escalate interface quality to strategist rather than add more manual existential instantiations or copy large assumptions. |
 | C1.6.1 | proved |  | E0060 | Review bounded closure, authorize checkpoint commit despite known downstream export failure as previous boundaries; C1.6.2 replace experimental tactic with opaque wrapper consumption. |
 | C1.6.2 | proved |  | E0062 |  |
+| C1.7 | proved |  | E0063 |  |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -864,6 +865,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T211644Z_m1868_t001` (use `read_tool_output` for exact output)
+
+## C1.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0063`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 26 steps, 25 tools, 1 holbuild, 2,510,230 tok (2,507,878 in, 2,352 out, 2,428,928 cached), 155.3s, $0.4243128
+
+### Attempts / Evidence
+
+- `E0063` (proved, , actual effort: 1 sessions, 2 msgs, 26 steps, 25 tools, 1 holbuild, 2,510,230 tok (2,507,878 in, 2,352 out, 2,428,928 cached), 155.3s, $0.4243128)
+  - Build target, audit five public statements against frozen base and authorized amendment, scan proof devices and modified paths, assert theorem kernel tags -> Target succeeds with no parser/cheat warnings. Five exported theorem tags pass empty-or-DISK_THM check. Original non-meter contract content preserved; added only state-gas resources/settlement and authorized creditBack gas guard. All changed paths under prog/. Final audit appended. (`TO_seq58_progcall_port-20261031T211644Z_m1894_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1895_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1898_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1899_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T211644Z_m1894_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T211644Z_m1898_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T211644Z_m1899_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
