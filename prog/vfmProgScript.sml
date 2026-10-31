@@ -6911,7 +6911,7 @@ Proof
         restore_state_gas_def, credit_new_account_apply,
         credit_new_account_context_def,
         Abbr`calleeGasLeft`,Abbr`all_pcs`,TO_FLOOKUP]
-    \\ gvs[absorb_state_gas_def, Abbr`merged`]
+    \\ gs[absorb_state_gas_def, Abbr`merged`]
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >-
