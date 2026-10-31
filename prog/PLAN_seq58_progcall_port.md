@@ -643,28 +643,37 @@ First prove the scalar-field projections of settle over a variable m, splitting 
 #### Not to try
 Do not substitute the full merged record before proving the generic settle contracts. Do not use unrestricted simp to discover record equality; fold/unfold only the named settlement boundary.
 
-### C1.3.8.2: Complete semantic pop and exception-handler budget boundary
+### C1.3.8.2: Finish step budget composition through context-wellformedness boundaries
 - Kind: `boundary_lemma`
 - Risk: 2
-- Work priority: 10
+- Work priority: 0
 - Work units: 5
-- Rationale: Settlement contracts remove the observed bottleneck; internal pop uses the existing budget_pop interface and root exit uses budget_root_exit.
-- Dependencies: C1.3.8.1
+- Rationale: decreases_gas_cred_def lines 672–673 and decreases_gas_cred_step_inner provide exactly intermediate context wellformedness. Existing handle-create and exception budget proofs use wf_state only to extract context gas bounds, so specialized weaker boundaries avoid the missing full-wf theorem.
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0040, E0041
+- Carries progress/evidence from: E0046, E0047
 
 #### Progress note
-Retains the original unfinished handler obligations and checked deposit helper source; neither previous episode certifies this leaf.
+Retain the committed pop, exception-tail, handle_exception and handle_step budget lemmas (f49a74e8 and 047767bf). They are supporting source evidence, not certification of the still-unproved step composition or root forbidden-exception exclusion. No old proof is asserted to certify this revised obligation.
 
 #### Summary
-Finish handle_create budget lifting and both pop boundaries. Supply restore/forfeit and output contracts needed by handle_exception. Compose exception-handler preservation and exclusion of forbidden exceptions, retaining the original hypotheses.
+Preserve the checked settlement and handler proofs. Introduce handler budget interfaces requiring EVERY (wf_context o FST), rather than full wf_state. Extract the matching preservation theorem directly from decreases_gas_cred_step_inner and compose step budget preservation. Root forbidden-exception exclusion remains a separate caller-grant obligation and must not be inferred from budget preservation; return at this checkpoint for ancestor review.
+
+#### Description
+All edits stay in prog/. The required completion for this leaf is the step budget theorem plus its context-wf interfaces, checked with holbuild and no prohibited proof escapes. Keep existing exported or downstream-consumed local lemma names usable through wrappers. The root all-result pop theorem intentionally allows an Impossible from unuse_gas after the pop: dropping below n makes the budget vacuous. This does not contradict unconditional budget preservation and does not establish forbidden-exception exclusion. Notes for ancestor review: use the authorized caller grant bound to discharge root unuse_gas when proving finite-return safety; do not add caller backing to unconditional handler-budget statements or to frozen exported rules. This update does not authorize editing outside this subtree's owned proof infrastructure.
+
+#### Statement
+Required local outputs in prog/vfmCallInnerScript.sml:
+1. step_inner_contexts_wf: EVERY (wf_context o FST) s.contexts /\ step_inner s = (r,t) ==> EVERY (wf_context o FST) t.contexts.
+2. Context-wf variants of call_meter_handle_create_budget, call_meter_handle_exception_budget and call_meter_handle_step_budget: retain their existing premises and conclusions, replacing only wf_state s by EVERY (wf_context o FST) s.contexts.
+3. call_meter_step_budget: wf_state s /\ call_meter_budget n ceiling s /\ 2 <= n /\ n <= LENGTH s.contexts /\ step s = (r,t) ==> call_meter_budget n ceiling t.
+If needed for composing handle_step, also extract handle_create context-wf preservation from its existing decreases-gas-cred contract (verify its signature before use), or prove that preservation locally from its meter operations.
 
 #### Approach
-Use parent_margin and call_meter_pop_pair, rewriting its settlement expression to the named settle function before budget_pop; discharge backed and claim premises directly with the new corollaries. Handle root exit with call_meter_budget_root_exit, not internal parent backing. Lift the existing fixed-tail handle_create invariant, use restore/forfeit claim interfaces and output-preservation contracts, and compose the exception handler with the existing step-inner boundary; build vfmCallInnerTheory.
+First extract step_inner_contexts_wf by specializing decreases_gas_cred_step_inner and unfolding decreases_gas_cred_def only in this boundary lemma; handle empty input separately using the definition's empty-stack clause. Factor the existing handler proofs into context-wf versions: EVERY supplies child and parent wf_context, hence their gas upper bounds, and no accounts/stack invariant is needed; retain original wf_state lemmas as short corollaries. Compose step as handle step_inner handle_step: use call_meter_step_inner_budget, context-wf preservation, and the non-shrinking stack property already used by step_inner_preserves_stack_room_gas_ok (same_frame_or_grow_step_inner_named and same_frame_or_grow_length) to establish handler entry depth; on INL the budget already holds, on INR apply the new handler boundary with the inner nonforbidden fact. Build vfmCallInnerTheory and report exact remaining root-exclusion obligation at checkpoint, without claiming finite-return safety complete.
 
 #### Not to try
-Consumers must not unfold absorb_state_gas, repayment, backed, and claim together on semantic records. Do not add an external-caller backing hypothesis or a callee-code assumption.
+Do not synthesize full wf_state for a failed inner state: the available decrease contract already provides the exact smaller invariant needed. Do not re-expand merged settlement records or replace the established pop contracts. Do not conclude root nonforbidden exceptions from call_meter_budget: its exit case deliberately forgets root constraints. Do not present an unconditional step nonforbidden theorem without a separate root grant argument. Avoid generic metis over call_meter_safe_def and manual full-assumption theorem plumbing; use the existing compositional boundary lemmas. Verify any additional library signature before relying on it; do not edit spec/ or change tactic timeout.
 
 ### C1.3.9: Derive collection-mode finite ordinary return
 - Kind: `proof`

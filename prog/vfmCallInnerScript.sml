@@ -1,7 +1,7 @@
 Theory vfmCallInner
 Ancestors vfmCallSteps vfmCallGrant vfmCallPrecompile vfmCallMeterOps
           vfmCallMeterSafe vfmCallMeter vfmCallBudget vfmExecution vfmContext
-          vfmState vfmTypes vfmExecutionProp vfmCallMeterProbe vfmHandleStep vfmDecreasesGas arithmetic list
+          vfmState vfmTypes vfmExecutionProp vfmCallMeterProbe vfmHandleStep vfmDecreasesGas vfmStepLength arithmetic list
 Libs BasicProvers
 
 Theorem call_meter_safe_pop_inv:
@@ -1124,7 +1124,7 @@ Proof
 QED
 
 Theorem call_meter_handle_create_budget:
-  wf_state s /\ call_meter_budget n ceiling s /\
+  EVERY (wf_context o FST) s.contexts /\ call_meter_budget n ceiling s /\
   0 < n /\ n <= LENGTH s.contexts /\
   e <> SOME Impossible /\ e <> SOME Unimplemented /\
   handle_create e s = (r,t) ==>
@@ -1392,7 +1392,7 @@ Proof
 QED
 
 Theorem call_meter_handle_exception_budget:
-  wf_state s /\ call_meter_budget n ceiling s /\
+  EVERY (wf_context o FST) s.contexts /\ call_meter_budget n ceiling s /\
   2 <= n /\ n <= LENGTH s.contexts /\
   handle_exception e s = (r,t) ==>
   call_meter_budget n ceiling t
@@ -1436,7 +1436,7 @@ Proof
 QED
 
 Theorem call_meter_handle_step_budget:
-  wf_state s /\ call_meter_budget n ceiling s /\
+  EVERY (wf_context o FST) s.contexts /\ call_meter_budget n ceiling s /\
   2 <= n /\ n <= LENGTH s.contexts /\
   e <> SOME Impossible /\ e <> SOME Unimplemented /\
   handle_step e s = (r,t) ==>
@@ -1452,7 +1452,9 @@ Proof
   `0 < n` by decide_tac >>
   `call_meter_budget n ceiling cs` by
     (drule_all call_meter_handle_create_budget >> simp[]) >>
-  `wf_state cs` by metis_tac[handle_create_preserves_wf_state] >>
+  `s.contexts <> []` by (strip_tac >> gvs[]) >>
+  `EVERY (wf_context o FST) cs.contexts` by
+    metis_tac[handle_create_preserves_wf_contexts] >>
   `LENGTH cs.contexts = LENGTH s.contexts` by
     metis_tac[handle_create_preserves_length] >>
   Cases_on `cr` >>
@@ -1461,4 +1463,39 @@ Proof
   >- (strip_tac >> gvs[]) >>
   strip_tac >> irule call_meter_handle_exception_budget >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem step_inner_contexts_wf:
+  EVERY (wf_context o FST) s.contexts /\ step_inner s = (r,t) ==>
+  EVERY (wf_context o FST) t.contexts
+Proof
+  strip_tac >> mp_tac decreases_gas_cred_step_inner >>
+  rewrite_tac[decreases_gas_cred_def] >>
+  disch_then (qspec_then `s` mp_tac) >>
+  Cases_on `s.contexts = []` >> simp[] >> metis_tac[]
+QED
+
+Theorem call_meter_step_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  2 <= n /\ n <= LENGTH s.contexts /\ step s = (r,t) ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >>
+  `0 < n /\ s.contexts <> []` by (Cases_on `s.contexts` >> gvs[]) >>
+  qpat_x_assum `step _ = _` mp_tac >>
+  simp[step_def, GSYM step_inner_def, handle_def] >>
+  Cases_on `step_inner s` >> rename1 `step_inner s = (ir,is)` >>
+  `call_meter_budget n ceiling is /\
+   (!e. ir = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)` by
+    (drule_all call_meter_step_inner_budget >> simp[]) >>
+  `EVERY (wf_context o FST) is.contexts` by
+    (irule step_inner_contexts_wf >> goal_assum (drule_at Any) >>
+     gvs[wf_state_def]) >>
+  `LENGTH s.contexts <= LENGTH is.contexts` by
+    metis_tac[same_frame_or_grow_step_inner_named,
+              same_frame_or_grow_length, GREATER_EQ] >>
+  Cases_on `ir` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  strip_tac >> irule call_meter_handle_step_budget >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[LESS_EQ_TRANS]
 QED
