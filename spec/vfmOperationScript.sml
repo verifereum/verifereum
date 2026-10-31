@@ -231,6 +231,9 @@ Definition parse_opcode_def:
       ∃n. opcode opn ≼ opc ++ REPLICATE n 0w
 End
 
+(* EIP-8038 charges reading an account's code a warm access on top of the
+   access to the account itself, so EXTCODESIZE and EXTCODECOPY carry 100
+   here while EXTCODEHASH pays only the access. *)
 Definition static_gas_def[simp]:
     static_gas Stop           = 0n
   ∧ static_gas Add            = 3
@@ -271,8 +274,8 @@ Definition static_gas_def[simp]:
   ∧ static_gas CodeSize       = 2
   ∧ static_gas CodeCopy       = 3
   ∧ static_gas GasPrice       = 2
-  ∧ static_gas ExtCodeSize    = 0
-  ∧ static_gas ExtCodeCopy    = 0
+  ∧ static_gas ExtCodeSize    = 100
+  ∧ static_gas ExtCodeCopy    = 100
   ∧ static_gas ReturnDataSize = 2
   ∧ static_gas ReturnDataCopy = 3
   ∧ static_gas ExtCodeHash    = 0

@@ -37,7 +37,7 @@ Proof
        set_current_context_def, bind_def, ignore_bind_def, return_def,
        assert_def, fail_def, lookup_account_def, lookup_storage_def,
        sstore_base_gas_def, sstore_refund_updates_def,
-       sstore_state_gas_refund_def, sstore_state_gas_def, zero_warm_def]
+       sstore_state_gas_refund_def, sstore_state_gas_def]
   >> EVAL_TAC
 QED
 

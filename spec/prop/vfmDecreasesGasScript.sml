@@ -1836,10 +1836,14 @@ Proof
   \\ TOP_CASE_TAC \\ gvs[] \\ TOP_CASE_TAC \\ gvs[wf_context_def, frame_unused_gas_def]
 QED
 
-Theorem sstore_base_gas_pos[simp]:
-  0 < sstore_base_gas originalValue currentValue value
+(* The base cost is now only what the write creates, which can be nothing,
+   so the step's execution charge is positive because the slot access it is
+   added to is: 100 warm or 2100 cold. *)
+Theorem sstore_dynamic_gas_pos[simp]:
+  0 < accessCost ⇒
+  0 < sstore_base_gas originalValue currentValue value + accessCost
 Proof
-  simp[sstore_base_gas_def, warm_access_cost_def, ZERO_LESS_ADD]
+  rw []
 QED
 
 Theorem decreases_gas_step_sstore_gas_consumption[simp]:
@@ -1854,8 +1858,18 @@ Proof
   \\ irule_at Any decreases_gas_get_accounts \\ rw []
   \\ irule_at Any decreases_gas_bind_right
   \\ irule_at Any decreases_gas_get_original \\ simp [] \\ gen_tac
-  \\ irule_at Any decreases_gas_bind_right
-  \\ irule_at Any decreases_gas_access_slot \\ simp [] \\ gen_tac
+  \\ irule decreases_gas_mono
+  \\ irule_at Any decreases_gas_bind_pred
+  \\ qexistsl_tac [`F`,`T`,`λx. 0 < x`]
+  \\ simp [return_def, warm_access_cost_def]
+  \\ conj_tac >-
+    (qx_genl_tac [`s'`,`a`] \\ strip_tac \\ pop_assum mp_tac
+     \\ rw [access_slot_def, return_def, fail_def, domain_check_def,
+            cold_sload_cost_def, warm_access_cost_def, set_domain_def,
+            ignore_bind_def, bind_def]
+     \\ pop_assum mp_tac \\ TOP_CASE_TAC \\ gvs[]
+     \\ TOP_CASE_TAC \\ gvs[])
+  \\ gen_tac \\ strip_tac
   \\ irule_at Any decreases_gas_ignore_bind_right
   \\ irule_at Any decreases_gas_update_gas_refund
   \\ irule_at Any decreases_gas_sstore_state_gas_tail
