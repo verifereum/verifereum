@@ -1038,3 +1038,54 @@ Proof
   rewrite_tac[GSYM ignore_bind_def] >> strip_tac >>
   drule_all call_meter_step_sequence_budget >> simp[]
 QED
+
+Theorem call_meter_safe_reraise_inv:
+  e <> SOME Impossible /\ e <> SOME Unimplemented ==>
+  call_meter_safe (call_meter_result c rb rest) (reraise e)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  simp[call_meter_safe_def, reraise_def]
+QED
+
+Theorem call_meter_safe_output_to_inv:
+  call_meter_safe (call_meter_result c rb rest) get_output_to
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[get_output_to_def] >> irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_current_inv, call_meter_safe_def, return_def]
+QED
+
+Theorem call_meter_safe_deposit_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (ignore_bind (assert valid InvalidContractPrefix)
+      (ignore_bind (consume_gas gas)
+        (ignore_bind (assert sizeOK OutOfGas)
+          (ignore_bind (charge_state_gas stateGas)
+            (ignore_bind (update_accounts f) (reraise NONE))))))
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_assert] >>
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_consume_inv] >>
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_assert] >>
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_charge_inv] >>
+  irule call_meter_safe_ignore_invariant >>
+  simp[call_meter_safe_update_accounts_inv, call_meter_safe_reraise_inv]
+QED
+
+Theorem call_meter_safe_handle_create_inv:
+  e <> SOME Impossible /\ e <> SOME Unimplemented ==>
+  call_meter_safe (call_meter_result c rb rest) (handle_create e)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  strip_tac >> rewrite_tac[handle_create_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> Cases_on `e` >> Cases_on `x'` >>
+          simp[call_meter_safe_reraise_inv, call_meter_safe_deposit_inv]) >>
+      simp[call_meter_safe_output_to_inv]) >>
+  simp[call_meter_safe_source_readers_inv]
+QED

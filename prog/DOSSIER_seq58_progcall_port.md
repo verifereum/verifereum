@@ -32,6 +32,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.7.3 | proved |  | E0037 | Review and commit storage safety family, then scheduled terminal opcode family. |
 | C1.3.7.4 | proved |  | E0038 | Review and commit terminal family; assemble ordinary dispatch and inner execution as scheduled. |
 | C1.3.7.5 | proved |  | E0039 | Review and commit dispatch and inner execution; proceed to handler/finite return components. |
+| C1.3.8 | progressed | other | E0040 | Continue C1.3.8: lift handle_create fixed-tail preservation to budget; prove pop_and_incorporate_context internal/root budget boundary using parent_margin, success_pop and failure_credit scalar facts; compose exception handler then step. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -599,6 +600,26 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1204_t001` (use `read_tool_output` for exact output)
+
+## C1.3.8
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0040`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 1 holbuild, 1,534,028 tok (1,532,084 in, 1,944 out, 1,508,736 cached), 121.7s, $0.2170096
+- next: Continue C1.3.8: lift handle_create fixed-tail preservation to budget; prove pop_and_incorporate_context internal/root budget boundary using parent_margin, success_pop and failure_credit scalar facts; compose exception handler then step.
+
+### Attempts / Evidence
+
+- `E0040` (progressed, other, actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 1 holbuild, 1,534,028 tok (1,532,084 in, 1,944 out, 1,508,736 cached), 121.7s, $0.2170096)
+  - Prove reraise/output reader interfaces and isolate code-deposit execution/state charge sequence; compose handle_create. -> call_meter_safe_handle_create_inv builds for every result under only e not forbidden, preserving fixed-tail call_meter_result. No handler-pop proof yet. (`TO_seq58_progcall_port-20261031T152132Z_m1219_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1219_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
