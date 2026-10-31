@@ -136,3 +136,19 @@ evidence:
 - episode:E0034
 - source:prog/vfmCallInnerScript.sml
 - tool_output:TO_seq58_progcall_port-20261031T152132Z_m1106_t001
+
+## L0016 scope='C1.3.7' tags=simp,call_meter_safe,conditional,interface
+shape: Conditional primitive contains return in one branch and an existing safety contract in the other.
+pattern: Split the condition; simplify return branch with call_meter_safe_def/return_def and the nontrivial branch solely with its boundary theorem. Including safe_def in a combined simp list can unfold the contract before the boundary rewrite fires.
+works_when: unspecified
+evidence:
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1157_t001
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1159_t001
+
+## L0017 scope='C1.3.7.5' tags=dispatch,is_call,PC,budget
+shape: Combine fixed-tail ordinary instructions and stack-changing CALL/CREATE into step_inner.
+pattern: First prove ordinary instruction and instruction-plus-PC fixed-tail contracts. Lift ordinary sequences to budget using original head backing/wf; CALL/CREATE use entry budget contracts and inc_pc_or_jump is return (). For finite dispatch use gvs[is_call_def] to eliminate contradictory constructor assumptions before applying entry contracts.
+works_when: unspecified
+evidence:
+- episode:E0039
+- source:prog/vfmCallInnerScript.sml:927-1041

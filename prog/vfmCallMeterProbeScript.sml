@@ -376,3 +376,125 @@ Proof
   rpt strip_tac >> gvs[call_meter_claim_def, call_meter_backed_def, MIN_DEF] >>
   IF_CASES_TAC >> decide_tac
 QED
+
+(* Settlement is proved over a variable merged meter before semantic records
+   are substituted. Logs and refund fields are irrelevant to its currency. *)
+Definition call_meter_settle_def:
+  call_meter_settle success credit logs ar sr m =
+    if success then repay_state_gas_spill_context
+      (m with <|logs := logs; addRefund := ar; subRefund := sr|>)
+    else m with <|
+      gasUsed := m.gasUsed - MIN credit m.stateGasSpilled;
+      stateGasSpilled := m.stateGasSpilled - MIN credit m.stateGasSpilled;
+      stateGasLeft := m.stateGasLeft + (credit - MIN credit m.stateGasSpilled)|>
+End
+
+Theorem call_meter_settle_backed:
+  call_meter_backed m ==>
+  call_meter_backed (call_meter_settle success credit logs ar sr m)
+Proof
+  Cases_on `success` >>
+  simp[call_meter_settle_def, call_meter_backed_def,
+       repay_state_gas_spill_context_def, MIN_DEF] >>
+  rpt IF_CASES_TAC >> decide_tac
+QED
+
+Theorem call_meter_settle_claim:
+  call_meter_backed m /\ m.gasUsed <= m.msgParams.gasLimit ==>
+  call_meter_claim (call_meter_settle success credit logs ar sr m) =
+    call_meter_claim m
+Proof
+  Cases_on `success` >>
+  simp[call_meter_settle_def, call_meter_backed_def, call_meter_claim_def,
+       repay_state_gas_spill_context_def, MIN_DEF] >>
+  rpt IF_CASES_TAC >> decide_tac
+QED
+
+Theorem call_meter_absorb_pop_backed:
+  parent.stateGasSpilled + parent.stateGasCommitted + call_meter_claim child <=
+    parent.gasUsed ==>
+  call_meter_backed (absorb_state_gas
+    (parent with gasUsed := parent.gasUsed -
+      (child.msgParams.gasLimit - child.gasUsed))
+    child.stateGasLeft child.stateGasSpilled child.stateGasCommitted)
+Proof
+  simp[call_meter_claim_def, call_meter_backed_def, absorb_state_gas_def] >>
+  decide_tac
+QED
+
+Theorem call_meter_absorb_pop_used:
+  parent.gasUsed <= parent.msgParams.gasLimit ==>
+  (absorb_state_gas
+    (parent with gasUsed := parent.gasUsed -
+      (child.msgParams.gasLimit - child.gasUsed))
+    child.stateGasLeft child.stateGasSpilled child.stateGasCommitted).gasUsed <=
+  (absorb_state_gas
+    (parent with gasUsed := parent.gasUsed -
+      (child.msgParams.gasLimit - child.gasUsed))
+    child.stateGasLeft child.stateGasSpilled child.stateGasCommitted).msgParams.gasLimit
+Proof
+  simp[absorb_state_gas_def] >> decide_tac
+QED
+
+Theorem call_meter_absorb_pop_claim:
+  parent.gasUsed <= parent.msgParams.gasLimit /\
+  parent.stateGasSpilled + parent.stateGasCommitted + call_meter_claim child <=
+    parent.gasUsed ==>
+  call_meter_claim (absorb_state_gas
+    (parent with gasUsed := parent.gasUsed -
+      (child.msgParams.gasLimit - child.gasUsed))
+    child.stateGasLeft child.stateGasSpilled child.stateGasCommitted) =
+  call_meter_claim parent + call_meter_claim child
+Proof
+  simp[call_meter_claim_def, absorb_state_gas_def] >> decide_tac
+QED
+
+Theorem call_meter_settle_pop_backed:
+  parent.stateGasSpilled + parent.stateGasCommitted + call_meter_claim child <=
+    parent.gasUsed ==>
+  call_meter_backed (call_meter_settle success credit logs ar sr
+    (absorb_state_gas
+      (parent with gasUsed := parent.gasUsed -
+        (child.msgParams.gasLimit - child.gasUsed))
+      child.stateGasLeft child.stateGasSpilled child.stateGasCommitted))
+Proof
+  strip_tac >> irule call_meter_settle_backed >>
+  irule call_meter_absorb_pop_backed >> simp[]
+QED
+
+Theorem call_meter_settle_pop_claim:
+  parent.gasUsed <= parent.msgParams.gasLimit /\
+  parent.stateGasSpilled + parent.stateGasCommitted + call_meter_claim child <=
+    parent.gasUsed ==>
+  call_meter_claim (call_meter_settle success credit logs ar sr
+    (absorb_state_gas
+      (parent with gasUsed := parent.gasUsed -
+        (child.msgParams.gasLimit - child.gasUsed))
+      child.stateGasLeft child.stateGasSpilled child.stateGasCommitted)) =
+  call_meter_claim parent + call_meter_claim child
+Proof
+  strip_tac >>
+  simp[call_meter_settle_claim, call_meter_absorb_pop_backed,
+       call_meter_absorb_pop_used, call_meter_absorb_pop_claim]
+QED
+
+Theorem call_meter_pop_settle_pair:
+  s.contexts = (child,saved)::(parent,prb)::rest /\
+  child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
+  pop_and_incorporate_context success s =
+    let merged = absorb_state_gas
+          (parent with gasUsed := parent.gasUsed -
+            (child.msgParams.gasLimit - child.gasUsed))
+          child.stateGasLeft child.stateGasSpilled child.stateGasCommitted;
+        settled = call_meter_settle success
+          (if child.msgParams.newAccountCharged then new_account_state_gas else 0)
+          (parent.logs ++ child.logs)
+          (parent.addRefund + child.addRefund)
+          (parent.subRefund + child.subRefund) merged
+    in (INL (), s with <|contexts := (settled,prb)::rest;
+          rollback := if success then s.rollback else saved|>)
+Proof
+  strip_tac >> drule_all call_meter_pop_pair >>
+  disch_then (qspec_then `success` mp_tac) >>
+  pure_rewrite_tac[LET_THM, call_meter_settle_def] >> simp[]
+QED

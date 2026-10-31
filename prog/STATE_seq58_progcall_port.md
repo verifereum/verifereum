@@ -2,55 +2,56 @@
 Updated: 2026-10-31
 
 ## Cursor
-- component: C1.3.7.2
+- component: C1.3.8
 - status: in_progress
 - active_file: prog/vfmCallInnerScript.sml
-- next_action: Fix call_meter_safe_access_inv near line 375: after result_lift/gen_tac, forward-introduce GEN_ALL call_meter_safe_access_address, unfold call_meter_safe_def and discharge with call_meter_ready_result (as in memory_info_inv). Build; subsequent source readers and copy_source/copy_memory helpers are unverified. Then finish family opcode consumers.
-- expected_goal_shape: forall d. call_meter_safe (call_meter_ready d rb rest) (access_address a) (lambda r t. call_meter_result d rb rest t). Existing access boundary returns ready, not result.
+- next_action: Begin C1.3.8 and verify vfmCallInnerTheory. Then prove the pop_and_incorporate_context budget boundary: inspect existing exact pair equation at prog/vfmProgCallScript.sml:369-404 and scalar success_pop_backed/claim, failure_credit_backed in vfmCallMeterProbeScript.sml. Use budget_parent_margin for internal pop and budget_root_exit for root pop; keep actual credit-after-absorb ordering. handle_create fixed-tail interface is already checked at Inner:1080.
+- expected_goal_shape: Internal pop: budget n ceiling s, n < LENGTH s.contexts, child::parent::rest and parent wf imply settled merged head backed and claim <= child claim + parent claim; root pop discharges budget by length. Later compose restore/forfeit, output operations and handle_step.
 - verify_with: holbuild(targets=["vfmCallInnerTheory"], timeout=1800)
 
 ## If This Fails
-- Inspect actual postcondition and use consequence or forward chaining to convert ready to result; checkpoint partial progress. Escalate only on structural interface failure, not routine beta/LET or postcondition matching.
+- Inspect exact semantic result before expanding arithmetic. checkpoint_progress for useful partial boundaries; if scalar/list interface is structurally insufficient, close_component(stuck) with evidence then request strategist review, rather than adding exported hypotheses.
 
 ## Do Not Retry
-- Treat arbitrary set_current_context as preserving fixed-anchor result.: Saved context must be proven to be current; use saved_context boundary and neutral replacement.
-  - evidence: episode:E0034
-  - evidence: source:prog/vfmCallInnerScript.sml
-- Infer paid grant reservation from ordinary call_meter_result or add external caller backing guards.: Result forgets surplus; rooted fresh-callee accounting and checked reservation are required. No further export weakening authorized.
-  - evidence: episode:E0023
-  - evidence: episode:E0024
+- Force stack-extending CALL/CREATE or stack-shrinking pop through fixed-tail call_meter_result.: Fixed-tail abstraction intentionally excludes frame stack changes; use budget-level entry/pop contracts.
+  - evidence: episode:E0039
+  - evidence: source:prog/vfmCallStepsScript.sml
+- Use simp[call_meter_safe_def,...invariant contracts...] uniformly across conditional return/nontrivial operations.: Definition unfolding may prevent interface rewrites and expose irrelevant primitive executions; split trivial cases before unfolding.
+  - evidence: tool_output:TO_seq58_progcall_port-20261031T152132Z_m1157_t001
+  - evidence: tool_output:TO_seq58_progcall_port-20261031T152132Z_m1159_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- The fixed-tail ordinary-result abstraction remains appropriate; CALL/CREATE retain separate rooted-budget contracts. Do not try to force stack-extending entry into fixed tails.
-- Outside-the-box option: generic reader-to-result adapter could replace repeated mp_tac/ready_result conversions. No need to redesign semantics or meter definitions.
-- Fresh expert should inspect exact postconditions before using simp: a ready-preserving operation does not syntactically match a result-returning boundary.
-- Remaining copy helpers explicitly parameterize source safety; verify their types and source case normalization rather than expanding every account/memory primitive.
+- Fixed-tail family interfaces worked for every ordinary constructor and code deposit. The next theorem changes stack shape, so do not optimize another fixed-tail adapter for pop.
+- Outside-the-box option: expose a context-valued settlement boundary once and use budget_pop/root_exit instead of monad-unfolding throughout handle_exception. Existing exact pair equation in ProgCall is a starting point, not a reason to duplicate large unfolds in consumers.
+- Fresh expert should first check whether handler intermediate states retain the needed parent wf gas bound and stack room; inner execution's budget theorem alone does not provide these.
+- PLAN abstraction remains appropriate: scalar meter laws, list budget boundaries, then semantic handler composition. Escalate if these boundaries cannot cover failure-credit settlement.
 
 ### What Went Wrong
-- Current access_inv proof assumed call_meter_safe_access_address returns call_meter_result; it actually preserves call_meter_ready. Build stops before the new copy helpers.
-- CREATE condition normalization initially used GSYM DISJ_ASSOC, but HOL's DISJ_ASSOC associates right-nested disjunction to the left. Correct direction fixed whole CREATE matching.
-- Saved-context proof needed gvs after stripping hypotheses; simp before introducing equalities cannot reduce conditional context readers/writers.
+- simp with call_meter_safe_def in the same list as invariant rewrites unfolded nontrivial branch contracts before their rewrites matched; split trivial return cases first (storage family).
+- Dispatch originally simplified only conclusions, leaving is_call Stop assumptions and 88 cases for metis; gvs on constructor assumptions eliminated non-call cases and removed timeout.
+- Higher-order matching was required for update_gas_refund's nested record update. Plain irule did not infer its context transformer.
+- Budget lift needed the explicit n <= LENGTH s.contexts fact after context-list splitting; syntactically normalized SUC length was insufficient for drule_all.
 
 ### Ignored Signals
-- Exact ready-versus-result postconditions were underweighted again when composing access_address. Inspect signatures rather than guessing from theorem names.
-- New suffixes after a failed earlier theorem are not checked: do not describe source-reader or copy combinators as proved yet.
+- Do not infer generalized variable order: drule ordinary_inst produced forall rest rb c, not c rb rest. Inspect the actual quantified goal before specialization.
+- A timeout in dispatch was a normalization bug, not evidence that the opcode family decomposition failed.
 
 ### Strategy Adjustments
-- CREATE whole entry is proved, reviewed and committed as 4912672c.
-- Neutral stack/control-flow plus existing arithmetic/memory helper coverage is proved, reviewed and committed as 07009dd6.
-- Continue only C1.3.7.2; C1.3.7.3 is a queued independent storage family, not current work.
-- Use saved_context plus ready_assert_prefix/set_neutral for genuine saved-context updates; invariant-only current_inv suffices only when returned contexts are read but not written back.
+- Read/copy/log, storage, terminal and opcode/inner execution families are all proved and reviewed; stable commits 3deeafc6, 70d4667a, 3241a41a, 9bf83f83.
+- C1.3.8 code-deposit portion is checked and committed d763c671; episode E0040 records nonterminal progress. No handler-pop proof has yet been attempted.
+- All source currently builds as vfmCallInnerTheory; task-wide exported rules are not yet complete. Keep modifications under prog/.
 
 ### Oracle Feedback
-- E0032 and E0034 accepted without contract changes. Reservation and saved-context boundary designs validated.
-- Strategist refined broad C1.3.7 into five bounded family/dispatch children. Final dispatch waits for memory/read/log, storage, and terminal families.
+- Reviews E0036-E0039 accepted all family and dispatch proofs without PLAN changes. In particular CALL PC no-op versus ordinary fixed-tail PC composition was validated.
+- Current handler component is authorized and active; no need to ask the oracle merely because ancestor risks remain high.
 
 ## Evidence Pointers
-- episode:E0032 - whole CREATE proof
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1042_t001 - CREATE stable commit
-- episode:E0034 - neutral/control-flow family proved
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1096_t001 - stable Inner checkpoint commit
-- episode:E0035 - current partial copy-family attempt
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1103_t001 - current access adapter failure
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1106_t001 - exact ready-preserving access signature
+- episode:E0039 - opcode and inner-execution budget contract proved and reviewed
+- episode:E0040 - partial handler component: code-deposit all-result safety
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1204_t001 - inner budget theorem build
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1219_t001 - handle_create interface build
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1226_t001 - stable deposit commit d763c671
+- source:prog/vfmCallBudgetScript.sml:196-245 - pop, root exit and parent margin interfaces
+- source:prog/vfmCallMeterProbeScript.sml:219-245 - success and failure backing scalar laws
+- source:prog/vfmProgCallScript.sml:369-404 - exact semantic pop settlement equation

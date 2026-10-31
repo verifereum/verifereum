@@ -1,7 +1,7 @@
 Theory vfmCallInner
 Ancestors vfmCallSteps vfmCallGrant vfmCallPrecompile vfmCallMeterOps
           vfmCallMeterSafe vfmCallMeter vfmCallBudget vfmExecution vfmContext
-          vfmState vfmTypes vfmExecutionProp arithmetic list
+          vfmState vfmTypes vfmExecutionProp vfmCallMeterProbe arithmetic list
 
 Theorem call_meter_safe_pop_inv:
   call_meter_safe (call_meter_result c rb rest) (pop_stack n)
@@ -1089,3 +1089,4 @@ Proof
       simp[call_meter_safe_output_to_inv]) >>
   simp[call_meter_safe_source_readers_inv]
 QED
+

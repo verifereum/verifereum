@@ -597,25 +597,74 @@ Read the current inner-execution definition and the checked Steps theorem signat
 Do not force stack-extending entry branches through call_meter_result. Do not mix exception-handler unwind proofs into inner execution. If the consumer interface requires an assumption not implied at its existing call sites, escalate rather than weaken the frozen rule.
 
 ### C1.3.8: Prove deposit and exception-handler budget preservation
-- Kind: `boundary_lemma`
+- Kind: `proof_group`
 - Risk: 2
 - Work priority: 50
-- Work units: 8
-- Rationale: Handler cases are explicit success, revert and exceptional failure; scalar conservation and backing laws isolate the list reasoning.
-- Dependencies: C1.3.7
+- Work units: 0
+- Rationale: The list-budget interface already matches. Scalar settlement can be proved over an arbitrary merged context before substituting the large semantic record.
 - Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0040, E0041
+
+#### Progress note
+E0040 deposit work remains useful source evidence; E0041 identifies the missing abstraction, not a mathematical obstruction. No completed handler proof is claimed.
 
 #### Summary
-Handle code deposit and all exception return branches with actual semantic ordering. Prove internal pop preserves ancestor margins. Discharge the budget after the root pop rather than imposing conditions on the caller. Combine with inner execution to obtain the step-level invariant.
-
-#### Statement
-Output: wf_state s /\ budget n cg s /\ 2<=n /\ n<=LENGTH s.contexts /\ step s=(INL (),t) ==> budget n cg t. Supporting outputs cover handle_create and handle_exception from the intermediate-state contracts of C1.3.7, including failure credit after absorb.
-
-#### Approach
-Follow handle_create's execution charge then state charge, and handle_exception's restore, optional forfeit, then pop order. For an internal pop use adjacent budget margin to justify unuse_gas and absorb/repay or failure credit; for root exit use the exit disjunct. Preserve exact transform equations for the final-pop consumer.
+Retain the checked handle_create invariant proof. Separate scalar settlement from semantic pop matching. Complete internal/root pop and exception-handler preservation without expanding merged records in consumers.
 
 #### Not to try
-Do not assume ordinary rollback clears committed spill. Do not move credit_new_account before absorb: current pop_and_incorporate_context credits the merged parent on failure.
+Do not simplify an abbreviation containing repeated absorb_state_gas records together with backed/claim definitions. Do not impose backing on the external caller.
+
+#### Argument
+Parent margin bounds the child's entire refundable claim. Absorption followed by repayment or failure credit preserves the sum of parent and child claims and yields a backed internal parent. Root exit instead uses the budget exit rule and does not require backing of the external caller.
+
+#### Definition design
+Use a named settlement function with a generic merged-context argument. Its backing and claim interfaces must hide logs and refund updates. Prove projection facts on an arbitrary context before substituting absorb_state_gas expressions; consumers must not normalize full records.
+
+#### Code structure
+Put scalar settlement helpers in prog/vfmCallMeterProbeScript.sml beside the existing pop lemmas. Put semantic pop and handler proofs in prog/vfmCallInnerScript.sml; retain the checked deposit helper chain.
+
+### C1.3.8.1: Compact scalar settlement interface
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: Credit and repayment subtract the same bounded amount from gasUsed and spilled; projection-first arithmetic avoids record normalization blowup.
+
+#### Summary
+Introduce a compact settlement expression parameterized by success, credit, logs, and refund increments. Prove backing and claim preservation for an arbitrary merged context. Derive pop-shaped backed and claim-sum corollaries for the exact semantic expression.
+
+#### Statement
+Define settle success credit logs ar sr m to be repay_state_gas_spill_context (m with <|logs := logs; addRefund := ar; subRefund := sr|>) on success, and m with <|gasUsed := m.gasUsed - MIN credit m.stateGasSpilled; stateGasSpilled := m.stateGasSpilled - MIN credit m.stateGasSpilled; stateGasLeft := m.stateGasLeft + (credit - MIN credit m.stateGasSpilled)|> otherwise. Prove separately: call_meter_backed m ==> call_meter_backed (settle success credit logs ar sr m); call_meter_backed m /\ m.gasUsed <= m.msgParams.gasLimit ==> call_meter_claim (settle success credit logs ar sr m) = call_meter_claim m. Derive separate backing and claim equality corollaries when m = absorb_state_gas (parent with gasUsed := parent.gasUsed - (child.msgParams.gasLimit - child.gasUsed)) child.stateGasLeft child.stateGasSpilled child.stateGasCommitted, assuming parent.gasUsed <= parent.msgParams.gasLimit and parent.stateGasSpilled + parent.stateGasCommitted + call_meter_claim child <= parent.gasUsed. Claim equality is call_meter_claim (settle ... m) = call_meter_claim parent + call_meter_claim child.
+
+#### Approach
+First prove the scalar-field projections of settle over a variable m, splitting success and MIN only there; backing and claim then reduce to small natural arithmetic. Separately prove backing, gasUsed upper bound, and claim-sum for absorption under the parent margin by projection rewriting, then compose the generic settlement contracts. Test the corollaries with the actual logs/refunds/creation-credit arguments from call_meter_pop_pair, using only definitional rewriting to identify settle.
+
+#### Not to try
+Do not substitute the full merged record before proving the generic settle contracts. Do not use unrestricted simp to discover record equality; fold/unfold only the named settlement boundary.
+
+### C1.3.8.2: Complete semantic pop and exception-handler budget boundary
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: Settlement contracts remove the observed bottleneck; internal pop uses the existing budget_pop interface and root exit uses budget_root_exit.
+- Dependencies: C1.3.8.1
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0040, E0041
+
+#### Progress note
+Retains the original unfinished handler obligations and checked deposit helper source; neither previous episode certifies this leaf.
+
+#### Summary
+Finish handle_create budget lifting and both pop boundaries. Supply restore/forfeit and output contracts needed by handle_exception. Compose exception-handler preservation and exclusion of forbidden exceptions, retaining the original hypotheses.
+
+#### Approach
+Use parent_margin and call_meter_pop_pair, rewriting its settlement expression to the named settle function before budget_pop; discharge backed and claim premises directly with the new corollaries. Handle root exit with call_meter_budget_root_exit, not internal parent backing. Lift the existing fixed-tail handle_create invariant, use restore/forfeit claim interfaces and output-preservation contracts, and compose the exception handler with the existing step-inner boundary; build vfmCallInnerTheory.
+
+#### Not to try
+Consumers must not unfold absorb_state_gas, repayment, backed, and claim together on semantic records. Do not add an external-caller backing hypothesis or a callee-code assumption.
 
 ### C1.3.9: Derive collection-mode finite ordinary return
 - Kind: `proof`
