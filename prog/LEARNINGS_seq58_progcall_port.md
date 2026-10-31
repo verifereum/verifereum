@@ -34,3 +34,21 @@ evidence:
 - episode:E0012
 - source:prog/vfmCallMeterProbeScript.sml
 - tool_output:TO_seq58_progcall_port-20261031T122504Z_m0321_t001
+
+## L0005 scope='C1.3' tags=claim,spill,committed,refund,ancestor,restore
+shape: Nested-frame refund budget and return preservation
+pattern: Use claim=gasLimit-gasUsed+spill+committed. Each selected frame needs own spill+committed plus claims above <= gasUsed; per-frame backing alone is false under pop. Checked success absorb/repay conserves combined parent+child claim, credit and ordinary restore conserve claim on backed wf meters, and forfeit reduces it. Ordinary restore clears spill only; restore_to_entry clears spill and committed. Fresh root claim equals grant, giving an internal ceiling without external backing.
+works_when: Primitive/adjacent meter interfaces proved in the probe; full list/opcode invariant still needs C1.3.4-.8.
+evidence:
+- episode:E0013
+- episode:E0014
+- source:prog/vfmCallMeterProbeScript.sml
+
+## L0006 scope='C1.3' tags=run_call,termination,INL,Collect,trace
+shape: Separate finite run existence from ordinary callee return
+pattern: run_call_eq_tr is unconditional totality and run_call_finite_trace extracts a finite trajectory for either INL or abort. INL collection return separately needs reachable inner non-abort safety and handler wf/stack/gas conditions. Reuse totality and last-pop structural facts; propagate new scoped budget through run_call_reaches_inv rather than proving termination again.
+works_when: Repairing collection-return machinery for fresh entered callees, with external caller unrestricted.
+evidence:
+- episode:E0014
+- source:prog/AUDIT_seq58_call_safety.md
+- tool_output:TO_seq58_progcall_port-20261031T123059Z_m0365_t001

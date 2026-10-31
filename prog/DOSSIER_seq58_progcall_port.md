@@ -14,6 +14,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.1 | proved |  | E0012 | Review and commit probe. Proceed C1.3.2 nested prefix boundaries; individual frame backing is checked but not yet established adequate for child gas refunds or for internal frame push/pop. |
 | C1.3.2 | proved |  | E0013 | Review bounded nested-frame probes and commit. Then C1.3.3 finite-run strategy checkpoint before authorizing full invariant/finite-return machinery. Remaining integration must prove margin before push (including stipend), ancestor-budget preservation, and exceptional-return restore/forfeit branches. |
 | C1.3.3 | proved |  | E0014 | Mandatory scoped PLAN update before accepting parent complete or beginning C1.4: evaluate proposed budget and add executable preservation, safety, collection-return, final-pop/summary and stipend leaves. Commit checked audit/probe changes after review. |
+| C1.3.4 | proved |  | E0015 | Review C1.3.4, commit new budget theory with required trailer, then scheduled semantic primitive contracts C1.3.5. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -199,6 +200,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 
 - `TO_seq58_progcall_port-20261031T123059Z_m0384_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_progcall_port-20261031T123059Z_m0385_t001` (use `read_tool_output` for exact output)
+
+## C1.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0015`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 40 steps, 39 tools, 16 holbuild, 2,481,475 tok (2,474,986 in, 6,489 out, 2,429,952 cached), 374.4s, $0.3979532
+- next: Review C1.3.4, commit new budget theory with required trailer, then scheduled semantic primitive contracts C1.3.5.
+
+### Attempts / Evidence
+
+- `E0015` (proved, , actual effort: 1 sessions, 3 msgs, 40 steps, 39 tools, 16 holbuild, 2,481,475 tok (2,474,986 in, 6,489 out, 2,429,952 cached), 374.4s, $0.3979532)
+  - Define recursive accumulated descendant chain with total/prefix/budget; prove indexed equivalence and list monotonicity/replacement/push/pop. -> New vfmCallBudgetTheory builds; recursive chain equivalent to specified EL/TAKE/SUM budget. Local scalar premises isolate semantic consumers from list arithmetic. ()
+  - Lift list rules to state prefix and test fresh root, active backing, adjacent margin, root claim/refund and root exit. -> All checked without external caller premises. Fresh root initializes at LENGTH rest+2; internal successful absorb/repay settlement exercises list pop using checked scalar probe lemmas. (`TO_seq58_progcall_port-20261031T123059Z_m0441_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T123059Z_m0441_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
