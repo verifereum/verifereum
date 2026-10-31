@@ -31,6 +31,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.7.2 | proved |  | E0036 | Review and commit read/memory/copy/log family; proceed to scheduled storage family. |
 | C1.3.7.3 | proved |  | E0037 | Review and commit storage safety family, then scheduled terminal opcode family. |
 | C1.3.7.4 | proved |  | E0038 | Review and commit terminal family; assemble ordinary dispatch and inner execution as scheduled. |
+| C1.3.7.5 | proved |  | E0039 | Review and commit dispatch and inner execution; proceed to handler/finite return components. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -578,6 +579,26 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1172_t001` (use `read_tool_output` for exact output)
+
+## C1.3.7.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0039`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 27 steps, 26 tools, 8 holbuild, 3,041,088 tok (3,038,005 in, 3,083 out, 3,000,192 cached), 326.8s, $0.4064752
+- next: Review and commit dispatch and inner execution; proceed to handler/finite return components.
+
+### Attempts / Evidence
+
+- `E0039` (proved, , actual effort: 1 sessions, 2 msgs, 27 steps, 26 tools, 8 holbuild, 3,041,088 tok (3,038,005 in, 3,083 out, 3,000,192 cached), 326.8s, $0.4064752)
+  - Finite ordinary dispatch; lift fixed-tail contracts to anchored budget, combine CALL/CREATE contracts, and compose PC handling and fetch. -> All ordinary constructors checked; whole step_inst and step_inner budget preservation plus forbidden-exception exclusion build. CALL PC is noop; ordinary PC remains fixed-tail, avoiding any post-CALL fixed-tail assumption. (`TO_seq58_progcall_port-20261031T152132Z_m1185_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1204_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1204_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

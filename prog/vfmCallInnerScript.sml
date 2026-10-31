@@ -1,7 +1,7 @@
 Theory vfmCallInner
 Ancestors vfmCallSteps vfmCallGrant vfmCallPrecompile vfmCallMeterOps
           vfmCallMeterSafe vfmCallMeter vfmCallBudget vfmExecution vfmContext
-          vfmState vfmTypes arithmetic list
+          vfmState vfmTypes vfmExecutionProp arithmetic list
 
 Theorem call_meter_safe_pop_inv:
   call_meter_safe (call_meter_result c rb rest) (pop_stack n)
@@ -921,4 +921,120 @@ Proof
           simp[call_meter_safe_callee_inv]) >>
       simp[call_meter_safe_access_inv]) >>
   simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_ordinary_inst_inv:
+  ~is_call op ==>
+  call_meter_safe (call_meter_result c rb rest) (step_inst op)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  Cases_on `op` >>
+  simp[is_call_def, step_inst_def, ignore_bind_def,
+       call_meter_safe_binop_inv, call_meter_safe_monop_inv,
+       call_meter_safe_modop_inv, call_meter_safe_exp_inv,
+       call_meter_safe_context_inv, call_meter_safe_msgParams_inv,
+       call_meter_safe_txParams_inv, call_meter_safe_keccak_inv,
+       call_meter_safe_balance_inv, call_meter_safe_call_data_load_inv,
+       call_meter_safe_copy_instances_inv, call_meter_safe_ext_code_size_inv,
+       call_meter_safe_ext_code_copy_inv, call_meter_safe_ext_code_hash_inv,
+       call_meter_safe_return_data_copy_inv, call_meter_safe_block_hash_inv,
+       call_meter_safe_blob_hash_inv, call_meter_safe_self_balance_inv,
+       call_meter_safe_step_pop_inv, call_meter_safe_mload_inv,
+       call_meter_safe_mstore_inv, call_meter_safe_sload_inv,
+       call_meter_safe_sstore_inv, call_meter_safe_step_jump_inv,
+       call_meter_safe_step_jumpi_inv, call_meter_safe_consume_inv,
+       call_meter_safe_step_push_inv, call_meter_safe_step_dup_inv,
+       call_meter_safe_step_swap_inv, call_meter_safe_log_inv,
+       call_meter_safe_step_dupn_inv, call_meter_safe_step_swapn_inv,
+       call_meter_safe_step_exchange_inv, call_meter_safe_return_inv,
+       call_meter_safe_self_destruct_inv, call_meter_safe_terminal_inv] >>
+  irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_return_data_inv, call_meter_safe_terminal_inv]
+QED
+
+Theorem call_meter_step_ordinary_budget:
+  ~is_call op /\ wf_state s /\ call_meter_budget n ceiling s /\
+  0 < n /\ n <= LENGTH s.contexts /\ step_inst op s = (r,t) ==>
+  call_meter_budget n ceiling t /\
+  (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
+Proof
+  strip_tac >>
+  `s.contexts <> []` by (strip_tac >> gvs[]) >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  `n <= LENGTH s.contexts` by simp[] >>
+  `call_meter_backed h0` by (drule_all call_meter_budget_top >> simp[]) >>
+  `h0.gasUsed <= h0.msgParams.gasLimit` by
+    gvs[wf_state_def, wf_context_def] >>
+  `call_meter_result h0 h1 t' s` by simp[call_meter_result_same] >>
+  drule call_meter_safe_ordinary_inst_inv >>
+  disch_then (qspecl_then [`t'`, `h1`, `h0`] mp_tac) >>
+  simp[call_meter_safe_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[] >>
+  drule_all call_meter_result_budget >> simp[]
+QED
+
+Theorem call_meter_step_inst_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  0 < n /\ n <= LENGTH s.contexts /\ step_inst op s = (r,t) ==>
+  call_meter_budget n ceiling t /\
+  (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
+Proof
+  Cases_on `is_call op`
+  >- (Cases_on `op` >> gvs[is_call_def, step_inst_def] >>
+      metis_tac[call_meter_step_call_budget, call_meter_step_create_budget]) >>
+  metis_tac[call_meter_step_ordinary_budget]
+QED
+
+Theorem call_meter_safe_ordinary_sequence_inv:
+  ~is_call op ==>
+  call_meter_safe (call_meter_result c rb rest)
+    (ignore_bind (step_inst op) (inc_pc_or_jump op))
+    (\r t. call_meter_result c rb rest t)
+Proof
+  strip_tac >> irule call_meter_safe_ignore_invariant >>
+  simp[call_meter_safe_ordinary_inst_inv, call_meter_safe_inc_pc_or_jump_inv]
+QED
+
+Theorem call_meter_step_sequence_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  0 < n /\ n <= LENGTH s.contexts /\
+  ignore_bind (step_inst op) (inc_pc_or_jump op) s = (r,t) ==>
+  call_meter_budget n ceiling t /\
+  (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
+Proof
+  Cases_on `is_call op`
+  >- (simp[inc_pc_or_jump_def, ignore_bind_def, bind_def, return_def] >>
+      rpt strip_tac >> Cases_on `step_inst op s` >> Cases_on `q` >> gvs[] >>
+      drule_all call_meter_step_inst_budget >> simp[]) >>
+  strip_tac >>
+  `s.contexts <> []` by (strip_tac >> gvs[]) >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  `n <= LENGTH s.contexts` by simp[] >>
+  `call_meter_backed h0` by (drule_all call_meter_budget_top >> simp[]) >>
+  `h0.gasUsed <= h0.msgParams.gasLimit` by
+    gvs[wf_state_def, wf_context_def] >>
+  `call_meter_result h0 h1 t' s` by simp[call_meter_result_same] >>
+  drule call_meter_safe_ordinary_sequence_inv >>
+  disch_then (qspecl_then [`t'`, `h1`, `h0`] mp_tac) >>
+  simp[call_meter_safe_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[] >>
+  drule_all call_meter_result_budget >> simp[]
+QED
+
+Theorem call_meter_step_inner_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  0 < n /\ n <= LENGTH s.contexts /\ step_inner s = (r,t) ==>
+  call_meter_budget n ceiling t /\
+  (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
+Proof
+  strip_tac >>
+  `s.contexts <> []` by (strip_tac >> gvs[]) >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  `n <= LENGTH s.contexts` by simp[] >>
+  qpat_x_assum `step_inner s = _` mp_tac >>
+  simp[step_inner_def, get_current_context_def, bind_def, return_def] >>
+  Cases_on `FLOOKUP h0.msgParams.parsed h0.pc` >> simp[]
+  >- (IF_CASES_TAC >> strip_tac >> drule_all call_meter_step_inst_budget >> simp[]) >>
+  rewrite_tac[GSYM ignore_bind_def] >> strip_tac >>
+  drule_all call_meter_step_sequence_budget >> simp[]
 QED
