@@ -798,7 +798,6 @@ Theorem step_preserves_non_accessed_storage:
     lookup_storage k (lookup_account a s'.rollback.accounts).storage =
     lookup_storage k (lookup_account a s.rollback.accounts).storage
 Proof
-  (* TODO: step_create no longer preserves all storage (it clears the created address's storage), so the uses of preserves_storage_step_create below need step_create_storage. Original proof:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
   >> reverse (Cases_on `a = (FST (HD s.contexts)).msgParams.callee`)
   >- (
@@ -929,8 +928,11 @@ Proof
             (lookup_account (FST (HD s.contexts)).msgParams.callee
                s.rollback.accounts).storage` by (
           Cases_on `op` >> fs[is_call_def, step_inst_def]
-          >> metis_tac[preserves_storage_step_call, preserves_storage_step_create,
-                       preserves_storage_def])
+          >~ [`step_create F s = _`]
+          >- (drule step_create_storage >> simp[] >> metis_tac[])
+          >~ [`step_create T s = _`]
+          >- (drule step_create_storage >> simp[] >> metis_tac[])
+          >> metis_tac[preserves_storage_step_call, preserves_storage_def])
         >> irule EQ_TRANS
         >> qexists `lookup_storage k
                       (lookup_account (FST (HD s.contexts)).msgParams.callee
@@ -1052,11 +1054,12 @@ Proof
   qexists_tac`lookup_storage k (lookup_account a r'.rollback.accounts).storage` >>
   reverse conj_tac >- (
     qpat_x_assum`_ ∧ _`kall_tac >>
-    mp_tac (INST_TYPE[alpha |-> ``:unit``](GEN_ALL preserves_storage_step_call)) >>
-    mp_tac (INST_TYPE[alpha |-> ``:unit``](GEN_ALL preserves_storage_step_create)) >>
-    rewrite_tac[preserves_storage_def] >>
-    Cases_on`op` >> gvs[is_call_def, step_inst_def] >>
-    rpt strip_tac >> first_x_assum drule >> rw[] ) >>
+    Cases_on `op` >> gvs[is_call_def, step_inst_def]
+    >~ [`step_create F s = _`]
+    >- (drule_all step_create_inr_no_grow >> simp[])
+    >~ [`step_create T s = _`]
+    >- (drule_all step_create_inr_no_grow >> simp[])
+    >> metis_tac[preserves_storage_step_call, preserves_storage_def] ) >>
   (* Relate s'.rollback storage to r'.rollback storage after handle_step. *)
   qpat_x_assum `_ ∧ _` strip_assume_tac
   (* Split the handle_step_pop_generic_gen disjunction. *)
@@ -1073,14 +1076,14 @@ Proof
   >> `lookup_storage k (lookup_account a s.rollback.accounts).storage =
       lookup_storage k (lookup_account a r'.rollback.accounts).storage` by (
        Cases_on `op` >> fs[is_call_def, step_inst_def]
-       >> metis_tac[preserves_storage_step_call, preserves_storage_step_create,
-                    preserves_storage_def])
+       >~ [`step_create F s = _`]
+       >- (drule_all step_create_inr_no_grow >> simp[])
+       >~ [`step_create T s = _`]
+       >- (drule_all step_create_inr_no_grow >> simp[])
+       >> metis_tac[preserves_storage_step_call, preserves_storage_def])
   >> `lookup_storage k (lookup_account a s'.rollback.accounts).storage =
       lookup_storage k (lookup_account a r''.accounts).storage` by simp[]
   >> simp[]
-
-  *)
-  cheat
 QED
 
 (* -------------------------------------------------------------------------
@@ -2123,7 +2126,6 @@ Theorem step_push_structure:
          outputTo_consistent_ctx (FST (EL i s.contexts)) ⇒
          outputTo_consistent_ctx (FST (EL (i+1) s'.contexts)))
 Proof
-  (* TODO: the storage conjunct was restated since CREATE clears the created address's storage. Original proof:
   rpt gen_tac >> strip_tac
   (* Unfold step = handle inner handle_step *)
   >> qpat_x_assum `step s = _` mp_tac
@@ -2179,11 +2181,9 @@ Proof
       (* Use step_create lemmas *)
       drule_then drule step_create_grows_by_exactly_one
       >> simp[] >> strip_tac
-      (* s1.rollback storage preserved *)
-      >> `preserves_storage (step_create two)` by simp[preserves_storage_step_create]
-      >> gvs[preserves_storage_def]
-      >> pop_assum drule >> strip_tac
-      >> gvs[lookup_storage_def, FUN_EQ_THM]
+      (* CREATE either leaves the storage object alone or clears it. *)
+      >> conj_tac
+      >- (drule step_create_storage_object >> simp[] >> metis_tac[])
       (* Use step_create_push_structure *)
       >> drule step_create_push_structure
       >> simp[]
@@ -2293,8 +2293,6 @@ Proof
   rw[] >> CASE_TAC >> rw[] >>
   irule decreases_gas_cred_ignore_bind_mono >> rw[] >>
   qexistsl_tac[`F`,`T`] >> simp[]
-  *)
-  cheat
 QED
 
 (* Reusable pre-handler push structure for step_inner. *)
