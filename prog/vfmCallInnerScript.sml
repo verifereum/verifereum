@@ -1,7 +1,8 @@
 Theory vfmCallInner
 Ancestors vfmCallSteps vfmCallGrant vfmCallPrecompile vfmCallMeterOps
           vfmCallMeterSafe vfmCallMeter vfmCallBudget vfmExecution vfmContext
-          vfmState vfmTypes vfmExecutionProp vfmCallMeterProbe arithmetic list
+          vfmState vfmTypes vfmExecutionProp vfmCallMeterProbe vfmHandleStep vfmDecreasesGas arithmetic list
+Libs BasicProvers
 
 Theorem call_meter_safe_pop_inv:
   call_meter_safe (call_meter_result c rb rest) (pop_stack n)
@@ -1329,4 +1330,107 @@ Proof
   Cases_on `success` >> simp[] >>
   ho_match_mp_tac call_meter_safe_ignore_invariant >>
   simp[call_meter_safe_output_observation, call_meter_safe_push_observation]
+QED
+
+Theorem call_meter_pop_root_budget_all:
+  LENGTH s.contexts = n /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  pop_and_incorporate_context success s = (r,t) ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >>
+  Cases_on `child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed`
+  >- metis_tac[call_meter_pop_root_budget] >>
+  qpat_x_assum `pop_and_incorporate_context _ _ = _` mp_tac >>
+  simp[pop_and_incorporate_context_def, get_gas_left_def,
+       get_current_context_def, pop_context_def, unuse_gas_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  strip_tac >> gvs[] >> irule call_meter_budget_exit >> simp[]
+QED
+
+Theorem call_meter_pop_budget_all:
+  call_meter_budget n ceiling s /\ 2 <= n /\ n <= LENGTH s.contexts /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  parent.gasUsed <= parent.msgParams.gasLimit /\
+  pop_and_incorporate_context success s = (r,t) ==>
+  call_meter_budget n ceiling t /\ t.contexts <> []
+Proof
+  strip_tac >> conj_tac
+  >- (Cases_on `n = LENGTH s.contexts`
+      >- metis_tac[call_meter_pop_root_budget_all] >>
+      `n < LENGTH s.contexts` by decide_tac >>
+      metis_tac[call_meter_pop_internal_budget]) >>
+  `1 < LENGTH s.contexts` by simp[] >>
+  drule pop_and_incorporate_context_length >>
+  disch_then (qspec_then `success` mp_tac) >> simp[] >>
+  strip_tac >> strip_tac >> gvs[]
+QED
+
+Theorem call_meter_exception_tail_budget:
+  call_meter_budget n ceiling s /\ 2 <= n /\ n <= LENGTH s.contexts /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  parent.gasUsed <= parent.msgParams.gasLimit /\
+  handle_ex_helper e s = (r,t) ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >>
+  qpat_x_assum `handle_ex_helper _ _ = _` mp_tac >>
+  simp[handle_ex_helper_def, get_num_contexts_def,
+       get_return_data_def, get_output_to_def, get_current_context_def,
+       bind_def, return_def] >>
+  Cases_on `pop_and_incorporate_context (e = NONE) s` >>
+  rename1 `pop_and_incorporate_context (e = NONE) s = (pr,ps)` >>
+  `call_meter_budget n ceiling ps /\ ps.contexts <> []` by
+    (drule_all call_meter_pop_budget_all >> simp[]) >>
+  Cases_on `pr` >> simp[ignore_bind_def, bind_def]
+  >- (strip_tac >>
+      `0 < n` by decide_tac >>
+      drule call_meter_safe_exception_output >>
+      simp[call_meter_safe_def] >>
+      gvs[after_pop_def] >> metis_tac[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem call_meter_handle_exception_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  2 <= n /\ n <= LENGTH s.contexts /\
+  handle_exception e s = (r,t) ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >>
+  `0 < n /\ 2 <= LENGTH s.contexts` by decide_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >>
+  Cases_on `t'` >> gvs[] >> PairCases_on `h` >>
+  rename1 `s.contexts = (child,crb)::(parent,prb)::rest` >>
+  `n <= LENGTH s.contexts` by simp[] >>
+  `0 < n` by decide_tac >>
+  `call_meter_backed child` by (drule_all call_meter_budget_top >> simp[]) >>
+  `child.gasUsed <= child.msgParams.gasLimit /\
+   parent.gasUsed <= parent.msgParams.gasLimit` by
+    gvs[wf_state_def, wf_context_def] >>
+  qabbrev_tac `prefix =
+    ignore_bind (if e = NONE then return () else restore_state_gas)
+      (if e <> NONE /\ e <> SOME Reverted then
+        ignore_bind forfeit_remaining_gas (set_return_data []) else return ())` >>
+  `call_meter_safe (call_meter_result child crb ((parent,prb)::rest)) prefix
+      (\r t. call_meter_result child crb ((parent,prb)::rest) t)` by
+    (simp[Abbr `prefix`, call_meter_safe_exception_prepare_inv]) >>
+  `handle_exception e s = ignore_bind prefix (handle_ex_helper e) s` by
+    (simp[NoAsms, Abbr `prefix`, handle_exception_def, handle_ex_helper_def,
+          after_pop_def, ignore_bind_def, bind_def, FUN_EQ_THM] >>
+     rpt TOP_CASE_TAC >> gvs[]) >>
+  `call_meter_result child crb ((parent,prb)::rest) s` by
+    simp[call_meter_result_same] >>
+  Cases_on `prefix s` >> rename1 `prefix s = (pr,ps)` >>
+  `call_meter_result child crb ((parent,prb)::rest) ps` by
+    (qpat_x_assum `call_meter_safe _ prefix _` mp_tac >>
+     pure_rewrite_tac[call_meter_safe_def] >> BETA_TAC >>
+     disch_then (qspecl_then [`s`, `pr`, `ps`] mp_tac) >> simp[]) >>
+  `call_meter_budget n ceiling ps` by
+    (drule_all call_meter_result_budget >> simp[]) >>
+  Cases_on `pr` >> gvs[ignore_bind_def, bind_def]
+  >- (gvs[call_meter_result_def] >>
+      `n <= LENGTH ps.contexts` by simp[] >>
+      drule_all call_meter_exception_tail_budget >> simp[]) >>
+  gvs[]
 QED

@@ -152,3 +152,20 @@ works_when: unspecified
 evidence:
 - episode:E0039
 - source:prog/vfmCallInnerScript.sml:927-1041
+
+## L0018 scope='C1.3.8' tags=settlement,record-update,claim,absorb,pop
+shape: Semantic pop produces a repeated merged context expression that is expensive to normalize.
+pattern: Define settlement over an arbitrary merged context, prove backing and claim conservation before substitution, then derive absorption/pop corollaries. Rewrite exact pop with call_meter_pop_settle_pair and consume call_meter_settle_pop_backed/claim without unfolding meter definitions.
+works_when: Success repayment and failure creation-credit both subtract bounded spill from gasUsed and spilled; parent margin and parent gas upper bound supply the scalar conditions.
+evidence:
+- episode:E0042
+- episode:E0043
+- source:prog/vfmCallMeterProbeScript.sml:380-501
+
+## L0019 scope='C1.3.8.2' tags=root-exit,observation,budget,output,ho_match_mp_tac
+shape: Post-pop observation updates must preserve a budget even when the exposed caller is not backed.
+pattern: Separate observation-only meter equality from backed fixed-tail contracts. call_meter_budget_observation splits active-prefix replacement from exited length; output safe contracts preserve budget/nonempty and compose with ho_match_mp_tac call_meter_safe_ignore_invariant for expanded predicate lambdas.
+works_when: inc_pc, return data, memory and stack updates preserve gas scalar fields and context count; push failure is an ordinary StackOverflow and preserves state.
+evidence:
+- episode:E0045
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1340_t001

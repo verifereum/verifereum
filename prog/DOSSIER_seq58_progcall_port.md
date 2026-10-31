@@ -34,7 +34,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.7.5 | proved |  | E0039 | Review and commit dispatch and inner execution; proceed to handler/finite return components. |
 | C1.3.8 | stuck | risk_mismatch | E0041 | Review handler decomposition: expose settled-context backing and claim contracts without expanding full context records inside semantic consumer. |
 | C1.3.8.1 | proved |  | E0042 |  |
-| C1.3.8.2 | progressed | other | E0045 | Compose prefix prepare, get_num_contexts/get_return_data/get_output_to, budget pop and safe_exception_output into handle_exception budget theorem, then handle_step and step. Need root-pop all-result interface if no external caller gas bound: failed unuse_gas after popping still exits root budget. No full handler proof attempted yet. |
+| C1.3.8.2 | progressed | other | E0046 | Compose handle_create and handle_exception budget into handle_step and step using existing wf and context-length preservation. Treat forbidden-exception exclusion separately: root pop all-result budget deliberately permits Impossible on unuse_gas, so ordinary-root-return needs later grant backing. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -652,10 +652,10 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 
 - result: `progressed`
 - diagnosis: `other`
-- latest episode: `E0045`
+- latest episode: `E0046`
 - blocker: 
-- actual effort: 1 sessions, 5 msgs, 74 steps, 73 tools, 26 holbuild, 7,421,062 tok (7,411,169 in, 9,893 out, 7,319,936 cached), 1339.5s, $1.0133896
-- next: Compose prefix prepare, get_num_contexts/get_return_data/get_output_to, budget pop and safe_exception_output into handle_exception budget theorem, then handle_step and step. Need root-pop all-result interface if no external caller gas bound: failed unuse_gas after popping still exits root budget. No full handler proof attempted yet.
+- actual effort: 1 sessions, 4 msgs, 54 steps, 53 tools, 12 holbuild, 3,968,834 tok (3,963,051 in, 5,783 out, 3,883,776 cached), 6087.2s, $0.6047576
+- next: Compose handle_create and handle_exception budget into handle_step and step using existing wf and context-length preservation. Treat forbidden-exception exclusion separately: root pop all-result budget deliberately permits Impossible on unuse_gas, so ordinary-root-return needs later grant backing.
 
 ### Attempts / Evidence
 
@@ -665,10 +665,12 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
   - Lift restore and forfeit fixed-tail contracts, then compose the initial exception-handler restore/forfeit/clear-data prefix. -> call_meter_safe_exception_prepare_inv builds; branches split before unfolding call_meter_safe_def to preserve contract rewrites. Full exception handler and post-pop output remain unfinished. (`TO_seq58_progcall_port-20261031T152132Z_m1288_t001`)
 - `E0045` (progressed, other, actual effort: 1 sessions, 5 msgs, 74 steps, 73 tools, 26 holbuild, 7,421,062 tok (7,411,169 in, 9,893 out, 7,319,936 cached), 1339.5s, $1.0133896)
   - Prove observation-only top replacement across active and exited budgets; lift inc_pc, returnData, write_memory and push_stack to budget/nonempty safe contracts, compose actual post-pop output spine. -> call_meter_safe_exception_output builds for both Code and Memory, every result, without backing on external caller. Generic functional-update matching needed explicit witnesses for budget adapters; final safe wrappers use the checked budget boundaries and monad leaf equations. Output composition requires ho_match_mp_tac for expanded predicate lambdas; Memory is first outputTo constructor. (`TO_seq58_progcall_port-20261031T152132Z_m1309_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1334_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1340_t001`)
+- `E0046` (progressed, other, actual effort: 1 sessions, 4 msgs, 54 steps, 53 tools, 12 holbuild, 3,968,834 tok (3,963,051 in, 5,783 out, 3,883,776 cached), 6087.2s, $0.6047576)
+  - Split root pop on refundable gas <= parent.gasUsed; unsuccessful unuse_gas occurs after shortening contexts. Compose all-result pop budget/nonempty with output safe contract through handle_ex_helper, then fixed-tail prepare into handle_exception. -> call_meter_pop_root_budget_all, call_meter_pop_budget_all, call_meter_exception_tail_budget and call_meter_handle_exception_budget build cleanly. Full handle_step/step and forbidden-exception exclusion remain. No external caller backing assumption was introduced. Generic safe-def metis timed out; selecting the safe assumption and specializing at live result solved it immediately. (`TO_seq58_progcall_port-20261031T152132Z_m1400_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_progcall_port-20261031T152132Z_m1340_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T152132Z_m1400_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
