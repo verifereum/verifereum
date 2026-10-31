@@ -158,7 +158,8 @@ Definition stack_original_step_create_def:
       access_address address;
       ensure_storage_in_domain address;
       toCreate <<- lookup_account address accounts;
-      newAccountCharged <<- account_empty toCreate;
+      newAccountCharged <<- account_empty toCreate ∧
+                           ¬account_already_created toCreate;
       charge_new_account newAccountCharged;
       cappedGas <- withhold_create_gas;
       if account_already_created toCreate

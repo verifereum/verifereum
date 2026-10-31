@@ -4413,6 +4413,10 @@ Proof
 QED
 
 
+(* The destination already exists, so the create aborts before entering a
+   child and charges no state gas: a destination with a nonce or code is
+   alive, and one with storage alone is this collision.  Hence
+   `evm_StateGasLeft sg` unchanged, and no creation-charge conjuncts. *)
 Theorem SPEC_Create_fail_created:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
@@ -4440,9 +4444,6 @@ Theorem SPEC_Create_fail_created:
          value ≤ sender.balance ∧ SUC sender.nonce < 2 ** 64 ∧
          SUC (LENGTH cs) ≤ 1024 ∧
          account_already_created (lookup_account addr rb.accounts) ∧
-         newAccountCharged = account_empty (lookup_account addr rb.accounts) ∧
-         stateCost = (if newAccountCharged then new_account_state_gas else 0) ∧
-         (if newAccountCharged then new_account_state_gas else 0) ≤ sg ∧
          access_storage_check d addr ∧
          g + gas + cappedGas ≤ p.gasLimit))
   {(pc,inst)}
@@ -4450,7 +4451,7 @@ Theorem SPEC_Create_fail_created:
    evm_PC (SUC pc) *
    evm_GasUsed (g + gas + cappedGas) * evm_MsgParams p *
    evm_Exception (INL ()) * evm_ReturnData [] *
-   evm_StateGasLeft (sg - stateCost) *
+   evm_StateGasLeft sg *
    evm_Rollback (accesses_add addr rb
                  with accounts updated_by increment_nonce p.callee) *
    evm_Memory em * evm_Contexts cs *
@@ -4487,17 +4488,6 @@ Proof
   \\ qpat_x_assum`is_create`mp_tac
   \\ qmatch_asmsub_abbrev_tac`largs ≤ LENGTH ss`
   \\ `1 < largs ∧ 2 < largs ∧ (inst = Create2 ⇒ 3 < largs)` by rw[Abbr`largs`]
-  \\ `(if newAccountCharged then new_account_state_gas else 0) <=
-      (FST (HD ((SND r with
-        <|contexts := (FST (HD (SND r).contexts) with
-                       <|stack := DROP largs ss; memory := em; returnData := [];
-                         gasUsed := g + gas|>, SND (HD (SND r).contexts))::cs;
-          rollback updated_by accesses_add addr;
-          msdomain updated_by (msdomain_add_storage addr o msdomain_add addr)|>).contexts))).stateGasLeft`
-     by gvs[]
-  \\ qpat_x_assum `Abbrev (newAccountCharged ⇔ _)`
-       (strip_assume_tac o REWRITE_RULE [markerTheory.Abbrev_def])
-  \\ Cases_on `newAccountCharged`
   \\ gvs[step_create_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def,
          set_current_context_def, consume_gas_def, EL_TAKE,
@@ -4515,7 +4505,7 @@ Proof
          inc_pc_or_jump_def]
   \\ gvs[access_address_split, access_storage_split]
   \\ strip_tac
-  \\ gvs[charge_state_gas_apply, Abbr`stateCost`, Abbr`sg`]
+  \\ gvs[charge_state_gas_apply, Abbr`sg`]
   \\ gvs[step_create_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def,
          set_current_context_def, consume_gas_def, EL_TAKE,

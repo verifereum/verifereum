@@ -1523,11 +1523,13 @@ Definition step_create_def:
       ensure_storage_in_domain address;
       toCreate <<- lookup_account address accounts;
       (* EIP-8037: the destination's creation, charged before the child's
-         grant is withheld so a spill thins what is withheld.  Decided by
-         the destination's existence alone, independently of the collision
-         check below: a colliding target exists with a nonce or code, so it
-         is alive and nothing was charged for it. *)
-      newAccountCharged <<- account_empty toCreate;
+         grant is withheld so a spill thins what is withheld.  A destination
+         that already exists is never charged for: one that exists by a nonce
+         or by code is alive, so EELS's `new_account_charged` is false for it,
+         and one that exists by storage alone is the collision below, where
+         the create aborts before its child is entered and so charges
+         nothing. *)
+      newAccountCharged <<- account_empty toCreate ∧ ¬account_already_created toCreate;
       charge_new_account newAccountCharged;
       cappedGas <- withhold_create_gas;
       if account_already_created toCreate
