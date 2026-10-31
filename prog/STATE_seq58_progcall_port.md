@@ -2,56 +2,60 @@
 Updated: 2026-10-31
 
 ## Cursor
-- component: C1.3.11
+- component: C1.4
 - status: in_progress
 - active_file: prog/vfmProgCallScript.sml
-- next_action: Build vfmProgCallTheory to validate the last unverified edit at call_stipend_prefix_proceed_zero (~461-487): direct stipend-prefix list calculation for child over reservoir-drained parent. Continue porting stipend and summary consumers in source order. C1.3.10 is proved/reviewed/committed (207422fb); current C1.3.11 cleanup edits are partial and uncommitted.
-- expected_goal_shape: Last verified failure: call_stipend_prefix n A D oa (s with contexts := (child,s.rollback)::(FST(HD s.contexts) with stateGasLeft:=0,SND(HD s.contexts))::TL s.contexts). Latest proof splits s.contexts and unfolds only stipend-prefix list predicates; check generated tail name t'. Later consumers still assume old step_call spine and gasUsed-only summary.
+- next_action: Restate call_entry_prepared (~967-1029) to the state-gas charged spine and exact conditional context output matching checked call_returns_summary (~852-965). Read sibling step_call_prepared (prog/vfmProgScript.sml:5843-5910) and port charge triplet, reservoir cover, literal upfront execution arithmetic, caller.stateGasLeft subtraction and authorized post-credit bound. No C1.4 edits yet. C1.3.11 proved/reviewed and committed 7c0ad8a1; all C1.3 leaves complete.
+- expected_goal_shape: Latest build checks Finalise call_returns_summary then fails in old call_entry_prepared[normalize_entry] at QED (~1093): nested consume_gas/charge_new_account cases, obsolete new_account_cost and pre-upfront call_gas assumptions. Statement must be ported before tactical repair. C1.4 compose_entry also still expects old gasUsed-only summary.
 - verify_with: holbuild(targets=["vfmProgCallTheory"], timeout=1800)
 
 ## If This Fails
-- Inspect the current small stipend list goal and repair via existing head_update/push boundaries if direct normalization is brittle. Continue only C1.3.11. Record partial evidence with checkpoint_progress; if the handler/stipend interface needs structural redesign, close stuck and request strategist review. Never add exported caller backing.
+- Inspect charged entry boundary without unfolding entire continuation. Record useful partial evidence with checkpoint_progress; request strategist interface repair if exact conditional prepared-entry formulation is unclear. Do not edit exported rules until C1.4 is checked.
 
 ## Do Not Retry
-- Restore or repair unrestricted nonempty-context call_exn_safe_step_call/step_create chain: Invalid safety contract under state-gas refunds; rooted safety already replaces it in checked vfmCallInner/Return theories.
-  - evidence: episode:E0050
-  - evidence: episode:E0051
-- Use old call_stipend_prefix_push directly on proceed_call's final pushed state: The parent is now drained before child push; establish stipend prefix on drained parent or prove the list predicate directly.
-  - evidence: tool_output:TO_seq58_progcall_port-20261031T152132Z_m1570_t001
-- Unfold merged semantic meter records in summary consumers: Use call_return_context_observations and call_return_context_meter, preserving restore/credit/repay distinctions at boundary level.
-  - evidence: episode:E0050
+- Recover old call_gas-before-consume spine or new_account_cost execution summand: Semantics consumes base execution gas before charge_new_account and computes call_gas with mc=oc=0.
+  - evidence: tool_output:TO_seq58_progcall_port-20261031T152132Z_m1584_t001
+  - evidence: tool_output:TO_seq58_progcall_port-20261031T211644Z_m1656_t001
+- Restore unrestricted safety or infer restored refund bound from old gas_stack_ok: Refund restoration increases refundable gas; checked rooted safety and successful-result observation already replace this invalid chain.
+  - evidence: episode:E0053
+  - evidence: episode:E0054
+- Initialize fresh root with call_meter_entry_budget or restore caller.gasUsed-gasLeft summary equality: Root prefix excludes external caller, and parent spill repayment contributes additional execution gas. Use singleton root budget and exact call_return_context_meter.
+  - evidence: tool_output:TO_seq58_progcall_port-20261031T152132Z_m1620_t001
+  - evidence: episode:E0054
 
 ## Reflection
 ### Tunnel Vision Check
-- A fresh expert should first distinguish meter-neutral stipend observations from safety: footprint preservation on an actual returned handler result may not need the rooted budget at every helper, whereas nonabort and post-restoration refund do.
-- Outside-the-box option: use generic actual-result handler structural laws from spec property theories for rollback/footprint instead of forcing the exact success-equation boundary's stronger refund premise into every stipend helper.
-- Do not optimize the deleted unrestricted safety chain. The isolated return theory already supplies valid finite-return and exact context settlement.
-- PLAN remains appropriate, but C1.3.11 spans substantial integration. Extract an internal observation boundary if the same drain/restore/credit frame reasoning repeats.
+- Fresh expert should question reuse of sibling prefix machinery: step_call_prepared is exported but only handles success; call_prefix_prog_apply_result and step_call_prefix_bridge are local in sibling (~5178,5292), so not directly reusable. Existing finite spine peel may be simpler than exporting/rebuilding those interfaces.
+- Do not optimize the old normalization before restating its obsolete cost and meter contract. Match prepared-entry output to the exact call_returns_summary rather than reconstructing huge semantic record expressions.
+- The PLAN abstraction is now appropriate: completed safety/return layers supply context-valued boundaries; C1.4 is charge normalization and composition only.
 
 ### What Went Wrong
-- Porting old proceed_call proof without unfolding get_accounts and drain_state_gas_reservoir left nested monadic cases. Adding these exposed the true parent: reservoir drained to zero; old push lemma no longer matched.
-- In call_memory_final_pop, irule/simp normalized LENGTH es.contexts in the goal but not the existing budget assumption. Direct metis_tac using call_return_reaches_budget and LESS_EQ_REFL avoided brittle normalization plumbing.
-- General reachability-budget helper must require 2<=n and n<=initial context depth, matching checked step_budget; these are discharged at root entry.
-- decide_tac did not compose a conditional post-restoration gas expression inequality; metis_tac[LESS_EQ_TRANS] immediately did.
+- Old stipend charge helper encoded call_gas before combined consume; actual semantics charges base execution first. Replaced with upfront affordability cutoff and zero-value call_gas continuation.
+- Generic cutoff value required explicit :num annotation because after removing call_gas its type defaulted incorrectly.
+- Initial independent last-pop errors were not automatically equal. Used call_memory_final_pop on the stipend footprint event and final context stack equality to equate success booleans; Cases_on both err=NONE guards closes b2w injectivity.
+- Grouping C1.3 retained stale Risk 3 after all descendants finished, blocking C1.4. Strategist lowered group risk to 2; no extra probes needed.
 
 ### Ignored Signals
-- The old handle_exception_memory_return premises used pre-restoration gas; old stipend handler proofs still use those inequalities and will need actual-result structural boundaries or scoped budget-derived restored bounds.
-- Deleting obsolete helpers is not full integration: current summary and prepared entry statements still contain gasUsed-only records and old new_account_cost; their scheduled components retain responsibility.
+- Arbitrary handler result rollback was not safe after partial pop/refund failure. Successful handler observation and successful trace step restriction were sufficient for all stipend consumers.
+- Full target not clean despite complete summary prefix: downstream entry normalization is genuinely stale and must not be advertised as passed.
 
 ### Strategy Adjustments
-- C1.3.10 added call_return_gas/data/context, exact handler equation, rooted refund bound, structural metadata/last-pop/trace, call_memory_final_pop, run_call_memory_returns, observation/meter projections. Clean build and review accepted, committed 207422fb.
-- C1.3.11 imported vfmCallReturn and removed ~1500 lines of duplicated/obsolete machinery from vfmProgCallScript. Structural consumer names now point to call_return_* facts. The main build reaches stipend-prefix proceed_zero; latest direct list repair remains unverified.
-- Only prog/ files changed. Do not commit current partial main-theory integration until build-clean stable checkpoint is available.
+- Checked call_abort_context_pair, stipend CALL/step/reachability chain, successful handler observation, run_call_stipend_footprint and exact call_returns_summary. Removed duplicate obsolete unrestricted chain via vfmCallReturn interfaces.
+- Fresh singleton child budget is initialized by definition, not call_meter_entry_budget, avoiding external caller backing.
+- C1.3.11 summary now exposes credited-abort or call_return_context on reservoir-drained parent; gasLeft is child return gas only, not total caller refund.
+- Bounded checked-prefix commit explicitly authorized by strategist despite unchanged downstream proof failure. Commit 7c0ad8a1 includes only task-owned prog changes and required trailers.
 
 ### Oracle Feedback
-- E0050 review accepted the isolated return interface, explicitly including REVERT restored-spill refund bound and no external caller backing.
-- Acceptance does not certify exports. C1.3.11 must discharge root budget at fresh entry, layer stipend observations, remove obsolete consumers, and assemble the actual exact-meter summary.
+- E0054 review accepted bounded C1.3.11 proof; main build advanced to C1.4 normalize_entry.
+- Strategist authorized exact conditional summary and local call_abort_context; no additional export hypotheses.
+- Scheduling reconciliation accepted all C1.3 leaves done and authorized C1.4. No source actions or builds performed for C1.4 yet.
 
 ## Evidence Pointers
-- episode:E0050 - proved and reviewed exact final-pop and finite memory-return interfaces
-- episode:E0051 - nonterminal C1.3.11 cleanup and stipend repair evidence
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1544_t001 - clean vfmCallReturnTheory with scalar and observation projections
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1546_t001 - strategist accepted bounded C1.3.10 scope
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1550_t001 - commit 207422fb
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1570_t001 - latest verified main-theory goal: child over drained parent
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1571_t001 - latest unverified stipend-prefix list repair
+- episode:E0054 - checked and reviewed stipend/exact summary integration
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1644_t001 - build passes Finalise call_returns_summary, fails downstream old normalize_entry
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1647_t001 - E0054 accepted
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1649_t001 - grouping risk lowered and bounded prefix commit authorized
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1653_t001 - checkpoint commit 7c0ad8a1
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1656_t001 - sibling charged prepared-entry statement and proof
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1657_t001 - current obsolete prepared-entry source
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1659_t001 - C1.4 active scheduled frontier

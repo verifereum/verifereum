@@ -38,6 +38,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.8.1 | proved |  | E0042 |  |
 | C1.3.8.2 | proved |  | E0048 | Ancestor review should schedule remaining nonabort/finite-return interface using authorized caller grant bound, not unconditional root safety. |
 | C1.3.9 | proved |  | E0049 | Review whether finite-return boundary suffices to close this leaf and schedule replacement/removal of old unrestricted local chain when integrating call_returns_summary. |
+| C1.4 | proved |  | E0056 | Review bounded proof and authorize checkpoint commit despite downstream caller_observation_frame failure; proceed to shared frame/export component. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -749,6 +750,29 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1472_t001` (use `read_tool_output` for exact output)
+
+## C1.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0056`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 16 steps, 15 tools, 7 holbuild, 1,555,067 tok (1,553,370 in, 1,697 out, 1,522,816 cached), 212.1s, $0.2303596
+- next: Review bounded proof and authorize checkpoint commit despite downstream caller_observation_frame failure; proceed to shared frame/export component.
+
+### Attempts / Evidence
+
+- `E0055` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 34 tools, 11 holbuild, 2,470,622 tok (2,466,347 in, 4,275 out, 2,397,440 cached), 485.2s, $0.4203080)
+  - Restated prepared entry to upfront execution charge, reservoir cover, charge triplet, authorized credit bound, and conditional call_abort_context/call_return_context output. -> Statement checks; original obsolete new_account_cost removed from this local theorem. compose_entry not ported yet. (`TO_seq58_progcall_port-20261031T211644Z_m1675_t001`)
+  - Peel delegate resolution, consume upfront, normalize charged reservoir using charge_state_gas definitions, then simplify call_gas and remaining consume. -> Advanced past charge to remaining conditional continuations; six expanded goals remain. gvs eliminates aliases and leaves branch splits referring to stale free value, so current tactic is brittle. AC simplification timed out and was removed; small adjacent-sum equality is fast. (`TO_seq58_progcall_port-20261031T211644Z_m1684_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1697_t001`)
+- `E0056` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 15 tools, 7 holbuild, 1,555,067 tok (1,553,370 in, 1,697 out, 1,522,816 cached), 212.1s, $0.2303596)
+  - COND_RATOR normalizes conditional continuation application; split actual remaining guard, simplify assert; replace obsolete cg<=dg+mc with caller post-credit bound; supply charged saved-account equality and err witness for call_returns_summary. -> normalize_entry, compose_entry and Finalise call_entry_prepared checked. Build advances through finite SPEC helpers to downstream caller_observation_frame missing state-gas observations. Full target not clean. (`TO_seq58_progcall_port-20261031T211644Z_m1717_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T211644Z_m1717_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

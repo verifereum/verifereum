@@ -741,21 +741,27 @@ Extend the existing run invariant by budget and propagate it with C1.3.8. Use sc
 ### C1.4: Rebuild charged call_entry_prepared
 - Kind: `boundary_lemma`
 - Risk: 2
-- Work priority: 30
-- Work units: 5
-- Rationale: The sibling prepared-entry theorem supplies the charged spine; no-entry safety and the finite summary have explicit prerequisite components.
-- Dependencies: C1.3, C1.8
+- Work priority: 50
+- Work units: 3
+- Rationale: The exhibited residual branch has identical charged states and continuations on both sides; distribute conditional application rather than splitting on an alias already eliminated. Composition consumes the already proved exact-context return summary.
 - Checkpoint: yes
 - Progress transition: `refinement`
+- Carries progress/evidence from: E0055
+
+#### Progress note
+Retain the partial charged prefix peel as work in progress, not certified proof. E0055 identifies an algebraic normalization boundary and a stale witness list in composition; neither establishes completion.
 
 #### Summary
-Remove new_account_cost from the prepared-entry theorem. Add the creation-charge triplet and authorized post-credit bound. Normalize charge before call_gas, then combine guarded no-entry or drained child entry with the return summary. Export an interface directly usable by shared SPEC tactics.
+Finish the current charged entry theorem without changing its statement. Normalize conditional function application before unfolding continuation implementations. Remove the split on the eliminated value alias. Compose with call_returns_summary using its exact err-dependent context and all existential witnesses.
+
+#### Statement
+Prove the current local call_entry_prepared statement, including conditional abort/return contexts and the explicit err witness. No change to exported hypotheses is authorized.
 
 #### Approach
-Mirror step_call_prepared in vfmProgScript.sml for literal cost arithmetic and charge placement. Keep normalize_entry as a finite spine peel with access_address_split; compose_entry should consume the new branch boundary lemma and call_returns_summary rather than manually constructing conjunction theorems.
+At the end of normalize_entry replace the stale Cases_on balance expression and continuation expansion with conditional application normalization: establish the polymorphic identity `(if b then f else g) x = (if b then f x else g x)` by cases on b if a suitable rewrite is not available, then rewrite with it before any bind unfolding. Use the actual goal guard if any case split remains necessary (via goal matching, not the old value variable); normalize record updates and the existing small adjacent-add equality only, keeping proceed_call and credit/abort continuations opaque where both sides already match. In compose_entry derive the abort refund bound from creditBack and caller equalities, apply call_entry_failure_normalize and call_returns_summary, and supply witnesses k,t,dd',cc,err,gasLeft,out,success in statement order; use the summary's exact context equality rather than attempting to identify distinct contexts through scalar observations.
 
 #### Not to try
-Do not start exported-rule proofs before this checkpoint passes. Do not recover the old entry spine by treating charge_new_account as an execution-cost summand.
+Do not continue expanding both arms of conditional monadic functions: this duplicates irrelevant charge and continuation implementations. Do not split on value after gvs has substituted it away; the displayed assumption about value then has no relation to the goal's w2n expression. Do not use global AC simplification, add hypotheses, expose sibling local prefix infrastructure, or retain the old existential list that omits err.
 
 ### C1.5: Port observation framing and shared SPEC machinery
 - Kind: `proof`

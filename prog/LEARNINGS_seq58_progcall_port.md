@@ -203,3 +203,27 @@ evidence:
 - episode:E0050
 - source:prog/vfmCallReturnScript.sml
 - tool_output:TO_seq58_progcall_port-20261031T152132Z_m1544_t001
+
+## L0024 scope='C1.3.11' tags=stipend,consume_gas,cutoff,call_gas,type
+shape: Stipend CALL preservation after upfront execution cost
+pattern: Successful consume affordability plus prefix-head gasLimit<=stipend and call_value_cost>stipend forces value=0. Make cutoff value explicitly num; creation charge/credit then simplify to false, and a separate get_gas_left/call_gas(0,...,0,0) continuation bounds child grant. Continuation must retain both dg and cg arguments because consume_gas dg remains in suffix.
+works_when: unspecified
+evidence:
+- source:prog/vfmProgCallScript.sml:502-585
+- episode:E0053
+
+## L0025 scope='C1.3.11' tags=handler,INL,observation,rollback,trace
+shape: Meter-independent stipend footprint through frame handlers
+pattern: Prove metadata/context/rollback observations only for actual successful handle_exception result, eliminating intermediate failures by INL. Restrict local step stipend preservation to INL; run_call_reaches_inv already quantifies successful steps. This avoids needing restored-refund bounds in observation consumers.
+works_when: unspecified
+evidence:
+- source:prog/vfmProgCallScript.sml:587-770
+- episode:E0053
+
+## L0026 scope='C1.3.11' tags=last_pop,success,b2w,return_context
+shape: Align return and footprint witnesses with independent final errors
+pattern: Apply call_memory_final_pop to footprint theorem's final event using the same rooted budget. Compare its t.contexts with run_call_memory_returns' t.contexts; call_return_context_observations projects stack b2w(error=NONE)::caller.stack. Case-split both NONE tests to establish equivalent success, not equality of arbitrary error witnesses.
+works_when: unspecified
+evidence:
+- source:prog/vfmProgCallScript.sml:948-962
+- episode:E0054
