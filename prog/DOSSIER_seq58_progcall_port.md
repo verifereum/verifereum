@@ -13,6 +13,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3 | stuck | wrong_statement | E0011 | Shallow replan C1.3 safety and finite-return infrastructure with internal meter invariant scoped to reachable callee states; never propagate generic spill<=g as unauthorized export premise. Address consumer stack/global-frame invariants explicitly. |
 | C1.3.1 | proved |  | E0012 | Review and commit probe. Proceed C1.3.2 nested prefix boundaries; individual frame backing is checked but not yet established adequate for child gas refunds or for internal frame push/pop. |
 | C1.3.10 | proved |  | E0050 | Review C1.3.10; commit stable return theory. C1.3.11 must integrate isolated return interfaces and layer stipend observations without leaving duplicate old unrestricted safety machinery. |
+| C1.3.11 | proved |  | E0054 | Review C1.3.11; proceed to C1.4 entry normalization and exact context consumer integration. Consider clean auxiliary target only if necessary, rather than claiming full target success. |
 | C1.3.2 | proved |  | E0013 | Review bounded nested-frame probes and commit. Then C1.3.3 finite-run strategy checkpoint before authorizing full invariant/finite-return machinery. Remaining integration must prove margin before push (including stipend), ancestor-budget preservation, and exceptional-return restore/forfeit branches. |
 | C1.3.3 | proved |  | E0014 | Mandatory scoped PLAN update before accepting parent complete or beginning C1.4: evaluate proposed budget and add executable preservation, safety, collection-return, final-pop/summary and stipend leaves. Commit checked audit/probe changes after review. |
 | C1.3.4 | proved |  | E0015 | Review C1.3.4, commit new budget theory with required trailer, then scheduled semantic primitive contracts C1.3.5. |
@@ -200,6 +201,35 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1544_t001` (use `read_tool_output` for exact output)
+
+## C1.3.11
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0054`
+- blocker: 
+- actual effort: 2 sessions, 1 msgs, 25 steps, 24 tools, 7 holbuild, 2,792,043 tok (2,787,493 in, 4,550 out, 2,619,392 cached), 577.8s, $0.6436412
+- next: Review C1.3.11; proceed to C1.4 entry normalization and exact context consumer integration. Consider clean auxiliary target only if necessary, rather than claiming full target success.
+
+### Attempts / Evidence
+
+- `E0051` (progressed, other, actual effort: 1 sessions, 2 msgs, 23 steps, 22 tools, 3 holbuild, 3,007,363 tok (3,004,930 in, 2,433 out, 2,864,896 cached), 661.7s, $0.5908876)
+  - Import vfmCallReturnTheory and remove duplicated structural metadata, guarded-trace, old final-pop and unrestricted exception-safety chain from vfmProgCallScript.sml; retarget structural consumers to checked call_return_* facts. -> Build now passes former broken call_exn_safe_step_call prefix and reaches stipend proceed_call. Source shrank from 2826 to about 1305 lines; later stipend/summary consumers are not yet ported. (`TO_seq58_progcall_port-20261031T152132Z_m1552_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1567_t001`)
+  - Port call_stipend_prefix_proceed_zero peel with get_accounts/drain_state_gas_reservoir/set_current_context. -> Verified prefix exposes child over drained parent. Old push lemma cannot match because parent has stateGasLeft zeroed. Latest edit replaces that application with direct stipend-prefix list calculation; not built yet when handoff triggered. (`TO_seq58_progcall_port-20261031T152132Z_m1570_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1571_t001`)
+- `E0052` (progressed, other, actual effort: 1 sessions, 10 steps, 9 tools, 3 holbuild, 557,113 tok (556,288 in, 825 out, 536,448 cached), 305.0s, $0.1015748)
+  - Correct drained-parent direct stipend-prefix normalization to use actual tail t and normalize both subtraction lengths. -> call_stipend_prefix_proceed_zero now checked; build advances through call_stipend_prefix_call_charge to call_stipend_prefix_call. (`TO_seq58_progcall_port-20261031T152132Z_m1584_t001`)
+- `E0053` (progressed, other, actual effort: 1 sessions, 2 msgs, 30 steps, 29 tools, 8 holbuild, 2,372,371 tok (2,368,415 in, 3,956 out, 2,317,056 cached), 326.6s, $0.3739836)
+  - Replace obsolete combined CALL charge helper by upfront successful consume cutoff; add zero-value get_gas_left/call_gas continuation bound. -> Checked call_stipend_prefix_call and all opcode/step_inner stipend preservation. (`TO_seq58_progcall_port-20261031T152132Z_m1602_t001`)
+  - Add successful handle_exception_memory_observation boundary; restrict local step/handler stipend preservation to INL trace steps and consume observation rather than invalid old refund premise. -> Checked run_call_stipend_originalAccounts, handle_step_noncode_rollback and Finalise run_call_stipend_footprint. Build reaches stale call_returns_summary entered branch. (`TO_seq58_progcall_port-20261031T152132Z_m1616_t001`)
+- `E0054` (proved, , actual effort: 2 sessions, 1 msgs, 25 steps, 24 tools, 7 holbuild, 2,792,043 tok (2,787,493 in, 4,550 out, 2,619,392 cached), 577.8s, $0.6436412)
+  - Prove stipend CALL cutoff for upfront consume, zero-value call_gas bound, and drained-parent proceed preservation. -> CALL/step/reachability stipend observations checked without extra callee or external caller conditions. (`TO_seq58_progcall_port-20261031T152132Z_m1602_t001`)
+  - Use successful handler metadata observation and restrict stipend trace steps to INL; assemble exact conditional credited-abort / call_return_context summary with singleton root budget. -> call_abort_context_pair, run_call_stipend_footprint and Finalise call_returns_summary all checked. Align independent return errors via call_memory_final_pop and final stack success word equality. Main build now fails in downstream C1.4 call_entry_prepared[normalize_entry], not C1.3.11. Full target is NOT yet build-clean. (`TO_seq58_progcall_port-20261031T152132Z_m1644_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1644_t001` (use `read_tool_output` for exact output)
 
 ## C1.3.2
 

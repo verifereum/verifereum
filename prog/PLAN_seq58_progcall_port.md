@@ -63,31 +63,33 @@ E0009 refutes the original frozen unguarded CALL rules. E0004 supplies the earli
 
 ### C1.3: Prove scoped callee safety and exact finite-return summaries
 - Kind: `proof_group`
-- Risk: 3
-- Work priority: 20
+- Risk: 2
+- Work priority: 30
 - Work units: 0
-- Rationale: Derived from child component C1.3.6 risk 3. Nested entry scalar/list boundaries are checked, but full step_call/step_create and precompile execution need compositional meter/safety interfaces not supplied by preceding components. proceed_call dispatches precompiles immediately after push; its general budget contract therefore requires precompile preservation before step_call, not only later all-opcode work.
-- Dependencies: C1.8
-- Checkpoint: yes
+- Rationale: The previously missing compositional safety, precompile preservation, and return-summary interfaces have now been checked by the completed descendants. E0054 integrates the summaries and the build reaches C1.4 call_entry_prepared[normalize_entry]. The former Risk 3 rationale is obsolete; remaining target failure is downstream, not residual C1.3 integration uncertainty.
 - Progress transition: `refinement`
+- Carries progress/evidence from: E0054
 
 #### Progress note
-E0012-E0014 remain bounded evidence only. Preserve their unchanged leaves; new descendants own every missing preservation and consumer proof.
+Only grouping risk and integration/scheduling guidance change. Every existing child, its exact obligation, and its reviewed proof evidence is preserved by merge_subtree; no new leaf continuity certification is requested.
 
 #### Summary
-Replace the false unrestricted CALL safety chain by a rooted prefix budget. Prove initialization without any external caller condition. Establish primitive and nested frame preservation before all-opcode safety. Use unconditional totality only after proving collection-mode non-abort behavior. Restate final-pop, stipend and return-summary consumers with exact meters before C1.4 may start.
+All existing descendant obligations are complete and remain unchanged. Scoped safety and stipend return summaries have been integrated in E0054. C1.3 no longer supplies a high-risk scheduling block. Continue with the existing C1.4 frontier; full vfmProgCallTheory success remains a later obligation.
+
+#### Approach
+Re-query the frontier after lowering this grouping risk and continue the existing C1.4 work; do not re-prove completed descendants. Treat the accepted E0054 proof prefix as stable progress, not as evidence of full-target success.
 
 #### Not to try
-Do not prove termination again. run_call_eq_tr is unconditional, but does not imply INL. Do not infer full safety from checked arithmetic probes or wf_state. Do not spread large monadic unfolds, copied ASSUME terms or manual conjunction plumbing through opcode and SPEC consumers.
+Do not create additional probes or auxiliary targets merely to clear this stale scheduling risk. Do not weaken exported rules, reopen completed safety proofs, or advertise the full target as build-clean. Do not block a bounded proved-prefix commit solely because the unchanged downstream proof is now reached.
 
 #### Argument
-For entry depth n, take the top LENGTH contexts - n + 1 frames. Their total claim is bounded by the initial child grant; each frame's own spill plus committed plus claims of all frames above it is bounded by its gasUsed. A fresh child satisfies this with equality for the ceiling and zero own refundable meter. Execution charges decrease claim, spill charges exchange gas for spill, grants transfer claim to a child, and successful pop conserves combined claim; credits and failure restoration do not increase it. Thus every internal refund is backed. At the last root pop the invariant need not hold on the external caller: bound the actual refund by the entry grant instead, then use the existing caller grant bound.
+The completed descendant proofs supply the compositional meter and safety boundaries for nested execution and precompile dispatch, then lift those boundaries through step execution and finite call reachability. The integrated return summary distinguishes credited abort from successful return and supplies the caller observations consumed by the downstream entry/post/frame proofs. E0054 checks this integration through call_returns_summary; the next source failure is entry normalization, outside this subtree.
 
 #### Definition design
-Define prefix and budget as in AUDIT_seq58_call_safety.md lines 89-102, including the LENGTH contexts < n exit disjunct. Keep wf_state separate. Provide list-local top-update/push/pop lemmas so opcode consumers never unfold EL/SUM arithmetic. Prove result-state contracts for failed intermediate operations as well as successful operations because handlers run on those states. Ordinary restore_state_gas preserves committed; it is not restore_state_gas_to_entry.
+Retain the checked descendant definitions and their boundary interfaces unchanged. In particular, preserve the credited-abort versus call_return_context distinction and the stipend observations established without additional callee assumptions. No new definition or proof probe is required for this scheduling reconciliation.
 
 #### Code structure
-Place budget definitions and list algebra in prog infrastructure; place semantic primitive contracts adjacent to their current boundary equations. Replace the old local safety consumer chain in vfmProgCallScript.sml rather than retaining a false compatibility lemma. Keep call_returns_summary after finite-return and final-pop facts. Any auxiliary theory must build with HOL4/holbuild and contain no admitted facts.
+Keep the completed helpers and summary integration in prog/vfmProgCallScript.sml. No source edits are required by this update. A bounded proved-prefix checkpoint commit is appropriate even though the complete target still fails at the known, unchanged C1.4 proof: inspect git status and diff, stage only the proved task-owned integration, and explicitly describe the downstream build boundary rather than claiming a green theory. Do not include broken experiments or unrelated changes. Use the TASK's exact commit trailers. Final completion still requires the full clean build and clean git status.
 
 ### C1.3.1: Check initialization and refund-margin interface
 - Kind: `definition_probe`
@@ -134,26 +136,70 @@ Use run_call_last_pop to isolate the final handler, root-depth budget to bound c
 #### Not to try
 Do not state caller.gasUsed-gasLeft as the complete returned meter. Do not bound a pre-restoration gas-left value and silently use it for the post-restoration refund.
 
-### C1.3.11: Port stipend observations and assemble call_returns_summary
+### C1.3.11: Assemble exact credited-abort / entered-return summary
 - Kind: `proof`
 - Risk: 2
-- Work priority: 80
-- Work units: 8
-- Rationale: Existing stipend and frame observations are retained; scoped finite return and exact final-pop meters now supply the missing interfaces.
-- Dependencies: C1.3.10
+- Work priority: 11
+- Work units: 5
+- Rationale: Both branches already have checked semantic pair/return interfaces. The rooted budget concerns only the fresh child, not caller backing; the remaining work is composition and alignment of final-pop witnesses.
 - Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0053
+
+#### Progress note
+Retain the checked stipend prefix, handler, originalAccounts and footprint proofs as source progress. This is not certification of the unfinished summary; its obsolete gasUsed-only conclusion is explicitly replaced.
 
 #### Summary
-Port all stipend-prefix and call_success_safe consumers needed by the exports. Preserve run_call_stipend_originalAccounts and run_call_stipend_footprint observations. Assemble call_returns_summary from guarded no-entry and initialized entered branches. Audit that no stale unrestricted safety theorem or old meter equality remains in the dependency chain.
+Keep the completed stipend machinery. Replace call_returns_summary's gasUsed-only record conclusion with a conditional exact context equality. Use a small context-valued definition for the credited abort branch and call_return_context for the entered branch. Preserve trace, wellformedness, rollback and stipend observations. Do not require backing of the suspended caller or identify total execution refund with call_return_gas.
+
+#### Description
+Owned outputs are the revised summary, the local call_abort_context definition and its pair/observation boundaries as needed by the summary and prepared-entry consumer. The definition is merely the exact record already checked by call_credit_abort_pair: memory/logs/refunds/baseline/committed remain caller's, and stack/pc/returnData/gasUsed/left/spilled have the displayed updates. Supply a local pair corollary with conclusion ignore_bind (credit_new_account charged) (abort_call_value cg) prepared = (INL (), prepared with contexts := (call_abort_context charged cg caller,cb)::cs), using the existing credit-abort hypotheses. This serves as the computation probe. No change to public rule statements is authorized.
+
+The existential gasLeft is the child return-gas quantity only; keep it for cost bounds, not as an equation for caller.gasUsed. The conditional context is deliberately exposed so C1.4 can instantiate caller and split failed without unfolding absorb/repay/credit internals. Entered observation consumers use call_return_context_observations and call_return_context_meter. Abort observation consumers use a single unfolding of call_abort_context or its local projection corollary.
 
 #### Statement
-Outputs include required call_success_safe/call_exn_safe consumers, stipend-prefix preservation through call/pop, run_call_stipend_originalAccounts, run_call_stipend_footprint, and call_returns_summary with exact semantic meters and the authorized guarded abort shape.
+Add local definition call_abort_context charged cg caller = let cost = (if charged then new_account_state_gas else 0); paid = MIN cost caller.stateGasSpilled in caller with <|stack := b2w F :: caller.stack; returnData := []; pc := SUC caller.pc; gasUsed := caller.gasUsed - paid - cg; stateGasLeft := caller.stateGasLeft + (cost-paid); stateGasSpilled := caller.stateGasSpilled-paid|>.
+
+Restate call_returns_summary as follows (all variables universally quantified):
+wf_state s /\ s.contexts = (c,cb)::cs /\
+FLOOKUP c.msgParams.parsed c.pc = SOME op /\
+is_call op /\ op <> Create /\ op <> Create2 /\
+prepared = s with <|contexts := (caller,cb)::cs; rollback := saved; msdomain := Collect dd|> /\
+charged = (op = Call /\ 0 < value /\ account_empty (lookup_account addr saved.accounts)) /\
+stateCost = (if charged then new_account_state_gas else 0) /\
+creditBack = MIN stateCost caller.stateGasSpilled /\
+cg <= caller.gasUsed - creditBack /\ LENGTH caller.stack < stack_limit /\
+~fIN addr precompile_addresses /\
+step_call op s =
+ (if failed then ignore_bind (credit_new_account charged) (abort_call_value cg) prepared
+  else ignore_bind (set_return_data [])
+    (proceed_call op sender addr value ao az code cg (Memory mr)) prepared)
+==>
+? k t dd' cc err gasLeft out success.
+ FUNPOW (\r. if ISR (FST r) then r else step (SND r)) k (INL (),s) = (INL (),t) /\
+ wf_state t /\ t.msdomain = Collect dd' /\ t.txParams = s.txParams /\
+ gasLeft <= cg /\
+ success = (~failed /\ err = NONE) /\
+ gasLeft = (if failed then cg else call_return_gas err cc) /\
+ out = (if failed then [] else call_return_data err cc) /\
+ t.contexts = ((if failed then call_abort_context charged cg caller
+   else call_return_context err cc
+     (caller with <|returnData := []; stateGasLeft := 0|>) mr),cb)::cs /\
+ (~failed ==> cc.msgParams.outputTo = Memory mr /\
+                 cc.msgParams.gasLimit = cg /\
+                 cc.msgParams.newAccountCharged = charged) /\
+ (~success ==> t.rollback = saved) /\
+ (cg <= call_stipend ==>
+   t.originalAccounts = s.originalAccounts /\
+   (success ==> t.rollback.accounts =
+      (if op <> CallCode /\ 0 < value then transfer_value sender addr value saved.accounts else saved.accounts) /\
+      t.rollback.toDelete = saved.toDelete)).
 
 #### Approach
-Retain the current stipend observation induction, replacing frame-transition peels with boundary lemmas and adding the rooted budget only to internal reachability reasoning where needed. In the entered summary initialize budget from the fresh child without constraining the external caller; in the never-entered branch use C1.8. Check the resulting summary against the existing C1.4 prepared-entry use site before closing.
+Failed branch: apply the credited pair corollary, dispatch one step, derive wellformedness from step_preserves_wf_state, and choose k=1, dd'=dd, gasLeft=cg, out=[], success=F (cc and err arbitrary). Entered branch: retain the clearing normalization and proceed_call_pair but match the drained suspended caller; initialize call_meter_budget (LENGTH entry.contexts) cg entry directly from its definitions, since its prefix is the singleton fresh child with backed claim cg, then apply run_call_memory_returns with ceiling cg (cg<=drainedCaller.gasUsed follows from the refund guard). Compose its trace with the initial step, extract cc metadata, and apply the checked stipend results; align the footprint theorem's err with the return theorem's err through their actual final step/last-pop witnesses, not by assuming independent existential errors coincide.
 
 #### Not to try
-Do not weaken stipend account/originalAccounts conclusions or introduce callee-code assumptions. Do not certify C1.3 merely because the probe theory builds; check the actual summary and all its required production dependencies.
+Do not use call_meter_entry_budget for this root initialization: that lifting law unnecessarily asks for caller backing, whereas the new root prefix contains only the child. Do not restore the old caller.gasUsed-gasLeft equation: parent spill repayment is additional. Do not inline absorb_state_gas/repay_state_gas_spill_context/credit_state_gas_refund in the summary or future prepared-entry consumers. Do not leave the old undrained-context pattern or treat the two final-pop existential error witnesses as automatically equal. If aligning those witnesses requires a helper, keep it local here with a conclusion directly identifying the final handler error from the same run_call last-pop event.
 
 ### C1.3.2: Check nested-prefix push and pop backing
 - Kind: `definition_probe`

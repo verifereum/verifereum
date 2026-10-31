@@ -194,3 +194,12 @@ evidence:
 - tool_output:TO_seq58_progcall_port-20261031T152132Z_m1418_t001
 - tool_output:TO_seq58_progcall_port-20261031T152132Z_m1420_t001
 - source:prog/vfmCallInnerScript.sml:1450
+
+## L0023 scope='C1.3.10' tags=return,refund,Reverted,restore,settle,projections
+shape: Final CALL memory return with arbitrary suspended external caller
+pattern: Bound both actual call_return_gas and gasLimit-(gasUsed-(if e=NONE then 0 else spill)) by root claim/ceiling. This supplies the exact handler boundary without external caller backing. Represent returned caller with call_return_context using call_meter_settle; consume observation/meter projections rather than expanding absorb/repay records.
+works_when: Fresh-root budget is initialized and ceiling<=caller.gasUsed; finite root return isolated via last_pop.
+evidence:
+- episode:E0050
+- source:prog/vfmCallReturnScript.sml
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1544_t001
