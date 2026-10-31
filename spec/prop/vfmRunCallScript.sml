@@ -2899,6 +2899,254 @@ Proof
   >> simp[]
 QED
 
+(* The rollback projections of a same-frame prefix are literally equal. *)
+Theorem same_frame_saved_prefix:
+  same_frame_rel s t ==>
+  !n. MAP SND (TAKE n t.contexts) = MAP SND (TAKE n s.contexts) /\
+      MAP (\p. (FST p).msgParams) (TAKE n t.contexts) =
+      MAP (\p. (FST p).msgParams) (TAKE n s.contexts)
+Proof
+  rw[same_frame_rel_def]
+  >> Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[]
+  >> Cases_on `n` >> simp[]
+QED
+
+Theorem active_rollbacks_same_frame_transport:
+  same_frame_rel s t /\ EVERY P (active_rollbacks d s) /\ P t.rollback ==>
+  EVERY P (active_rollbacks d t)
+Proof
+  strip_tac >> drule same_frame_saved_prefix >> strip_tac
+  >> gvs[active_rollbacks_def, same_frame_rel_def]
+QED
+
+(* A pop consumes the first saved rollback. The surviving saved prefix is
+   unchanged, even when the pop exits below the entry depth. *)
+Theorem saved_prefix_pop_transport:
+  EVERY P (MAP SND (TAKE (SUC n) (child :: parent :: rest))) ==>
+  EVERY P (MAP SND (TAKE n ((new_head,SND parent) :: rest)))
+Proof
+  Cases_on `n` >> simp[]
+QED
+
+Theorem active_rollbacks_pop_transport:
+  s.contexts = child :: parent :: rest /\
+  t.contexts = (new_head,SND parent) :: rest /\
+  EVERY P (active_rollbacks d s) /\ P t.rollback ==>
+  EVERY P (active_rollbacks d t)
+Proof
+  strip_tac >> gvs[active_rollbacks_def]
+  >> Cases_on `LENGTH rest + 2 < MAX 2 d`
+  >- (`SUC (SUC (LENGTH rest)) - MAX 2 d = 0` by decide_tac >> simp[])
+  >> `SUC (SUC (SUC (LENGTH rest))) - MAX 2 d =
+        SUC (SUC (SUC (LENGTH rest)) - MAX 2 d)` by decide_tac
+  >> gvs[] >> irule saved_prefix_pop_transport >> qexists_tac `child` >> simp[]
+QED
+
+Theorem protected_rollbacks_pop_transport:
+  s.contexts = child :: parent :: rest /\
+  t.contexts = (new_head,SND parent) :: rest /\
+  d <= LENGTH t.contexts /\
+  EVERY P (s.rollback :: MAP SND (TAKE (LENGTH s.contexts - d) s.contexts)) /\
+  P t.rollback ==>
+  EVERY P (t.rollback :: MAP SND (TAKE (LENGTH t.contexts - d) t.contexts))
+Proof
+  strip_tac >> gvs[]
+  >> `SUC (SUC (LENGTH rest)) - d = SUC (SUC (LENGTH rest) - d)` by decide_tac
+  >> gvs[] >> irule saved_prefix_pop_transport >> qexists_tac `child` >> simp[]
+  >> `SUC (SUC (LENGTH rest)) - (d + 1) = SUC (LENGTH rest) - d` by decide_tac
+  >> gvs[]
+QED
+
+(* Relational transport from the old active rollback followed by its saved
+   prefix to the newly saved prefix. Consumers use EVERY, not EL arithmetic. *)
+Theorem saved_prefix_push_transport:
+  n < LENGTH (cs:(context # rollback_state) list) /\ SUC n <= LENGTH cs' /\
+  EVERY P ((rb:rollback_state) :: MAP SND (TAKE n cs)) /\
+  (!i. i < SUC n ==>
+       R (if i = 0 then rb else SND (EL (i-1) cs)) (SND (EL i cs'))) /\
+  (!x y. P x /\ R x y ==> Q y) ==>
+  EVERY Q (MAP SND (TAKE (SUC n) cs'))
+Proof
+  strip_tac
+  >> fs[EVERY_EL, EL_MAP, LENGTH_TAKE_EQ]
+  >> qx_gen_tac `i` >> strip_tac
+  >> simp[EL_TAKE]
+  >> first_x_assum irule
+  >> qexists_tac `if i = 0 then rb else SND (EL (i-1) cs)`
+  >> conj_tac
+  >- (Cases_on `i` >> gvs[EL_TAKE, ADD1])
+  >> first_x_assum irule >> simp[]
+QED
+
+Theorem active_rollbacks_push_transport:
+  0 < d /\ d <= LENGTH s.contexts /\
+  LENGTH t.contexts = SUC (LENGTH s.contexts) /\
+  EVERY P (active_rollbacks d s) /\ Q t.rollback /\
+  (!i. i < LENGTH s.contexts ==>
+       R (if i = 0 then s.rollback else SND (EL (i-1) s.contexts))
+         (SND (EL i t.contexts))) /\
+  (!x y. P x /\ R x y ==> Q y) ==>
+  EVERY Q (active_rollbacks d t)
+Proof
+  strip_tac
+  >> `SUC (LENGTH t.contexts) - MAX 2 d =
+        SUC (SUC (LENGTH s.contexts) - MAX 2 d)` by
+       (rw[MAX_DEF] >> decide_tac)
+  >> `SUC (LENGTH s.contexts) - MAX 2 d < LENGTH s.contexts` by
+       (rw[MAX_DEF] >> decide_tac)
+  >> gvs[active_rollbacks_def]
+  >> irule saved_prefix_push_transport
+  >> conj_tac >- simp[]
+  >> qexistsl_tac [`P`, `R`, `s.contexts`, `s.rollback`] >> simp[]
+  >> metis_tac[]
+QED
+
+Theorem protected_rollbacks_same_frame_transport:
+  same_frame_rel s t /\
+  EVERY P (s.rollback :: MAP SND (TAKE (LENGTH s.contexts - d) s.contexts)) /\
+  P t.rollback ==>
+  EVERY P (t.rollback :: MAP SND (TAKE (LENGTH t.contexts - d) t.contexts))
+Proof
+  strip_tac >> drule same_frame_saved_prefix >> strip_tac
+  >> gvs[same_frame_rel_def]
+QED
+
+Theorem protected_rollbacks_push_transport:
+  0 < d /\ d <= LENGTH s.contexts /\
+  LENGTH t.contexts = SUC (LENGTH s.contexts) /\
+  EVERY P (s.rollback :: MAP SND (TAKE (LENGTH s.contexts - d) s.contexts)) /\
+  Q t.rollback /\
+  (!i. i < LENGTH s.contexts ==>
+       R (if i = 0 then s.rollback else SND (EL (i-1) s.contexts))
+         (SND (EL i t.contexts))) /\
+  (!x y. P x /\ R x y ==> Q y) ==>
+  EVERY Q (t.rollback :: MAP SND (TAKE (LENGTH t.contexts - d) t.contexts))
+Proof
+  strip_tac
+  >> `LENGTH t.contexts - d = SUC (LENGTH s.contexts - d)` by decide_tac
+  >> `LENGTH s.contexts - d < LENGTH s.contexts` by decide_tac
+  >> simp[] >> irule saved_prefix_push_transport
+  >> conj_tac >- simp[]
+  >> qexistsl_tac [`P`, `R`, `s.contexts`, `s.rollback`] >> simp[]
+  >> metis_tac[]
+QED
+
+Theorem protected_frames_same_frame_transport:
+  same_frame_rel s t /\
+  EVERY P (MAP (\p. (FST p).msgParams) (TAKE (LENGTH s.contexts - d) s.contexts)) ==>
+  EVERY P (MAP (\p. (FST p).msgParams) (TAKE (LENGTH t.contexts - d) t.contexts))
+Proof
+  strip_tac >> drule same_frame_saved_prefix >> strip_tac
+  >> gvs[same_frame_rel_def]
+QED
+
+Theorem protected_frames_pop_transport:
+  s.contexts = child :: parent :: rest /\
+  t.contexts = (new_head,SND parent) :: rest /\
+  new_head.msgParams = (FST parent).msgParams /\
+  d <= LENGTH t.contexts /\
+  EVERY P (MAP (\p. (FST p).msgParams) (TAKE (LENGTH s.contexts - d) s.contexts)) ==>
+  EVERY P (MAP (\p. (FST p).msgParams) (TAKE (LENGTH t.contexts - d) t.contexts))
+Proof
+  strip_tac >> gvs[]
+  >> `SUC (SUC (LENGTH rest)) - d = SUC (SUC (LENGTH rest) - d)` by decide_tac
+  >> `SUC (SUC (LENGTH rest)) - (d+1) = SUC (LENGTH rest) - d` by decide_tac
+  >> gvs[] >> Cases_on `SUC (LENGTH rest) - d` >> gvs[]
+QED
+
+Theorem protected_frames_push_transport:
+  0 < d /\ d <= LENGTH s.contexts /\
+  LENGTH t.contexts = SUC (LENGTH s.contexts) /\
+  MAP FST (TL (TL t.contexts)) = MAP FST (TL s.contexts) /\
+  (FST (EL 1 t.contexts)).msgParams = (FST (HD s.contexts)).msgParams /\
+  P (FST (HD t.contexts)).msgParams /\
+  EVERY P (MAP (\p. (FST p).msgParams) (TAKE (LENGTH s.contexts - d) s.contexts)) ==>
+  EVERY P (MAP (\p. (FST p).msgParams) (TAKE (LENGTH t.contexts - d) t.contexts))
+Proof
+  strip_tac
+  >> `LENGTH t.contexts - d = SUC (LENGTH s.contexts - d)` by decide_tac
+  >> Cases_on `s.contexts` >> gvs[]
+  >> Cases_on `t.contexts` >> gvs[]
+  >> rename1 `t.contexts = child :: cs`
+  >> Cases_on `cs` >> gvs[]
+  >> rename1 `t.contexts = child :: parent :: rest`
+  >> `MAP (\c:context. c.msgParams) (MAP FST rest) =
+      MAP (\c:context. c.msgParams) (MAP FST t')` by simp[]
+  >> gvs[MAP_MAP_o, combinTheory.o_DEF]
+  >> `!n. MAP (\p. (FST p).msgParams) (TAKE n rest) =
+            MAP (\p. (FST p).msgParams) (TAKE n t')`
+      by simp[MAP_TAKE]
+  >> Cases_on `SUC (LENGTH t') - d` >> gvs[]
+  >- (`SUC (SUC (LENGTH t')) - (d+1) = 0` by decide_tac >> simp[])
+  >> `SUC (SUC (LENGTH t')) - (d+2) = n` by decide_tac >> simp[]
+QED
+
+(* Both rollback choices in step_pop_structure come from the old active
+   list. In particular this remains true at d=1 and at an exit below d. *)
+Theorem active_rollbacks_pop_sources:
+  d <= LENGTH s.contexts /\ 2 <= LENGTH s.contexts ==>
+  MEM s.rollback (active_rollbacks d s) /\
+  MEM (SND (HD s.contexts)) (active_rollbacks d s)
+Proof
+  strip_tac
+  >> `0 < SUC (LENGTH s.contexts) - MAX 2 d` by
+       (rw[MAX_DEF] >> decide_tac)
+  >> Cases_on `SUC (LENGTH s.contexts) - MAX 2 d` >> gvs[]
+  >> Cases_on `s.contexts` >> gvs[active_rollbacks_def]
+QED
+
+(* No collision protection is required for an unchanged-storage transition:
+   this is the interface used for either rollback choice of a pop. *)
+Theorem storage_slots_access_transport:
+  (!a k. ~fIN (SK a k) rb.accesses.storageKeys ==>
+     lookup_storage k (lookup_account a rb.accounts).storage =
+       lookup_storage k (lookup_account a rb0.accounts).storage \/
+     lookup_storage k (lookup_account a rb.accounts).storage = 0w /\
+       ~account_already_created (lookup_account a rb0.accounts)) /\
+  toSet rb.accesses.storageKeys SUBSET toSet next.accesses.storageKeys /\
+  (!a. (lookup_account a next.accounts).storage =
+       (lookup_account a rb.accounts).storage) ==>
+  !a k. ~fIN (SK a k) next.accesses.storageKeys ==>
+     lookup_storage k (lookup_account a next.accounts).storage =
+       lookup_storage k (lookup_account a rb0.accounts).storage \/
+     lookup_storage k (lookup_account a next.accounts).storage = 0w /\
+       ~account_already_created (lookup_account a rb0.accounts)
+Proof
+  rpt strip_tac
+  >> `~fIN (SK a k) rb.accesses.storageKeys` by
+       (gvs[SUBSET_DEF, finite_setTheory.fIN_IN] >> metis_tac[])
+  >> metis_tac[]
+QED
+
+(* Slot safety composes across access inclusion and a possible CREATE clear.
+   Collision protection is needed only for the clearing alternative. *)
+Theorem storage_slots_compose:
+  (!a k. ~fIN (SK a k) rb.accesses.storageKeys ==>
+     lookup_storage k (lookup_account a rb.accounts).storage =
+       lookup_storage k (lookup_account a rb0.accounts).storage \/
+     lookup_storage k (lookup_account a rb.accounts).storage = 0w /\
+       ~account_already_created (lookup_account a rb0.accounts)) /\
+  toSet rb.accesses.storageKeys SUBSET toSet next.accesses.storageKeys /\
+  (!a k. ~fIN (SK a k) next.accesses.storageKeys ==>
+     lookup_storage k (lookup_account a next.accounts).storage =
+       lookup_storage k (lookup_account a rb.accounts).storage \/
+     lookup_storage k (lookup_account a next.accounts).storage = 0w /\
+       ~account_already_created (lookup_account a rb.accounts)) /\
+  (!a. account_already_created (lookup_account a rb0.accounts) ==>
+       account_already_created (lookup_account a rb.accounts)) ==>
+  !a k. ~fIN (SK a k) next.accesses.storageKeys ==>
+     lookup_storage k (lookup_account a next.accounts).storage =
+       lookup_storage k (lookup_account a rb0.accounts).storage \/
+     lookup_storage k (lookup_account a next.accounts).storage = 0w /\
+       ~account_already_created (lookup_account a rb0.accounts)
+Proof
+  rpt strip_tac
+  >> `~fIN (SK a k) rb.accesses.storageKeys` by
+       (gvs[SUBSET_DEF, finite_setTheory.fIN_IN] >> metis_tac[])
+  >> first_x_assum (qspecl_then [`a`, `k`] strip_assume_tac)
+  >> metis_tac[]
+QED
+
 (* Single-step preservation of run_call_inv, by length-change cases. *)
 
 Theorem run_call_inv_step:
