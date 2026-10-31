@@ -251,12 +251,12 @@ Proof
 QED
 
 Definition transaction1_from_rlp_def:
-  transaction1_from_rlp rlp =
+  transaction1_from_rlp chainId rlp =
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 11 then NONE else
   let chainIdRlp = EL 0 ls in
-  if chainIdRlp ≠ rlp_number 1 then NONE else
+  if chainIdRlp ≠ rlp_number chainId then NONE else
   let nonceRlp = EL 1 ls in
   if ¬is_RLPB nonceRlp then NONE else
   let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
@@ -310,19 +310,19 @@ val transaction1_from_rlp_pre_def = transaction1_from_rlp_def
   |> cv_auto_trans_pre "transaction1_from_rlp_pre";
 
 Theorem transaction1_from_rlp_pre[cv_pre]:
-  transaction1_from_rlp_pre x
+  transaction1_from_rlp_pre c x
 Proof
   rw[transaction1_from_rlp_pre_def]
   >> strip_tac >> gvs[]
 QED
 
 Definition transaction2_from_rlp_def:
-  transaction2_from_rlp baseFee rlp =
+  transaction2_from_rlp chainId baseFee rlp =
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 12 then NONE else
   let chainIdRlp = EL 0 ls in
-  if chainIdRlp ≠ rlp_number 1 then NONE else
+  if chainIdRlp ≠ rlp_number chainId then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   let txLs = [
@@ -352,19 +352,19 @@ val transaction2_from_rlp_pre_def =
   transaction2_from_rlp_def;
 
 Theorem transaction2_from_rlp_pre[cv_pre]:
-  transaction2_from_rlp_pre bf x
+  transaction2_from_rlp_pre c bf x
 Proof
   rw[transaction2_from_rlp_pre_def]
   >> strip_tac >> gvs[]
 QED
 
 Definition transaction3_from_rlp_def:
-  transaction3_from_rlp baseFee rlp =
+  transaction3_from_rlp chainId baseFee rlp =
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 14 then NONE else
   let chainIdRlp = EL 0 ls in
-  if chainIdRlp ≠ rlp_number 1 then NONE else
+  if chainIdRlp ≠ rlp_number chainId then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   let maxBlobFeeRlp = EL 9 ls in
@@ -404,7 +404,7 @@ val transaction3_from_rlp_pre_def = transaction3_from_rlp_def
   |> cv_auto_trans_pre "transaction3_from_rlp_pre";
 
 Theorem transaction3_from_rlp_pre[cv_pre]:
-  transaction3_from_rlp_pre bf x
+  transaction3_from_rlp_pre c bf x
 Proof
   rw[transaction3_from_rlp_pre_def]
   >> strip_tac >> gvs[]
@@ -470,12 +470,12 @@ Proof
 QED
 
 Definition transaction4_from_rlp_def:
-  transaction4_from_rlp baseFee rlp =
+  transaction4_from_rlp chainId baseFee rlp =
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 13 then NONE else
   let chainIdRlp = EL 0 ls in
-  if chainIdRlp ≠ rlp_number 1 then NONE else
+  if chainIdRlp ≠ rlp_number chainId then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   (* destination cannot be null in type 4 *)
@@ -514,14 +514,14 @@ val transaction4_from_rlp_pre_def = transaction4_from_rlp_def
   |> cv_auto_trans_pre "transaction4_from_rlp_pre";
 
 Theorem transaction4_from_rlp_pre[cv_pre]:
-  transaction4_from_rlp_pre bf x
+  transaction4_from_rlp_pre c bf x
 Proof
   rw[transaction4_from_rlp_pre_def]
   >> strip_tac >> gvs[]
 QED
 
 Definition transaction_from_rlp_def:
-  transaction_from_rlp baseFee rlp =
+  transaction_from_rlp chainId baseFee rlp =
   if is_RLPL rlp then
     let ls = dest_RLPL rlp in
     if ¬(LENGTH ls = 9 ∧ EVERY is_RLPB ls) then NONE else
@@ -537,8 +537,11 @@ Definition transaction_from_rlp_def:
     let s = num_of_be_bytes $ dest_RLPB $ EL 8 ls in
     if ¬valid_transaction_s s then NONE else
     let txLs = [nonce; gasPrice; gas; toRlp; value; data] in
+    (* pre-EIP-155 v is 27 or 28; EIP-155 v is 35 + 2 * chainId + parity *)
+    if ¬(v = 27 ∨ v = 28 ∨ 35 ≤ v ∧ (v - 35) DIV 2 = chainId) then NONE else
     let (txLs, v) = if v = 27 ∨ v = 28 then (txLs, v)
-                    else (txLs ++ (MAP rlp_number [1; 0; 0]), v - 10) in
+                    else (txLs ++ (MAP rlp_number [chainId; 0; 0]),
+                          27 + (v - 35) MOD 2) in
     let hash = word_of_bytes T 0w $ Keccak_256_w64 $ rlp_encode $ RLPL txLs in
     case ecrecover hash v r s of NONE => NONE |
       SOME addr =>
@@ -561,16 +564,16 @@ Definition transaction_from_rlp_def:
   if NULL bs then NONE else
   if HD bs = 1w then
     case rlp_decode_chunks [TL bs] of NONE => NONE |
-    SOME rlp => transaction1_from_rlp rlp
+    SOME rlp => transaction1_from_rlp chainId rlp
   else if HD bs = 2w then
     case rlp_decode_chunks [TL bs] of NONE => NONE |
-    SOME rlp => transaction2_from_rlp baseFee rlp
+    SOME rlp => transaction2_from_rlp chainId baseFee rlp
   else if HD bs = 3w then
     case rlp_decode_chunks [TL bs] of NONE => NONE |
-    SOME rlp => transaction3_from_rlp baseFee rlp
+    SOME rlp => transaction3_from_rlp chainId baseFee rlp
   else if HD bs = 4w then
     case rlp_decode_chunks [TL bs] of NONE => NONE |
-    SOME rlp => transaction4_from_rlp baseFee rlp
+    SOME rlp => transaction4_from_rlp chainId baseFee rlp
   else NONE
 End
 
@@ -578,26 +581,26 @@ val transaction_from_rlp_pre_def = cv_auto_trans_pre "transaction_from_rlp_pre"
   $ REWRITE_RULE[GSYM word_of_bytes_be_def] transaction_from_rlp_def;
 
 Theorem transaction_from_rlp_pre[cv_pre]:
-  transaction_from_rlp_pre bf x
+  transaction_from_rlp_pre c bf x
 Proof
   rw[transaction_from_rlp_pre_def]
   \\ strip_tac \\ gvs[]
 QED
 
 Definition OPT_MMAP_transaction_from_rlp_def:
-  OPT_MMAP_transaction_from_rlp bf [] = SOME [] ∧
-  OPT_MMAP_transaction_from_rlp bf (x::xs) =
-  case transaction_from_rlp bf x of NONE => NONE
+  OPT_MMAP_transaction_from_rlp c bf [] = SOME [] ∧
+  OPT_MMAP_transaction_from_rlp c bf (x::xs) =
+  case transaction_from_rlp c bf x of NONE => NONE
      | SOME h =>
-         case OPT_MMAP_transaction_from_rlp bf xs of NONE => NONE
+         case OPT_MMAP_transaction_from_rlp c bf xs of NONE => NONE
             | SOME t => SOME (h::t)
 End
 
 val () = cv_auto_trans OPT_MMAP_transaction_from_rlp_def;
 
 Theorem OPT_MMAP_transaction_from_rlp_eq:
-  OPT_MMAP_transaction_from_rlp bf ls =
-  OPT_MMAP (transaction_from_rlp bf) ls
+  OPT_MMAP_transaction_from_rlp c bf ls =
+  OPT_MMAP (transaction_from_rlp c bf) ls
 Proof
   Induct_on`ls` \\ rw[OPT_MMAP_transaction_from_rlp_def]
   \\ CASE_TAC \\ gvs[]
@@ -625,7 +628,7 @@ Proof
 QED
 
 Definition block_from_rlp_def:
-  block_from_rlp rlp =
+  block_from_rlp chainId rlp =
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 4 then NONE else
@@ -638,7 +641,7 @@ Definition block_from_rlp_def:
   SOME blk =>
   if ¬is_RLPL transactions then NONE else
   let ls = dest_RLPL transactions in
-  case OPT_MMAP (transaction_from_rlp blk.baseFeePerGas) ls of NONE => NONE |
+  case OPT_MMAP (transaction_from_rlp chainId blk.baseFeePerGas) ls of NONE => NONE |
   SOME transactions =>
   if ¬is_RLPL withdrawals then NONE else
   let ls = dest_RLPL withdrawals in
@@ -659,7 +662,7 @@ val block_from_rlp_pre_def = block_from_rlp_def
   |> cv_auto_trans_pre "block_from_rlp_pre";
 
 Theorem block_from_rlp_pre[cv_pre]:
-  block_from_rlp_pre x
+  block_from_rlp_pre c x
 Proof
   rw[block_from_rlp_pre_def]
   \\ strip_tac \\ gvs[]

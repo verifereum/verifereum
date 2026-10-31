@@ -32,14 +32,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+          persist-credentials: false
 
       - name: Resolve release ref
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
-          release_tag="${{ github.event.release.tag_name || inputs.release_tag }}"
           release_sha="$(git rev-parse HEAD)"
           artefact_name="$HBX_BASENAME-hbx-$release_sha"
 
-          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
           echo "RELEASE_SHA=$release_sha" >> "$GITHUB_ENV"
           echo "HBX_ARTEFACT_NAME=$artefact_name" >> "$GITHUB_ENV"
 
