@@ -468,19 +468,15 @@ Proof
       \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ]))
       \\ strip_tac
       >> rpt BasicProvers.VAR_EQ_TAC
-      >> rewrite_tac[theorem"opname_distinct", CONS_11, GSYM CONJ_ASSOC,
-                     NOT_CONS_NIL, NOT_NIL_CONS]
-      >> simp_tac bool_ss [] >>
-      rpt(pop_assum mp_tac) >> EVAL_TAC )
+      >> rpt(pop_assum mp_tac) >> EVAL_TAC
+      >> simp_tac bool_ss [] >> EVAL_TAC )
     >- (
       rpt gen_tac
       \\ CONV_TAC(LAND_CONV(SIMP_CONV(srw_ss())[NUMERAL_LESS_THM, LESS_OR_EQ]))
       \\ strip_tac
       >> rpt BasicProvers.VAR_EQ_TAC
-      >> rewrite_tac[theorem"opname_distinct", CONS_11, GSYM CONJ_ASSOC,
-                     NOT_CONS_NIL, NOT_NIL_CONS]
-      >> simp_tac bool_ss [] >>
-      rpt(pop_assum mp_tac) >> EVAL_TAC )
+      >> rpt(pop_assum mp_tac) >> EVAL_TAC
+      >> simp_tac bool_ss [] >> EVAL_TAC )
     >- (
       rpt gen_tac
       >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
@@ -510,7 +506,8 @@ Proof
     >> rpt strip_tac
     >> rpt BasicProvers.VAR_EQ_TAC
     >> rewrite_tac[CONS_11, GSYM CONJ_ASSOC]
-    >> simp_tac bool_ss []
+    >> CONV_TAC(ONCE_DEPTH_CONV(
+         Unwind.UNWIND_EXISTS_CONV THENC Unwind.UNWIND_EXISTS_CONV))
     >> EVAL_TAC)
   \\ Cases_on ‘opcs’ \\ simp[wf_opname_def, opcode_def]
   >- (
@@ -520,27 +517,27 @@ Proof
   \\ CCONTR_TAC \\ gvs[]
   \\ pop_assum mp_tac \\ simp[PULL_EXISTS]
   \\ let
-    val def_cases = opcode_def |> concl |> strip_conj |> List.map
-      (fn tm => (EXISTS_TAC(rand (lhs tm)) handle HOL_ERR _ => NO_TAC)
-                \\ rw[opcode_def] \\ NO_TAC)
-    val push_cases =  List.tabulate(33, (fn n =>
-          let
-            val nn = numSyntax.term_of_int n
-          in
-            EXISTS_TAC “Push ^nn (take_pad_0 ^nn t)”
-            \\ simp[wf_opname_def, opcode_def, take_pad_0_IS_PREFIX]
-            \\ NO_TAC
-          end))
     fun mk_x_cases m tm = List.tabulate(m, fn n =>
-      let val nn = numSyntax.term_of_int n in
-        EXISTS_TAC (mk_comb (tm, nn)) \\ rw[opcode_def, wf_opname_def] \\ NO_TAC
-      end)
-    val dup_cases = mk_x_cases 16 “Dup”
-    val swap_cases = mk_x_cases 16 “Swap”
-    val log_cases = mk_x_cases 5 “Log”
+      mk_comb (tm, numSyntax.term_of_int n))
+    val witnesses =
+      List.filter (fn c => type_of c = “:opname”)
+        (TypeBase.constructors_of “:opname”) @
+      List.tabulate(33, fn n =>
+        let val nn = numSyntax.term_of_int n in
+          “Push ^nn (take_pad_0 ^nn t)”
+        end) @
+      mk_x_cases 16 “Dup” @ mk_x_cases 16 “Swap” @ mk_x_cases 5 “Log”
+    val by_first_byte = List.map
+      (fn x => (rhs (concl (EVAL “HD (opcode ^x)”)), x)) witnesses
   in
-    TRY $ FIRST (def_cases @ push_cases @ dup_cases @ swap_cases @ log_cases)
+    fn (g as (_, w)) =>
+      let
+        val opc = fst (listSyntax.dest_cons (rand (rand (snd (strip_exists w)))))
+      in
+        EXISTS_TAC (op_assoc aconv opc by_first_byte) g
+      end
   end
+  \\ simp[opcode_def, take_pad_0_IS_PREFIX]
 QED
 
 val _ = cv_auto_trans parse_opcode_cond_thm

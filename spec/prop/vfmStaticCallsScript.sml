@@ -1560,11 +1560,11 @@ Proof
           vfmContextTheory.initial_msg_params_def]
   >> Cases_on `s.contexts` >> gvs[]
   >> PairCases_on `h` >> gvs[]
-  >> rpt (CASE_TAC >> gvs[return_def, fail_def])
-  >> TRY (imp_res_tac update_accounts_contexts_pair)
-  >> TRY (gvs[snc_def, vfmContextTheory.return_destination_distinct] >> NO_TAC)
-  >> irule cp_preserves_snc
-  >> gvs[snc_def, vfmContextTheory.return_destination_distinct]
+  >> IF_CASES_TAC >> gvs[update_accounts_def, return_def]
+  >> (Cases_on `fIN address precompile_addresses` >> simp[return_def]
+      >- (irule cp_preserves_snc
+          >> gvs[snc_def, vfmContextTheory.return_destination_distinct])
+      >> gvs[snc_def, vfmContextTheory.return_destination_distinct])
 QED
 
 (* proceed_create preserves snc: pushed context has static=F *)
