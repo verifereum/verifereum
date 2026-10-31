@@ -30,6 +30,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.7.1 | proved |  | E0034 |  |
 | C1.3.7.2 | proved |  | E0036 | Review and commit read/memory/copy/log family; proceed to scheduled storage family. |
 | C1.3.7.3 | proved |  | E0037 | Review and commit storage safety family, then scheduled terminal opcode family. |
+| C1.3.7.4 | proved |  | E0038 | Review and commit terminal family; assemble ordinary dispatch and inner execution as scheduled. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -557,6 +558,26 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1159_t001` (use `read_tool_output` for exact output)
+
+## C1.3.7.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0038`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 778,351 tok (776,448 in, 1,903 out, 763,648 cached), 71.9s, $0.1209948
+- next: Review and commit terminal family; assemble ordinary dispatch and inner execution as scheduled.
+
+### Attempts / Evidence
+
+- `E0038` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 778,351 tok (776,448 in, 1,903 out, 763,648 cached), 71.9s, $0.1209948)
+  - Prove terminal, return-data, deletion and account-charge adapters; compose Return/Revert and selfdestruct through isolated neutral tail. -> All terminal family theorems build on first attempt, covering both return flags and all selfdestruct charge/access failure paths. No popping claimed at instruction level. (`TO_seq58_progcall_port-20261031T152132Z_m1172_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1172_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

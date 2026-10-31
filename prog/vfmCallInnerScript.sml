@@ -804,3 +804,121 @@ Proof
       simp[call_meter_safe_callee_inv]) >>
   simp[call_meter_safe_pop_inv]
 QED
+
+Theorem call_meter_safe_terminal_inv:
+  call_meter_safe (call_meter_result c rb rest) finish
+    (\r t. call_meter_result c rb rest t) /\
+  call_meter_safe (call_meter_result c rb rest) revert
+    (\r t. call_meter_result c rb rest t) /\
+  call_meter_safe (call_meter_result c rb rest) (fail InvalidOpcode)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  simp[call_meter_safe_def, finish_def, revert_def, fail_def]
+QED
+
+Theorem call_meter_safe_return_data_inv:
+  call_meter_safe (call_meter_result c rb rest) (set_return_data bytes)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> simp[call_meter_safe_set_return_data]
+QED
+
+Theorem call_meter_safe_stop_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (ignore_bind (set_return_data []) finish)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_ignore_invariant >>
+  simp[call_meter_safe_return_data_inv, call_meter_safe_terminal_inv]
+QED
+
+Theorem call_meter_safe_return_inv:
+  call_meter_safe (call_meter_result c rb rest) (step_return b)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_return_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+              >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+                  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+                      >- (Cases_on `b` >> simp[call_meter_safe_terminal_inv]) >>
+                      simp[call_meter_safe_return_data_inv]) >>
+                  simp[call_meter_safe_read_memory_inv]) >>
+              simp[call_meter_safe_expand_inv]) >>
+          simp[call_meter_safe_consume_inv]) >>
+      simp[call_meter_safe_memory_info_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_charge_account_inv:
+  call_meter_safe (call_meter_result c rb rest) (charge_new_account charged)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> simp[call_meter_safe_charge_account]
+QED
+
+Theorem call_meter_safe_update_accounts_inv:
+  call_meter_safe (call_meter_result c rb rest) (update_accounts f)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> gen_tac >>
+  mp_tac (GEN_ALL call_meter_safe_update_accounts) >>
+  simp[call_meter_safe_def] >> metis_tac[call_meter_ready_result]
+QED
+
+Theorem call_meter_safe_delete_inv:
+  call_meter_safe (call_meter_result c rb rest) (add_to_delete a)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> gen_tac >>
+  simp[call_meter_safe_def, add_to_delete_def, return_def,
+       call_meter_ready_def] >> rpt strip_tac >>
+  irule call_meter_result_same >> simp[]
+QED
+
+Theorem call_meter_safe_self_destruct_tail_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (ignore_bind (update_accounts f)
+      (ignore_bind (push_logs logs)
+        (bind get_original (\original.
+          ignore_bind (if account_empty (lookup_account a original)
+                       then add_to_delete a else return ()) finish))))
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_update_accounts_inv] >>
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_logs_inv] >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_ignore_invariant >> conj_tac
+      >- (IF_CASES_TAC
+          >- simp[call_meter_safe_delete_inv] >>
+          simp[call_meter_safe_def, return_def]) >>
+      simp[call_meter_safe_terminal_inv]) >>
+  simp[call_meter_safe_original_inv]
+QED
+
+Theorem call_meter_safe_self_destruct_inv:
+  call_meter_safe (call_meter_result c rb rest) step_self_destruct
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_self_destruct_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_ignore_invariant >> conj_tac
+              >- simp[call_meter_safe_return_data_inv] >>
+              irule call_meter_safe_bind_invariant >> conj_tac
+              >- (gen_tac >> BETA_TAC >> irule call_meter_safe_ignore_invariant >> conj_tac
+                  >- simp[call_meter_safe_consume_inv] >>
+                  irule call_meter_safe_ignore_invariant >> conj_tac
+                  >- simp[call_meter_safe_charge_account_inv] >>
+                  irule call_meter_safe_ignore_invariant >>
+                  simp[call_meter_safe_not_static_inv, call_meter_safe_self_destruct_tail_inv]) >>
+              simp[call_meter_safe_accounts_inv]) >>
+          simp[call_meter_safe_callee_inv]) >>
+      simp[call_meter_safe_access_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
