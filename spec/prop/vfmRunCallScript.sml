@@ -74,12 +74,26 @@ End
    to 1 and nonces never decrease within a run, so an account created at or
    before a saved rollback is also created in every later state. *)
 Definition run_call_inv_def:
-  run_call_inv es s ⇔
+  run_call_inv es (q:unit + exception option) s ⇔
     s.txParams = es.txParams ∧
     outputTo_consistent_stack s ∧
     wf_state s ∧
-    EVERY (λrb. storage_slot_preserved rb es.rollback)
-          (active_rollbacks (LENGTH es.contexts) s)
+    EVERY (λrb. ∀a k. ¬fIN (SK a k) rb.accesses.storageKeys ⇒
+      lookup_storage k (lookup_account a rb.accounts).storage =
+        lookup_storage k (lookup_account a es.rollback.accounts).storage ∨
+      lookup_storage k (lookup_account a rb.accounts).storage = 0w ∧
+        ¬account_already_created (lookup_account a es.rollback.accounts))
+      (active_rollbacks (LENGTH es.contexts) s) ∧
+    (ISL q ∧ LENGTH es.contexts ≤ LENGTH s.contexts ⇒
+      EVERY (λrb. ∀a.
+        account_already_created (lookup_account a es.rollback.accounts) ⇒
+        account_already_created (lookup_account a rb.accounts))
+        (s.rollback :: MAP SND
+          (TAKE (LENGTH s.contexts - LENGTH es.contexts) s.contexts)) ∧
+      EVERY (λmp. ∀a. mp.outputTo = Code a ⇒
+        ¬account_already_created (lookup_account a es.rollback.accounts))
+        (MAP (λp. (FST p).msgParams)
+          (TAKE (LENGTH s.contexts - LENGTH es.contexts) s.contexts)))
 End
 
 (* -------------------------------------------------------------------------
@@ -91,7 +105,7 @@ Theorem run_call_inv_refl:
   (FST (HD es.contexts)).jumpDest = NONE ∧
   EVERY (λrb. storage_slot_preserved rb es.rollback)
         (MAP SND (TAKE 2 es.contexts)) ⇒
-  run_call_inv es es
+  run_call_inv es (INL ()) es
 Proof
   rw[run_call_inv_def, active_rollbacks_saved, storage_slot_preserved_def]
   >> gvs[outputTo_consistent_stack_def,wf_state_def]
@@ -4384,243 +4398,101 @@ QED
 (* Single-step preservation of run_call_inv, by length-change cases. *)
 
 Theorem run_call_inv_step:
-  ∀es s s' r.
+  ∀es s s' q r.
     es.contexts ≠ [] ∧
-    run_call_inv es s ∧
-    LENGTH s.contexts ≥ LENGTH es.contexts ∧
+    run_call_inv es q s ∧ ISL q ∧
+    LENGTH es.contexts ≤ LENGTH s.contexts ∧
     step s = (r, s') ⇒
-    run_call_inv es s'
+    run_call_inv es r s'
 Proof
-  (* TODO: run_call_inv is no longer preserved, since CREATE clears the
-     created address's storage without accessing its slots. Original proof:
-  rpt strip_tac
-  >> qmatch_asmsub_rename_tac `step s0 = (rr, s1)`
-  >> `outputTo_consistent_stack s0` by fs[run_call_inv_def]
-  >> `outputTo_consistent s0` by
-       metis_tac[outputTo_consistent_stack_imp_consistent]
-  >> `s0.contexts ≠ []` by fs[outputTo_consistent_def]
-  >> `s1.txParams = s0.txParams`
-       by metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND]
-  >> `s1.txParams = es.txParams` by fs[run_call_inv_def]
-  >> `wf_state s0` by fs[run_call_inv_def]
-  >> `wf_state s1` by metis_tac[step_preserves_wf_state, SND]
-  >> simp[run_call_inv_def]
-  (* Trichotomy on the length change. *)
-  >> Cases_on `LENGTH s1.contexts = LENGTH s0.contexts` >> gvs[]
-  >- (
-    (* CASE 0: same-frame. *)
-    `same_frame_rel s0 s1` by metis_tac[step_same_frame]
-    >> `LENGTH s1.contexts = LENGTH s0.contexts ∧
-        TL s1.contexts = TL s0.contexts ∧
-        SND (HD s1.contexts) = SND (HD s0.contexts) ∧
-        (FST (HD s1.contexts)).msgParams = (FST (HD s0.contexts)).msgParams ∧
-        toSet s0.rollback.accesses.storageKeys ⊆
-          toSet s1.rollback.accesses.storageKeys`
-      by fs[same_frame_rel_def]
-    >> `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
-    (* outputTo_consistent_stack s1. *)
-    >> `outputTo_consistent_stack s1` by (
-         fs[outputTo_consistent_stack_def]
-         >> Cases_on `s0.contexts` >> Cases_on `s1.contexts` >> gvs[]
-         >> gvs[outputTo_consistent_ctx_def])
-    >> simp[]
-    (* active_rollbacks: tail unchanged. Using same_frame_rel's
-       TL s1 = TL s0 and SND HD s1 = SND HD s0, so MAP SND of any
-       TAKE prefix is the same. *)
-    >> `∀n. MAP SND (TAKE n s1.contexts) = MAP SND (TAKE n s0.contexts)`
-        by (
-          `∃hd0 hd1 t. s0.contexts = hd0 :: t ∧ s1.contexts = hd1 :: t ∧
-                       SND hd0 = SND hd1`
-            by (Cases_on `s0.contexts` >> Cases_on `s1.contexts`
-                >> gvs[] >> metis_tac[])
-          >> simp[]
-          >> Cases >> simp[])
-    >> `active_rollbacks (LENGTH es.contexts) s1 =
-          s1.rollback :: TL (active_rollbacks (LENGTH es.contexts) s0)`
-        by (simp[active_rollbacks_saved]
-            >> `¬(LENGTH s0.contexts < LENGTH es.contexts)` by simp[]
-            >> simp[])
-    >> simp[]
-    (* Tail invariant transfers. *)
-    >> `EVERY (λrb. storage_slot_preserved rb es.rollback)
-              (TL (active_rollbacks (LENGTH es.contexts) s0))`
-        by (`EVERY (λrb. storage_slot_preserved rb es.rollback)
-                   (active_rollbacks (LENGTH es.contexts) s0)`
-              by fs[run_call_inv_def]
-            >> Cases_on `active_rollbacks (LENGTH es.contexts) s0` >> gvs[])
-    >> simp[]
-    (* Head: storage_slot_preserved s1.rollback es.rollback. *)
-    >> `storage_slot_preserved s0.rollback es.rollback`
-        by (fs[run_call_inv_def, active_rollbacks_saved])
-    >> simp[storage_slot_preserved_def]
-    >> rpt strip_tac
-    >> `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
-        by (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
-            >> metis_tac[])
-    >> `lookup_storage k (lookup_account a s0.rollback.accounts).storage =
-        lookup_storage k (lookup_account a es.rollback.accounts).storage`
-        by fs[storage_slot_preserved_def]
-    >> drule_all step_preserves_non_accessed_storage
-    >> simp[]
-    >> metis_tac[])
-  >> Cases_on `LENGTH s1.contexts > LENGTH s0.contexts` >> gvs[]
-  >- (
-    (* CASE +1: push. *)
-    drule_all step_push_structure
-    >> strip_tac
-    >> `s1.contexts ≠ []` by (strip_tac >> gvs[])
-    >> `outputTo_consistent_stack s1` by (
-         simp[outputTo_consistent_stack_def]
-         >> Cases_on`s1.contexts` >> gvs[]
-         >> simp[EVERY_MEM, MEM_EL, PULL_EXISTS]
-         >> qx_gen_tac`i` >> strip_tac
-         >> first_x_assum(qspec_then`i`mp_tac)
-         >> simp[EL_CONS,PRE_SUB1,EL_MAP]
-         >> gvs[outputTo_consistent_stack_def,EVERY_MEM,MEM_EL,
-                PULL_EXISTS,EL_MAP])
-    >> simp[]
-    >> qabbrev_tac`ed = LENGTH es.contexts`
-    >> qabbrev_tac`m = LENGTH s1.contexts  - ed + 2`
-    >> `storage_slot_preserved s1.rollback es.rollback` by (
-      rw[storage_slot_preserved_def] >>
-      gvs[SUBSET_DEF, finite_setTheory.fIN_IN] >>
-      gvs[run_call_inv_def, active_rollbacks_saved] >>
-      gvs[storage_slot_preserved_def] >>
-      first_x_assum irule >>
-      simp[finite_setTheory.fIN_IN] >>
-      metis_tac[] )
-    (* Now prove EVERY storage_slot_preserved for active_rollbacks *)
-    >> simp[active_rollbacks_saved]
-    >> `¬(LENGTH s1.contexts < ed)` by simp[Abbr`ed`]
-    >> simp[EVERY_EL, EL_MAP]
-    >> rpt strip_tac
-    >> Cases_on `n = 0`
-    >- (
-      (* n = 0: SND (EL 0 s1.contexts) has storage = s0.rollback storage *)
-      gvs[]
-      >> `storage_slot_preserved s0.rollback es.rollback`
-           by (fs[run_call_inv_def, active_rollbacks_saved])
-      >> last_x_assum (qspec_then `0` mp_tac) >> simp[]
-      >> strip_tac
-      >> gvs[storage_slot_preserved_def]
-      >> `0 < m` by (Cases_on`m` >> gvs[])
-      >> simp[HD_TAKE]
-      >> rpt strip_tac
-      >> first_x_assum irule
-      >> gvs[SUBSET_DEF, finite_setTheory.fIN_IN]
-      >> Cases_on`s1.contexts` >> gvs[]
-      >> strip_tac
-      >> first_x_assum(qspec_then`0`(fn th => mp_tac th >> impl_tac >- gvs[]
-            >> IF_CASES_TAC)) >> rw[]
-      >> metis_tac[])
-    >> (
-      (* n > 0: SND (EL n s1.contexts) has storage = SND (EL (n-1) s0.contexts) storage *)
-      last_x_assum (qspec_then `n` mp_tac) >> simp[]
-      >> gvs[LENGTH_TAKE_EQ]
-      >> strip_tac
-      >> simp[EL_TAKE]
-      >> gvs[run_call_inv_def, active_rollbacks_saved]
-      >> gvs[EVERY_EL, EL_MAP, LENGTH_TAKE_EQ]
-      >> last_x_assum(qspec_then`n-1`mp_tac)
-      >> simp[EL_TAKE]
-      >> strip_tac
-      >> gvs[storage_slot_preserved_def]
-      >> rpt strip_tac
-      >> gvs[EL_TAKE]
-      >> gvs[MIN_DEF]
-      >> Cases_on`s0.contexts` >> gvs[ADD1]
-      >> Cases_on`es.contexts` >> gvs[Abbr`ed`,ADD1]
-      >> Cases_on`n` >> gvs[ADD1]
-      >> qmatch_asmsub_rename_tac`n < LENGTH t`
-      >> last_x_assum(qspec_then`n + 1`mp_tac)
-      >> simp[SUBSET_DEF] >> gvs[finite_setTheory.fIN_IN]
-      >> disch_then(qspec_then`SK a k`mp_tac) >> simp[] >> strip_tac
-      >> first_x_assum(qspecl_then[`a`,`k`]mp_tac)
-      >> Cases_on`n` >> gvs[]
-      >> simp[EL_TAKE,EL_CONS]))
-  >> (
-    (* CASE −1: pop. *)
-    drule step_pop_structure
-    >> impl_keep_tac >- gvs[wf_state_def]
-    >> disch_then $ qx_choosel_then[`new_head`,`parent`,`rest`]assume_tac
-    >> qmatch_asmsub_abbrev_tac `s0.contexts = callee_ctx :: parent :: rest`
-    (* outputTo_consistent_stack s1: new_head has parent's msgParams. *)
-    >> `outputTo_consistent_stack s1` by (
-         `EVERY outputTo_consistent_ctx (MAP FST s0.contexts) ∧
-          s0.contexts ≠ []`
-           by fs[outputTo_consistent_stack_def]
-         >> gvs[]
-         >> simp[outputTo_consistent_stack_def,
-                 outputTo_consistent_ctx_def]
-         >> gvs[outputTo_consistent_ctx_def])
-    >> simp[]
-    (* active_rollbacks ed s1 vs active_rollbacks ed s0.
-       LENGTH s1 = LENGTH s0 - 1. s1.contexts = (new_head, SND parent) :: rest.
-       s0.contexts = HD :: parent :: rest. *)
-    >> qabbrev_tac `ed = LENGTH es.contexts`
-    >> `EVERY (λrb. storage_slot_preserved rb es.rollback)
-              (active_rollbacks ed s0)`
-         by fs[run_call_inv_def]
-    >> `LENGTH s0.contexts = 2 + LENGTH rest ∧
-        LENGTH s1.contexts = 1 + LENGTH rest`
-        by (gvs[])
-    >> `¬(LENGTH s0.contexts < ed)` by simp[]
-    (* Key: show storage_slot_preserved s1.rollback es.rollback from the
-       storage-pointwise disjunction + access monotonicity + the relevant
-       s0-side slot-preserved facts. *)
-    >> `storage_slot_preserved s0.rollback es.rollback ∧
-        storage_slot_preserved (SND callee_ctx) es.rollback`
-         by (qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
-             >> simp[active_rollbacks_saved]
-             >> qpat_x_assum `s0.contexts = _` SUBST1_TAC
-             >> `LENGTH s0.contexts + 2 - ed ≥ 2` by simp[]
-             >> `∃n. LENGTH s0.contexts + 2 - ed = SUC (SUC n)` by
-                  (Cases_on `LENGTH s0.contexts + 2 - ed` >> fs[]
-                   >> Cases_on `n` >> fs[])
-             >> simp[] >> strip_tac >> fs[])
-    >> `storage_slot_preserved s1.rollback es.rollback` by (
-         (* step_pop_structure's conclusion is a disjunction of
-            (accesses-subset ∧ storage-eq) pairs. Case-split and discharge
-            each via the matching subset and the corresponding
-            storage_slot_preserved hypothesis. *)
-         simp[storage_slot_preserved_def]
-         >> rpt strip_tac
-         >> gvs[]
-         >- (
-           (* Disjunct A: s.accesses ⊆ s'.accesses ∧ storage s' = storage s. *)
-           `¬fIN (SK a k) s0.rollback.accesses.storageKeys`
-             by (fs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
-                 >> metis_tac[])
-           >> `lookup_storage k (lookup_account a s0.rollback.accounts).storage =
-               lookup_storage k (lookup_account a es.rollback.accounts).storage`
-                by fs[storage_slot_preserved_def]
-           >> fs[lookup_storage_def]
-           >> metis_tac[])
-         >>
-           (* Disjunct B: callee_rb.accesses ⊆ s'.accesses ∧
-              storage s' = storage callee_rb. *)
-           `¬fIN (SK a k) (SND callee_ctx).accesses.storageKeys`
-             by (gvs[]
-                 >> gvs[pred_setTheory.SUBSET_DEF, finite_setTheory.fIN_IN]
-                 >> metis_tac[])
-           >> `lookup_storage k (lookup_account a (SND callee_ctx).accounts).storage =
-               lookup_storage k (lookup_account a es.rollback.accounts).storage`
-                by fs[storage_slot_preserved_def])
-    (* Split on whether s1.contexts is below ed or not. *)
-    >> Cases_on `LENGTH s1.contexts < ed`
-    >- ((* LENGTH s1 < ed: active_rollbacks s1 = [s1.rollback]. *)
-        simp[active_rollbacks_saved])
-    (* LENGTH s1 ≥ ed. Both active_rollbacks have a non-trivial tail.
-       s0's TAKE takes one more element than s1's. *)
-    >> qpat_x_assum `EVERY _ (active_rollbacks ed s0)` mp_tac
-    >> simp[active_rollbacks_saved]
-    >> gvs[MIN_DEF] >> rw[] >> gvs[ADD1,Abbr`ed`]
-    >> Cases_on`es.contexts` >> gvs[ADD1]
-    >> Cases_on`rest` >> Cases_on`t` >> gvs[ADD1]
-  )
-  *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  fs[run_call_inv_def] >>
+  `0 < LENGTH es.contexts` by (Cases_on `es.contexts` >> gvs[]) >>
+  `s.contexts <> [] /\ outputTo_consistent s` by
+    metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent] >>
+  `wf_state s'` by metis_tac[step_preserves_wf_state, SND] >>
+  `s'.txParams = es.txParams` by
+    metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND] >>
+  simp[run_call_inv_def] >>
+  conj_tac >- gvs[wf_state_def] >>
+  conj_tac >- suspend "storage" >>
+  strip_tac >> Cases_on `r` >> gvs[] >>
+  conj_tac
+  >- (`EVERY (^collision_protected es.rollback)
+        (s'.rollback :: MAP SND
+          (TAKE (LENGTH s'.contexts - LENGTH es.contexts) s'.contexts))`
+        suffices_by simp[] >>
+      irule step_continuing_collision_protection >>
+      simp[] >> qexists_tac `s` >> simp[]) >>
+  irule step_continuing_protected_frames >>
+  simp[] >> qexists_tac `s` >> simp[]
 QED
+
+Resume run_call_inv_step[storage]:
+  qmatch_goalsub_abbrev_tac `EVERY P (active_rollbacks _ s')` >>
+  `EVERY P (active_rollbacks (LENGTH es.contexts) s)` by fs[Abbr `P`] >>
+  `P s.rollback` by gvs[active_rollbacks_def] >>
+  Cases_on `LENGTH s'.contexts = LENGTH s.contexts`
+  >- (`same_frame_rel s s'` by metis_tac[step_same_frame] >>
+      irule active_rollbacks_same_frame_transport >>
+      reverse conj_tac >- (qexists_tac `s` >> simp[]) >>
+      simp[Abbr `P`] >> rpt gen_tac >> disch_tac >>
+      drule_all step_preserves_non_accessed_storage >> strip_tac >>
+      `~fIN (SK a k) s.rollback.accesses.storageKeys` by
+        (fs[same_frame_rel_def, SUBSET_DEF, finite_setTheory.fIN_IN] >>
+         metis_tac[]) >> fs[]) >>
+  Cases_on `LENGTH s.contexts < LENGTH s'.contexts`
+  >- suspend "push_storage" >>
+  suspend "pop_storage"
+QED
+
+Resume run_call_inv_step[push_storage]:
+  drule step_push_structure >> (impl_tac >- simp[]) >> strip_tac >>
+  `P s'.rollback` by
+    (simp[Abbr `P`] >> rpt gen_tac >> disch_tac >>
+     irule storage_slots_compose >> simp[] >>
+     qexists_tac `s.rollback` >> fs[] >>
+     qx_gen_tac `address` >> qx_gen_tac `key` >> disch_tac >>
+     qpat_x_assum `!a. _ \/ _` (qspec_then `address` strip_assume_tac) >>
+     simp[lookup_storage_def, empty_storage_def]) >>
+  irule active_rollbacks_push_transport >> simp[ADD1] >>
+  qexistsl_tac [`P`,
+    `\rb next. toSet rb.accesses.storageKeys SUBSET toSet next.accesses.storageKeys /\
+       (!a. (lookup_account a next.accounts).storage =
+            (lookup_account a rb.accounts).storage)`, `s`] >>
+  simp[] >>
+  map_every qx_gen_tac [`rb`, `next`] >> strip_tac >>
+  fs[Abbr `P`] >> rpt gen_tac >> disch_tac >>
+  `~fIN (SK a k) rb.accesses.storageKeys` by
+    (fs[SUBSET_DEF, finite_setTheory.fIN_IN] >> metis_tac[]) >>
+  fs[]
+QED
+
+Resume run_call_inv_step[pop_storage]:
+  `LENGTH s'.contexts < LENGTH s.contexts` by decide_tac >>
+  `EVERY (wf_context o FST) s.contexts` by gvs[wf_state_def] >>
+  drule_all step_pop_structure >>
+  disch_then (qx_choosel_then [`head`, `parent`, `rest`] strip_assume_tac) >>
+  `2 <= LENGTH s.contexts` by
+    (qpat_assum `s.contexts = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  `P (SND (HD s.contexts))` by
+    (`MEM (SND (HD s.contexts)) (active_rollbacks (LENGTH es.contexts) s)` by
+       (irule (cj 2 active_rollbacks_pop_sources) >> simp[]) >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `?source. P source /\
+    toSet source.accesses.storageKeys SUBSET toSet s'.rollback.accesses.storageKeys /\
+    (!a. (lookup_account a s'.rollback.accounts).storage =
+         (lookup_account a source.accounts).storage)` by metis_tac[] >>
+  `P s'.rollback` by
+    (fs[Abbr `P`] >> rpt gen_tac >> disch_tac >>
+     `~fIN (SK a k) source.accesses.storageKeys` by
+       (fs[SUBSET_DEF, finite_setTheory.fIN_IN] >> metis_tac[]) >>
+     fs[] >> metis_tac[]) >>
+  irule active_rollbacks_pop_transport >>
+  simp[] >> qexistsl_tac [`HD s.contexts`, `parent`, `s`] >> fs[]
+QED
+
+Finalise run_call_inv_step
 
 (* -------------------------------------------------------------------------
  * Main run_call preservation theorem.
@@ -4633,12 +4505,12 @@ Theorem run_call_preserves_inv:
     EVERY (λrb. storage_slot_preserved rb es.rollback)
           (MAP SND (TAKE 2 es.contexts)) ∧
     run_call es = SOME (res, es') ⇒
-    run_call_inv es es'
+    run_call_inv es res es'
 Proof
   rpt strip_tac
   >> `es.contexts ≠ []` by fs[wf_state_def]
   >> gvs[run_call_def]
-  >> `(λ p. run_call_inv es (SND p)) (res, es')` suffices_by simp[]
+  >> `(λ p. run_call_inv es (FST p) (SND p)) (res, es')` suffices_by simp[]
   >> irule (MP_CANON OWHILE_INV_IND)
   >> goal_assum (first_assum o mp_then Any mp_tac)
   >> simp[run_call_inv_refl]
@@ -4651,7 +4523,7 @@ Proof
        >> Cases_on `es.contexts` >> gvs[outputTo_consistent_stack_def])
   >> irule run_call_inv_step
   >> simp[]
-  >> qexistsl_tac [`q`, `s''`]
+  >> qexistsl_tac [`r''`, `s''`]
   >> simp[]
 QED
 
@@ -4674,9 +4546,8 @@ Theorem run_call_preserves_storage_outside_accessed_slots:
         ¬account_already_created (lookup_account a es.rollback.accounts)
 Proof
   rpt strip_tac
-  >> disj1_tac
   >> drule_all run_call_preserves_inv
-  >> rw[run_call_inv_def, active_rollbacks_saved, storage_slot_preserved_def]
+  >> rw[run_call_inv_def, active_rollbacks_saved]
 QED
 
 Theorem run_call_preserves_txParams:
