@@ -36,7 +36,7 @@ Theory vfmStoragePredicates
 Ancestors
   arithmetic combin list pair pred_set finite_set rich_list sum
   vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmStaticCalls vfmSameFrame vfmPreserves
+  vfmStaticCalls vfmSameFrame vfmPreserves vfmStepLength
 Libs
   dep_rewrite BasicProvers
 
@@ -1564,6 +1564,332 @@ Proof
   irule preserves_storage_ignore_bind >> simp[] >>
   irule preserves_storage_bind >> simp[] >> gen_tac >>
   irule preserves_storage_cond >> simp[]
+QED
+
+(* Shared CALL/CREATE prefix interface, upstream of the frame consumers. *)
+Theorem call_prefix_refl:
+  s.contexts <> [] ==>
+  cp_rel s s /\ s.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  simp[cp_rel_refl]
+QED
+
+Theorem call_prefix_trans:
+  (cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) /\
+  (cp_rel t u /\ u.rollback.accesses.storageKeys = t.rollback.accesses.storageKeys) ==>
+  cp_rel s u /\ u.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  metis_tac[cp_rel_trans]
+QED
+
+Theorem call_prefix_contexts:
+  cp_rel s t /\ s.contexts <> [] ==>
+  t.contexts <> [] /\ LENGTH t.contexts = LENGTH s.contexts
+Proof
+  rw[cp_rel_def] >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem bind_call_prefix_grows_extract:
+  (cp_rel s0 s /\ s.rollback.accesses.storageKeys = s0.rollback.accesses.storageKeys) /\
+  s0.contexts <> [] /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) g /\
+  bind g f s = (r,t) /\ LENGTH s0.contexts < LENGTH t.contexts ==>
+  ?x u. g s = (INL x,u) /\
+    (cp_rel s0 u /\ u.rollback.accesses.storageKeys = s0.rollback.accesses.storageKeys) /\
+    f x u = (r,t)
+Proof
+  rw[preserves_when_def, bind_def]
+  >> gvs[AllCaseEqs()]
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> imp_res_tac call_prefix_contexts
+  >> gvs[]
+  >- (irule cp_rel_trans >> qexists_tac `s` >> simp[])
+  >> strip_tac >> gvs[]
+QED
+
+Theorem call_prefix_of_cp_keys:
+  cp m /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) m ==>
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) m
+Proof
+  rw[cp_eq_preserves_when, preserves_when_def] >> metis_tac[]
+QED
+
+Theorem call_prefix_keys_leaves:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (pop_stack n) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (memory_expansion_info off sz) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (consume_gas gas) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) assert_not_static /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (expand_memory ext) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (set_return_data data)
+Proof
+  rw[preserves_when_def, pop_stack_def, memory_expansion_info_def,
+     consume_gas_def, assert_not_static_def, expand_memory_def,
+     set_return_data_def, get_static_def, get_current_context_def,
+     set_current_context_def, bind_def, ignore_bind_def, return_def,
+     assert_def, fail_def]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem call_prefix_keys_access_address:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (access_address a)
+Proof
+  rw[preserves_when_def, access_address_def, domain_check_def,
+     set_domain_def, ignore_bind_def, bind_def, return_def, fail_def]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem call_prefix_keys_getters:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_accounts /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_gas_left /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_callee /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_num_contexts /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (return x)
+Proof
+  rw[preserves_when_def, get_accounts_def, get_gas_left_def,
+     get_callee_def, get_num_contexts_def, get_current_context_def,
+     bind_def, return_def, fail_def] >> gvs[AllCaseEqs()]
+QED
+
+Theorem call_prefix_bind:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) g /\
+  (!x. preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (f x)) ==>
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (bind g f)
+Proof
+  strip_tac >> irule preserves_when_bind >> simp[]
+  >> metis_tac[call_prefix_trans, call_prefix_contexts]
+QED
+
+Theorem call_prefix_leaves:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (pop_stack n) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (memory_expansion_info off sz) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (consume_gas gas) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) assert_not_static /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (expand_memory ext) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (set_return_data data) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (access_address a) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_accounts /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_gas_left /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_callee /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) get_num_contexts /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (return x)
+Proof
+  rpt conj_tac >> irule call_prefix_of_cp_keys
+  >> simp[call_prefix_keys_leaves, call_prefix_keys_access_address,
+          call_prefix_keys_getters]
+QED
+
+Theorem create_prefix_keys_leaves:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (read_memory off sz) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (assert b e) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (ensure_storage_in_domain a)
+Proof
+  rw[preserves_when_def, read_memory_def, get_current_context_def,
+     ensure_storage_in_domain_def, domain_check_def, set_domain_def,
+     bind_def, ignore_bind_def, assert_def, return_def, fail_def]
+  >> gvs[AllCaseEqs()]
+QED
+
+Theorem create_prefix_leaves:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (read_memory off sz) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (assert b e) /\
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys) (ensure_storage_in_domain a)
+Proof
+  rpt conj_tac >> irule call_prefix_of_cp_keys
+  >> simp[create_prefix_keys_leaves]
+QED
+
+val create_peel =
+  drule_at (Pat `bind`) bind_call_prefix_grows_extract
+  >> simp[call_prefix_leaves, create_prefix_leaves]
+  >> disch_then (qspec_then `s` mp_tac) >> simp[]
+  >> qpat_x_assum `bind _ _ _ = _` kall_tac
+  >> strip_tac >> gvs[];
+
+Theorem step_create_reaches_proceed_create:
+  step_create two s = (r,s') /\ s.contexts <> [] /\
+  LENGTH s.contexts < LENGTH s'.contexts ==>
+  ?u sender address value code gas.
+    cp_rel s u /\ u.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys /\
+    proceed_create sender address value code gas u = (r,s') /\
+    sender = (FST (HD s.contexts)).msgParams.callee /\
+    ~account_already_created (lookup_account address s.rollback.accounts)
+Proof
+  simp[step_create_def, ignore_bind_def] >> strip_tac
+  >> `cp_rel s s /\ s.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys`
+    by simp[call_prefix_refl]
+  >> create_peel >> create_peel >> create_peel
+  >> create_peel >> create_peel >> create_peel
+  >> rename1 `get_callee beforeSender = (INL sender,afterSender)`
+  >> `sender = (FST (HD s.contexts)).msgParams.callee`
+    by gvs[get_callee_def, get_current_context_def, bind_def, return_def,
+           fail_def, cp_rel_def, AllCaseEqs()]
+  >> `afterSender.rollback.accounts = s.rollback.accounts` by gvs[cp_rel_def]
+  >> gvs[get_accounts_def, Once bind_def, return_def]
+  >> create_peel >> create_peel >> create_peel
+  >> create_peel >> create_peel >> create_peel
+  >> qpat_x_assum `pop_stack _ _ = _` kall_tac
+  >> qpat_x_assum `memory_expansion_info _ _ _ = _` kall_tac
+  >> qpat_x_assum `consume_gas _ _ = _` kall_tac
+  >> qpat_x_assum `expand_memory _ _ = _` kall_tac
+  >> qpat_x_assum `read_memory _ _ _ = _` kall_tac
+  >> qmatch_asmsub_abbrev_tac `proceed_create _ address value code gas`
+  >> qmatch_asmsub_abbrev_tac `if (_ \/ _ \/ _) then _ else _`
+  >> qmatch_asmsub_abbrev_tac `(if guard then abort_unuse _ else _) _ = _`
+  >> Cases_on `guard`
+  >- (fs[COND_RATOR, IgnAsm `Abbrev _`]
+      >> drule_at (Pat `_ = (_,s')`) psf_imp_length_contexts_preserved
+      >> simp[] >> imp_res_tac call_prefix_contexts >> gvs[])
+  >> gvs[COND_RATOR, ignore_bind_def]
+  >> create_peel >> create_peel
+  >> Cases_on `account_already_created (lookup_account address s.rollback.accounts)`
+  >> gvs[COND_RATOR]
+  >- (imp_res_tac call_prefix_contexts
+      >> drule_all abort_create_exists_length >> simp[])
+  >> rename1 `proceed_create _ address value code gas entry = (r,s')`
+  >> qexistsl_tac [`entry`, `address`, `value`, `code`, `gas`] >> simp[]
+QED
+
+Theorem proceed_create_frame_effects:
+  proceed_create sender address value code gas s = (r,s') /\ s.contexts <> [] ==>
+  r = INL () /\
+  s'.rollback.accounts =
+    transfer_value sender address value
+      (increment_nonce address
+        (clear_storage address (increment_nonce sender s.rollback.accounts))) /\
+  (SND (HD s'.contexts)).accounts = increment_nonce sender s.rollback.accounts /\
+  s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys /\
+  (SND (HD s'.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys /\
+  ?t. FST (HD s'.contexts) = initial_context address code F (Code address) t
+Proof
+  strip_tac
+  >> gvs[proceed_create_def, update_accounts_def, get_rollback_def,
+         get_original_def, set_original_def, push_context_def,
+         ignore_bind_def, bind_def, return_def, fail_def, AllCaseEqs()]
+  >> metis_tac[]
+QED
+
+Theorem increment_nonce_lookup:
+  (lookup_account a (increment_nonce b accounts)).nonce =
+    if a = b then SUC (lookup_account a accounts).nonce
+    else (lookup_account a accounts).nonce
+Proof
+  Cases_on `a = b` >>
+  simp[increment_nonce_def, lookup_account_def, update_account_def,
+       combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem increment_nonce_code:
+  (lookup_account a (increment_nonce b accounts)).code =
+    (lookup_account a accounts).code
+Proof
+  Cases_on `a = b` >>
+  simp[increment_nonce_def, lookup_account_def, update_account_def,
+       combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem clear_storage_nonce[simp]:
+  (lookup_account a (clear_storage b accounts)).nonce =
+    (lookup_account a accounts).nonce
+Proof
+  rw[clear_storage_def, lookup_account_def, update_account_def,
+     combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem clear_storage_code[simp]:
+  (lookup_account a (clear_storage b accounts)).code =
+    (lookup_account a accounts).code
+Proof
+  rw[clear_storage_def, lookup_account_def, update_account_def,
+     combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem proceed_create_nonce_certificate:
+  s.contexts <> [] /\
+  proceed_create sender address value code gas s = (r, t) ==>
+  0 < (lookup_account address t.rollback.accounts).nonce /\
+  (FST (HD t.contexts)).msgParams.outputTo = Code address
+Proof
+  strip_tac >> drule_all proceed_create_frame_effects >> strip_tac
+  >> simp[transfer_value_preserves_nonce, increment_nonce_lookup,
+          initial_context_def, initial_msg_params_def]
+QED
+
+Theorem proceed_create_nonce_code:
+  proceed_create sender address value code gas s = (r,t) /\ s.contexts <> [] ==>
+  !a. (lookup_account a t.rollback.accounts).code =
+        (lookup_account a s.rollback.accounts).code /\
+      (lookup_account a t.rollback.accounts).nonce =
+        (lookup_account a s.rollback.accounts).nonce +
+          (if a = sender then 1 else 0) + (if a = address then 1 else 0)
+Proof
+  strip_tac >> drule_all proceed_create_frame_effects >> strip_tac
+  >> simp[transfer_value_preserves_nonce, transfer_value_preserves_code,
+          increment_nonce_lookup, increment_nonce_code]
+  >> gen_tac >> Cases_on `a = sender` >> Cases_on `a = address` >> gvs[]
+QED
+
+(* Successful growing CREATE: the collision certificate refers to the
+   original accounts, and the nonce equation also covers sender = address. *)
+Theorem step_create_growth_effects:
+  step_create two s = (r,t) /\ s.contexts <> [] /\
+  LENGTH s.contexts < LENGTH t.contexts ==>
+  r = INL () /\
+  ?address.
+    (FST (HD t.contexts)).msgParams.outputTo = Code address /\
+    ~account_already_created (lookup_account address s.rollback.accounts) /\
+    0 < (lookup_account address t.rollback.accounts).nonce /\
+    (!a. (lookup_account a t.rollback.accounts).code =
+           (lookup_account a s.rollback.accounts).code /\
+         (lookup_account a t.rollback.accounts).nonce =
+           (lookup_account a s.rollback.accounts).nonce +
+           (if a = (FST (HD s.contexts)).msgParams.callee then 1 else 0) +
+           (if a = address then 1 else 0))
+Proof
+  strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_create_nonce_certificate >> strip_tac
+  >> drule_all proceed_create_nonce_code >> strip_tac
+  >> drule_all proceed_create_frame_effects >> strip_tac
+  >> gvs[cp_rel_def]
+  >> qexists_tac `address` >> simp[]
 QED
 
 (* A cp prefix cannot account for a changed storage object. *)

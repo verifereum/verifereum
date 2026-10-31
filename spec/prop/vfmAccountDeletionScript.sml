@@ -813,24 +813,7 @@ Proof
   simp[account_already_created_def, NULL_EQ]
 QED
 
-Theorem increment_nonce_lookup:
-  (lookup_account a (increment_nonce b accounts)).nonce =
-    if a = b then SUC (lookup_account a accounts).nonce
-    else (lookup_account a accounts).nonce
-Proof
-  Cases_on `a = b` >>
-  simp[increment_nonce_def, lookup_account_def, update_account_def,
-       APPLY_UPDATE_THM]
-QED
-
-Theorem increment_nonce_code:
-  (lookup_account a (increment_nonce b accounts)).code =
-    (lookup_account a accounts).code
-Proof
-  Cases_on `a = b` >>
-  simp[increment_nonce_def, lookup_account_def, update_account_def,
-       APPLY_UPDATE_THM]
-QED
+(* increment_nonce_lookup and increment_nonce_code are shared upstream. *)
 
 Theorem deposit_code_nonce:
   (lookup_account a
@@ -849,20 +832,7 @@ Proof
   simp[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
 QED
 
-Theorem proceed_create_nonce_certificate:
-  s.contexts ≠ [] ∧
-  proceed_create sender address value code gas s = (r, t) ⇒
-  0 < (lookup_account address t.rollback.accounts).nonce ∧
-  (FST (HD t.contexts)).msgParams.outputTo = Code address
-Proof
-  strip_tac >> qhdtm_x_assum `proceed_create` mp_tac >>
-  simp[proceed_create_def, ignore_bind_def, bind_def,
-       update_accounts_def, get_rollback_def, get_original_def,
-       set_original_def, push_context_def, return_def] >>
-  strip_tac >> gvs[] >>
-  simp[transfer_value_preserves_nonce, increment_nonce_lookup,
-       initial_context_def, initial_msg_params_def]
-QED
+(* proceed_create_nonce_certificate is shared in vfmStoragePredicates. *)
 
 val push_post = ``λQ (m:execution_state -> ('a + exception option) # execution_state). ∀s r t.
   m s = (r,t) ∧ s.contexts ≠ [] ∧
