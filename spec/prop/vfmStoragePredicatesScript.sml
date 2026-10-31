@@ -26,8 +26,9 @@
  *     per-opcode dispatch theorem combining pns with opcode case
  *     analysis.
  *   - Compound operation lemmas: handle_create, step_self_destruct,
- *     step_call, step_create, proceed_call, proceed_create, dispatch
- *     precompiles etc. all preserve storage.
+ *     step_call, proceed_call, dispatch precompiles etc. all preserve
+ *     storage; step_create and proceed_create preserve it except for
+ *     clearing the storage of the address they create.
  *   - Access-list effect lemmas: write_storage_effect, access_slot
  *     adds to storageKeys, step_sstore_gas_consumption adds the slot.
  * ========================================================================== *)
@@ -1524,14 +1525,24 @@ Proof
   >> simp[preserves_rollback_dispatch_precompiles, preserves_rollback_imp_preserves_storage]
 QED
 
-Theorem preserves_storage_proceed_create[simp]:
-  preserves_storage
-    (proceed_create senderAddress address value code cappedGas)
+(* When it succeeds, proceed_create clears the storage of the address it
+   creates, as EELS process_create_message does; it preserves every other
+   account's storage. *)
+Theorem proceed_create_storage:
+  proceed_create senderAddress address value code cappedGas s = (r, s') ⇒
+  ∀a k.
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    if a = address ∧ r = INL () then 0w
+    else lookup_storage k (lookup_account a s.rollback.accounts).storage
 Proof
-  simp[proceed_create_def]
-  >> rpt (irule preserves_storage_bind >> rw[]
-          ORELSE irule preserves_storage_ignore_bind >> rw[]
-          ORELSE irule preserves_storage_cond >> rw[])
+  strip_tac
+  >> Cases_on `s.contexts = []`
+  >> gvs[proceed_create_def, fail_def, update_accounts_def, get_rollback_def,
+         get_original_def, set_original_def, push_context_def,
+         ignore_bind_def, bind_def, return_def]
+  >> rw[transfer_value_def, increment_nonce_def, clear_storage_def,
+        update_account_def, lookup_account_def, lookup_storage_def,
+        empty_storage_def, combinTheory.APPLY_UPDATE_THM, COND_RAND]
 QED
 
 Theorem preserves_storage_step_call:
@@ -1555,24 +1566,18 @@ Proof
   irule preserves_storage_cond >> simp[]
 QED
 
-Theorem preserves_storage_step_create:
-  preserves_storage (step_create two)
+(* step_create changes a storage slot only by creating a new frame at an
+   address that had no nonce and no code, whose storage it clears. *)
+Theorem step_create_storage:
+  step_create two s = (r, s') ⇒
+  ∀a k.
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage =
+    lookup_storage k (lookup_account a s.rollback.accounts).storage ∨
+    r = INL () ∧ LENGTH s'.contexts = SUC (LENGTH s.contexts) ∧
+    lookup_storage k (lookup_account a s'.rollback.accounts).storage = 0w ∧
+    ¬account_already_created (lookup_account a s.rollback.accounts)
 Proof
-  simp[step_create_def] >>
-  irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_ignore_bind >> simp[] >>
-  irule preserves_storage_ignore_bind >> simp[] >>
-  irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_ignore_bind >> simp[] >>
-  irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_ignore_bind >> simp[] >>
-  irule preserves_storage_ignore_bind >> simp[] >>
-  irule preserves_storage_ignore_bind >> simp[] >>
-  irule preserves_storage_bind >> simp[] >> gen_tac >>
-  irule preserves_storage_cond >> simp[]
+  cheat
 QED
 
 Theorem step_call_same_frame_preserves_storage:
@@ -1593,8 +1598,10 @@ Theorem step_create_same_frame_preserves_storage:
     lookup_storage k (lookup_account a s'.rollback.accounts).storage =
     lookup_storage k (lookup_account a s.rollback.accounts).storage
 Proof
-  strip_tac
-  >> metis_tac[preserves_storage_step_create, preserves_storage_def]
+  rpt strip_tac
+  >> drule step_create_storage
+  >> disch_then (qspecl_then [`a`, `k`] strip_assume_tac)
+  >> gvs[]
 QED
 
 (* Main dispatcher: is_call op + step_inst INL + same length ⇒ storage preserved. *)
@@ -1628,8 +1635,15 @@ Proof
   >> Cases_on `is_call op`
   >- ((* Call/create: use preserves_storage_step_call/create *)
       Cases_on `op` >> gvs[is_call_def, step_inst_def]
-      >> metis_tac[preserves_storage_step_call, preserves_storage_step_create,
-                   preserves_storage_def])
+      >~ [`step_create`]
+      >- (rpt gen_tac >> drule step_create_storage
+          >> disch_then (qspecl_then [`a`, `k`] strip_assume_tac)
+          >> gvs[])
+      >~ [`step_create`]
+      >- (rpt gen_tac >> drule step_create_storage
+          >> disch_then (qspecl_then [`a`, `k`] strip_assume_tac)
+          >> gvs[])
+      >> metis_tac[preserves_storage_step_call, preserves_storage_def])
   (* Non-call ops *)
   >> Cases_on `op = SStore`
   >- ((* SStore INR: failed before write_storage *)

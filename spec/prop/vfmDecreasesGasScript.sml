@@ -1666,7 +1666,8 @@ Theorem step_create_lemma:
         set_original $ update_account address empty_account_state original;
         _ <- update_accounts $
           transfer_value senderAddress address value o
-          increment_nonce address;
+          increment_nonce address o
+          clear_storage address;
         _ <- get_static;
         push_context $
           (initial_context address code F (Code address) subContextTx, rollback)

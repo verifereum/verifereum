@@ -23,12 +23,14 @@ Libs
  * What a frame not executing as an account can do to it.
  * ------------------------------------------------------------------------- *)
 
-(* Balance is free (value transfers); the nonce may change only for an
- * account a CREATE may target (EIP-7610: no nonce, code or storage). *)
+(* Balance is free (value transfers); the nonce and storage may change only
+ * for an account a CREATE may target (no nonce and no code), whose nonce
+ * the CREATE bumps and whose storage it clears. *)
 Definition foreign_account_change_def:
   foreign_account_change acc acc' ⇔
-    acc'.code = acc.code ∧ acc'.storage = acc.storage ∧
-    (acc'.nonce = acc.nonce ∨ ¬account_already_created acc)
+    acc'.code = acc.code ∧
+    (acc'.nonce = acc.nonce ∧ acc'.storage = acc.storage ∨
+     ¬account_already_created acc)
 End
 
 Theorem foreign_account_change_refl[simp]:
@@ -1453,7 +1455,9 @@ Theorem proceed_create_frame_effects:
   proceed_create sender address value code gas s = (r,s') ∧ s.contexts ≠ [] ⇒
   r = INL () ∧
   s'.rollback.accounts =
-    transfer_value sender address value (increment_nonce address (increment_nonce sender s.rollback.accounts)) ∧
+    transfer_value sender address value
+      (increment_nonce address
+        (clear_storage address (increment_nonce sender s.rollback.accounts))) ∧
   (SND (HD s'.contexts)).accounts = increment_nonce sender s.rollback.accounts ∧
   s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∧
   (SND (HD s'.contexts)).accesses.storageKeys = s.rollback.accesses.storageKeys ∧
@@ -1470,13 +1474,15 @@ Theorem create_foreign_account_updates:
   y ≠ sender ∧ ¬account_already_created (lookup_account address accounts) ⇒
   foreign_account_change (lookup_account y accounts)
     (lookup_account y (transfer_value sender address value
-      (increment_nonce address (increment_nonce sender accounts)))) ∧
+      (increment_nonce address
+        (clear_storage address (increment_nonce sender accounts))))) ∧
   foreign_account_change (lookup_account y accounts)
     (lookup_account y (increment_nonce sender accounts))
 Proof
   rw[foreign_account_change_def, transfer_value_preserves_code,
      transfer_value_preserves_storage, transfer_value_preserves_nonce,
-     increment_nonce_def, lookup_account_def, update_account_def]
+     increment_nonce_def, clear_storage_def, lookup_account_def,
+     update_account_def]
   >> Cases_on `y = address` >> gvs[combinTheory.APPLY_UPDATE_THM]
 QED
 
@@ -3143,8 +3149,8 @@ Proof
   >> strip_tac >> gvs[]
 QED
 
-(* If `a` has no code and a CREATE at `a` would collide (nonzero nonce or
- * nonempty storage), run_call changes neither its code nor its storage. *)
+(* If `a` has no code and a CREATE at `a` would collide (nonzero nonce),
+ * run_call changes neither its code nor its storage. *)
 Theorem run_call_empty_code_account:
   wf_state es ∧
   (lookup_account a es.rollback.accounts).code = [] ∧

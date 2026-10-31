@@ -1951,6 +1951,19 @@ Proof
   \\ rw[]
 QED
 
+Theorem ignores_extra_domain_update_accounts_clear_storage[simp]:
+  ignores_extra_domain (update_accounts (clear_storage a))
+Proof
+  rw[update_accounts_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, domain_accounts_def,
+         states_agree_modulo_accounts_def, rollback_state_component_equality,
+         rollback_states_agree_modulo_accounts_def, APPLY_UPDATE_THM,
+         accounts_agree_modulo_storage_def, clear_storage_def,
+         update_account_def, lookup_account_def, domain_check_def]
+  \\ CASE_TAC
+  \\ gvs[account_state_component_equality] \\ rw[]
+QED
+
 Theorem ignores_extra_domain_update_accounts_o[simp]:
   ignores_extra_domain (update_accounts f) ∧
   ignores_extra_domain (update_accounts g)
