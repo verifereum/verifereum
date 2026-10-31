@@ -172,8 +172,8 @@ jobs:
             holbuild executable runtests_unchecked
           } 2>&1 | tee -a "$RUNNER_TEMP/holbuild.log"
 
-      # After the test runners: they request a 30 s tactic timeout, which the
-      # main build's entries (built with none) don't satisfy, so a snapshot
+      # After the test runners: they check proof steps, which the main
+      # build's entries (built with none) don't satisfy, so a snapshot
       # saved before them makes every run rebuild those theories.
       - name: Save holbuild project snapshot
         if: always()
