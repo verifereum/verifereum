@@ -1945,24 +1945,19 @@ End
    head words holding the offsets of the five byte fields, then each field
    as a size word followed by its padded bytes. Anything else makes the
    block invalid. *)
-Definition deposit_log_word_def:
-  deposit_log_word (data: byte list) n =
-  w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP n data)))
-End
-
 Definition parse_deposit_request_def:
   parse_deposit_request (data: byte list) =
   if LENGTH data = 576 ∧
-     deposit_log_word data 0 = 160 ∧
-     deposit_log_word data 32 = 256 ∧
-     deposit_log_word data 64 = 320 ∧
-     deposit_log_word data 96 = 384 ∧
-     deposit_log_word data 128 = 512 ∧
-     deposit_log_word data 160 = 48 ∧
-     deposit_log_word data 256 = 32 ∧
-     deposit_log_word data 320 = 8 ∧
-     deposit_log_word data 384 = 96 ∧
-     deposit_log_word data 512 = 8
+     num_of_be_bytes (TAKE 32 data) = 160 ∧
+     num_of_be_bytes (TAKE 32 (DROP 32 data)) = 256 ∧
+     num_of_be_bytes (TAKE 32 (DROP 64 data)) = 320 ∧
+     num_of_be_bytes (TAKE 32 (DROP 96 data)) = 384 ∧
+     num_of_be_bytes (TAKE 32 (DROP 128 data)) = 512 ∧
+     num_of_be_bytes (TAKE 32 (DROP 160 data)) = 48 ∧
+     num_of_be_bytes (TAKE 32 (DROP 256 data)) = 32 ∧
+     num_of_be_bytes (TAKE 32 (DROP 320 data)) = 8 ∧
+     num_of_be_bytes (TAKE 32 (DROP 384 data)) = 96 ∧
+     num_of_be_bytes (TAKE 32 (DROP 512 data)) = 8
   then
     let pubkey = TAKE 48 (DROP 192 data) in
     let withdrawal_creds = TAKE 32 (DROP 288 data) in

@@ -37,6 +37,14 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Theorem deposit_log_wrong_size:
+  parse_deposit_request
+    (TAKE 160 deposit_test_log ++ deposit_test_word 47 ++
+     DROP 192 deposit_test_log) = NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
 Theorem deposit_log_too_long:
   parse_deposit_request (deposit_test_log ++ [0w]) = NONE
 Proof
