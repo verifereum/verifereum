@@ -169,3 +169,28 @@ works_when: inc_pc, return data, memory and stack updates preserve gas scalar fi
 evidence:
 - episode:E0045
 - tool_output:TO_seq58_progcall_port-20261031T152132Z_m1340_t001
+
+## L0020 scope='C1.3.8' tags=wf_context,decreases_gas_cred,handler,step_inner
+shape: Handler budget proof needs intermediate gas upper bounds but no full account/state invariant
+pattern: Strengthen the handler boundary input to EVERY (wf_context o FST) contexts. Extract this intermediate invariant from decreases_gas_cred_step_inner by unfolding decreases_gas_cred_def only in a boundary lemma; use its empty-context clause separately. This avoids synthesizing wf_state on failed inner states.
+works_when: Handler consumes only top and parent context wellformedness; accounts and other state invariants are irrelevant to its budget argument.
+evidence:
+- episode:E0048
+- source:prog/vfmCallInnerScript.sml:1468-1502
+
+## L0021 scope='C1.3.9' tags=Collect,OWHILE,budget,gas_stack_ok,finite_return
+shape: Scoped nonabort inner execution must yield finite ordinary collection-mode run return
+pattern: Propagate ISL,wf_state,rooted budget and Collect through OWHILE_INV_IND. Inner budget theorem excludes Impossible/Unimplemented; collection mode excludes OutsideDomain. Existing step_inner stack_room/gas_stack preservation and handle_step_not_abort_returns_inl discharge handler INL, including final root pop. Then combine unconditional run_call_eq_tr and run_call_inl_length.
+works_when: Initial state is wf, has rooted budget at its entry depth, and has at least two contexts.
+evidence:
+- episode:E0049
+- source:prog/vfmCallReturnScript.sml
+
+## L0022 scope='C1.3.8' tags=polymorphic,Cases_on,handle_create,unit
+shape: Case equation for handle_create fails to rewrite the live handler case despite identical printed terms
+pattern: handle_create's result is polymorphic. Annotate Cases_on `(handle_create e s) : unit execution_result` when composing handle_step; otherwise the case equation can belong to a distinct type instance and will not rewrite the live unit result.
+works_when: Composing a polymorphic reraising operation with a unit-typed handler.
+evidence:
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1418_t001
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1420_t001
+- source:prog/vfmCallInnerScript.sml:1450

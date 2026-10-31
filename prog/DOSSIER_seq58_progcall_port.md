@@ -12,6 +12,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.2.2 | proved |  | E0009 | Review checked frozen-export obstruction; report unprovable with tightest sufficient repair proposal, without applying it. Candidate repair obligation for no-entry path is calleeGas <= gasUsed after credit (equivalently for positive stipend, MIN stateCost initialSpill + calleeGas <= g+gasCost when charge reservoir-covered). Do not claim this alone repairs every cross-frame path. |
 | C1.3 | stuck | wrong_statement | E0011 | Shallow replan C1.3 safety and finite-return infrastructure with internal meter invariant scoped to reachable callee states; never propagate generic spill<=g as unauthorized export premise. Address consumer stack/global-frame invariants explicitly. |
 | C1.3.1 | proved |  | E0012 | Review and commit probe. Proceed C1.3.2 nested prefix boundaries; individual frame backing is checked but not yet established adequate for child gas refunds or for internal frame push/pop. |
+| C1.3.10 | proved |  | E0050 | Review C1.3.10; commit stable return theory. C1.3.11 must integrate isolated return interfaces and layer stipend observations without leaving duplicate old unrestricted safety machinery. |
 | C1.3.2 | proved |  | E0013 | Review bounded nested-frame probes and commit. Then C1.3.3 finite-run strategy checkpoint before authorizing full invariant/finite-return machinery. Remaining integration must prove margin before push (including stipend), ancestor-budget preservation, and exceptional-return restore/forfeit branches. |
 | C1.3.3 | proved |  | E0014 | Mandatory scoped PLAN update before accepting parent complete or beginning C1.4: evaluate proposed budget and add executable preservation, safety, collection-return, final-pop/summary and stipend leaves. Commit checked audit/probe changes after review. |
 | C1.3.4 | proved |  | E0015 | Review C1.3.4, commit new budget theory with required trailer, then scheduled semantic primitive contracts C1.3.5. |
@@ -177,6 +178,28 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T122504Z_m0321_t001` (use `read_tool_output` for exact output)
+
+## C1.3.10
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0050`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 60 steps, 59 tools, 15 holbuild, 5,207,785 tok (5,195,158 in, 12,627 out, 5,087,872 cached), 3895.8s, $0.8496292
+- next: Review C1.3.10; commit stable return theory. C1.3.11 must integrate isolated return interfaces and layer stipend observations without leaving duplicate old unrestricted safety machinery.
+
+### Attempts / Evidence
+
+- `E0050` (proved, , actual effort: 1 sessions, 4 msgs, 60 steps, 59 tools, 15 holbuild, 5,207,785 tok (5,195,158 in, 12,627 out, 5,087,872 cached), 3895.8s, $0.8496292)
+  - Define semantic call_return_gas/data/context; reuse call_meter_settle; prove exact handle_exception memory equation and rooted post-restoration refund bounds. -> Checked all handler branches including REVERT spill restoration, exceptional forfeit, creation-credit cancellation, success absorb/repay. No external caller backing is assumed. (`TO_seq58_progcall_port-20261031T152132Z_m1544_t001`)
+  - Relocate structural reachability/last-pop/guarded-trace machinery into isolated vfmCallReturnTheory; derive call_memory_final_pop and run_call_memory_returns with rooted budget and ceiling <= caller.gasUsed. -> Finite ordinary memory-return interface builds with exact returned context and actual refund <= ceiling. Stipend footprint layering and deletion/replacement of old duplicated local chain remain C1.3.11 integration work. General reachability budget needs 2<=n and n<=initial depth; both follow at root entry. (`TO_seq58_progcall_port-20261031T152132Z_m1537_t001`, `TO_seq58_progcall_port-20261031T152132Z_m1544_t001`)
+  - Add observation and scalar meter projection theorems for call_return_context. -> Baseline, committed, reservoir, spill, gasUsed, memory/control/log/refund projections checked by boundary simplification; consumers need not unfold merged semantic records. (`TO_seq58_progcall_port-20261031T152132Z_m1544_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1544_t001` (use `read_tool_output` for exact output)
 
 ## C1.3.2
 

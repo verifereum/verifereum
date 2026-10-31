@@ -2,57 +2,58 @@
 Updated: 2026-10-31
 
 ## Cursor
-- component: C1.3.8.2
-- status: in_progress
-- active_file: prog/vfmCallInnerScript.sml
-- next_action: Begin C1.3.8.2, verify vfmCallInnerTheory, then compose handle_exception's prepare prefix (Inner:1162), reader operations, pop budget boundaries (Inner:1094-1124), and safe_exception_output (Inner:1309). First inspect pop_and_incorporate_context/unuse_gas failure ordering: root budget should discharge on all pop results, even without an external caller gas bound. Internal pop already has INL and budget from parent margin.
-- expected_goal_shape: wf_state s, budget n ceiling s, 2<=n<=LENGTH contexts and handle_exception e s=(r,t) imply budget n ceiling t. Preparation supplies fixed-tail call_meter_result, internal pop uses preserved parent gas bound; root-pop failure may already have shortened contexts. Output safety preserves budget/nonempty without caller backing. Then compose handle_step and step.
-- verify_with: holbuild(targets=["vfmCallInnerTheory"], timeout=1800)
+- component: C1.3.10
+- status: ready
+- active_file: prog/vfmCallReturnScript.sml
+- next_action: Resume begun C1.3.10. Verify vfmCallReturnTheory, then inspect old call_memory_final_pop/run_call_memory_returns in vfmProgCallScript.sml (1559-1618 and later) and checked handle_exception_memory_return plus meter restore/settlement boundaries. Build final-pop and finite memory-return interfaces over the isolated vfmCallReturnTheory; replace gasUsed-only post records by exact semantic context transforms and bound actual post-restoration refund via root claim. No source edits have been made for C1.3.10 yet.
+- expected_goal_shape: At final root depth, budget bounds child claim by ceiling. Actual refundable execution gas after restore/forfeit is <= claim, hence <= grant <= caller.gasUsed. Returned caller context must express absorb_state_gas, failure credit_new_account or success repay_state_gas_spill_context plus memory/pc/stack/rollback observations.
+- verify_with: holbuild(targets=["vfmCallReturnTheory"], timeout=1800)
 
 ## If This Fails
-- Use checked interfaces, not merged-record expansion. checkpoint_progress for partial handler evidence; close_component(stuck) and strategist review only for structural failure. Do not add exported caller backing or extra gas hypotheses.
+- Use checked semantic boundary lemmas rather than unfolding merged records. Record partial evidence with checkpoint_progress; escalate structural interface gaps to strategist. Do not add caller backing or export guards.
 
 ## Do Not Retry
-- Unfold settled merged-record abbreviation with backed/claim/absorb/repay definitions in semantic consumers.: Repeated record normalization times out; call_meter_pop_settle_pair and call_meter_settle_pop_backed/claim now hide the implementation.
+- Expand settled merged semantic records with backed/claim/absorb/repay definitions in consumers: Repeated record normalization timed out in earlier work; use call_meter_pop_settle_pair and scalar settlement corollaries.
   - evidence: episode:E0041
   - evidence: episode:E0042
-- Use fixed-tail call_meter_result through stack-shrinking pop or require caller backing after root exit.: The external caller is intentionally unconstrained. Use budget_pop internally and root-exit plus observation budget interfaces externally.
-  - evidence: episode:E0043
-  - evidence: episode:E0045
+- Infer unconditional root nonforbidden exceptions from call_meter_budget alone: Budget exit intentionally permits unuse_gas failure after the pop. Ordinary-return proof instead combines scoped inner safety with full-wf-derived gas_stack_ok/stack_room_ok handler interfaces.
+  - evidence: episode:E0046
+  - evidence: episode:E0049
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box alternative: prove handler budget preservation for all results separately from forbidden-exception exclusion; root pop can discharge budget even if unuse_gas fails after pop. Check exact ordering before imposing a caller bound.
-- The scalar/list/semantic decomposition remains sound: compact settlement made the previously timing-out internal pop proof a short composition.
-- A fresh expert should question which wf/stack/gas facts survive handle_create and the preparation prefix, and which root-return nonabort facts belong to later finite-return components. Full handler composition has not been attempted.
-- Do not optimize another fixed-tail pop abstraction: root exit deliberately permits an unbacked external caller. Output observation interfaces already handle this.
+- Outside-the-box simplification succeeded: weakening handler input from full wf_state to EVERY (wf_context o FST) avoided reconstructing a large intermediate invariant; the exact smaller invariant follows directly from decreases_gas_cred_step_inner.
+- Fresh expert should question whether final-pop proof is bounding pre-restore gas instead of actual restored refund. Preserve committed/spill distinctions and use compact scalar interfaces.
+- Do not optimize the old unrestricted safety chain: new isolated vfmCallReturnTheory already proves scoped finite ordinary return. Integration must remove/replace obsolete local helpers later.
+- The decomposition remains appropriate after revised C1.3.8.2: budget preservation and ordinary return are separate interfaces. C1.3.10 should operate on final semantic context transforms, not gasUsed-only records.
 
 ### What Went Wrong
-- Expanding the exact merged settlement record with simp or gvs timed out; E0041 led to the compact settlement interface, now proved and reviewed.
-- Automatic functional-update matching failed for generic observation adapters; explicit one-lambda witnesses worked for budget adapters. Safe wrappers then reused those budget facts and primitive result equations.
-- Predicate-lambda composition requires ho_match_mp_tac call_meter_safe_ignore_invariant rather than irule. OutputTo constructor order is Memory then Code.
-- push_stack simplification normalizes stack_limit to 1024; splitting on the symbolic constant requires gvs[vfmConstantsTheory.stack_limit_def].
+- Generic metis_tac[call_meter_safe_def] timed out; selecting the live safe assumption, unfolding only its definition and specializing at the actual result solved immediately.
+- Cases_on unannotated handle_create e s selected a polymorphic result instance that could not rewrite the unit-typed handler case. Explicit unit execution_result annotation fixed it.
+- same_frame_or_grow_length concludes GREATER_EQ, not syntactic <=; metis needed GREATER_EQ.
+- gvs removed arithmetic facts implied by stronger bounds; drule_all then required restating 0<n or 2<=LENGTH contexts explicitly.
 
 ### Ignored Signals
-- Large repeated merged record expressions were an interface defect, not a reason for more scalar simplification.
-- Preservation facts stated via SND of an operation need the pair projection to consume a result equation; metis with pairTheory.SND closed the push nonempty leaf.
+- Full wf_state contains gas_stack_ok and stack_room_ok, and existing handler safety already consumes their intermediate preservation. Initial concern that root nonabort necessarily required an additional caller condition was too pessimistic for the full-wf run invariant.
+- Semantic consumer equality proofs must avoid simplifying by the current result equation prematurely; NoAsms in the handler decomposition equality prevents losing the compositional shape.
 
 ### Strategy Adjustments
-- C1.3.8.1 completed, reviewed, committed f7852e9c. C1.3.8.2 remains active with partial progress committed b2f6cb27 and ec4298c1.
-- Internal/root pop, handle_create budget lifting, exception prepare prefix, and post-pop output safety are checked. Full handle_exception/handle_step/step remain undone.
-- Final relevant build vfmCallInnerTheory succeeded; no broken experiments or source cheats were added.
+- C1.3.8.2 and C1.3.9 completed, reviewed, committed. Latest commits: 5b53ea87 (step budget) and 9b64dd9e (finite ordinary return); earlier handler checkpoints f49a74e8 and 047767bf.
+- New prog/vfmCallReturnScript.sml isolates valid finite-return machinery from the still-obsolete unrestricted local safety chain in vfmProgCallScript.sml. Upcoming final-pop/summary integration owns replacement of those old consumers.
+- C1.3.10 has been begun, but only existing final-pop source was read. No partial proof experiment or uncommitted source remains; git status clean at handoff.
 
 ### Oracle Feedback
-- E0041 review accepted the abstraction failure and split handler work into compact settlement and semantic integration.
-- E0042 review accepted generic settlement/absorption contracts and exact compact pop equation. This insight held in the semantic internal-pop consumer.
+- Strategist's smaller context-wf boundary insight held: all three handler budget lemmas strengthened in place and step_inner_contexts_wf made step composition short.
+- E0048 review certified budget preservation only, not unconditional nonabort. E0049 then certified scoped ordinary return using full-wf run invariant and existing handler safety, without extra exported assumptions.
+- Acceptance of isolated vfmCallReturnTheory does not imply vfmProgCallTheory builds; obsolete unrestricted local chain and export consumers remain integration work.
 
 ## Evidence Pointers
-- episode:E0041 - timeout diagnosis and accepted decomposition repair
-- episode:E0042 - compact scalar settlement interface proved/reviewed
-- episode:E0043 - internal/root pop and handle_create budget lift
-- episode:E0044 - exception preparation prefix
-- episode:E0045 - post-pop observation and output safety
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1340_t001 - final clean vfmCallInnerTheory build
-- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1344_t001 - output boundary checkpoint ec4298c1
-- source:prog/vfmCallMeterProbeScript.sml:380-501 - compact settle, absorption and exact pop boundary
-- source:prog/vfmCallInnerScript.sml:1094-1333 - checked handler building blocks
+- episode:E0048 - revised step budget leaf proved and reviewed
+- episode:E0049 - scoped finite ordinary return proved and reviewed
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1450_t001 - clean vfmCallInnerTheory build
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1472_t001 - clean vfmCallReturnTheory build
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1474_t001 - strategist accepted finite-return boundary and identified integration responsibility
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1479_t001 - old final-pop source/interface to port
+- tool_output:TO_seq58_progcall_port-20261031T152132Z_m1482_t001 - clean git status
+- source:prog/vfmCallInnerScript.sml:1394-1502 - context-wf handler and step budget boundaries
+- source:prog/vfmCallReturnScript.sml - isolated scoped finite-return theory
