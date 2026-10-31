@@ -634,3 +634,173 @@ Proof
   rpt conj_tac >> irule call_meter_safe_step_copy_inv >>
   simp[call_meter_safe_call_data_inv, call_meter_safe_source_readers_inv]
 QED
+
+Theorem call_meter_safe_charge_inv:
+  call_meter_safe (call_meter_result c rb rest) (charge_state_gas n)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> simp[call_meter_safe_charge]
+QED
+
+Theorem call_meter_safe_credit_inv:
+  call_meter_safe (call_meter_result c rb rest) (credit_state_gas_refund n)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> simp[call_meter_safe_credit]
+QED
+
+Theorem call_meter_safe_slot_inv:
+  call_meter_safe (call_meter_result c rb rest) (access_slot key)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> gen_tac >>
+  simp[call_meter_safe_def, call_meter_ready_def, access_slot_def,
+       domain_check_def, set_domain_def, ignore_bind_def, bind_def,
+       return_def, fail_def] >> rpt strip_tac >>
+  Cases_on `s.msdomain` >> gvs[AllCaseEqs()] >>
+  irule call_meter_result_same >> simp[]
+QED
+
+Theorem call_meter_safe_original_inv:
+  call_meter_safe (call_meter_result c rb rest) get_original
+    (\r t. call_meter_result c rb rest t)
+Proof
+  simp[call_meter_safe_def, call_meter_result_def, get_original_def,
+       return_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem call_meter_safe_tStorage_inv:
+  call_meter_safe (call_meter_result c rb rest) get_tStorage
+    (\r t. call_meter_result c rb rest t)
+Proof
+  simp[call_meter_safe_def, get_tStorage_def, return_def]
+QED
+
+Theorem call_meter_safe_write_storage_inv:
+  call_meter_safe (call_meter_result c rb rest) (write_storage a k v)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> gen_tac >>
+  rewrite_tac[write_storage_def] >>
+  mp_tac (GEN_ALL call_meter_safe_update_accounts) >>
+  simp[call_meter_safe_def] >> metis_tac[call_meter_ready_result]
+QED
+
+Theorem call_meter_safe_set_tStorage_inv:
+  call_meter_safe (call_meter_result c rb rest) (set_tStorage x)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_result_lift >> gen_tac >>
+  simp[call_meter_safe_def, set_tStorage_def, return_def,
+       call_meter_ready_def] >> rpt strip_tac >>
+  irule call_meter_result_same >> simp[]
+QED
+
+Theorem call_meter_safe_write_transient_inv:
+  call_meter_safe (call_meter_result c rb rest) (write_transient_storage a k v)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[write_transient_storage_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_tStorage_inv, call_meter_safe_set_tStorage_inv]
+QED
+
+Theorem call_meter_safe_update_refund_inv:
+  call_meter_safe (call_meter_result c rb rest) (update_gas_refund delta)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  PairCases_on `delta` >> irule call_meter_safe_result_lift >> gen_tac >>
+  rewrite_tac[update_gas_refund_def] >>
+  ho_match_mp_tac call_meter_safe_context_update >> simp[call_meter_neutral_def]
+QED
+
+Theorem call_meter_safe_gas_left_inv:
+  call_meter_safe (call_meter_result c rb rest) get_gas_left
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[get_gas_left_def] >> irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_current_inv, call_meter_safe_def, return_def]
+QED
+
+Theorem call_meter_safe_storage_reader_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (if transient then bind get_tStorage (\ts. return (lookup_transient_storage a ts))
+     else bind get_accounts (\acc. return (lookup_account a acc).storage))
+    (\r t. call_meter_result c rb rest t)
+Proof
+  Cases_on `transient` >> simp[] >> irule call_meter_safe_bind_invariant >>
+  simp[call_meter_safe_tStorage_inv, call_meter_safe_accounts_inv,
+       call_meter_safe_def, return_def]
+QED
+
+Theorem call_meter_safe_sload_inv:
+  call_meter_safe (call_meter_result c rb rest) (step_sload transient)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_sload_def, ignore_bind_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+              >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+                  simp[call_meter_safe_storage_reader_inv, call_meter_result_push_stack]) >>
+              simp[call_meter_safe_consume_inv]) >>
+          Cases_on `transient`
+          >- simp[call_meter_safe_def, return_def] >>
+          simp[call_meter_safe_slot_inv]) >>
+      simp[call_meter_safe_callee_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED
+
+Theorem call_meter_safe_sstore_gas_tail_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (ignore_bind (update_gas_refund delta)
+      (ignore_bind (if refund = 0 then return () else credit_state_gas_refund refund)
+        (ignore_bind (consume_gas gas) (charge_state_gas stateGas))))
+    (\r t. call_meter_result c rb rest t)
+Proof
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- simp[call_meter_safe_update_refund_inv] >>
+  irule call_meter_safe_ignore_invariant >> conj_tac
+  >- (Cases_on `refund = 0`
+      >- simp[call_meter_safe_def, return_def] >>
+      simp[call_meter_safe_credit_inv]) >>
+  irule call_meter_safe_ignore_invariant >>
+  simp[call_meter_safe_consume_inv, call_meter_safe_charge_inv]
+QED
+
+Theorem call_meter_safe_sstore_gas_inv:
+  call_meter_safe (call_meter_result c rb rest)
+    (step_sstore_gas_consumption address key value)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_sstore_gas_consumption_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_ignore_invariant >> conj_tac
+      >- simp[call_meter_safe_assert] >>
+      irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >>
+              simp[call_meter_safe_slot_inv, call_meter_safe_sstore_gas_tail_inv]) >>
+          simp[call_meter_safe_original_inv]) >>
+      simp[call_meter_safe_accounts_inv]) >>
+  simp[call_meter_safe_gas_left_inv]
+QED
+
+Theorem call_meter_safe_sstore_inv:
+  call_meter_safe (call_meter_result c rb rest) (step_sstore transient)
+    (\r t. call_meter_result c rb rest t)
+Proof
+  rewrite_tac[step_sstore_def, LET_THM] >> BETA_TAC >>
+  irule call_meter_safe_bind_invariant >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule call_meter_safe_bind_invariant >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule call_meter_safe_ignore_invariant >> conj_tac
+          >- (Cases_on `transient` >> simp[call_meter_safe_consume_inv,
+                                          call_meter_safe_sstore_gas_inv]) >>
+          irule call_meter_safe_ignore_invariant >> conj_tac
+          >- simp[call_meter_safe_not_static_inv] >>
+          Cases_on `transient` >> simp[call_meter_safe_write_storage_inv,
+                                      call_meter_safe_write_transient_inv]) >>
+      simp[call_meter_safe_callee_inv]) >>
+  simp[call_meter_safe_pop_inv]
+QED

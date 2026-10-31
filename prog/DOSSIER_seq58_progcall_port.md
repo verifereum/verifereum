@@ -29,6 +29,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.7 | progressed | other | E0033 | Continue finite opcode coverage with memory/storage/terminal families, then dispatch and step_inner lift. New vfmCallInnerScript.sml is build-clean and untracked until stable checkpoint commit. |
 | C1.3.7.1 | proved |  | E0034 |  |
 | C1.3.7.2 | proved |  | E0036 | Review and commit read/memory/copy/log family; proceed to scheduled storage family. |
+| C1.3.7.3 | proved |  | E0037 | Review and commit storage safety family, then scheduled terminal opcode family. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -535,6 +536,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 
 - `TO_seq58_progcall_port-20261031T152132Z_m1114_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_progcall_port-20261031T152132Z_m1133_t001` (use `read_tool_output` for exact output)
+
+## C1.3.7.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0037`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 21 steps, 20 tools, 6 holbuild, 1,793,496 tok (1,790,183 in, 3,313 out, 1,760,768 cached), 196.2s, $0.2680368
+- next: Review and commit storage safety family, then scheduled terminal opcode family.
+
+### Attempts / Evidence
+
+- `E0037` (proved, , actual effort: 1 sessions, 2 msgs, 21 steps, 20 tools, 6 holbuild, 1,793,496 tok (1,790,183 in, 3,313 out, 1,760,768 cached), 196.2s, $0.2680368)
+  - Lift state charge/refund and build storage-specific neutral access/read/write/refund adapters. -> Primitive adapters build; slot access covers domain failures and preserves fixed contexts. Context refund update requires higher-order matching. (`TO_seq58_progcall_port-20261031T152132Z_m1153_t001`)
+  - Compose sload, separate sstore gas tail, whole sstore gas consumption, and transient/nontransient sstore. -> All storage family contracts build with no added caller conditions, including exceptional charge results. (`TO_seq58_progcall_port-20261031T152132Z_m1159_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T152132Z_m1159_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
