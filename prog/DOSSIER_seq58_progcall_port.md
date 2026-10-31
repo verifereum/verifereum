@@ -45,6 +45,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.6.2 | proved |  | E0062 |  |
 | C1.7 | proved |  | E0064 |  |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
+| C1.9 | proved |  | E0065 |  |
 
 ## C1.1
 
@@ -908,3 +909,24 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261030T183500Z_m0283_t001` (use `read_tool_output` for exact output)
+
+## C1.9
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0065`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 5 tools, 1 holbuild, 336,106 tok (335,719 in, 387 out, 330,624 cached), 21.9s, $0.0471224
+
+### Attempts / Evidence
+
+- `E0065` (proved, , actual effort: 1 sessions, 6 steps, 5 tools, 1 holbuild, 336,106 tok (335,719 in, 387 out, 330,624 cached), 21.9s, $0.0471224)
+  - Commit generated review/plan bookkeeping, rebuild final target, verify porcelain -> Committed 66563ed2 with exact trailers; vfmProgCallTheory succeeds and git status clean. No proof source changed. (`TO_seq58_progcall_port-20261031T211644Z_m1926_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1927_t001`, `TO_seq58_progcall_port-20261031T211644Z_m1928_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T211644Z_m1926_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T211644Z_m1927_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T211644Z_m1928_t001` (use `read_tool_output` for exact output)
