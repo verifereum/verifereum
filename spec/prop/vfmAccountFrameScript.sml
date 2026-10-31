@@ -946,117 +946,7 @@ QED
 
 (* Shared prefix interface is supplied by vfmStoragePredicates. *)
 
-Theorem call_prefix_delegate_code_selection:
-  preserves_when (λs. s.contexts ≠ [])
-    (λs t. cp_rel s t ∧ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys)
-    (case get_delegate bytecode of
-       NONE => return (bytecode, 0)
-     | SOME d => do
-         cost <- access_address d;
-         return ((lookup_account d accounts).code, cost)
-       od)
-Proof
-  Cases_on `get_delegate bytecode` >> simp[call_prefix_leaves]
-  >> irule call_prefix_bind >> simp[call_prefix_leaves]
-QED
-
-Theorem step_call_reaches_proceed_call:
-  step_call op s = (r,s') ∧ s.contexts ≠ [] ∧
-  LENGTH s.contexts < LENGTH s'.contexts ⇒
-  ∃u sender address value ao az code gas mr.
-    cp_rel s u ∧ u.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∧
-    proceed_call op sender address value ao az code gas (Memory mr) u = (r,s') ∧
-    sender = (FST (HD s.contexts)).msgParams.callee ∧
-    value ≤ (lookup_account sender s.rollback.accounts).balance ∧
-    code = (case get_delegate (lookup_account address s.rollback.accounts).code of
-      NONE => (lookup_account address s.rollback.accounts).code
-    | SOME d => (lookup_account d s.rollback.accounts).code) ∧
-    (¬call_has_value op ⇒ value = 0) ∧
-    (op = Call ∧ 0 < value ⇒ ¬(FST (HD s.contexts)).msgParams.static)
-Proof
-  let
-    val peel =
-      drule_at (Pat `bind`) bind_call_prefix_grows_extract
-      >> simp[call_prefix_leaves]
-      >> disch_then (qspec_then `s` mp_tac) >> simp[]
-      >> qpat_x_assum `bind _ _ _ = _` kall_tac
-      >> strip_tac >> gvs[]
-  in
-  simp[step_call_def] >> strip_tac
-  >> `cp_rel s s ∧ s.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys`
-    by simp[call_prefix_refl]
-  >> peel >> pairarg_tac >> gvs[]
-  >> qmatch_asmsub_abbrev_tac `proceed_call op _ address value ao az _ _ rd`
-  >> peel
-  >> peel
-  >> `u''.rollback.accounts = s.rollback.accounts` by gvs[cp_rel_def]
-  >> gvs[get_accounts_def, Once bind_def, return_def]
-  >> drule_at (Pat `bind`) bind_call_prefix_grows_extract
-  >> disch_then (qspec_then `s` mp_tac) >> simp[]
-  >> (impl_tac >- irule call_prefix_delegate_code_selection)
-  >> qpat_x_assum `bind _ _ _ = _` kall_tac
-  >> strip_tac >> gvs[] >> pairarg_tac >> gvs[]
-  >> `code = (case get_delegate (lookup_account address s.rollback.accounts).code of
-       NONE => (lookup_account address s.rollback.accounts).code
-     | SOME d => (lookup_account d s.rollback.accounts).code)`
-    by (Cases_on `get_delegate (lookup_account address s.rollback.accounts).code`
-        >> gvs[bind_def, return_def, AllCaseEqs()])
-  >> peel >> pairarg_tac >> gvs[ignore_bind_def]
-  >> qpat_x_assum `pop_stack _ _ = _` kall_tac
-  >> qpat_x_assum `memory_expansion_info _ _ _ = _` kall_tac
-  >> qpat_x_assum `access_address _ _ = _` kall_tac
-  >> qpat_x_assum `(case _ of NONE => _ | SOME _ => _) _ = _` kall_tac
-  >> qpat_x_assum `get_gas_left _ = _` kall_tac
-  >> qpat_x_assum `call_gas _ _ _ _ _ = _` kall_tac
-  >> peel
-  >> drule_at (Pat `bind`) bind_call_prefix_grows_extract
-  >> simp[] >> disch_then (qspec_then `s` mp_tac) >> simp[]
-  >> (impl_tac >- (Cases_on `op = Call ∧ 0 < value` >> simp[call_prefix_leaves]))
-  >> qpat_x_assum `bind _ _ _ = _` kall_tac
-  >> strip_tac >> gvs[]
-  >> `op = Call ∧ 0 < value ⇒ ¬(FST (HD s.contexts)).msgParams.static`
-    by (strip_tac
-        >> gvs[assert_not_static_def, get_static_def, get_current_context_def,
-               bind_def, assert_def, return_def, fail_def, cp_rel_def, AllCaseEqs()])
-  >> peel
-  >> peel
-  >> rename1 `get_callee beforeSender = (INL sender,afterSender)`
-  >> `sender = (FST (HD s.contexts)).msgParams.callee`
-    by gvs[get_callee_def, get_current_context_def, bind_def, return_def,
-           fail_def, cp_rel_def, AllCaseEqs()]
-  >> gvs[COND_RATOR]
-  >> Cases_on `(lookup_account (FST (HD s.contexts)).msgParams.callee
-                 s.rollback.accounts).balance < value` >> gvs[]
-  >- (drule_at (Pat `_ = (_,s')`) psf_imp_length_contexts_preserved
-      >> simp[] >> imp_res_tac call_prefix_contexts >> gvs[])
-  >> peel
-  >> peel >> gvs[COND_RATOR]
-  >> rename1 `get_num_contexts depthState = (INL depth,entry)`
-  >> Cases_on `depth > 1024` >> gvs[]
-  >- (drule_at (Pat `_ = (_,s')`) psf_imp_length_contexts_preserved
-      >> simp[] >> imp_res_tac call_prefix_contexts >> gvs[])
-  >> qexistsl_tac [`entry`, `address`, `value`, `ao`, `az`, `stipend`]
-  >> simp[] >> gvs[Abbr `rd`]
-  >> qexists_tac `<|offset := w2n (EL ((if call_has_value op then 1 else 0) + 4) x);
-                   size := w2n (EL ((if call_has_value op then 1 else 0) + 5) x)|>`
-  >> simp[] >> simp[Abbr `value`]
-  end
-QED
-
-
-Theorem proceed_call_saved_rollback:
-  proceed_call op sender address value ao az code gas rd s = (r, s') ∧
-  s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
-  SND (HD s'.contexts) = s.rollback ∧
-  s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys
-Proof
-  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
-  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
-       get_rollback_def, read_memory_def, get_current_context_def,
-       get_caller_def, get_value_def, get_static_def,
-       push_context_def, update_accounts_def, return_def, fail_def,
-       AllCaseEqs()]
-QED
+(* CALL prefix extraction and saved rollback interface are shared in RunCall. *)
 
 Theorem proceed_call_nonprecompile_frame:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
@@ -1101,55 +991,9 @@ Proof
   >> Cases_on `op = DelegateCall` >> simp[]
 QED
 
-Theorem terminal_bind:
-  (∀x s. ISR (FST (f x s))) ⇒ ISR (FST (bind g f s))
-Proof
-  rw[bind_def] >> Cases_on `g s` >> Cases_on `q` >> gvs[]
-QED
+(* Terminal precompile combinators are shared in RunCall. *)
 
-Theorem terminal_ignore_bind:
-  (∀s. ISR (FST (f s))) ⇒ ISR (FST (ignore_bind g f s))
-Proof
-  simp[ignore_bind_def] >> strip_tac >> irule terminal_bind >> simp[]
-QED
-
-Theorem dispatch_precompiles_terminal:
-  ISR (FST (dispatch_precompiles a s))
-Proof
-  rw[dispatch_precompiles_def]
-  >> simp[precompile_ecrecover_def, precompile_sha2_256_def,
-          precompile_ripemd_160_def, precompile_identity_def,
-          precompile_modexp_def, precompile_ecadd_def,
-          precompile_ecmul_def, precompile_ecpairing_def,
-          precompile_blake2f_def, precompile_point_eval_def,
-          precompile_bls_g1add_def, precompile_bls_g1msm_def,
-          precompile_bls_g2add_def, precompile_bls_g2msm_def,
-          precompile_bls_pairing_def, precompile_bls_map_fp_to_g1_def,
-          precompile_bls_map_fp2_to_g2_def, precompile_p256verify_def,
-          fail_def]
-  >> rpt (FIRST [irule terminal_bind >> rpt gen_tac,
-                 irule terminal_ignore_bind >> gen_tac,
-                 CHANGED_TAC (simp[finish_def, fail_def]),
-                 BasicProvers.PURE_CASE_TAC])
-QED
-
-Theorem proceed_call_inl_nonprecompile:
-  proceed_call op sender address value ao az code gas rd s = (INL (), s') ∧
-  s.contexts ≠ [] ⇒ ¬fIN address precompile_addresses
-Proof
-  strip_tac >> strip_tac
-  >> Cases_on `op ≠ CallCode ∧ 0 < value`
-  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
-       get_rollback_def, read_memory_def, get_current_context_def,
-       get_caller_def, get_value_def, get_static_def,
-       push_context_def, update_accounts_def, return_def, fail_def,
-       AllCaseEqs()]
-  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed`
-  >> `ISR (FST ((dispatch_precompiles address : unit execution) pushed))`
-       by simp[dispatch_precompiles_terminal]
-  >> qpat_x_assum `ISR _` mp_tac
-  >> qpat_x_assum `dispatch_precompiles _ _ = _` (fn th => simp[th, sumTheory.ISR])
-QED
+(* proceed_call_inl_nonprecompile is shared in RunCall. *)
 
 Theorem step_call_push_storage_keys:
   step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
@@ -1331,68 +1175,7 @@ Proof
   >> qexistsl_tac [`code`, `t`] >> simp[]
 QED
 
-Theorem step_grow_dispatch:
-  wf_state s ∧ step s = (r,s') ∧ LENGTH s.contexts < LENGTH s'.contexts ⇒
-  r = INL () ∧
-  ((∃op. step_call op s = (INL (),s')) ∨
-   (∃two. step_create two s = (INL (),s')))
-Proof
-  strip_tac
-  >> `s.contexts ≠ []` by gvs[wf_state_def]
-  >> qpat_x_assum `step s = _` mp_tac
-  >> simp[step_def, handle_def]
-  >> qmatch_goalsub_abbrev_tac `inner s`
-  >> Cases_on `inner s` >> Cases_on `q`
-  >- (simp[] >> strip_tac >> gvs[]
-      >> gvs[Abbr `inner`, bind_def, AllCaseEqs()]
-      >> gvs[get_current_context_def, return_def, fail_def, bind_def]
-      >> gvs[option_CASE_rator, CaseEq "option", COND_RATOR, CaseEq "bool"]
-      >~ [`step_inst Stop`]
-      >- (drule_at Any psf_imp_length_contexts_preserved >> simp[])
-      >~ [`step_inst Invalid`]
-      >- (drule_at Any psf_imp_length_contexts_preserved >> simp[])
-      >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
-      >> rename1 `step_inst op s = (INL (),mid)`
-      >> drule_at Any psf_imp_length_contexts_preserved >> simp[]
-      >> (impl_keep_tac >- (strip_tac >>
-          gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def,
-              bind_def, get_current_context_def, fail_def]))
-      >> strip_tac
-      >> `LENGTH s.contexts < LENGTH mid.contexts` by simp[]
-      >> `is_call op` by (irule step_inst_inl_grew_is_call
-          >> qexistsl_tac [`s`, `mid`] >> simp[])
-      >> gvs[inc_pc_or_jump_def, return_def, COND_RATOR, CaseEq "bool"]
-      >> Cases_on `op` >> gvs[is_call_def, step_inst_def]
-      >> metis_tac[])
-  >> simp[] >> strip_tac
-  >> `same_frame_or_grow inner` by simp[Abbr `inner`]
-  >> `LENGTH r'.contexts ≥ LENGTH s.contexts` by
-      (drule_all same_frame_or_grow_length >> simp[])
-  >> `r'.contexts ≠ []` by (strip_tac >> gvs[] >> Cases_on `s.contexts` >> gvs[])
-  >> `LENGTH s'.contexts ≤ LENGTH s.contexts` suffices_by gvs[]
-  >> Cases_on `LENGTH r'.contexts = LENGTH s.contexts`
-  >- (drule handle_step_shrinks_by_one >> simp[])
-  >> `LENGTH r'.contexts > LENGTH s.contexts` by simp[]
-  >> `outputTo_consistent s` by
-      (irule outputTo_consistent_stack_imp_consistent >> gvs[wf_state_def])
-  >> `¬vfm_abort y` by (irule step_inner_inr_grow_not_abort
-      >> qexistsl_tac [`s`, `r'`] >> simp[Abbr `inner`])
-  >> `0 < LENGTH s.contexts` by (Cases_on `s.contexts` >> gvs[])
-  >> `LENGTH r'.contexts ≥ 2` by simp[]
-  >> `LENGTH r'.contexts = LENGTH s.contexts + 1` by
-      (qunabbrev_tac `inner` >> drule_then drule step_inner_grows_by_exactly_one >> gvs[])
-  >> drule_at (Pat `handle_step`) handle_step_not_abort_pops >> gvs[]
-  >> `decreases_gas_cred T 0 0 inner` suffices_by
-      (gvs[decreases_gas_cred_def]
-       >> disch_then (qspec_then `s` mp_tac) >> rw[]
-       >> gvs[wf_state_def, EVERY_MEM])
-  >> simp[Abbr `inner`]
-  >> irule decreases_gas_cred_bind_mono
-  >> qexistsl_tac [`T`, `F`] >> simp[] >> gen_tac
-  >> rw[] >> CASE_TAC >> rw[]
-  >> irule decreases_gas_cred_ignore_bind_mono >> rw[]
-  >> qexistsl_tac [`F`, `T`] >> simp[]
-QED
+(* step_grow_dispatch is shared upstream in vfmRunCallTheory. *)
 
 (* A push copies the stack below, except that CREATE's set_original may
  * change the last saved rollback.  Only the callee's nonce and the created

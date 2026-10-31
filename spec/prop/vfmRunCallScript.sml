@@ -9,7 +9,7 @@ Ancestors
   vfmContext vfmState vfmExecution vfmExecutionProp
   vfmStoragePredicates vfmSameFrame vfmStaticCalls
   vfmDecreasesGas vfmStepLength vfmHandleStep vfmRunWithinFrame
-  vfmHeadStack vfmHeadGas vfmJumpDest
+  vfmHeadStack vfmHeadGas vfmJumpDest vfmPreserves
 Libs
   dep_rewrite BasicProvers
 
@@ -3145,6 +3145,1240 @@ Proof
        (gvs[SUBSET_DEF, finite_setTheory.fIN_IN] >> metis_tac[])
   >> first_x_assum (qspecl_then [`a`, `k`] strip_assume_tac)
   >> metis_tac[]
+QED
+
+(* Nonce/code transport before the return-code deposit boundary. *)
+val nonce_code_rel = ``\a (s:execution_state) (t:execution_state).
+  (lookup_account a s.rollback.accounts).nonce <=
+    (lookup_account a t.rollback.accounts).nonce /\
+  (lookup_account a t.rollback.accounts).code =
+    (lookup_account a s.rollback.accounts).code``;
+
+Theorem nonce_code_rel_trans:
+  ^nonce_code_rel a s u /\ ^nonce_code_rel a u t ==> ^nonce_code_rel a s t
+Proof
+  simp[] >> strip_tac >> simp[] >> decide_tac
+QED
+
+Theorem preserves_nonce_code_of_rollback:
+  preserves_rollback m ==> preserves (^nonce_code_rel a) m
+Proof
+  rw[preserves_rollback_def, preserves_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem preserves_nonce_code_bind:
+  preserves (^nonce_code_rel a) g /\
+  (!x. preserves (^nonce_code_rel a) (f x)) ==>
+  preserves (^nonce_code_rel a) (bind g f)
+Proof
+  strip_tac >> irule preserves_bind >> simp[] >>
+  metis_tac[nonce_code_rel_trans]
+QED
+
+Theorem preserves_nonce_code_ignore_bind:
+  preserves (^nonce_code_rel a) g /\
+  preserves (^nonce_code_rel a) f ==>
+  preserves (^nonce_code_rel a) (ignore_bind g f)
+Proof
+  strip_tac >> irule preserves_ignore_bind >> simp[] >>
+  metis_tac[nonce_code_rel_trans]
+QED
+
+Theorem preserves_nonce_code_increment:
+  preserves (^nonce_code_rel a) (update_accounts (increment_nonce b))
+Proof
+  rw[preserves_def, update_accounts_def, return_def,
+     increment_nonce_lookup, increment_nonce_code] >>
+  Cases_on `a = b` >> gvs[]
+QED
+
+Theorem preserves_nonce_code_transfer:
+  preserves (^nonce_code_rel a)
+    (update_accounts (transfer_value sender recipient value))
+Proof
+  rw[preserves_def, update_accounts_def, return_def,
+     transfer_value_preserves_code, transfer_value_preserves_nonce]
+QED
+
+Theorem preserves_nonce_code_proceed_create:
+  preserves (^nonce_code_rel a)
+    (proceed_create sender address value code gas)
+Proof
+  rw[preserves_def, proceed_create_def, bind_def, ignore_bind_def,
+       update_accounts_def, get_rollback_def, get_original_def,
+       set_original_def, push_context_def, return_def, fail_def,
+       COND_RATOR, AllCaseEqs(),
+       increment_nonce_lookup, increment_nonce_code,
+       transfer_value_preserves_code, transfer_value_preserves_nonce] >>
+  Cases_on `a = address` >> Cases_on `a = sender` >>
+  gvs[increment_nonce_lookup, increment_nonce_code,
+      transfer_value_preserves_code, transfer_value_preserves_nonce]
+QED
+
+Theorem preserves_nonce_code_access_address:
+  preserves (^nonce_code_rel a) (access_address b)
+Proof
+  rw[preserves_def, access_address_def, domain_check_def,
+     set_domain_def, return_def, fail_def, AllCaseEqs()] >>
+  gvs[ignore_bind_def, bind_def, set_domain_def, return_def]
+QED
+
+Theorem preserves_nonce_code_step_create:
+  preserves (^nonce_code_rel a) (step_create two)
+Proof
+  simp[step_create_def, ignore_bind_def] >>
+  rpt (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+       (conj_tac >-
+         (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+       simp[] >> rpt gen_tac) >>
+  IF_CASES_TAC
+  >- (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[]) >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >- simp[SRULE [] preserves_nonce_code_access_address]) >>
+  simp[] >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  simp[] >> IF_CASES_TAC
+  >- (simp[abort_create_exists_def, ignore_bind_def] >>
+      ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+      (conj_tac >- simp[SRULE [] preserves_nonce_code_increment]) >>
+      simp[] >> irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[]) >>
+  simp[SRULE [] preserves_nonce_code_proceed_create]
+QED
+
+Theorem preserves_nonce_code_proceed_call:
+  preserves (^nonce_code_rel a)
+    (proceed_call op sender address value off sz code gas output)
+Proof
+  simp[proceed_call_def, ignore_bind_def] >>
+  ntac 2
+    (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+     (conj_tac >-
+       (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+     gen_tac) >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (IF_CASES_TAC >- simp[SRULE [] preserves_nonce_code_transfer] >>
+     irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  simp[] >>
+  rpt (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+       (conj_tac >-
+         (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+       simp[] >> rpt gen_tac) >>
+  irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[]
+QED
+
+Theorem preserves_nonce_code_step_call:
+  preserves (^nonce_code_rel a) (step_call op)
+Proof
+  simp[step_call_def, ignore_bind_def] >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  gen_tac >> pairarg_tac >> simp[] >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >> gen_tac >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >- simp[SRULE [] preserves_nonce_code_access_address]) >> gen_tac >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >> gen_tac >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (Cases_on `get_delegate (lookup_account (w2w (EL 1 args)) accounts).code`
+     >- (simp[] >> irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[]) >>
+     simp[] >> ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+     (conj_tac >- simp[SRULE [] preserves_nonce_code_access_address]) >>
+     gen_tac >> irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  Cases >> simp[] >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  gen_tac >> pairarg_tac >> simp[] >>
+  rpt (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+       (conj_tac >-
+         (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+       simp[] >> rpt gen_tac) >>
+  IF_CASES_TAC
+  >- (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[]) >>
+  rpt (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+       (conj_tac >-
+         (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+       simp[] >> rpt gen_tac) >>
+  IF_CASES_TAC
+  >- (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[]) >>
+  simp[SRULE [] preserves_nonce_code_proceed_call]
+QED
+
+Theorem preserves_nonce_code_access_slot:
+  preserves (^nonce_code_rel a) (access_slot sk)
+Proof
+  rw[preserves_def, access_slot_def, domain_check_def,
+     set_domain_def, return_def, fail_def, AllCaseEqs()] >>
+  gvs[ignore_bind_def, bind_def, set_domain_def, return_def]
+QED
+
+Theorem preserves_nonce_code_write_storage:
+  preserves (^nonce_code_rel a) (write_storage b k v)
+Proof
+  rw[preserves_def, write_storage_def, update_accounts_def, return_def] >>
+  Cases_on `a = b` >>
+  gvs[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+Theorem preserves_nonce_code_sstore_gas:
+  preserves (^nonce_code_rel a) (step_sstore_gas_consumption b k v)
+Proof
+  simp[step_sstore_gas_consumption_def, ignore_bind_def] >>
+  rpt (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+       (conj_tac >-
+         (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+       simp[] >> rpt gen_tac) >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >- simp[SRULE [] preserves_nonce_code_access_slot]) >> gen_tac >>
+  irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[]
+QED
+
+Theorem preserves_nonce_code_step_sstore:
+  preserves (^nonce_code_rel a) (step_sstore transient)
+Proof
+  simp[step_sstore_def, ignore_bind_def] >>
+  ntac 2
+    (ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+     (conj_tac >-
+       (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >> gen_tac) >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (Cases_on `transient` >> simp[SRULE [] preserves_nonce_code_sstore_gas] >>
+     irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  simp[] >> ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >-
+    (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >> simp[] >>
+  Cases_on `transient` >> simp[SRULE [] preserves_nonce_code_write_storage] >>
+  rw[preserves_def, write_transient_storage_def, bind_def,
+     get_tStorage_def, set_tStorage_def, return_def]
+QED
+
+Theorem self_destruct_account_update_nonce_code:
+  (lookup_account a
+    (update_account sender ((lookup_account sender accounts) with balance := 0)
+      (transfer_value sender address value accounts))).nonce =
+    (lookup_account a accounts).nonce /\
+  (lookup_account a
+    (update_account sender ((lookup_account sender accounts) with balance := 0)
+      (transfer_value sender address value accounts))).code =
+    (lookup_account a accounts).code
+Proof
+  Cases_on `a = sender` >>
+  simp[lookup_account_def, update_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  simp[GSYM lookup_account_def, transfer_value_preserves_nonce,
+       transfer_value_preserves_code]
+QED
+
+Theorem preserves_nonce_code_step_self_destruct:
+  preserves (^nonce_code_rel a) step_self_destruct
+Proof
+  simp[step_self_destruct_def] >>
+  ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >- (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  gen_tac >> ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >- simp[SRULE [] preserves_nonce_code_access_address]) >>
+  gen_tac >> ho_match_mp_tac (SRULE [] preserves_nonce_code_bind) >>
+  (conj_tac >- (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  gen_tac >> ho_match_mp_tac (SRULE [] preserves_nonce_code_ignore_bind) >>
+  (conj_tac >- (irule (SRULE [] preserves_nonce_code_of_rollback) >> simp[])) >>
+  rw[preserves_def] >>
+  gvs[bind_def, ignore_bind_def, get_accounts_def, consume_gas_def,
+      get_current_context_def, set_current_context_def, assert_def,
+      assert_not_static_def, get_static_def, get_original_def,
+      update_accounts_def, add_to_delete_def, finish_def, fail_def,
+      return_def, COND_RATOR, AllCaseEqs()] >>
+  simp[self_destruct_account_update_nonce_code,
+       transfer_value_preserves_nonce, transfer_value_preserves_code]
+QED
+
+Theorem cp_nonce_code:
+  cp (m:unit execution) ==> preserves_when (\s. s.contexts <> []) (^nonce_code_rel a) m
+Proof
+  rw[cp_def, preserves_when_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem step_inst_nonce_code:
+  s.contexts <> [] /\ step_inst op s = (r,t) ==> ^nonce_code_rel a s t
+Proof
+  Cases_on `op`
+  >~ [`step_inst SStore`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_sstore) >> simp[])
+  >~ [`step_inst TStore`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_sstore) >> simp[])
+  >~ [`step_inst SelfDestruct`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_self_destruct) >> simp[])
+  >~ [`step_inst Create`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_create) >> simp[])
+  >~ [`step_inst Create2`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_create) >> simp[])
+  >~ [`step_inst Call`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_call) >> simp[])
+  >~ [`step_inst CallCode`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_call) >> simp[])
+  >~ [`step_inst DelegateCall`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_call) >> simp[])
+  >~ [`step_inst StaticCall`] >-
+    (simp[step_inst_def] >> strip_tac >>
+     drule (SRULE [preserves_def] preserves_nonce_code_step_call) >> simp[])
+  >~ [`step_inst (Log n)`] >- (
+    strip_tac >>
+    `preserves (^nonce_code_rel a) (step_inst (Log n))` by
+      (irule preserves_nonce_code_of_rollback >>
+       irule step_inst_Log_preserves_rollback) >>
+    gvs[preserves_def] >> first_x_assum drule >> simp[]) >>
+  simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `m s = (r,t)` >>
+  irule (SRULE [preserves_when_def] cp_nonce_code) >>
+  simp[] >> qexistsl_tac [`m`,`r`] >> simp[Abbr `m`]
+QED
+
+Theorem same_frame_nonce_monotone:
+  same_frame_rel s t ==>
+  (lookup_account a s.rollback.accounts).nonce <=
+    (lookup_account a t.rollback.accounts).nonce
+Proof
+  rw[same_frame_rel_def, callee_local_changes_def] >>
+  Cases_on `a = (FST (HD s.contexts)).msgParams.callee` >> gvs[]
+QED
+
+Theorem step_same_frame_positive_nonce:
+  wf_state s /\ step s = (r, t) /\
+  LENGTH t.contexts = LENGTH s.contexts /\
+  0 < (lookup_account a s.rollback.accounts).nonce ==>
+  0 < (lookup_account a t.rollback.accounts).nonce
+Proof
+  strip_tac >>
+  `outputTo_consistent s` by
+    metis_tac[outputTo_consistent_stack_imp_consistent, wf_state_def] >>
+  drule_all step_same_frame >> strip_tac >>
+  drule same_frame_nonce_monotone >>
+  disch_then (qspec_then `a` assume_tac) >> decide_tac
+QED
+
+Theorem deposit_code_nonce:
+  (lookup_account a
+    (update_account b (lookup_account b accounts with code := code)
+      accounts)).nonce = (lookup_account a accounts).nonce
+Proof
+  rw[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+Theorem deposit_code_other:
+  a <> b ==>
+  lookup_account a
+    (update_account b (lookup_account b accounts with code := code)
+      accounts) = lookup_account a accounts
+Proof
+  simp[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+Theorem handle_create_nonce:
+  s.contexts <> [] /\ handle_create e s = (r, t) ==>
+  (lookup_account a t.rollback.accounts).nonce =
+    (lookup_account a s.rollback.accounts).nonce
+Proof
+  rw[handle_create_def, bind_def, get_return_data_def,
+     get_output_to_def, get_current_context_def, return_def] >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  Cases_on `e` >> Cases_on `h0.msgParams.outputTo` >>
+  gvs[reraise_def, ignore_bind_def, bind_def, assert_def,
+      return_def, fail_def, AllCaseEqs(), consume_gas_def,
+      get_current_context_def, set_current_context_def,
+      update_accounts_def, deposit_code_nonce]
+QED
+
+Theorem handle_create_code_other:
+  s.contexts <> [] /\ handle_create e s = (r,t) /\
+  (FST (HD s.contexts)).msgParams.outputTo <> Code a ==>
+  (lookup_account a t.rollback.accounts).code =
+    (lookup_account a s.rollback.accounts).code
+Proof
+  rw[handle_create_def, bind_def, get_return_data_def,
+     get_output_to_def, get_current_context_def, return_def] >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  Cases_on `e` >> Cases_on `h0.msgParams.outputTo` >>
+  gvs[reraise_def, ignore_bind_def, bind_def, assert_def,
+      return_def, fail_def, AllCaseEqs(), consume_gas_def,
+      get_current_context_def, set_current_context_def,
+      update_accounts_def, deposit_code_other]
+QED
+
+Theorem handle_create_protected_account:
+  s.contexts <> [] /\ handle_create e s = (r,t) /\
+  ((lookup_account a s.rollback.accounts).nonce <> 0 \/
+   ~NULL (lookup_account a s.rollback.accounts).code) /\
+  ((FST (HD s.contexts)).msgParams.outputTo = Code a ==>
+    0 < (lookup_account a s.rollback.accounts).nonce) ==>
+  (lookup_account a t.rollback.accounts).nonce <> 0 \/
+    ~NULL (lookup_account a t.rollback.accounts).code
+Proof
+  strip_tac >> drule_all handle_create_nonce >>
+  disch_then (qspec_then `a` assume_tac) >>
+  Cases_on `(FST (HD s.contexts)).msgParams.outputTo = Code a` >>
+  gvs[] >> drule_all handle_create_code_other >> simp[]
+QED
+
+Theorem step_grow_dispatch:
+  wf_state s /\ step s = (r,s') /\ LENGTH s.contexts < LENGTH s'.contexts ==>
+  r = INL () /\
+  ((?op. step_call op s = (INL (),s')) \/
+   (?two. step_create two s = (INL (),s')))
+Proof
+  strip_tac
+  >> `s.contexts <> []` by gvs[wf_state_def]
+  >> qpat_x_assum `step s = _` mp_tac
+  >> simp[step_def, handle_def]
+  >> qmatch_goalsub_abbrev_tac `inner s`
+  >> Cases_on `inner s` >> Cases_on `q`
+  >- (simp[] >> strip_tac >> gvs[]
+      >> gvs[Abbr `inner`, bind_def, AllCaseEqs()]
+      >> gvs[get_current_context_def, return_def, fail_def, bind_def]
+      >> gvs[option_CASE_rator, CaseEq "option", COND_RATOR, CaseEq "bool"]
+      >~ [`step_inst Stop`]
+      >- (drule_at Any psf_imp_length_contexts_preserved >> simp[])
+      >~ [`step_inst Invalid`]
+      >- (drule_at Any psf_imp_length_contexts_preserved >> simp[])
+      >> gvs[ignore_bind_def, bind_def, AllCaseEqs()]
+      >> rename1 `step_inst op s = (INL (),mid)`
+      >> drule_at Any psf_imp_length_contexts_preserved >> simp[]
+      >> (impl_keep_tac >- (strip_tac >>
+          gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def,
+              bind_def, get_current_context_def, fail_def]))
+      >> strip_tac
+      >> `LENGTH s.contexts < LENGTH mid.contexts` by simp[]
+      >> `is_call op` by (irule step_inst_inl_grew_is_call
+          >> qexistsl_tac [`s`, `mid`] >> simp[])
+      >> gvs[inc_pc_or_jump_def, return_def, COND_RATOR, CaseEq "bool"]
+      >> Cases_on `op` >> gvs[is_call_def, step_inst_def]
+      >> metis_tac[])
+  >> simp[] >> strip_tac
+  >> `same_frame_or_grow inner` by simp[Abbr `inner`]
+  >> `LENGTH r'.contexts >= LENGTH s.contexts` by
+      (drule_all same_frame_or_grow_length >> simp[])
+  >> `r'.contexts <> []` by (strip_tac >> gvs[] >> Cases_on `s.contexts` >> gvs[])
+  >> `LENGTH s'.contexts <= LENGTH s.contexts` suffices_by gvs[]
+  >> Cases_on `LENGTH r'.contexts = LENGTH s.contexts`
+  >- (drule handle_step_shrinks_by_one >> simp[])
+  >> `LENGTH r'.contexts > LENGTH s.contexts` by simp[]
+  >> `outputTo_consistent s` by
+      (irule outputTo_consistent_stack_imp_consistent >> gvs[wf_state_def])
+  >> `~vfm_abort y` by (irule step_inner_inr_grow_not_abort
+      >> qexistsl_tac [`s`, `r'`] >> simp[Abbr `inner`])
+  >> `0 < LENGTH s.contexts` by (Cases_on `s.contexts` >> gvs[])
+  >> `LENGTH r'.contexts >= 2` by simp[]
+  >> `LENGTH r'.contexts = LENGTH s.contexts + 1` by
+      (qunabbrev_tac `inner` >> drule_then drule step_inner_grows_by_exactly_one >> gvs[])
+  >> drule_at (Pat `handle_step`) handle_step_not_abort_pops >> gvs[]
+  >> `decreases_gas_cred T 0 0 inner` suffices_by
+      (gvs[decreases_gas_cred_def]
+       >> disch_then (qspec_then `s` mp_tac) >> rw[]
+       >> gvs[wf_state_def, EVERY_MEM])
+  >> simp[Abbr `inner`]
+  >> irule decreases_gas_cred_bind_mono
+  >> qexistsl_tac [`T`, `F`] >> simp[] >> gen_tac
+  >> rw[] >> CASE_TAC >> rw[]
+  >> irule decreases_gas_cred_ignore_bind_mono >> rw[]
+  >> qexistsl_tac [`F`, `T`] >> simp[]
+QED
+
+Theorem step_growth_nonce_code:
+  wf_state s /\ step s = (r,t) /\ LENGTH s.contexts < LENGTH t.contexts ==>
+  ^nonce_code_rel a s t
+Proof
+  strip_tac >> drule_all step_grow_dispatch >> strip_tac
+  >- (drule (SRULE [preserves_def] preserves_nonce_code_step_call) >> simp[]) >>
+  drule (SRULE [preserves_def] preserves_nonce_code_step_create) >> simp[]
+QED
+
+(* Protection starts with no newly introduced snapshots or Code frames. *)
+Theorem collision_protection_initial:
+  EVERY (\rb. !a.
+    account_already_created (lookup_account a s.rollback.accounts) ==>
+    account_already_created (lookup_account a rb.accounts))
+    (s.rollback :: MAP SND (TAKE (LENGTH s.contexts - LENGTH s.contexts) s.contexts)) /\
+  EVERY (\cr. !a. (FST cr).msgParams.outputTo = Code a ==>
+    ~account_already_created (lookup_account a s.rollback.accounts))
+    (TAKE (LENGTH s.contexts - LENGTH s.contexts) s.contexts)
+Proof
+  simp[]
+QED
+
+Theorem step_inst_preserves_created_account:
+  s.contexts <> [] /\ step_inst op s = (r,t) /\
+  account_already_created (lookup_account a s.rollback.accounts) ==>
+  account_already_created (lookup_account a t.rollback.accounts)
+Proof
+  strip_tac >> drule_all step_inst_nonce_code >>
+  disch_then (qspec_then `a` mp_tac) >>
+  gvs[account_already_created_def] >> decide_tac
+QED
+
+Theorem handle_create_preserves_other_created_account:
+  s.contexts <> [] /\ handle_create e s = (r,t) /\
+  (FST (HD s.contexts)).msgParams.outputTo <> Code a /\
+  account_already_created (lookup_account a s.rollback.accounts) ==>
+  account_already_created (lookup_account a t.rollback.accounts)
+Proof
+  strip_tac >> drule_all handle_create_nonce >>
+  disch_then (qspec_then `a` assume_tac) >>
+  drule_all handle_create_code_other >>
+  gvs[account_already_created_def]
+QED
+
+Theorem call_prefix_delegate_code_selection:
+  preserves_when (\s. s.contexts <> [])
+    (\s t. cp_rel s t /\ t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys)
+    (case get_delegate bytecode of
+       NONE => return (bytecode, 0)
+     | SOME d => do
+         cost <- access_address d;
+         return ((lookup_account d accounts).code, cost)
+       od)
+Proof
+  Cases_on `get_delegate bytecode` >> simp[call_prefix_leaves]
+  >> irule call_prefix_bind >> simp[call_prefix_leaves]
+QED
+
+Theorem step_call_reaches_proceed_call:
+  step_call op s = (r,s') /\ s.contexts <> [] /\
+  LENGTH s.contexts < LENGTH s'.contexts ==>
+  ?u sender address value ao az code gas mr.
+    cp_rel s u /\ u.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys /\
+    proceed_call op sender address value ao az code gas (Memory mr) u = (r,s') /\
+    sender = (FST (HD s.contexts)).msgParams.callee /\
+    value <= (lookup_account sender s.rollback.accounts).balance /\
+    code = (case get_delegate (lookup_account address s.rollback.accounts).code of
+      NONE => (lookup_account address s.rollback.accounts).code
+    | SOME d => (lookup_account d s.rollback.accounts).code) /\
+    (~call_has_value op ==> value = 0) /\
+    (op = Call /\ 0 < value ==> ~(FST (HD s.contexts)).msgParams.static)
+Proof
+  let
+    val peel =
+      drule_at (Pat `bind`) bind_call_prefix_grows_extract
+      >> simp[call_prefix_leaves]
+      >> disch_then (qspec_then `s` mp_tac) >> simp[]
+      >> qpat_x_assum `bind _ _ _ = _` kall_tac
+      >> strip_tac >> gvs[]
+  in
+  simp[step_call_def] >> strip_tac
+  >> `cp_rel s s /\ s.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys`
+    by simp[call_prefix_refl]
+  >> peel >> pairarg_tac >> gvs[]
+  >> qmatch_asmsub_abbrev_tac `proceed_call op _ address value ao az _ _ rd`
+  >> peel
+  >> peel
+  >> `u''.rollback.accounts = s.rollback.accounts` by gvs[cp_rel_def]
+  >> gvs[get_accounts_def, Once bind_def, return_def]
+  >> drule_at (Pat `bind`) bind_call_prefix_grows_extract
+  >> disch_then (qspec_then `s` mp_tac) >> simp[]
+  >> (impl_tac >- irule call_prefix_delegate_code_selection)
+  >> qpat_x_assum `bind _ _ _ = _` kall_tac
+  >> strip_tac >> gvs[] >> pairarg_tac >> gvs[]
+  >> `code = (case get_delegate (lookup_account address s.rollback.accounts).code of
+       NONE => (lookup_account address s.rollback.accounts).code
+     | SOME d => (lookup_account d s.rollback.accounts).code)`
+    by (Cases_on `get_delegate (lookup_account address s.rollback.accounts).code`
+        >> gvs[bind_def, return_def, AllCaseEqs()])
+  >> peel >> pairarg_tac >> gvs[ignore_bind_def]
+  >> qpat_x_assum `pop_stack _ _ = _` kall_tac
+  >> qpat_x_assum `memory_expansion_info _ _ _ = _` kall_tac
+  >> qpat_x_assum `access_address _ _ = _` kall_tac
+  >> qpat_x_assum `(case _ of NONE => _ | SOME _ => _) _ = _` kall_tac
+  >> qpat_x_assum `get_gas_left _ = _` kall_tac
+  >> qpat_x_assum `call_gas _ _ _ _ _ = _` kall_tac
+  >> peel
+  >> drule_at (Pat `bind`) bind_call_prefix_grows_extract
+  >> simp[] >> disch_then (qspec_then `s` mp_tac) >> simp[]
+  >> (impl_tac >- (Cases_on `op = Call /\ 0 < value` >> simp[call_prefix_leaves]))
+  >> qpat_x_assum `bind _ _ _ = _` kall_tac
+  >> strip_tac >> gvs[]
+  >> `op = Call /\ 0 < value ==> ~(FST (HD s.contexts)).msgParams.static`
+    by (strip_tac
+        >> gvs[assert_not_static_def, get_static_def, get_current_context_def,
+               bind_def, assert_def, return_def, fail_def, cp_rel_def, AllCaseEqs()])
+  >> peel
+  >> peel
+  >> rename1 `get_callee beforeSender = (INL sender,afterSender)`
+  >> `sender = (FST (HD s.contexts)).msgParams.callee`
+    by gvs[get_callee_def, get_current_context_def, bind_def, return_def,
+           fail_def, cp_rel_def, AllCaseEqs()]
+  >> gvs[COND_RATOR]
+  >> Cases_on `(lookup_account (FST (HD s.contexts)).msgParams.callee
+                 s.rollback.accounts).balance < value` >> gvs[]
+  >- (drule_at (Pat `_ = (_,s')`) psf_imp_length_contexts_preserved
+      >> simp[] >> imp_res_tac call_prefix_contexts >> gvs[])
+  >> peel
+  >> peel >> gvs[COND_RATOR]
+  >> rename1 `get_num_contexts depthState = (INL depth,entry)`
+  >> Cases_on `depth > 1024` >> gvs[]
+  >- (drule_at (Pat `_ = (_,s')`) psf_imp_length_contexts_preserved
+      >> simp[] >> imp_res_tac call_prefix_contexts >> gvs[])
+  >> qexistsl_tac [`entry`, `address`, `value`, `ao`, `az`, `stipend`]
+  >> simp[] >> gvs[Abbr `rd`]
+  >> qexists_tac `<|offset := w2n (EL ((if call_has_value op then 1 else 0) + 4) x);
+                   size := w2n (EL ((if call_has_value op then 1 else 0) + 5) x)|>`
+  >> simp[] >> simp[Abbr `value`]
+  end
+QED
+
+Theorem proceed_call_saved_rollback:
+  proceed_call op sender address value ao az code gas rd s = (r, s') /\
+  s.contexts <> [] /\ ~fIN address precompile_addresses ==>
+  SND (HD s'.contexts) = s.rollback /\
+  s'.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys
+Proof
+  strip_tac >> Cases_on `op <> CallCode /\ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+QED
+
+Theorem terminal_bind:
+  (!x s. ISR (FST (f x s))) ==> ISR (FST (bind g f s))
+Proof
+  rw[bind_def] >> Cases_on `g s` >> Cases_on `q` >> gvs[]
+QED
+
+Theorem terminal_ignore_bind:
+  (!s. ISR (FST (f s))) ==> ISR (FST (ignore_bind g f s))
+Proof
+  simp[ignore_bind_def] >> strip_tac >> irule terminal_bind >> simp[]
+QED
+
+Theorem dispatch_precompiles_terminal:
+  ISR (FST (dispatch_precompiles a s))
+Proof
+  rw[dispatch_precompiles_def]
+  >> simp[precompile_ecrecover_def, precompile_sha2_256_def,
+          precompile_ripemd_160_def, precompile_identity_def,
+          precompile_modexp_def, precompile_ecadd_def,
+          precompile_ecmul_def, precompile_ecpairing_def,
+          precompile_blake2f_def, precompile_point_eval_def,
+          precompile_bls_g1add_def, precompile_bls_g1msm_def,
+          precompile_bls_g2add_def, precompile_bls_g2msm_def,
+          precompile_bls_pairing_def, precompile_bls_map_fp_to_g1_def,
+          precompile_bls_map_fp2_to_g2_def, precompile_p256verify_def,
+          fail_def]
+  >> rpt (FIRST [irule terminal_bind >> rpt gen_tac,
+                 irule terminal_ignore_bind >> gen_tac,
+                 CHANGED_TAC (simp[finish_def, fail_def]),
+                 BasicProvers.PURE_CASE_TAC])
+QED
+
+Theorem proceed_call_inl_nonprecompile:
+  proceed_call op sender address value ao az code gas rd s = (INL (), s') /\
+  s.contexts <> [] ==> ~fIN address precompile_addresses
+Proof
+  strip_tac >> strip_tac
+  >> Cases_on `op <> CallCode /\ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+  >> qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed`
+  >> `ISR (FST ((dispatch_precompiles address : unit execution) pushed))`
+       by simp[dispatch_precompiles_terminal]
+  >> qpat_x_assum `ISR _` mp_tac
+  >> qpat_x_assum `dispatch_precompiles _ _ = _` (fn th => simp[th, sumTheory.ISR])
+QED
+
+Theorem proceed_call_saved_accounts:
+  s.contexts <> [] /\
+  proceed_call op sender address value argsOffset argsSize code stipend
+    outputTo s = (r,t) ==>
+  (SND (HD t.contexts)).accounts = s.rollback.accounts
+Proof
+  strip_tac >> qhdtm_x_assum `proceed_call` mp_tac >>
+  simp[proceed_call_def, bind_def, ignore_bind_def, get_rollback_def,
+       read_memory_def, get_current_context_def, return_def] >>
+  Cases_on `op <> CallCode /\ 0 < value` >>
+  simp[update_accounts_def, return_def, get_caller_def, get_value_def,
+       get_static_def, get_current_context_def, bind_def,
+       push_context_def, ignore_bind_def] >>
+  qmatch_goalsub_abbrev_tac `(if _ then _ else _) ss` >>
+  qmatch_goalsub_abbrev_tac `m ss = _` >> strip_tac >>
+  `ss.contexts <> []` by simp[Abbr `ss`] >>
+  `cp m` by
+    (simp[Abbr `m`] >>
+     Cases_on `fIN address precompile_addresses` >> simp[]) >>
+  `cp_rel ss t` by
+    (qpat_x_assum `cp m` mp_tac >>
+     rewrite_tac[cp_eq_preserves_when, preserves_when_def] >>
+     disch_then drule >> simp[]) >>
+  `SND (HD t.contexts) = SND (HD ss.contexts)` by
+    gvs[cp_rel_def] >>
+  simp[Abbr `ss`]
+QED
+
+Theorem step_call_grow_saved_accounts:
+  s.contexts <> [] /\ step_call op s = (r,t) /\
+  LENGTH s.contexts < LENGTH t.contexts ==>
+  (SND (HD t.contexts)).accounts = s.rollback.accounts
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac >>
+  `u.contexts <> []` by
+    (gvs[cp_rel_def] >> Cases_on `s.contexts` >> gvs[]) >>
+  drule_all proceed_call_saved_accounts >> gvs[cp_rel_def]
+QED
+
+Theorem step_create_saved_head_nonce_code:
+  step_create two s = (INL (),t) /\ s.contexts <> [] /\
+  LENGTH s.contexts < LENGTH t.contexts ==>
+  (lookup_account a s.rollback.accounts).nonce <=
+    (lookup_account a (SND (HD t.contexts)).accounts).nonce /\
+  (lookup_account a (SND (HD t.contexts)).accounts).code =
+    (lookup_account a s.rollback.accounts).code
+Proof
+  strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac >>
+  drule_all call_prefix_contexts >> strip_tac >>
+  drule_all proceed_create_frame_effects >> strip_tac >>
+  gvs[cp_rel_def, increment_nonce_lookup, increment_nonce_code] >>
+  Cases_on `a = (FST (HD s.contexts)).msgParams.callee` >> gvs[]
+QED
+
+Theorem step_growth_saved_head_nonce_code:
+  wf_state s /\ step s = (r,t) /\ LENGTH s.contexts < LENGTH t.contexts ==>
+  (lookup_account a s.rollback.accounts).nonce <=
+    (lookup_account a (SND (HD t.contexts)).accounts).nonce /\
+  (lookup_account a (SND (HD t.contexts)).accounts).code =
+    (lookup_account a s.rollback.accounts).code
+Proof
+  strip_tac >> `s.contexts <> []` by gvs[wf_state_def] >>
+  drule_all step_grow_dispatch >> strip_tac
+  >- (drule_all step_call_grow_saved_accounts >> simp[]) >>
+  drule_all step_create_saved_head_nonce_code >> simp[]
+QED
+
+Theorem proceed_call_memory_output:
+  s.contexts <> [] /\
+  proceed_call op sender address value ao az code stipend (Memory mr) s = (r,t) ==>
+  (FST (HD t.contexts)).msgParams.outputTo = Memory mr
+Proof
+  Cases_on `s.contexts` >> simp[] >>
+  simp[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_caller_def,
+       get_value_def, get_static_def, update_accounts_def,
+       push_context_def, get_current_context_def, return_def] >>
+  Cases_on `op <> CallCode /\ 0 < value` >>
+  Cases_on `fIN address precompile_addresses` >> simp[return_def] >>
+  strip_tac >> gvs[update_accounts_def, get_current_context_def,
+       return_def, initial_context_def, initial_msg_params_def] >>
+  qmatch_asmsub_abbrev_tac `dispatch_precompiles address pushed` >>
+  `pushed.contexts <> []` by simp[Abbr `pushed`] >>
+  mp_tac (INST_TYPE [alpha |-> ``:unit``]
+    (Q.INST [`a` |-> `address`] preserves_same_frame_dispatch_precompiles)) >>
+  rewrite_tac[preserves_same_frame_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  gvs[same_frame_rel_def, Abbr `pushed`, initial_context_def,
+      initial_msg_params_def]
+QED
+
+Theorem step_growth_nonce_certificate:
+  wf_state s /\ step s = (r,t) /\
+  LENGTH s.contexts < LENGTH t.contexts /\
+  (FST (HD t.contexts)).msgParams.outputTo = Code b ==>
+  0 < (lookup_account b t.rollback.accounts).nonce
+Proof
+  strip_tac >> `s.contexts <> []` by gvs[wf_state_def] >>
+  drule_all step_grow_dispatch >> strip_tac
+  >- (drule_all step_call_reaches_proceed_call >> strip_tac >>
+      drule_all call_prefix_contexts >> strip_tac >>
+      drule_all proceed_call_memory_output >> simp[]) >>
+  drule_all step_create_growth_effects >> strip_tac >> gvs[]
+QED
+
+Theorem set_last_accounts_foreign_lookup:
+  ls <> [] /\ a <> address ==>
+  MAP (\p. lookup_account a (SND p).accounts)
+    (set_last_accounts (update_account address empty_account_state
+      (SND (LAST ls)).accounts) ls) =
+  MAP (\p. lookup_account a (SND p).accounts) ls
+Proof
+  Induct_on `ls` using SNOC_INDUCT >>
+  simp[set_last_accounts_def, FRONT_SNOC, LAST_SNOC, MAP_SNOC,
+       lookup_account_def, update_account_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem proceed_create_old_snapshot_lookups:
+  s.contexts <> [] /\ a <> address /\
+  proceed_create sender address value code gas s = (r,t) ==>
+  MAP (\p. lookup_account a (SND p).accounts) (TL t.contexts) =
+  MAP (\p. lookup_account a (SND p).accounts) s.contexts
+Proof
+  strip_tac >> qhdtm_x_assum `proceed_create` mp_tac >>
+  simp[proceed_create_def, ignore_bind_def, bind_def,
+       update_accounts_def, get_rollback_def, get_original_def,
+       set_original_def, push_context_def, return_def] >>
+  strip_tac >> gvs[] >> simp[set_last_accounts_foreign_lookup]
+QED
+
+Theorem proceed_call_old_snapshot_lookups:
+  proceed_call op sender address value ao az code gas rd s = (r,t) /\
+  s.contexts <> [] /\ ~fIN address precompile_addresses ==>
+  MAP (\p. lookup_account a (SND p).accounts) (TL t.contexts) =
+  MAP (\p. lookup_account a (SND p).accounts) s.contexts
+Proof
+  strip_tac >> Cases_on `op <> CallCode /\ 0 < value` >>
+  gvs[proceed_call_def, bind_def, ignore_bind_def,
+      get_rollback_def, read_memory_def, get_current_context_def,
+      get_caller_def, get_value_def, get_static_def,
+      push_context_def, update_accounts_def, return_def, fail_def,
+      AllCaseEqs()]
+QED
+
+Theorem step_create_old_snapshot_lookups:
+  step_create two s = (INL (),t) /\ s.contexts <> [] /\
+  LENGTH s.contexts < LENGTH t.contexts /\
+  ((lookup_account a s.rollback.accounts).nonce <> 0 \/
+   ~NULL (lookup_account a s.rollback.accounts).code) ==>
+  MAP (\p. lookup_account a (SND p).accounts) (TL t.contexts) =
+  MAP (\p. lookup_account a (SND p).accounts) s.contexts
+Proof
+  strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac >>
+  drule_all call_prefix_contexts >> strip_tac >>
+  `a <> address` by (strip_tac >> gvs[cp_rel_def, account_already_created_def]) >>
+  drule_all proceed_create_old_snapshot_lookups >>
+  gvs[cp_rel_def] >> Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem step_call_old_snapshot_lookups:
+  step_call op s = (INL (),t) /\ s.contexts <> [] /\
+  LENGTH s.contexts < LENGTH t.contexts ==>
+  MAP (\p. lookup_account a (SND p).accounts) (TL t.contexts) =
+  MAP (\p. lookup_account a (SND p).accounts) s.contexts
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac >>
+  drule_all call_prefix_contexts >> strip_tac >>
+  drule_all proceed_call_inl_nonprecompile >> strip_tac >>
+  drule_all proceed_call_old_snapshot_lookups >> gvs[cp_rel_def] >>
+  Cases_on `s.contexts` >> gvs[]
+QED
+
+Theorem step_growth_old_snapshot_lookups:
+  wf_state s /\ step s = (r,t) /\ LENGTH s.contexts < LENGTH t.contexts /\
+  ((lookup_account a s.rollback.accounts).nonce <> 0 \/
+   ~NULL (lookup_account a s.rollback.accounts).code) ==>
+  MAP (\p. lookup_account a (SND p).accounts) (TL t.contexts) =
+  MAP (\p. lookup_account a (SND p).accounts) s.contexts
+Proof
+  strip_tac >> `s.contexts <> []` by gvs[wf_state_def] >>
+  drule_all step_grow_dispatch >> strip_tac >>
+  metis_tac[step_call_old_snapshot_lookups, step_create_old_snapshot_lookups]
+QED
+
+Theorem step_growth_old_snapshot_lookup:
+  wf_state s /\ step s = (r,t) /\ LENGTH s.contexts < LENGTH t.contexts /\
+  ((lookup_account a s.rollback.accounts).nonce <> 0 \/
+   ~NULL (lookup_account a s.rollback.accounts).code) /\ i < LENGTH s.contexts ==>
+  lookup_account a (SND (EL (SUC i) t.contexts)).accounts =
+  lookup_account a (SND (EL i s.contexts)).accounts
+Proof
+  strip_tac >>
+  `MAP (\p. lookup_account a (SND p).accounts) (TL t.contexts) =
+   MAP (\p. lookup_account a (SND p).accounts) s.contexts`
+    by metis_tac[step_growth_old_snapshot_lookups] >>
+  pop_assum (mp_tac o Q.AP_TERM `EL i`) >>
+  simp[EL_MAP, EL]
+QED
+
+(* These are ML abbreviations only; the exported facts have inline predicates. *)
+val collision_protected = ``\(B:rollback_state) (rb:rollback_state). !a.
+  account_already_created (lookup_account a B.accounts) ==>
+  account_already_created (lookup_account a rb.accounts)``;
+
+Theorem step_growth_collision_protection:
+  0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
+  step s = (r,t) /\ LENGTH s.contexts < LENGTH t.contexts /\
+  EVERY (^collision_protected B)
+    (s.rollback :: MAP SND (TAKE (LENGTH s.contexts - d) s.contexts)) ==>
+  EVERY (^collision_protected B)
+    (t.rollback :: MAP SND (TAKE (LENGTH t.contexts - d) t.contexts))
+Proof
+  strip_tac >> fs[] >> conj_tac
+  >- (rpt strip_tac >> drule_all step_growth_nonce_code >>
+      disch_then (qspec_then `a` mp_tac) >>
+      `account_already_created (lookup_account a s.rollback.accounts)` by metis_tac[] >>
+      gvs[account_already_created_def] >> decide_tac) >>
+  `s.contexts <> [] /\ outputTo_consistent_stack s` by gvs[wf_state_def] >>
+  `LENGTH t.contexts = SUC (LENGTH s.contexts)` by
+    (`LENGTH t.contexts > LENGTH s.contexts` by simp[] >>
+     drule_all step_push_structure >> simp[ADD1]) >>
+  simp[EVERY_EL, EL_MAP, LENGTH_TAKE_EQ] >> rpt strip_tac >>
+  `account_already_created (lookup_account a s.rollback.accounts)` by metis_tac[] >>
+  Cases_on `n`
+  >- (simp[EL_TAKE] >> drule_all step_growth_saved_head_nonce_code >>
+      disch_then (qspec_then `a` mp_tac) >>
+      gvs[account_already_created_def] >> decide_tac) >>
+  `n' < LENGTH s.contexts /\ n' < LENGTH s.contexts - d` by decide_tac >>
+  `lookup_account a (SND (EL (SUC n') t.contexts)).accounts =
+     lookup_account a (SND (EL n' s.contexts)).accounts` by
+    (irule step_growth_old_snapshot_lookup >>
+     simp[] >> gvs[account_already_created_def] >> metis_tac[]) >>
+  gvs[EL_TAKE, EVERY_EL, EL_MAP, LENGTH_TAKE_EQ] >>
+  metis_tac[EL_TAKE]
+QED
+
+Theorem step_growth_code_provenance:
+  wf_state s /\ step s = (r,t) /\ LENGTH s.contexts < LENGTH t.contexts /\
+  ^collision_protected B s.rollback ==>
+  !a. (FST (HD t.contexts)).msgParams.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts)
+Proof
+  strip_tac >> `s.contexts <> []` by gvs[wf_state_def] >>
+  drule_all step_grow_dispatch >> strip_tac
+  >- (drule_all step_call_reaches_proceed_call >> strip_tac >>
+      drule_all call_prefix_contexts >> strip_tac >>
+      drule_all proceed_call_memory_output >> simp[]) >>
+  drule_all step_create_growth_effects >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem step_growth_protected_frames:
+  0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
+  step s = (r,t) /\ LENGTH s.contexts < LENGTH t.contexts /\
+  ^collision_protected B s.rollback /\
+  EVERY (\mp. !a. mp.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts))
+    (MAP (\p. (FST p).msgParams) (TAKE (LENGTH s.contexts-d) s.contexts)) ==>
+  EVERY (\mp. !a. mp.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts))
+    (MAP (\p. (FST p).msgParams) (TAKE (LENGTH t.contexts-d) t.contexts))
+Proof
+  strip_tac >>
+  `!a. (FST (HD t.contexts)).msgParams.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts)` by
+    (qx_gen_tac `a` >> disch_tac >> fs[] >>
+     irule (SRULE [] step_growth_code_provenance) >>
+     qexistsl_tac [`r`, `s`, `t`] >> simp[]) >>
+  `s.contexts <> [] /\ outputTo_consistent_stack s /\
+   LENGTH t.contexts > LENGTH s.contexts` by gvs[wf_state_def] >>
+  drule_all step_push_structure >> strip_tac >>
+  irule protected_frames_push_transport >>
+  conj_tac >- simp[] >>
+  simp[] >> qexists_tac `s` >> simp[ADD1]
+QED
+
+val step_inner = ``do
+  context <- get_current_context;
+  case FLOOKUP context.msgParams.parsed context.pc of
+  | SOME op => ignore_bind (step_inst op) (inc_pc_or_jump op)
+  | NONE => if LENGTH context.msgParams.code <= context.pc
+            then step_inst Stop else step_inst Invalid
+  od``;
+
+Theorem step_inst_inc_pc_nonce_code:
+  s.contexts <> [] /\
+  ignore_bind (step_inst op) (inc_pc_or_jump op) s = (r,t) ==>
+  ^nonce_code_rel a s t
+Proof
+  strip_tac >>
+  Cases_on `step_inst op s` >> rename1 `step_inst op s = (q,u)` >>
+  `^nonce_code_rel a s u` by metis_tac[step_inst_nonce_code] >>
+  `u.contexts <> []` by metis_tac[step_inst_preserves_nonempty_contexts, SND] >>
+  Cases_on `q`
+  >- (rename1 `step_inst op s = (INL x,u)` >> Cases_on `x` >>
+      `inc_pc_or_jump op u = (r,t)` by gvs[ignore_bind_def, bind_def] >>
+      `preserves_when (\s. s.contexts <> []) (^nonce_code_rel a)
+         (inc_pc_or_jump op)` by (irule cp_nonce_code >> simp[]) >>
+      qpat_x_assum `preserves_when _ _ _` mp_tac >>
+      simp[preserves_when_def] >> disch_then drule >>
+      disch_then drule >> strip_tac >>
+      gvs[] >> decide_tac) >>
+  gvs[ignore_bind_def, bind_def]
+QED
+
+Theorem step_inner_nonce_code:
+  s.contexts <> [] /\ ^step_inner s = (r,t) ==>
+  ^nonce_code_rel a s t
+Proof
+  strip_tac >> qpat_x_assum `bind _ _ s = _` mp_tac >>
+  simp[bind_def, get_current_context_def, return_def] >>
+  Cases_on `FLOOKUP (FST (HD s.contexts)).msgParams.parsed
+    (FST (HD s.contexts)).pc` >> simp[]
+  >- (IF_CASES_TAC >> strip_tac >>
+      irule (SRULE [] step_inst_nonce_code) >> metis_tac[]) >>
+  strip_tac >> irule (SRULE [] step_inst_inc_pc_nonce_code) >> metis_tac[]
+QED
+
+Theorem handle_exception_inl_pops:
+  s.contexts <> [] /\ handle_exception e s = (INL x,t) ==>
+  LENGTH t.contexts + 1 = LENGTH s.contexts
+Proof
+  Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
+  Cases_on `t'` >> simp[]
+  >- (Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
+      simp[handle_exception_def, bind_def, ignore_bind_def,
+           get_gas_left_def, get_current_context_def, return_def,
+           consume_gas_def, set_return_data_def, set_current_context_def,
+           get_num_contexts_def, reraise_def, assert_def, fail_def,
+           AllCaseEqs()]) >>
+  PairCases_on `h` >> Cases_on `h0.msgParams.outputTo` >>
+  Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
+  simp[handle_exception_def, bind_def, ignore_bind_def,
+       get_gas_left_def, get_current_context_def, return_def,
+       consume_gas_def, set_return_data_def, set_current_context_def,
+       get_num_contexts_def, get_return_data_def, get_output_to_def,
+       reraise_def, assert_def, fail_def, inc_pc_def, push_stack_def,
+       write_memory_def, pop_and_incorporate_context_def, pop_context_def,
+       set_rollback_def, unuse_gas_def, update_gas_refund_def,
+       push_logs_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem handle_step_inl_pops:
+  s.contexts <> [] /\ handle_step e s = (INL x,t) ==>
+  LENGTH t.contexts + 1 = LENGTH s.contexts
+Proof
+  strip_tac >> qhdtm_x_assum `handle_step` mp_tac >>
+  simp[handle_step_def] >> IF_CASES_TAC
+  >- simp[reraise_def] >>
+  simp[handle_def] >>
+  strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR) >>
+  simp[] >> strip_tac >>
+  drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac >>
+  drule_all handle_create_preserves_length >> strip_tac >>
+  drule_all handle_exception_inl_pops >> simp[]
+QED
+
+Theorem handle_exception_length_one:
+  LENGTH s.contexts = 1 /\ handle_exception e s = (r,t) ==>
+  LENGTH t.contexts = 1
+Proof
+  Cases_on `s.contexts` >> simp[] >> Cases_on `t'` >> simp[] >>
+  PairCases_on `h` >>
+  Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
+  simp[handle_exception_def, bind_def, ignore_bind_def,
+       get_gas_left_def, get_current_context_def, return_def,
+       consume_gas_def, set_return_data_def, set_current_context_def,
+       get_num_contexts_def, reraise_def, assert_def, fail_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem handle_exception_rollback_sources:
+  s.contexts <> [] /\ handle_exception e s = (r,t) ==>
+  t.rollback = s.rollback \/
+  (2 <= LENGTH s.contexts /\ t.rollback = SND (HD s.contexts))
+Proof
+  strip_tac >>
+  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- metis_tac[handle_exception_same_length_preserves_rollback] >>
+  drule_all handle_exception_shrinks_by_one >> strip_tac >>
+  `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
+  `2 <= LENGTH s.contexts` by
+    (Cases_on `LENGTH s.contexts = 1`
+     >- (drule_all handle_exception_length_one >> simp[]) >>
+     Cases_on `s.contexts` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  Cases_on `s.contexts` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  PairCases_on `h` >>
+  `LENGTH t.contexts < LENGTH s.contexts` by (gvs[] >> decide_tac) >>
+  drule_all handle_exception_pop_generic_gen >> simp[]
+QED
+
+Theorem handle_step_protected_account:
+  s.contexts <> [] /\ handle_step e s = (r,t) /\
+  ((lookup_account a s.rollback.accounts).nonce <> 0 \/
+   ~NULL (lookup_account a s.rollback.accounts).code) /\
+  (2 <= LENGTH s.contexts ==>
+    (lookup_account a (SND (HD s.contexts)).accounts).nonce <> 0 \/
+    ~NULL (lookup_account a (SND (HD s.contexts)).accounts).code) /\
+  ((FST (HD s.contexts)).msgParams.outputTo = Code a ==>
+    0 < (lookup_account a s.rollback.accounts).nonce) ==>
+  (lookup_account a t.rollback.accounts).nonce <> 0 \/
+    ~NULL (lookup_account a t.rollback.accounts).code
+Proof
+  strip_tac >> (
+  qhdtm_x_assum `handle_step` mp_tac >>
+  simp[handle_step_def] >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[]) >>
+  simp[handle_def] >>
+  strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR) >>
+  simp[] >> strip_tac >>
+  drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac >>
+  drule_all handle_create_preserves_length >> strip_tac >>
+  `((lookup_account a s'.rollback.accounts).nonce <> 0 \/
+    ~NULL (lookup_account a s'.rollback.accounts).code)` by
+      (irule (INST_TYPE [alpha |-> ``:unit``] handle_create_protected_account) >>
+       metis_tac[]) >>
+  drule_all handle_exception_rollback_sources >> strip_tac >> gvs[])
+QED
+
+Theorem step_inner_inr_grow_protected_head:
+  wf_state s /\ ^step_inner s = (INR e,u) /\
+  LENGTH s.contexts < LENGTH u.contexts /\
+  ((lookup_account a s.rollback.accounts).nonce <> 0 \/
+   ~NULL (lookup_account a s.rollback.accounts).code) ==>
+  (?mr. (FST (HD u.contexts)).msgParams.outputTo = Memory mr) /\
+  ((lookup_account a (SND (HD u.contexts)).accounts).nonce <> 0 \/
+   ~NULL (lookup_account a (SND (HD u.contexts)).accounts).code)
+Proof
+  strip_tac >> (
+  `s.contexts <> [] /\ outputTo_consistent s` by
+    metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent] >>
+  gvs[bind_def, get_current_context_def, return_def, fail_def,
+      COND_RATOR, vfmTypesTheory.option_CASE_rator, AllCaseEqs(),
+      ignore_bind_def]
+  >~ [`step_inst Stop`]
+  >- (`preserves_same_frame (step_inst Stop)` by simp[] >>
+      imp_res_tac psf_imp_length_contexts_preserved >> gvs[])
+  >~ [`step_inst Invalid`]
+  >- (`preserves_same_frame (step_inst Invalid)` by simp[] >>
+      imp_res_tac psf_imp_length_contexts_preserved >> gvs[])
+  >- (`preserves_same_frame (inc_pc_or_jump op)` by simp[] >>
+      drule_then drule psf_imp_length_contexts_preserved >>
+      (impl_tac >-
+        (strip_tac >>
+         gvs[inc_pc_or_jump_def, COND_RATOR, AllCaseEqs(), return_def] >>
+         gvs[bind_def, AllCaseEqs(), get_current_context_def, fail_def])) >>
+      strip_tac >> drule step_inst_inl_grew_is_call >> gvs[] >>
+      strip_tac >> gvs[inc_pc_or_jump_def, return_def]) >>
+  rename1 `step_inst op s = (INR e,u)` >>
+  drule step_inst_inr_grew_is_call_family >>
+  (impl_tac >- gvs[]) >>
+  reverse (Cases_on `step_inst op s = step_call op s`)
+  >- (strip_tac >> gvs[step_inst_def]) >>
+  gvs[] >>
+  `(SND (HD u.contexts)).accounts = s.rollback.accounts` by
+    (irule step_call_grow_saved_accounts >> metis_tac[]) >>
+  strip_tac >>
+  drule step_call_inr_grow_structure >>
+  disch_then (qspecl_then [`u`,`op`,`e`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[])
+QED
+
+Theorem step_continuing_collision_current:
+  0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
+  step s = (INL x,t) /\ d <= LENGTH t.contexts /\
+  EVERY (^collision_protected B)
+    (s.rollback :: MAP SND (TAKE (LENGTH s.contexts-d) s.contexts)) /\
+  EVERY (\mp. !a. mp.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts))
+    (MAP (\p. (FST p).msgParams) (TAKE (LENGTH s.contexts-d) s.contexts)) ==>
+  ^collision_protected B t.rollback
+Proof
+  simp[] >> strip_tac >> qx_gen_tac `a` >> disch_tac >>
+  `account_already_created (lookup_account a s.rollback.accounts)` by metis_tac[] >>
+  `s.contexts <> []` by gvs[wf_state_def] >>
+  qhdtm_x_assum `step` mp_tac >>
+  simp[step_def, handle_def] >>
+  Cases_on `^step_inner s` >> rename1 `^step_inner s = (q,u)` >>
+  `^nonce_code_rel a s u` by
+    (irule step_inner_nonce_code >> metis_tac[]) >>
+  `same_frame_or_grow ^step_inner` by simp[] >>
+  `LENGTH s.contexts <= LENGTH u.contexts` by
+    (drule_all same_frame_or_grow_length >> simp[]) >>
+  `u.contexts <> []` by (strip_tac >> gvs[]) >>
+  `account_already_created (lookup_account a u.rollback.accounts)` by
+    (gvs[account_already_created_def] >> decide_tac) >>
+  Cases_on `q` >> simp[] >> strip_tac
+  >- gvs[] >>
+  rename1 `handle_step e u = (INL (),t)` >>
+  Cases_on `LENGTH u.contexts = LENGTH s.contexts`
+  >- (drule_all handle_step_inl_pops >> strip_tac >>
+      `d < LENGTH s.contexts` by decide_tac >>
+      `same_frame_rel s u` by
+        (drule_all same_frame_or_grow_eq_length >> simp[]) >>
+      `account_already_created (lookup_account a (SND (HD s.contexts)).accounts) /\
+       (FST (HD s.contexts)).msgParams.outputTo <> Code a` by
+        (Cases_on `s.contexts` >> gvs[] >> metis_tac[]) >>
+      `(lookup_account a t.rollback.accounts).nonce <> 0 \/
+       ~NULL (lookup_account a t.rollback.accounts).code`
+        suffices_by simp[account_already_created_def] >>
+      irule handle_step_protected_account >>
+      qexistsl_tac [`e`, `INL ()`, `u`] >>
+      gvs[same_frame_rel_def, account_already_created_def]) >>
+  `LENGTH s.contexts < LENGTH u.contexts` by decide_tac >>
+  `((lookup_account a s.rollback.accounts).nonce <> 0 \/
+    ~NULL (lookup_account a s.rollback.accounts).code)` by
+    gvs[account_already_created_def] >>
+  drule_at (Pat `bind _ _ _ = _`) step_inner_inr_grow_protected_head >>
+  disch_then (qspec_then `a` mp_tac) >> simp[] >> strip_tac >>
+  `(lookup_account a t.rollback.accounts).nonce <> 0 \/
+   ~NULL (lookup_account a t.rollback.accounts).code`
+    suffices_by simp[account_already_created_def] >>
+  irule handle_step_protected_account >>
+  qexistsl_tac [`e`, `INL ()`, `u`] >>
+  gvs[account_already_created_def]
+QED
+
+Theorem step_continuing_collision_protection:
+  0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
+  step s = (INL x,t) /\ d <= LENGTH t.contexts /\
+  EVERY (^collision_protected B)
+    (s.rollback :: MAP SND (TAKE (LENGTH s.contexts-d) s.contexts)) /\
+  EVERY (\mp. !a. mp.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts))
+    (MAP (\p. (FST p).msgParams) (TAKE (LENGTH s.contexts-d) s.contexts)) ==>
+  EVERY (^collision_protected B)
+    (t.rollback :: MAP SND (TAKE (LENGTH t.contexts-d) t.contexts))
+Proof
+  strip_tac >>
+  `^collision_protected B t.rollback` by
+    (irule step_continuing_collision_current >>
+     qexistsl_tac [`d`, `s`, `x`] >> simp[]) >>
+  `s.contexts <> [] /\ outputTo_consistent_stack s /\
+   outputTo_consistent s /\ EVERY (wf_context o FST) s.contexts` by
+    (gvs[wf_state_def] >> metis_tac[outputTo_consistent_stack_imp_consistent]) >>
+  Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (irule step_growth_collision_protection >> simp[] >>
+      qexistsl_tac [`INL x`, `s`] >> fs[]) >>
+  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+      irule protected_rollbacks_same_frame_transport >> simp[] >>
+      qexists_tac `s` >> fs[]) >>
+  `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
+  drule_all step_pop_structure >> strip_tac >>
+  irule protected_rollbacks_pop_transport >> simp[] >>
+  qexistsl_tac [`HD s.contexts`, `parent`, `s`] >> fs[]
+QED
+
+Theorem step_continuing_protected_frames:
+  0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
+  step s = (INL x,t) /\ d <= LENGTH t.contexts /\
+  EVERY (^collision_protected B)
+    (s.rollback :: MAP SND (TAKE (LENGTH s.contexts-d) s.contexts)) /\
+  EVERY (\mp. !a. mp.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts))
+    (MAP (\p. (FST p).msgParams) (TAKE (LENGTH s.contexts-d) s.contexts)) ==>
+  EVERY (\mp. !a. mp.outputTo = Code a ==>
+    ~account_already_created (lookup_account a B.accounts))
+    (MAP (\p. (FST p).msgParams) (TAKE (LENGTH t.contexts-d) t.contexts))
+Proof
+  strip_tac >>
+  `s.contexts <> [] /\ outputTo_consistent_stack s /\
+   outputTo_consistent s /\ EVERY (wf_context o FST) s.contexts` by
+    (gvs[wf_state_def] >> metis_tac[outputTo_consistent_stack_imp_consistent]) >>
+  Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (irule step_growth_protected_frames >> simp[] >>
+      qexistsl_tac [`INL x`, `s`] >> fs[]) >>
+  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+      irule protected_frames_same_frame_transport >>
+      qexists_tac `s` >> simp[]) >>
+  `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
+  drule_all step_pop_structure >> strip_tac >>
+  irule protected_frames_pop_transport >> simp[] >>
+  qexistsl_tac [`HD s.contexts`, `parent`, `s`] >> fs[]
 QED
 
 (* Single-step preservation of run_call_inv, by length-change cases. *)
