@@ -13,6 +13,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3 | stuck | wrong_statement | E0011 | Shallow replan C1.3 safety and finite-return infrastructure with internal meter invariant scoped to reachable callee states; never propagate generic spill<=g as unauthorized export premise. Address consumer stack/global-frame invariants explicitly. |
 | C1.3.1 | proved |  | E0012 | Review and commit probe. Proceed C1.3.2 nested prefix boundaries; individual frame backing is checked but not yet established adequate for child gas refunds or for internal frame push/pop. |
 | C1.3.2 | proved |  | E0013 | Review bounded nested-frame probes and commit. Then C1.3.3 finite-run strategy checkpoint before authorizing full invariant/finite-return machinery. Remaining integration must prove margin before push (including stipend), ancestor-budget preservation, and exceptional-return restore/forfeit branches. |
+| C1.3.3 | proved |  | E0014 | Mandatory scoped PLAN update before accepting parent complete or beginning C1.4: evaluate proposed budget and add executable preservation, safety, collection-return, final-pop/summary and stipend leaves. Commit checked audit/probe changes after review. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -176,6 +177,28 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 
 - `TO_seq58_progcall_port-20261031T122624Z_m0346_t001` (use `read_tool_output` for exact output)
 - `TO_seq58_progcall_port-20261031T123059Z_m0352_t001` (use `read_tool_output` for exact output)
+
+## C1.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0014`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 27 steps, 26 tools, 3 holbuild, 2,474,768 tok (2,467,807 in, 6,961 out, 2,420,608 cached), 322.4s, $0.4060688
+- next: Mandatory scoped PLAN update before accepting parent complete or beginning C1.4: evaluate proposed budget and add executable preservation, safety, collection-return, final-pop/summary and stipend leaves. Commit checked audit/probe changes after review.
+
+### Attempts / Evidence
+
+- `E0014` (proved, , actual effort: 1 sessions, 1 msgs, 27 steps, 26 tools, 3 holbuild, 2,474,768 tok (2,467,807 in, 6,961 out, 2,420,608 cached), 322.4s, $0.4060688)
+  - Audit exact finite-run consumer signatures, unrestricted safety chain, existing wf/gas_stack invariants and final-pop/summary statements. -> Recorded source-location and premise/provider map in prog/AUDIT_seq58_call_safety.md. Total run_call_eq_tr and trace extraction are unconditional and reusable; INL collection return depends on false unrestricted step_inner safety. Existing gas_stack_ok omits own backing and committed descendants. Production final-pop and summary still have old meter-free conclusions and need restatement. (`TO_seq58_progcall_port-20261031T123059Z_m0364_t001`, `TO_seq58_progcall_port-20261031T123059Z_m0365_t001`, `TO_seq58_progcall_port-20261031T123059Z_m0367_t001`, `TO_seq58_progcall_port-20261031T123059Z_m0368_t001`)
+  - Test refundable claim including committed balance, actual restore/forfeit, paid stipend push budget, success-pop ancestor currency and creation refund credit. -> Clean probe build. Fresh root claim equals grant; ordinary restore preserves claim, forfeit reduces it; stipend<=opcode cost supplies both fresh-parent backing and nonincreasing ancestor total; success pop conserves parent+child claim; credit preserves claim on backed frames. Corrected prior comment: full entry restoration erases spill+committed but ordinary REVERT restores spill only. Proposed exact scoped budget and proof outputs in audit, explicitly not yet proved opcode-wide. (`TO_seq58_progcall_port-20261031T123059Z_m0381_t001`, `TO_seq58_progcall_port-20261031T123059Z_m0384_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T123059Z_m0384_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T123059Z_m0385_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

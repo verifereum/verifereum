@@ -245,9 +245,9 @@ Proof
   IF_CASES_TAC >> decide_tac
 QED
 
-(* The refund claim is unchanged when a failed child restores its refundable
-   meter. This is the bridge from the pre-restoration margin to the actual
-   larger execution-gas refund of a REVERT. *)
+(* Full entry restoration (used by dispatch), unlike ordinary exception
+   restoration, erases both spill and committed. This arithmetic identity
+   tests that stronger restoration; ordinary REVERT is tested separately below. *)
 Theorem call_meter_restore_grant:
   call_meter_backed c /\ c.gasUsed <= c.msgParams.gasLimit ==>
   c.msgParams.gasLimit - (c.gasUsed - c.stateGasSpilled - c.stateGasCommitted) =
@@ -294,4 +294,85 @@ Proof
        bind_def, ignore_bind_def, return_def, LET_THM,
        initial_context_def, initial_msg_params_def, call_meter_backed_def] >>
   rpt strip_tac >> gvs[]
+QED
+
+(* Candidate ancestor-budget currency; unlike frame_unused_gas this includes
+   committed spill. The invariant using it is not yet a preservation theorem. *)
+Definition call_meter_claim_def:
+  call_meter_claim c = c.msgParams.gasLimit - c.gasUsed +
+    c.stateGasSpilled + c.stateGasCommitted
+End
+
+Theorem call_meter_restore_claim:
+  s.contexts = (c,rb)::cs /\ call_meter_backed c /\
+  c.gasUsed <= c.msgParams.gasLimit /\
+  restore_state_gas s = (INL (),t) ==>
+  call_meter_claim (FST (HD t.contexts)) = call_meter_claim c
+Proof
+  simp[restore_state_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, return_def] >>
+  rpt strip_tac >> gvs[call_meter_claim_def, call_meter_backed_def] >> decide_tac
+QED
+
+Theorem call_meter_forfeit_claim:
+  s.contexts = (c,rb)::cs /\ call_meter_backed c /\
+  c.gasUsed <= c.msgParams.gasLimit ==>
+  let t = SND (forfeit_remaining_gas s) in
+    FST (forfeit_remaining_gas s) = INL () /\
+    call_meter_backed (FST (HD t.contexts)) /\
+    call_meter_claim (FST (HD t.contexts)) <= call_meter_claim c /\
+    (FST (HD t.contexts)).gasUsed = c.msgParams.gasLimit
+Proof
+  simp[forfeit_remaining_gas_def, get_gas_left_def, consume_gas_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  rpt strip_tac >> gvs[LET_THM, call_meter_claim_def, call_meter_backed_def] >>
+  decide_tac
+QED
+
+Theorem call_meter_stipend_push_budget:
+  !sp sc g cost d grant stipend limit:num.
+  sp + sc <= g /\ stipend <= cost /\ g + cost + d + grant <= limit ==>
+  sp + d + sc + (grant + stipend) <= g + cost + d + grant /\
+  (limit - (g + cost + d + grant) + (sp + d) + sc) +
+    (grant + stipend) <= limit - g + sp + sc
+Proof
+  rpt strip_tac >> decide_tac
+QED
+
+(* Cancelling a child into its parent conserves the ancestor's total claim,
+   even when the merged reservoir repays spill. This is independent of logs. *)
+Theorem call_meter_success_pop_claim:
+  caller.gasUsed <= caller.msgParams.gasLimit /\
+  caller.stateGasSpilled + caller.stateGasCommitted +
+    call_meter_claim callee <= caller.gasUsed ==>
+  call_meter_claim (repay_state_gas_spill_context
+    (absorb_state_gas
+      (caller with gasUsed := caller.gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed))
+      callee.stateGasLeft callee.stateGasSpilled callee.stateGasCommitted)) =
+  call_meter_claim caller + call_meter_claim callee
+Proof
+  simp[call_meter_claim_def, repay_state_gas_spill_context_def,
+       absorb_state_gas_def, MIN_DEF] >>
+  IF_CASES_TAC >> decide_tac
+QED
+
+Theorem call_meter_initial_claim:
+  call_meter_claim (initial_context callee code static output charged sg tx) =
+    tx.gasLimit
+Proof
+  simp[call_meter_claim_def, initial_context_def, initial_msg_params_def]
+QED
+
+Theorem call_meter_credit_claim:
+  s.contexts = (c,rb)::cs /\ call_meter_backed c /\
+  c.gasUsed <= c.msgParams.gasLimit /\
+  credit_state_gas_refund n s = (INL (),t) ==>
+  call_meter_claim (FST (HD t.contexts)) = call_meter_claim c
+Proof
+  simp[credit_state_gas_refund_def, get_current_context_def,
+       set_current_context_def, bind_def, return_def] >>
+  rpt strip_tac >> gvs[call_meter_claim_def, call_meter_backed_def, MIN_DEF] >>
+  IF_CASES_TAC >> decide_tac
 QED
