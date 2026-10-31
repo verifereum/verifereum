@@ -1434,3 +1434,31 @@ Proof
       drule_all call_meter_exception_tail_budget >> simp[]) >>
   gvs[]
 QED
+
+Theorem call_meter_handle_step_budget:
+  wf_state s /\ call_meter_budget n ceiling s /\
+  2 <= n /\ n <= LENGTH s.contexts /\
+  e <> SOME Impossible /\ e <> SOME Unimplemented /\
+  handle_step e s = (r,t) ==>
+  call_meter_budget n ceiling t
+Proof
+  strip_tac >>
+  qpat_x_assum `handle_step _ _ = _` mp_tac >>
+  Cases_on `vfm_abort e`
+  >- (simp[handle_step_def, reraise_def] >> strip_tac >> gvs[]) >>
+  simp[handle_step_def, handle_def] >>
+  Cases_on `(handle_create e s) : unit execution_result` >>
+  rename1 `handle_create e s = (cr,cs)` >>
+  `0 < n` by decide_tac >>
+  `call_meter_budget n ceiling cs` by
+    (drule_all call_meter_handle_create_budget >> simp[]) >>
+  `wf_state cs` by metis_tac[handle_create_preserves_wf_state] >>
+  `LENGTH cs.contexts = LENGTH s.contexts` by
+    metis_tac[handle_create_preserves_length] >>
+  Cases_on `cr` >>
+  qpat_assum `handle_create e s = _` (fn th => rewrite_tac[th]) >>
+  simp[]
+  >- (strip_tac >> gvs[]) >>
+  strip_tac >> irule call_meter_handle_exception_budget >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
