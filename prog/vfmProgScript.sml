@@ -323,6 +323,13 @@ QED
 (* Theorems for construction of |- SPEC EVM_MODEL ...                            *)
 (* ----------------------------------------------------------------------------- *)
 
+Theorem evm2set_on_DELETE[local]:
+  evm2set_on (dom DELETE x) s = evm2set_on dom s DIFF evm2set_on {x} s
+Proof
+  rw[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
+  \\ rw[EQ_IMP_THM] \\ gvs[]
+QED
+
 Theorem STAR_evm2set_with_original:
   ((evm_OriginalAccounts a * p) (evm2set_on dom s) ⇔
    (a = (SND s).originalAccounts) ∧
@@ -399,9 +406,9 @@ Proof
   \\ qmatch_asmsub_abbrev_tac`p s2`
   \\ `s1 = s2` suffices_by rw[]
   \\ rw[Abbr`s1`, Abbr`s2`]
-  \\ gvs[evm2set_on_def, EXTENSION, PUSH_IN_INTO_IF]
-  \\ rw[EQ_IMP_THM]
-  \\ strip_tac \\ gvs[]
+  \\ gvs[evm2set_on_DELETE, Q.GEN `x` (Q.SPEC `{x}` evm2set_on_def)]
+  \\ gvs[evm2set_on_def, PUSH_IN_INTO_IF]
+  \\ rw[EXTENSION, EQ_IMP_THM] \\ gvs[]
 QED
 
 Theorem STAR_evm_OriginalAccounts = CONJUNCT1 STAR_evm2set_with_original;
@@ -927,9 +934,10 @@ Theorem post_transaction_accounting_accounts:
   lookup_account addr t.rollback.accounts
 Proof
   strip_tac
-  \\ simp[post_transaction_accounting_def, transaction_gas_accounting_def, LET_THM,
-          lookup_account_process_deletions_other,
-          lookup_account_update_account_other]
+  \\ ASM_SIMP_TAC std_ss [post_transaction_accounting_def, LET_THM,
+                         pairTheory.UNCURRY,
+                         lookup_account_process_deletions_other,
+                         lookup_account_update_account_other]
 QED
 
 (* Helper definitions for gas accounting in bridging theorem *)
@@ -1027,13 +1035,15 @@ Theorem post_transaction_accounting_success_lookup:
      else 0)
 Proof
   strip_tac
-  >> simp[post_transaction_accounting_def, transaction_gas_accounting_def]
+  >> ASM_SIMP_TAC std_ss [post_transaction_accounting_def,
+                         transaction_gas_accounting_def, LET_THM,
+                         pairTheory.UNCURRY_DEF]
   >> Cases_on `MEM addr t.rollback.toDelete`
-  >> simp[lookup_account_process_deletions_deleted,
+  >> ASM_SIMP_TAC std_ss [lookup_account_process_deletions_deleted,
           lookup_account_process_deletions_other, lookup_account_two_credits,
           compute_refund_ether_def, compute_transaction_fee_def,
           compute_total_gas_used_def, compute_tx_gas_used_def,
-          compute_gas_left_def]
+          compute_gas_left_def, LET_THM]
 QED
 
 (* Main bridging theorem: connects SPEC to run_transaction for message calls *)
@@ -1700,7 +1710,7 @@ Theorem SPEC_Stop_outermost:
 Proof
   start_tac
   \\ gvs [step_inst_def,bind_def,ignore_bind_def,set_return_data_def,
-          get_current_context_def,return_def,set_current_context_def,
+         get_current_context_def,return_def,set_current_context_def,
           finish_def,handle_step_def,handle_def,handle_create_def,
           get_return_data_def,get_output_to_def,handle_exception_def,
           reraise_def,get_num_contexts_def,NULL_EQ,assert_def,
@@ -1835,72 +1845,139 @@ fun exn_outer_tac ths =
           return_destination_case_elim])
   \\ end_tac
 
-fun exn_inner_tac ths =
+Theorem step_exception_inner[local]:
+  s.contexts = (callee,cb)::(caller,crb)::rest ∧
+  FLOOKUP callee.msgParams.parsed callee.pc = SOME inst ∧
+  ignore_bind (step_inst inst) (inc_pc_or_jump inst) s = (INR (SOME exc), s') ∧
+  s'.contexts = (callee',cb)::(caller,crb)::rest ∧
+  callee'.gasUsed ≤ callee'.msgParams.gasLimit ∧
+  exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
+  LENGTH caller.stack < stack_limit
+  ⇒
+  step s =
+  (INL (),
+   s' with <| contexts :=
+                (caller with <| stack := b2w F :: caller.stack;
+                                pc := SUC caller.pc; returnData := [] |>,
+                 crb)::rest;
+              rollback := cb |>)
+Proof
+  strip_tac
+  \\ simp[step_def, handle_def, bind_def, get_current_context_def, return_def]
+  \\ Cases_on`callee'.msgParams.outputTo`
+  \\ simp[handle_step_def, handle_def, handle_create_def, handle_exception_def,
+          bind_def, ignore_bind_def, return_def, reraise_def,
+          get_return_data_def, get_output_to_def, get_current_context_def,
+          get_gas_left_def, consume_gas_def, assert_def,
+          set_current_context_def, set_return_data_def, get_num_contexts_def,
+          pop_and_incorporate_context_def, pop_context_def, unuse_gas_def,
+          set_rollback_def, inc_pc_def, push_stack_def, write_memory_def,
+          buffer_write_def, execution_state_component_equality]
+  \\ gvs[execution_state_component_equality, context_component_equality]
+QED
+
+val exn_inner_start_tac =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ rewrite_tac [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
                   EMPTY_evm2set,STAR_evm_hide_Parsed, STAR_CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
-  \\ last_x_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ qpat_x_assum `Abbrev (b = _)`
+       (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
   \\ rpt (qpat_x_assum`_ = _`(assume_tac o
                               ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
   \\ gvs[]
+  \\ ‘¬ISR (FST s)’ by (Cases_on ‘FST s’ \\ fs[])
+  \\ pop_assum (fn th => rewrite_tac[th])
+  \\ ‘∃callee cb caller crb rest.
+        (SND s).contexts = (callee,cb)::(caller,crb)::rest’
+     by (Cases_on ‘(SND s).contexts’ \\ gvs[] \\ Cases_on ‘t’ \\ gvs[]
+         \\ Cases_on ‘h’ \\ Cases_on ‘h'’ \\ simp[])
+  \\ gvs[]
+  \\ ‘wf_context callee’ by gvs[wf_state_def]
+
+val exn_inner_end_tac =
+  drule_at (Pat ‘ignore_bind _ _ _ = _’) step_exception_inner
+  \\ simp[] \\ strip_tac
   \\ drule step_preserves_wf_state
-  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
-  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
-  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
-  \\ Cases_on ‘step (SND r)’ \\ fs []
-  \\ strip_tac
-  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
-  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
-    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
-  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
-          return_def, wf_context_def, SF CONJ_ss]
-  \\ `¬(SUC (LENGTH (TL (SND r).contexts)) ≤ 1)` by (
-       Cases_on`TL (SND r).contexts` \\ gvs[])
-  \\ rpt (qpat_x_assum`SOME _ = _`(assume_tac o SYM))
-  \\ rpt (qpat_x_assum`_ = step_inst _`(assume_tac o SYM))
-  \\ gvs (ths @ [pop_stack_def,fail_def,bind_def,ignore_bind_def,
-         handle_step_def,vfm_abort_def,handle_def,handle_create_def,
-         get_return_data_def,get_output_to_def,reraise_def,
-         get_current_context_def,return_def,set_current_context_def,
-         assert_def,consume_gas_def,return_destination_case_rator])
-  \\ qmatch_assum_rename_tac`wf_state r2`
-  \\ `(FST (HD r2.contexts)).msgParams.parsed =
-      parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
-     by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
-  \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
-  \\ Cases_on`p.outputTo`
-  \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
-         inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
-         bind_def,ignore_bind_def,return_def,get_current_context_def,
-         set_current_context_def,assert_def,get_return_data_def,
-         get_output_to_def,set_return_data_def,get_gas_left_def,
-         consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
-         set_rollback_def]
-  \\ (rpt (conj_tac >- (
-        gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
-        TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
-             \\ simp[] \\ NO_TAC)
-        \\ metis_tac[NOT_SOME_NONE])))
-  \\ (conj_tac >-
-       (qpat_x_assum ‘_ = {}’ mp_tac
-        \\ simp[EXTENSION,Abbr`all_pcs`] \\ rw [EQ_IMP_THM]
-        \\ gvs[SUBSET_DEF,PULL_EXISTS]
-        \\ last_x_assum(qspec_then`x`mp_tac)
-        \\ simp[]
-        \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
-        \\ metis_tac[option_CASES]))
+  \\ qpat_x_assum ‘step _ = _’ SUBST1_TAC
+  \\ simp[] \\ strip_tac
+  \\ conj_tac
+  >- (gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP] \\ metis_tac[NOT_SOME_NONE])
+  \\ conj_tac
+  >- (gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP] \\ metis_tac[NOT_SOME_NONE])
+  \\ conj_tac
+  >- (qpat_x_assum ‘_ = {}’ mp_tac
+      \\ simp[EXTENSION] \\ rw [EQ_IMP_THM]
+      \\ gvs[SUBSET_DEF,PULL_EXISTS]
+      \\ last_x_assum(qspec_then`x`mp_tac)
+      \\ simp[]
+      \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
+      \\ metis_tac[option_CASES])
   \\ irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
-  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
-  \\ ntac 2 strip_tac
-  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP, Abbr`all_pcs`]
-  \\ qmatch_assum_rename_tac`HasParsed pc2 ∉ dom`
-  \\ first_x_assum(qspec_then`pc2`mp_tac)
-  \\ simp[]
-  \\ strip_tac \\ gvs[]
+  \\ rpt strip_tac
+  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP]
+  \\ first_x_assum(qspec_then`pc`mp_tac)
+  \\ simp[] \\ strip_tac \\ gvs[]
+
+Theorem SPEC_exception_inner[local]:
+  (P ⇒
+   ∀s ctx.
+     s.contexts = (ctx,cb)::cs ∧ wf_context ctx ∧
+     ctx.stack = ss ∧ ctx.gasUsed = g ∧ ctx.msgParams = p ∧
+     ctx.returnData = rd ∧ ctx.memory = m ⇒
+     ∃exc ctx'.
+       ignore_bind (step_inst inst) (inc_pc_or_jump inst) s =
+         (INR (SOME exc), s with contexts := (ctx',cb)::cs) ∧
+       exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
+       ctx'.gasUsed ≤ ctx'.msgParams.gasLimit)
+  ⇒
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
+   evm_CachedRB cb *
+   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
+   evm_JumpDest j * evm_Parsed pc inst *
+   evm_hide_Parsed (all_pcs DELETE pc) *
+   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+         caller = FST (HD cs) ∧
+         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
+         P))
+  {}
+  (evm_Stack (b2w F::caller.stack) *
+   evm_Memory (caller.memory) *
+   evm_PC (SUC caller.pc) *
+   CODE_POOL EVM_INSTR {(pc,inst) |
+                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
+   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
+   evm_Contexts (TL cs) *
+   evm_CachedRB (SND (HD cs)) *
+   evm_MsgParams (caller.msgParams) *
+   evm_ReturnData [] *
+   evm_Exception (INL ()) *
+   evm_Rollback cb *
+   evm_GasUsed caller.gasUsed *
+   evm_JumpDest caller.jumpDest *
+   evm_Logs caller.logs *
+   evm_AddRefund caller.addRefund *
+   evm_SubRefund caller.subRefund)
+Proof
+  strip_tac \\ exn_inner_start_tac
+  \\ first_x_assum (qspecl_then [‘SND s’, ‘callee’] mp_tac)
+  \\ simp[] \\ strip_tac
+  \\ exn_inner_end_tac
+QED
+
+val exn_inner_thms =
+  [pop_stack_def,fail_def,bind_def,ignore_bind_def,vfm_abort_def,
+   get_current_context_def,return_def,set_current_context_def,
+   assert_def,consume_gas_def,get_return_data_def,
+   execution_state_component_equality,wf_context_def]
+
+fun exn_inner_tac ths =
+  irule SPEC_exception_inner \\ rpt strip_tac \\ gvs (ths @ exn_inner_thms)
 
 Theorem SPEC_StackUnderflow_outermost:
   SPEC EVM_MODEL
@@ -2383,7 +2460,8 @@ Theorem SPEC_WriteInStaticContext_TStore_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,get_callee_def]
+  exn_inner_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                 get_callee_def]
 QED
 
 Theorem SPEC_WriteInStaticContext_Log_inner:
@@ -2423,8 +2501,7 @@ Theorem SPEC_WriteInStaticContext_Log_inner:
 Proof
   exn_inner_tac [step_inst_def,step_log_def,memory_expansion_info_def,
                  expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
-                 assert_not_static_def,get_static_def,get_callee_def,
-                 Abbr`dynamicGas`]
+                 assert_not_static_def,get_static_def,get_callee_def]
 QED
 
 Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
@@ -2467,9 +2544,21 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_self_destruct_def,access_address_split,
-                 set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
-                 assert_not_static_def,get_static_def,get_callee_def]
+  exn_inner_start_tac
+  \\ ‘∃exc callee' rb'.
+        ignore_bind (step_inst SelfDestruct) (inc_pc_or_jump SelfDestruct)
+          (SND s) =
+        (INR (SOME exc),
+         SND s with <| contexts := (callee',cb)::(caller,crb)::rest;
+                       rollback := rb';
+                       msdomain := msdomain_add (w2w (HD callee.stack))
+                                     (SND s).msdomain |>) ∧
+        exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
+        callee'.gasUsed ≤ callee'.msgParams.gasLimit’
+     by gvs([step_inst_def,step_self_destruct_def,access_address_split,
+            set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+            assert_not_static_def,get_static_def,get_callee_def] @ exn_inner_thms)
+  \\ exn_inner_end_tac
 QED
 
 (* Non-vacuity witnesses: concrete opcodes meet the shape hypotheses of the
@@ -4105,21 +4194,49 @@ Proof
        qpat_x_assum`call_has_value _`mp_tac \\
        Cases_on`call_inst` \\ simp[call_has_value_def, is_call_def])
   \\ `call_inst ≠ Call ⇒ cCost < value` by gvs[Abbr`cCost`]
-  \\ Cases_on`call_inst = Call`
   \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
          pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
          memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
          memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
-         CaseEq"sum",CaseEq"prod",CaseEq"option",CaseEq"bool",fail_def,
-         assert_not_static_def, get_static_def, abort_call_value_def, push_stack_def,
-         set_return_data_def, unuse_gas_def, inc_pc_def, inc_pc_or_jump_def,
-         Abbr`cCost`,delegate_check_def]
+         CaseEq"prod", sum_CASE_rator, prod_CASE_rator]
   \\ qpat_x_assum`step_inst _ = _`kall_tac
-  \\ (conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def])
-  \\ (conj_tac >-
-        (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
-         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
+  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (gdr,gds)`
+  \\ reverse $ Cases_on`gdr` \\ gvs[]
+  >- gvs[CaseEq"prod",CaseEq"sum",CaseEq"option",delegate_check_def,
+         access_address_split]
+  \\ qmatch_asmsub_abbrev_tac`access_address _ s4`
+  \\ sg `gds.contexts = s4.contexts`
+  >- (
+    qpat_x_assum`_ gds = _`kall_tac
+    \\ gvs[CaseEq"option"]
+    \\ qpat_x_assum`_ (access_address _ _) _ = _`mp_tac
+    \\ CASE_TAC \\ CASE_TAC
+    \\ drule access_address_contexts_unchanged
+    \\ rw[] \\ rw[] )
+  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (INL gdr,_)`
+  \\ PairCases_on`gdr`
+  \\ gvs[get_current_context_def,bind_def,Abbr`s4`,return_def]
+  \\ sg `dCost = gdr1`
+  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
+  \\ gvs[get_current_context_def,return_def,bind_def,assert_def,
+         set_current_context_def]
+  \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
+  \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
+  >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
+        bind_def, ignore_bind_def, get_static_def, assert_def,
+        get_current_context_def,Abbr`s1`]
+  \\ gvs[Abbr`s1`,bind_def,ignore_bind_def,set_return_data_def,get_current_context_def,
+         return_def,set_current_context_def,abort_call_value_def,
+         unuse_gas_def,assert_def, push_stack_def, inc_pc_def, inc_pc_or_jump_def,
+         Abbr`c`,delegate_check_def]
+  \\ conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]
+  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
+  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
+  \\ conj_tac >-
+       (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
+  \\ gvs[CaseEq"option",access_address_split]
   \\ end_tac
 QED
 
