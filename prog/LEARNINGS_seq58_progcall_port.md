@@ -245,3 +245,11 @@ evidence:
 - episode:E0060
 - episode:E0061
 - tool_output:TO_seq58_progcall_port-20261031T211644Z_m1828_t001
+
+## L0029 scope='C1.6.2' tags=simp,projection,IgnAsm,CODE_POOL
+shape: Consumer has implementation equality final = complex_constructor and projection equalities final.field = observation
+pattern: Drop implementation equality in interface-level consumers before simplification so projection equations match directly; otherwise simplifier may expand final first and strand CODE_POOL lookups. Keep settlement carrier equality ignored during separation normalization via IgnAsm, then allow it when discharging pure cond.
+works_when: unspecified
+evidence:
+- episode:E0062
+- tool_output:TO_seq58_progcall_port-20261031T211644Z_m1868_t001
