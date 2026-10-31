@@ -24,7 +24,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6.5 | progressed | missing_helper | E0023 | Request strategist guidance on surplus-preserving composition before unfolding any whole opcode. |
 | C1.3.6.5.1 | proved |  | E0024 | Review reservation interface and commit; then reservation acquisition/discharge leaf. |
 | C1.3.6.5.2 | proved |  | E0026 |  |
-| C1.3.6.5.3 | progressed | other | E0027 | Compose get_gas_left reader and fixed-context payment_tail with call_gas pair; preserve reader equality in success post. Then layer charge/static/expand and initial zero-reservation prefixes to obtain full step_call. |
+| C1.3.6.5.3 | progressed | other | E0028 | Layer charge_new_account, conditional assert_not_static and expand_memory over gas_tail using reserved_budget_bind; then opcode consume margin and initial readers/pop_stack. Keep all primitive bodies opaque. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -429,24 +429,21 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 
 - result: `progressed`
 - diagnosis: `other`
-- latest episode: `E0027`
+- latest episode: `E0028`
 - blocker: 
-- actual effort: 1 sessions, 3 msgs, 43 steps, 42 tools, 18 holbuild, 4,002,648 tok (3,996,818 in, 5,830 out, 3,938,560 cached), 477.7s, $0.5686720
-- next: Compose get_gas_left reader and fixed-context payment_tail with call_gas pair; preserve reader equality in success post. Then layer charge/static/expand and initial zero-reservation prefixes to obtain full step_call.
+- actual effort: 2 sessions, 4 msgs, 56 steps, 54 tools, 21 holbuild, 5,410,348 tok (5,403,036 in, 7,312 out, 5,220,352 cached), 827.9s, $0.9605232
+- next: Layer charge_new_account, conditional assert_not_static and expand_memory over gas_tail using reserved_budget_bind; then opcode consume margin and initial readers/pop_stack. Keep all primitive bodies opaque.
 
 ### Attempts / Evidence
 
 - `E0027` (progressed, other, actual effort: 1 sessions, 3 msgs, 43 steps, 42 tools, 18 holbuild, 4,002,648 tok (3,996,818 in, 5,830 out, 3,938,560 cached), 477.7s, $0.5686720)
   - Built CallStepsTheory with credit+abort contracts, anchor-result-to-budget lifting, reservation/budget bind, depth tail, balance/callee tail and fixed-context grant-payment tail. -> All seven suffix/composition theorems build clean. Whole step_call remains unwritten; next is get_gas_left and variable call_gas bind then charge/static/expand prefix and initial readers/payment. No opcode or precompile internals unfolded. (`TO_seq58_progcall_port-20261031T140620Z_m0858_t001`, `TO_seq58_progcall_port-20261031T140620Z_m0862_t001`)
-
-### Ruled Out
-
-- irule/ho_match_mp_tac matching partial precondition against eta-expanded lambda is unreliable here; directed drule_all then simp[call_meter_safe_def] and small metis closes.
-- Do not guess existential order: irule reserved_budget_bind infers c,k,rb,rest from precondition and leaves only existential u in a conjunction.
+- `E0028` (progressed, other, actual effort: 2 sessions, 4 msgs, 56 steps, 54 tools, 21 holbuild, 5,410,348 tok (5,403,036 in, 7,312 out, 5,220,352 cached), 827.9s, $0.9605232)
+  - Composed get_gas_left success-sensitive reader with call_gas pair split and checked payment_tail. -> call_meter_reserved_gas_tail builds. Reasserted n<=LENGTH u.contexts after gvs before directed boundary application. All CallSteps suffix lemmas are now checked; whole opcode prefix still pending. (`TO_seq58_progcall_port-20261031T142258Z_m0875_t001`)
 
 ### Evidence refs
 
-- `TO_seq58_progcall_port-20261031T140620Z_m0862_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261031T142258Z_m0875_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 

@@ -155,3 +155,40 @@ Proof
   simp[] >> drule_all call_meter_reserved_call_payment >>
   simp[call_meter_safe_def] >> metis_tac[]
 QED
+
+Theorem call_meter_reserved_gas_tail:
+  call_meter_budget n ceiling u /\ n <= LENGTH u.contexts /\
+  u.contexts = (c,rb)::rest /\
+  (if value = 0 then 0 else call_stipend) <= margin ==>
+  call_meter_safe (call_meter_reserved c margin rb rest)
+    (bind get_gas_left (\gasLeft.
+      case call_gas value requested gasLeft 0 0 of (paid,grant) =>
+      ignore_bind (consume_gas paid)
+        (bind get_callee (\sender.
+          if (lookup_account sender accounts).balance < value then
+            ignore_bind (credit_new_account charged) (abort_call_value grant)
+          else ignore_bind (set_return_data [])
+            (bind get_num_contexts (\depth.
+              if depth > 1024 then
+                ignore_bind (credit_new_account charged) (abort_unuse grant)
+              else proceed_call op sender addr value ao az code grant output))))))
+    (\r t. call_meter_budget n ceiling t)
+Proof
+  strip_tac >> irule call_meter_safe_bind >>
+  qexists `\gasLeft s. ?d. s.contexts = (d,rb)::rest /\
+      gasLeft = d.msgParams.gasLimit - d.gasUsed /\ call_meter_reserved c margin rb rest s` >>
+  reverse conj_tac
+  >- (irule call_meter_safe_consequence >>
+      qexistsl [`call_meter_reserved c margin rb rest`,
+                `\r t. ?d. t.contexts = (d,rb)::rest /\
+                  r = INL (d.msgParams.gasLimit - d.gasUsed) /\
+                  call_meter_reserved c margin rb rest t`] >>
+      simp[call_meter_reserved_gas_left_reader] >> rpt strip_tac >>
+      Cases_on `r` >> gvs[] >> metis_tac[]) >>
+  gen_tac >> BETA_TAC >> rewrite_tac[call_meter_safe_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `call_gas value requested (d.msgParams.gasLimit - d.gasUsed) 0 0` >>
+  gvs[] >> `n <= LENGTH u.contexts` by simp[] >>
+  drule_all call_meter_reserved_payment_tail >>
+  rewrite_tac[call_meter_safe_def] >> BETA_TAC >> disch_then drule_all >> simp[]
+QED
