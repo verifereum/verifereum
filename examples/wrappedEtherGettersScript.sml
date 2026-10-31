@@ -427,12 +427,18 @@ val decimals_lift = getter_lift decimals_result_spec
 val totalSupply_lift = getter_lift totalSupply_result_spec
 val balanceOf_lift = getter_lift balanceOf_result_spec
 val allowance_lift = getter_lift allowance_result_spec
+Theorem IN_fmap_entries[local]:
+  (k,v) ∈ fmap_entries fm ⇔ FLOOKUP fm k = SOME v
+Proof
+  simp[fmap_entries_def]
+QED
+
 fun getter_code_tac g =
-  (rewrite_tac [SUBSET_DEF] >> Cases
-   >> rewrite_tac [IN_INSERT, NOT_IN_EMPTY, PAIR_EQ]
-   >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
-   >> simp [fmap_entries_def]
-   >> CONV_TAC (REWRITE_CONV [parsed_contract_code_eq] THENC EVAL)) g
+  (rewrite_tac [INSERT_SUBSET, EMPTY_SUBSET, IN_fmap_entries]
+   >> CONV_TAC (UNBETA_CONV ``parsed_contract_code``
+                THENC REWR_CONV (GSYM LET_THM)
+                THENC REWRITE_CONV [parsed_contract_code_def]
+                THENC cv_eval)) g
 
 Theorem weth_symbol_run_transaction[local]:
   (lookup_account addr accounts).code = contract_code /\

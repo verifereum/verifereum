@@ -471,6 +471,13 @@ Theorem parsed_contract_code_eq =
 fun evc tm = tm |> REWRITE_CONV[parsed_contract_code_eq]
                 |> CONV_RULE (RAND_CONV EVAL)
 
+(* evaluates a term about parsed_contract_code, parsing the code once *)
+val parsed_code_conv =
+  UNBETA_CONV “parsed_contract_code”
+  THENC REWR_CONV (GSYM LET_THM)
+  THENC REWRITE_CONV [parsed_contract_code_def]
+  THENC cv_eval
+
 val word_of_bytes_conv =
   REWR_CONV (SRULE [FUN_EQ_THM] (GSYM word_of_bytes_le_def)) THENC cv_eval;
 val evm_domain_ty = “:evm_el set set”;
@@ -941,12 +948,8 @@ val code_req = SPEC_fallback_code |> concl |> strip_comb |> #2 |> el 3;
 Theorem code_req_met[local]:
   ∀n i. (n,i) ∈ ^code_req ⇒ FLOOKUP parsed_contract_code n = SOME i
 Proof
-  rpt gen_tac
-  \\ rewrite_tac[pred_setTheory.IN_INSERT, pairTheory.PAIR_EQ]
-  \\ reverse strip_tac
-  >- gvs[]
-  \\ rpt BasicProvers.VAR_EQ_TAC
-  \\ CONV_TAC evc
+  simp_tac (srw_ss()) [pred_setTheory.IN_INSERT, DISJ_IMP_THM, FORALL_AND_THM]
+  \\ CONV_TAC parsed_code_conv
 QED
 
 Definition fmap_entries_def:
@@ -1117,11 +1120,8 @@ Proof
   \\ mp_tac (MATCH_MP SPEC_SUBSET_CODE SPEC_fallback_blocks_inst
              |> SPEC “fmap_entries parsed_contract_code”)
   \\ impl_tac
-  >- (rewrite_tac[pred_setTheory.SUBSET_DEF] \\ Cases
-      \\ rewrite_tac[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY,
-                     pairTheory.PAIR_EQ]
-      \\ strip_tac \\ rpt BasicProvers.VAR_EQ_TAC
-      \\ simp[fmap_entries_def] \\ CONV_TAC evc)
+  >- (simp_tac (srw_ss()) [pred_setTheory.INSERT_SUBSET, fmap_entries_def]
+      \\ CONV_TAC parsed_code_conv)
   \\ REWRITE_TAC [SPEC_MOVE_COND]
   \\ impl_tac
   >- (qpat_x_assum ‘(_,_,_) = _’ (assume_tac o SYM)
