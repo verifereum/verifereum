@@ -4,10 +4,10 @@
 
 ### C1: Complete the CALL port under the explicitly amended contract
 - Kind: `proof_group`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: The specific no-entry obstruction has an owner-authorized guard. Existing boundary equations and sibling guarded rules provide the implementation pattern; remaining work is local semantic composition and separation-logic packaging.
+- Rationale: Derived from child component C1.3 risk 3. Existing call_exn_safe_step_call asserts unconditional nonempty-context safety, already refuted by historical checked refund witness. Owner-authorized export guards do not repair this universally quantified local helper or its step_inner/run_call consumers.
 - Required for completion: yes
 - Supersedes: C1.2
 - Progress transition: `replacement`
@@ -62,27 +62,104 @@ Retain both concrete probe episodes, including the admissible non-precompile wit
 #### Summary
 E0009 refutes the original frozen unguarded CALL rules. E0004 supplies the earlier no-entry computation. Preserve these facts and their tight repair rationale; do not characterize the original statement as proved.
 
-### C1.3: Port preservation and finite return summaries
-- Kind: `proof`
+### C1.3: Design and validate callee-prefix safety before finite-return integration
+- Kind: `proof_group`
 - Risk: 2
 - Work priority: 20
-- Work units: 8
-- Rationale: Existing step/prefix and finite-return arguments are structural; meter changes are isolated by the checked boundary interfaces.
+- Work units: 0
+- Rationale: Only bounded interface probes are authorized in this revision. Their outputs are checked lemmas or precise residual obligations, not an assertion that the proposed invariant is already preserved.
 - Dependencies: C1.8
 - Checkpoint: yes
-- Progress transition: `refinement`
+- Supersedes: C1.3
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0011
+
+#### Progress note
+Retain E0011's diagnosis of false unrestricted safety, not proof credit. No prior proof of this component is carried forward.
 
 #### Summary
-Port remaining exception-safety and stipend-prefix consumers in the file. Update run_call_memory_returns and call_returns_summary to expose exact returned meters. Preserve the stipend account and originalAccounts conclusions. Cover intermediate broken proofs required by these chains, not unrelated theories.
-
-#### Statement
-Outputs include the call_exn_safe/call_success_safe consumers required for finite execution, stipend-prefix preservation through call and pop, run_call_stipend_originalAccounts, run_call_stipend_footprint, run_call_memory_returns, and call_returns_summary on the new meter interface.
-
-#### Approach
-Follow the existing step and run_call induction structure, using boundary equations at frame transitions. In call_returns_summary split failed from entered explicitly: the former uses the guarded no-entry equation; the latter uses the finite child-return result with drained parent and semantic return meter.
+Replace nonempty-only opcode safety by an invariant on executing callee frames, never on the suspended external caller. Test initialization, refund margins, nested push/pop, and the final pop separately. Existing wf_state does not imply spill<=gasUsed. Probe completion requires a strategy checkpoint and a further plan before finite-return consumers are authorized.
 
 #### Not to try
-Do not keep the old caller-with-only-gasUsed-update equality when return also credits or repays state gas. Do not unfold all meter definitions repeatedly in the preservation induction.
+Do not prove call_exn_safe_step_call from nonempty contexts. Do not derive spill backing from wf_context or wf_state. Do not require EVERY meter_ok over the complete context stack. Do not use large manual theorem instantiations to hide a missing invariant, or treat a probe build as certification of the return summaries.
+
+#### Argument
+A fresh entered callee has zero spill and committed charge. Internal execution must preserve sufficient execution-gas backing for refundable meter balances and for outstanding descendant grants. The protected suffix starts at the suspended caller; its meter need not satisfy the callee invariant. Internal pops return to a protected callee and must preserve the invariant; the final pop returns to the external caller and needs only the exact semantic return equation, not preservation of the callee invariant. Termination should reuse existing run_call trace/termination results if their hypotheses can be established without restricting that external caller. This is a candidate argument to test, not a claim of an already proved invariant.
+
+#### Definition design
+Use a predicate parameterized by entry depth n, selecting TAKE (LENGTH s.contexts - n + 1) s.contexts while n<=LENGTH s.contexts. Start with refundable backing c.stateGasSpilled+c.stateGasCommitted<=c.gasUsed for selected frames. Test whether suspended selected frames require the stronger margin: their own refundable backing plus the sum of descendant (gasLimit-gasUsed+stateGasSpilled+stateGasCommitted) is <= their gasUsed. Do not include the external caller at index LENGTH s.contexts-n+1. At the final pop the predicate is no longer required. Keep this separate from wf_state: wf_context_def has no spill bound, and gas_stack_ok_def includes descendant spill but not the parent's own spill or committed balance. Probe these distinctions explicitly before adopting a definition.
+
+#### Code structure
+All new lemmas and probes belong in prog/, preferably a temporary standalone probe theory importing unchanged property theories, then migrate accepted durable interfaces into vfmProgCallScript.sml. Do not edit spec/. Keep the existing primitive safety combinators. Do not introduce cheats to force the main script through its false theorem. The checkpoint must assign remaining preservation, finite-return, stipend, and summary proofs as executable leaves.
+
+### C1.3.1: Check initialization and refund-margin interface
+- Kind: `definition_probe`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: Finite record computations and natural-number arithmetic; failure is a useful bounded diagnostic rather than a demand to prove an unchecked universal preservation theorem.
+- Dependencies: C1.8
+- Checkpoint: yes
+
+#### Summary
+Test callee-local refundable backing on fresh entry and individual meter operations. Establish the margin needed when credit_new_account precedes abort_call_value. Separate unconditionally safe primitives from composed operations needing a margin.
+
+#### Description
+Return checked small lemmas and exact residuals. Primitive credit_state_gas_refund is nonempty-safe even with an oversized spill because subtraction truncates; the falsehood occurs in its composition with later gas-return assertions. Preserve existing reader, setter, return/fail/assert, stack/memory and consume_gas safety lemmas where their current statements remain valid. Audit create/abort composites as well as CALL before treating them as unconditional.
+
+#### Statement
+Probe fresh initial_context backing; preservation of sp+sc<=gasUsed by charge_state_gas, credit_state_gas_refund, commit_state_gas, restore_state_gas and restore_state_gas_to_entry on their actual branches. In the no-entry CALL path test: pre-existing sp+sc<=g, creation charging, and successful execution charge sufficient for stipend imply stipend<=gasUsed after credit_new_account.
+
+#### Approach
+Use the exact pair equations already checked in C1.8 and the meter definitions, with named intermediate contexts rather than full monadic expansion at consumer sites. Verify arbitrary original caller spill is excluded only from this callee-local lemma, not constrained at the export; record any additional arithmetic invariant required by the branch.
+
+#### Not to try
+Do not conflate primitive refund exception safety with preservation of the stipend credit margin. Do not change exported statements. If the candidate arithmetic fact fails, provide concrete numerals and request redesign rather than add premises silently.
+
+### C1.3.2: Check nested-prefix push and pop backing
+- Kind: `definition_probe`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: Bounded tests of the two frame-boundary algebraic interfaces reveal whether the candidate needs a descendant budget; no opcode-wide induction is authorized yet.
+- Dependencies: C1.3.1
+- Checkpoint: yes
+
+#### Summary
+Test whether per-frame backing suffices for internal pops. If it does not, test the explicit descendant-budget strengthening in the parent design. Prove fresh-root initialization independently of the suspended caller's meter.
+
+#### Description
+The invariant must account for execution gas returned from a child before claiming its parent's spill remains backed. Test committed balance as well as spill, including child failure that restores to entry. Use concrete counterexamples to reject insufficient candidate invariants; these do not by themselves refute an export. Do not initiate full opcode preservation until the checkpoint approves the boundary interface.
+
+#### Statement
+Probe root initialization for a fresh callee over an arbitrary caller; internal proceed_call/proceed_create push preservation of selected-frame backing; internal success and failure pop preservation using absorb_state_gas, repay_state_gas_spill_context, restore/credit and the actual execution-gas refund. Separately test final-pop equations without asserting backing of the external caller.
+
+#### Approach
+Inspect the actual handle_exception/pop order and calculate each branch on two adjacent selected contexts. Use the property-layer push structures to identify the drained parent and fresh child; derive the exact residual inequality on a suspended selected parent before selecting the invariant definition.
+
+#### Not to try
+A per-frame spill bound alone is not automatically closed under subtracting child gasLeft from a parent. The last pop is not an internal-pop preservation case; requiring its caller to satisfy the callee invariant would leak a forbidden assumption.
+
+### C1.3.3: Validate finite-run consumers and specify remaining proof obligations
+- Kind: `diagnostic`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: A bounded signature and use-site audit with small entailment probes determines the exact induction interface before committing to large preservation proofs.
+- Dependencies: C1.3.2
+- Checkpoint: yes
+
+#### Summary
+Check termination and finite-trace reuse against an arbitrary suspended caller. Produce exact replacement signatures for restricted step safety and finite returns. Require a new subtree plan covering preservation and all summaries before allowing downstream execution.
+
+#### Description
+The checkpoint deliverable lists replacements for call_exn_safe_step_call, call_exn_safe_step_inst, call_exn_safe_step_inner and step_inner_not_impossible_unimplemented; the nonempty-only versions must be removed/restricted during the subsequent implementation phase. Also account for step_collect_ge2_inl, run_call_collect_inl/returns, call_memory_final_pop, stipend-prefix preservation/footprint, run_call_memory_returns and call_returns_summary, including state-gas return equations. Audit run_call_reaches_outer_contexts and metadata consumers against the unchanged suffix: frame boundaries drain the parent at entry, but the suffix below the active callee must stay fixed during its run. Report whether existing termination can be reused directly or needs a prefix-only measure theorem. This diagnostic cannot close the original C1.3 proof obligation; submit its checked output for replacement with implementation leaves.
+
+#### Approach
+Inspect run_call_eq_tr, run_call_finite_trace, run_call_reaches_inv and the current wf/stack preservation uses; prove the initialization entailments their hypotheses need, or report the exact caller-dependent residual. Formulate step safety from selected-head backing and a reached-prefix invariant, then separate internal transitions from the final pop using run_call_last_pop's length argument.
+
+#### Not to try
+Do not authorize exported rules after these probes alone. Do not insert an unproved reachable-prefix hypothesis into a finite-return lemma without also scheduling and proving initialization and transition preservation. If a frozen exported contract itself is contradicted, stop with a checked concrete counterexample and the tightest sufficient fix, without applying that fix.
 
 ### C1.4: Rebuild charged call_entry_prepared
 - Kind: `boundary_lemma`

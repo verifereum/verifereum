@@ -10,6 +10,8 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.2 | stuck | risk_mismatch | E0003 | Authorize concrete no-entry CALL probe with gas request 0, value 1, reservoir >=183600, initial gasUsed=0 and spill=183600; creation refund erases execution cost leaving gasUsed=0 before unuse stipend 2300. |
 | C1.2.1 | proved |  | E0004 |  |
 | C1.2.2 | proved |  | E0009 | Review checked frozen-export obstruction; report unprovable with tightest sufficient repair proposal, without applying it. Candidate repair obligation for no-entry path is calleeGas <= gasUsed after credit (equivalently for positive stipend, MIN stateCost initialSpill + calleeGas <= g+gasCost when charge reservoir-covered). Do not claim this alone repairs every cross-frame path. |
+| C1.3 | stuck | wrong_statement | E0011 | Shallow replan C1.3 safety and finite-return infrastructure with internal meter invariant scoped to reachable callee states; never propagate generic spill<=g as unauthorized export premise. Address consumer stack/global-frame invariants explicitly. |
+| C1.3.1 | proved |  | E0012 | Review and commit probe. Proceed C1.3.2 nested prefix boundaries; individual frame backing is checked but not yet established adequate for child gas refunds or for internal frame push/pop. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -109,6 +111,48 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261030T170049Z_m0255_t001` (use `read_tool_output` for exact output)
+
+## C1.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `wrong_statement`
+- latest episode: `E0011`
+- blocker: Existing call_exn_safe_step_call asserts unconditional nonempty-context safety, already refuted by historical checked refund witness. Owner-authorized export guards do not repair this universally quantified local helper or its step_inner/run_call consumers.
+- actual effort: 1 sessions, 3 steps, 2 tools, 321,059 tok (320,497 in, 562 out, 312,832 cached), 24.3s, $0.0522332
+- next: Shallow replan C1.3 safety and finite-return infrastructure with internal meter invariant scoped to reachable callee states; never propagate generic spill<=g as unauthorized export premise. Address consumer stack/global-frame invariants explicitly.
+
+### Attempts / Evidence
+
+- `E0011` (stuck, wrong_statement, actual effort: 1 sessions, 3 steps, 2 tools, 321,059 tok (320,497 in, 562 out, 312,832 cached), 24.3s, $0.0522332)
+  - Inspect next failed theorem and forward safety consumers before touching tactics; compare to checked counterexample and existing decreases-gas invariant hypotheses. -> Current source1293-1358 asserts call_exn_safe of step_call/step_inst with only nonempty contexts; step_inner_not_impossible_unimplemented1371 also only assumes nonempty. Historical refund_probe_nonempty_safety_false directly contradicts first statement. DecreasesGas provides spill<=gasUsed hypothesis but no ready nonempty-only replacement. No proof edits made for C1.3; this needs scoped-invariant strategy, not missing consume_gas simp. (`TO_seq58_progcall_port-20261030T183500Z_m0290_t001`, `TO_seq58_progcall_port-20261030T183500Z_m0291_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261030T183500Z_m0290_t001` (use `read_tool_output` for exact output)
+- `TO_seq58_progcall_port-20261030T170049Z_m0255_t001` (use `read_tool_output` for exact output)
+
+## C1.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0012`
+- blocker: 
+- actual effort: 2 sessions, 2 msgs, 25 steps, 23 tools, 9 holbuild, 3,093,657 tok (3,089,202 in, 4,455 out, 2,927,744 cached), 321.7s, $0.6602404
+- next: Review and commit probe. Proceed C1.3.2 nested prefix boundaries; individual frame backing is checked but not yet established adequate for child gas refunds or for internal frame push/pop.
+
+### Attempts / Evidence
+
+- `E0012` (proved, , actual effort: 2 sessions, 2 msgs, 25 steps, 23 tools, 9 holbuild, 3,093,657 tok (3,089,202 in, 4,455 out, 2,927,744 cached), 321.7s, $0.6602404)
+  - Introduce callee-local call_meter_backed c := sp+committed<=gasUsed in standalone probe; prove fresh initialization and preservation by actual meter operations. -> call_meter_initial, charge, credit, commit, restore and restore_to_entry all proved with finite definition and arithmetic proofs. No assumption on suspended caller introduced. (`TO_seq58_progcall_port-20261031T121902Z_m0306_t001`, `TO_seq58_progcall_port-20261031T122504Z_m0321_t001`)
+  - Check stipend margin through successful execution charge, creation charge (including spill), then creation credit; audit primitive refund and CREATE abort separately. -> Arithmetic margin and call_meter_charge_credit_stipend prove stipend survives refund from a backed callee, even when charge spills. call_meter_credit_pair has no backing premise and shows primitive credit always normal on nonempty contexts. abort_create equation confirms no grant unuse and no incoming meter hypothesis for that primitive. Main vfmProgCallScript untouched. (`TO_seq58_progcall_port-20261031T121902Z_m0314_t001`, `TO_seq58_progcall_port-20261031T122504Z_m0321_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T122504Z_m0321_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
