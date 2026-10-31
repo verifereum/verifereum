@@ -652,18 +652,14 @@ Proof
   simp[]
 QED
 
-(* evaluates the largest w2n of a memory read in the goal, so that the
-   reads of a log's offset and length are separate steps *)
-fun read_w2n_tac (g as (_, w)) =
-  let
-    fun reads_memory t =
-      is_app "w2n" 1 t andalso can (find_term (is_app "expanded_memory" 3)) t
-    val ts = find_terms reads_memory w
-    val t = hd (Listsort.sort (fn (a, b) =>
-                  Int.compare (term_size b, term_size a)) ts)
-  in
-    PURE_REWRITE_TAC [QCONV (with_ground_div reads_conv) t] g
-  end
+(* with the memory abbreviated as mem, evaluates the free memory pointer
+   read from it once, for all its occurrences *)
+fun read_pointer_tac g =
+  qpat_assum `Abbrev (mem = _)` (fn th =>
+    PURE_REWRITE_TAC
+      [(RAND_CONV (REWR_CONV (PURE_REWRITE_RULE [markerTheory.Abbrev_def] th))
+        THENC QCONV (with_ground_div reads_conv))
+         “buffer_take 64 32 mem”]) g
 
 (* the leading SEP_EXISTSs of an assertion applied to a state, as ∃s,
    without rewriting inside the (large) assertion *)
@@ -843,7 +839,9 @@ Proof
     \\ conj_tac
     >- (qexists_tac `calleeLogs`
         \\ qpat_x_assum `result.logs = _` SUBST1_TAC
-        \\ read_w2n_tac \\ read_w2n_tac
+        \\ qmatch_goalsub_abbrev_tac `buffer_take 64 32 mem`
+        \\ read_pointer_tac
+        \\ qunabbrev_tac `mem`
         \\ CONV_TAC (QCONV (with_ground_div reads_conv))
         \\ rewrite_tac[REVERSE_word_to_bytes_bytes32])
     \\ conj_tac
