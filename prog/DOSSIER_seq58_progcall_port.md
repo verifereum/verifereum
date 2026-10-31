@@ -19,6 +19,7 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 | C1.3.6 | stuck | missing_helper | E0017 | Review scoped missing dependency: preserve entry shape/budget partial work, introduce or assign compositional meter+exception-safety interface and ordinary primitive/precompile laws before whole step_call/step_create, avoiding a flat 1500-line duplicated local safety library. |
 | C1.3.6.1 | proved |  | E0018 | Review/commit bounded entry facts, then C1.3.6.2 composition probes. |
 | C1.3.6.2 | proved |  | E0019 | Review then commit safe-contract theory; continue scheduled neutral-operation adapters. |
+| C1.3.6.3 | proved |  | E0020 | Review adapters then commit; next scheduled precompile preservation. |
 | C1.8 | proved |  | E0010 | Review C1.8 and allow C1.3. Note C1.3 call_exn_safe_step_call universally quantifies over merely nonempty contexts, so original checked counterexample still disproves this local helper; exported guard alone does not repair broad helper. Need invariant-specific safety decomposition rather than merely matching current consume_gas goal. Consider shallow C1.3 redesign before execution. |
 
 ## C1.1
@@ -311,6 +312,27 @@ PLAN: `prog/PLAN_seq58_progcall_port.md`
 ### Evidence refs
 
 - `TO_seq58_progcall_port-20261031T123059Z_m0551_t001` (use `read_tool_output` for exact output)
+
+## C1.3.6.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0020`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 57 steps, 56 tools, 19 holbuild, 4,811,267 tok (4,803,011 in, 8,256 out, 4,725,888 cached), 495.9s, $0.7093948
+- next: Review adapters then commit; next scheduled precompile preservation.
+
+### Attempts / Evidence
+
+- `E0020` (proved, , actual effort: 1 sessions, 3 msgs, 57 steps, 56 tools, 19 holbuild, 4,811,267 tok (4,803,011 in, 8,256 out, 4,725,888 cached), 495.9s, $0.7093948)
+  - Introduced call_meter_ready and call_meter_neutral with result lifting; proved generic state/context reader and update boundaries and instantiated stack, memory, address/domain, account, return-data, pc and static-assert operations. -> Neutral preservation allows reservoir and unrelated fields to change, but requires gas limit, used, spill and committed equality. Memory/pc consumers use generic updater; stack checks allow underflow/overflow on all result states. ()
+  - Wrapped existing primitive meter result laws with independent forbidden-error checks; covered charge/credit/new-account, drain, restore/restore-entry, commit, forfeit, repay and stronger withhold grant adapter. -> vfmCallMeterOpsTheory builds clean; withhold retains grant-specific result rather than unrestricted meter preservation. (`TO_seq58_progcall_port-20261031T123059Z_m0613_t001`)
+
+### Evidence refs
+
+- `TO_seq58_progcall_port-20261031T123059Z_m0613_t001` (use `read_tool_output` for exact output)
 
 ## C1.8
 
