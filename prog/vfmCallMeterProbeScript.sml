@@ -149,3 +149,149 @@ Proof
   rpt strip_tac >> gvs[stack_limit_def] >>
   cong_tac (SOME 4) >> simp[context_component_equality]
 QED
+
+(* Exact return boundary, also valid when the parent is the arbitrary external
+   caller: backing is deliberately not among its premises. *)
+Theorem call_meter_pop_pair:
+  s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
+  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed ==>
+  pop_and_incorporate_context success s =
+    let merged = absorb_state_gas
+          (caller with gasUsed := caller.gasUsed -
+             (callee.msgParams.gasLimit - callee.gasUsed))
+          callee.stateGasLeft callee.stateGasSpilled callee.stateGasCommitted;
+        credit = if callee.msgParams.newAccountCharged then new_account_state_gas else 0;
+        settled = if success then
+          repay_state_gas_spill_context (merged with <|
+            logs := caller.logs ++ callee.logs;
+            addRefund := caller.addRefund + callee.addRefund;
+            subRefund := caller.subRefund + callee.subRefund |> )
+          else merged with <|
+            gasUsed := merged.gasUsed - MIN credit merged.stateGasSpilled;
+            stateGasSpilled := merged.stateGasSpilled - MIN credit merged.stateGasSpilled;
+            stateGasLeft := merged.stateGasLeft + (credit - MIN credit merged.stateGasSpilled) |>
+    in (INL (), s with <|
+      contexts := (settled, callerSaved)::rest;
+      rollback := if success then s.rollback else saved
+    |>)
+Proof
+  strip_tac >> Cases_on `success` >>
+  Cases_on `callee.msgParams.newAccountCharged` >>
+  simp[LET_THM, repay_state_gas_spill_def, credit_new_account_def,
+       credit_state_gas_refund_def, absorb_state_gas_def,
+       repay_state_gas_spill_context_def,
+       pop_and_incorporate_context_def, get_gas_left_def,
+       get_current_context_def, pop_context_def, unuse_gas_def,
+       push_logs_def, update_gas_refund_def, set_rollback_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, fail_def, combinTheory.o_DEF, combinTheory.C_DEF,
+       context_component_equality] >>
+  cong_tac (SOME 4) >> simp[context_component_equality]
+QED
+
+(* Both selected frames may be individually backed, yet returning an unused
+   child grant destroys the parent's backing. All relevant meters are concrete;
+   unrelated context fields and rollback data remain arbitrary. *)
+Theorem call_meter_individual_pop_counterexample:
+  let parent = c with <|gasUsed := 10; stateGasLeft := 0;
+        stateGasSpilled := 10; stateGasCommitted := 0|>;
+      child = c with <|gasUsed := 0; stateGasLeft := 0;
+        stateGasSpilled := 0; stateGasCommitted := 0;
+        msgParams := c.msgParams with <|gasLimit := 10; newAccountCharged := F |> |>;
+      s = es with contexts := [(child,rb);(parent,rb)]
+  in call_meter_backed parent /\ call_meter_backed child /\
+     ISL (FST (pop_and_incorporate_context T s)) /\
+     ~call_meter_backed
+       (FST (HD (SND (pop_and_incorporate_context T s)).contexts))
+Proof
+  simp[LET_THM, call_meter_backed_def,
+       pop_and_incorporate_context_def, get_gas_left_def,
+       get_current_context_def, pop_context_def, unuse_gas_def,
+       push_logs_def, update_gas_refund_def, repay_state_gas_spill_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, fail_def, combinTheory.o_DEF, combinTheory.C_DEF,
+       absorb_state_gas_def, repay_state_gas_spill_context_def]
+QED
+
+(* The exact sufficient parent margin includes the child's refundable meter
+   as well as its unused execution grant. Reservoir repayment cancels the same
+   quantity from backing and usage. *)
+Theorem call_meter_success_pop_backed:
+  caller.stateGasSpilled + caller.stateGasCommitted +
+    (callee.msgParams.gasLimit - callee.gasUsed) +
+    callee.stateGasSpilled + callee.stateGasCommitted <= caller.gasUsed ==>
+  call_meter_backed (repay_state_gas_spill_context
+    (absorb_state_gas
+      (caller with gasUsed := caller.gasUsed -
+        (callee.msgParams.gasLimit - callee.gasUsed))
+      callee.stateGasLeft callee.stateGasSpilled callee.stateGasCommitted))
+Proof
+  simp[call_meter_backed_def, repay_state_gas_spill_context_def,
+       absorb_state_gas_def, MIN_DEF] >>
+  IF_CASES_TAC >> decide_tac
+QED
+
+Theorem call_meter_failure_credit_backed:
+  caller.stateGasSpilled + caller.stateGasCommitted +
+    gasLeft + sp + sc <= caller.gasUsed ==>
+  let merged = absorb_state_gas (caller with gasUsed := caller.gasUsed - gasLeft)
+        sg sp sc
+  in call_meter_backed (merged with <|
+    gasUsed := merged.gasUsed - MIN credit merged.stateGasSpilled;
+    stateGasSpilled := merged.stateGasSpilled - MIN credit merged.stateGasSpilled;
+    stateGasLeft := merged.stateGasLeft + (credit - MIN credit merged.stateGasSpilled) |>)
+Proof
+  simp[LET_THM, call_meter_backed_def, absorb_state_gas_def, MIN_DEF] >>
+  IF_CASES_TAC >> decide_tac
+QED
+
+(* The refund claim is unchanged when a failed child restores its refundable
+   meter. This is the bridge from the pre-restoration margin to the actual
+   larger execution-gas refund of a REVERT. *)
+Theorem call_meter_restore_grant:
+  call_meter_backed c /\ c.gasUsed <= c.msgParams.gasLimit ==>
+  c.msgParams.gasLimit - (c.gasUsed - c.stateGasSpilled - c.stateGasCommitted) =
+    c.msgParams.gasLimit - c.gasUsed + c.stateGasSpilled + c.stateGasCommitted
+Proof
+  simp[call_meter_backed_def] >> decide_tac
+QED
+
+Theorem call_meter_call_push:
+  s.contexts = (c,rb)::cs /\ ~fIN addr precompile_addresses /\
+  c.stateGasSpilled + c.stateGasCommitted + grant <= c.gasUsed /\
+  proceed_call op sender addr value ao az code grant output s = (r,t) ==>
+  let child = FST (HD t.contexts);
+      parent = FST (HD (TL t.contexts))
+  in call_meter_backed child /\
+     parent.stateGasSpilled + parent.stateGasCommitted +
+       (child.msgParams.gasLimit - child.gasUsed) +
+       child.stateGasSpilled + child.stateGasCommitted <= parent.gasUsed
+Proof
+  strip_tac >> Cases_on `op <> CallCode /\ 0 < value` >>
+  gvs[proceed_call_def, get_accounts_def, drain_state_gas_reservoir_def,
+      set_current_context_def, get_rollback_def, read_memory_def,
+      get_current_context_def, update_accounts_def,
+      get_caller_def, get_value_def, get_static_def, push_context_def,
+      bind_def, ignore_bind_def, return_def, LET_THM,
+      initial_context_def, initial_msg_params_def, call_meter_backed_def]
+QED
+
+Theorem call_meter_create_push:
+  s.contexts = (c,rb)::cs /\
+  c.stateGasSpilled + c.stateGasCommitted + grant <= c.gasUsed /\
+  proceed_create sender addr value code grant s = (r,t) ==>
+  let child = FST (HD t.contexts);
+      parent = FST (HD (TL t.contexts))
+  in call_meter_backed child /\
+     parent.stateGasSpilled + parent.stateGasCommitted +
+       (child.msgParams.gasLimit - child.gasUsed) +
+       child.stateGasSpilled + child.stateGasCommitted <= parent.gasUsed
+Proof
+  simp[proceed_create_def, drain_state_gas_reservoir_def,
+       get_current_context_def, set_current_context_def,
+       get_accounts_def, get_rollback_def, update_accounts_def,
+       get_original_def, set_original_def, push_context_def,
+       bind_def, ignore_bind_def, return_def, LET_THM,
+       initial_context_def, initial_msg_params_def, call_meter_backed_def] >>
+  rpt strip_tac >> gvs[]
+QED

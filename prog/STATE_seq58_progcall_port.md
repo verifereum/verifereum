@@ -1,55 +1,60 @@
 # STATE_seq58_progcall_port
-Updated: 2026-10-30
+Updated: 2026-10-31
 
 ## Cursor
-- component: C1.2.2
+- component: C1.3.2
 - status: in_progress
-- active_file: prog/vfmCallRefundProbeScript.sml
-- next_action: Build standalone probe baseline, then construct/check the complete state-gas-ported separation precondition and CALL code ownership for (INL (),refund_candidate_state) using evm2set_on and STAR_evm2set_with_original. All concrete cond clauses and no-normal-PC1 iteration are already checked. Bridge the guarded FUNPOW sequence to rel_sequence EVM_NEXT_REL and the frozen postcondition via EVM_SPEC_SEMANTICS/V_SPEC_CODE; do not report exported falsehood before this bridge is checked.
-- expected_goal_shape: Precondition evaluates on an explicit evm domain with Stack,PC0,GasUsed0, four state-gas fields, MsgParams,Memory,Rollback,Msdomain,ReturnData,Exception(INL()),refunds,logs,OriginalAccounts and CALL code. Postcondition entails ISL exception and PC1, contradicted by refund_candidate_no_normal_successor_pc for every n.
-- verify_with: holbuild(targets=["vfmCallRefundProbeTheory"], timeout=1800)
+- active_file: prog/vfmCallMeterProbeScript.sml
+- next_action: Begin/reaffirm C1.3.2 and build vfmCallMeterProbeTheory baseline. Then probe two-frame internal pop: construct checked counterexample to per-frame backing alone (parent gasUsed=spill=10, child unused grant=10, child spill=committed=0, no reservoir repayment). Test the planned strengthened parent margin including descendant refundable grant, using actual absorb/repay and failure restore/credit equations. No C1.3.2 source edits yet.
+- expected_goal_shape: Individual call_meter_backed holds for fresh callee and primitive transitions, but parent spill+committed may cease to be backed after subtracting child gasLeft. Expected sufficient residual is parent own backing plus child's gasLeft+spill+committed <= parent.gasUsed; test success/failure separately and do not impose this on final external caller.
+- verify_with: holbuild(targets=["vfmCallMeterProbeTheory"], timeout=1800)
 
 ## If This Fails
-- Record partial evidence with checkpoint_progress; if separation/SPEC interface is structurally hard, close stuck and request shallow oracle guidance. Preserve distinction between checked concrete execution and unchecked exported SPEC falsehood.
+- For bounded probe counterexamples record checked evidence without claiming export falsehood. Use checkpoint_progress for partial results. If invariant interface fails structurally, close C1.3.2 stuck and request scoped redesign. Do not resume main-file opcode proofs before nested-boundary and finite-run strategy checkpoints.
 
 ## Do Not Retry
-- EVAL the original choice-based parse_opcode or full step_call: Timeouts; rewrite parse_opcode_cond_thm and load wordsLib for small parser computations; bounded monadic simplification for CALL.
-  - evidence: episode:E0006
-  - evidence: tool_output:TO_seq58_progcall_port-20261030T170049Z_m0124_t001
-- Use256w witness to refute frozen exports: Checked fIN256w precompile_addresses contradicts explicit nonprecompile premise. Use separate100w candidate.
-  - evidence: episode:E0007
+- Prove call_exn_safe_step_call from merely nonempty contexts or derive spill backing from wf_state.: Historical checked witness falsifies unrestricted safety; scoped backing is not part of wf_context.
+  - evidence: episode:E0011
   - evidence: source:prog/vfmCallRefundProbeScript.sml
-- Maintain stipend<=gasUsed through creation refund from nonempty contexts alone: Checked local safety falsehood; do not silently add spill invariants or change semantics.
-  - evidence: episode:E0004
+- Treat original unguarded export falsehood as a current stop gate after owner amendment.: Owner explicitly authorized only sibling coverage, creditBack and survival guards; strategist reconciled task and retained counterexample as historical evidence.
+  - evidence: tool_output:TO_seq58_progcall_port-20261030T183500Z_m0272_t001
+- Require backing on every context including suspended external caller.: Would leak an unauthorized hypothesis into exported rules; scoped callee invariant excludes external suffix.
+  - evidence: tool_output:TO_seq58_progcall_port-20261030T183500Z_m0294_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Fresh expert should question full separation ownership and code framing first: numerical conditions and execution obstruction are checked, but SPEC applicability is not.
-- The prior256w witness was invalid because256 is now a precompile. New100w witness has checked nonmembership; do not conflate them.
-- An alternative to writing a huge specialized SPEC negation is deriving a necessary normal-PC/exception reachability consequence of the frozen postcondition, then using the already checked no_normal_successor_pc lemma.
-- Current shallow probe is appropriate; do not resume sibling proofs or optimize the old safety invariant until applicability is resolved.
+- Fresh expert should challenge nested-pop preservation first: per-frame backing has only been established for individual meter operations, not gas transfer between frames.
+- Alternative worth auditing in C1.3.3: reuse existing run_call finite trace/measure machinery rather than rebuilding opcode-wide exception safety. Check whether its hypotheses depend on the arbitrary suspended caller.
+- Do not optimize the existing call_exn_safe_step_call proof: its nonempty-only statement is false. Primitive safety combinators remain useful, but compound execution needs a scoped invariant.
+- Current shallow probes are appropriate. The planned descendant-budget strengthening is a candidate, not an established invariant; check committed balances and restoration as carefully as spill.
 
 ### What Went Wrong
-- Ground parse/word computation failed because standalone theory omitted Libs wordsLib; adding it resolved conditional opcode evaluation.
-- Initial witness address256 silently violated an explicit exported premise. Checked membership exposed this; no exported falsehood was claimed.
-- Review updated PLAN but left episode pending twice; explicit second review settled E0007. Five oracle calls used this session; avoid unnecessary redesign.
+- Original frozen rules admitted a checked counterexample. Owner explicitly amended the task to permit sibling-style coverage, creditBack and grant-survival guards; the old stop decision is superseded only to that narrow extent.
+- Strategist initially misclassified the explicit owner task amendment as an impermissible directive. A follow-up resolved precedence and authorized continuation.
+- Main-file unrestricted call_exn_safe_step_call remained false despite guarded exports. E0011 forced a scoped callee-prefix redesign instead of tactic patches.
+- MIN arithmetic needed MIN_DEF splitting before decide_tac. Charge simplification needed branch splits and live context assumptions before monadic evaluation.
 
 ### Ignored Signals
-- Precompile exclusion should have been checked before tracing the old witness. Historical address assumptions are unsafe on current semantics.
-- Repeated unchanged word-comparison goals were a missing computation-library signal, not a parser decomposition problem.
+- An authorized initial-CALL guard cannot justify safety of every arbitrary intermediate nonempty state.
+- wf_state does not entail spill backing; the callee starts with zero spill, while the externally suspended caller must remain unconstrained.
+- Episode review accepts evidence but often does not redesign the plan. A separate replacement call was needed after accepted E0011 left no frontier.
 
 ### Strategy Adjustments
-- Separate100w candidate now has wf, Impossible step, all concrete state-gas-ported cond clauses, guarded FUNPOW exception, and zero/positive-step normal-PC obstruction checked.
-- Use observation facts for get_current_context and parsed lookup to unfold step without expanding large concrete states in consumers.
-- Checked probes committed as45ce560d and fee3f429. Old partial vfmProgCallScript edits remain uncommitted and untouched; do not certify them as completed port.
+- C1.8 guarded charge/credit/abort boundary equations committed as 3f361b34. They build through the boundary prefix; vfmProgCallTheory still fails later in old safety machinery.
+- C1.3.1 completed and reviewed E0012. Standalone backing/margin probes committed as 4ce766e4; target vfmCallMeterProbeTheory clean.
+- C1.3.2 has just begun; no source changes or new proof-search evidence for it. Do not create a handoff-only episode.
+- Keep semantic changes out of spec/. Record owner's invariant rationale rather than proposing a semantics repair: backed reachable callee states exclude the historical witness, but no global spill<=g hypothesis is authorized on exports.
 
 ### Oracle Feedback
-- Strategist accepted E0007 only as partial evidence with an invalid exported witness, then authorized separate100w candidate at the same shallow component.
-- Full separation precondition and actual SPEC obstruction are mandatory before claiming frozen export falsehood. E0008 is a nonterminal checkpoint, not component completion.
+- Accepted E0010 only as guarded boundary-prefix evidence, not full theory completion.
+- Accepted E0011 as wrong-statement blocker and replaced C1.3 with initialization, nested-prefix and finite-consumer probes.
+- Accepted E0012: sp+committed<=gasUsed is initialized and preserved by the tested meter operations; actual consume/charge/credit stipend margin includes spilling. This does not certify nested frame or final-pop safety.
 
 ## Evidence Pointers
-- episode:E0008 - current checked100w evidence and remaining bridge
-- tool_output:TO_seq58_progcall_port-20261030T170049Z_m0203_t001 - final clean standalone probe build
-- tool_output:TO_seq58_progcall_port-20261030T170049Z_m0187_t001 - E0007 reviewed;256w inadmissibility accepted
-- source:prog/vfmCallRefundProbeScript.sml - candidate facts through no_normal_successor_pc
-- source:prog/vfmProgScript.sml - EVM_SPEC_SEMANTICS around349, STAR_evm2set_with_original around368, EVM_NEXT_REL around322
+- episode:E0012 - checked primitive backing and stipend-margin probes
+- tool_output:TO_seq58_progcall_port-20261031T122504Z_m0321_t001 - clean standalone meter-probe build
+- tool_output:TO_seq58_progcall_port-20261031T122624Z_m0323_t001 - accepted E0012 review
+- tool_output:TO_seq58_progcall_port-20261030T183500Z_m0294_t001 - scoped C1.3 probe redesign
+- tool_output:TO_seq58_progcall_port-20261031T122624Z_m0328_t001 - repay_state_gas_spill_context exact meter equations
+- source:prog/vfmCallMeterProbeScript.sml - durable meter probes committed4ce766e4
+- source:prog/vfmProgCallScript.sml - guarded boundaries and still-unrepaired main safety chain
