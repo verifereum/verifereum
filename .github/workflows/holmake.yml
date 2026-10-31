@@ -8,8 +8,9 @@ on:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Only a PR's runs share a group; runs on main never cancel each other.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -25,6 +26,7 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-polyml
+        id: polyml
 
       - name: Verify Poly/ML is executable
         run: poly -v
@@ -47,7 +49,7 @@ jobs:
         id: cache-hol4
         with:
           path: ~/HOL
-          key: hol-${{ runner.os }}-${{ runner.arch }}-${{ steps.hol4-version.outputs.hash }}
+          key: hol-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4-version.outputs.hash }}
 
       - name: Setup and Build HOL4
         if: steps.cache-hol4.outputs.cache-hit != 'true'
@@ -66,7 +68,7 @@ jobs:
         continue-on-error: true
         with:
           path: ~/HOL
-          key: hol-${{ runner.os }}-${{ runner.arch }}-${{ steps.hol4-version.outputs.hash }}
+          key: hol-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4-version.outputs.hash }}
 
       - name: Add HOL to PATH and export HOLDIR
         run: |
