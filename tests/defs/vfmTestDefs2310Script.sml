@@ -1,5 +1,5 @@
 Theory vfmTestDefs2310[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip6110_deposits/modified_contract/invalid_log_length.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip6110_deposits/modified_contract/invalid_log_length.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stReturnDataTest/returndatacopy_after_failing_delegatecall/returndatacopy_after_failing_delegatecall.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stReturnDataTest/returndatacopy_after_failing_delegatecall/returndatacopy_after_failing_delegatecall.json");
 val defs = mapi (define_test "2310") tests;

@@ -5,20 +5,27 @@ Libs cv_transLib monadsyntax wordsLib
 val () = monadsyntax.enable_monad "evm_execution";
 val () = monadsyntax.enable_monadsyntax();
 
-(* Exercise child execution and settlement without external fixtures. *)
+(* Exercise child execution and settlement without external fixtures.
+
+   EIP-8037: a transaction's state gas is funded by the part of its gas
+   limit above EIP-7825's 2**24 cap on execution gas, so the fixture asks
+   for a limit above the cap and the sender is funded to pay for it.  The
+   children below get their state gas from the reservoir the transaction
+   hands down, not from execution gas: a fresh storage slot costs 97920
+   state gas, which a 100000-gas child could not have spilled. *)
 Definition original_accounts_fixture_def:
   original_accounts_fixture =
     update_account 0x300w (empty_account_state with balance := 7) $
     update_account 0x200w (empty_account_state with balance := 100) $
     update_account 0x400w (empty_account_state with balance := 100) $
-    settlement_accounts 10000000
+    settlement_accounts 100000000
 End
 val () = cv_auto_trans original_accounts_fixture_def;
 
 Definition original_child_run_def:
   original_child_run nested gas code =
     case initial_state (Collect empty_domain) F 1 [] (settlement_block 0x500w)
-      original_accounts_fixture (settlement_tx with gasLimit := 500000) of
+      original_accounts_fixture (settlement_tx with gasLimit := 20000000) of
       NONE => NONE
     | SOME s =>
       case (if nested then do
@@ -81,9 +88,28 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem original_accounts_survive_code_deposit_out_of_gas:
+(* EIP-8037 phase 3: the deposit is 6 execution gas a keccak word plus 1530
+   state gas a byte, the latter out of the child's reservoir, so the one byte
+   here fits the 100-gas child that EIP-170's 200 a byte ran out of gas on:
+   the create succeeds and pushes its address.  The case below is the same
+   deposit on a child that cannot pay it. *)
+Theorem original_accounts_survive_code_deposit_fits_child_gas:
   original_accounts_observation
     (original_child_run F 100
+      [0x60w; 0w; 0x60w; 0w; 0x53w; 0x60w; 1w; 0x60w; 0w; 0xf3w]) =
+  SOME (INL (), 1, 0w, T, 0w, 1, 7, [0x300w])
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The same deposit, on a child that cannot pay it: the code runs in 18 gas,
+   so 23 leaves 5 where the deposit's 6 execution gas needs 6 -- and the
+   state gas is not reached, since execution gas is charged first.  The
+   create fails, its destination is rolled back to the account the fixture
+   gave it, and the original accounts stand. *)
+Theorem original_accounts_survive_code_deposit_out_of_gas:
+  original_accounts_observation
+    (original_child_run F 23
       [0x60w; 0w; 0x60w; 0w; 0x53w; 0x60w; 1w; 0x60w; 0w; 0xf3w]) =
   SOME (INL (), 1, 0w, T, 0w, 0, 7, [0w])
 Proof

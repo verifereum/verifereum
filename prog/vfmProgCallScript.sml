@@ -4,199 +4,13 @@
    data. *)
 Theory vfmProgCall
 Ancestors
-  vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
+  vfmCallReturn vfmCallBudget vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
   vfmDecreasesGas vfmRunCall vfmContextLength vfmAccountFrame vfmStaticCalls
   vfmRunWithinFrame vfmSameFrame vfmDomainCollection vfmStepLength
   vfmTypes vfmBuffer vfmHandleStep vfmStoragePredicates
   prog set_sep pred_set pair list arithmetic option finite_map combin
 
-(* ----------------------------------------------------------------------------- *)
-(* The contexts below the callee are left alone while it runs                    *)
-(* ----------------------------------------------------------------------------- *)
-
-Theorem DROP_TL_eq[local]:
-  0 < k ∧ l1 ≠ [] ∧ l2 ≠ [] ∧ TL l1 = TL l2 ⇒ DROP k l1 = DROP k l2
-Proof
-  Cases_on `k` \\ Cases_on `l1` \\ Cases_on `l2` \\ gvs[]
-QED
-
-Theorem DROP_SUC_TL_TL[local]:
-  0 < k ∧ 2 ≤ LENGTH l' ∧ l ≠ [] ∧ TL (TL l') = TL l ⇒
-  DROP (SUC k) l' = DROP k l
-Proof
-  Cases_on `k` \\ Cases_on `l` \\ gvs[]
-  \\ Cases_on `l'` \\ gvs[] \\ Cases_on `t'` \\ gvs[]
-QED
-
-Theorem DROP_pop[local]:
-  L ≤ SUC (LENGTH rest) ⇒
-  DROP (LENGTH (x::rest) + 1 - L) (x::rest) =
-  DROP (LENGTH (a::b::rest) + 1 - L) (a::b::rest)
-Proof
-  strip_tac
-  \\ `LENGTH (a::b::rest) + 1 - L = SUC (SUC (SUC (LENGTH rest) - L)) ∧
-      LENGTH (x::rest) + 1 - L = SUC (SUC (LENGTH rest) - L)` by simp[]
-  \\ ASM_REWRITE_TAC[] \\ simp[]
-QED
-
-Theorem step_push_TL_TL[local]:
-  wf_state s ∧ step s = (r,s') ∧ LENGTH s.contexts < LENGTH s'.contexts ⇒
-  LENGTH s'.contexts = SUC (LENGTH s.contexts) ∧
-  TL (TL s'.contexts) = TL s.contexts
-Proof
-  strip_tac
-  \\ `s.contexts ≠ []` by gvs[wf_state_def]
-  \\ drule_all step_push_foreign \\ strip_tac \\ simp[]
-  \\ drule_all step_grow_dispatch \\ strip_tac \\ gvs[]
-  >- (drule step_call_push_structure \\ simp[])
-  \\ drule step_create_reaches_proceed_create \\ simp[] \\ strip_tac
-  \\ gvs[cp_rel_def, proceed_create_def, update_accounts_def, get_rollback_def,
-         get_original_def, set_original_def, push_context_def,
-         ignore_bind_def, bind_def, return_def, fail_def, AllCaseEqs()]
-QED
-
-(* While run_call es is still in es's frame or deeper, the contexts below
-   es's frame are those of es. *)
-Theorem run_call_reaches_outer_contexts:
-  wf_state es ∧ run_call_reaches es s ∧ LENGTH es.contexts ≤ LENGTH s.contexts ⇒
-  DROP (LENGTH s.contexts + 1 - LENGTH es.contexts) s.contexts = TL es.contexts
-Proof
-  strip_tac
-  \\ `(λs. wf_state s ∧
-        (LENGTH es.contexts ≤ LENGTH s.contexts ⇒
-         DROP (LENGTH s.contexts + 1 - LENGTH es.contexts) s.contexts =
-         TL es.contexts)) s` suffices_by simp[]
-  \\ irule run_call_reaches_inv
-  \\ qexists_tac `es` \\ simp[]
-  \\ conj_tac
-  >- (`es.contexts ≠ []` by gvs[wf_state_def]
-      \\ Cases_on `es.contexts` \\ gvs[])
-  \\ qx_genl_tac [`t`,`t'`] \\ strip_tac
-  \\ `wf_state t'` by metis_tac[step_preserves_wf_state, SND]
-  \\ simp[] \\ strip_tac
-  \\ `t.contexts ≠ []` by gvs[wf_state_def]
-  \\ `DROP (LENGTH t.contexts + 1 - LENGTH es.contexts) t.contexts =
-      TL es.contexts` by metis_tac[]
-  \\ qpat_x_assum `_ ⇒ _` kall_tac
-  \\ Cases_on `LENGTH t'.contexts = LENGTH t.contexts`
-  >- (`outputTo_consistent t`
-        by metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent]
-      \\ drule_all step_same_frame \\ rw[same_frame_rel_def]
-      \\ `t'.contexts ≠ []` by gvs[wf_state_def]
-      \\ qpat_x_assum `DROP _ _ = _` (SUBST1_TAC o SYM)
-      \\ irule DROP_TL_eq \\ simp[])
-  \\ Cases_on `LENGTH t.contexts < LENGTH t'.contexts`
-  >- (drule_all step_push_TL_TL \\ strip_tac
-      \\ qpat_x_assum `DROP _ _ = _` (SUBST1_TAC o SYM)
-      \\ `LENGTH t'.contexts + 1 - LENGTH es.contexts =
-          SUC (LENGTH t.contexts + 1 - LENGTH es.contexts)` by simp[]
-      \\ pop_assum SUBST1_TAC
-      \\ `0 < LENGTH t.contexts` by (Cases_on `t.contexts` \\ fs[])
-      \\ irule DROP_SUC_TL_TL \\ simp[])
-  \\ `LENGTH t'.contexts < LENGTH t.contexts` by decide_tac
-  \\ `outputTo_consistent_stack t ∧ EVERY (wf_context o FST) t.contexts`
-       by gvs[wf_state_def]
-  \\ drule_all step_pop_structure \\ strip_tac
-  \\ `LENGTH es.contexts ≤ SUC (LENGTH rest)` by gvs[]
-  \\ qpat_x_assum `DROP _ _ = _` (SUBST1_TAC o SYM)
-  \\ qpat_x_assum `t'.contexts = _` SUBST1_TAC
-  \\ qpat_x_assum `t.contexts = _` (fn th => ONCE_REWRITE_TAC[th])
-  \\ irule DROP_pop \\ simp[]
-QED
-
-Theorem step_preserves_selected_metadata:
-  wf_state s ∧ step s = (r,t) ∧ 2 ≤ n ∧
-  n ≤ LENGTH s.contexts ∧ n ≤ LENGTH t.contexts ⇒
-  (SND (EL (LENGTH t.contexts - n) t.contexts),
-   (FST (EL (LENGTH t.contexts - n) t.contexts)).msgParams) =
-  (SND (EL (LENGTH s.contexts - n) s.contexts),
-   (FST (EL (LENGTH s.contexts - n) s.contexts)).msgParams)
-Proof
-  strip_tac >>
-  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- suspend "same_depth"
-  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
-  >- suspend "push_depth"
-  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
-  >> suspend "pop_depth"
-QED
-
-Resume step_preserves_selected_metadata[same_depth]:
-  drule_all step_same_frame_foreign >> strip_tac >>
-  qpat_x_assum `∀y. _` kall_tac >>
-  qpat_x_assum `wf_state _` kall_tac >>
-  qpat_x_assum `step _ = _` kall_tac >>
-  Cases_on `s.contexts` >- gvs[] >>
-  Cases_on `t.contexts` >- gvs[] >>
-  gvs[] >> Cases_on `SUC (LENGTH t') - n` >> gvs[]
-QED
-
-Resume step_preserves_selected_metadata[push_depth]:
-  drule_all step_push_TL_TL >> strip_tac >>
-  drule_all step_push_foreign >> strip_tac >>
-  `2 ≤ LENGTH s.contexts` by decide_tac >>
-  `LENGTH t.contexts - n = SUC (LENGTH s.contexts - n)` by decide_tac >>
-  qpat_x_assum `∀y. _` kall_tac >>
-  qpat_x_assum `wf_state _` kall_tac >>
-  qpat_x_assum `step _ = _` kall_tac >>
-  Cases_on `s.contexts` >- gvs[] >>
-  Cases_on `t.contexts` >- gvs[] >>
-  rename1 `t.contexts = a::tail` >>
-  Cases_on `tail` >- gvs[] >> gvs[] >>
-  `SUC (SUC (LENGTH t')) - n = SUC (SUC (LENGTH t') - n)`
-    by decide_tac >>
-  asm_rewrite_tac[] >> Cases_on `SUC (LENGTH t') - n` >> gvs[]
-QED
-
-Resume step_preserves_selected_metadata[pop_depth]:
-  drule_all step_pop_foreign >> strip_tac >>
-  qpat_x_assum `wf_state _` kall_tac >>
-  qpat_x_assum `step _ = _` kall_tac >>
-  qpat_x_assum `s.contexts = _` (fn th => ONCE_REWRITE_TAC[th]) >>
-  `n ≤ SUC (LENGTH rest)` by gvs[] >>
-  `SUC (SUC (LENGTH rest)) - n = SUC (SUC (LENGTH rest) - n)`
-    by decide_tac >>
-  simp[] >> asm_rewrite_tac[] >>
-  Cases_on `SUC (LENGTH rest) - n` >> gvs[]
-QED
-
-Finalise step_preserves_selected_metadata
-
-Theorem run_call_reaches_selected_metadata:
-  wf_state es ∧ run_call_reaches es t ∧
-  2 ≤ n ∧ n ≤ LENGTH es.contexts ∧ n ≤ LENGTH t.contexts ⇒
-  (SND (EL (LENGTH t.contexts - n) t.contexts),
-   (FST (EL (LENGTH t.contexts - n) t.contexts)).msgParams) =
-  (SND (EL (LENGTH es.contexts - n) es.contexts),
-   (FST (EL (LENGTH es.contexts - n) es.contexts)).msgParams)
-Proof
-  strip_tac >>
-  `(λs. wf_state s ∧
-     (n ≤ LENGTH s.contexts ⇒
-      (SND (EL (LENGTH s.contexts - n) s.contexts),
-       (FST (EL (LENGTH s.contexts - n) s.contexts)).msgParams) =
-      (SND (EL (LENGTH es.contexts - n) es.contexts),
-       (FST (EL (LENGTH es.contexts - n) es.contexts)).msgParams))) t`
-    suffices_by simp[] >>
-  irule run_call_reaches_inv >> qexists_tac `es` >> simp[] >>
-  qx_genl_tac [`s`,`s'`] >> strip_tac >>
-  `wf_state s'` by metis_tac[step_preserves_wf_state, SND] >>
-  simp[] >> strip_tac >>
-  `n ≤ LENGTH s.contexts` by decide_tac >>
-  drule_all step_preserves_selected_metadata >> simp[]
-QED
-
-Theorem run_call_reaches_root_metadata:
-  wf_state es ∧ 2 ≤ LENGTH es.contexts ∧ run_call_reaches es t ∧
-  LENGTH t.contexts = LENGTH es.contexts ⇒
-  SND (HD t.contexts) = SND (HD es.contexts) ∧
-  (FST (HD t.contexts)).msgParams = (FST (HD es.contexts)).msgParams
-Proof
-  strip_tac >>
-  drule (Q.INST [`n` |-> `LENGTH es.contexts`]
-    run_call_reaches_selected_metadata) >>
-  disch_then (qspec_then `t` mp_tac) >> simp[]
-QED
+(* Structural reachability and final-pop facts live in vfmCallReturnTheory. *)
 
 Theorem delegate_check_collect_frame[local]:
   delegate_check code (Collect dd) rb dc saved dom ⇒
@@ -270,16 +84,63 @@ Proof
   cong_tac (SOME 4) >> simp[context_component_equality]
 QED
 
+Theorem call_charge_new_account_pair[local]:
+  s.contexts = (c,cb)::cs /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  stateCost <= c.stateGasLeft ==>
+  charge_new_account charged s =
+    (INL (), s with contexts :=
+      (c with stateGasLeft := c.stateGasLeft - stateCost,cb)::cs)
+Proof
+  Cases_on `charged` >>
+  simp[charge_new_account_def, charge_state_gas_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, return_def] >> rpt strip_tac >>
+  gvs[execution_state_component_equality]
+QED
+
+Theorem call_credit_abort_pair[local]:
+  s.contexts = (c,cb)::cs /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  creditBack = MIN stateCost c.stateGasSpilled /\
+  cg <= c.gasUsed - creditBack /\ LENGTH c.stack < stack_limit ==>
+  let credited = c with <|
+        gasUsed := c.gasUsed - creditBack;
+        stateGasSpilled := c.stateGasSpilled - creditBack;
+        stateGasLeft := c.stateGasLeft + (stateCost - creditBack) |>;
+      result = (INL (), s with contexts :=
+        (credited with <|stack := b2w F::c.stack; returnData := [];
+          gasUsed := credited.gasUsed - cg; pc := SUC c.pc|>,cb)::cs)
+  in ignore_bind (credit_new_account charged) (abort_call_value cg) s = result /\
+     ignore_bind (set_return_data [])
+       (ignore_bind (credit_new_account charged) (abort_unuse cg)) s = result
+Proof
+  Cases_on `charged` >>
+  simp[LET_THM, credit_new_account_def, credit_state_gas_refund_def,
+       abort_call_value_def, abort_unuse_def, push_stack_def,
+       set_return_data_def, unuse_gas_def, inc_pc_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  rpt strip_tac >> gvs[stack_limit_def] >>
+  cong_tac (SOME 4) >> simp[context_component_equality]
+QED
+
 Theorem call_entry_failure_normalize[local]:
-  prepared.contexts = (caller,cb)::cs ∧ cg ≤ caller.gasUsed ∧
-  LENGTH caller.stack < stack_limit ⇒
-  (if balanceFail then abort_call_value cg prepared
+  prepared.contexts = (caller,cb)::cs /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  creditBack = MIN stateCost caller.stateGasSpilled /\
+  cg <= caller.gasUsed - creditBack /\
+  LENGTH caller.stack < stack_limit ==>
+  (if balanceFail then
+     ignore_bind (credit_new_account charged) (abort_call_value cg) prepared
    else ignore_bind (set_return_data [])
-     (if depthFail then abort_unuse cg else proceed) prepared) =
-  (if balanceFail ∨ depthFail then abort_call_value cg prepared
+     (if depthFail then ignore_bind (credit_new_account charged) (abort_unuse cg)
+      else proceed) prepared) =
+  (if balanceFail \/ depthFail then
+     ignore_bind (credit_new_account charged) (abort_call_value cg) prepared
    else ignore_bind (set_return_data []) proceed prepared)
 Proof
-  strip_tac >> drule_all call_abort_pair >>
+  strip_tac >> drule_all call_credit_abort_pair >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
   Cases_on `balanceFail` >> Cases_on `depthFail` >> simp[]
 QED
@@ -297,13 +158,18 @@ Theorem proceed_call_pair[local]:
              maxFeePerBlobGas := NONE; authorizationList := []|>
   in (INL (), s with <|
     contexts := (initial_context callee code
-      (op = StaticCall \/ c.msgParams.static) output tx,s.rollback)::(c,cb)::cs;
+      (op = StaticCall \/ c.msgParams.static) output
+      (op = Call /\ 0 < value /\
+       account_empty (lookup_account addr s.rollback.accounts)) c.stateGasLeft tx
+        with logs := transfer_log sender callee value,s.rollback)::
+      (c with stateGasLeft := 0,cb)::cs;
     rollback := s.rollback with accounts updated_by
       (if op <> CallCode /\ 0 < value then transfer_value sender addr value else I)
   |>)
 Proof
   strip_tac >> Cases_on `op <> CallCode /\ 0 < value` >>
-  simp[proceed_call_def, get_rollback_def, read_memory_def,
+  simp[proceed_call_def, get_accounts_def, drain_state_gas_reservoir_def,
+       set_current_context_def, get_rollback_def, read_memory_def,
        get_current_context_def, update_accounts_def,
        get_caller_def, get_value_def, get_static_def, push_context_def,
        bind_def, ignore_bind_def, return_def] >>
@@ -311,1149 +177,8 @@ Proof
 QED
 
 
-(* The return boundary retains every unmentioned state and context field. *)
-Theorem pop_and_incorporate_context_pair[local]:
-  s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
-  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed ==>
-  pop_and_incorporate_context success s =
-    (INL (), s with <|
-      contexts :=
-        (caller with <|
-          gasUsed := caller.gasUsed -
-            (callee.msgParams.gasLimit - callee.gasUsed);
-          logs := caller.logs ++ (if success then callee.logs else []);
-          addRefund := caller.addRefund + (if success then callee.addRefund else 0);
-          subRefund := caller.subRefund + (if success then callee.subRefund else 0)
-        |>, callerSaved)::rest;
-      rollback := if success then s.rollback else saved
-    |>)
-Proof
-  strip_tac >> Cases_on `success` >>
-  simp[pop_and_incorporate_context_def, get_gas_left_def,
-       get_current_context_def, pop_context_def, unuse_gas_def,
-       push_logs_def, update_gas_refund_def, set_rollback_def,
-       set_current_context_def, bind_def, ignore_bind_def, return_def,
-       assert_def, fail_def, combinTheory.o_DEF, combinTheory.C_DEF,
-       vfmContextTheory.context_component_equality] >>
-  cong_tac (SOME 4) >> simp[context_component_equality]
-QED
-
-Theorem handle_exception_memory_return[local]:
-  s.contexts = (callee, saved)::(caller, callerSaved)::rest /\
-  callee.msgParams.outputTo = Memory r /\
-  callee.gasUsed <= callee.msgParams.gasLimit /\
-  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed /\
-  LENGTH caller.stack < stack_limit ==>
-  handle_exception e s =
-  let success = (e = NONE);
-      gasLeft = if e = NONE \/ e = SOME Reverted then
-                  callee.msgParams.gasLimit - callee.gasUsed else 0;
-      out = if e = NONE \/ e = SOME Reverted then callee.returnData else []
-  in (INL (), s with <|
-    contexts := (caller with <|
-      stack := b2w success :: caller.stack;
-      pc := SUC caller.pc;
-      gasUsed := caller.gasUsed - gasLeft;
-      memory := buffer_write r.offset (TAKE r.size out) caller.memory;
-      returnData := out;
-      logs := caller.logs ++ (if success then callee.logs else []);
-      addRefund := caller.addRefund + (if success then callee.addRefund else 0);
-      subRefund := caller.subRefund + (if success then callee.subRefund else 0)
-    |>, callerSaved)::rest;
-    rollback := if success then s.rollback else saved
-  |>)
-Proof
-  strip_tac >> Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-  gvs[handle_exception_def, pop_and_incorporate_context_def,
-      get_gas_left_def, get_num_contexts_def, get_output_to_def,
-      get_return_data_def, get_current_context_def, pop_context_def,
-      consume_gas_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
-      set_rollback_def, set_current_context_def, set_return_data_def,
-      inc_pc_def, push_stack_def, write_memory_def,
-      bind_def, ignore_bind_def, return_def, assert_def, fail_def,
-      combinTheory.o_DEF, combinTheory.C_DEF] >>
-  cong_tac (SOME 4) >> simp[context_component_equality, ADD_COMM]
-QED
-
-Theorem step_collect_not_outside[local]:
-  s.msdomain = Collect dd /\ step s = (r,s') ==>
-  r <> INR (SOME (OutsideDomain x))
-Proof
-  strip_tac >>
-  mp_tac step_computes_minimal_domain >>
-  rewrite_tac[computes_minimal_domain_def] >>
-  disch_then drule >> simp[]
-QED
-
-Theorem run_call_preserves_collect[local]:
-  es.msdomain = Collect dd /\ run_call es = SOME (r,es') ==>
-  ?dd'. es'.msdomain = Collect dd'
-Proof
-  strip_tac >>
-  `(\p. ?d. (SND p).msdomain = Collect d) (r,es')` suffices_by simp[] >>
-  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
-  qexists_tac `\(r,s). ISL r /\ LENGTH es.contexts <= LENGTH s.contexts` >>
-  qexists_tac `step o SND` >>
-  qexists_tac `(INL () : unit + exception option,es)` >>
-  simp[] >>
-  reverse conj_tac >- fs[run_call_def, GREATER_EQ, UNCURRY] >>
-  qx_gen_tac `st` >> PairCases_on `st` >> simp[] >> strip_tac >>
-  Cases_on `step st1` >> simp[] >>
-  irule step_preserves_collect >> metis_tac[]
-QED
-
-Definition call_exn_safe_def:
-  call_exn_safe P m Q <=>
-    !s r t. P s /\ m s = (r,t) ==>
-      Q t /\ (!e. r = INR e ==> e <> SOME Impossible /\ e <> SOME Unimplemented)
-End
-
-Theorem call_exn_safe_consequence[local]:
-  (!s. P' s ==> P s) /\ call_exn_safe P m Q /\ (!s. Q s ==> Q' s) ==>
-  call_exn_safe P' m Q'
-Proof
-  simp[call_exn_safe_def] >> metis_tac[]
-QED
-
-Theorem call_exn_safe_bind[local]:
-  call_exn_safe P g R /\ (!x. call_exn_safe R (f x) Q) /\
-  (!s. R s ==> Q s) ==> call_exn_safe P (bind g f) Q
-Proof
-  rw[call_exn_safe_def, bind_def] >>
-  Cases_on `g s` >> Cases_on `q` >> gvs[] >> metis_tac[]
-QED
-
-Theorem call_exn_safe_bind_invariant[local]:
-  call_exn_safe P g Inv /\ (!x. call_exn_safe Inv (f x) Inv) ==>
-  call_exn_safe P (bind g f) Inv
-Proof
-  strip_tac >> irule call_exn_safe_bind >> metis_tac[]
-QED
-
-Theorem call_exn_safe_return[local]:
-  call_exn_safe P (return x) P
-Proof
-  simp[call_exn_safe_def, return_def]
-QED
-
-Theorem call_exn_safe_fail[local]:
-  e <> Impossible /\ e <> Unimplemented ==> call_exn_safe P (fail e) P
-Proof
-  simp[call_exn_safe_def, fail_def]
-QED
-
-Theorem call_exn_safe_assert[local]:
-  e <> Impossible /\ e <> Unimplemented ==>
-  call_exn_safe P (assert b e) P
-Proof
-  Cases_on `b` >> simp[call_exn_safe_def, assert_def]
-QED
-
-Theorem call_exn_safe_reraise[local]:
-  e <> SOME Impossible /\ e <> SOME Unimplemented ==>
-  call_exn_safe P (reraise e) P
-Proof
-  simp[call_exn_safe_def, reraise_def]
-QED
-
-Theorem call_exn_safe_finish[local]:
-  call_exn_safe P finish P /\ call_exn_safe P revert P
-Proof
-  simp[call_exn_safe_def, finish_def, revert_def]
-QED
-
-Theorem call_exn_safe_get_current_context[local]:
-  call_exn_safe (\s. s.contexts <> []) get_current_context
-    (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def] >> gvs[get_current_context_def, return_def]
-QED
-
-Theorem call_exn_safe_set_current_context[local]:
-  call_exn_safe (\s. s.contexts <> []) (set_current_context c)
-    (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def] >> gvs[set_current_context_def, return_def]
-QED
-
-Theorem call_exn_safe_original[local]:
-  call_exn_safe (\s. s.contexts <> []) get_original
-    (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (set_original a)
-    (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def] >> gvs[get_original_def, set_original_def, return_def]
-QED
-
-Theorem call_exn_safe_state_readers[local]:
-  call_exn_safe P get_num_contexts P /\
-  call_exn_safe P get_tx_params P /\
-  call_exn_safe P get_accounts P /\
-  call_exn_safe P get_tStorage P /\
-  call_exn_safe P get_rollback P
-Proof
-  simp[call_exn_safe_def, get_num_contexts_def, get_tx_params_def,
-       get_accounts_def, get_tStorage_def, get_rollback_def, return_def]
-QED
-
-Theorem call_exn_safe_state_updates[local]:
-  call_exn_safe (\s. s.contexts <> []) (update_accounts f) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (set_tStorage ts) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (set_rollback rb) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (set_domain d) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (add_to_delete a) (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def] >>
-  gvs[update_accounts_def, set_tStorage_def, set_rollback_def,
-      set_domain_def, add_to_delete_def, return_def]
-QED
-
-Theorem call_exn_safe_context_readers[local]:
-  call_exn_safe (\s. s.contexts <> []) get_gas_left (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_callee (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_caller (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_value (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_output_to (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_return_data (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_static (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_current_code (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) get_call_data (\s. s.contexts <> [])
-Proof
-  rewrite_tac[get_gas_left_def, get_callee_def, get_caller_def, get_value_def,
-    get_output_to_def, get_return_data_def, get_static_def,
-    get_current_code_def, get_call_data_def] >>
-  rpt conj_tac >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_get_current_context, call_exn_safe_return]
-QED
-
-Theorem call_exn_safe_context_updates[local]:
-  call_exn_safe (\s. s.contexts <> []) (set_return_data rd) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (set_jump_dest jd) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (push_logs ls) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[set_return_data_def, set_jump_dest_def, push_logs_def] >>
-  rpt conj_tac >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_consume_gas[local]:
-  call_exn_safe (\s. s.contexts <> []) (consume_gas n) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[consume_gas_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_get_current_context] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_assert, call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_stack[local]:
-  call_exn_safe (\s. s.contexts <> []) (pop_stack n) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (push_stack v) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[pop_stack_def, push_stack_def, ignore_bind_def] >>
-  conj_tac >> irule call_exn_safe_bind_invariant >>
-  (reverse conj_tac >- simp[call_exn_safe_get_current_context]) >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  (reverse conj_tac >- simp[call_exn_safe_assert]) >>
-  gen_tac >> simp[]
-  >- (irule call_exn_safe_bind_invariant >>
-      simp[call_exn_safe_set_current_context, call_exn_safe_return]) >>
-  simp[call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_inc_pc_or_jump[local]:
-  call_exn_safe (\s. s.contexts <> []) (inc_pc_or_jump op) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[inc_pc_or_jump_def] >>
-  Cases_on `is_call op` >- simp[call_exn_safe_return] >>
-  simp[] >> irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_get_current_context] >>
-  qx_gen_tac `ctx` >> simp[] >>
-  Cases_on `ctx.jumpDest` >- simp[call_exn_safe_set_current_context] >>
-  simp[ignore_bind_def] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_assert, call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_step_binop[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_binop op f) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_binop_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_stack] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_consume_gas, call_exn_safe_stack]
-QED
-
-Theorem call_exn_safe_step_monop[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_monop op f) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_monop_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_stack] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_consume_gas, call_exn_safe_stack]
-QED
-
-Theorem call_exn_safe_step_modop[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_modop op f) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_modop_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_stack] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_consume_gas, call_exn_safe_stack]
-QED
-
-Theorem call_exn_safe_step_context[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_context op f) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_context_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_consume_gas] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_get_current_context, call_exn_safe_stack]
-QED
-
-Theorem call_exn_safe_step_txParams[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_txParams op f) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_txParams_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_consume_gas] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_state_readers, call_exn_safe_stack]
-QED
-
-Theorem call_exn_safe_domain_check[local]:
-  call_exn_safe (\s. s.contexts <> []) cont (\s. s.contexts <> []) ==>
-  call_exn_safe (\s. s.contexts <> []) (domain_check err check dom_add cont)
-    (\s. s.contexts <> [])
-Proof
-  pure_rewrite_tac[call_exn_safe_def] >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `s.msdomain`
-  >- (gvs[domain_check_def] >> Cases_on `check d` >>
-      gvs[fail_def] >> metis_tac[]) >>
-  gvs[domain_check_def, ignore_bind_def, bind_def, set_domain_def, return_def] >>
-  first_x_assum (qspec_then `s with msdomain := Collect (dom_add d)` mp_tac) >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem call_exn_safe_memory[local]:
-  call_exn_safe (\s. s.contexts <> []) (memory_expansion_info offset sz)
-    (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (expand_memory n) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (read_memory offset sz) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (write_memory offset bytes) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[memory_expansion_info_def, expand_memory_def,
-    read_memory_def, write_memory_def] >>
-  rpt conj_tac >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_get_current_context, call_exn_safe_return,
-    call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_access[local]:
-  call_exn_safe (\s. s.contexts <> []) (access_address a) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (access_slot x) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (ensure_storage_in_domain a) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[access_address_def, access_slot_def, ensure_storage_in_domain_def] >>
-  rpt conj_tac >> irule call_exn_safe_domain_check >>
-  rw[call_exn_safe_def] >> gvs[return_def]
-QED
-
-Theorem call_exn_safe_get_code[local]:
-  call_exn_safe P (get_code a) P
-Proof
-  rewrite_tac[get_code_def] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_state_readers, call_exn_safe_return]
-QED
-
-Theorem call_exn_safe_storage_updates[local]:
-  call_exn_safe (\s. s.contexts <> []) (write_storage a k v) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (write_transient_storage a k v) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[write_storage_def, write_transient_storage_def] >>
-  conj_tac >- simp[call_exn_safe_state_updates] >>
-  irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_state_readers, call_exn_safe_state_updates]
-QED
-
-Theorem call_exn_safe_get_return_data_check[local]:
-  call_exn_safe (\s. s.contexts <> []) (get_return_data_check off sz) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[get_return_data_check_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_context_readers] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_assert, call_exn_safe_return]
-QED
-
-Theorem call_exn_safe_update_gas_refund[local]:
-  call_exn_safe (\s. s.contexts <> []) (update_gas_refund deltas) (\s. s.contexts <> [])
-Proof
-  Cases_on `deltas` >> rewrite_tac[update_gas_refund_def] >>
-  irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_assert_not_static[local]:
-  call_exn_safe (\s. s.contexts <> []) assert_not_static (\s. s.contexts <> [])
-Proof
-  rewrite_tac[assert_not_static_def] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_context_readers, call_exn_safe_assert]
-QED
-
-Theorem call_exn_safe_simple_opcodes[local]:
-  call_exn_safe (\s. s.contexts <> []) step_exp (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_balance (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_call_data_load (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_ext_code_size (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_ext_code_hash (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_keccak256 (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_exp_def, step_balance_def, step_call_data_load_def,
-    step_ext_code_size_def, step_ext_code_hash_def, step_keccak256_def, ignore_bind_def] >>
-  rpt conj_tac >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_consume_gas,
-         call_exn_safe_state_readers, call_exn_safe_access,
-         call_exn_safe_context_readers, call_exn_safe_memory] >>
-       gen_tac >> simp[]) >>
-  simp[call_exn_safe_stack]
-QED
-
-Theorem call_exn_safe_environment_memory_stack[local]:
-  call_exn_safe (\s. s.contexts <> []) step_block_hash (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_blob_hash (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_self_balance (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_mload (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (step_mstore op) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_jump (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_jumpi (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (step_push n ws) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) step_pop (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (step_dup n) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (step_swap n) (\s. s.contexts <> []) /\
-  call_exn_safe (\s. s.contexts <> []) (step_log n) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_block_hash_def, step_blob_hash_def, step_self_balance_def,
-    step_mload_def, step_mstore_def, step_jump_def, step_jumpi_def, step_push_def,
-    step_pop_def, step_dup_def, step_swap_def, step_log_def, ignore_bind_def] >>
-  rpt conj_tac >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_consume_gas,
-         call_exn_safe_state_readers, call_exn_safe_context_readers,
-         call_exn_safe_memory, call_exn_safe_get_current_context,
-         call_exn_safe_assert, call_exn_safe_assert_not_static] >>
-       gen_tac >> simp[]) >>
-  simp[call_exn_safe_stack, call_exn_safe_consume_gas, call_exn_safe_memory,
-    call_exn_safe_context_updates, call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_step_return[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_return b) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_return_def, ignore_bind_def] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_consume_gas,
-         call_exn_safe_memory, call_exn_safe_context_updates] >>
-       gen_tac >> simp[]) >>
-  Cases_on `b` >> simp[call_exn_safe_finish]
-QED
-
-Theorem call_exn_safe_copy_to_memory[local]:
-  (!reader. src = SOME reader ==>
-    call_exn_safe (\s. s.contexts <> []) reader (\s. s.contexts <> [])) ==>
-  call_exn_safe (\s. s.contexts <> []) (copy_to_memory gas off srcOff sz src)
-    (\s. s.contexts <> [])
-Proof
-  strip_tac >> Cases_on `src`
-  >- (Cases_on `max_expansion_range (off,sz) (srcOff,sz)` >>
-      simp[copy_to_memory_def, ignore_bind_def] >>
-      rpt (irule call_exn_safe_bind_invariant >>
-           reverse conj_tac >- simp[call_exn_safe_memory, call_exn_safe_consume_gas] >>
-           gen_tac >> simp[]) >> simp[call_exn_safe_memory]) >>
-  gvs[] >> simp[copy_to_memory_def, ignore_bind_def] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_memory, call_exn_safe_consume_gas] >>
-       gen_tac >> simp[]) >>
-  simp[call_exn_safe_memory]
-QED
-
-Theorem call_exn_safe_step_copy_to_memory[local]:
-  (!reader. src = SOME reader ==>
-    call_exn_safe (\s. s.contexts <> []) reader (\s. s.contexts <> [])) ==>
-  call_exn_safe (\s. s.contexts <> []) (step_copy_to_memory op src) (\s. s.contexts <> [])
-Proof
-  strip_tac >> rewrite_tac[step_copy_to_memory_def] >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac >- simp[call_exn_safe_stack] >>
-  gen_tac >> simp[] >> irule call_exn_safe_copy_to_memory >> simp[]
-QED
-
-Theorem call_exn_safe_step_return_data_copy[local]:
-  call_exn_safe (\s. s.contexts <> []) step_return_data_copy (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_return_data_copy_def] >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac >- simp[call_exn_safe_stack] >>
-  gen_tac >> simp[] >> irule call_exn_safe_copy_to_memory >>
-  simp[call_exn_safe_get_return_data_check]
-QED
-
-Theorem call_exn_safe_step_ext_code_copy[local]:
-  call_exn_safe (\s. s.contexts <> []) step_ext_code_copy (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_ext_code_copy_def] >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac >- simp[call_exn_safe_stack] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_access] >>
-  gen_tac >> simp[] >> irule call_exn_safe_copy_to_memory >> simp[call_exn_safe_get_code]
-QED
-
-Theorem call_exn_safe_step_sstore_gas_consumption[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_sstore_gas_consumption a k v)
-    (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_sstore_gas_consumption_def, ignore_bind_def] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_context_readers, call_exn_safe_assert,
-         call_exn_safe_state_readers, call_exn_safe_original, call_exn_safe_access,
-         call_exn_safe_update_gas_refund] >> gen_tac >> simp[]) >>
-  simp[call_exn_safe_consume_gas]
-QED
-
-Theorem call_exn_safe_step_sstore[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_sstore transient) (\s. s.contexts <> [])
-Proof
-  Cases_on `transient` >> rewrite_tac[step_sstore_def, ignore_bind_def] >> simp[] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_context_readers,
-         call_exn_safe_consume_gas, call_exn_safe_step_sstore_gas_consumption,
-         call_exn_safe_assert_not_static] >> gen_tac >> simp[]) >>
-  simp[call_exn_safe_storage_updates]
-QED
-
-Theorem call_exn_safe_step_sload[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_sload transient) (\s. s.contexts <> [])
-Proof
-  Cases_on `transient` >> rewrite_tac[step_sload_def, ignore_bind_def] >> simp[] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_context_readers,
-         call_exn_safe_return, call_exn_safe_access, call_exn_safe_consume_gas,
-         call_exn_safe_state_readers] >> gen_tac >> simp[]) >>
-  simp[call_exn_safe_stack]
-QED
-
-Theorem call_exn_safe_step_self_destruct[local]:
-  call_exn_safe (\s. s.contexts <> []) step_self_destruct (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_self_destruct_def, ignore_bind_def] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_access,
-         call_exn_safe_context_readers, call_exn_safe_context_updates,
-         call_exn_safe_state_readers, call_exn_safe_consume_gas,
-         call_exn_safe_assert_not_static, call_exn_safe_state_updates,
-         call_exn_safe_original] >> gen_tac >> simp[]) >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac
-  >- (IF_CASES_TAC >> simp[call_exn_safe_return] >>
-      irule call_exn_safe_bind_invariant >>
-      simp[call_exn_safe_state_updates]) >>
-  simp[call_exn_safe_finish]
-QED
-
-Theorem call_exn_safe_step_inst_noncall[local]:
-  ~is_call op ==>
-  call_exn_safe (\s. s.contexts <> []) (step_inst op) (\s. s.contexts <> [])
-Proof
-  Cases_on `op` >> simp[is_call_def, step_inst_def, step_msgParams_def,
-    call_exn_safe_step_binop, call_exn_safe_step_monop, call_exn_safe_step_modop,
-    call_exn_safe_step_context, call_exn_safe_step_txParams, call_exn_safe_simple_opcodes,
-    call_exn_safe_environment_memory_stack, call_exn_safe_step_return,
-    call_exn_safe_step_return_data_copy, call_exn_safe_step_ext_code_copy,
-    call_exn_safe_step_sstore, call_exn_safe_step_sload, call_exn_safe_step_self_destruct,
-    call_exn_safe_fail, call_exn_safe_consume_gas] >>
-  rpt strip_tac
-  >- (rewrite_tac[ignore_bind_def] >> irule call_exn_safe_bind_invariant >>
-      simp[call_exn_safe_context_updates, call_exn_safe_finish]) >>
-  irule call_exn_safe_step_copy_to_memory >> simp[call_exn_safe_context_readers]
-QED
-
-Theorem call_exn_safe_unuse_gas[local]:
-  call_exn_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (unuse_gas n) (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def] >>
-  gvs[unuse_gas_def, get_current_context_def, bind_def, return_def,
-      ignore_bind_def, assert_def, set_current_context_def]
-QED
-
-Theorem call_exn_safe_inc_pc[local]:
-  call_exn_safe (\s. s.contexts <> []) inc_pc (\s. s.contexts <> [])
-Proof
-  rewrite_tac[inc_pc_def] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_get_current_context, call_exn_safe_set_current_context]
-QED
-
-Theorem call_exn_safe_abort_unuse[local]:
-  call_exn_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (abort_unuse n) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[abort_unuse_def, ignore_bind_def] >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac
-  >- simp[call_exn_safe_unuse_gas] >>
-  gen_tac >> simp[] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_stack, call_exn_safe_inc_pc]
-QED
-
-Theorem call_exn_safe_push_context[local]:
-  call_exn_safe P (push_context crb) (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def] >> gvs[push_context_def, return_def]
-QED
-
-Theorem call_exn_safe_abort_create_exists[local]:
-  call_exn_safe (\s. s.contexts <> []) (abort_create_exists a) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[abort_create_exists_def, ignore_bind_def] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_state_updates, call_exn_safe_stack] >>
-       gen_tac >> simp[]) >> simp[call_exn_safe_inc_pc]
-QED
-
-Theorem call_exn_safe_proceed_create[local]:
-  call_exn_safe (\s. s.contexts <> []) (proceed_create sender addr value code gas)
-    (\s. s.contexts <> [])
-Proof
-  rewrite_tac[proceed_create_def, ignore_bind_def] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_state_updates, call_exn_safe_state_readers,
-         call_exn_safe_original] >> gen_tac >> simp[]) >>
-  simp[call_exn_safe_push_context]
-QED
-
-Theorem call_exn_safe_abort_call_value[local]:
-  call_exn_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (abort_call_value n) (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def] >>
-  gvs[abort_call_value_def, push_stack_def, set_return_data_def,
-    unuse_gas_def, inc_pc_def, get_current_context_def, set_current_context_def,
-    bind_def, ignore_bind_def, return_def, assert_def, AllCaseEqs()]
-QED
-
-Theorem call_exn_safe_dispatch_precompiles[local]:
-  fIN a precompile_addresses ==>
-  call_exn_safe (\s. s.contexts <> []) (dispatch_precompiles a) (\s. s.contexts <> [])
-Proof
-  rw[call_exn_safe_def]
-  >- metis_tac[dispatch_precompiles_preserves_nonempty_contexts, SND] >>
-  drule_all dispatch_precompiles_inr_not_reverted_not_abort >>
-  Cases_on `e` >> simp[vfm_abort_def] >> Cases_on `x` >> simp[vfm_abort_def]
-QED
-
-Theorem call_exn_safe_proceed_call[local]:
-  call_exn_safe (\s. s.contexts <> [])
-    (proceed_call op sender addr value argsOff argsSz code gas output)
-    (\s. s.contexts <> [])
-Proof
-  rewrite_tac[proceed_call_def, ignore_bind_def] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_state_readers, call_exn_safe_memory] >>
-       gen_tac >> simp[]) >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac
-  >- (IF_CASES_TAC >> simp[call_exn_safe_state_updates, call_exn_safe_return]) >>
-  gen_tac >> simp[] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_context_readers, call_exn_safe_push_context] >>
-       gen_tac >> simp[]) >>
-  IF_CASES_TAC >> simp[call_exn_safe_dispatch_precompiles, call_exn_safe_return]
-QED
-
-Definition call_success_safe_def:
-  call_success_safe P m Q <=>
-    call_exn_safe P m (\s. s.contexts <> []) /\
-    (!s x t. P s /\ m s = (INL x,t) ==> Q x t)
-End
-
-Theorem call_success_safe_forget[local]:
-  call_success_safe P m Q ==> call_exn_safe P m (\s. s.contexts <> [])
-Proof
-  simp[call_success_safe_def]
-QED
-
-Theorem call_success_safe_lift[local]:
-  call_exn_safe P m R /\ (!s. R s ==> s.contexts <> []) ==>
-  call_success_safe P m (\x s. R s)
-Proof
-  simp[call_success_safe_def, call_exn_safe_def] >> metis_tac[]
-QED
-
-Theorem call_success_safe_consequence[local]:
-  (!s. P' s ==> P s) /\ call_success_safe P m Q /\
-  (!x s. Q x s ==> Q' x s) ==> call_success_safe P' m Q'
-Proof
-  simp[call_success_safe_def, call_exn_safe_def] >> metis_tac[]
-QED
-
-Theorem call_success_safe_return[local]:
-  (!s. P s ==> s.contexts <> []) ==>
-  call_success_safe P (return v) (\x s. x = v /\ P s)
-Proof
-  simp[call_success_safe_def, call_exn_safe_def, return_def]
-QED
-
-Theorem call_success_safe_bind[local]:
-  call_success_safe P m R /\ (!x. call_success_safe (R x) (f x) Q) ==>
-  call_success_safe P (bind m f) Q
-Proof
-  rw[call_success_safe_def, call_exn_safe_def, bind_def] >>
-  Cases_on `m s` >> Cases_on `q` >> gvs[] >> metis_tac[]
-QED
-
-Theorem call_success_safe_bind_exn[local]:
-  call_success_safe P m R /\
-  (!x. call_exn_safe (R x) (f x) (\s. s.contexts <> [])) ==>
-  call_exn_safe P (bind m f) (\s. s.contexts <> [])
-Proof
-  rw[call_success_safe_def, call_exn_safe_def, bind_def] >>
-  Cases_on `m s` >> Cases_on `q` >> gvs[] >> metis_tac[]
-QED
-
-Theorem call_success_safe_consume_gas[local]:
-  call_success_safe (\s. s.contexts <> []) (consume_gas n)
-    (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-Proof
-  rewrite_tac[call_success_safe_def] >>
-  conj_tac >- simp[call_exn_safe_consume_gas] >>
-  rw[] >> gvs[consume_gas_def, bind_def, ignore_bind_def, assert_def,
-    get_current_context_def, set_current_context_def, return_def, AllCaseEqs()]
-QED
-
-Theorem call_success_safe_credit_assert[local]:
-  e <> Impossible /\ e <> Unimplemented ==>
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (assert b e) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-Proof
-  strip_tac >> ho_match_mp_tac call_success_safe_lift >>
-  simp[call_exn_safe_assert]
-QED
-
-Theorem call_success_safe_credit_readers[local]:
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    get_accounts (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    get_num_contexts (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-Proof
-  conj_tac >> ho_match_mp_tac call_success_safe_lift >> simp[call_exn_safe_state_readers]
-QED
-
-Theorem call_success_safe_credit_return[local]:
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (return v) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-Proof
-  ho_match_mp_tac call_success_safe_lift >> simp[call_exn_safe_return]
-QED
-
-Theorem call_success_safe_credit_context_effects[local]:
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    assert_not_static (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (expand_memory amount) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (read_memory off sz) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    get_callee (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (set_return_data rd) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-Proof
-  rpt conj_tac >> ho_match_mp_tac call_success_safe_lift >>
-  (conj_tac >- (rw[call_exn_safe_def] >>
-    gvs[assert_not_static_def, get_static_def, expand_memory_def, read_memory_def,
-      get_callee_def, set_return_data_def, bind_def, ignore_bind_def,
-      get_current_context_def, set_current_context_def, assert_def,
-      return_def, AllCaseEqs()]) >> simp[])
-QED
-
-Theorem call_success_safe_credit_access[local]:
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (access_address a) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed) /\
-  call_success_safe (\s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-    (ensure_storage_in_domain a) (\x s. s.contexts <> [] /\ n <= (FST (HD s.contexts)).gasUsed)
-Proof
-  conj_tac >> ho_match_mp_tac call_success_safe_lift >>
-  (conj_tac >- (rw[call_exn_safe_def] >>
-    Cases_on `s.msdomain` >>
-    gvs[access_address_def, ensure_storage_in_domain_def, domain_check_def,
-      bind_def, ignore_bind_def, set_domain_def, return_def, fail_def, AllCaseEqs()]) >>
-  simp[])
-QED
-
-Theorem call_gas_refund_credit[local]:
-  call_gas value gas gasLeft memoryCost
-    (accessCost + (if 0 < value then call_value_cost else 0) + createCost + delegateCost) =
-      (dynamicGas,stipend) ==>
-  stipend <= static_gas op + dynamicGas + memoryCost
-Proof
-  strip_tac >>
-  `stipend <= dynamicGas + memoryCost` suffices_by simp[] >>
-  irule call_gas_stipend_le_consumed >>
-  goal_assum (drule_at Any) >>
-  Cases_on `0 < value` >> simp[call_stipend_def, call_value_cost_def]
-QED
-
-Theorem call_exn_safe_step_create[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_create two) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_create_def, ignore_bind_def] >> simp[] >>
-  ntac 9 (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_memory,
-         call_exn_safe_consume_gas, call_exn_safe_context_readers,
-         call_exn_safe_state_readers, call_exn_safe_assert] >> gen_tac >> simp[]) >>
-  qmatch_goalsub_abbrev_tac `consume_gas credit` >>
-  irule call_success_safe_bind_exn >>
-  qexists_tac `\x s. s.contexts <> [] /\ credit <= (FST (HD s.contexts)).gasUsed` >>
-  reverse conj_tac >- irule call_success_safe_consume_gas >>
-  gen_tac >> simp[] >>
-  rpt (irule call_success_safe_bind_exn >>
-       qexists_tac `\x s. s.contexts <> [] /\ credit <= (FST (HD s.contexts)).gasUsed` >>
-       reverse conj_tac >- simp[call_success_safe_credit_context_effects,
-         call_success_safe_credit_readers] >> gen_tac >> simp[]) >>
-  IF_CASES_TAC >- simp[call_exn_safe_abort_unuse] >>
-  irule call_exn_safe_consequence >>
-  qexistsl_tac [`\s. s.contexts <> []`, `\s. s.contexts <> []`] >>
-  simp[] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_access] >> gen_tac >> simp[]) >>
-  IF_CASES_TAC >> simp[call_exn_safe_abort_create_exists, call_exn_safe_proceed_create]
-QED
-
-Theorem call_exn_safe_step_call[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_call op) (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_call_def, ignore_bind_def] >> simp[] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_stack, call_exn_safe_memory,
-         call_exn_safe_access, call_exn_safe_context_readers,
-         call_exn_safe_state_readers] >> gen_tac >> simp[]) >>
-  pairarg_tac >> simp[] >>
-  rpt (irule call_exn_safe_bind_invariant >>
-       reverse conj_tac >- simp[call_exn_safe_memory, call_exn_safe_access,
-         call_exn_safe_state_readers] >> gen_tac >> simp[]) >>
-  pop_assum kall_tac >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac
-  >- (BasicProvers.TOP_CASE_TAC >> simp[call_exn_safe_return] >>
-      irule call_exn_safe_bind_invariant >>
-      simp[call_exn_safe_access, call_exn_safe_return]) >>
-  qx_gen_tac `code_cost` >> PairCases_on `code_cost` >> simp[] >>
-  irule call_exn_safe_bind_invariant >> reverse conj_tac
-  >- simp[call_exn_safe_context_readers] >>
-  gen_tac >> simp[] >> pairarg_tac >> simp[] >>
-  qmatch_asmsub_abbrev_tac `call_gas value gas available mem_cost costs` >>
-  qmatch_goalsub_abbrev_tac `consume_gas charge` >>
-  `stipend <= charge` by
-    (`stipend <= dynamicGas + mem_cost` suffices_by simp[Abbr `charge`] >>
-     irule call_gas_stipend_le_consumed >>
-     goal_assum (drule_at Any) >>
-     Cases_on `0 < value` >>
-     simp[Abbr `costs`, call_stipend_def, call_value_cost_def] >>
-     IF_CASES_TAC >> simp[] >> decide_tac) >>
-  irule call_success_safe_bind_exn >>
-  qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
-  reverse conj_tac
-  >- (irule call_success_safe_consequence >>
-      qexistsl_tac [`\s. s.contexts <> []`,
-        `\x s. s.contexts <> [] /\ charge <= (FST (HD s.contexts)).gasUsed`] >>
-      simp[call_success_safe_consume_gas] >> rpt strip_tac >> decide_tac) >>
-  gen_tac >> simp[] >>
-  irule call_success_safe_bind_exn >>
-  qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
-  reverse conj_tac
-  >- (IF_CASES_TAC >> simp[call_success_safe_credit_context_effects,
-         call_success_safe_credit_return]) >>
-  gen_tac >> simp[] >>
-  rpt (irule call_success_safe_bind_exn >>
-       qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
-       reverse conj_tac >- simp[call_success_safe_credit_context_effects,
-         call_success_safe_credit_readers] >> gen_tac >> simp[]) >>
-  IF_CASES_TAC >- simp[call_exn_safe_abort_call_value] >>
-  rpt (irule call_success_safe_bind_exn >>
-       qexists_tac `\x s. s.contexts <> [] /\ stipend <= (FST (HD s.contexts)).gasUsed` >>
-       reverse conj_tac >- simp[call_success_safe_credit_context_effects,
-         call_success_safe_credit_readers] >> gen_tac >> simp[]) >>
-  IF_CASES_TAC >- simp[call_exn_safe_abort_unuse] >>
-  irule call_exn_safe_consequence >>
-  qexistsl_tac [`\s. s.contexts <> []`, `\s. s.contexts <> []`] >>
-  simp[call_exn_safe_proceed_call]
-QED
-
-Theorem call_exn_safe_step_inst[local]:
-  call_exn_safe (\s. s.contexts <> []) (step_inst op) (\s. s.contexts <> [])
-Proof
-  Cases_on `is_call op` >- (Cases_on `op` >>
-    gvs[is_call_def, step_inst_def, call_exn_safe_step_call, call_exn_safe_step_create]) >>
-  simp[call_exn_safe_step_inst_noncall]
-QED
-
-Theorem call_exn_safe_step_inner[local]:
-  call_exn_safe (\s. s.contexts <> []) step_inner (\s. s.contexts <> [])
-Proof
-  rewrite_tac[step_inner_def] >> irule call_exn_safe_bind_invariant >>
-  reverse conj_tac >- simp[call_exn_safe_get_current_context] >>
-  gen_tac >> simp[] >> BasicProvers.TOP_CASE_TAC
-  >- (IF_CASES_TAC >> simp[call_exn_safe_step_inst]) >>
-  rewrite_tac[ignore_bind_def] >> irule call_exn_safe_bind_invariant >>
-  simp[call_exn_safe_step_inst, call_exn_safe_inc_pc_or_jump]
-QED
-
-Theorem step_inner_not_impossible_unimplemented[local]:
-  s.contexts <> [] /\ step_inner s = (INR e,t) ==>
-  e <> SOME Impossible /\ e <> SOME Unimplemented
-Proof
-  mp_tac call_exn_safe_step_inner >> simp[call_exn_safe_def] >> metis_tac[]
-QED
-
-Theorem step_inner_handler_state[local]:
-  wf_state s /\ 2 <= LENGTH s.contexts /\ step_inner s = (r,t) ==>
-  2 <= LENGTH t.contexts /\ EVERY (wf_context o FST) t.contexts /\
-  stack_room_ok t /\ gas_stack_ok t
-Proof
-  rpt strip_tac
-  >- (`s.contexts <> []` by (strip_tac >> gvs[]) >>
-      `LENGTH s.contexts <= LENGTH t.contexts` by
-        (`same_frame_or_grow step_inner` by simp[] >>
-         drule_all same_frame_or_grow_length >> simp[]) >> decide_tac)
-  >- (mp_tac decreases_gas_cred_step_inner >>
-      simp[decreases_gas_cred_def] >>
-      disch_then (qspec_then `s` mp_tac) >> gvs[wf_state_def])
-  >- metis_tac[step_inner_preserves_stack_room_gas_ok]
-  >> metis_tac[step_inner_preserves_stack_room_gas_ok]
-QED
-
-Theorem step_collect_ge2_inl[local]:
-  wf_state s /\ s.msdomain = Collect dd /\ 2 <= LENGTH s.contexts /\
-  step s = (r,t) ==> ISL r
-Proof
-  strip_tac >>
-  `s.contexts <> []` by (strip_tac >> gvs[]) >>
-  `!x. r <> INR (SOME (OutsideDomain x))` by
-    metis_tac[step_collect_not_outside] >>
-  qpat_x_assum `step s = _` mp_tac >>
-  simp[step_eq_handle_step_inner, handle_def] >>
-  Cases_on `step_inner s` >> Cases_on `q` >> gvs[] >>
-  rename1 `step_inner s = (INR err, mid)` >> strip_tac >>
-  `err <> SOME Impossible /\ err <> SOME Unimplemented` by
-    metis_tac[step_inner_not_impossible_unimplemented] >>
-  Cases_on `vfm_abort err`
-  >- (gvs[handle_step_def, reraise_def] >>
-      Cases_on `err` >> gvs[vfm_abort_def] >>
-      Cases_on `x` >> gvs[vfm_abort_def] >> metis_tac[]) >>
-  drule_all step_inner_handler_state >> strip_tac >>
-  irule handle_step_not_abort_returns_inl >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-
-Theorem step_collect_ge2_not_abort[local]:
-  wf_state s /\ s.msdomain = Collect dd /\ 2 <= LENGTH s.contexts /\
-  step s = (r,t) ==> !e. r = INR e ==> ~vfm_abort e
-Proof
-  strip_tac >> drule_all step_collect_ge2_inl >> Cases_on `r` >> simp[]
-QED
-
-Theorem run_call_collect_inl[local]:
-  wf_state es /\ es.msdomain = Collect dd /\ 2 <= LENGTH es.contexts /\
-  run_call es = SOME (r,t) ==> ISL r
-Proof
-  strip_tac >>
-  `(\p. ISL (FST p) /\ wf_state (SND p) /\
-      ?d. (SND p).msdomain = Collect d) (r,t)` suffices_by simp[] >>
-  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
-  qexists_tac `\(r,s). ISL r /\ LENGTH es.contexts <= LENGTH s.contexts` >>
-  qexists_tac `step o SND` >>
-  qexists_tac `(INL () : unit + exception option,es)` >> simp[] >>
-  reverse conj_tac >- fs[run_call_def, GREATER_EQ, UNCURRY] >>
-  qx_gen_tac `st` >> PairCases_on `st` >> simp[] >> strip_tac >>
-  Cases_on `step st1` >> simp[] >>
-  `2 <= LENGTH st1.contexts` by decide_tac >>
-  conj_tac >- metis_tac[step_collect_ge2_inl] >>
-  conj_tac >- (drule step_preserves_wf_state >> simp[]) >>
-  irule step_preserves_collect >> metis_tac[]
-QED
-
-Theorem run_call_collect_returns[local]:
-  wf_state es /\ es.msdomain = Collect dd /\ 2 <= LENGTH es.contexts ==>
-  ?es' dd'. run_call es = SOME (INL (),es') /\
-    LENGTH es'.contexts + 1 = LENGTH es.contexts /\ es'.msdomain = Collect dd'
-Proof
-  strip_tac >>
-  Cases_on `run_call_tr (LENGTH es.contexts) (step es)` >>
-  `run_call es = SOME (q,r)` by simp[run_call_eq_tr] >>
-  `ISL q` by metis_tac[run_call_collect_inl] >>
-  Cases_on `q` >> gvs[] >>
-  drule_all run_call_inl_length >>
-  drule_all run_call_preserves_collect >> metis_tac[]
-QED
-
-Theorem run_call_last_step[local]:
-  run_call es = SOME (INL (),t) ==>
-  ?n before. FUNPOW (step o SND) n (INL (),es) = (INL (),before) /\
-    run_call_reaches es before /\ LENGTH es.contexts <= LENGTH before.contexts /\
-    step before = (INL (),t)
-Proof
-  strip_tac >> drule run_call_finite_trace >> strip_tac >>
-  Cases_on `n`
-  >- gvs[] >>
-  rename1 `FUNPOW (step o SND) (SUC n) _ = _` >>
-  `ISL (FST (FUNPOW (step o SND) n (INL (),es))) /\
-    LENGTH es.contexts <= LENGTH (SND (FUNPOW (step o SND) n (INL (),es))).contexts`
-    by (first_x_assum (qspec_then `n` mp_tac) >> simp[]) >>
-  `run_call_reaches es (SND (FUNPOW (step o SND) n (INL (),es)))` by
-    (irule run_call_trace_reaches >> simp[] >> rpt strip_tac >>
-     first_x_assum irule >> decide_tac) >>
-  qexistsl_tac [`n`, `SND (FUNPOW (step o SND) n (INL (),es))`] >>
-  gvs[FUNPOW_SUC] >>
-  Cases_on `FUNPOW (step o SND) n (INL (),es)` >> gvs[] >>
-  Cases_on `q` >> gvs[] >>
-  first_x_assum (qspec_then `n` mp_tac) >> simp[]
-QED
-
-Theorem run_call_last_pop[local]:
-  wf_state es /\ run_call es = SOME (INL (),t) ==>
-  ?n before err mid.
-    FUNPOW (step o SND) n (INL (),es) = (INL (),before) /\
-    run_call_reaches es before /\ wf_state before /\
-    LENGTH before.contexts = LENGTH es.contexts /\
-    TL before.contexts = TL es.contexts /\
-    t.txParams = es.txParams /\ step before = (INL (),t) /\
-    step_inner before = (INR err,mid) /\ handle_step err mid = (INL (),t)
-Proof
-  strip_tac >> drule run_call_last_step >> strip_tac >>
-  `wf_state before` by metis_tac[run_call_reaches_wf_state] >>
-  `LENGTH t.contexts + 1 = LENGTH es.contexts` by
-    metis_tac[run_call_inl_length] >>
-  `LENGTH before.contexts <= LENGTH t.contexts + 1` by
-    metis_tac[step_length_not_drop_more_than_one] >>
-  `LENGTH before.contexts = LENGTH es.contexts` by decide_tac >>
-  `TL before.contexts = TL es.contexts` by
-    (drule_all run_call_reaches_outer_contexts >> simp[] >>
-     Cases_on `before.contexts` >> gvs[]) >>
-  `before.txParams = es.txParams` by
-    (`(\s. s.txParams = es.txParams) before` suffices_by simp[] >>
-     irule run_call_reaches_inv >> qexists_tac `es` >> simp[] >>
-     rpt strip_tac >>
-     metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND]) >>
-  `t.txParams = es.txParams` by
-    metis_tac[vfmTxParamsTheory.step_preserves_txParams, SND] >>
-  qpat_x_assum `step before = _` mp_tac >>
-  simp[step_eq_handle_step_inner, handle_def] >>
-  Cases_on `step_inner before` >> Cases_on `q` >> simp[]
-  >- (strip_tac >> gvs[] >>
-      `same_frame_or_grow step_inner` by simp[] >>
-      `before.contexts <> []` by gvs[wf_state_def] >>
-      drule_all same_frame_or_grow_length >> simp[]) >>
-  strip_tac >> qexistsl_tac [`n`, `before`, `y`, `r`] >>
-  simp[GSYM step_eq_handle_step_inner]
-QED
-
-Theorem handle_step_noncode_inl[local]:
-  s.contexts ≠ [] ∧
-  (∀a. (FST (HD s.contexts)).msgParams.outputTo ≠ Code a) ∧
-  handle_step e s = (INL (),t) ⇒
-  handle_exception e s = (INL (),t)
-Proof
-  strip_tac >> qpat_x_assum `handle_step e s = _` mp_tac >>
-  simp[handle_step_def] >> IF_CASES_TAC >- simp[reraise_def] >>
-  simp[handle_def] >>
-  drule_all (INST_TYPE [alpha |-> ``:unit``] handle_create_reraises) >>
-  disch_then (fn th => rewrite_tac[th]) >> simp[reraise_def]
-QED
-
-Theorem step_inner_final_pop_frame[local]:
-  wf_state s ∧ step_inner s = (INR err,mid) ∧
-  handle_step err mid = (INL (),t) ∧
-  LENGTH t.contexts + 1 = LENGTH s.contexts ⇒
-  same_frame_rel s mid ∧ EVERY (wf_context o FST) mid.contexts ∧
-  stack_room_ok mid ∧ gas_stack_ok mid
-Proof
-  strip_tac >>
-  `s.contexts ≠ []` by fs[wf_state_def] >>
-  `same_frame_or_grow step_inner` by simp[] >>
-  `LENGTH s.contexts ≤ LENGTH mid.contexts` by
-    (drule_all same_frame_or_grow_length >> simp[]) >>
-  `mid.contexts ≠ []` by
-    (Cases_on `mid.contexts` >> simp[] >>
-     qpat_x_assum `LENGTH s.contexts ≤ _` mp_tac >> simp[] >>
-     Cases_on `s.contexts` >> fs[]) >>
-  `LENGTH mid.contexts = LENGTH s.contexts` by
-    (drule_all handle_step_shrinks_by_one >> strip_tac >> decide_tac) >>
-  conj_tac >- (drule_all same_frame_or_grow_eq_length >> simp[]) >>
-  conj_tac
-  >- (mp_tac decreases_gas_cred_step_inner >>
-      simp[decreases_gas_cred_def] >>
-      disch_then (qspec_then `s` mp_tac) >> simp[] >> fs[wf_state_def]) >>
-  metis_tac[step_inner_preserves_stack_room_gas_ok]
-QED
-
-Theorem call_memory_final_pop[local]:
-  wf_state es ∧ es.contexts = (callee,saved)::(caller,cb)::rest ∧
-  callee.msgParams.outputTo = Memory mr ∧ run_call_reaches es before ∧
-  LENGTH before.contexts = LENGTH es.contexts ∧
-  TL before.contexts = TL es.contexts ∧
-  step_inner before = (INR err,mid) ∧ handle_step err mid = (INL (),t) ∧
-  LENGTH t.contexts + 1 = LENGTH es.contexts ⇒
-  ∃cc gasLeft out.
-    mid.contexts = (cc,saved)::(caller,cb)::rest ∧
-    cc.msgParams = callee.msgParams ∧
-    gasLeft = (if err = NONE ∨ err = SOME Reverted then
-      cc.msgParams.gasLimit - cc.gasUsed else 0) ∧
-    out = (if err = NONE ∨ err = SOME Reverted then cc.returnData else []) ∧
-    gasLeft ≤ callee.msgParams.gasLimit ∧
-    t.contexts = (caller with <|
-      stack := b2w (err = NONE) :: caller.stack;
-      pc := SUC caller.pc; gasUsed := caller.gasUsed - gasLeft;
-      memory := buffer_write mr.offset (TAKE mr.size out) caller.memory;
-      returnData := out;
-      logs := caller.logs ++ (if err = NONE then cc.logs else []);
-      addRefund := caller.addRefund + (if err = NONE then cc.addRefund else 0);
-      subRefund := caller.subRefund + (if err = NONE then cc.subRefund else 0)
-    |>,cb)::rest ∧
-    t.rollback = (if err = NONE then mid.rollback else saved)
-Proof
-  strip_tac >>
-  `2 ≤ LENGTH es.contexts` by simp[] >>
-  `wf_state before` by metis_tac[run_call_reaches_wf_state] >>
-  `LENGTH t.contexts + 1 = LENGTH before.contexts` by decide_tac >>
-  drule_all step_inner_final_pop_frame >> strip_tac >>
-  `SND (HD before.contexts) = saved ∧
-   (FST (HD before.contexts)).msgParams = callee.msgParams` by
-    (drule_all run_call_reaches_root_metadata >> simp[]) >>
-  `SND (HD mid.contexts) = saved ∧
-   (FST (HD mid.contexts)).msgParams = callee.msgParams ∧
-   TL mid.contexts = (caller,cb)::rest ∧ mid.contexts ≠ []` by
-    (fs[same_frame_rel_def] >> Cases_on `mid.contexts` >> fs[]) >>
-  `mid.contexts = (FST (HD mid.contexts),saved)::(caller,cb)::rest` by
-    (Cases_on `mid.contexts` >- fs[] >> PairCases_on `h` >> fs[]) >>
-  suspend "memory_equation"
-QED
-
-Resume call_memory_final_pop[memory_equation]:
-  qmatch_asmsub_abbrev_tac `mid.contexts = (cc,saved)::(caller,cb)::rest` >>
-  `cc.msgParams = callee.msgParams` by simp[Abbr `cc`] >>
-  `cc.gasUsed ≤ cc.msgParams.gasLimit ∧ LENGTH caller.stack < stack_limit` by
-    fs[wf_context_def, stack_room_ok_def] >>
-  `cc.msgParams.gasLimit - cc.gasUsed ≤ caller.gasUsed` by
-    (fs[gas_stack_ok_def] >> first_x_assum (qspec_then `0` mp_tac) >>
-     simp[unused_gas_def]) >>
-  `(∀a. (FST (HD mid.contexts)).msgParams.outputTo ≠ Code a)` by simp[] >>
-  `cc.msgParams.outputTo = Memory mr` by simp[] >>
-  drule_all handle_step_noncode_inl >>
-  drule_all handle_exception_memory_return >>
-  disch_then (fn th => rewrite_tac[th]) >> simp[LET_THM] >> strip_tac >>
-  qpat_x_assum `_ = t` (SUBST1_TAC o SYM) >>
-  Cases_on `err = NONE ∨ err = SOME Reverted` >> simp[]
-QED
-
-Finalise call_memory_final_pop
+(* Scoped safety and exact finite memory returns are supplied by
+   vfmCallReturnTheory; unrestricted nonempty-frame safety is invalid. *)
 
 (* Protected persistent footprint and fixed-limit descendant invariant. *)
 Definition call_footprint_def:
@@ -1742,7 +467,8 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `s.contexts <> []` by metis_tac[call_stipend_prefix_head] >>
   qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[proceed_call_def, get_rollback_def, read_memory_def,
+  simp[proceed_call_def, get_rollback_def, read_memory_def, get_accounts_def,
+       drain_state_gas_reservoir_def, set_current_context_def,
        get_current_context_def, get_caller_def, get_value_def, get_static_def,
        push_context_def, bind_def, ignore_bind_def, return_def] >>
   qmatch_goalsub_abbrev_tac `(if _ then _ else _) pushed` >>
@@ -1753,7 +479,12 @@ Proof
       s with contexts := (child,s.rollback)::s.contexts` by
        simp[execution_state_component_equality] >>
      pop_assum (fn th => rewrite_tac[th]) >>
-     irule call_stipend_prefix_push >> simp[Abbr `child`, initial_context_def, initial_msg_params_def]) >>
+     Cases_on `s.contexts` >- fs[] >> PairCases_on `h` >>
+     gvs[call_stipend_prefix_def, call_footprint_def] >>
+     `SUC (SUC (LENGTH t)) - n = SUC (SUC (LENGTH t) - n)` by decide_tac >>
+     `SUC (SUC (LENGTH t)) - (n + 1) = SUC (LENGTH t) - n` by decide_tac >>
+     simp[Abbr `child`, initial_context_def, initial_msg_params_def] >>
+     Cases_on `SUC (LENGTH t) - n` >> gvs[]) >>
   IF_CASES_TAC >> simp[return_def] >> strip_tac >> gvs[] >>
   drule_all call_stipend_prefix_precompiles >> simp[]
 QED
@@ -1769,41 +500,48 @@ Proof
 QED
 
 Theorem call_stipend_prefix_call_charge[local]:
-  (0 < value ==> call_value_cost <= oc) /\
-  (!cg s r t. value = 0 /\ cg <= call_stipend /\
-    call_stipend_prefix n A D oa s /\ suffix cg s = (r,t) ==>
-    call_stipend_prefix n A D oa t) ==>
+  (0 < (value:num) ==> call_value_cost <= cost) /\
+  (!s r t. value = 0 /\ call_stipend_prefix n A D oa s /\
+    suffix s = (r,t) ==> call_stipend_prefix n A D oa t) ==>
+  !s r t. call_stipend_prefix n A D oa s /\
+    bind (consume_gas cost) (\u. suffix) s = (r,t) ==>
+    call_stipend_prefix n A D oa t
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule call_stipend_prefix_head >> strip_tac >>
+  qpat_x_assum `bind _ _ s = _` mp_tac >>
+  simp[bind_def] >> Cases_on `consume_gas cost s` >>
+  rename1 `consume_gas cost s = (res,mid)` >>
+  `call_stipend_prefix n A D oa mid` by
+    (irule (INST_TYPE [alpha |-> ``:unit``] cp_preserves_stipend_prefix) >>
+     qexistsl_tac [`consume_gas cost`, `res`, `s`] >> simp[]) >>
+  Cases_on `res` >> simp[]
+  >- (Cases_on `x` >> drule_all consume_gas_affordable >> strip_tac >>
+      `value = 0` by
+        (gvs[call_stipend_def, call_value_cost_def] >> decide_tac) >>
+      strip_tac >> metis_tac[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem call_stipend_prefix_zero_gas[local]:
+  (!dg cg s r t. cg <= call_stipend /\ call_stipend_prefix n A D oa s /\
+    suffix dg cg s = (r,t) ==> call_stipend_prefix n A D oa t) ==>
   !s r t. call_stipend_prefix n A D oa s /\
     bind get_gas_left (\left.
-      let (dg,cg) = call_gas value gas left mc oc in
-        bind (consume_gas (sc + dg + mc)) (\u. suffix cg)) s = (r,t) ==>
+      let (dg,cg) = call_gas 0 gas left 0 0 in suffix dg cg) s = (r,t) ==>
     call_stipend_prefix n A D oa t
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule call_stipend_prefix_head >> strip_tac >>
   qpat_x_assum `bind _ _ s = _` mp_tac >>
   simp[get_gas_left_def, get_current_context_def, bind_def, return_def] >>
-  Cases_on `call_gas value gas
-    ((FST (HD s.contexts)).msgParams.gasLimit - (FST (HD s.contexts)).gasUsed) mc oc` >>
-  rename1 `call_gas value gas _ mc oc = (dg,cg)` >>
-  simp[bind_def] >>
-  Cases_on `consume_gas (dg + (mc + sc)) s` >>
-  rename1 `consume_gas _ s = (res,mid)` >>
-  `call_stipend_prefix n A D oa mid` by
-    (irule (INST_TYPE [alpha |-> ``:unit``] cp_preserves_stipend_prefix) >>
-     qexistsl_tac [`consume_gas (dg + (mc + sc))`, `res`, `s`] >> simp[]) >>
-  Cases_on `res` >> simp[]
-  >- (Cases_on `x` >>
-      drule_all consume_gas_affordable >> strip_tac >>
-      `value = 0 /\ cg <= call_stipend` by
-        (`value = 0 /\ cg <=
-          (FST (HD s.contexts)).msgParams.gasLimit -
-          (FST (HD s.contexts)).gasUsed` suffices_by simp[] >>
-         irule call_gas_stipend_budget >>
-         conj_tac >- decide_tac >>
-         qexistsl_tac [`dg`, `gas`, `mc`, `oc`, `sc`] >> simp[] >> decide_tac) >>
-      strip_tac >> metis_tac[]) >>
-  strip_tac >> gvs[]
+  Cases_on `call_gas 0 gas
+    ((FST (HD s.contexts)).msgParams.gasLimit - (FST (HD s.contexts)).gasUsed) 0 0` >>
+  rename1 `call_gas 0 gas _ 0 0 = (dg,cg)` >> simp[] >>
+  `cg <= call_stipend` by
+    (qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+     simp[call_gas_def, LET_THM] >> strip_tac >> gvs[] >> decide_tac) >>
+  metis_tac[]
 QED
 
 Theorem call_stipend_prefix_call[local]:
@@ -1819,9 +557,18 @@ Proof
   ho_match_mp_tac call_stipend_prefix_cp_bind >>
   conj_tac >- (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   qx_gen_tac `code_cost` >> PairCases_on `code_cost` >> simp[] >>
-  ho_match_mp_tac (SRULE [LET_THM, AC ADD_ASSOC ADD_COMM] call_stipend_prefix_call_charge) >>
-  conj_tac >- (strip_tac >> simp[] >> IF_CASES_TAC >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `charge_new_account (op = Call /\ 0 < v /\ _)` >>
+  ho_match_mp_tac (Q.INST [`value` |-> `v`] call_stipend_prefix_call_charge) >>
+  conj_tac >- (simp[Abbr `v`] >> IF_CASES_TAC >> simp[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `_ s = (r,t)` mp_tac >>
+  qpat_x_assum `call_stipend_prefix n A D oa s` mp_tac >>
+  qid_spec_tac `t` >> qid_spec_tac `r` >> qid_spec_tac `s` >>
+  simp[AND_IMP_INTRO, charge_new_account_def, credit_new_account_def] >>
+  ho_match_mp_tac call_stipend_prefix_cp_bind >>
+  conj_tac >- simp[] >> gen_tac >> simp[] >>
+  ho_match_mp_tac (SRULE [LET_THM] call_stipend_prefix_zero_gas) >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `_ s = (r,t)` mp_tac >>
   qpat_x_assum `call_stipend_prefix n A D oa s` mp_tac >>
   qid_spec_tac `t` >> qid_spec_tac `r` >> qid_spec_tac `s` >>
@@ -1837,19 +584,30 @@ Proof
     call_stipend_prefix_proceed_zero >> simp[]
 QED
 
-Theorem handle_exception_memory_footprint[local]:
-  call_footprint A D oa s /\
-  s.contexts = (callee,saved)::(caller,callerSaved)::rest /\
-  callee.msgParams.outputTo = Memory r /\
-  callee.gasUsed <= callee.msgParams.gasLimit /\
-  callee.msgParams.gasLimit - callee.gasUsed <= caller.gasUsed /\
-  LENGTH caller.stack < stack_limit /\ handle_exception e s = (res,t) ==>
-  t.originalAccounts = oa /\
-  (e = NONE ==> t.rollback.accounts = A /\ t.rollback.toDelete = D) /\
-  (e <> NONE ==> t.rollback = saved)
+Theorem handle_exception_memory_observation[local]:
+  s.contexts = (c,saved)::(caller,cb)::rest /\
+  c.msgParams.outputTo = Memory mr /\
+  handle_exception e s = (INL (),t) ==>
+  ?caller'. t = s with <|
+    contexts := (caller',cb)::rest;
+    rollback := if e = NONE then s.rollback else saved |> /\
+    caller'.msgParams = caller.msgParams
 Proof
-  strip_tac >> drule_all handle_exception_memory_return >>
-  Cases_on `e = NONE` >> simp[LET_THM] >> strip_tac >> gvs[call_footprint_def]
+  strip_tac >> Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
+  Cases_on `c.msgParams.newAccountCharged` >>
+  gvs[handle_exception_def, pop_and_incorporate_context_def,
+      LET_THM, restore_state_gas_def, forfeit_remaining_gas_def,
+      repay_state_gas_spill_def, credit_new_account_def,
+      credit_state_gas_refund_def, absorb_state_gas_def,
+      repay_state_gas_spill_context_def,
+      get_gas_left_def, get_num_contexts_def, get_output_to_def,
+      get_return_data_def, get_current_context_def, pop_context_def,
+      consume_gas_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
+      set_rollback_def, set_current_context_def, set_return_data_def,
+      inc_pc_def, push_stack_def, write_memory_def,
+      bind_def, ignore_bind_def, return_def, assert_def, fail_def,
+      combinTheory.o_DEF, combinTheory.C_DEF, AllCaseEqs()] >>
+  simp[execution_state_component_equality] >> metis_tac[]
 QED
 
 Theorem call_stipend_prefix_pop[local]:
@@ -1873,7 +631,7 @@ QED
 
 Theorem call_stipend_prefix_handle_step[local]:
   EVERY (wf_context o FST) s.contexts /\ stack_room_ok s /\ gas_stack_ok s /\
-  call_stipend_prefix n A D oa s /\ handle_step e s = (res,t) ==>
+  call_stipend_prefix n A D oa s /\ handle_step e s = (INL (),t) ==>
   t.originalAccounts = oa /\
   (n <= LENGTH t.contexts ==> call_stipend_prefix n A D oa t)
 Proof
@@ -1893,19 +651,12 @@ Proof
   Cases_on `t'` >> gvs[] >>
   PairCases_on `h` >> PairCases_on `h'` >> gvs[] >>
   Cases_on `h0.msgParams.outputTo` >> gvs[] >>
-  `h0.gasUsed <= h0.msgParams.gasLimit /\ LENGTH h'0.stack < stack_limit` by
-    (fs[wf_context_def, stack_room_ok_def]) >>
-  `h0.msgParams.gasLimit - h0.gasUsed <= h'0.gasUsed` by
-    (fs[gas_stack_ok_def] >> first_x_assum (qspec_then `0` mp_tac) >>
-     simp[unused_gas_def]) >>
-  drule_all handle_exception_memory_return >>
-  disch_then (fn th => rewrite_tac[th]) >>
-  simp[LET_THM] >> strip_tac >>
+  strip_tac >>
+  drule_all handle_exception_memory_observation >> strip_tac >>
   irule call_stipend_prefix_pop >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >>
-  qpat_x_assum `_ = t` (assume_tac o SYM) >>
-  goal_assum (drule_at Any) >> simp[]
+  qexists_tac `e = NONE` >> simp[]
 QED
 
 Theorem call_stipend_prefix_step_inst[local]:
@@ -1940,7 +691,7 @@ Proof
 QED
 
 Theorem step_preserves_stipend_prefix[local]:
-  wf_state s /\ call_stipend_prefix n A D oa s /\ step s = (r,t) ==>
+  wf_state s /\ call_stipend_prefix n A D oa s /\ step s = (INL (),t) ==>
   wf_state t /\ t.originalAccounts = oa /\
   (n <= LENGTH t.contexts ==> call_stipend_prefix n A D oa t)
 Proof
@@ -1991,7 +742,7 @@ Proof
   `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
     es.rollback.toDelete es.originalAccounts es` by
     (irule call_stipend_prefix_root >> simp[call_footprint_def] >> metis_tac[]) >>
-  drule run_call_last_step >> strip_tac >>
+  drule call_return_last_step >> strip_tac >>
   `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
     es.rollback.toDelete es.originalAccounts before` by
     metis_tac[run_call_reaches_stipend_prefix] >>
@@ -2008,21 +759,14 @@ Theorem handle_step_noncode_rollback[local]:
 Proof
   strip_tac >>
   `s.contexts ≠ []` by (Cases_on `s.contexts` >> fs[]) >>
-  drule_all handle_step_noncode_inl >>
+  drule_all call_return_handle_step_noncode >>
   Cases_on `s.contexts` >- fs[] >>
   rename1 `s.contexts = calleePair::cs` >>
   Cases_on `cs` >- fs[] >>
   PairCases_on `calleePair` >> PairCases_on `h` >>
   gvs[] >> Cases_on `calleePair0.msgParams.outputTo` >> gvs[] >>
-  `calleePair0.gasUsed ≤ calleePair0.msgParams.gasLimit ∧
-   LENGTH h0.stack < stack_limit` by
-    (fs[wf_context_def, stack_room_ok_def]) >>
-  `calleePair0.msgParams.gasLimit - calleePair0.gasUsed ≤ h0.gasUsed` by
-    (fs[gas_stack_ok_def] >> first_x_assum (qspec_then `0` mp_tac) >>
-     simp[unused_gas_def]) >>
-  drule_all handle_exception_memory_return >>
-  disch_then (fn th => rewrite_tac[th]) >>
-  simp[LET_THM] >> strip_tac >> gvs[]
+  strip_tac >> drule_all handle_exception_memory_observation >>
+  strip_tac >> gvs[]
 QED
 
 Theorem run_call_stipend_footprint:
@@ -2046,12 +790,12 @@ Proof
   strip_tac >>
   `t.originalAccounts = es.originalAccounts` by
     (irule run_call_stipend_originalAccounts >> metis_tac[]) >>
-  drule_all run_call_last_pop >> strip_tac >>
+  drule_all call_return_last_pop >> strip_tac >>
   qexistsl_tac [`n`,`before`,`err`,`mid`] >> simp[] >>
   `2 ≤ LENGTH es.contexts` by simp[] >>
   `SND (HD before.contexts) = saved ∧
    (FST (HD before.contexts)).msgParams = callee.msgParams` by
-    (drule_all run_call_reaches_root_metadata >> simp[]) >>
+    (drule_all call_return_root_metadata >> simp[]) >>
   `call_stipend_prefix (LENGTH es.contexts) es.rollback.accounts
     es.rollback.toDelete es.originalAccounts es` by
     (irule call_stipend_prefix_root >> simp[call_footprint_def] >> metis_tac[]) >>
@@ -2068,7 +812,7 @@ Resume run_call_stipend_footprint[final_footprint]:
   `LENGTH t.contexts + 1 = LENGTH es.contexts` by
     metis_tac[run_call_inl_length] >>
   `LENGTH t.contexts + 1 = LENGTH before.contexts` by decide_tac >>
-  drule_all step_inner_final_pop_frame >> strip_tac >>
+  drule_all call_return_inner_final_frame >> strip_tac >>
   `SND (HD mid.contexts) = saved ∧
    (FST (HD mid.contexts)).msgParams = callee.msgParams` by
     fs[same_frame_rel_def] >>
@@ -2082,145 +826,81 @@ QED
 
 Finalise run_call_stipend_footprint
 
-Theorem FUNPOW_guarded_prefix[local]:
-  ∀stop f n x. (∀i. i < n ⇒ ¬stop (FUNPOW f i x)) ⇒
-  FUNPOW (λx. if stop x then x else f x) n x = FUNPOW f n x
+
+Definition call_abort_context_def:
+  call_abort_context charged cg caller =
+    let cost = if charged then new_account_state_gas else 0;
+        paid = MIN cost caller.stateGasSpilled
+    in caller with <|stack := b2w F::caller.stack; returnData := [];
+         pc := SUC caller.pc; gasUsed := caller.gasUsed - paid - cg;
+         stateGasLeft := caller.stateGasLeft + (cost - paid);
+         stateGasSpilled := caller.stateGasSpilled - paid|>
+End
+
+Theorem call_abort_context_pair[local]:
+  prepared.contexts = (caller,cb)::cs /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  creditBack = MIN stateCost caller.stateGasSpilled /\
+  cg <= caller.gasUsed - creditBack /\ LENGTH caller.stack < stack_limit ==>
+  ignore_bind (credit_new_account charged) (abort_call_value cg) prepared =
+    (INL (),prepared with contexts := (call_abort_context charged cg caller,cb)::cs)
 Proof
-  Induct_on `n` >- simp[] >> rpt gen_tac >> strip_tac >>
-  `∀i. i < n ⇒ ¬stop (FUNPOW f i x)` by
-    (gen_tac >> disch_tac >> first_x_assum irule >> decide_tac) >>
-  `¬stop (FUNPOW f n x)` by
-    (qpat_x_assum `∀i. i < SUC n ⇒ _` (qspec_then `n` mp_tac) >> simp[]) >>
-  simp[FUNPOW_SUC]
+  strip_tac >> drule_all call_credit_abort_pair >>
+  simp[LET_THM, call_abort_context_def]
 QED
 
-Theorem guarded_steps_preserve_wf[local]:
-  ∀n r. wf_state (SND r) ⇒
-  wf_state (SND (FUNPOW
-    (λr. if ISR (FST r) then r else step (SND r)) n r))
-Proof
-  Induct_on `n` >- simp[] >> gen_tac >> strip_tac >>
-  simp[FUNPOW_SUC] >> IF_CASES_TAC >> simp[] >>
-  metis_tac[step_preserves_wf_state]
-QED
-
-Theorem run_call_guarded_trace[local]:
-  wf_state es ∧ run_call es = SOME (INL (),t) ⇒
-  ∃k. FUNPOW (λr. if ISR (FST r) then r else step (SND r))
-    k (INL (),es) = (INL (),t) ∧ wf_state t
-Proof
-  strip_tac >> drule run_call_finite_trace >> strip_tac >>
-  `∀i. i < n ⇒ ¬ISR (FST (FUNPOW (step o SND) i (INL (),es)))` by
-    (gen_tac >> disch_tac >> first_x_assum drule >>
-     Cases_on `FST (FUNPOW (step o SND) i (INL (),es))` >> simp[]) >>
-  `FUNPOW (λr. if ISR (FST r) then r else step (SND r)) n (INL (),es) =
-    FUNPOW (step o SND) n (INL (),es)` by
-    (qspecl_then [`ISR o FST`, `step o SND`, `n`, `(INL (),es)`]
-       mp_tac FUNPOW_guarded_prefix >> simp[]) >>
-  qexists_tac `n` >> simp[] >>
-  qspecl_then [`n`, `(INL (),es)`] mp_tac guarded_steps_preserve_wf >> simp[]
-QED
-
-(* Shared entered-CALL return interface, including the conditional stipend frame. *)
-Theorem run_call_memory_returns[local]:
-  wf_state es ∧ es.contexts = (callee,saved)::(caller,cb)::rest ∧
-  es.msdomain = Collect dd ∧ callee.msgParams.outputTo = Memory mr ⇒
-  ∃k t dd' cc gasLeft out success.
-    FUNPOW (λr. if ISR (FST r) then r else step (SND r))
-      k (INL (),es) = (INL (),t) ∧ wf_state t ∧
-    t.msdomain = Collect dd' ∧ t.txParams = es.txParams ∧
-    gasLeft ≤ callee.msgParams.gasLimit ∧
-    t.contexts = (caller with <|
-      stack := b2w success :: caller.stack;
-      pc := SUC caller.pc; gasUsed := caller.gasUsed - gasLeft;
-      memory := buffer_write mr.offset (TAKE mr.size out) caller.memory;
-      returnData := out;
-      logs := caller.logs ++ (if success then cc.logs else []);
-      addRefund := caller.addRefund + (if success then cc.addRefund else 0);
-      subRefund := caller.subRefund + (if success then cc.subRefund else 0)
-    |>,cb)::rest ∧
-    (¬success ⇒ t.rollback = saved) ∧
-    (callee.msgParams.gasLimit ≤ call_stipend ⇒
-      t.originalAccounts = es.originalAccounts ∧
-      (success ⇒ t.rollback.accounts = es.rollback.accounts ∧
-                  t.rollback.toDelete = es.rollback.toDelete))
-Proof
-  strip_tac >>
-  `2 ≤ LENGTH es.contexts` by simp[] >>
-  drule_all run_call_collect_returns >> strip_tac >>
-  `∃n before err mid.
-    FUNPOW (step o SND) n (INL (),es) = (INL (),before) ∧
-    run_call_reaches es before ∧ wf_state before ∧
-    LENGTH before.contexts = LENGTH es.contexts ∧
-    TL before.contexts = TL es.contexts ∧ es'.txParams = es.txParams ∧
-    step before = (INL (),es') ∧ step_inner before = (INR err,mid) ∧
-    handle_step err mid = (INL (),es') ∧
-    (callee.msgParams.gasLimit ≤ call_stipend ⇒
-      es'.originalAccounts = es.originalAccounts ∧
-      (err = NONE ⇒ es'.rollback.accounts = es.rollback.accounts ∧
-                     es'.rollback.toDelete = es.rollback.toDelete))` by
-    (Cases_on `callee.msgParams.gasLimit ≤ call_stipend`
-     >- (drule run_call_stipend_footprint >>
-         disch_then (qspecl_then [`es'`,`saved`,`(caller,cb)::rest`,`callee`] mp_tac) >>
-         simp[] >> strip_tac >>
-         qexistsl_tac [`n`,`before`,`err`,`mid`] >> simp[] >>
-         Cases_on `err = NONE` >> gvs[])
-     >> drule_all run_call_last_pop >> metis_tac[]) >>
-  drule_all call_memory_final_pop >> strip_tac >>
-  drule_all run_call_guarded_trace >> strip_tac >>
-  qexistsl_tac [`k`,`es'`,`dd'`,`cc`,`gasLeft`,`out`,`err = NONE`] >>
-  simp[] >> metis_tac[]
-QED
-
-(* The entry normalization is supplied by call_entry_prepared; caller is the
-   charged, expanded, argument-popped caller.  Both entry failures have the
-   same abort_call_value result, so they share a single branch here. *)
 Theorem call_returns_summary[local]:
-  wf_state s ∧ s.contexts = (c,cb)::cs ∧
-  FLOOKUP c.msgParams.parsed c.pc = SOME op ∧
-  is_call op ∧ op ≠ Create ∧ op ≠ Create2 ∧
+  wf_state s /\ s.contexts = (c,cb)::cs /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME op /\
+  is_call op /\ op <> Create /\ op <> Create2 /\
   prepared = s with <|contexts := (caller,cb)::cs;
-                         rollback := saved; msdomain := Collect dd|> ∧
-  cg ≤ caller.gasUsed ∧ LENGTH caller.stack < stack_limit ∧
-  ¬fIN addr precompile_addresses ∧
+                         rollback := saved; msdomain := Collect dd|> /\
+  charged = (op = Call /\ 0 < value /\
+    account_empty (lookup_account addr saved.accounts)) /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  creditBack = MIN stateCost caller.stateGasSpilled /\
+  cg <= caller.gasUsed - creditBack /\ LENGTH caller.stack < stack_limit /\
+  ~fIN addr precompile_addresses /\
   step_call op s =
-    (if failed then abort_call_value cg prepared
+    (if failed then ignore_bind (credit_new_account charged) (abort_call_value cg) prepared
      else ignore_bind (set_return_data [])
-       (proceed_call op sender addr value ao az code cg (Memory mr)) prepared) ⇒
-  ∃k t dd' cc gasLeft out success.
-    FUNPOW (λr. if ISR (FST r) then r else step (SND r))
-      k (INL (),s) = (INL (),t) ∧ wf_state t ∧
-    t.msdomain = Collect dd' ∧ t.txParams = s.txParams ∧
-    gasLeft ≤ cg ∧
-    t.contexts = (caller with <|
-      stack := b2w success :: caller.stack;
-      pc := SUC caller.pc; gasUsed := caller.gasUsed - gasLeft;
-      memory := buffer_write mr.offset (TAKE mr.size out) caller.memory;
-      returnData := out;
-      logs := caller.logs ++ (if success then cc.logs else []);
-      addRefund := caller.addRefund + (if success then cc.addRefund else 0);
-      subRefund := caller.subRefund + (if success then cc.subRefund else 0)
-    |>,cb)::cs ∧
-    (¬success ⇒ t.rollback = saved) ∧
-    (cg ≤ call_stipend ⇒
-      t.originalAccounts = s.originalAccounts ∧
-      (success ⇒
+       (proceed_call op sender addr value ao az code cg (Memory mr)) prepared) ==>
+  ?k t dd' cc err gasLeft out success.
+    FUNPOW (\r. if ISR (FST r) then r else step (SND r))
+      k (INL (),s) = (INL (),t) /\ wf_state t /\
+    t.msdomain = Collect dd' /\ t.txParams = s.txParams /\
+    gasLeft <= cg /\ success = (~failed /\ err = NONE) /\
+    gasLeft = (if failed then cg else call_return_gas err cc) /\
+    out = (if failed then [] else call_return_data err cc) /\
+    t.contexts = ((if failed then call_abort_context charged cg caller
+      else call_return_context err cc
+        (caller with <|returnData := []; stateGasLeft := 0|>) mr),cb)::cs /\
+    (~failed ==> cc.msgParams.outputTo = Memory mr /\
+                 cc.msgParams.gasLimit = cg /\
+                 cc.msgParams.newAccountCharged = charged) /\
+    (~success ==> t.rollback = saved) /\
+    (cg <= call_stipend ==>
+      t.originalAccounts = s.originalAccounts /\
+      (success ==>
         t.rollback.accounts =
-          (if op ≠ CallCode ∧ 0 < value then
-             transfer_value sender addr value saved.accounts else saved.accounts) ∧
+          (if op <> CallCode /\ 0 < value then
+             transfer_value sender addr value saved.accounts else saved.accounts) /\
         t.rollback.toDelete = saved.toDelete))
 Proof
   strip_tac >>
   `prepared.contexts = (caller,cb)::cs` by simp[] >>
   Cases_on `failed`
-  >- (drule_all call_abort_pair >> simp[LET_THM] >> strip_tac >>
-      `step s = abort_call_value cg prepared` by
-        (simp[] >> irule step_call_success_dispatch >> metis_tac[]) >>
-      `wf_state (SND (abort_call_value cg prepared))` by
-        metis_tac[step_preserves_wf_state] >>
-      qexistsl_tac [`1`,`SND (abort_call_value cg prepared)`,`dd`,
-                    `caller`,`cg`,`[]`,`F`] >>
-      simp[FUNPOW_1, context_component_equality]) >>
+  >- (drule_all call_abort_context_pair >> strip_tac >>
+      `step s = (INL (),prepared with contexts :=
+        (call_abort_context charged cg caller,cb)::cs)` by
+        (irule step_call_success_dispatch >> metis_tac[]) >>
+      `wf_state (prepared with contexts :=
+        (call_abort_context charged cg caller,cb)::cs)` by
+        metis_tac[step_preserves_wf_state, SND] >>
+      qexistsl_tac [`1`,`prepared with contexts :=
+        (call_abort_context charged cg caller,cb)::cs`,`dd`,
+        `caller`,`NONE`,`cg`,`[]`,`F`] >>
+      simp[FUNPOW_1]) >>
   suspend "entered"
 QED
 
@@ -2242,10 +922,10 @@ Resume call_returns_summary[entered]:
     (irule step_call_success_dispatch >> metis_tac[]) >>
   `wf_state entry` by metis_tac[step_preserves_wf_state, SND] >>
   qmatch_asmsub_abbrev_tac
-    `(callee,cleared.rollback)::(caller with returnData := [],cb)::cs` >>
-  `entry.contexts = (callee,saved)::(caller with returnData := [],cb)::cs ∧
+    `(callee,cleared.rollback)::(caller with <|returnData := []; stateGasLeft := 0|>,cb)::cs` >>
+  `entry.contexts = (callee,saved)::(caller with <|returnData := []; stateGasLeft := 0|>,cb)::cs ∧
    entry.msdomain = Collect dd ∧ callee.msgParams.outputTo = Memory mr ∧
-   callee.msgParams.gasLimit = cg` by
+   callee.msgParams.gasLimit = cg ∧ callee.msgParams.newAccountCharged = charged` by
     simp[Abbr `entry`, Abbr `cleared`, Abbr `callee`,
          initial_context_def, initial_msg_params_def] >>
   `entry.txParams = s.txParams ∧ entry.originalAccounts = s.originalAccounts ∧
@@ -2255,12 +935,30 @@ Resume call_returns_summary[entered]:
         transfer_value sender addr value saved.accounts else saved.accounts)` by
     (simp[Abbr `entry`, Abbr `cleared`] >>
      Cases_on `op ≠ CallCode ∧ 0 < value` >> simp[]) >>
+  `call_meter_budget (LENGTH entry.contexts) cg entry` by
+    simp[call_meter_budget_def, call_meter_prefix_def, call_meter_chain_def,
+         vfmCallMeterBaseTheory.call_meter_claim_def, Abbr `callee`, initial_context_def,
+         initial_msg_params_def] >>
+  `cg <= (caller with <|returnData := []; stateGasLeft := 0|>).gasUsed` by simp[] >>
   drule_all run_call_memory_returns >> strip_tac >>
-  qexistsl_tac [`SUC k`,`t`,`dd'`,`cc`,`gasLeft`,`out`,`success`] >>
+  qexistsl_tac [`SUC k`,`t`,`dd'`,`cc`,`err`] >>
   qpat_x_assum `Abbrev (entry = _)` kall_tac >>
   qpat_x_assum `Abbrev (cleared = _)` kall_tac >>
   qpat_x_assum `Abbrev (callee = _)` kall_tac >>
-  simp[FUNPOW, context_component_equality] >>
+  simp[FUNPOW] >> strip_tac >>
+  `!a. callee.msgParams.outputTo <> Code a` by simp[] >>
+  `callee.msgParams.gasLimit <= call_stipend` by simp[] >>
+  `1 <= LENGTH ((caller with <|returnData := []; stateGasLeft := 0|>,cb)::cs)` by simp[] >>
+  drule_all run_call_stipend_footprint >> strip_tac >>
+  `LENGTH t.contexts + 1 = LENGTH entry.contexts` by
+    metis_tac[run_call_inl_length] >>
+  drule_all call_memory_final_pop >> strip_tac >>
+  `err = NONE <=> err' = NONE` by
+    (qpat_x_assum `t.contexts = _` mp_tac >>
+     simp[call_return_context_observations, context_component_equality] >>
+     strip_tac >>
+     Cases_on `err = NONE` >> Cases_on `err' = NONE` >>
+     gvs[call_return_context_observations]) >>
   metis_tac[]
 QED
 
@@ -2282,29 +980,43 @@ Theorem call_entry_prepared[local]:
   delegate_check ta.code (msdomain_add addr s.msdomain)
     (accesses_add addr s.rollback) dc rb' dom' ∧
   memory_cost c.memory offset sz = mc ∧
-  call_gas value gas (c.msgParams.gasLimit-c.gasUsed) mc
-    (access_cost s.rollback addr + (if 0 < value then call_value_cost else 0) +
-     (if op = Call ∧ 0 < value ∧ account_empty ta then new_account_cost else 0) + dc)
-    = (dg,cg) ∧
-  c.gasUsed + (static_gas op + dg + mc) ≤ c.msgParams.gasLimit ∧
+  charged = (op = Call /\ 0 < value /\ account_empty ta) /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  call_gas value gas
+    (c.msgParams.gasLimit - (c.gasUsed + (static_gas op +
+      access_cost s.rollback addr + (if 0 < value then call_value_cost else 0) + dc + mc)))
+    0 0 = (dg,cg) /\
+  c.gasUsed + (static_gas op + access_cost s.rollback addr +
+    (if 0 < value then call_value_cost else 0) + dc + mc + dg) <= c.msgParams.gasLimit /\
+  creditBack = MIN stateCost c.stateGasSpilled /\
+  cg <= c.gasUsed + (static_gas op + access_cost s.rollback addr +
+    (if 0 < value then call_value_cost else 0) + dc + mc + dg) - creditBack /\ 
   (0 < value ⇒ ¬c.msgParams.static) ∧
   caller = c with <|stack := DROP (6+v) c.stack;
-    gasUsed := c.gasUsed + (static_gas op + dg + mc);
+    gasUsed := c.gasUsed + (static_gas op + access_cost s.rollback addr +
+      (if 0 < value then call_value_cost else 0) + dc + mc + dg);
+    stateGasLeft := c.stateGasLeft - stateCost;
     memory := expanded_memory c.memory offset sz|> ∧
   prepared = s with <|rollback := rb'; msdomain := dom';
                       contexts := (caller,cb)::cs|> ⇒
-  ∃k t dd' cc gasLeft out success.
+  ∃k t dd' cc err gasLeft out success.
     FUNPOW (λr. if ISR (FST r) then r else step (SND r))
       k (INL (),s) = (INL (),t) ∧ wf_state t ∧
     t.msdomain = Collect dd' ∧ t.txParams = s.txParams ∧ gasLeft ≤ cg ∧
-    t.contexts = (caller with <|
-      stack := b2w success :: caller.stack;
-      pc := SUC caller.pc; gasUsed := caller.gasUsed - gasLeft;
-      memory := buffer_write ro (TAKE rz out) caller.memory; returnData := out;
-      logs := caller.logs ++ (if success then cc.logs else []);
-      addRefund := caller.addRefund + (if success then cc.addRefund else 0);
-      subRefund := caller.subRefund + (if success then cc.subRefund else 0)
-    |>,cb)::cs ∧
+    success = (~((lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+                 LENGTH s.contexts > 1024) /\ err = NONE) /\
+    gasLeft = (if (lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+                 LENGTH s.contexts > 1024 then cg else call_return_gas err cc) /\
+    out = (if (lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+                 LENGTH s.contexts > 1024 then [] else call_return_data err cc) /\
+    t.contexts = ((if (lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+                 LENGTH s.contexts > 1024 then call_abort_context charged cg caller
+      else call_return_context err cc
+        (caller with <|returnData := []; stateGasLeft := 0|>)
+        <|offset := ro; size := rz|>),cb)::cs ∧
+    (~((lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+        LENGTH s.contexts > 1024) ==> cc.msgParams.newAccountCharged = charged) /\
     (¬success ⇒ t.rollback = rb') ∧
     (cg ≤ call_stipend ⇒
       t.originalAccounts = s.originalAccounts ∧
@@ -2319,9 +1031,9 @@ Proof
   `access_check s.msdomain addr` by simp[access_check_def] >>
   `step_call op s =
     if (lookup_account c.msgParams.callee s.rollback.accounts).balance < value
-    then abort_call_value cg prepared
+    then ignore_bind (credit_new_account charged) (abort_call_value cg) prepared
     else ignore_bind (set_return_data [])
-      (if LENGTH s.contexts > 1024 then abort_unuse cg
+      (if LENGTH s.contexts > 1024 then ignore_bind (credit_new_account charged) (abort_unuse cg)
        else proceed_call op c.msgParams.callee addr value ao az
          (case get_delegate ta.code of NONE => ta.code
           | SOME a => (lookup_account a s.rollback.accounts).code)
@@ -2331,6 +1043,9 @@ Proof
 QED
 
 Resume call_entry_prepared[normalize_entry]:
+  `c.gasUsed + (static_gas op + access_cost s.rollback addr +
+      (if 0 < value then call_value_cost else 0) + dc + mc) <= c.msgParams.gasLimit`
+    by decide_tac >>
   qpat_x_assum `wf_state s` kall_tac >>
   qpat_x_assum `FLOOKUP _ _ = SOME op` kall_tac >>
   qpat_x_assum `is_call op` kall_tac >>
@@ -2379,8 +1094,15 @@ Resume call_entry_prepared[normalize_entry]:
     get_current_context_def, consume_gas_def, assert_def, fail_def,
     set_current_context_def, get_callee_def, get_num_contexts_def,
     expand_memory_def, expanded_memory_def, assert_not_static_def,
-    LET_THM, get_static_def] >>
+    LET_THM, get_static_def, GSYM ADD_ASSOC] >>
+  fs[GSYM ADD_ASSOC] >>
+  qpat_assum `charged = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  Cases_on `charged` >>
+  fs[charge_new_account_def, charge_state_gas_def,
+    bind_def, return_def, get_current_context_def, set_current_context_def] >>
   Cases_on `op = Call /\ 0 < value` >>
+  gvs[] >>
+  fs[GSYM ADD_ASSOC] >>
   asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
     get_current_context_def, get_static_def, assert_def, fail_def,
     set_current_context_def, get_num_contexts_def, LET_THM] >>
@@ -2389,8 +1111,11 @@ Resume call_entry_prepared[normalize_entry]:
     bind_def, ignore_bind_def, return_def, set_return_data_def,
     get_current_context_def, set_current_context_def, get_num_contexts_def,
     LET_THM] >>
-  Cases_on `(lookup_account c.msgParams.callee s.rollback.accounts).balance < value` >>
-  asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+  `!x:num. dg + (dc + x) = dc + (dg + x)` by decide_tac >>
+  simp[COND_RATOR, bind_def, ignore_bind_def, return_def, set_return_data_def,
+    get_current_context_def, set_current_context_def, get_num_contexts_def] >>
+  IF_CASES_TAC >> gvs[] >>
+  simp[assert_def, fail_def, COND_RATOR, bind_def, ignore_bind_def, return_def, set_return_data_def,
     get_current_context_def, set_current_context_def, get_num_contexts_def]
 QED
 
@@ -2400,8 +1125,8 @@ Resume call_entry_prepared[compose_entry]:
     (qpat_x_assum `delegate_check _ _ _ _ _ _` mp_tac >>
      simp[msdomain_add_def] >> strip_tac >>
      drule delegate_check_collect_frame >> simp[accesses_add_def]) >>
-  `cg ≤ dg + mc` by (drule call_gas_charged_bound >> simp[]) >>
-  `cg ≤ caller.gasUsed` by simp[] >>
+  `creditBack = MIN stateCost caller.stateGasSpilled /\
+   cg <= caller.gasUsed - creditBack` by (fs[GSYM ADD_ASSOC] >> gvs[]) >>
   `LENGTH c.stack ≤ stack_limit` by fs[wf_state_def, wf_context_def] >>
   `LENGTH (DROP (6+v) c.stack) < stack_limit` by
     (irule call_operand_drop_room >> qpat_x_assum `v = _` kall_tac >> simp[]) >>
@@ -2413,8 +1138,10 @@ Resume call_entry_prepared[compose_entry]:
     qpat_x_assum `step_call op s = _` (assume_tac o ONCE_REWRITE_RULE [th])) >>
   `prepared = s with <|contexts := (caller,cb)::cs;
     rollback := rb'; msdomain := Collect dd1|>` by simp[] >>
+  `charged = (op = Call /\ 0 < value /\
+    account_empty (lookup_account addr rb'.accounts))` by simp[] >>
   drule_all call_returns_summary >>
-  strip_tac >> qexistsl_tac [`k`,`t`,`dd'`,`cc`,`gasLeft`,`out`,`success`] >>
+  strip_tac >> qexistsl_tac [`k`,`t`,`dd'`,`cc`,`err`,`gasLeft`,`out`,`success`] >>
   simp[] >> metis_tac[]
 QED
 
@@ -2453,6 +1180,10 @@ Theorem caller_observation_frame:
   (HasException ∉ dom ⇒ FST r' = FST r) ∧
   (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
   (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
+  (HasStateGasLeft NOTIN dom ==> ctxt'.stateGasLeft = ctxt.stateGasLeft) /\
+  (HasStateGasSpilled NOTIN dom ==> ctxt'.stateGasSpilled = ctxt.stateGasSpilled) /\
+  (HasStateGasBaseline NOTIN dom ==> ctxt'.stateGasBaseline = ctxt.stateGasBaseline) /\
+  (HasStateGasCommitted NOTIN dom ==> ctxt'.stateGasCommitted = ctxt.stateGasCommitted) /\
   (HasMsgParams ∉ dom ⇒ ctxt'.msgParams = ctxt.msgParams) ∧
   (HasLogs ∉ dom ⇒ ctxt'.logs = ctxt.logs) ∧
   (HasSubRefund ∉ dom ⇒ ctxt'.subRefund = ctxt.subRefund) ∧
@@ -2479,6 +1210,202 @@ Proof
   rw[Once EQ_IMP_THM] >> gvs[]
 QED
 
+Theorem call_final_context_observations[local]:
+  final = (if failed then call_abort_context charged cg caller
+    else call_return_context err cc
+      (caller with <|returnData := []; stateGasLeft := 0|>) mr) /\
+  success = (~failed /\ err = NONE) /\
+  out = (if failed then [] else call_return_data err cc) ==>
+  final.stack = b2w success::caller.stack /\
+  final.pc = SUC caller.pc /\
+  final.memory = buffer_write mr.offset (TAKE mr.size out) caller.memory /\
+  final.returnData = out /\
+  final.msgParams = caller.msgParams /\
+  final.jumpDest = caller.jumpDest /\
+  final.logs = caller.logs ++ (if success then cc.logs else []) /\
+  final.addRefund = caller.addRefund + (if success then cc.addRefund else 0) /\
+  final.subRefund = caller.subRefund + (if success then cc.subRefund else 0)
+Proof
+  Cases_on `failed` >>
+  simp[call_abort_context_def, call_return_context_observations] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem call_final_context_meters[local]:
+  final = (if failed then call_abort_context charged cg caller
+    else call_return_context err cc
+      (caller with <|returnData := []; stateGasLeft := 0|>) mr) /\
+  success = (~failed /\ err = NONE) /\
+  gasLeft = (if failed then cg else call_return_gas err cc) /\
+  (~failed ==> cc.msgParams.newAccountCharged = charged) /\
+  merged = (let base = (ARB with <|
+      gasUsed := caller.gasUsed;
+      stateGasLeft := (if failed then caller.stateGasLeft else 0);
+      stateGasSpilled := caller.stateGasSpilled;
+      stateGasBaseline := caller.stateGasBaseline;
+      stateGasCommitted := caller.stateGasCommitted|>)
+    in if failed then credit_new_account_context base charged
+       else if success then repay_state_gas_spill_context
+         (absorb_state_gas base cc.stateGasLeft cc.stateGasSpilled cc.stateGasCommitted)
+       else credit_new_account_context
+         (absorb_state_gas base cc.stateGasBaseline 0 cc.stateGasCommitted) charged) ==>
+  final.gasUsed = merged.gasUsed - gasLeft /\
+  final.stateGasLeft = merged.stateGasLeft /\
+  final.stateGasSpilled = merged.stateGasSpilled /\
+  final.stateGasBaseline = merged.stateGasBaseline /\
+  final.stateGasCommitted = merged.stateGasCommitted
+Proof
+  Cases_on `failed` >> Cases_on `err = NONE` >>
+  simp[call_abort_context_def, call_return_context_def,
+    vfmCallMeterBaseTheory.call_meter_settle_def, LET_THM,
+    credit_new_account_context_def, absorb_state_gas_def,
+    repay_state_gas_spill_context_def] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+(* This predicate shields the output names from existential-equality
+   simplification while the public precondition is normalized. *)
+Definition call_entry_ready_def[local]:
+  call_entry_ready s c op addr value cg caller charged ro rz rb cb cs
+      k t dd cc err gasLeft out success entered childSG merged final <=>
+  let failed = ((lookup_account c.msgParams.callee s.rollback.accounts).balance < value \/
+               LENGTH s.contexts > 1024)
+  in
+    FUNPOW (\r. if ISR (FST r) then r else step (SND r)) k (INL (),s) = (INL (),t) /\
+    wf_state t /\ t.msdomain = Collect dd /\ t.txParams = s.txParams /\
+    gasLeft <= cg /\ success = (~failed /\ err = NONE) /\
+    gasLeft = (if failed then cg else call_return_gas err cc) /\
+    out = (if failed then [] else call_return_data err cc) /\
+    entered = ~failed /\
+    childSG = (if err = NONE then cc.stateGasLeft else cc.stateGasBaseline) /\
+    final = (if failed then call_abort_context charged cg caller
+      else call_return_context err cc
+        (caller with <|returnData := []; stateGasLeft := 0|>) <|offset := ro; size := rz|>) /\
+    t.contexts = (final,cb)::cs /\
+    (~failed ==> cc.msgParams.newAccountCharged = charged) /\
+    (~success ==> t.rollback = rb) /\
+    (cg <= call_stipend ==>
+      t.originalAccounts = s.originalAccounts /\
+      (success ==> t.rollback.accounts =
+        (if op <> CallCode /\ 0 < value then
+           transfer_value c.msgParams.callee addr value s.rollback.accounts
+         else s.rollback.accounts) /\ t.rollback.toDelete = s.rollback.toDelete)) /\
+    merged = (let base = (ARB with <|gasUsed := caller.gasUsed;
+      stateGasLeft := (if entered then 0 else caller.stateGasLeft);
+      stateGasSpilled := caller.stateGasSpilled;
+      stateGasBaseline := caller.stateGasBaseline;
+      stateGasCommitted := caller.stateGasCommitted|>)
+      in if ~entered then credit_new_account_context base charged
+         else if success then repay_state_gas_spill_context
+           (absorb_state_gas base childSG cc.stateGasSpilled cc.stateGasCommitted)
+         else credit_new_account_context
+           (absorb_state_gas base childSG 0 cc.stateGasCommitted) charged) /\
+    final.stack = b2w success::caller.stack /\
+    final.pc = SUC caller.pc /\
+    final.memory = buffer_write ro (TAKE rz out) caller.memory /\
+    final.returnData = out /\ final.msgParams = caller.msgParams /\
+    final.jumpDest = caller.jumpDest /\
+    final.logs = caller.logs ++ (if success then cc.logs else []) /\
+    final.addRefund = caller.addRefund + (if success then cc.addRefund else 0) /\
+    final.subRefund = caller.subRefund + (if success then cc.subRefund else 0) /\
+    final.gasUsed = merged.gasUsed - gasLeft /\
+    final.stateGasLeft = merged.stateGasLeft /\
+    final.stateGasSpilled = merged.stateGasSpilled /\
+    final.stateGasBaseline = merged.stateGasBaseline /\
+    final.stateGasCommitted = merged.stateGasCommitted
+End
+
+Theorem call_entry_ready_prepared[local]:
+  wf_state s /\ s.contexts = (c,cb)::cs /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME op /\
+  is_call op /\ op <> Create /\ op <> Create2 /\
+  s.msdomain = Collect dd /\ ~fIN addr precompile_addresses /\
+  6 + v <= LENGTH c.stack /\
+  v = (if call_has_value op then 1 else 0) /\
+  w2n (EL 0 c.stack) = gas /\ w2w (EL 1 c.stack) = addr /\
+  (if 0 < v then w2n (EL 2 c.stack) else 0) = value /\
+  w2n (EL (v+2) c.stack) = ao /\ w2n (EL (v+3) c.stack) = az /\
+  w2n (EL (v+4) c.stack) = ro /\ w2n (EL (v+5) c.stack) = rz /\
+  max_expansion_range (ao,az) (ro,rz) = (offset,sz) /\
+  lookup_account addr s.rollback.accounts = ta /\
+  delegate_check ta.code (msdomain_add addr s.msdomain)
+    (accesses_add addr s.rollback) dc rb' dom' /\
+  memory_cost c.memory offset sz = mc /\
+  charged = (op = Call /\ 0 < value /\ account_empty ta) /\
+  stateCost = (if charged then new_account_state_gas else 0) /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  call_gas value gas
+    (c.msgParams.gasLimit - (c.gasUsed + (static_gas op +
+      access_cost s.rollback addr + (if 0 < value then call_value_cost else 0) + dc + mc)))
+    0 0 = (dg,cg) /\
+  c.gasUsed + (static_gas op + access_cost s.rollback addr +
+    (if 0 < value then call_value_cost else 0) + dc + mc + dg) <= c.msgParams.gasLimit /\
+  creditBack = MIN stateCost c.stateGasSpilled /\
+  cg <= c.gasUsed + (static_gas op + access_cost s.rollback addr +
+    (if 0 < value then call_value_cost else 0) + dc + mc + dg) - creditBack /\
+  (0 < value ==> ~c.msgParams.static) /\
+  caller = c with <|stack := DROP (6+v) c.stack;
+    gasUsed := c.gasUsed + (static_gas op + access_cost s.rollback addr +
+      (if 0 < value then call_value_cost else 0) + dc + mc + dg);
+    stateGasLeft := c.stateGasLeft - stateCost;
+    memory := expanded_memory c.memory offset sz|> /\
+  prepared = s with <|rollback := rb'; msdomain := dom';
+                      contexts := (caller,cb)::cs|> ==>
+  ?k t dd' cc err gasLeft out success entered childSG merged final.
+    call_entry_ready s c op addr value cg caller charged ro rz rb' cb cs
+      k t dd' cc err gasLeft out success entered childSG merged final
+Proof
+  strip_tac >> drule_all (GEN_ALL call_entry_prepared) >>
+  POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `success = (~failed /\ err = NONE)` >>
+  qmatch_asmsub_abbrev_tac `t.contexts = (final,cb)::cs` >>
+  qpat_assum `Abbrev (final = _)`
+    (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_all call_final_context_observations >> strip_tac >>
+  qabbrev_tac `entered = ~failed` >>
+  qabbrev_tac `childSG = if err = NONE then cc.stateGasLeft else cc.stateGasBaseline` >>
+  qabbrev_tac `merged = (let base = (ARB with <|gasUsed := caller.gasUsed;
+    stateGasLeft := (if entered then 0 else caller.stateGasLeft);
+    stateGasSpilled := caller.stateGasSpilled;
+    stateGasBaseline := caller.stateGasBaseline;
+    stateGasCommitted := caller.stateGasCommitted|>)
+    in if ~entered then credit_new_account_context base charged
+       else if success then repay_state_gas_spill_context
+         (absorb_state_gas base childSG cc.stateGasSpilled cc.stateGasCommitted)
+       else credit_new_account_context
+         (absorb_state_gas base childSG 0 cc.stateGasCommitted) charged)` >>
+  `merged = (let base = (ARB with <|gasUsed := caller.gasUsed;
+      stateGasLeft := (if failed then caller.stateGasLeft else 0);
+      stateGasSpilled := caller.stateGasSpilled;
+      stateGasBaseline := caller.stateGasBaseline;
+      stateGasCommitted := caller.stateGasCommitted|>)
+    in if failed then credit_new_account_context base charged
+       else if success then repay_state_gas_spill_context
+         (absorb_state_gas base cc.stateGasLeft cc.stateGasSpilled cc.stateGasCommitted)
+       else credit_new_account_context
+         (absorb_state_gas base cc.stateGasBaseline 0 cc.stateGasCommitted) charged)` by
+    (qpat_x_assum `Abbrev (merged = _)` mp_tac >>
+     qpat_x_assum `Abbrev (entered = _)` mp_tac >>
+     qpat_x_assum `Abbrev (childSG = _)` mp_tac >>
+     qpat_x_assum `success = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac std_ss [markerTheory.Abbrev_def] >> rpt strip_tac >>
+     Cases_on `failed` >> Cases_on `err = NONE` >> fs[]) >>
+  `success = (~failed /\ err = NONE)` by
+    (qpat_x_assum `success = _` mp_tac >> simp[Abbr `entered`]) >>
+  `~failed ==> cc.msgParams.newAccountCharged = charged` by
+    (qpat_x_assum `entered ==> _` mp_tac >> simp[Abbr `entered`]) >>
+  drule_all call_final_context_meters >> strip_tac >>
+  qexistsl_tac [`k`,`t`,`dd'`,`cc`,`err`,`gasLeft`,`out`,`success`,
+    `entered`,`childSG`,`merged`,`final`] >>
+  pure_rewrite_tac[call_entry_ready_def, LET_THM] >>
+  qpat_x_assum `Abbrev (failed = _)`
+    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  rule_assum_tac (SIMP_RULE (srw_ss()) [markerTheory.Abbrev_def, LET_THM]) >>
+  simp_tac (srw_ss()) [] >>
+  rpt conj_tac >> metis_tac[]
+QED
+
 val call_spec_entry_tac =
   irule IMP_EVM_SPEC_FINITE_CODE >> rpt gen_tac >>
   CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss())
@@ -2495,21 +1422,24 @@ val call_spec_entry_tac =
   qpat_x_assum `Abbrev (c = _)` kall_tac >>
   gvs[] >>
   qpat_assum `Collect dd = _` (assume_tac o SYM) >>
-  drule_all (SIMP_RULE (boss_ss()) [] (GEN_ALL call_entry_prepared)) >>
+  drule_all (SIMP_RULE (boss_ss()) [] (GEN_ALL call_entry_ready_prepared)) >>
   strip_tac >>
+  qpat_x_assum `call_entry_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [call_entry_ready_def, LET_THM]) >>
   `FUNPOW (λr. if ISR (FST r) then r else step (SND r)) k s = (INL (),t')` by
     (qpat_assum `s = (INL (),SND s)` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   qexists_tac `k` >>
   qpat_x_assum `FUNPOW _ k s = _` (fn th => rewrite_tac[th]);
 
 val call_spec_post_tac = fn witnesses =>
+  qpat_x_assum `final = _` kall_tac >>
   once_rewrite_tac[STAR_COMM] >>
   simp[STAR_CODE_POOL_evm2set] >>
   conj_tac >- (qpat_x_assum `_ = {HasParsed c.pc}` mp_tac >> SET_TAC[]) >>
   CONV_TAC (REDEPTH_CONV (HO_REWR_CONV SEP_EXISTS_THM)) >>
   qexistsl_tac witnesses >>
-  gvs[] >> Cases_on `success` >>
-  simp[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC] >>
+  simp[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC,
+       IgnAsm `merged = _`] >>
   qmatch_goalsub_abbrev_tac `evm2set_on rest _` >>
   `rest = {}` by
     (qunabbrev_tac `rest` >>
@@ -2518,6 +1448,7 @@ val call_spec_post_tac = fn witnesses =>
   simp[cond_def, evm2set_on_def];
 
 val call_spec_frame_tac =
+  qpat_x_assum `final = _` kall_tac >>
   sym_tac >> irule caller_observation_frame >> simp[];
 
 (* CALL to any code at a non-precompile, in a Collect domain (the
@@ -2528,6 +1459,8 @@ val call_spec_frame_tac =
 Theorem SPEC_Call_any:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_OriginalAccounts oa *
@@ -2544,24 +1477,34 @@ Theorem SPEC_Call_any:
          em = expanded_memory m offset sz ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         newAccountCharged = (call_inst = Call /\ 0 < value /\ account_empty toAccount) /\
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) /\
+         (if newAccountCharged then new_account_state_gas else 0) <= sg /\
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, calleeGas) ∧
-         gasCost = static_gas call_inst + dynamicGas + mCost ∧
-         g + gasCost ≤ p.gasLimit ∧
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst + access_cost rb addr +
+             (if 0 < value then call_value_cost else 0) + dCost + mCost)))
+           0 0 = (dynamicGas, calleeGas) /\
+         gasCost = static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas /\
+         g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) <= p.gasLimit /\
+         creditBack = MIN stateCost sp /\
+         calleeGas <= g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) - creditBack /\
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
          ¬fIN addr precompile_addresses ∧
          d = Collect dd))
   {(pc,call_inst)}
-  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd' oa'.
+  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd' oa' entered childSG childSP childCM merged.
    evm_Stack (b2w success :: DROP (6 + vOff) ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + gasCost - gasLeft) *
+   evm_GasUsed (merged.gasUsed - gasLeft) *
+   evm_StateGasLeft merged.stateGasLeft * evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline * evm_StateGasCommitted merged.stateGasCommitted *
    evm_MsgParams p *
    evm_Memory (buffer_write retOffset (TAKE retSize out) em) *
    evm_Rollback rb' * evm_Msdomain (Collect dd') * evm_ReturnData out *
@@ -2570,7 +1513,19 @@ Theorem SPEC_Call_any:
    evm_SubRefund (sr + if success then calleeSr else 0) *
    evm_Logs (l ++ if success then calleeLogs else []) *
    evm_OriginalAccounts oa' *
-   cond (gasLeft ≤ calleeGas ∧ (¬success ⇒ rb' = newRb)))
+   cond ((success ==> entered) /\
+         (~entered ==> gasLeft = calleeGas /\ out = []) /\
+         merged =
+           (let base = (ARB with <|gasUsed := g + gasCost;
+              stateGasLeft := (if entered then 0 else sg - stateCost);
+              stateGasSpilled := sp; stateGasBaseline := bsl;
+              stateGasCommitted := cm|>)
+            in if ~entered then credit_new_account_context base newAccountCharged
+               else if success then repay_state_gas_spill_context
+                 (absorb_state_gas base childSG childSP childCM)
+               else credit_new_account_context
+                 (absorb_state_gas base childSG 0 childCM) newAccountCharged) /\
+         gasLeft ≤ calleeGas ∧ (¬success ⇒ rb' = newRb)))
 Proof
   call_spec_entry_tac >>
   conj_tac >- suspend "post" >>
@@ -2580,7 +1535,8 @@ QED
 Resume SPEC_Call_any[post]:
   call_spec_post_tac
     [`success`,`out`,`gasLeft`,`cc.logs`,`cc.addRefund`,`cc.subRefund`,
-     `t'.rollback`,`dd'`,`t'.originalAccounts`]
+     `t'.rollback`,`dd'`,`t'.originalAccounts`,`entered`,`childSG`,
+     `cc.stateGasSpilled`,`cc.stateGasCommitted`,`merged`]
 QED
 
 Resume SPEC_Call_any[frame]:
@@ -2596,6 +1552,8 @@ Finalise SPEC_Call_any
 Theorem SPEC_Call_stipend:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    cond (6 + vOff ≤ LENGTH ss ∧
@@ -2611,25 +1569,35 @@ Theorem SPEC_Call_stipend:
          em = expanded_memory m offset sz ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         newAccountCharged = (call_inst = Call /\ 0 < value /\ account_empty toAccount) /\
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) /\
+         (if newAccountCharged then new_account_state_gas else 0) <= sg /\
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, calleeGas) ∧
-         gasCost = static_gas call_inst + dynamicGas + mCost ∧
-         g + gasCost ≤ p.gasLimit ∧
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst + access_cost rb addr +
+             (if 0 < value then call_value_cost else 0) + dCost + mCost)))
+           0 0 = (dynamicGas, calleeGas) /\
+         gasCost = static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas /\
+         g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) <= p.gasLimit /\
+         creditBack = MIN stateCost sp /\
+         calleeGas <= g + (static_gas call_inst + access_cost rb addr +
+           (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas) - creditBack /\
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
          ¬fIN addr precompile_addresses ∧
          d = Collect dd ∧
          calleeGas ≤ call_stipend))
   {(pc,call_inst)}
-  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd'.
+  (SEP_EXISTS success out gasLeft calleeLogs calleeAr calleeSr rb' dd' entered childSG childSP childCM merged.
    evm_Stack (b2w success :: DROP (6 + vOff) ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + gasCost - gasLeft) *
+   evm_GasUsed (merged.gasUsed - gasLeft) *
+   evm_StateGasLeft merged.stateGasLeft * evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline * evm_StateGasCommitted merged.stateGasCommitted *
    evm_MsgParams p *
    evm_Memory (buffer_write retOffset (TAKE retSize out) em) *
    evm_Rollback rb' * evm_Msdomain (Collect dd') * evm_ReturnData out *
@@ -2637,7 +1605,19 @@ Theorem SPEC_Call_stipend:
    evm_AddRefund (ar + if success then calleeAr else 0) *
    evm_SubRefund (sr + if success then calleeSr else 0) *
    evm_Logs (l ++ if success then calleeLogs else []) *
-   cond (gasLeft ≤ calleeGas ∧
+   cond ((success ==> entered) /\
+         (~entered ==> gasLeft = calleeGas /\ out = []) /\
+         merged =
+           (let base = (ARB with <|gasUsed := g + gasCost;
+              stateGasLeft := (if entered then 0 else sg - stateCost);
+              stateGasSpilled := sp; stateGasBaseline := bsl;
+              stateGasCommitted := cm|>)
+            in if ~entered then credit_new_account_context base newAccountCharged
+               else if success then repay_state_gas_spill_context
+                 (absorb_state_gas base childSG childSP childCM)
+               else credit_new_account_context
+                 (absorb_state_gas base childSG 0 childCM) newAccountCharged) /\
+         gasLeft ≤ calleeGas ∧
          (if success then
             rb'.accounts =
               (if call_inst ≠ CallCode ∧ 0 < value
@@ -2654,7 +1634,8 @@ QED
 Resume SPEC_Call_stipend[post]:
   call_spec_post_tac
     [`success`,`out`,`gasLeft`,`cc.logs`,`cc.addRefund`,`cc.subRefund`,
-     `t'.rollback`,`dd'`]
+     `t'.rollback`,`dd'`,`entered`,`childSG`,
+     `cc.stateGasSpilled`,`cc.stateGasCommitted`,`merged`]
 QED
 
 Resume SPEC_Call_stipend[frame]:
@@ -2662,3 +1643,10 @@ Resume SPEC_Call_stipend[frame]:
 QED
 
 Finalise SPEC_Call_stipend
+
+(* Audit the public proof boundary, including transitive oracle tags. *)
+val _ = List.app (fn th =>
+  if Tag.isDisk (Thm.tag th) orelse Tag.isEmpty (Thm.tag th) then ()
+  else raise Fail "CALL export has a non-kernel dependency")
+  [SPEC_Call_any, SPEC_Call_stipend, caller_observation_frame,
+   IMP_EVM_SPEC_FINITE, IMP_EVM_SPEC_FINITE_CODE];

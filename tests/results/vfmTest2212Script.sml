@@ -1,7 +1,7 @@
 Theory vfmTest2212[no_sig_docs]
 Ancestors vfmTestDefs2212
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result2212_0.nsv", "result2212_1.nsv", "result2212_2.nsv", "result2212_3.nsv", "result2212_4.nsv"];
+val () = holbuild_extra_outputs ["result2212_0.nsv"];
 val thyn = "vfmTestDefs2212";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

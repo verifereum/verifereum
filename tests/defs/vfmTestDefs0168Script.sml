@@ -1,5 +1,5 @@
 Theory vfmTestDefs0168[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/constantinople/eip1052_extcodehash/extcodehash/extcodehash_precompile.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/constantinople/eip1052_extcodehash/extcodehash/extcodehash_precompile.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists/bal_nonce_changes.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists/bal_nonce_changes.json");
 val defs = mapi (define_test "0168") tests;

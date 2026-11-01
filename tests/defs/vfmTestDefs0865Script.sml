@@ -1,5 +1,5 @@
 Theory vfmTestDefs0865[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stMemoryStressTest/callcode_bounds/callcode_bounds.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stMemoryStressTest/callcode_bounds/callcode_bounds.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8282_builder_execution_requests/request_predeploys/request_overpayment.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8282_builder_execution_requests/request_predeploys/request_overpayment.json");
 val defs = mapi (define_test "0865") tests;

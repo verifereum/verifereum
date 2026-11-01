@@ -1,5 +1,5 @@
 Theory vfmTestDefs0238[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/istanbul/eip152_blake2/blake2/blake2b.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/istanbul/eip152_blake2/blake2/blake2b.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists_eip7702/bal_7702_delegation_create.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip7928_block_level_access_lists/block_access_lists_eip7702/bal_7702_delegation_create.json");
 val defs = mapi (define_test "0238") tests;

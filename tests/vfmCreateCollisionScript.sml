@@ -21,7 +21,10 @@ Definition collision_observation_def:
 End
 val () = cv_auto_trans collision_observation_def;
 
-(* A creation transaction with empty initcode. *)
+(* A creation transaction with empty initcode. Amsterdam charges 183600
+   state gas plus 24000 intrinsic execution gas, rather than Osaka's 53000.
+   All three fixtures use 300000 gas to fund entry/creation state gas and
+   retain their storage-clearing and rollback regression coverage. *)
 Definition collision_tx_accounts_def:
   collision_tx_accounts =
     update_account (address_for_create 0x100w 0)
@@ -32,8 +35,8 @@ val () = cv_auto_trans collision_tx_accounts_def;
 
 Theorem create_tx_storage_only_target:
   collision_observation (address_for_create 0x100w 0) collision_tx_accounts
-    (settlement_tx with <| to := NONE; gasLimit := 153000 |>) =
-    SOME (NONE, 53000, 1, 0w)
+    (settlement_tx with <| to := NONE; gasLimit := 300000 |>) =
+    SOME (NONE, 207600, 1, 0w)
 Proof
   CONV_TAC cv_eval
 QED
@@ -60,7 +63,7 @@ val () = cv_auto_trans collision_outcome_def;
 
 Theorem create_op_storage_only_target:
   collision_outcome (address_for_create 0x200w 1) collision_op_accounts
-    (settlement_tx with gasLimit := 200000) =
+    (settlement_tx with gasLimit := 300000) =
     SOME (NONE, 1, 0w)
 Proof
   CONV_TAC cv_eval
@@ -70,7 +73,7 @@ QED
    creation is rolled back, so the target keeps nonce 0 and its storage. *)
 Theorem create_tx_storage_only_target_revert:
   collision_outcome (address_for_create 0x100w 0) collision_tx_accounts
-    (settlement_tx with <| to := NONE; gasLimit := 153000;
+    (settlement_tx with <| to := NONE; gasLimit := 300000;
                            data := [0x5fw; 0x5fw; 0xfdw] |>) =
     SOME (SOME Reverted, 0, 1w)
 Proof

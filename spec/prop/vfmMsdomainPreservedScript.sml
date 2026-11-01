@@ -105,6 +105,32 @@ Proof
   rw[set_rollback_def, return_def]
 QED
 
+Theorem SND_state_gas_meter_msdomain[simp]:
+  (!s. (SND (get_state_gas_left s)).msdomain = s.msdomain) /\
+  (!n s. (SND (charge_state_gas n s)).msdomain = s.msdomain) /\
+  (!n s. (SND (credit_state_gas_refund n s)).msdomain = s.msdomain) /\
+  (!s. (SND (restore_state_gas s)).msdomain = s.msdomain) /\
+  (!s. (SND (commit_state_gas s)).msdomain = s.msdomain) /\
+  (!sg s. (SND (restore_state_gas_to_entry sg s)).msdomain = s.msdomain) /\
+  (!s. (SND (repay_state_gas_spill s)).msdomain = s.msdomain) /\
+  (!s. (SND (forfeit_remaining_gas s)).msdomain = s.msdomain) /\
+  (!s. (SND (withhold_create_gas s)).msdomain = s.msdomain) /\
+  (!s. (SND (drain_state_gas_reservoir s)).msdomain = s.msdomain) /\
+  (!gas reservoir s. (SND (restore_child_gas gas reservoir s)).msdomain = s.msdomain)
+Proof
+  rw[get_state_gas_left_def, charge_state_gas_def,
+     credit_state_gas_refund_def, restore_state_gas_def, commit_state_gas_def,
+     restore_state_gas_to_entry_def, repay_state_gas_spill_def,
+     forfeit_remaining_gas_def, withhold_create_gas_def,
+     drain_state_gas_reservoir_def, restore_child_gas_def,
+     consume_gas_def, get_gas_left_def, unuse_gas_def,
+     bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def, assert_def, LET_THM]
+  >> rw[bind_def, ignore_bind_def, get_current_context_def,
+        set_current_context_def, return_def, fail_def, assert_def]
+  >> rw[]
+QED
+
 Theorem SND_pop_and_incorporate_context_msdomain[simp]:
   ∀b s. (SND (pop_and_incorporate_context b s)).msdomain = s.msdomain
 Proof
@@ -171,13 +197,24 @@ Theorem SND_handle_create_msdomain[simp]:
   ∀e s. (SND (handle_create e s)).msdomain = s.msdomain
 Proof
   rpt gen_tac
-  >> simp[handle_create_def, bind_def, ignore_bind_def, return_def,
-          fail_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
-  >> simp[]
+  >> simp[handle_create_def]
+  >> rpt (FIRST [irule SND_bind_msdomain, irule SND_ignore_bind_msdomain,
+                 IF_CASES_TAC, CASE_TAC]
+          >> rpt conj_tac >> rpt gen_tac >> BETA_TAC)
+  >> simp[assert_def, consume_gas_def, update_accounts_def,
+          bind_def, ignore_bind_def, get_current_context_def,
+          set_current_context_def, return_def, fail_def]
+  >> rw[]
+QED
+
+Theorem SND_handle_msdomain[local]:
+  (!s. (SND (f s)).msdomain = s.msdomain) /\
+  (!e s. (SND (h e s)).msdomain = s.msdomain) ==>
+  (SND (handle f h s)).msdomain = s.msdomain
+Proof
+  strip_tac >> simp[handle_def]
+  >> Cases_on `f s` >> Cases_on `q` >> simp[]
+  >> metis_tac[SND]
 QED
 
 (* handle_step does not modify msdomain. *)
@@ -185,8 +222,8 @@ Theorem SND_handle_step_msdomain[simp]:
   ∀e s. (SND (handle_step e s)).msdomain = s.msdomain
 Proof
   rpt gen_tac
-  >> rw[handle_step_def, handle_def, bind_def, return_def, fail_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
-  >> simp[]
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC >- simp[]
+  >> irule SND_handle_msdomain
+  >> simp[SND_handle_create_msdomain, SND_handle_exception_msdomain]
 QED

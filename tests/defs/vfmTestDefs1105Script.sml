@@ -1,5 +1,5 @@
 Theory vfmTestDefs1105[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRandom/random_statetest164/random_statetest164.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRandom/random_statetest164/random_statetest164.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/homestead/identity_precompile/identity/identity_return_buffer_modify.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/homestead/identity_precompile/identity/identity_return_buffer_modify.json");
 val defs = mapi (define_test "1105") tests;

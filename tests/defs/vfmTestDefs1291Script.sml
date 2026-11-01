@@ -1,5 +1,5 @@
 Theory vfmTestDefs1291[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stRandom/random_statetest381/random_statetest381.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stRandom/random_statetest381/random_statetest381.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stCallCodes/callcode_in_initcode_to_empty_contract/callcode_in_initcode_to_empty_contract.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stCallCodes/callcode_in_initcode_to_empty_contract/callcode_in_initcode_to_empty_contract.json");
 val defs = mapi (define_test "1291") tests;

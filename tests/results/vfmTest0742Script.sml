@@ -1,7 +1,7 @@
 Theory vfmTest0742[no_sig_docs]
 Ancestors vfmTestDefs0742
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result0742_0.nsv"];
+val () = holbuild_extra_outputs ["result0742_0.nsv", "result0742_1.nsv", "result0742_2.nsv", "result0742_3.nsv", "result0742_4.nsv"];
 val thyn = "vfmTestDefs0742";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

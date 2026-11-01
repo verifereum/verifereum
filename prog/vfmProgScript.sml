@@ -17,6 +17,10 @@ Datatype:
          | JumpDest   (num option)
          | ReturnData (byte list)
          | GasUsed    num
+         | StateGasLeft num                       (* EIP-8037 state gas *)
+         | StateGasSpilled num                    (* EIP-8037 spill *)
+         | StateGasBaseline num                   (* EIP-8037 frame entry *)
+         | StateGasCommitted num                  (* EIP-8037 committed *)
          | AddRefund  num
          | SubRefund  num
          | Logs       (event list)
@@ -44,6 +48,10 @@ Datatype:
           | HasJumpDest
           | HasReturnData
           | HasGasUsed
+          | HasStateGasLeft
+          | HasStateGasSpilled
+          | HasStateGasBaseline
+          | HasStateGasCommitted
           | HasAddRefund
           | HasSubRefund
           | HasLogs
@@ -67,6 +75,10 @@ Definition evm2set_on_def:
       (if HasJumpDest ∈ dom   then { JumpDest (current_context.jumpDest) } else {}) ∪
       (if HasReturnData ∈ dom then { ReturnData (current_context.returnData) } else {}) ∪
       (if HasGasUsed ∈ dom    then { GasUsed (current_context.gasUsed) } else {}) ∪
+      (if HasStateGasLeft ∈ dom then { StateGasLeft (current_context.stateGasLeft) } else {}) ∪
+      (if HasStateGasSpilled ∈ dom then { StateGasSpilled (current_context.stateGasSpilled) } else {}) ∪
+      (if HasStateGasBaseline ∈ dom then { StateGasBaseline (current_context.stateGasBaseline) } else {}) ∪
+      (if HasStateGasCommitted ∈ dom then { StateGasCommitted (current_context.stateGasCommitted) } else {}) ∪
       (if HasAddRefund ∈ dom  then { AddRefund (current_context.addRefund) } else {}) ∪
       (if HasSubRefund ∈ dom  then { SubRefund (current_context.subRefund) } else {}) ∪
       (if HasLogs ∈ dom       then { Logs (current_context.logs) } else {}) ∪
@@ -130,6 +142,10 @@ Proof
        (if ∃x. JumpDest x ∈ u then {HasJumpDest} else {}) ∪
        (if ∃x. ReturnData x ∈ u then {HasReturnData} else {}) ∪
        (if ∃x. GasUsed x ∈ u then {HasGasUsed} else {}) ∪
+       (if ∃x. StateGasLeft x ∈ u then {HasStateGasLeft} else {}) ∪
+       (if ∃x. StateGasSpilled x ∈ u then {HasStateGasSpilled} else {}) ∪
+       (if ∃x. StateGasBaseline x ∈ u then {HasStateGasBaseline} else {}) ∪
+       (if ∃x. StateGasCommitted x ∈ u then {HasStateGasCommitted} else {}) ∪
        (if ∃x. AddRefund x ∈ u then {HasAddRefund} else {}) ∪
        (if ∃x. SubRefund x ∈ u then {HasSubRefund} else {}) ∪
        (if ∃x. MsgParams x ∈ u then {HasMsgParams} else {}) ∪
@@ -205,6 +221,32 @@ End
 
 Definition evm_GasUsed_def:
   evm_GasUsed g = SEP_EQ { GasUsed g }
+End
+
+(* EIP-8037: the state gas the top frame's reservoir still holds, which
+   settlement needs to know what the transaction spent. *)
+Definition evm_StateGasLeft_def:
+  evm_StateGasLeft g = SEP_EQ { StateGasLeft g }
+End
+
+(* EIP-8037: the execution gas a state charge has spilled out of the
+   frame and not been credited back yet.  A state charge draws the
+   reservoir first, so a rule that only covers what the reservoir can pay
+   leaves this alone; one that covers a spill has to say what it becomes. *)
+Definition evm_StateGasSpilled_def:
+  evm_StateGasSpilled g = SEP_EQ { StateGasSpilled g }
+End
+
+(* EIP-8037: the reservoir level the frame rolls back to.  A frame rule
+   that pops a failed child has to name it, because the child arrives
+   restored to it. *)
+Definition evm_StateGasBaseline_def:
+  evm_StateGasBaseline g = SEP_EQ { StateGasBaseline g }
+End
+
+(* EIP-8037: the spill a commit marked non-refillable. *)
+Definition evm_StateGasCommitted_def:
+  evm_StateGasCommitted g = SEP_EQ { StateGasCommitted g }
 End
 
 Definition evm_MsgParams_def:
@@ -350,6 +392,18 @@ Theorem STAR_evm2set_with_original:
   ((evm_GasUsed g * p) (evm2set_on dom s) ⇔
    (g = (FST (HD (SND s).contexts)).gasUsed) /\
    HasGasUsed ∈ dom /\ p (evm2set_on (dom DELETE HasGasUsed) s)) /\
+  ((evm_StateGasLeft g * p) (evm2set_on dom s) ⇔
+   (g = (FST (HD (SND s).contexts)).stateGasLeft) /\
+   HasStateGasLeft ∈ dom /\ p (evm2set_on (dom DELETE HasStateGasLeft) s)) /\
+  ((evm_StateGasSpilled g * p) (evm2set_on dom s) ⇔
+   (g = (FST (HD (SND s).contexts)).stateGasSpilled) /\
+   HasStateGasSpilled ∈ dom /\ p (evm2set_on (dom DELETE HasStateGasSpilled) s)) /\
+  ((evm_StateGasBaseline g * p) (evm2set_on dom s) ⇔
+   (g = (FST (HD (SND s).contexts)).stateGasBaseline) /\
+   HasStateGasBaseline ∈ dom /\ p (evm2set_on (dom DELETE HasStateGasBaseline) s)) /\
+  ((evm_StateGasCommitted g * p) (evm2set_on dom s) ⇔
+   (g = (FST (HD (SND s).contexts)).stateGasCommitted) /\
+   HasStateGasCommitted ∈ dom /\ p (evm2set_on (dom DELETE HasStateGasCommitted) s)) /\
   ((evm_JumpDest j * p) (evm2set_on dom s) ⇔
    (j = (FST (HD (SND s).contexts)).jumpDest) /\
    HasJumpDest ∈ dom /\ p (evm2set_on (dom DELETE HasJumpDest) s)) /\
@@ -399,6 +453,8 @@ Theorem STAR_evm2set_with_original:
 Proof
   simp [cond_STAR,EQ_STAR,
         evm_PC_def, evm_JumpDest_def, evm_MsgParams_def, evm_GasUsed_def,
+        evm_StateGasLeft_def, evm_StateGasSpilled_def,
+        evm_StateGasBaseline_def, evm_StateGasCommitted_def,
         evm_ReturnData_def, evm_Stack_def, evm_Exception_def,
         evm_TxParams_def, evm_Contexts_def, evm_CachedRB_def, evm_Memory_def,
         evm_Rollback_def, evm_OriginalAccounts_def, evm_Msdomain_def, evm_Logs_def,
@@ -565,6 +621,10 @@ Theorem UPDATE_evm2set_without_original[local]:
   (HasException ∉ dom ⇒ FST r' = FST r) ∧
   (HasStack ∉ dom ⇒ ctxt'.stack = ctxt.stack) ∧
   (HasGasUsed ∉ dom ⇒ ctxt'.gasUsed = ctxt.gasUsed) ∧
+  (HasStateGasLeft ∉ dom ⇒ ctxt'.stateGasLeft = ctxt.stateGasLeft) ∧
+  (HasStateGasSpilled ∉ dom ⇒ ctxt'.stateGasSpilled = ctxt.stateGasSpilled) ∧
+  (HasStateGasBaseline ∉ dom ⇒ ctxt'.stateGasBaseline = ctxt.stateGasBaseline) ∧
+  (HasStateGasCommitted ∉ dom ⇒ ctxt'.stateGasCommitted = ctxt.stateGasCommitted) ∧
   (HasMsgParams ∉ dom ⇒ ctxt'.msgParams = ctxt.msgParams) ∧
   (HasLogs ∉ dom ⇒ ctxt'.logs = ctxt.logs) ∧
   (HasSubRefund ∉ dom ⇒ ctxt'.subRefund = ctxt.subRefund) ∧
@@ -739,6 +799,20 @@ Proof
   \\ simp[]
 QED
 
+(* EIP-8037: `run_create` charges the transaction's creation of the callee
+   before it hands its frame on, which rebuilds the frame's context.  The
+   prelude builds exactly one frame, so a charge that is nought leaves the
+   contexts where they were. *)
+Theorem initial_state_contexts_length:
+  initial_state dom static chainId prevHashes blk accounts tx = SOME s
+  ⇒
+  LENGTH s.contexts = 1
+Proof
+  rw[initial_state_def, CaseEq"option"]
+  \\ pairarg_tac \\ gvs[]
+  \\ pairarg_tac \\ gvs[CaseEq"option"]
+QED
+
 (* Lemma: initial_state sets callee correctly *)
 Theorem initial_state_callee:
   initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
@@ -754,11 +828,22 @@ Proof
   \\ rw[callee_from_tx_to_def]
 QED
 
-(* Lemma: run_create for message calls to non-precompiles *)
+(* Lemma: run_create for message calls to non-precompiles.  EIP-8037 makes
+   the top frame pay for creating the account a value transfer would land
+   on, before the callee is entered; a charge the frame's gas cannot cover
+   fails the transaction instead.  The lemmas below hand the callee's SPEC
+   the state `run_create` returns, so they need that charge to be nought --
+   which it is whenever the destination already exists, or no value moves. *)
 Theorem run_create_call:
   initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
   tx.to = SOME callee ∧
-  ¬fIN callee precompile_addresses
+  ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for the
+     callee to be entered with the initial state's contexts.  Nought covers a
+     transaction whose authorizations are free as well as one that carries
+     none. *)
+  authorization_charges chainId blk accounts tx = [] ∧
+  ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts))
   ⇒
   run_create dom static chainId prevHashes blk accounts tx =
   SOME (INR (s.rollback.accounts,
@@ -767,14 +852,22 @@ Theorem run_create_call:
                   transfer_value tx.from callee tx.value),
              NONE))
 Proof
-  rw[run_create_def]
+  (* The premise is the charge list itself, so it rewrites the prelude's
+     `apply_authorization_charges` call to the empty one, which the
+     definition then settles on the frame unchanged. *)
+  rw[run_create_def, apply_authorization_charges_def]
   \\ imp_res_tac initial_state_callee
-  \\ gvs[]
+  \\ imp_res_tac initial_state_contexts_length
+  \\ `s.contexts = [(FST (HD s.contexts), SND (HD s.contexts))]` by
+       (Cases_on `s.contexts` \\ gvs[LENGTH_NIL]
+        \\ Cases_on `h` \\ Cases_on `t` \\ gvs[])
+  \\ gvs[charge_state_gas_context_def, execution_state_component_equality]
 QED
 
 (* The transaction prelude leaves a contract's code and storage alone *)
 Theorem process_authorization_contract:
-  process_authorization c auth (accs, acc, r) = (accs', acc', r') ∧
+  process_authorization c paid preAccs auth (accs, acc, pw, ds, ch) =
+    (accs', acc', pw', ds', ch') ∧
   ¬NULL (lookup_account a accs).code ∧
   ¬is_delegation (lookup_account a accs).code ⇒
   lookup_account a accs' = lookup_account a accs
@@ -785,8 +878,9 @@ Proof
 QED
 
 Theorem process_authorizations_contract:
-  ∀auths accs acc r accs' acc' r'.
-    process_authorizations c auths accs acc r = (accs', acc', r') ∧
+  ∀auths accs acc pw ds ch accs' acc' pw' ds' ch'.
+    process_authorizations c paid preAccs auths accs acc pw ds ch =
+      (accs', acc', pw', ds', ch') ∧
     ¬NULL (lookup_account a accs).code ∧
     ¬is_delegation (lookup_account a accs).code ⇒
     lookup_account a accs' = lookup_account a accs
@@ -823,7 +917,12 @@ Proof
 QED
 
 (* the initial state of a message call to a contract (code that is not a
-   delegation) *)
+   delegation)
+
+   EIP-7708: the transaction's own transfer is the frame's first log, so the
+   initial frame's logs are `transfer_log` of it rather than empty.  The log
+   lives in the frame, so a transaction that fails takes it down with the rest
+   of the frame's logs. *)
 Theorem initial_state_call_code:
   initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
   tx.to = SOME addr ∧
@@ -834,7 +933,13 @@ Theorem initial_state_call_code:
     s.rollback.toDelete = [] ∧
     ctxt.stack = [] ∧ ctxt.memory = empty_buffer ∧ ctxt.pc = 0 ∧
     ctxt.jumpDest = NONE ∧ ctxt.returnData = [] ∧ ctxt.gasUsed = 0 ∧
-    ctxt.addRefund = 0 ∧ ctxt.subRefund = 0 ∧ ctxt.logs = [] ∧
+    ctxt.addRefund = 0 ∧ ctxt.subRefund = 0 ∧
+    (* EIP-8037: the frame starts with nothing spilled out of it and nothing
+       committed, so its meter's only non-zero cell is the reservoir -- which
+       is the transaction's state gas grant, handed to the top frame whole. *)
+    ctxt.stateGasSpilled = 0 ∧ ctxt.stateGasCommitted = 0 ∧
+    ctxt.stateGasLeft = s.txParams.stateGasReservoir ∧
+    ctxt.logs = transfer_log tx.from addr tx.value ∧
     ctxt.msgParams.callee = addr ∧ ctxt.msgParams.code = code ∧
     ctxt.msgParams.parsed = parse_code 0 FEMPTY code ∧
     ctxt.msgParams.value = tx.value ∧
@@ -855,6 +960,7 @@ Proof
   \\ gvs[apply_intrinsic_cost_def, initial_context_def,
          initial_msg_params_def, code_from_tx_def, get_delegate_def,
          callee_from_tx_to_def, initial_rollback_def,
+         initial_tx_params_def,
          empty_return_destination_def, is_code_dest_def]
 QED
 
@@ -938,20 +1044,50 @@ Proof
   >- (rw[process_deletions_def] \\ simp[lookup_account_update_account_other])
 QED
 
-(* Lemma: deleted addresses become empty_account_state *)
+(* EIP-8246: an address a transaction deleted is cleared, not emptied, so
+   the account it leaves behind is its credited self with its nonce, code
+   and storage cleared.  Only the accounting statements need to say this:
+   the executor has already cleared it, by clearing it when it applies
+   `process_deletions`. *)
+Definition clear_deleted_def:
+  clear_deleted deleted a = if deleted then clear_account a else a
+End
+
+Theorem clear_deleted_balance[simp]:
+  (clear_deleted deleted a).balance = a.balance
+Proof
+  rw[clear_deleted_def, clear_account_def]
+QED
+
+(* Lemma: deleted addresses are cleared, keeping their balance (EIP-8246) *)
 Theorem lookup_account_process_deletions_deleted:
   MEM addr toDelete ⇒
-  lookup_account addr (process_deletions toDelete acc) = empty_account_state
+  lookup_account addr (process_deletions toDelete acc) =
+  clear_account (lookup_account addr acc)
 Proof
   qid_spec_tac `acc`
   \\ Induct_on `toDelete`
   >- rw[]
   >- (rw[process_deletions_def]
       >- (Cases_on `MEM addr toDelete`
-          >- (first_x_assum irule \\ first_x_assum ACCEPT_TAC)
+          >- (first_assum (mp_tac o Q.SPEC
+                `update_account addr (clear_account (lookup_account addr acc)) acc`)
+              \\ simp[lookup_account_update_account_same])
           >- simp[lookup_account_process_deletions_other,
-                  lookup_account_update_account_same])
-      >- (first_x_assum irule \\ first_x_assum ACCEPT_TAC))
+                  lookup_account_update_account_same, clear_account_def])
+      >- (first_assum (mp_tac o Q.SPEC
+            `update_account h (clear_account (lookup_account h acc)) acc`)
+          \\ Cases_on `addr = h`
+          \\ simp[lookup_account_update_account_other,
+                  lookup_account_update_account_same]))
+QED
+
+Theorem lookup_account_process_deletions_cleared:
+  MEM addr toDelete ⇒
+  (lookup_account addr (process_deletions toDelete acc)).balance =
+  (lookup_account addr acc).balance
+Proof
+  rw[lookup_account_process_deletions_deleted, clear_account_def]
 QED
 
 (* Lemma: post_transaction_accounting preserves accounts for addresses
@@ -967,10 +1103,15 @@ Theorem post_transaction_accounting_accounts:
   lookup_account addr t.rollback.accounts
 Proof
   strip_tac
-  \\ ASM_SIMP_TAC std_ss [post_transaction_accounting_def, LET_THM,
-                         pairTheory.UNCURRY,
-                         lookup_account_process_deletions_other,
-                         lookup_account_update_account_other]
+  (* `std_ss`, not `simp`/`srw_ss`: the goal matches two copies of the
+     settlement arithmetic against each other, and the arithmetic
+     normaliser needs minutes over it now that the state dimension is in
+     there.  Nothing here needs arithmetic, only the unfolding. *)
+  \\ ASM_SIMP_TAC std_ss [post_transaction_accounting_def,
+         transaction_gas_accounting_def, LET_THM, COND_CLAUSES,
+         pairTheory.pair_case_thm, pairTheory.UNCURRY_DEF,
+         lookup_account_process_deletions_other,
+         lookup_account_update_account_other]
 QED
 
 (* Helper definitions for gas accounting in bridging theorem *)
@@ -978,35 +1119,47 @@ Definition compute_gas_left_def:
   compute_gas_left (ctxtGasLimit:num) ctxtGasUsed = ctxtGasLimit - ctxtGasUsed
 End
 
+(* EIP-8037: what the transaction spent is its limit less the execution
+   gas and the state gas reservoir the top frame gave back. *)
 Definition compute_tx_gas_used_def:
-  compute_tx_gas_used (txGasLimit:num) ctxtGasLimit ctxtGasUsed =
-    txGasLimit - compute_gas_left ctxtGasLimit ctxtGasUsed
+  compute_tx_gas_used (txGasLimit:num) ctxtGasLimit ctxtGasUsed
+                      ctxtStateGasLeft =
+    txGasLimit - compute_gas_left ctxtGasLimit ctxtGasUsed - ctxtStateGasLeft
 End
 
 Definition compute_total_gas_used_def:
-  compute_total_gas_used (txGasLimit:num) txData ctxtGasLimit ctxtGasUsed
-                         ctxtAddRefund ctxtSubRefund authRefund =
-    let txGasUsed = compute_tx_gas_used txGasLimit ctxtGasLimit ctxtGasUsed in
+  compute_total_gas_used (txGasLimit:num) txAccessList txData txTo txFrom
+                         txValue ctxtGasLimit ctxtGasUsed ctxtStateGasLeft
+                         ctxtAddRefund
+                         ctxtSubRefund authRefund =
+    let txGasUsed = compute_tx_gas_used txGasLimit ctxtGasLimit ctxtGasUsed
+                         ctxtStateGasLeft in
     let storageRefund = ctxtAddRefund - ctxtSubRefund in
     let gasRefund = MIN (txGasUsed DIV 5) (authRefund + storageRefund) in
-    let floor_cost = calldata_floor_cost txData in
+    let floor_cost = calldata_floor_cost txAccessList (IS_NONE txTo)
+                                      (txTo = SOME txFrom) txValue txData in
       MAX (txGasUsed - gasRefund) floor_cost
 End
 
 Definition compute_refund_ether_def:
-  compute_refund_ether (txGasLimit:num) txGasPrice txData ctxtGasLimit ctxtGasUsed
-                       ctxtAddRefund ctxtSubRefund authRefund =
-    let totalGasUsed = compute_total_gas_used txGasLimit txData ctxtGasLimit
-                         ctxtGasUsed ctxtAddRefund ctxtSubRefund authRefund in
+  compute_refund_ether (txGasLimit:num) txGasPrice txAccessList txData txTo
+                       txFrom txValue ctxtGasLimit ctxtGasUsed ctxtStateGasLeft
+                       ctxtAddRefund
+                       ctxtSubRefund authRefund =
+    let totalGasUsed = compute_total_gas_used txGasLimit txAccessList txData
+                         txTo txFrom txValue ctxtGasLimit ctxtGasUsed
+                         ctxtStateGasLeft ctxtAddRefund ctxtSubRefund authRefund in
       (txGasLimit - totalGasUsed) * txGasPrice
 End
 
 Definition compute_transaction_fee_def:
-  compute_transaction_fee (txGasLimit:num) txGasPrice baseFeePerGas txData
-                          ctxtGasLimit ctxtGasUsed ctxtAddRefund ctxtSubRefund
-                          authRefund =
-    let totalGasUsed = compute_total_gas_used txGasLimit txData ctxtGasLimit
-                         ctxtGasUsed ctxtAddRefund ctxtSubRefund authRefund in
+  compute_transaction_fee (txGasLimit:num) txGasPrice baseFeePerGas txAccessList
+                          txData txTo txFrom txValue ctxtGasLimit ctxtGasUsed
+                          ctxtStateGasLeft
+                          ctxtAddRefund ctxtSubRefund authRefund =
+    let totalGasUsed = compute_total_gas_used txGasLimit txAccessList txData
+                         txTo txFrom txValue ctxtGasLimit ctxtGasUsed
+                         ctxtStateGasLeft ctxtAddRefund ctxtSubRefund authRefund in
     let priorityFeePerGas = txGasPrice - baseFeePerGas in
       totalGasUsed * priorityFeePerGas
 End
@@ -1014,12 +1167,14 @@ End
 (* the sender's gas refund and the fee recipient's fee, as
    post_transaction_accounting pays them *)
 Definition pay_transaction_gas_def:
-  pay_transaction_gas blk tx gasLimit gasUsed addRefund subRefund authRefund
-                      accounts =
-  let refund = compute_refund_ether tx.gasLimit tx.gasPrice tx.data gasLimit
-                 gasUsed addRefund subRefund authRefund;
+  pay_transaction_gas blk tx gasLimit gasUsed stateGasLeft addRefund subRefund
+                      authRefund accounts =
+  let refund = compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList
+                 tx.data tx.to tx.from tx.value gasLimit gasUsed stateGasLeft
+                 addRefund subRefund authRefund;
       fee = compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
-              tx.data gasLimit gasUsed addRefund subRefund authRefund;
+              tx.accessList tx.data tx.to tx.from tx.value gasLimit gasUsed
+              stateGasLeft addRefund subRefund authRefund;
       accounts = update_account tx.from
         ((lookup_account tx.from accounts) with balance updated_by $+ refund)
         accounts
@@ -1030,17 +1185,19 @@ End
 
 Theorem lookup_account_pay_transaction_gas:
   lookup_account addr
-    (pay_transaction_gas blk tx gasLimit gasUsed addRefund subRefund authRefund
-       accounts) =
+    (pay_transaction_gas blk tx gasLimit gasUsed stateGasLeft addRefund
+       subRefund authRefund accounts) =
   (lookup_account addr accounts) with balance :=
     (lookup_account addr accounts).balance +
     (if addr = tx.from then
-       compute_refund_ether tx.gasLimit tx.gasPrice tx.data gasLimit gasUsed
-         addRefund subRefund authRefund
+       compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
+         tx.to tx.from tx.value gasLimit gasUsed stateGasLeft addRefund
+         subRefund authRefund
      else 0) +
     (if addr = blk.coinBase then
-       compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas tx.data
-         gasLimit gasUsed addRefund subRefund authRefund
+       compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
+         tx.accessList tx.data tx.to tx.from tx.value gasLimit gasUsed
+         stateGasLeft addRefund subRefund authRefund
      else 0)
 Proof
   rewrite_tac[pay_transaction_gas_def, LET_THM]
@@ -1051,32 +1208,42 @@ QED
 Theorem post_transaction_accounting_success_lookup:
   ~NULL t.contexts /\ NULL (TL t.contexts) ==>
   lookup_account addr (SND (post_transaction_accounting blk tx NONE acc t)) =
-  if MEM addr t.rollback.toDelete then empty_account_state else
-  (lookup_account addr t.rollback.accounts) with balance :=
+  clear_deleted (MEM addr t.rollback.toDelete)
+  ((lookup_account addr t.rollback.accounts) with balance :=
     (lookup_account addr t.rollback.accounts).balance +
     (if addr = tx.from then
-       compute_refund_ether tx.gasLimit tx.gasPrice tx.data
+       compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
+         tx.to tx.from tx.value
          (FST (HD t.contexts)).msgParams.gasLimit
-         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
+         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).stateGasLeft
+         (FST (HD t.contexts)).addRefund
          (FST (HD t.contexts)).subRefund t.txParams.authRefund
      else 0) +
     (if addr = blk.coinBase then
-       compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas tx.data
+       compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
+         tx.accessList tx.data tx.to tx.from tx.value
          (FST (HD t.contexts)).msgParams.gasLimit
-         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).addRefund
+         (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).stateGasLeft
+         (FST (HD t.contexts)).addRefund
          (FST (HD t.contexts)).subRefund t.txParams.authRefund
-     else 0)
+     else 0))
 Proof
   strip_tac
+  (* `std_ss` for the same reason as `post_transaction_accounting_accounts`
+     above: the spec's settlement formula and the `compute_*` mirrors are
+     unfolded and matched syntactically, which `srw_ss` cannot do quickly. *)
   >> ASM_SIMP_TAC std_ss [post_transaction_accounting_def,
-                         transaction_gas_accounting_def, LET_THM,
-                         pairTheory.UNCURRY_DEF]
+        transaction_gas_accounting_def, LET_THM, COND_CLAUSES,
+        pairTheory.pair_case_thm, pairTheory.UNCURRY_DEF]
   >> Cases_on `MEM addr t.rollback.toDelete`
-  >> ASM_SIMP_TAC std_ss [lookup_account_process_deletions_deleted,
-          lookup_account_process_deletions_other, lookup_account_two_credits,
-          compute_refund_ether_def, compute_transaction_fee_def,
-          compute_total_gas_used_def, compute_tx_gas_used_def,
-          compute_gas_left_def, LET_THM]
+  >> ASM_SIMP_TAC std_ss [clear_deleted_def,
+        lookup_account_process_deletions_deleted,
+        lookup_account_process_deletions_other,
+        lookup_account_update_account_other,
+        lookup_account_update_account_same, lookup_account_two_credits,
+        compute_refund_ether_def, compute_transaction_fee_def,
+        compute_total_gas_used_def, compute_tx_gas_used_def,
+        compute_gas_left_def, LET_THM, COND_CLAUSES]
 QED
 
 Theorem transfer_value_zero:
@@ -1090,6 +1257,14 @@ QED
 Theorem run_to_run_transaction:
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for the
+     callee to be entered with the initial state's contexts.  Nought covers a
+     transaction whose authorizations are free as well as one that carries
+     none. *)
+  authorization_charges chainId blk accounts tx = [] ∧
+  (* EIP-8037: as in `SPEC_to_run_transaction`, the prelude's own charge for
+     creating the callee has to be nought for the callee to be entered. *)
+  ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts)) ∧
   wf_accounts accounts ∧
   initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
   run (s with rollback updated_by
@@ -1097,7 +1272,8 @@ Theorem run_to_run_transaction:
     = SOME rs2 ∧
   (evm_Exception (INR NONE) * evm_ReturnData returnData *
    evm_Logs logs * evm_Rollback rb * evm_Contexts [] *
-   evm_GasUsed gasUsed * evm_MsgParams msgParams *
+   evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+   evm_MsgParams msgParams *
    evm_AddRefund addRefund * evm_SubRefund subRefund *
    evm_TxParams txParams * R) (evm2set rs2)
   ⇒
@@ -1107,20 +1283,24 @@ Theorem run_to_run_transaction:
     result.result = NONE ∧
     result.output = returnData ∧
     result.logs = logs ∧
+    (* Fees accumulate at aliased addresses; successful deletions happen last. *)
     (∀addr.
        lookup_account addr accounts' =
-       if MEM addr rb.toDelete then empty_account_state else
-       (lookup_account addr rb.accounts) with balance :=
+       clear_deleted (MEM addr rb.toDelete)
+       ((lookup_account addr rb.accounts) with balance :=
          (lookup_account addr rb.accounts).balance +
          (if addr = tx.from then
-            compute_refund_ether tx.gasLimit tx.gasPrice tx.data
-              msgParams.gasLimit gasUsed addRefund subRefund txParams.authRefund
+            compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
+              tx.to tx.from tx.value
+              msgParams.gasLimit gasUsed stateGasLeft addRefund subRefund
+              txParams.authRefund
           else 0) +
          (if addr = blk.coinBase then
             compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
-              tx.data msgParams.gasLimit gasUsed addRefund subRefund
-              txParams.authRefund
-          else 0))
+              tx.accessList tx.data tx.to tx.from tx.value
+              msgParams.gasLimit gasUsed stateGasLeft addRefund
+              subRefund txParams.authRefund
+          else 0)))
 Proof
   strip_tac
   \\ simp[run_transaction_def]
@@ -1133,7 +1313,7 @@ Proof
        by (imp_res_tac run_create_call >> gvs[])
   \\ gvs[]
   \\ `FST rs2 = INR NONE` by
-     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
       \\ simp[evm2set_def]
       \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
       \\ simp[])
@@ -1141,7 +1321,122 @@ Proof
   \\ `r.contexts <> []` by
      (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
       \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
-  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ simp[evm2set_def, STAR_evm2set]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+  \\ strip_tac
+  \\ qexistsl_tac
+       [`FST (post_transaction_accounting blk tx NONE s.rollback.accounts r)`,
+        `SND (post_transaction_accounting blk tx NONE s.rollback.accounts r)`]
+  \\ `~NULL r.contexts /\ NULL (TL r.contexts)` by simp[NULL_EQ]
+  \\ drule_all post_transaction_accounting_success
+  \\ disch_then (qspecl_then [`tx`, `blk`, `s.rollback.accounts`] strip_assume_tac)
+  \\ simp[]
+  \\ gen_tac
+  \\ drule_all post_transaction_accounting_success_lookup
+  \\ disch_then (qspecl_then [`tx`, `blk`, `addr`, `s.rollback.accounts`] mp_tac)
+  \\ disch_then SUBST1_TAC
+  (* This branch's `compute_*` calls take the transaction's recipient and value,
+     and the steps above have already rewritten the goal's own copy of them --
+     `tx.to` to `SOME callee`, and `tx.value` to 0 in the case where the
+     prelude's creation charge is nought.  The accounting lemma's copy of the
+     same formula only appears here, so substitute those equalities through
+     before `AP_TERM_TAC`, which needs the same function on both sides. *)
+  \\ gvs[]
+  \\ AP_TERM_TAC
+  \\ qmatch_goalsub_abbrev_tac `_ with balance := balance + refund + fee`
+  \\ simp[NoAsms, account_state_component_equality, AC ADD_ASSOC ADD_COMM]
+QED
+
+(* Main bridging theorem: connects SPEC to run_transaction for message calls *)
+
+(* Main bridging theorem: connects SPEC to run_transaction for message calls *)
+Theorem SPEC_to_run_transaction:
+  (* SPEC preconditions *)
+  SPEC EVM_MODEL P {} Q ∧
+  (* Transaction is a message call to a non-precompile *)
+  tx.to = SOME callee ∧
+  ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for the
+     callee to be entered with the initial state's contexts.  Nought covers a
+     transaction whose authorizations are free as well as one that carries
+     none. *)
+  authorization_charges chainId blk accounts tx = [] ∧
+  (* EIP-8037: the prelude's own charge for creating the callee is nought,
+     which holds whenever the callee already exists or no value moves, so
+     that the state `run_create` hands the callee is the one `P` and `Q`
+     above describe.  A transaction that charges it spends gas before the
+     callee runs, and can fail the transaction outright. *)
+  ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts)) ∧
+  (* Well-formed accounts *)
+  wf_accounts accounts ∧
+  (* initial_state succeeds *)
+  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
+  (* The state after transfer_value modification satisfies precondition P *)
+  s' = s with rollback updated_by
+       (λr. r with accounts updated_by transfer_value tx.from callee tx.value) ∧
+  P (evm2set (INL (), s')) ∧
+  (* Postcondition has the required form for successful execution *)
+  Q = evm_Exception (INR NONE) * evm_ReturnData returnData *
+      evm_Logs logs * evm_Rollback rb * evm_Contexts [] *
+      evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+      evm_MsgParams msgParams *
+      evm_AddRefund addRefund * evm_SubRefund subRefund *
+      evm_TxParams txParams * R
+  ⇒
+  ∃result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') ∧
+    result.result = NONE ∧
+    result.output = returnData ∧
+    result.logs = logs ∧
+    (* Fees accumulate at aliased addresses; successful deletions happen last. *)
+    (∀addr.
+       lookup_account addr accounts' =
+       clear_deleted (MEM addr rb.toDelete)
+       ((lookup_account addr rb.accounts) with balance :=
+         (lookup_account addr rb.accounts).balance +
+         (if addr = tx.from then
+            compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
+              tx.to tx.from tx.value
+              msgParams.gasLimit gasUsed stateGasLeft addRefund subRefund
+              txParams.authRefund
+          else 0) +
+         (if addr = blk.coinBase then
+            compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
+              tx.accessList tx.data tx.to tx.from tx.value
+              msgParams.gasLimit gasUsed stateGasLeft addRefund
+              subRefund txParams.authRefund
+          else 0)))
+Proof
+  strip_tac
+  \\ simp[run_transaction_def]
+  \\ `run_create dom F chainId prevHashes blk accounts tx =
+      SOME (INR (s.rollback.accounts, s', NONE))`
+       by (imp_res_tac run_create_call >> gvs[])
+  \\ simp[]
+  \\ sg `?rs2. run s' = SOME rs2 /\ Q (evm2set rs2)`
+  >- (irule run_from_SPEC
+      \\ conj_tac
+      >- (qexists_tac `evm_ReturnData returnData * evm_Logs logs *
+            evm_Rollback rb * evm_Contexts [] * evm_GasUsed gasUsed *
+            evm_StateGasLeft stateGasLeft *
+            evm_MsgParams msgParams * evm_AddRefund addRefund *
+            evm_SubRefund subRefund * evm_TxParams txParams * R`
+          \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
+      >- (qexists_tac `P` \\ simp[]))
+  \\ gvs[]
+  \\ `FST rs2 = INR NONE` by
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+      \\ simp[evm2set_def]
+      \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+      \\ simp[])
+  \\ Cases_on `rs2` \\ gvs[]
+  \\ `r.contexts <> []` by
+     (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+      \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
   \\ simp[evm2set_def, STAR_evm2set]
   \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
   \\ simp[]
@@ -1158,66 +1453,13 @@ Proof
   \\ disch_then (qspecl_then [`tx`, `blk`, `addr`, `s.rollback.accounts`] mp_tac)
   \\ disch_then SUBST1_TAC
   \\ AP_TERM_TAC
+  (* The two sides disagree on the recipient: the spec keeps `tx.to`, the
+     accounting lemma's instance was already rewritten to `SOME callee`.
+     Rewrite before abbreviating, or the abbreviation hides the occurrence
+     from the rewriter and the AC step cannot close. *)
+  \\ qpat_x_assum `tx.to = SOME callee` (fn th => simp [th])
   \\ qmatch_goalsub_abbrev_tac `_ with balance := balance + refund + fee`
   \\ simp[NoAsms, account_state_component_equality, AC ADD_ASSOC ADD_COMM]
-QED
-
-(* Main bridging theorem: connects SPEC to run_transaction for message calls *)
-Theorem SPEC_to_run_transaction:
-  (* SPEC preconditions *)
-  SPEC EVM_MODEL P {} Q ∧
-  (* Transaction is a message call to a non-precompile *)
-  tx.to = SOME callee ∧
-  ¬fIN callee precompile_addresses ∧
-  (* Well-formed accounts *)
-  wf_accounts accounts ∧
-  (* initial_state succeeds *)
-  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
-  (* The state after transfer_value modification satisfies precondition P *)
-  s' = s with rollback updated_by
-       (λr. r with accounts updated_by transfer_value tx.from callee tx.value) ∧
-  P (evm2set (INL (), s')) ∧
-  (* Postcondition has the required form for successful execution *)
-  Q = evm_Exception (INR NONE) * evm_ReturnData returnData *
-      evm_Logs logs * evm_Rollback rb * evm_Contexts [] *
-      evm_GasUsed gasUsed * evm_MsgParams msgParams *
-      evm_AddRefund addRefund * evm_SubRefund subRefund *
-      evm_TxParams txParams * R
-  ⇒
-  ∃result accounts'.
-    run_transaction dom F chainId prevHashes blk accounts tx =
-      SOME (result, accounts') ∧
-    result.result = NONE ∧
-    result.output = returnData ∧
-    result.logs = logs ∧
-    (* Fees accumulate at aliased addresses; successful deletions happen last. *)
-    (∀addr.
-       lookup_account addr accounts' =
-       if MEM addr rb.toDelete then empty_account_state else
-       (lookup_account addr rb.accounts) with balance :=
-         (lookup_account addr rb.accounts).balance +
-         (if addr = tx.from then
-            compute_refund_ether tx.gasLimit tx.gasPrice tx.data
-              msgParams.gasLimit gasUsed addRefund subRefund txParams.authRefund
-          else 0) +
-         (if addr = blk.coinBase then
-            compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
-              tx.data msgParams.gasLimit gasUsed addRefund subRefund
-              txParams.authRefund
-          else 0))
-Proof
-  strip_tac
-  \\ `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
-  by (irule run_from_SPEC
-      \\ conj_tac
-      >- (qexists_tac `evm_ReturnData returnData * evm_Logs logs *
-            evm_Rollback rb * evm_Contexts [] * evm_GasUsed gasUsed *
-            evm_MsgParams msgParams * evm_AddRefund addRefund *
-            evm_SubRefund subRefund * evm_TxParams txParams * R`
-          \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
-      >- (qexists_tac `P` \\ simp[]))
-  \\ gvs[]
-  \\ drule_all run_to_run_transaction \\ simp[]
 QED
 
 Theorem post_transaction_accounting_failure:
@@ -1227,12 +1469,14 @@ Theorem post_transaction_accounting_failure:
     (FST (HD t.contexts)).returnData /\
   (FST (post_transaction_accounting blk tx (SOME e) acc t)).logs = [] /\
   (FST (post_transaction_accounting blk tx (SOME e) acc t)).gasUsed =
-    compute_total_gas_used tx.gasLimit tx.data
-      (FST (HD t.contexts)).msgParams.gasLimit (FST (HD t.contexts)).gasUsed
+    compute_total_gas_used tx.gasLimit tx.accessList tx.data tx.to tx.from
+      tx.value (FST (HD t.contexts)).msgParams.gasLimit
+      (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).stateGasLeft
       0 0 t.txParams.authRefund /\
   SND (post_transaction_accounting blk tx (SOME e) acc t) =
   pay_transaction_gas blk tx (FST (HD t.contexts)).msgParams.gasLimit
-    (FST (HD t.contexts)).gasUsed 0 0 t.txParams.authRefund acc
+    (FST (HD t.contexts)).gasUsed (FST (HD t.contexts)).stateGasLeft
+    0 0 t.txParams.authRefund acc
 Proof
   strip_tac
   \\ simp[post_transaction_accounting_def, transaction_gas_accounting_def,
@@ -1246,12 +1490,22 @@ QED
 Theorem run_to_run_transaction_failure:
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for the
+     callee to be entered with the initial state's contexts.  Nought covers a
+     transaction whose authorizations are free as well as one that carries
+     none. *)
+  authorization_charges chainId blk accounts tx = [] ∧
+  (* EIP-8037: as in `SPEC_to_run_transaction_failure`, the prelude's own
+     charge for creating the callee has to be nought for the callee to be
+     entered. *)
+  ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts)) ∧
   initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
   run (s with rollback updated_by
        (λr. r with accounts updated_by transfer_value tx.from callee tx.value))
     = SOME rs2 ∧
   (evm_Exception (INR (SOME e)) * evm_ReturnData returnData *
-   evm_Contexts [] * evm_GasUsed gasUsed * evm_MsgParams msgParams *
+   evm_Contexts [] * evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+   evm_MsgParams msgParams *
    evm_TxParams txParams * R) (evm2set rs2)
   ⇒
   ∃result accounts'.
@@ -1261,10 +1515,11 @@ Theorem run_to_run_transaction_failure:
     result.output = returnData ∧
     result.logs = [] ∧
     result.gasUsed =
-      compute_total_gas_used tx.gasLimit tx.data msgParams.gasLimit gasUsed
-        0 0 txParams.authRefund ∧
+      compute_total_gas_used tx.gasLimit tx.accessList tx.data tx.to tx.from
+        tx.value msgParams.gasLimit gasUsed stateGasLeft 0 0
+        txParams.authRefund ∧
     accounts' =
-      pay_transaction_gas blk tx msgParams.gasLimit gasUsed 0 0
+      pay_transaction_gas blk tx msgParams.gasLimit gasUsed stateGasLeft 0 0
         txParams.authRefund s.rollback.accounts
 Proof
   strip_tac
@@ -1278,7 +1533,7 @@ Proof
        by (imp_res_tac run_create_call >> gvs[])
   \\ gvs[]
   \\ `FST rs2 = INR (SOME e)` by
-     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _) _` mp_tac
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
       \\ simp[evm2set_def]
       \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
       \\ simp[])
@@ -1286,7 +1541,7 @@ Proof
   \\ `r.contexts <> []` by
      (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
       \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
-  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
   \\ simp[evm2set_def, STAR_evm2set]
   \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
   \\ simp[]
@@ -1304,12 +1559,22 @@ Theorem SPEC_to_run_transaction_failure:
   SPEC EVM_MODEL P {} Q ∧
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for the
+     callee to be entered with the initial state's contexts.  Nought covers a
+     transaction whose authorizations are free as well as one that carries
+     none. *)
+  authorization_charges chainId blk accounts tx = [] ∧
+  (* EIP-8037: as in `SPEC_to_run_transaction`, the prelude's own charge for
+     creating the callee has to be nought for the callee to be entered at
+     all. *)
+  ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts)) ∧
   initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
   s' = s with rollback updated_by
        (λr. r with accounts updated_by transfer_value tx.from callee tx.value) ∧
   P (evm2set (INL (), s')) ∧
   Q = evm_Exception (INR (SOME e)) * evm_ReturnData returnData *
-      evm_Contexts [] * evm_GasUsed gasUsed * evm_MsgParams msgParams *
+      evm_Contexts [] * evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+      evm_MsgParams msgParams *
       evm_TxParams txParams * R
   ⇒
   ∃result accounts'.
@@ -1319,23 +1584,47 @@ Theorem SPEC_to_run_transaction_failure:
     result.output = returnData ∧
     result.logs = [] ∧
     result.gasUsed =
-      compute_total_gas_used tx.gasLimit tx.data msgParams.gasLimit gasUsed
-        0 0 txParams.authRefund ∧
+      compute_total_gas_used tx.gasLimit tx.accessList tx.data tx.to tx.from
+        tx.value msgParams.gasLimit gasUsed stateGasLeft 0 0
+        txParams.authRefund ∧
     accounts' =
-      pay_transaction_gas blk tx msgParams.gasLimit gasUsed 0 0
+      pay_transaction_gas blk tx msgParams.gasLimit gasUsed stateGasLeft 0 0
         txParams.authRefund s.rollback.accounts
 Proof
   strip_tac
-  \\ `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
-  by (irule run_from_SPEC
+  \\ simp[run_transaction_def]
+  \\ `run_create dom F chainId prevHashes blk accounts tx =
+      SOME (INR (s.rollback.accounts, s', NONE))`
+       by (imp_res_tac run_create_call >> gvs[])
+  \\ simp[]
+  \\ sg `?rs2. run s' = SOME rs2 /\ Q (evm2set rs2)`
+  >- (irule run_from_SPEC
       \\ conj_tac
       >- (qexists_tac `evm_ReturnData returnData * evm_Contexts [] *
-            evm_GasUsed gasUsed * evm_MsgParams msgParams *
+            evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+            evm_MsgParams msgParams *
             evm_TxParams txParams * R`
           \\ qexists_tac `SOME e` \\ gvs[] \\ simp[STAR_ASSOC])
       >- (qexists_tac `P` \\ simp[]))
   \\ gvs[]
-  \\ drule_all run_to_run_transaction_failure \\ simp[]
+  \\ `FST rs2 = INR (SOME e)` by
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+      \\ simp[evm2set_def]
+      \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+      \\ simp[])
+  \\ Cases_on `rs2` \\ gvs[]
+  \\ `r.contexts <> []` by
+     (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+      \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ simp[evm2set_def, STAR_evm2set]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+  \\ strip_tac
+  \\ `~NULL r.contexts /\ NULL (TL r.contexts)` by simp[NULL_EQ]
+  \\ qexists_tac
+       `FST (post_transaction_accounting blk tx (SOME e) s.rollback.accounts r)`
+  \\ simp[PAIR_FST_SND_EQ, post_transaction_accounting_failure]
 QED
 
 (*-------------------------------------------------------------------------------*
@@ -1705,18 +1994,32 @@ Definition SStore_gas_def:
     originalValue = lookup_storage key orig_account.storage;
     baseDynamicGas = sstore_base_gas originalValue currentValue value;
     accessCost = access_slot_cost rb (SK address key);
-    dynamicGas = baseDynamicGas + zero_warm accessCost;
+    dynamicGas = baseDynamicGas + accessCost;
     (add,sub) = sstore_refund_updates originalValue currentValue value;
   in (dynamicGas, add, sub)
 End
 
-(* an SSTORE to a slot just read pays no cold surcharge *)
+(* EIP-8037: the state gas the same comparison charges, and what it
+   credits back when the slot returns to a zero transaction-start value.
+   At most one of the two is ever non-zero. *)
+Definition SStore_state_gas_def:
+  SStore_state_gas original rb address key value = let
+    accounts = rb.accounts;
+    currentValue = lookup_storage key (lookup_account address accounts).storage;
+    originalValue = lookup_storage key (lookup_account address original).storage;
+  in (sstore_state_gas_refund originalValue currentValue value,
+      sstore_state_gas originalValue currentValue value)
+End
+(* an SSTORE to a slot just read pays the warm access, not the cold surcharge:
+   this variant of `SStore_gas` charges the access cost itself rather than its
+   cold surcharge, so the access cost here is the warm one. *)
 Theorem SStore_gas_add_slot:
   FST (SStore_gas original (accesses_add_slot (SK a k) rb) a k v) =
   sstore_base_gas (lookup_storage k (lookup_account a original).storage)
-                  (lookup_storage k (lookup_account a rb.accounts).storage) v
+                  (lookup_storage k (lookup_account a rb.accounts).storage) v +
+  warm_access_cost
 Proof
-  rw[SStore_gas_def, access_slot_cost_add_slot, zero_warm_def,
+  rw[SStore_gas_def, access_slot_cost_add_slot,
      warm_access_cost_def, accesses_add_slot_accounts]
   \\ pairarg_tac \\ gvs[]
 QED
@@ -1724,16 +2027,18 @@ QED
 Theorem sstore_base_gas_le:
   sstore_base_gas ov cv v ≤ 20000
 Proof
-  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, warm_access_cost_def]
+  rw[sstore_base_gas_def, storage_write_cost_def]
 QED
 
-(* the first write to a slot that was nonzero, or that isn't changed *)
+(* EIP-8038 prices the write itself, whether the slot was set or updated, so
+   this is at most one `STORAGE_WRITE`, not the old
+   `storage_update_cost - cold_sload_cost`; the slot's access is a separate
+   term of the charge. *)
 Theorem sstore_base_gas_same_le:
-  (c = 0w ⇒ v = c) ⇒ sstore_base_gas c c v ≤ 2900
+  (c = 0w ⇒ v = c) ⇒
+  sstore_base_gas c c v ≤ storage_write_cost
 Proof
-  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, warm_access_cost_def]
+  rw[sstore_base_gas_def, storage_write_cost_def]
   \\ gvs[]
 QED
 
@@ -1796,9 +2101,14 @@ val end_tac =
   \\ qmatch_goalsub_rename_tac ‘p = (_,_)’
   \\ Cases_on ‘p’ \\ gvs[]
 
-val binop_tac =
+(* `extra` carries the definitions of a step's own gas arithmetic, which
+   only the rule for that step needs; the rest of the family shares the
+   base set. *)
+fun binop_prefix_tac extra prepare =
   start_tac
-  \\ gvs [step_inst_def,step_binop_def,step_modop_def,pop_stack_def,bind_def,
+  \\ prepare
+  \\ gvs (extra @
+         [step_inst_def,step_binop_def,step_modop_def,pop_stack_def,bind_def,
           ignore_bind_def,get_current_context_def,return_def,assert_def,
           set_current_context_def,consume_gas_def,push_stack_def,
           inc_pc_or_jump_def,is_call_def,with_zero_mod_def,step_monop_def,
@@ -1830,8 +2140,10 @@ val binop_tac =
           ExtCodeHash_gas_def,step_ext_code_hash_def,step_mload_def,
           step_copy_to_memory_def,copy_to_memory_def,step_blob_hash_def,
           write_memory_def,memory_expand_by_def,step_keccak256_def,
-          step_block_hash_def,step_self_balance_def,get_callee_def]
-  \\ Cases_on ‘FST r’ \\ gvs[]
+          step_block_hash_def,step_self_balance_def,get_callee_def]);
+
+val binop_tail_tac =
+  Cases_on ‘FST r’ \\ gvs[]
   \\ TRY(Cases_on ‘(FST (HD (SND r).contexts)).stack’ >- gvs[] \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`HD (TAKE _ hs)` \\ Cases_on`hs` \\ gvs[])
   \\ TRY(qmatch_goalsub_rename_tac`DROP _ (hs:bytes32 list)` \\ Cases_on`hs` \\ gvs[])
@@ -1850,6 +2162,138 @@ val binop_tac =
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
   \\ end_tac
+
+fun binop_staged_tac extra prepare normalize =
+  binop_prefix_tac extra prepare >> normalize >> binop_tail_tac;
+
+fun binop_tac_of extra = binop_staged_tac extra all_tac all_tac;
+
+val binop_tac = binop_tac_of [];
+
+(* EIP-8037: `credit_new_account` as a context function, so a rule that pops
+   a failed frame can name the meter the refill leaves in its parent.  The
+   refill draws the frame's outstanding spill into execution gas first and
+   puts the rest back in the reservoir, exactly as the step does. *)
+Definition credit_new_account_context_def:
+  credit_new_account_context ctxt charged =
+    ctxt with <|
+      gasUsed := ctxt.gasUsed -
+                 MIN (if charged then new_account_state_gas else 0)
+                     ctxt.stateGasSpilled;
+      stateGasSpilled := ctxt.stateGasSpilled -
+                 MIN (if charged then new_account_state_gas else 0)
+                     ctxt.stateGasSpilled;
+      stateGasLeft := ctxt.stateGasLeft +
+                 ((if charged then new_account_state_gas else 0) -
+                  MIN (if charged then new_account_state_gas else 0)
+                      ctxt.stateGasSpilled) |>
+End
+
+(* The refill as a rewrite: it fires whatever `charged` turns out to be, so a
+   rule that credits a frame's creation charge need not split on the flag. *)
+Theorem credit_new_account_apply[local]:
+  s.contexts <> [] ==>
+  credit_new_account charged s =
+    (INL (), s with contexts :=
+      (credit_new_account_context (FST (HD s.contexts)) charged,
+       SND (HD s.contexts)) :: TL s.contexts)
+Proof
+  strip_tac >>
+  Cases_on `s.contexts` >- gvs[] >>
+  rename1 `s.contexts = h::ts` >> Cases_on `h` >>
+  rename1 `s.contexts = (c,k)::cs` >>
+  Cases_on `charged` >>
+  gvs[credit_new_account_def, credit_state_gas_refund_def,
+      credit_new_account_context_def, LET_THM, bind_def,
+      get_current_context_def, set_current_context_def, return_def,
+      context_component_equality, execution_state_component_equality]
+QED
+
+(* A failed, gas-saturated child returns no execution gas. Compute the
+   merge on two explicit frames without unfolding either meter function. *)
+Theorem saturated_failed_child_pop[local]:
+  s.contexts = (child,rb)::(caller,caller_rb)::rest /\
+  child.gasUsed = child.msgParams.gasLimit ==>
+  pop_and_incorporate_context F s =
+    (INL (), s with <|
+      contexts :=
+        (credit_new_account_context
+          (absorb_state_gas caller child.stateGasLeft child.stateGasSpilled
+                            child.stateGasCommitted)
+          child.msgParams.newAccountCharged, caller_rb)::rest;
+      rollback := rb |> )
+Proof
+  strip_tac >>
+  simp[pop_and_incorporate_context_def, get_gas_left_def,
+       pop_context_def, unuse_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, credit_new_account_apply, set_rollback_def]
+QED
+
+Theorem saturated_failed_child_pop_update[local]:
+  child.gasUsed = child.msgParams.gasLimit ==>
+  pop_and_incorporate_context F
+    (s with contexts := (child,rb)::(caller,caller_rb)::rest) =
+    (INL (), s with <|
+      contexts :=
+        (credit_new_account_context
+          (absorb_state_gas caller child.stateGasLeft child.stateGasSpilled
+                            child.stateGasCommitted)
+          child.msgParams.newAccountCharged, caller_rb)::rest;
+      rollback := rb |> )
+Proof
+  strip_tac >>
+  simp[pop_and_incorporate_context_def, get_gas_left_def,
+       pop_context_def, unuse_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, credit_new_account_apply, set_rollback_def]
+QED
+
+Theorem charge_new_account_apply[local]:
+  s.contexts <> [] /\
+  (if charged then new_account_state_gas else 0) <=
+    (FST (HD s.contexts)).stateGasLeft ==>
+  charge_new_account charged s =
+    (INL (), s with contexts :=
+      (FST (HD s.contexts) with
+         stateGasLeft := (FST (HD s.contexts)).stateGasLeft -
+                         (if charged then new_account_state_gas else 0),
+       SND (HD s.contexts))
+      :: TL s.contexts)
+Proof
+  strip_tac >>
+  Cases_on `s.contexts` >- gvs[] >>
+  rename1 `s.contexts = h::ts` >> Cases_on `h` >>
+  rename1 `s.contexts = (c,k)::cs` >>
+  Cases_on `charged` >>
+  gvs[charge_new_account_def, charge_state_gas_def, bind_def,
+      get_current_context_def, set_current_context_def, return_def,
+      assert_def, context_component_equality,
+      execution_state_component_equality]
+QED
+
+(* EIP-8038: the code deposit's state charge, reduced the same way.  It is
+   the same meter as `charge_new_account`'s, without the flag: the reservoir
+   pays when it can, and the affordability of the charge is the side
+   condition. *)
+Theorem charge_state_gas_apply[local]:
+  s.contexts <> [] /\
+  n <= (FST (HD s.contexts)).stateGasLeft ==>
+  charge_state_gas n s =
+    (INL (), s with contexts :=
+      (FST (HD s.contexts) with
+         stateGasLeft := (FST (HD s.contexts)).stateGasLeft - n,
+       SND (HD s.contexts))
+      :: TL s.contexts)
+Proof
+  strip_tac >>
+  Cases_on `s.contexts` >- gvs[] >>
+  rename1 `s.contexts = h::ts` >> Cases_on `h` >>
+  rename1 `s.contexts = (c,k)::cs` >>
+  gvs[charge_state_gas_def, bind_def, get_current_context_def,
+      set_current_context_def, return_def, context_component_equality,
+      execution_state_component_equality]
+QED
 
 Theorem SPEC_Stop_outermost:
   SPEC EVM_MODEL
@@ -1872,18 +2316,34 @@ Proof
           get_return_data_def,get_output_to_def,handle_exception_def,
           reraise_def,get_num_contexts_def,NULL_EQ,assert_def,
           return_destination_case_rator,consume_gas_def,update_accounts_def,
+          charge_state_gas_apply, word_size_def,
           CaseEq"return_destination",CaseEq"prod",CaseEq"sum"]
   \\ end_tac
+QED
+
+Theorem repay_absorb_gasUsed_sub[local]:
+  repay_state_gas_spill_context
+    (absorb_state_gas (c with gasUsed := c.gasUsed - n) sg sp cm) =
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)) with
+    gasUsed := (repay_state_gas_spill_context
+                  (absorb_state_gas c sg sp cm)).gasUsed - n
+Proof
+  simp[absorb_state_gas_def, repay_state_gas_spill_context_def,
+       context_component_equality] >> decide_tac
 QED
 
 Theorem SPEC_Stop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc Stop * evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = repay_state_gas_spill_context
+                    (absorb_state_gas caller sg sp cm) ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          calleeGasLeft = p.gasLimit - g ∧
@@ -1906,7 +2366,11 @@ Theorem SPEC_Stop_inner:
                     update_account addr
                       (lookup_account addr accounts with code := [])
                       accounts)) *
-   evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   evm_GasUsed (merged.gasUsed - calleeGasLeft) *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs (caller.logs ++ l) *
    evm_AddRefund (caller.addRefund + ar) *
@@ -1952,7 +2416,10 @@ Proof
          set_current_context_def,assert_def,get_return_data_def,
          get_output_to_def,set_return_data_def,Abbr`calleeGasLeft`,
          write_memory_def,pop_context_def,unuse_gas_def,push_logs_def,
-         update_gas_refund_def,get_gas_left_def]
+         update_gas_refund_def,get_gas_left_def,
+         repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+         absorb_state_gas_def, charge_state_gas_apply, word_size_def,
+         keccak256_per_word_cost_def, Abbr`merged`]
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
@@ -1991,159 +2458,281 @@ QED
    n arguments. Each is discharged for a concrete instruction by unfolding
    step_inst_def and its step_* definition. *)
 
+(* EIP-8037's state-gas meter operations.  A frame's failure now rolls its
+   state gas back and forfeits its execution grant, and a frame that pops
+   merges its meter into its parent's, so every rule that crosses a frame
+   boundary has to unfold them. *)
+val state_gas_defs =
+  [get_state_gas_left_def, charge_state_gas_def,
+   credit_state_gas_refund_def, restore_state_gas_def, commit_state_gas_def,
+   restore_state_gas_to_entry_def, repay_state_gas_spill_def,
+   absorb_state_gas_def, repay_state_gas_spill_context_def,
+   forfeit_remaining_gas_def, withhold_create_gas_def,
+   drain_state_gas_reservoir_def, restore_child_gas_def,
+   charge_new_account_apply, credit_new_account_apply,
+   credit_new_account_context_def];
+
+Theorem credit_state_gas_refund_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  credit_state_gas_refund n s =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - MIN n c.stateGasSpilled;
+                stateGasSpilled := c.stateGasSpilled - MIN n c.stateGasSpilled;
+                stateGasLeft := c.stateGasLeft + (n - MIN n c.stateGasSpilled)|>,k)::cs)
+Proof
+  strip_tac >> simp[credit_state_gas_refund_def, bind_def,
+    get_current_context_def, set_current_context_def, return_def,
+    context_component_equality, execution_state_component_equality, ADD_COMM]
+QED
+
+Theorem restore_state_gas_context_apply[local]:
+  restore_state_gas (s with contexts := (c,k)::cs) =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - c.stateGasSpilled;
+                stateGasSpilled := 0; stateGasLeft := c.stateGasBaseline;
+                addRefund := 0; subRefund := 0|>,k)::cs)
+Proof
+  simp[restore_state_gas_def, bind_def, get_current_context_def,
+       set_current_context_def, return_def]
+QED
+
+Theorem restore_state_gas_to_entry_context_apply[local]:
+  restore_state_gas_to_entry sg (s with contexts := (c,k)::cs) =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - c.stateGasSpilled - c.stateGasCommitted;
+                stateGasSpilled := 0; stateGasCommitted := 0;
+                stateGasLeft := sg; stateGasBaseline := sg|>,k)::cs)
+Proof
+  simp[restore_state_gas_to_entry_def, bind_def, get_current_context_def,
+       set_current_context_def, return_def]
+QED
+
+Theorem guarded_credit_state_gas_refund_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  (if n = 0 then return () else credit_state_gas_refund n) s =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - MIN n c.stateGasSpilled;
+                stateGasSpilled := c.stateGasSpilled - MIN n c.stateGasSpilled;
+                stateGasLeft := c.stateGasLeft + (n - MIN n c.stateGasSpilled)|>,k)::cs)
+Proof
+  strip_tac >> Cases_on `n = 0`
+  >- gvs[return_def, context_component_equality, execution_state_component_equality]
+  >> drule credit_state_gas_refund_apply >> simp[]
+QED
+
+Theorem charge_state_gas_no_spill_apply[local]:
+  s.contexts = (c,k)::cs /\ n <= c.stateGasLeft ==>
+  charge_state_gas n s =
+    (INL (), s with contexts := (c with stateGasLeft := c.stateGasLeft - n,k)::cs)
+Proof
+  strip_tac >> simp[charge_state_gas_def, bind_def,
+    get_current_context_def, set_current_context_def, return_def]
+QED
+
+Theorem restored_gas_forfeit[local]:
+  !u sp lim:num. u <= lim ==> lim - (u - sp) + (u - sp) = lim
+Proof
+  decide_tac
+QED
+
+Theorem self_destruct_restored_gas_forfeit[local]:
+  !g base warm transfer sp lim:num.
+    g + base + warm + transfer <= lim ==>
+    lim - (g + (warm + (transfer + base)) - sp) +
+      (g + (warm + (transfer + base)) - sp) = lim
+Proof
+  decide_tac
+QED
+
 fun exn_outer_tac ths =
   start_tac
-  \\ gvs (ths @ [pop_stack_def,fail_def,bind_def,ignore_bind_def,
+  \\ gvs (ths @ state_gas_defs @
+          [pop_stack_def,fail_def,bind_def,ignore_bind_def,
           handle_step_def,vfm_abort_def,handle_def,handle_create_def,
           get_return_data_def,get_output_to_def,reraise_def,
           handle_exception_def,get_gas_left_def,consume_gas_def,
           set_return_data_def,get_current_context_def,return_def,
           set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
           return_destination_case_elim])
+  \\ gvs[DELETE_COMM]
   \\ end_tac
 
-Theorem step_exception_inner[local]:
-  s.contexts = (callee,cb)::(caller,crb)::rest ∧
-  FLOOKUP callee.msgParams.parsed callee.pc = SOME inst ∧
-  ignore_bind (step_inst inst) (inc_pc_or_jump inst) s = (INR (SOME exc), s') ∧
-  s'.contexts = (callee',cb)::(caller,crb)::rest ∧
-  callee'.gasUsed ≤ callee'.msgParams.gasLimit ∧
-  exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
-  LENGTH caller.stack < stack_limit
-  ⇒
-  step s =
-  (INL (),
-   s' with <| contexts :=
-                (caller with <| stack := b2w F :: caller.stack;
-                                pc := SUC caller.pc; returnData := [] |>,
-                 crb)::rest;
-              rollback := cb |>)
-Proof
-  strip_tac
-  \\ simp[step_def, handle_def, bind_def, get_current_context_def, return_def]
-  \\ Cases_on`callee'.msgParams.outputTo`
-  \\ simp[handle_step_def, handle_def, handle_create_def, handle_exception_def,
-          bind_def, ignore_bind_def, return_def, reraise_def,
-          get_return_data_def, get_output_to_def, get_current_context_def,
-          get_gas_left_def, consume_gas_def, assert_def,
-          set_current_context_def, set_return_data_def, get_num_contexts_def,
-          pop_and_incorporate_context_def, pop_context_def, unuse_gas_def,
-          set_rollback_def, inc_pc_def, push_stack_def, write_memory_def,
-          buffer_write_def, execution_state_component_equality]
-  \\ gvs[execution_state_component_equality, context_component_equality]
-QED
-
-val exn_inner_start_tac =
+fun exn_inner_intro_tac ths =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ rewrite_tac [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
                   EMPTY_evm2set,STAR_evm_hide_Parsed, STAR_CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
-  \\ qpat_x_assum `Abbrev (b = _)`
-       (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ last_x_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
   \\ rpt (qpat_x_assum`_ = _`(assume_tac o
                               ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
   \\ gvs[]
-  \\ ‘¬ISR (FST s)’ by (Cases_on ‘FST s’ \\ fs[])
-  \\ pop_assum (fn th => rewrite_tac[th])
-  \\ ‘∃callee cb caller crb rest.
-        (SND s).contexts = (callee,cb)::(caller,crb)::rest’
-     by (Cases_on ‘(SND s).contexts’ \\ gvs[] \\ Cases_on ‘t’ \\ gvs[]
-         \\ Cases_on ‘h’ \\ Cases_on ‘h'’ \\ simp[])
-  \\ gvs[]
-  \\ ‘wf_context callee’ by gvs[wf_state_def]
 
-val exn_inner_end_tac =
-  drule_at (Pat ‘ignore_bind _ _ _ = _’) step_exception_inner
-  \\ simp[] \\ strip_tac
-  \\ drule step_preserves_wf_state
-  \\ qpat_x_assum ‘step _ = _’ SUBST1_TAC
-  \\ simp[] \\ strip_tac
-  \\ conj_tac
-  >- (gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP] \\ metis_tac[NOT_SOME_NONE])
-  \\ conj_tac
-  >- (gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP] \\ metis_tac[NOT_SOME_NONE])
-  \\ conj_tac
-  >- (qpat_x_assum ‘_ = {}’ mp_tac
-      \\ simp[EXTENSION] \\ rw [EQ_IMP_THM]
-      \\ gvs[SUBSET_DEF,PULL_EXISTS]
-      \\ last_x_assum(qspec_then`x`mp_tac)
-      \\ simp[]
-      \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
-      \\ metis_tac[option_CASES])
-  \\ irule UPDATE_evm2set_without_original
-  \\ simp[execution_state_component_equality]
-  \\ rpt strip_tac
-  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP]
-  \\ first_x_assum(qspec_then`pc`mp_tac)
-  \\ simp[] \\ strip_tac \\ gvs[]
+fun exn_inner_step_tac ths =
+  drule step_preserves_wf_state
+  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
+  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
+  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
+  \\ Cases_on ‘step (SND r)’ \\ fs []
+  \\ strip_tac
+  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
+  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
+    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
+  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
+          return_def, wf_context_def, SF CONJ_ss]
+  \\ `¬(SUC (LENGTH (TL (SND r).contexts)) ≤ 1)` by (
+       Cases_on`TL (SND r).contexts` \\ gvs[])
+  \\ rpt (qpat_x_assum`SOME _ = _`(assume_tac o SYM))
+  \\ rpt (qpat_x_assum`_ = step_inst _`(assume_tac o SYM))
+  \\ gvs (ths @ state_gas_defs @
+         [pop_stack_def,fail_def,bind_def,ignore_bind_def,
+         handle_step_def,vfm_abort_def,handle_def,handle_create_def,
+         get_return_data_def,get_output_to_def,reraise_def,
+         get_current_context_def,return_def,set_current_context_def,
+         assert_def,consume_gas_def,get_gas_left_def,return_destination_case_rator])
 
-Theorem SPEC_exception_inner[local]:
-  (P ⇒
-   ∀s ctx.
-     s.contexts = (ctx,cb)::cs ∧ wf_context ctx ∧
-     ctx.stack = ss ∧ ctx.gasUsed = g ∧ ctx.msgParams = p ∧
-     ctx.returnData = rd ∧ ctx.memory = m ⇒
-     ∃exc ctx'.
-       ignore_bind (step_inst inst) (inc_pc_or_jump inst) s =
-         (INR (SOME exc), s with contexts := (ctx',cb)::cs) ∧
-       exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
-       ctx'.gasUsed ≤ ctx'.msgParams.gasLimit)
-  ⇒
-  SPEC EVM_MODEL
-  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
-   evm_CachedRB cb *
-   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   evm_JumpDest j * evm_Parsed pc inst *
-   evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
-         caller = FST (HD cs) ∧
-         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
-         P))
-  {}
-  (evm_Stack (b2w F::caller.stack) *
-   evm_Memory (caller.memory) *
-   evm_PC (SUC caller.pc) *
-   CODE_POOL EVM_INSTR {(pc,inst) |
-                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
-   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
-   evm_Contexts (TL cs) *
-   evm_CachedRB (SND (HD cs)) *
-   evm_MsgParams (caller.msgParams) *
-   evm_ReturnData [] *
-   evm_Exception (INL ()) *
-   evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
-   evm_JumpDest caller.jumpDest *
-   evm_Logs caller.logs *
-   evm_AddRefund caller.addRefund *
-   evm_SubRefund caller.subRefund)
+Theorem exn_inner_length_guard[local]:
+  !xs:'a list. (SUC (LENGTH xs) <= 1) <=> (xs = [])
 Proof
-  strip_tac \\ exn_inner_start_tac
-  \\ first_x_assum (qspecl_then [‘SND s’, ‘callee’] mp_tac)
-  \\ simp[] \\ strip_tac
-  \\ exn_inner_end_tac
+  Cases >> simp[]
 QED
 
-val exn_inner_thms =
-  [pop_stack_def,fail_def,bind_def,ignore_bind_def,vfm_abort_def,
-   get_current_context_def,return_def,set_current_context_def,
-   assert_def,consume_gas_def,get_return_data_def,
-   execution_state_component_equality,wf_context_def]
+Theorem exn_inner_gas_saturation[local]:
+  !a b:num. a + (b - a) <= b ==> a + (b - a) = b
+Proof
+  rpt strip_tac >> decide_tac
+QED
 
-fun exn_inner_tac ths =
-  irule SPEC_exception_inner \\ rpt strip_tac \\ gvs (ths @ exn_inner_thms)
+Theorem exn_inner_forfeit_guard[local]:
+  !g sp limit:num. g <= limit ==> g - sp + (limit - (g - sp)) = limit
+Proof
+  rpt strip_tac >> decide_tac
+QED
+
+(* The conjunction loop and the set-equality tail are separate steps: run
+   together they go past holbuild's per-step budget, and each is timed on its
+   own. *)
+(* Each phase is invoked separately at consumers, so computation does not
+   share a timing fragment with unrelated conjunction/parsed-set work. *)
+fun exn_computed_eq_tac th =
+  if is_conj (concl th) then CONJUNCTS_THEN exn_computed_eq_tac th
+  else if is_eq (concl th) andalso is_var (rhs (concl th)) then
+    SUBST_ALL_TAC (SYM th)
+  else strip_assume_tac th
+
+fun exn_boundary_prepare_tac () =
+  qmatch_assum_rename_tac `wf_state r2`
+  \\ `(FST (HD r2.contexts)).msgParams.parsed =
+        parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
+       by (gvs[wf_state_def] \\ Cases_on `r2.contexts` \\ gvs[wf_context_def])
+  \\ `~(SUC (LENGTH cs) <= 1)` by (Cases_on `cs` \\ gvs[])
+  \\ Cases_on `cs` >- gvs[]
+  \\ rename1 `Abbrev (caller = FST (HD (hdcs::tlcs)))`
+  \\ PairCases_on `hdcs`
+  \\ Cases_on `p.outputTo`
+  \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
+         inc_pc_def,push_stack_def,bind_def,ignore_bind_def,return_def,
+         get_current_context_def,set_current_context_def,assert_def,
+         get_return_data_def,get_output_to_def,set_return_data_def,
+         write_memory_def]
+
+fun exn_boundary_restore_tac () =
+  qpat_assum `(SND r).contexts <> []` (fn ne =>
+    qpat_x_assum `restore_state_gas _ = _`
+       (mp_tac o SIMP_RULE (srw_ss())
+         [ne, restore_state_gas_context_apply, restore_state_gas_def,
+          bind_def, get_current_context_def, set_current_context_def,
+          return_def, ExclSF "ARITH"]))
+  \\ disch_then (fn th =>
+       if is_eq (concl th) then SUBST_ALL_TAC (SYM th)
+       else strip_assume_tac th)
+
+fun exn_boundary_forfeit_tac () =
+  imp_res_tac exn_inner_forfeit_guard
+  \\ qpat_assum `Abbrev (p = _)` (fn pth =>
+       qpat_assum `Abbrev (g = _)` (fn gth =>
+       qpat_assum `!spill. _ - spill + (p.gasLimit - (_ - spill)) = p.gasLimit`
+         (fn gas => qpat_x_assum `forfeit_remaining_gas _ = _`
+           (mp_tac o SIMP_RULE (srw_ss())
+             [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] pth),
+              GSYM (REWRITE_RULE [markerTheory.Abbrev_def] gth),
+              gas, LET_THM, forfeit_remaining_gas_def, get_gas_left_def,
+              consume_gas_def, bind_def, ignore_bind_def, return_def,
+              get_current_context_def, set_current_context_def,
+              assert_def, fail_def, ExclSF "ARITH"]))))
+  \\ disch_then exn_computed_eq_tac
+
+fun exn_boundary_reads_tac () =
+  qpat_x_assum `(if _.contexts = [] then _ else (INL (FST (HD _.contexts)),_)) = _`
+       (exn_computed_eq_tac o SIMP_RULE (srw_ss()) [ExclSF "ARITH"])
+  \\ qpat_x_assum `(if _.contexts = [] then _ else (INL (),_)) = _`
+       (exn_computed_eq_tac o SIMP_RULE (srw_ss()) [ExclSF "ARITH"])
+
+fun exn_boundary_merge_tac () =
+  qpat_assum `TL (SND r).contexts = _` (fn tail =>
+    qpat_assum `Abbrev (p = _)` (fn pth =>
+       qpat_x_assum `(if LENGTH _.contexts <= 1 then _ else _) _ = _`
+         (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [tail, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] pth),
+            saturated_failed_child_pop_update, bind_def, ignore_bind_def,
+            return_def, get_current_context_def, set_current_context_def,
+            assert_def])))
+
+fun exn_boundary_output_tac () =
+  qpat_assum `p.outputTo = _` (fn output =>
+       qpat_assum `LENGTH caller.stack < 1024` (fn stack =>
+         disch_then (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [output, stack, absorb_state_gas_def, credit_new_account_context_def,
+            bind_def, ignore_bind_def, return_def, get_current_context_def,
+            set_current_context_def, assert_def])))
+  \\ disch_then exn_computed_eq_tac
+
+fun exn_inner_conj_tac ths =
+  rpt (conj_tac >- (
+        gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
+        TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
+             \\ simp[] \\ NO_TAC)
+        \\ metis_tac[NOT_SOME_NONE]))
+
+fun exn_inner_pcs_tac ths =
+  conj_tac >-
+    (qpat_x_assum ‘_ = {}’ mp_tac
+     \\ simp[EXTENSION,Abbr`all_pcs`] \\ rw [EQ_IMP_THM]
+     \\ gvs[SUBSET_DEF,PULL_EXISTS]
+     \\ last_x_assum(qspec_then`x`mp_tac)
+     \\ simp[]
+     \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
+     \\ metis_tac[option_CASES])
+
+fun exn_inner_allpcs_tac ths =
+  irule UPDATE_evm2set_without_original
+  \\ simp[execution_state_component_equality]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
+  \\ ntac 2 strip_tac
+  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP, Abbr`all_pcs`]
+  \\ qmatch_assum_rename_tac`HasParsed pc2 ∉ dom`
+  \\ first_x_assum(qspec_then`pc2`mp_tac)
+  \\ simp[]
+  \\ strip_tac \\ gvs[]
+
+
 
 Theorem SPEC_StackUnderflow_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ LENGTH ss < n ∧
            ∃k. step_inst inst = bind (pop_stack n) k))
     {(pc,inst)}
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME StackUnderflow)))
 Proof
@@ -2153,6 +2742,9 @@ QED
 Theorem SPEC_OutOfGas_pop_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ n ≤ LENGTH ss ∧
            p.gasLimit < g + cost (TAKE n ss) ∧
@@ -2161,6 +2753,10 @@ Theorem SPEC_OutOfGas_pop_outermost:
                  (λargs. ignore_bind (consume_gas (cost args)) (k args))))
     {(pc,inst)}
     (evm_Stack (DROP n ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME OutOfGas)))
 Proof
@@ -2170,11 +2766,18 @@ QED
 Theorem SPEC_OutOfGas_outermost:
   SPEC EVM_MODEL
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ p.gasLimit < g + c ∧
            ∃k. step_inst inst = ignore_bind (consume_gas c) k))
     {(pc,inst)}
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME OutOfGas)))
 Proof
@@ -2184,6 +2787,9 @@ QED
 Theorem SPEC_StackOverflow_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ LENGTH ss = stack_limit ∧
            g + c ≤ p.gasLimit ∧
@@ -2193,6 +2799,10 @@ Theorem SPEC_StackOverflow_outermost:
                    k s = (INR (SOME StackOverflow), s)))
     {(pc,inst)}
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME StackOverflow)))
 Proof
@@ -2202,12 +2812,16 @@ QED
 Theorem SPEC_StackUnderflow_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc inst *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          LENGTH ss < n ∧
@@ -2225,24 +2839,43 @@ Theorem SPEC_StackUnderflow_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Theorem SPEC_OutOfGas_pop_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc inst *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          n ≤ LENGTH ss ∧ p.gasLimit < g + cost (TAKE n ss) ∧
@@ -2262,24 +2895,43 @@ Theorem SPEC_OutOfGas_pop_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Theorem SPEC_OutOfGas_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc inst *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          p.gasLimit < g + c ∧
@@ -2297,24 +2949,43 @@ Theorem SPEC_OutOfGas_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Theorem SPEC_StackOverflow_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc inst *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          LENGTH ss = stack_limit ∧ g + c ≤ p.gasLimit ∧
@@ -2335,13 +3006,28 @@ Theorem SPEC_StackOverflow_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Triviality one_le_LENGTH:
@@ -2353,6 +3039,9 @@ QED
 Theorem SPEC_InvalidJumpDest_Jump_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_JumpDest j * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧
            g + static_gas Jump ≤ p.gasLimit ∧
@@ -2360,6 +3049,10 @@ Theorem SPEC_InvalidJumpDest_Jump_outermost:
              FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest)))
     {(pc,Jump)}
     (evm_Stack (TL ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_JumpDest (SOME (w2n (HD ss))) *
      evm_Exception (INR (SOME InvalidJumpDest)))
@@ -2372,6 +3065,9 @@ QED
 Theorem SPEC_InvalidJumpDest_JumpI_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_JumpDest j * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 2 ≤ LENGTH ss ∧ EL 1 ss ≠ 0w ∧
            g + static_gas JumpI ≤ p.gasLimit ∧
@@ -2379,6 +3075,10 @@ Theorem SPEC_InvalidJumpDest_JumpI_outermost:
              FLOOKUP p.parsed (w2n (HD ss)) = SOME JumpDest)))
     {(pc,JumpI)}
     (evm_Stack (DROP 2 ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_JumpDest (SOME (w2n (HD ss))) *
      evm_Exception (INR (SOME InvalidJumpDest)))
@@ -2391,6 +3091,9 @@ QED
 Theorem SPEC_OutOfBoundsRead_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Memory m * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 3 ≤ LENGTH ss ∧
            offset = w2n (EL 0 ss) ∧ sz = w2n (EL 2 ss) ∧
@@ -2399,6 +3102,10 @@ Theorem SPEC_OutOfBoundsRead_outermost:
            g + ReturnDataCopy_gas m offset sz ≤ p.gasLimit))
     {(pc,ReturnDataCopy)}
     (evm_Stack (DROP 3 ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] * evm_Memory m *
      evm_Exception (INR (SOME OutOfBoundsRead)))
 Proof
@@ -2410,12 +3117,16 @@ QED
 Theorem SPEC_InvalidJumpDest_Jump_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc Jump *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          ss ≠ [] ∧ g + static_gas Jump ≤ p.gasLimit ∧
@@ -2434,26 +3145,51 @@ Theorem SPEC_InvalidJumpDest_Jump_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
-                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                 one_le_LENGTH,SF CONJ_ss]
+  exn_inner_intro_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                      is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                      one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_step_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        one_le_LENGTH,SF CONJ_ss]
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                          one_le_LENGTH,SF CONJ_ss]
 QED
 
 Theorem SPEC_InvalidJumpDest_JumpI_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc JumpI *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          2 ≤ LENGTH ss ∧ EL 1 ss ≠ 0w ∧
@@ -2473,26 +3209,51 @@ Theorem SPEC_InvalidJumpDest_JumpI_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
-                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                 SF CONJ_ss]
+  exn_inner_intro_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                      is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                      SF CONJ_ss]
+  \\ exn_inner_step_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        SF CONJ_ss]
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        SF CONJ_ss]
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                          SF CONJ_ss]
 QED
 
 Theorem SPEC_OutOfBoundsRead_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc ReturnDataCopy *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          3 ≤ LENGTH ss ∧
@@ -2513,25 +3274,53 @@ Theorem SPEC_OutOfBoundsRead_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
-                 memory_expansion_info_def,get_return_data_check_def,
-                 ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  exn_inner_intro_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                      memory_expansion_info_def,get_return_data_check_def,
+                      ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_step_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                        memory_expansion_info_def,get_return_data_check_def,
+                        ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                        memory_expansion_info_def,get_return_data_check_def,
+                        ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                          memory_expansion_info_def,get_return_data_check_def,
+                          ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
 QED
 
 Theorem SPEC_WriteInStaticContext_TStore_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 2 ≤ LENGTH ss ∧ p.static ∧
            g + warm_access_cost ≤ p.gasLimit))
     {(pc,TStore)}
     (evm_Stack (DROP 2 ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME WriteInStaticContext)))
 Proof
@@ -2542,6 +3331,9 @@ QED
 Theorem SPEC_WriteInStaticContext_Log_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Memory m * evm_Exception e *
      cond (NULL cs ∧ ISL e ∧ 2 + n ≤ LENGTH ss ∧ p.static ∧
            offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
@@ -2550,19 +3342,38 @@ Theorem SPEC_WriteInStaticContext_Log_outermost:
            g + static_gas (Log n) + dynamicGas ≤ p.gasLimit))
     {(pc,Log n)}
     (evm_Stack (DROP (2 + n) ss) * evm_PC pc * evm_MsgParams p *
-     evm_Contexts cs * evm_GasUsed p.gasLimit * evm_ReturnData [] *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_Contexts cs *
+     evm_AddRefund 0 * evm_SubRefund 0 *
+     evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Memory (expanded_memory m offset sz) *
      evm_Exception (INR (SOME WriteInStaticContext)))
 Proof
-  exn_outer_tac [step_inst_def,step_log_def,memory_expansion_info_def,
-                 expand_memory_def,memory_cost_def,expanded_memory_def,
-                 memory_expand_by_def,EL_TAKE,HD_TAKE,assert_not_static_def,
-                 get_static_def,get_callee_def]
+  start_tac
+  \\ gvs (state_gas_defs @
+          [step_inst_def,step_log_def,memory_expansion_info_def,
+           expand_memory_def,memory_cost_def,expanded_memory_def,
+           memory_expand_by_def,EL_TAKE,HD_TAKE,assert_not_static_def,
+           get_static_def,get_callee_def,
+           pop_stack_def,fail_def,bind_def,ignore_bind_def,
+           handle_step_def,vfm_abort_def,handle_def,handle_create_def,
+           get_return_data_def,get_output_to_def,reraise_def,
+           handle_exception_def,get_gas_left_def,consume_gas_def,
+           set_return_data_def,get_current_context_def,return_def,
+           set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
+           return_destination_case_elim])
+  \\ gvs[DELETE_COMM]
+  \\ end_tac
 QED
 
 Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      evm_Rollback rb * evm_Msdomain d *
      cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧ p.static ∧
@@ -2570,16 +3381,25 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
            sender = lookup_account p.callee rb.accounts ∧
            transferCost = (if 0 < sender.balance ∧
                               account_empty (lookup_account addr rb.accounts)
-                           then self_destruct_new_account_cost else 0) ∧
+                           then account_write_cost else 0) ∧
+           stateCost = (if 0 < sender.balance ∧
+                           account_empty (lookup_account addr rb.accounts)
+                        then new_account_state_gas else 0) ∧
+           (if 0 < sender.balance ∧ account_empty (lookup_account addr rb.accounts) then new_account_state_gas else 0) ≤ sg ∧
            g + static_gas SelfDestruct + zero_warm (access_cost rb addr) +
            transferCost ≤ p.gasLimit))
     {(pc,SelfDestruct)}
     (evm_Stack (TL ss) * evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME WriteInStaticContext)) *
      evm_Rollback (accesses_add addr rb) * evm_Msdomain (msdomain_add addr d))
 Proof
-  exn_outer_tac [step_inst_def,step_self_destruct_def,access_address_split,
+  exn_outer_tac [self_destruct_restored_gas_forfeit,
+                 step_inst_def,step_self_destruct_def,access_address_split,
                  set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                  assert_not_static_def,get_static_def,get_callee_def,
                  GSYM rich_listTheory.TAIL_BY_DROP,SUB_ADD]
@@ -2588,12 +3408,16 @@ QED
 Theorem SPEC_WriteInStaticContext_TStore_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc TStore *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          2 ≤ LENGTH ss ∧ p.static ∧
@@ -2611,25 +3435,47 @@ Theorem SPEC_WriteInStaticContext_TStore_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
-                 get_callee_def]
+  exn_inner_intro_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                      get_callee_def]
+  \\ exn_inner_step_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                        get_callee_def]
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                        get_callee_def]
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                          get_callee_def]
 QED
 
 Theorem SPEC_WriteInStaticContext_Log_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc (Log n) *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          2 + n ≤ LENGTH ss ∧ p.static ∧
@@ -2650,27 +3496,56 @@ Theorem SPEC_WriteInStaticContext_Log_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_log_def,memory_expansion_info_def,
-                 expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
-                 assert_not_static_def,get_static_def,get_callee_def]
+  exn_inner_intro_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                      expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                      assert_not_static_def,get_static_def,get_callee_def,
+                      Abbr`dynamicGas`]
+  \\ exn_inner_step_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                        expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                        assert_not_static_def,get_static_def,get_callee_def,
+                        Abbr`dynamicGas`]
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                        expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                        assert_not_static_def,get_static_def,get_callee_def,
+                        Abbr`dynamicGas`]
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                          expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                          assert_not_static_def,get_static_def,get_callee_def,
+                          Abbr`dynamicGas`]
 QED
 
 Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Msdomain d *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc SelfDestruct *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          ss ≠ [] ∧ p.static ∧
@@ -2678,7 +3553,11 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
          sender = lookup_account p.callee rb.accounts ∧
          transferCost = (if 0 < sender.balance ∧
                             account_empty (lookup_account addr rb.accounts)
-                         then self_destruct_new_account_cost else 0) ∧
+                         then account_write_cost else 0) ∧
+         stateCost = (if 0 < sender.balance ∧
+                         account_empty (lookup_account addr rb.accounts)
+                      then new_account_state_gas else 0) ∧
+         (if 0 < sender.balance ∧ account_empty (lookup_account addr rb.accounts) then new_account_state_gas else 0) ≤ sg ∧
          g + static_gas SelfDestruct + zero_warm (access_cost rb addr) +
          transferCost ≤ p.gasLimit))
   {}
@@ -2695,27 +3574,36 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
    evm_Exception (INL ()) *
    evm_Msdomain (msdomain_add addr d) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_start_tac
-  \\ ‘∃exc callee' rb'.
-        ignore_bind (step_inst SelfDestruct) (inc_pc_or_jump SelfDestruct)
-          (SND s) =
-        (INR (SOME exc),
-         SND s with <| contexts := (callee',cb)::(caller,crb)::rest;
-                       rollback := rb';
-                       msdomain := msdomain_add (w2w (HD callee.stack))
-                                     (SND s).msdomain |>) ∧
-        exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
-        callee'.gasUsed ≤ callee'.msgParams.gasLimit’
-     by gvs([step_inst_def,step_self_destruct_def,access_address_split,
-            set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
-            assert_not_static_def,get_static_def,get_callee_def] @ exn_inner_thms)
-  \\ exn_inner_end_tac
+  exn_inner_intro_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                      set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                      assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_step_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                        set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                        assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
+  \\ exn_inner_conj_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                        set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                        assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_pcs_tac []
+  \\ exn_inner_allpcs_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                          set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                          assert_not_static_def,get_static_def,get_callee_def]
 QED
 
 (* Non-vacuity witnesses: concrete opcodes meet the shape hypotheses of the
@@ -3567,6 +4455,20 @@ Theorem SPEC_BlobBaseFee:
 Proof binop_tac
 QED
 
+Theorem SPEC_SlotNumber:
+  SPEC EVM_MODEL
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   cond (LENGTH ss < stack_limit ∧ j = NONE ∧ ISL e ∧
+         g + static_gas SlotNumber ≤ p.gasLimit))
+  {(pc,SlotNumber)}
+  (evm_Stack (n2w (t.slotNumber) :: ss) *
+   evm_JumpDest j * evm_Exception e * evm_TxParams t *
+   evm_PC (pc + LENGTH (opcode SlotNumber)) *
+   evm_GasUsed (g + static_gas SlotNumber) * evm_MsgParams p)
+Proof binop_tac
+QED
+
 Theorem SPEC_Pop:
   SPEC EVM_MODEL
     (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
@@ -3657,30 +4559,80 @@ Theorem SPEC_SLoad:
 Proof binop_tac
 QED
 
+(* EIP-8037/EIP-8038: the execution charge is the access plus the write
+   cost, and the state gas comes out of the frame's reservoir.  A
+   state-gas credit is banked first, in LIFO order, so `sp` (the frame's
+   outstanding spill) is what decides how much of it reaches execution
+   gas; the rule requires the reservoir to cover the charge itself, so
+   nothing spills here and the credit is the only thing that moves
+   `gasUsed` off `g`. *)
 Theorem SPEC_SStore_original:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_JumpDest j * evm_Exception e * evm_Rollback rb * evm_Msdomain d *
    evm_AddRefund ar * evm_SubRefund sr * evm_OriginalAccounts original *
+   evm_StateGasLeft sl * evm_StateGasSpilled sp *
    cond (2 ≤ LENGTH ss ∧ j = NONE ∧ ISL e ∧
          key = HD ss ∧ value = EL 1 ss ∧
          ~p.static ∧ call_stipend < p.gasLimit - g ∧
          sk = SK p.callee key ∧ access_slot_check d sk ∧
          (cost,ad,sd) =
            SStore_gas original rb p.callee key value ∧
-         g + cost ≤ p.gasLimit))
+         (stateGasRefund,stateGas) =
+           SStore_state_gas original rb p.callee key value ∧
+         stateGas ≤ sl + stateGasRefund - MIN stateGasRefund sp ∧
+         g - MIN stateGasRefund sp + cost ≤ p.gasLimit))
   {(pc,SStore)}
   (evm_Stack (DROP 2 ss) *
    evm_PC (pc + LENGTH (opcode SStore)) *
    evm_JumpDest j * evm_Exception e *
-   evm_GasUsed (g + cost) *
+   evm_GasUsed (g - MIN stateGasRefund sp + cost) *
    evm_Rollback (SStore_write p.callee key value $ accesses_add_slot sk rb) *
    evm_Msdomain (msdomain_add_slot sk d) *
    evm_AddRefund (ar + ad) *
    evm_SubRefund (sr + sd) *
    evm_OriginalAccounts original *
+   evm_StateGasLeft (sl + stateGasRefund - MIN stateGasRefund sp - stateGas) *
+   evm_StateGasSpilled (sp - MIN stateGasRefund sp) *
    evm_MsgParams p)
-Proof binop_tac
+Proof
+  binop_prefix_tac [SStore_state_gas_def, get_state_gas_left_def]
+    (Cases_on `(SND r).contexts` >> gvs[] >>
+     rename1 `(SND r).contexts = h::t` >> Cases_on `h` >>
+     rename1 `(SND r).contexts = (ctx,k)::cs` >> gvs[])
+  >> qmatch_asmsub_abbrev_tac
+       `(if refund = 0 then return () else credit_state_gas_refund refund) st` >>
+     `st.contexts <> []` by simp[Abbr `st`] >>
+     Cases_on `st.contexts` >- gvs[] >>
+     rename1 `st.contexts = h::ts` >> Cases_on `h` >>
+     drule guarded_credit_state_gas_refund_apply >>
+     disch_then (qspec_then `refund` assume_tac) >>
+     gvs[bind_def, get_current_context_def, set_current_context_def,
+         return_def, Abbr `st`] >>
+     qmatch_asmsub_abbrev_tac `charge_state_gas sg st2` >>
+     `st2.contexts <> []` by simp[Abbr `st2`] >>
+     Cases_on `st2.contexts` >- gvs[] >>
+     rename1 `st2.contexts = h::ts` >> Cases_on `h` >>
+     drule charge_state_gas_no_spill_apply >>
+     disch_then (qspec_then `sg` mp_tac) >>
+     (impl_tac >- (gvs[Abbr `st2`] >> decide_tac)) >>
+     strip_tac >>
+     gvs[bind_def, get_current_context_def, set_current_context_def,
+         return_def, Abbr `st2`, inc_pc_or_jump_def, is_call_def,
+         ExclSF "ARITH"] >>
+     qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
+     qpat_x_assum `charge_state_gas _ _ = _` kall_tac >>
+     conj_tac >- (Cases_on `FST r` >> gvs[]) >>
+     conj_tac >- (qpat_x_assum `(ad,sd) = _`
+                   (mp_tac o AP_TERM ``FST :num#num -> num``) >> simp[]) >>
+     conj_tac >- (qpat_x_assum `(ad,sd) = _` mp_tac >>
+                 disch_then (mp_tac o AP_TERM ``SND :num#num -> num``) >> simp[]) >>
+     conj_tac >- (rpt (pop_assum kall_tac) >> rw[MIN_DEF] >> decide_tac) >>
+     conj_tac >-
+       (qpat_x_assum `_ = {_}` $ rewrite_tac o single o GSYM >>
+        fs[EXTENSION] >> rw[] >> eq_tac >> rw[]) >>
+     irule UPDATE_evm2set_without_original >>
+     simp[execution_state_component_equality]
 QED
 
 Theorem SPEC_SStore = SPEC_SStore_original;
@@ -4017,7 +4969,7 @@ Proof
          set_current_context_def, consume_gas_def, EL_TAKE,
          read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, memory_expansion_info_split,
-         expand_memory_split,get_gas_left_def]
+         expand_memory_split,get_gas_left_def,withhold_create_gas_def]
   \\ qpat_x_assum`step_inst _ = _`kall_tac
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
@@ -4027,7 +4979,7 @@ Proof
   \\ pop_assum kall_tac
   \\ `is_call inst` by gvs[Abbr`is_create`,is_call_def]
   \\ qpat_x_assum`is_create`mp_tac
-  \\ gvs[abort_unuse_def, unuse_gas_def, bind_def, ignore_bind_def,
+  \\ gvs[abort_create_def, bind_def, ignore_bind_def,
          return_def, fail_def, assert_def, get_current_context_def,
          set_current_context_def, push_stack_def, inc_pc_def,
          inc_pc_or_jump_def]
@@ -4038,11 +4990,16 @@ Proof
   \\ end_tac
 QED
 
+
+(* The destination already exists, so the create aborts before entering a
+   child and charges no state gas: a destination with a nonce or code is
+   alive, and one with storage alone is this collision.  Hence
+   `evm_StateGasLeft sg` unchanged, and no creation-charge conjuncts. *)
 Theorem SPEC_Create_fail_created:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
    evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
-   evm_Contexts cs * evm_Msdomain d *
+   evm_Contexts cs * evm_Msdomain d * evm_StateGasLeft sg *
    cond ((if inst = Create2 then 4 else 3) ≤ LENGTH ss ∧ ISL e ∧
          value = w2n (EL 0 ss) ∧ offset = w2n (EL 1 ss) ∧ sz = w2n (EL 2 ss) ∧
          salt = EL 3 ss ∧
@@ -4072,6 +5029,7 @@ Theorem SPEC_Create_fail_created:
    evm_PC (SUC pc) *
    evm_GasUsed (g + gas + cappedGas) * evm_MsgParams p *
    evm_Exception (INL ()) * evm_ReturnData [] *
+   evm_StateGasLeft sg *
    evm_Rollback (accesses_add addr rb
                  with accounts updated_by increment_nonce p.callee) *
    evm_Memory em * evm_Contexts cs *
@@ -4113,8 +5071,9 @@ Proof
          set_current_context_def, consume_gas_def, EL_TAKE,
          read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, memory_expansion_info_split,
-         expand_memory_split,get_gas_left_def]
-  \\ qpat_x_assum`step_inst _ = _`kall_tac
+         expand_memory_split,get_gas_left_def,withhold_create_gas_def,
+         charge_new_account_def, charge_state_gas_apply]
+  \\ TRY (qpat_x_assum`step_inst _ = _`kall_tac)
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
          set_current_context_def, get_num_contexts_def, access_storage_split,
@@ -4124,16 +5083,90 @@ Proof
          inc_pc_or_jump_def]
   \\ gvs[access_address_split, access_storage_split]
   \\ strip_tac
-  \\ conj_tac >- simp[Abbr`cappedGas`,Abbr`gasLeft`]
-  \\ conj_tac >-
-       (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
-        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
-  \\ end_tac
+  \\ gvs[charge_state_gas_apply, Abbr`sg`]
+  \\ gvs[step_create_def, bind_def, return_def, ignore_bind_def,
+         pop_stack_def, get_current_context_def, assert_def,
+         set_current_context_def, consume_gas_def, EL_TAKE,
+         read_memory_def, get_callee_def, get_accounts_def,
+         access_address_split, memory_expansion_info_split,
+         expand_memory_split, get_gas_left_def, withhold_create_gas_def,
+         charge_new_account_def, charge_state_gas_apply, charge_state_gas_def,
+         assert_not_static_def, get_static_def, set_return_data_def,
+         get_num_contexts_def, access_storage_split,
+         abort_create_exists_def, update_accounts_def, HD_TAKE,
+         LENGTH_DROP, fail_def, push_stack_def, inc_pc_def,
+         inc_pc_or_jump_def, handle_step_def, increment_nonce_def]
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
+  \\ ((conj_tac >- ((qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
+                     \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []) ORELSE
+                    simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      end_tac)
 QED
 
 Theorem SPEC_Create_original:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Rollback rb * evm_Memory m * evm_Exception e * evm_ReturnData rd *
    evm_Contexts cs * evm_Msdomain d * evm_JumpDest j *
    evm_CachedRB cb * evm_OriginalAccounts original *
@@ -4162,6 +5195,9 @@ Theorem SPEC_Create_original:
          SUC (LENGTH cs) ≤ 1024 ∧
          ¬account_already_created (lookup_account addr rb.accounts) ∧
          access_storage_check d addr ∧
+         newAccountCharged = account_empty (lookup_account addr rb.accounts) ∧
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) ∧
+         (if newAccountCharged then new_account_state_gas else 0) ≤ sg ∧
          new_parsed = parse_code 0 FEMPTY code ∧
          all_pcs = FDOM p.parsed ∪ FDOM new_parsed ∧
          g + gas + cappedGas ≤ p.gasLimit ∧
@@ -4174,20 +5210,25 @@ Theorem SPEC_Create_original:
          caller = <|stack := DROP (if inst = Create2 then 4 else 3) ss;
                     memory := em; pc := pc; jumpDest := j;
                     returnData := []; gasUsed := g + gas + cappedGas;
-                    addRefund := ar; subRefund := sr; logs := l;
-                    msgParams := p|> ∧
+                    addRefund := ar; subRefund := sr; stateGasLeft := 0;
+                    stateGasSpilled := sp; stateGasBaseline := bsl;
+                    stateGasCommitted := cm;
+                    logs := l; msgParams := p|> ∧
          caller_rb = accesses_add addr rb
                      with accounts updated_by increment_nonce p.callee ))
   {}
   (evm_Stack [] * evm_PC 0 * evm_GasUsed 0 *
-   evm_MsgParams (initial_msg_params addr code F (Code addr) tx) *
+   evm_StateGasLeft (sg - stateCost) *
+   evm_StateGasSpilled 0 * evm_StateGasBaseline (sg - stateCost) * evm_StateGasCommitted 0 *
+   evm_MsgParams (initial_msg_params addr code F (Code addr) newAccountCharged tx) *
    evm_JumpDest NONE *
    evm_Exception (INL ()) * evm_ReturnData [] *
    evm_Rollback (caller_rb with accounts updated_by
                  (transfer_value p.callee addr value o increment_nonce addr o
                   clear_storage addr)) *
    evm_Memory empty_buffer *
-   evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
+   evm_AddRefund 0 * evm_SubRefund 0 *
+   evm_Logs (transfer_log p.callee addr value) *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
    evm_hide_Parsed (all_pcs DIFF FDOM new_parsed) *
    evm_Contexts ((caller, cb) :: cs) *
@@ -4232,41 +5273,80 @@ Proof
          set_current_context_def, consume_gas_def, EL_TAKE,
          read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, memory_expansion_info_split,
-         expand_memory_split,get_gas_left_def]
+         expand_memory_split,get_gas_left_def,withhold_create_gas_def,
+         charge_new_account_apply]
   \\ qpat_x_assum`step_inst _ = _`kall_tac
   \\ gvs[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
          assert_def, return_def, get_current_context_def, set_return_data_def,
          set_current_context_def, get_num_contexts_def, access_storage_split,
-         HD_TAKE, proceed_create_def,
+         HD_TAKE, proceed_create_def, drain_state_gas_reservoir_def,
          update_accounts_def, get_rollback_def, get_original_def,
          set_original_def, push_context_def, inc_pc_or_jump_def]
   \\ gvs[access_address_split, access_storage_split]
   \\ strip_tac
-  \\ conj_tac >- gvs[Abbr`cappedGas`,Abbr`gasLeft`]
-  \\ conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
-                  \\ metis_tac[NOT_SOME_NONE])
-  \\ conj_tac >- simp[initial_msg_params_def]
-  \\ conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
-                  \\ metis_tac[NOT_SOME_NONE])
-  \\ conj_tac >- (
-       simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`]
-       \\ simp[context_component_equality]
-       \\ simp[Abbr`cappedGas`,Abbr`gasLeft`])
+  \\ gvs[step_create_def, bind_def, return_def, ignore_bind_def,
+         pop_stack_def, get_current_context_def, assert_def,
+         set_current_context_def, consume_gas_def, EL_TAKE,
+         read_memory_def, get_callee_def, get_accounts_def,
+         access_address_split, memory_expansion_info_split,
+         expand_memory_split, get_gas_left_def, withhold_create_gas_def,
+         charge_new_account_apply, charge_new_account_def,
+         charge_state_gas_apply, charge_state_gas_def,
+         assert_not_static_def, get_static_def, set_return_data_def,
+         get_num_contexts_def, access_storage_split,
+         HD_TAKE, LENGTH_DROP,
+         Abbr`stateCost`, Abbr`sg`, Abbr`cappedGas`, Abbr`gasLeft`]
+  \\ gvs[proceed_create_def, drain_state_gas_reservoir_def,
+         update_accounts_def, get_rollback_def, get_original_def,
+         set_original_def, push_context_def, inc_pc_or_jump_def,
+         handle_step_def, increment_nonce_def, initial_msg_params_def,
+         bind_def, ignore_bind_def, return_def, get_current_context_def,
+         set_current_context_def]
   \\ gs[EMPTY_evm2set]
-  \\ conj_tac >-
-      (qpat_x_assum ‘_ = {}’ mp_tac
-       \\ fs [EXTENSION, Abbr`all_pcs`]
-       \\ srw_tac[DNF_ss][TO_FLOOKUP]
-       \\ eq_tac \\ rw []
-       \\ first_x_assum(qspec_then`x`mp_tac)
+  \\ ntac 4
+     ((conj_tac >- (qmatch_goalsub_rename_tac `IMAGE _ _ SUBSET _`
+                    \\ gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
+                    \\ metis_tac[NOT_SOME_NONE])) ORELSE
+      (conj_tac >- simp[initial_msg_params_def]) ORELSE
+      (conj_tac >- (simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`]
+                    \\ simp[context_component_equality]
+                    \\ simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      (conj_tac >-
+         (qpat_x_assum ‘_ = {}’ mp_tac
+          \\ fs [EXTENSION, Abbr`all_pcs`]
+          \\ srw_tac[DNF_ss][TO_FLOOKUP]
+          \\ eq_tac \\ rw []
+          \\ first_x_assum(qspec_then`x`mp_tac)
+          \\ simp[]
+          \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
+          \\ metis_tac[option_CASES])) ORELSE
+      (irule UPDATE_evm2set_without_original
        \\ simp[]
-       \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
-       \\ metis_tac[option_CASES])
-  \\ irule UPDATE_evm2set_without_original
-  \\ simp[]
-  \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
-  \\ simp[initial_msg_params_def]
-  \\ metis_tac[]
+       \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+       \\ simp[initial_msg_params_def]
+       \\ metis_tac[]) ORELSE ALL_TAC)
+  \\ ntac 4
+     ((conj_tac >- (qmatch_goalsub_rename_tac `IMAGE _ _ SUBSET _`
+                    \\ gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
+                    \\ metis_tac[NOT_SOME_NONE])) ORELSE
+      (conj_tac >- simp[initial_msg_params_def]) ORELSE
+      (conj_tac >- (simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`]
+                    \\ simp[context_component_equality]
+                    \\ simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      (conj_tac >-
+         (qpat_x_assum ‘_ = {}’ mp_tac
+          \\ fs [EXTENSION, Abbr`all_pcs`]
+          \\ srw_tac[DNF_ss][TO_FLOOKUP]
+          \\ eq_tac \\ rw []
+          \\ first_x_assum(qspec_then`x`mp_tac)
+          \\ simp[]
+          \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
+          \\ metis_tac[option_CASES])) ORELSE
+      (irule UPDATE_evm2set_without_original
+       \\ simp[]
+       \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+       \\ simp[initial_msg_params_def]
+       \\ metis_tac[]) ORELSE ALL_TAC)
 QED
 
 Theorem SPEC_Create = SPEC_Create_original;
@@ -4282,9 +5362,589 @@ Definition delegate_check_def:
        newDom = msdomain_add delegate d
 End
 
+(* Where a destination no longer matters: `handle_create` does work only for
+   a deposit's own failure, and hands every other exception straight on
+   whichever output destination the frame has.  A call rule reaches it with
+   the exception already known not to be a deposit's, so it never has to
+   split on a destination it does not use. *)
+Theorem return_destination_case_const[local]:
+  !(x : return_destination) (r : execution_state -> 'a execution_result).
+    return_destination_CASE x (\m : memory_range. r) (\a : address. r) = r
+Proof
+  Cases_on `x` \\ simp[return_destination_CASE_rator]
+QED
+
+Theorem handle_create_not_none[local]:
+  !e s. e <> NONE /\ s.contexts <> [] ==> handle_create e s = reraise e s
+Proof
+  rpt strip_tac
+  \\ Cases_on `e`
+  \\ gvs[handle_create_def, get_return_data_def, get_output_to_def,
+         reraise_def, bind_def, return_def, ignore_bind_def,
+         get_current_context_def, return_destination_case_const,
+         CaseEq"bool"]
+QED
+
+(* As a rewrite rather than a fact in the goal: a call rule's step is the
+   call's, and the simplifier reaches `step_inst op` in the state it is
+   unfolding only through the rewrite set. *)
+Theorem step_inst_call[local]:
+  !op. call_has_value op ==> step_inst op = step_call op
+Proof
+  Cases_on `op` \\ simp[step_inst_def, call_has_value_def]
+QED
+
+(* CALL prefix interfaces, independently validated in the prefix probe.
+   Use this theory's original access/delegation and memory constants. *)
+Theorem call_delegate_segment[local]:
+  s.rollback = rb /\ s.msdomain = d /\
+  delegate_check code d rb cost rb' d' ==>
+  (case get_delegate code of
+     NONE => return (code,0)
+   | SOME del => do
+       n <- access_address del;
+       return ((lookup_account del rb.accounts).code,n)
+     od) s =
+  (INL ((case get_delegate code of NONE => code
+           | SOME del => (lookup_account del rb.accounts).code),cost),
+   s with <|rollback := rb'; msdomain := d'|>)
+Proof
+  strip_tac >> Cases_on `get_delegate code` >>
+  gvs[delegate_check_def, return_def, bind_def, access_address_split,
+      execution_state_component_equality]
+QED
+
+Theorem call_access_segment[local]:
+  s.rollback = rb /\ s.msdomain = d /\ access_check d addr /\
+  delegate_check (lookup_account addr rb.accounts).code
+    (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ==>
+  (do
+     aCost <- access_address addr;
+     accounts <- get_accounts;
+     pair <- (case get_delegate (lookup_account addr accounts).code of
+       NONE => return ((lookup_account addr accounts).code,0)
+     | SOME del => do
+         n <- access_address del;
+         return ((lookup_account del accounts).code,n)
+       od);
+     return (aCost,accounts,pair)
+   od) s =
+  (INL (access_cost rb addr, rb.accounts,
+    ((case get_delegate (lookup_account addr rb.accounts).code of
+        NONE => (lookup_account addr rb.accounts).code
+      | SOME del => (lookup_account del rb.accounts).code),dCost)),
+   s with <|rollback := newRb; msdomain := newDom|>)
+Proof
+  strip_tac >>
+  simp[Once bind_def, access_address_split] >>
+  simp[get_accounts_def, bind_def, return_def, accesses_add_def] >>
+  Cases_on `get_delegate (lookup_account addr rb.accounts).code` >>
+  gvs[delegate_check_def, access_address_split, bind_def, return_def,
+      execution_state_component_equality]
+QED
+
+Theorem call_consume_gas_apply[local]:
+  s.contexts = (c,k)::cs /\ c.gasUsed + n <= c.msgParams.gasLimit ==>
+  consume_gas n s =
+  (INL (), s with contexts := (c with gasUsed := c.gasUsed + n,k)::cs)
+Proof
+  strip_tac >>
+  `n + c.gasUsed <= c.msgParams.gasLimit` by decide_tac >>
+  simp[consume_gas_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, ADD_COMM]
+QED
+
+Theorem call_static_assert_apply[local]:
+  s.contexts = (c,k)::cs /\ (doStatic ==> ~c.msgParams.static) ==>
+  (if doStatic then assert_not_static else return ()) s = (INL (),s)
+Proof
+  strip_tac >> Cases_on `doStatic` >>
+  gvs[assert_not_static_def, get_static_def, get_current_context_def,
+      bind_def, return_def, assert_def]
+QED
+
+Theorem call_expand_memory_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  expand_memory n s =
+  (INL (), s with contexts := (c with memory := buffer_extend n c.memory,k)::cs)
+Proof
+  strip_tac >> simp[expand_memory_def, get_current_context_def,
+    set_current_context_def, bind_def, return_def]
+QED
+
+Theorem call_get_gas_left_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  get_gas_left s = (INL (c.msgParams.gasLimit - c.gasUsed),s)
+Proof
+  strip_tac >> simp[get_gas_left_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem call_get_callee_apply[local]:
+  s.contexts = (c,k)::cs ==>
+  get_callee s = (INL c.msgParams.callee,s)
+Proof
+  strip_tac >> simp[get_callee_def, get_current_context_def, bind_def, return_def]
+QED
+
+Theorem call_meter_segment[local]:
+  s.contexts = (c,k)::cs /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (doStatic ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) ==>
+  (do
+     consume_gas baseCost;
+     charge_new_account charged;
+     if doStatic then assert_not_static else return ();
+     expand_memory expandBy;
+     left <- get_gas_left;
+     pair <<- call_gas value gas left 0 0;
+     consume_gas (FST pair);
+     sender <- get_callee;
+     return (sender,SND pair)
+   od) s =
+  (INL (c.msgParams.callee,stipend), s with contexts :=
+    (c with <|gasUsed := c.gasUsed + baseCost + dynamicGas;
+              memory := buffer_extend expandBy c.memory;
+              stateGasLeft := c.stateGasLeft -
+                (if charged then new_account_state_gas else 0)|>,k)::cs)
+Proof
+  strip_tac >>
+  `consume_gas baseCost s =
+    (INL (), s with contexts :=
+      (c with gasUsed := c.gasUsed + baseCost,k)::cs)` by
+    (irule call_consume_gas_apply >> simp[]) >>
+  simp[bind_def, ignore_bind_def, charge_new_account_apply] >>
+  qmatch_goalsub_abbrev_tac `(if doStatic then assert_not_static else return ()) st` >>
+  `(if doStatic then assert_not_static else return ()) st = (INL (),st)` by
+    (irule call_static_assert_apply >> simp[Abbr `st`]) >>
+  simp[] >>
+  qabbrev_tac `c1 = FST (HD st.contexts)` >>
+  `st.contexts = (c1,k)::cs` by simp[Abbr `st`, Abbr `c1`] >>
+  `expand_memory expandBy st =
+    (INL (),st with contexts :=
+      (c1 with memory := buffer_extend expandBy c1.memory,k)::cs)` by
+    (irule call_expand_memory_apply >> simp[]) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `get_gas_left st2` >>
+  `get_gas_left st2 =
+    (INL (c.msgParams.gasLimit - (c.gasUsed + baseCost)),st2)` by
+    (`st2.contexts = (c1 with memory := buffer_extend expandBy c1.memory,k)::cs`
+       by simp[Abbr `st2`] >>
+     drule call_get_gas_left_apply >>
+     simp[Abbr `c1`, Abbr `st`, ADD_COMM]) >>
+  simp[] >>
+  `call_gas value gas (c.msgParams.gasLimit - (baseCost + c.gasUsed)) 0 0 =
+    (dynamicGas,stipend)` by metis_tac[ADD_COMM] >>
+  simp[] >>
+  qabbrev_tac `c2 = FST (HD st2.contexts)` >>
+  `consume_gas dynamicGas st2 =
+    (INL (),st2 with contexts :=
+      (c2 with gasUsed := c2.gasUsed + dynamicGas,k)::cs)` by
+    (irule call_consume_gas_apply >>
+     simp[Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`] >> decide_tac) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `get_callee st3` >>
+  `get_callee st3 = (INL c.msgParams.callee,st3)` by
+    (`st3.contexts =
+       (c2 with gasUsed := c2.gasUsed + dynamicGas,k)::cs`
+       by simp[Abbr `st3`] >>
+     drule call_get_callee_apply >>
+     simp[Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`]) >>
+  simp[return_def, Abbr `st3`, Abbr `c2`, Abbr `st2`, Abbr `c1`, Abbr `st`] >>
+  qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+  simp[call_gas_def]
+QED
+
+Theorem call_pop_stack_apply[local]:
+  s.contexts = (c,k)::cs /\ n <= LENGTH c.stack ==>
+  pop_stack n s =
+  (INL (TAKE n c.stack),s with contexts :=
+    (c with stack := DROP n c.stack,k)::cs)
+Proof
+  strip_tac >> simp[pop_stack_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, assert_def, return_def]
+QED
+
+Theorem call_pair_apply[local]:
+  !f p. (\(a,b). f a b) p = f (FST p) (SND p)
+Proof
+  rpt gen_tac >> Cases_on `p` >> simp[]
+QED
+
+Theorem call_pair_function[local]:
+  (\(a,b). f a b) = (\p. f (FST p) (SND p))
+Proof
+  simp_tac bool_ss [FUN_EQ_THM, call_pair_apply]
+QED
+
+Theorem step_call_segments[local]:
+  step_call op = do
+    valueOffset <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + valueOffset);
+    gas <<- w2n $ EL 0 args;
+    address <<- w2w $ EL 1 args;
+    value <<- if 0 < valueOffset then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + valueOffset) args;
+    argsSize <<- w2n $ EL (3 + valueOffset) args;
+    retOffset <<- w2n $ EL (4 + valueOffset) args;
+    retSize <<- w2n $ EL (5 + valueOffset) args;
+    (offset,size) <<- max_expansion_range
+      (argsOffset,argsSize) (retOffset,retSize);
+    mx <- memory_expansion_info offset size;
+    (accessCost,accounts,(code,delegateCost)) <- (do
+      aCost <- access_address address;
+      accts <- get_accounts;
+      pair <- (case get_delegate (lookup_account address accts).code of
+        NONE => return ((lookup_account address accts).code,0)
+      | SOME del => do
+          n <- access_address del;
+          return ((lookup_account del accts).code,n)
+        od);
+      return (aCost,accts,pair)
+    od);
+    toAccount <<- lookup_account address accounts;
+    charged <<- op = Call /\ 0 < value /\ account_empty toAccount;
+    (sender,stipend) <- (do
+      consume_gas (static_gas op + accessCost +
+        (if 0 < value then call_value_cost else 0) + delegateCost + mx.cost);
+      charge_new_account charged;
+      if op = Call /\ 0 < value then assert_not_static else return ();
+      expand_memory mx.expand_by;
+      left <- get_gas_left;
+      pair <<- call_gas value gas left 0 0;
+      consume_gas (FST pair);
+      sender <- get_callee;
+      return (sender,SND pair)
+    od);
+    if (lookup_account sender accounts).balance < value then do
+      credit_new_account charged;
+      abort_call_value stipend
+    od else do
+      set_return_data [];
+      sucDepth <- get_num_contexts;
+      if sucDepth > 1024 then do
+        credit_new_account charged;
+        abort_unuse stipend
+      od else proceed_call op sender address value argsOffset argsSize code stipend
+        (Memory <|offset := retOffset; size := retSize|>)
+    od
+  od
+Proof
+  simp_tac pure_ss [step_call_def, LET_THM, ignore_bind_def, bind_assoc,
+    return_bind, call_pair_function, call_pair_apply, pairTheory.FST, pairTheory.SND] >>
+  BETA_TAC >> simp_tac pure_ss [pairTheory.FST, pairTheory.SND] >> REFL_TAC
+QED
+
+Theorem call_bind_success[local]:
+  f s = (INL x,s') ==> vfmExecution$bind f cont s = cont x s'
+Proof
+  strip_tac >> simp[bind_def]
+QED
+
+Definition call_access_prog_def:
+  call_access_prog addr = do
+    aCost <- access_address addr;
+    accounts <- get_accounts;
+    pair <- (case get_delegate (lookup_account addr accounts).code of
+      NONE => return ((lookup_account addr accounts).code,0)
+    | SOME del => do
+        n <- access_address del;
+        return ((lookup_account del accounts).code,n)
+      od);
+    return (aCost,accounts,pair)
+  od
+End
+
+Theorem call_access_prog_apply[local]:
+  s.rollback = rb /\ s.msdomain = d /\ access_check d addr /\
+  delegate_check (lookup_account addr rb.accounts).code
+    (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ==>
+  call_access_prog addr s =
+  (INL (access_cost rb addr,rb.accounts,
+    ((case get_delegate (lookup_account addr rb.accounts).code of
+        NONE => (lookup_account addr rb.accounts).code
+      | SOME del => (lookup_account del rb.accounts).code),dCost)),
+    s with <|rollback := newRb; msdomain := newDom|>)
+Proof
+  strip_tac >> rewrite_tac[call_access_prog_def] >>
+  irule call_access_segment >> simp[]
+QED
+
+Definition call_meter_prog_def:
+  call_meter_prog baseCost charged doStatic expandBy value gas = do
+    consume_gas baseCost;
+    charge_new_account charged;
+    if doStatic then assert_not_static else return ();
+    expand_memory expandBy;
+    left <- get_gas_left;
+    pair <<- call_gas value gas left 0 0;
+    consume_gas (FST pair);
+    sender <- get_callee;
+    return (sender,SND pair)
+  od
+End
+
+Theorem call_meter_prog_apply[local]:
+  s.contexts = (c,k)::cs /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (doStatic ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) ==>
+  call_meter_prog baseCost charged doStatic expandBy value gas s =
+  (INL (c.msgParams.callee,stipend), s with contexts :=
+    (c with <|gasUsed := c.gasUsed + baseCost + dynamicGas;
+              memory := buffer_extend expandBy c.memory;
+              stateGasLeft := c.stateGasLeft -
+                (if charged then new_account_state_gas else 0)|>,k)::cs)
+Proof
+  strip_tac >> rewrite_tac[call_meter_prog_def] >>
+  irule call_meter_segment >> simp[]
+QED
+
+Theorem step_call_named_segments[local]:
+  step_call op = do
+    vo <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + vo);
+    gas <<- w2n $ EL 0 args;
+    address <<- w2w $ EL 1 args;
+    value <<- if 0 < vo then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + vo) args;
+    argsSize <<- w2n $ EL (3 + vo) args;
+    retOffset <<- w2n $ EL (4 + vo) args;
+    retSize <<- w2n $ EL (5 + vo) args;
+    (offset,size) <<- max_expansion_range
+      (argsOffset,argsSize) (retOffset,retSize);
+    mx <- memory_expansion_info offset size;
+    (accessCost,accounts,(code,delegateCost)) <- call_access_prog address;
+    charged <<- op = Call /\ 0 < value /\ account_empty (lookup_account address accounts);
+    (sender,stipend) <- call_meter_prog
+      (static_gas op + accessCost + (if 0 < value then call_value_cost else 0) +
+       delegateCost + mx.cost)
+      charged (op = Call /\ 0 < value) mx.expand_by value gas;
+    if (lookup_account sender accounts).balance < value then do
+      credit_new_account charged;
+      abort_call_value stipend
+    od else do
+      set_return_data [];
+      sucDepth <- get_num_contexts;
+      if sucDepth > 1024 then do
+        credit_new_account charged;
+        abort_unuse stipend
+      od else proceed_call op sender address value argsOffset argsSize code stipend
+        (Memory <|offset := retOffset; size := retSize|>)
+    od
+  od
+Proof
+  once_rewrite_tac[step_call_segments] >>
+  simp_tac pure_ss [call_access_prog_def, call_meter_prog_def, LET_THM] >>
+  REFL_TAC
+QED
+
+Definition call_prefix_prog_def:
+  call_prefix_prog op cont : execution_state -> 'a execution_result = do
+    vo <<- if call_has_value op then 1 else 0;
+    args <- pop_stack (6 + vo);
+    gas <<- w2n $ EL 0 args;
+    addr <<- w2w $ EL 1 args;
+    value <<- if 0 < vo then w2n $ EL 2 args else 0;
+    argsOffset <<- w2n $ EL (2 + vo) args;
+    argsSize <<- w2n $ EL (3 + vo) args;
+    retOffset <<- w2n $ EL (4 + vo) args;
+    retSize <<- w2n $ EL (5 + vo) args;
+    (offset,sz) <<- max_expansion_range
+      (argsOffset,argsSize) (retOffset,retSize);
+    mx <- memory_expansion_info offset sz;
+    (accessCost,accounts,(code,dCost)) <- call_access_prog addr;
+    charged <<- op = Call /\ 0 < value /\ account_empty (lookup_account addr accounts);
+    (sender,stipend) <- call_meter_prog
+      (static_gas op + accessCost + (if 0 < value then call_value_cost else 0) +
+       dCost + mx.cost)
+      charged (op = Call /\ 0 < value) mx.expand_by value gas;
+    cont addr value argsOffset argsSize retOffset retSize accounts code charged sender stipend
+  od
+End
+
+Theorem step_call_prefix_bridge[local]:
+  step_call op = call_prefix_prog op
+    (\addr value argsOffset argsSize retOffset retSize accounts code charged sender stipend.
+      if (lookup_account sender accounts).balance < value then do
+        credit_new_account charged;
+        abort_call_value stipend
+      od else do
+        set_return_data [];
+        sucDepth <- get_num_contexts;
+        if sucDepth > 1024 then do
+          credit_new_account charged;
+          abort_unuse stipend
+        od else proceed_call op sender addr value argsOffset argsSize code stipend
+          (Memory <|offset := retOffset; size := retSize|>)
+      od)
+Proof
+  once_rewrite_tac[step_call_named_segments] >>
+  simp_tac pure_ss [call_prefix_prog_def, LET_THM] >> REFL_TAC
+QED
+
+Theorem call_pop_bind_apply[local]:
+  s.contexts = (c,k)::cs /\ n <= LENGTH c.stack ==>
+  vfmExecution$bind (pop_stack n)
+    (kont : (256 word) list -> execution_state -> 'a execution_result) s =
+  kont (TAKE n c.stack)
+    (s with contexts := (c with stack := DROP n c.stack,k)::cs)
+Proof
+  strip_tac >> irule call_bind_success >>
+  irule call_pop_stack_apply >> simp[]
+QED
+
+Theorem call_prefix_prog_apply[local]:
+  s.contexts = (c,k)::cs /\ s.rollback = rb /\ s.msdomain = d /\
+  vo = (if call_has_value op then 1 else 0) /\
+  6 + vo <= LENGTH c.stack /\ args = TAKE (6 + vo) c.stack /\
+  gas = w2n (EL 0 args) /\ addr = w2w (EL 1 args) /\
+  value = (if 0 < vo then w2n (EL 2 args) else 0) /\
+  ao = w2n (EL (2 + vo) args) /\ az = w2n (EL (3 + vo) args) /\
+  ro = w2n (EL (4 + vo) args) /\ rz = w2n (EL (5 + vo) args) /\
+  max_expansion_range (ao,az) (ro,rz) = (offset,sz) /\
+  access_check d addr /\
+  delegate_check (lookup_account addr rb.accounts).code
+    (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom /\
+  code = (case get_delegate (lookup_account addr rb.accounts).code of
+    NONE => (lookup_account addr rb.accounts).code
+  | SOME del => (lookup_account del rb.accounts).code) /\
+  charged = (op = Call /\ 0 < value /\ account_empty (lookup_account addr rb.accounts)) /\
+  baseCost = static_gas op + access_cost rb addr +
+    (if 0 < value then call_value_cost else 0) + dCost + memory_cost c.memory offset sz /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (op = Call /\ 0 < value ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) ==>
+  call_prefix_prog op cont s =
+  cont addr value ao az ro rz rb.accounts code charged c.msgParams.callee stipend
+    (s with <|rollback := newRb; msdomain := newDom; contexts :=
+      (c with <|stack := DROP (6 + vo) c.stack;
+                memory := expanded_memory c.memory offset sz;
+                gasUsed := c.gasUsed + baseCost + dynamicGas;
+                stateGasLeft := c.stateGasLeft -
+                  (if charged then new_account_state_gas else 0)|>,k)::cs|>)
+Proof
+  strip_tac >>
+  once_rewrite_tac[call_prefix_prog_def] >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  qpat_assum `vo = _` (fn th => rewrite_tac[GSYM th]) >>
+  qmatch_goalsub_abbrev_tac `vfmExecution$bind (pop_stack (6 + vo)) kont s` >>
+  `vfmExecution$bind (pop_stack (6 + vo)) kont s =
+    kont (TAKE (6 + vo) c.stack)
+      (s with contexts := (c with stack := DROP (6 + vo) c.stack,k)::cs)` by
+    (irule call_pop_bind_apply >> simp[]) >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  simp_tac pure_ss [Abbr `kont`, LET_THM] >> BETA_TAC >>
+  qpat_assum `args = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
+    [`gas = _`, `addr = _`, `value = _`, `ao = _`, `az = _`, `ro = _`, `rz = _`] >>
+  qpat_assum `max_expansion_range _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac pure_ss [call_pair_apply, pairTheory.FST, pairTheory.SND] >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `vfmExecution$bind (memory_expansion_info offset sz) _ st` >>
+  `memory_expansion_info offset sz st =
+    (INL <|cost := memory_cost c.memory offset sz;
+           expand_by := memory_expand_by c.memory offset sz|>,st)` by
+    simp[memory_expansion_info_split, Abbr `st`] >>
+  pop_assum (fn th => simp_tac std_ss [Once bind_def, th,
+    pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  `call_access_prog addr st =
+    (INL (access_cost rb addr,rb.accounts,(code,dCost)),
+     st with <|rollback := newRb; msdomain := newDom|>)` by
+    (qpat_assum `code = _` (fn th => pure_rewrite_tac[th]) >>
+     irule call_access_prog_apply >> gvs[Abbr `st`]) >>
+  pop_assum (fn th => simp_tac std_ss [Once bind_def, th,
+    pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `charged = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `baseCost = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qmatch_goalsub_abbrev_tac `vfmExecution$bind _ _ st2` >>
+  qabbrev_tac `c2 = c with stack := DROP (6 + vo) c.stack` >>
+  `st2.contexts = (c2,k)::cs` by simp[Abbr `st2`, Abbr `st`, Abbr `c2`] >>
+  `call_meter_prog baseCost charged (op = Call /\ 0 < value)
+      (memory_expand_by c.memory offset sz) value gas st2 =
+    (INL (c2.msgParams.callee,stipend), st2 with contexts :=
+      (c2 with <|gasUsed := c2.gasUsed + baseCost + dynamicGas;
+                 memory := buffer_extend (memory_expand_by c.memory offset sz) c2.memory;
+                 stateGasLeft := c2.stateGasLeft -
+                   (if charged then new_account_state_gas else 0)|>,k)::cs)` by
+    (irule call_meter_prog_apply >> gvs[Abbr `c2`]) >>
+  pop_assum (fn th => simp_tac std_ss [Once bind_def, th,
+    pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+  simp_tac (srw_ss()) [Abbr `st2`, Abbr `st`, Abbr `c2`,
+    expanded_memory_def, execution_state_component_equality]
+QED
+
+Theorem call_prefix_prog_apply_result[local]:
+  s.contexts = (c,k)::cs /\ s.rollback = rb /\ s.msdomain = d /\
+  vo = (if call_has_value op then 1 else 0) /\
+  6 + vo <= LENGTH c.stack /\ args = TAKE (6 + vo) c.stack /\
+  gas = w2n (EL 0 args) /\ addr = w2w (EL 1 args) /\
+  value = (if 0 < vo then w2n (EL 2 args) else 0) /\
+  ao = w2n (EL (2 + vo) args) /\ az = w2n (EL (3 + vo) args) /\
+  ro = w2n (EL (4 + vo) args) /\ rz = w2n (EL (5 + vo) args) /\
+  max_expansion_range (ao,az) (ro,rz) = (offset,sz) /\
+  access_check d addr /\
+  delegate_check (lookup_account addr rb.accounts).code
+    (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom /\
+  code = (case get_delegate (lookup_account addr rb.accounts).code of
+    NONE => (lookup_account addr rb.accounts).code
+  | SOME del => (lookup_account del rb.accounts).code) /\
+  charged = (op = Call /\ 0 < value /\ account_empty (lookup_account addr rb.accounts)) /\
+  baseCost = static_gas op + access_cost rb addr +
+    (if 0 < value then call_value_cost else 0) + dCost + memory_cost c.memory offset sz /\
+  c.gasUsed + baseCost <= c.msgParams.gasLimit /\
+  c.gasUsed + baseCost + dynamicGas <= c.msgParams.gasLimit /\
+  (if charged then new_account_state_gas else 0) <= c.stateGasLeft /\
+  (op = Call /\ 0 < value ==> ~c.msgParams.static) /\
+  call_gas value gas (c.msgParams.gasLimit - (c.gasUsed + baseCost)) 0 0 =
+    (dynamicGas,stipend) /\
+  cont addr value ao az ro rz rb.accounts code charged c.msgParams.callee stipend
+    (s with <|rollback := newRb; msdomain := newDom; contexts :=
+      (c with <|stack := DROP (6 + vo) c.stack;
+                memory := expanded_memory c.memory offset sz;
+                gasUsed := c.gasUsed + baseCost + dynamicGas;
+                stateGasLeft := c.stateGasLeft -
+                  (if charged then new_account_state_gas else 0)|>,k)::cs|>) = result ==>
+  call_prefix_prog op cont s = result
+Proof
+  strip_tac >> drule_all call_prefix_prog_apply >>
+  disch_then (qspec_then `cont` mp_tac) >> gvs[]
+QED
+
+Theorem call_refund_unuse_apply[local]:
+  cost = (if charged then new_account_state_gas else 0) /\
+  back = MIN cost c.stateGasSpilled /\
+  s.contexts = (c with stateGasLeft := c.stateGasLeft - cost,k)::cs /\
+  cost <= c.stateGasLeft /\ stipend <= c.gasUsed - back ==>
+  (do credit_new_account charged; unuse_gas stipend od) s =
+  (INL (), s with contexts :=
+    (c with <|gasUsed := c.gasUsed - back - stipend;
+              stateGasLeft := c.stateGasLeft - back;
+              stateGasSpilled := c.stateGasSpilled - back|>,k)::cs)
+Proof
+  strip_tac >>
+  `back <= cost` by simp[] >>
+  `(c.stateGasLeft - cost) + (cost - back) = c.stateGasLeft - back` by decide_tac >>
+  Cases_on `charged` >>
+  gvs[credit_new_account_def, credit_state_gas_refund_def, unuse_gas_def,
+    bind_def, ignore_bind_def, get_current_context_def, set_current_context_def,
+    return_def, assert_def, execution_state_component_equality,
+    context_component_equality]
+QED
+
 Theorem SPEC_Call_fail_balance:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e *
    cond (7 ≤ LENGTH ss ∧ ISL e ∧
@@ -4295,15 +5955,25 @@ Theorem SPEC_Call_fail_balance:
          em = expanded_memory m offset sz ∧
          access_check d addr ∧
          toAccount = lookup_account addr rb.accounts ∧
-         cCost = (if call_inst = Call ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         vCost = (if 0 < value then call_value_cost else 0) ∧
+         newAccountCharged = (call_inst = Call ∧ 0 < value ∧
+                              account_empty toAccount) ∧
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) ∧
+         (if newAccountCharged then new_account_state_gas else 0) ≤ sg ∧
+         creditBack = MIN stateCost sp ∧
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + call_value_cost + cCost + dCost) =
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst +
+              access_cost rb addr + vCost + dCost + mCost))) 0 0 =
              (dynamicGas, stipend) ∧
-         g + static_gas call_inst + dynamicGas + mCost ≤ p.gasLimit ∧
+         g + (static_gas call_inst + access_cost rb addr + vCost + dCost + mCost) ≤
+           p.gasLimit ∧
+         g + (static_gas call_inst + access_cost rb addr + vCost + dCost + mCost +
+              dynamicGas) ≤ p.gasLimit ∧
+         stipend ≤ g + (static_gas call_inst + access_cost rb addr + vCost + dCost +
+                       mCost + dynamicGas) - creditBack ∧
          ¬p.static ∧
          call_has_value call_inst ∧
          sender = lookup_account p.callee rb.accounts ∧
@@ -4311,7 +5981,10 @@ Theorem SPEC_Call_fail_balance:
   {(pc,call_inst)}
   (evm_Stack (b2w F :: DROP 7 ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + static_gas call_inst + dynamicGas + mCost - stipend) *
+   evm_GasUsed (g + (static_gas call_inst + access_cost rb addr + vCost + dCost +
+                     mCost + dynamicGas) - creditBack - stipend) *
+   evm_StateGasLeft (sg - creditBack) *
+   evm_StateGasSpilled (sp - creditBack) *
    evm_MsgParams p *
    evm_Memory em *
    evm_Rollback newRb *
@@ -4319,88 +5992,87 @@ Theorem SPEC_Call_fail_balance:
    evm_Exception (INL ()) *
    evm_ReturnData [])
 Proof
-  irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
-  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
-  \\ reverse $ Cases_on ‘b’ >- simp[]
-  \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
-  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
-                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
-  \\ gs[]
-  \\ drule step_preserves_wf_state
-  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
-  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
-  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
-  \\ Cases_on ‘step (SND r)’ \\ fs []
-  \\ strip_tac
-  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
-  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
-    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
-  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
-          return_def, wf_context_def, SF CONJ_ss]
-  \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
-  \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
-  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
-  \\ `step_inst call_inst = step_call call_inst` by (
-       qpat_x_assum`call_has_value _`mp_tac \\
-       Cases_on`call_inst` \\ simp[step_inst_def, call_has_value_def] )
-  \\ `stipend ≤ g + dynamicGas + mCost` by (
-       qhdtm_x_assum`call_gas`mp_tac
-       \\ qpat_x_assum`_ ≤ _.gasLimit`mp_tac
-       \\ simp[call_value_cost_def, call_stipend_def, call_gas_def])
-  \\ `is_call call_inst` by (
-       qpat_x_assum`call_has_value _`mp_tac \\
-       Cases_on`call_inst` \\ simp[call_has_value_def, is_call_def])
-  \\ `call_inst ≠ Call ⇒ cCost < value` by gvs[Abbr`cCost`]
-  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
-         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
-         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
-         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
-         CaseEq"prod", sum_CASE_rator, prod_CASE_rator]
-  \\ qpat_x_assum`step_inst _ = _`kall_tac
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (gdr,gds)`
-  \\ reverse $ Cases_on`gdr` \\ gvs[]
-  >- gvs[CaseEq"prod",CaseEq"sum",CaseEq"option",delegate_check_def,
-         access_address_split]
-  \\ qmatch_asmsub_abbrev_tac`access_address _ s4`
-  \\ sg `gds.contexts = s4.contexts`
-  >- (
-    qpat_x_assum`_ gds = _`kall_tac
-    \\ gvs[CaseEq"option"]
-    \\ qpat_x_assum`_ (access_address _ _) _ = _`mp_tac
-    \\ CASE_TAC \\ CASE_TAC
-    \\ drule access_address_contexts_unchanged
-    \\ rw[] \\ rw[] )
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (INL gdr,_)`
-  \\ PairCases_on`gdr`
-  \\ gvs[get_current_context_def,bind_def,Abbr`s4`,return_def]
-  \\ sg `dCost = gdr1`
-  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
-  \\ gvs[get_current_context_def,return_def,bind_def,assert_def,
-         set_current_context_def]
-  \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
-  \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
-  >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
-        bind_def, ignore_bind_def, get_static_def, assert_def,
-        get_current_context_def,Abbr`s1`]
-  \\ gvs[Abbr`s1`,bind_def,ignore_bind_def,set_return_data_def,get_current_context_def,
-         return_def,set_current_context_def,abort_call_value_def,
-         unuse_gas_def,assert_def, push_stack_def, inc_pc_def, inc_pc_or_jump_def,
-         Abbr`c`,delegate_check_def]
-  \\ conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
-  \\ conj_tac >-
-       (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
-        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
-  \\ gvs[CaseEq"option",access_address_split]
-  \\ end_tac
+  irule IMP_EVM_SPEC >> rpt strip_tac >>
+  rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set] >>
+  qmatch_goalsub_abbrev_tac `b ==> _` >>
+  reverse (Cases_on `b`) >- simp[] >>
+  pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  rpt (qpat_x_assum `_ = _` (assume_tac o
+    ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def])) >>
+  gs[] >>
+  drule step_preserves_wf_state >>
+  qmatch_assum_rename_tac `wf_state (SND r)` >>
+  Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists] >>
+  pop_assum (SUBST_ALL_TAC o EQF_INTRO) >>
+  Cases_on `step (SND r)` >> fs[] >> strip_tac >>
+  `(SND r).contexts <> []` by fs[wf_state_def] >>
+  `wf_context (FST (HD (SND r).contexts))` by
+    (Cases_on `(SND r).contexts` >> gvs[wf_state_def]) >>
+  gvs[step_def,handle_def,bind_def,get_current_context_def,
+      return_def,wf_context_def,SF CONJ_ss] >>
+  qpat_x_assum `(_,_) = _` (assume_tac o SYM) >>
+  qpat_x_assum `(_,_) = _` (assume_tac o SYM) >>
+  qpat_x_assum `SOME _ = _` (assume_tac o SYM) >>
+  `is_call call_inst` by
+    (qpat_x_assum `call_has_value _` mp_tac >>
+     Cases_on `call_inst` >> simp[call_has_value_def,is_call_def]) >>
+  gvs[step_inst_call] >>
+  qpat_x_assum `(case _ of (INL _,_) => _ | (INR _,_) => _) = _` mp_tac >>
+  once_rewrite_tac[step_call_prefix_bridge] >>
+  once_rewrite_tac[ignore_bind_def] >>
+  once_rewrite_tac[bind_def] >>
+  qmatch_goalsub_abbrev_tac `call_prefix_prog call_inst kont (SND r)` >>
+  qabbrev_tac `c = FST (HD (SND r).contexts)` >>
+  qabbrev_tac `k = SND (HD (SND r).contexts)` >>
+  qabbrev_tac `cs = TL (SND r).contexts` >>
+  `(SND r).contexts = (c,k)::cs` by
+    (Cases_on `(SND r).contexts` >> gvs[Abbr `c`,Abbr `k`,Abbr `cs`]) >>
+  `call_prefix_prog call_inst kont (SND r) =
+    kont addr value argsOffset argsSize retOffset retSize rb.accounts
+      (case get_delegate toAccount.code of NONE => toAccount.code
+       | SOME del => (lookup_account del rb.accounts).code)
+      newAccountCharged p.callee stipend
+      (SND r with <|rollback := newRb; msdomain := newDom; contexts :=
+        (c with <|stack := DROP 7 ss; memory := em;
+          gasUsed := g + (static_gas call_inst + access_cost rb addr + vCost + dCost + mCost) + dynamicGas;
+          stateGasLeft := sg - stateCost|>,k)::cs|>)` by
+    (simp_tac pure_ss [Abbr `ss`,Abbr `g`,Abbr `p`,Abbr `sg`,Abbr `stateCost`,
+                Abbr `em`,Abbr `m`,Abbr `toAccount`] >>
+     irule call_prefix_prog_apply_result >>
+     qexistsl [`addr`,`argsOffset`,`TAKE 7 c.stack`,`argsSize`,
+       `static_gas call_inst + access_cost rb addr + vCost + dCost + mCost`,
+       `c`,`newAccountCharged`,
+       `(case get_delegate (lookup_account addr rb.accounts).code of
+          NONE => (lookup_account addr rb.accounts).code
+        | SOME del => (lookup_account del rb.accounts).code)`,
+       `cs`,`d`,`dCost`,`dynamicGas`,`gas`,`k`,`newDom`,`newRb`,
+       `offset`,`rb`,`retOffset`,`retSize`,`stipend`,`sz`,`value`,`1`] >>
+     `0 < value` by (qpat_x_assum `sender.balance < value` mp_tac >> decide_tac) >>
+     simp[EL_TAKE,Abbr `d`,Abbr `rb`,Abbr `vCost`,Abbr `mCost`,
+       Abbr `argsOffset`,Abbr `argsSize`,Abbr `retOffset`,Abbr `retSize`,
+       Abbr `gas`,Abbr `addr`,Abbr `value`,Abbr `newAccountCharged`,
+       GSYM ADD_ASSOC] >>
+     qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [Abbr `kont`,Abbr `sender`] >>
+  simp[ignore_bind_def,Once bind_def,credit_new_account_apply] >>
+  `creditBack <= stateCost` by simp[Abbr `creditBack`] >>
+  `sg - stateCost + (stateCost - creditBack) = sg - creditBack` by decide_tac >>
+  simp[credit_new_account_context_def] >>
+  `LENGTH (DROP 7 ss) < 1024` by
+    (simp[LENGTH_DROP] >> decide_tac) >>
+  simp[abort_call_value_def,push_stack_def,set_return_data_def,unuse_gas_def,
+    inc_pc_def,inc_pc_or_jump_def,bind_def,ignore_bind_def,
+    get_current_context_def,set_current_context_def,return_def,assert_def] >>
+  strip_tac >> gvs[Abbr `pc`,Abbr `p`] >>
+  conj_tac >- SET_TAC[] >> end_tac
 QED
 
 Theorem SPEC_Call_fail_depth:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_Exception e * evm_Contexts cs *
    cond (6 + vOff ≤ LENGTH ss ∧
@@ -4417,14 +6089,22 @@ Theorem SPEC_Call_fail_depth:
          access_check d addr ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         newAccountCharged = (call_inst = Call ∧ 0 < value ∧
+                              account_empty toAccount) ∧
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) ∧
+         (if newAccountCharged then new_account_state_gas else 0) ≤ sg ∧
+         creditBack = MIN stateCost sp ∧
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, stipend) ∧
-         g + static_gas call_inst + dynamicGas + mCost ≤ p.gasLimit ∧
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst +
+              access_cost rb addr + vCost + dCost + mCost))) 0 0 =
+             (dynamicGas, stipend) ∧
+         gasCost = static_gas call_inst + access_cost rb addr + vCost + dCost +
+                   mCost + dynamicGas ∧
+         g + gasCost ≤ p.gasLimit ∧
+         stipend ≤ g + gasCost - creditBack ∧
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
          sender = lookup_account p.callee rb.accounts ∧
@@ -4433,7 +6113,9 @@ Theorem SPEC_Call_fail_depth:
   {(pc,call_inst)}
   (evm_Stack (b2w F :: DROP (6 + vOff) ss) *
    evm_PC (SUC pc) *
-   evm_GasUsed (g + static_gas call_inst + dynamicGas + mCost - stipend) *
+   evm_GasUsed (g + gasCost - creditBack - stipend) *
+   evm_StateGasLeft (sg - creditBack) *
+   evm_StateGasSpilled (sp - creditBack) *
    evm_MsgParams p *
    evm_Memory em *
    evm_Rollback newRb *
@@ -4442,86 +6124,86 @@ Theorem SPEC_Call_fail_depth:
    evm_Contexts cs *
    evm_ReturnData [])
 Proof
-  irule IMP_EVM_SPEC \\ rpt strip_tac
-  \\ rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set]
-  \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
-  \\ reverse $ Cases_on ‘b’ >- simp[]
-  \\ pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
-  \\ rpt (qpat_x_assum`_ = _`(assume_tac o
-                              ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
-  \\ gs[]
-  \\ drule step_preserves_wf_state
-  \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
-  \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
-  \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
-  \\ Cases_on ‘step (SND r)’ \\ fs []
-  \\ strip_tac
-  \\ ‘(SND r).contexts ≠ []’ by fs [wf_state_def]
-  \\ ‘wf_context (FST (HD (SND r).contexts))’ by (
-    Cases_on ‘(SND r).contexts’ \\ gvs[wf_state_def] )
-  \\ gvs [step_def,handle_def,bind_def,get_current_context_def,
-          return_def, wf_context_def, SF CONJ_ss]
-  \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
-  \\ qpat_x_assum `(_,_) = _` $ assume_tac o SYM
-  \\ qpat_x_assum `SOME _ = _` $ assume_tac o SYM
-  \\ `step_inst call_inst = step_call call_inst` by (
-       qpat_x_assum`is_call __`mp_tac \\
-       Cases_on`call_inst` \\ simp[step_inst_def, is_call_def]
-       \\ fs[])
-  \\ `stipend ≤ g + dynamicGas + mCost` by (
-       qhdtm_x_assum`call_gas`mp_tac
-       \\ qpat_x_assum`_ ≤ _.gasLimit`mp_tac
-       \\ Cases_on`value = 0` >- gvs[call_gas_def]
-       \\ simp[call_value_cost_def, call_stipend_def, call_gas_def, Abbr`vCost`])
-  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
-         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
-         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
-         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
-         CaseEq"prod", sum_CASE_rator, prod_CASE_rator]
-  \\ qpat_x_assum`step_inst _ = _`kall_tac
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (gdr,gds)`
-  \\ reverse $ Cases_on`gdr` \\ gvs[]
-  >- gvs[CaseEq"prod",CaseEq"sum",CaseEq"option",delegate_check_def,
-         access_address_split]
-  \\ qmatch_asmsub_abbrev_tac`access_address _ s4`
-  \\ sg `gds.contexts = s4.contexts`
-  >- (
-    qpat_x_assum`_ gds = _`kall_tac
-    \\ gvs[CaseEq"option"]
-    \\ qpat_x_assum`_ (access_address _ _) _ = _`mp_tac
-    \\ CASE_TAC \\ CASE_TAC
-    \\ drule access_address_contexts_unchanged
-    \\ rw[] \\ rw[] )
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (INL gdr,_)`
-  \\ PairCases_on`gdr`
-  \\ gvs[get_current_context_def,bind_def,Abbr`s4`,return_def]
-  \\ sg `dCost = gdr1`
-  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
-  \\ gvs[get_current_context_def,return_def,bind_def,assert_def,
-         set_current_context_def]
-  \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
-  \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
-  >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
-        bind_def, ignore_bind_def, get_static_def, assert_def,
-        get_current_context_def,Abbr`s1`]
-  \\ gvs[Abbr`s1`,bind_def,ignore_bind_def,set_return_data_def,get_current_context_def,
-         return_def,set_current_context_def,get_num_contexts_def,abort_unuse_def,
-         unuse_gas_def,assert_def, push_stack_def, inc_pc_def, inc_pc_or_jump_def,
-         Abbr`c`,delegate_check_def]
-  \\ conj_tac >- simp[Abbr`em`, expanded_memory_def, memory_expand_by_def]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split]
-  \\ conj_tac >-
-       (qpat_x_assum ‘{_} = _’ $ rewrite_tac o single
-        \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
-  \\ gvs[CaseEq"option",access_address_split]
-  \\ end_tac
+  irule IMP_EVM_SPEC >> rpt strip_tac >>
+  rewrite_tac[STAR_evm2set, STAR_evm_OriginalAccounts, GSYM STAR_ASSOC, CODE_POOL_evm2set] >>
+  qmatch_goalsub_abbrev_tac `b ==> _` >>
+  reverse (Cases_on `b`) >- simp[] >>
+  pop_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  rpt (qpat_x_assum `_ = _` (assume_tac o
+    ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def])) >> gs[] >>
+  drule step_preserves_wf_state >>
+  qmatch_assum_rename_tac `wf_state (SND r)` >>
+  Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists] >>
+  pop_assum (SUBST_ALL_TAC o EQF_INTRO) >>
+  Cases_on `step (SND r)` >> fs[] >> strip_tac >>
+  `(SND r).contexts <> []` by fs[wf_state_def] >>
+  `wf_context (FST (HD (SND r).contexts))` by
+    (Cases_on `(SND r).contexts` >> gvs[wf_state_def]) >>
+  gvs[step_def,handle_def,bind_def,get_current_context_def,
+      return_def,wf_context_def,SF CONJ_ss] >>
+  qpat_x_assum `(_,_) = _` (assume_tac o SYM) >>
+  qpat_x_assum `(_,_) = _` (assume_tac o SYM) >>
+  qpat_x_assum `SOME _ = _` (assume_tac o SYM) >>
+  `step_inst call_inst = step_call call_inst` by
+    (qpat_x_assum `is_call _` mp_tac >> Cases_on `call_inst` >>
+     simp[step_inst_def,is_call_def] >> gvs[]) >>
+  gvs[] >>
+  qpat_x_assum `(case _ of (INL _,_) => _ | (INR _,_) => _) = _` mp_tac >>
+  once_rewrite_tac[step_call_prefix_bridge] >>
+  once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_def] >>
+  qmatch_goalsub_abbrev_tac `call_prefix_prog call_inst kont (SND r)` >>
+  qabbrev_tac `c = FST (HD (SND r).contexts)` >>
+  qabbrev_tac `k = SND (HD (SND r).contexts)` >>
+  `(SND r).contexts = (c,k)::cs` by
+    (Cases_on `(SND r).contexts` >> gvs[Abbr `c`,Abbr `k`,Abbr `cs`]) >>
+  `call_prefix_prog call_inst kont (SND r) =
+    kont addr value argsOffset argsSize retOffset retSize rb.accounts
+      (case get_delegate toAccount.code of NONE => toAccount.code
+       | SOME del => (lookup_account del rb.accounts).code)
+      newAccountCharged p.callee stipend
+      (SND r with <|rollback := newRb; msdomain := newDom; contexts :=
+        (c with <|stack := DROP (6 + vOff) ss; memory := em;
+          gasUsed := g + gasCost;
+          stateGasLeft := sg - stateCost|>,k)::cs|>)` by
+    (irule call_prefix_prog_apply_result >>
+     qexistsl [`addr`,`argsOffset`,`TAKE (6 + vOff) ss`,`argsSize`,
+       `static_gas call_inst + access_cost rb addr + vCost + dCost + mCost`,
+       `c`,`newAccountCharged`,
+       `(case get_delegate toAccount.code of NONE => toAccount.code
+         | SOME del => (lookup_account del rb.accounts).code)`,
+       `cs`,`d`,`dCost`,`dynamicGas`,`gas`,`k`,`newDom`,`newRb`,
+       `offset`,`rb`,`retOffset`,`retSize`,`stipend`,`sz`,`value`,`vOff`] >>
+     `vOff <= 1` by (simp[Abbr `vOff`] >> Cases_on `call_has_value call_inst` >> simp[]) >>
+     simp[EL_TAKE,Abbr `ss`,Abbr `g`,Abbr `p`,Abbr `sg`,Abbr `stateCost`,
+       Abbr `em`,Abbr `m`,Abbr `toAccount`,Abbr `d`,Abbr `rb`,
+       Abbr `vCost`,Abbr `mCost`,Abbr `gasCost`,
+       Abbr `argsOffset`,Abbr `argsSize`,Abbr `retOffset`,Abbr `retSize`,
+       Abbr `gas`,Abbr `addr`,Abbr `value`,Abbr `newAccountCharged`,
+       GSYM ADD_ASSOC] >>
+     qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [Abbr `kont`,Abbr `sender`] >>
+  simp[ignore_bind_def,bind_def,set_return_data_def,get_num_contexts_def,
+    get_current_context_def,set_current_context_def,return_def] >>
+  simp[credit_new_account_apply] >>
+  `creditBack <= stateCost` by simp[Abbr `creditBack`] >>
+  `sg - stateCost + (stateCost - creditBack) = sg - creditBack` by decide_tac >>
+  simp[credit_new_account_context_def] >>
+  `LENGTH (DROP (6 + vOff) ss) < 1024` by
+    (simp[LENGTH_DROP] >> decide_tac) >>
+  simp[abort_unuse_def,push_stack_def,unuse_gas_def,
+    inc_pc_def,inc_pc_or_jump_def,bind_def,ignore_bind_def,
+    get_current_context_def,set_current_context_def,return_def,assert_def] >>
+  strip_tac >> gvs[Abbr `pc`,Abbr `p`] >>
+  conj_tac >- SET_TAC[] >> end_tac
 QED
 
 Theorem SPEC_Call:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
@@ -4540,17 +6222,22 @@ Theorem SPEC_Call:
          access_check d addr ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         newAccountCharged = (call_inst = Call ∧ 0 < value ∧
+                              account_empty toAccount) ∧
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) ∧
+         (if newAccountCharged then new_account_state_gas else 0) ≤ sg ∧
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          calleeCode = (case get_delegate toAccount.code of
                          NONE => toAccount.code
                        | SOME del => (lookup_account del rb.accounts).code) ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, stipend) ∧
-         gasCost = static_gas call_inst + dynamicGas + mCost ∧
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst +
+              access_cost rb addr + vCost + dCost + mCost))) 0 0 =
+             (dynamicGas, stipend) ∧
+         gasCost = static_gas call_inst + access_cost rb addr + vCost + dCost +
+                   mCost + dynamicGas ∧
          g + gasCost ≤ p.gasLimit ∧
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
@@ -4572,14 +6259,20 @@ Theorem SPEC_Call:
          all_pcs = FDOM p.parsed ∪ FDOM new_parsed ∧
          caller = <|stack := DROP (6 + vOff) ss; memory := em; pc := pc; jumpDest := j;
                     returnData := []; gasUsed := g + gasCost; addRefund := ar;
-                    subRefund := sr; logs := l; msgParams := p|>))
+                    subRefund := sr; stateGasLeft := 0; stateGasSpilled := sp;
+                    stateGasBaseline := bsl; stateGasCommitted := cm;
+                    logs := l; msgParams := p|>))
   {}
   (evm_Stack [] * evm_PC 0 * evm_GasUsed 0 *
+   evm_StateGasLeft (sg - stateCost) *
+   evm_StateGasSpilled 0 * evm_StateGasBaseline (sg - stateCost) * evm_StateGasCommitted 0 *
    evm_MsgParams (initial_msg_params callee calleeCode
                   (call_inst = StaticCall ∨ p.static)
-                  (Memory <|offset := retOffset; size := retSize|>) tx) *
+                  (Memory <|offset := retOffset; size := retSize|>)
+                  newAccountCharged tx) *
    evm_Memory empty_buffer *
-   evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
+   evm_AddRefund 0 * evm_SubRefund 0 *
+   evm_Logs (transfer_log p.callee callee value) *
    evm_JumpDest NONE *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *
    evm_hide_Parsed (all_pcs DIFF FDOM new_parsed) *
@@ -4620,47 +6313,47 @@ Proof
        qpat_x_assum`is_call __`mp_tac \\
        Cases_on`call_inst` \\ simp[step_inst_def, is_call_def]
        \\ fs[])
-  \\ `g + dynamicGas + mCost + static_gas call_inst ≤ p.gasLimit`
-     by gvs[Abbr`gasCost`]
-  \\ gvs[step_call_def, bind_def, return_def, ignore_bind_def,
-         pop_stack_def, get_current_context_def, assert_def, set_current_context_def,
-         memory_expansion_info_def, consume_gas_def, expand_memory_def, EL_TAKE,
-         memory_cost_def, read_memory_def, get_callee_def, get_accounts_def,
-         access_address_split, get_gas_left_def, HD_TAKE, option_CASE_rator,
-         CaseEq"prod", sum_CASE_rator, prod_CASE_rator]
-  \\ qpat_x_assum`step_inst _ = _`kall_tac
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (gdr,gds)`
-  \\ reverse $ Cases_on`gdr` \\ gvs[]
-  >- gvs[CaseEq"prod",CaseEq"sum",CaseEq"option",delegate_check_def,
-         access_address_split]
-  \\ qmatch_asmsub_abbrev_tac`access_address _ s4`
-  \\ sg `gds.contexts = s4.contexts`
-  >- (
-    qpat_x_assum`_ gds = _`kall_tac
-    \\ gvs[CaseEq"option"]
-    \\ qpat_x_assum`_ (access_address _ _) _ = _`mp_tac
-    \\ CASE_TAC \\ CASE_TAC
-    \\ drule access_address_contexts_unchanged
-    \\ rw[] \\ rw[] )
-  \\ qmatch_asmsub_rename_tac`option_CASE (get_delegate _) _ _ = (INL gdr,_)`
-  \\ PairCases_on`gdr`
-  \\ gvs[get_current_context_def,bind_def,Abbr`s4`,return_def]
-  \\ sg `dCost = gdr1`
-  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
-  \\ gvs[get_current_context_def,return_def,bind_def,assert_def,
-         set_current_context_def]
-  \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
-  \\ Q.SUBGOAL_THEN `(COND a b c) s1 = (INL (), s1)` assume_tac
-  >- rw[Abbr`a`,Abbr`b`,Abbr`c`,return_def,assert_not_static_def,
-        bind_def, ignore_bind_def, get_static_def, assert_def,
-        get_current_context_def,Abbr`s1`]
-  \\ gvs[Abbr`s1`,bind_def,ignore_bind_def, set_return_data_def,
-         get_current_context_def,return_def,set_current_context_def,
-         get_num_contexts_def,abort_unuse_def,unuse_gas_def,assert_def,
-         push_stack_def,inc_pc_def, inc_pc_or_jump_def,Abbr`c`,
-         proceed_call_def,get_rollback_def,read_memory_def]
-  \\ pop_assum kall_tac \\ qunabbrev_tac`b` \\ qunabbrev_tac`a`
-  \\ qmatch_asmsub_abbrev_tac`(COND a b c) (s1:execution_state)`
+  >> gvs[] >>
+  qpat_x_assum `(case _ of (INL _,_) => _ | (INR _,_) => _) = _` mp_tac >>
+  once_rewrite_tac[step_call_prefix_bridge] >>
+  once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_def] >>
+  qmatch_goalsub_abbrev_tac `call_prefix_prog call_inst kont (SND r)` >>
+  qabbrev_tac `c0 = FST (HD (SND r).contexts)` >>
+  qabbrev_tac `k = SND (HD (SND r).contexts)` >>
+  `(SND r).contexts = (c0,k)::cs` by
+    (Cases_on `(SND r).contexts` >> gvs[Abbr `c0`,Abbr `k`,Abbr `cs`]) >>
+  `call_prefix_prog call_inst kont (SND r) =
+    kont addr value argsOffset argsSize retOffset retSize rb.accounts calleeCode
+      newAccountCharged p.callee stipend
+      (SND r with <|rollback := newRb; msdomain := newDom; contexts :=
+        (c0 with <|stack := DROP (6 + vOff) ss; memory := em;
+          gasUsed := g + gasCost;
+          stateGasLeft := sg - stateCost|>,k)::cs|>)` by
+    (irule call_prefix_prog_apply_result >>
+     qexistsl [`addr`,`argsOffset`,`TAKE (6 + vOff) ss`,`argsSize`,
+       `static_gas call_inst + access_cost rb addr + vCost + dCost + mCost`,
+       `c0`,`newAccountCharged`,`calleeCode`,
+       `cs`,`d`,`dCost`,`dynamicGas`,`gas`,`k`,`newDom`,`newRb`,
+       `offset`,`rb`,`retOffset`,`retSize`,`stipend`,`sz`,`value`,`vOff`] >>
+     `vOff <= 1` by (simp[Abbr `vOff`] >> Cases_on `call_has_value call_inst` >> simp[]) >>
+     simp[EL_TAKE,Abbr `ss`,Abbr `g`,Abbr `p`,Abbr `sg`,Abbr `stateCost`,
+       Abbr `em`,Abbr `m`,Abbr `toAccount`,Abbr `d`,Abbr `rb`,Abbr `c0`,
+       Abbr `vCost`,Abbr `mCost`,Abbr `gasCost`,memory_cost_def,Abbr `calleeCode`,
+       Abbr `argsOffset`,Abbr `argsSize`,Abbr `retOffset`,Abbr `retSize`,
+       Abbr `gas`,Abbr `addr`,Abbr `value`,Abbr `newAccountCharged`,
+       GSYM ADD_ASSOC] >>
+     qpat_x_assum `_ + _ <= _.gasLimit` mp_tac >>
+     qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [memory_cost_def,Once MULT_COMM,AC ADD_ASSOC ADD_COMM] >>
+     rpt strip_tac >> decide_tac) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [Abbr `kont`,Abbr `sender`] >>
+  simp[ignore_bind_def,bind_def,set_return_data_def,get_num_contexts_def,
+    get_current_context_def,set_current_context_def,return_def] >>
+  simp[proceed_call_def,drain_state_gas_reservoir_def,get_rollback_def,read_memory_def,
+    get_accounts_def,bind_def,ignore_bind_def,get_current_context_def,
+    set_current_context_def,return_def] >>
+  qmatch_goalsub_abbrev_tac `(COND a b c) (s1:execution_state)`
   \\ qmatch_goalsub_abbrev_tac`_ with accounts updated_by f`
   \\ Q.SUBGOAL_THEN `(COND a b c) s1 = update_accounts f s1` assume_tac
   >- (rw[Abbr`a`,Abbr`b`,Abbr`c`,Abbr`f`,return_def,update_accounts_def,
@@ -4670,12 +6363,15 @@ Proof
       \\ gvs[transfer_value_def, rollback_state_component_equality])
   \\ gvs[update_accounts_def, Abbr`s1`,Abbr`c`,return_def,
          get_caller_def,bind_def,ignore_bind_def,get_current_context_def,
-         get_value_def,get_static_def,push_context_def]
-  \\ pop_assum kall_tac
-  \\ sg `gdr0 = calleeCode`
-  >- gvs[delegate_check_def,CaseEq"option",access_address_split]
-  \\ gvs[]
-  \\ conj_tac >- gvs[Abbr`em`, expanded_memory_def, memory_expand_by_def]
+         get_value_def,get_static_def,push_context_def,
+         inc_pc_or_jump_def,initial_context_def]
+  \\ strip_tac \\ gvs[]
+  \\ conj_tac >-
+    (AP_THM_TAC >> AP_TERM_TAC >>
+     gvs[Abbr `newAccountCharged`,Abbr `toAccount`] >>
+     qpat_x_assum `delegate_check _ _ _ _ _ _` mp_tac >>
+     simp[delegate_check_def] >> Cases_on `get_delegate (lookup_account addr rb.accounts).code` >>
+     simp[accesses_add_def] >> rpt strip_tac >> gvs[accesses_add_def])
   \\ gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,initial_msg_params_def,
          TO_FLOOKUP]
   \\ conj_tac >- metis_tac[NOT_SOME_NONE]
@@ -4684,8 +6380,6 @@ Proof
        simp[Abbr`caller`,Abbr`em`, expanded_memory_def, memory_expand_by_def,
             context_component_equality,Abbr`gasCost`]
   \\ gvs[EMPTY_evm2set]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split,delegate_check_def]
-  \\ conj_tac >- gvs[CaseEq"option",access_address_split,delegate_check_def]
   \\ conj_tac >-
       (qpat_x_assum ‘_ = {}’ mp_tac
        \\ fs [EXTENSION]
@@ -4704,16 +6398,14 @@ Proof
 QED
 
 Theorem call_gas_cost_covers_stipend:
-  call_gas value gas gasLeft mCost
-    (accessCost + (if 0 < value then call_value_cost else 0) + cCost + dCost) =
-      (dynamicGas,stipend) ==>
-  stipend <= staticCost + dynamicGas + mCost
+  call_gas value gas gasLeft 0 0 = (dynamicGas,stipend) ==>
+  stipend <= staticCost + accessCost +
+             (if 0 < value then call_value_cost else 0) + dCost + mCost + dynamicGas
 Proof
   strip_tac >>
-  `stipend <= dynamicGas + mCost` suffices_by decide_tac >>
-  irule call_gas_stipend_le_consumed >>
-  goal_assum (drule_at Any) >>
-  Cases_on `0 < value` >> simp[call_value_cost_def, call_stipend_def]
+  Cases_on `0 < value` >>
+  gvs[call_gas_def, call_value_cost_def, call_stipend_def, LET_THM] >>
+  Cases_on `gas <= gasLeft - gasLeft DIV 64` >> simp[MIN_DEF] >> decide_tac
 QED
 
 Theorem call_stack_after_pop_has_room[local]:
@@ -4734,6 +6426,14 @@ Proof
        assert_def, bind_def, return_def]
 QED
 
+Theorem call_base_cost_bound[local]:
+  !a b c d e f h n:num.
+    a + (b + c + d + e + f + h) <= n ==>
+    a + (b + c + d + e + f) <= n
+Proof
+  decide_tac
+QED
+
 Theorem step_call_prepared:
   s.contexts = (caller,cb)::cs /\ s.rollback = rb /\ s.msdomain = d /\
   caller.stack = ss /\ caller.msgParams = p /\
@@ -4750,16 +6450,19 @@ Theorem step_call_prepared:
   em = expanded_memory m offset sz /\ access_check d addr /\
   toAccount = lookup_account addr rb.accounts /\
   vCost = (if 0 < value then call_value_cost else 0) /\
-  cCost = (if op = Call /\ 0 < value /\ account_empty toAccount
-           then new_account_cost else 0) /\
+  newAccountCharged = (op = Call /\ 0 < value /\ account_empty toAccount) /\
+  stateCost = (if newAccountCharged then new_account_state_gas else 0) /\
+  (if newAccountCharged then new_account_state_gas else 0) <= caller.stateGasLeft /\
   delegate_check toAccount.code (msdomain_add addr d)
     (accesses_add addr rb) dCost newRb newDom /\
   calleeCode = (case get_delegate toAccount.code of
     NONE => toAccount.code | SOME del => (lookup_account del rb.accounts).code) /\
   mCost = memory_cost m offset sz /\
-  call_gas value gas (p.gasLimit - g) mCost
-    (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas,stipend) /\
-  gasCost = static_gas op + dynamicGas + mCost /\
+  call_gas value gas
+    (p.gasLimit - (g + (static_gas op + access_cost rb addr + vCost + dCost + mCost)))
+    0 0 = (dynamicGas,stipend) /\
+  gasCost = static_gas op + access_cost rb addr + vCost + dCost + mCost +
+            dynamicGas /\
   g + gasCost <= p.gasLimit /\
   (0 < value ==> ~p.static) /\
   value <= (lookup_account p.callee rb.accounts).balance /\ LENGTH cs < 1024 ==>
@@ -4768,118 +6471,87 @@ Theorem step_call_prepared:
     (Memory <|offset := retOffset; size := retSize|>)
     (s with <|rollback := newRb; msdomain := newDom;
       contexts := (caller with <|stack := DROP (6 + vOff) ss;
-        memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs|>)
+        memory := em; gasUsed := g + gasCost; returnData := [];
+        stateGasLeft := caller.stateGasLeft - stateCost|>,cb)::cs|>)
 Proof
   strip_tac >>
-  `vOff <= 1` by (Cases_on `call_has_value op` >> simp[]) >>
-  `0 < 6 + vOff /\ 1 < 6 + vOff /\ 2 < 6 + vOff /\
-   vOff + 2 < 6 + vOff /\ vOff + 3 < 6 + vOff /\
-   vOff + 4 < 6 + vOff /\ vOff + 5 < 6 + vOff` by decide_tac >>
-  pure_rewrite_tac[step_call_def] >>
-  qpat_assum `vOff = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-  pure_rewrite_tac[LET_THM, pop_stack_def, bind_def, ignore_bind_def,
-    get_current_context_def] >>
-  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (srw_ss()) [] >>
-  qpat_assum `caller.stack = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_assum `6 + vOff <= _` (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (srw_ss()) [assert_def, return_def, bind_def,
-    ignore_bind_def, set_current_context_def] >>
-  pure_rewrite_tac[get_current_context_def] >>
-  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (srw_ss()) [return_def] >>
-  qpat_assum `caller.stack = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_assum `6 + vOff <= _` (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (srw_ss()) [return_def] >>
-  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (srw_ss()) [] >>
-  simp_tac (srw_ss()) [EL_TAKE, arithmeticTheory.ADD_COMM,
-    DECIDE ``!n:num. 0 < 6 + n /\ 1 < 6 + n /\ 2 < 6 + n /\
-      2 + n < 6 + n /\ 3 + n < 6 + n /\ 4 + n < 6 + n /\ 5 + n < 6 + n``] >>
-  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
-    [`gas = _`, `addr = _`, `value = _`, `argsOffset = _`, `argsSize = _`,
-     `retOffset = _`, `retSize = _`] >>
-  qpat_assum `max_expansion_range _ _ = _` (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (srw_ss()) [] >>
-  simp_tac (srw_ss()) [HD_TAKE, DECIDE ``!n:num. 0 < n + 6``] >>
-  qpat_assum `gas = _` (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE[EL] th)]) >>
-  simp_tac (srw_ss()) [memory_expansion_info_def, bind_def, LET_THM,
-    get_current_context_def, return_def] >>
-  qpat_assum `caller.memory = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_assum `mCost = _` (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE[memory_cost_def] th)]) >>
-  pure_rewrite_tac[bind_def] >>
-  qpat_assum `access_check _ _` (fn th =>
-    simp_tac (srw_ss()) [access_address_split, th]) >>
-  qpat_assum `s.rollback = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_assum `s.msdomain = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_assum `access_check _ _` (fn th =>
-    qpat_assum `s.msdomain = _` (fn td =>
-    qpat_assum `s.rollback = _` (fn tr =>
-      simp_tac (srw_ss()) [access_address_split, th, td, tr,
-        get_accounts_def, return_def]))) >>
-  qpat_assum `toAccount = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
-    [`vCost = _`, `cCost = _`] >>
-  qpat_x_assum `delegate_check _ _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[delegate_check_def] >>
-  Cases_on `get_delegate toAccount.code` >>
-  pure_rewrite_tac[option_CLAUSES] >> BETA_TAC >> strip_tac >>
-  qpat_assum `s.rollback = _` (fn tr =>
-    qpat_assum `s.msdomain = _` (fn td =>
-    simp_tac (srw_ss()) [access_address_split, tr, td,
-      return_def, bind_def])) >>
-  qpat_assum `access_check _ _` (fn th =>
-    qpat_assum `s.rollback = _` (fn tr =>
-    qpat_assum `s.msdomain = _` (fn td =>
-      simp_tac (srw_ss()) [access_address_split, th, tr, td,
-        return_def, bind_def]))) >>
-  qpat_assum `caller.msgParams = _` (fn tp =>
-    qpat_assum `caller.gasUsed = _` (fn tg =>
-    simp_tac (srw_ss()) [get_gas_left_def, get_current_context_def,
-      bind_def, return_def, tp, tg])) >>
-  qpat_assum `call_gas _ _ _ _ _ = _` (fn th =>
-    qpat_assum `dCost = _` (fn td =>
-      simp_tac (srw_ss()) [SIMP_RULE (srw_ss()) [td,
-        AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] th,
-        AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
-  qpat_assum `gasCost = _` (fn th => pure_rewrite_tac
-    [GSYM (SIMP_RULE (srw_ss())
-      [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] th)]) >>
-  qpat_assum `g + gasCost <= _` (fn tb =>
-    qpat_assum `caller.msgParams = _` (fn tp =>
-    qpat_assum `caller.gasUsed = _` (fn tg =>
-    simp_tac (srw_ss()) [consume_gas_def, LET_THM, get_current_context_def,
-      bind_def, ignore_bind_def, return_def, assert_def,
-      set_current_context_def, tp, tg, tb]))) >>
-  qmatch_goalsub_abbrev_tac
-    `(if op = Call /\ 0 < value then assert_not_static else return ()) st` >>
-  `(if op = Call /\ 0 < value then assert_not_static else return ()) st =
-    (INL (),st)` by
-    (irule call_static_check_success >>
-     simp[Abbr `st`] >> goal_assum (drule_at Any)) >>
-  qpat_x_assum `(if _ then _ else _) st = _`
-    (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (srw_ss()) [Abbr `st`] >>
-  qpat_assum `caller.memory = _` (fn tm =>
-    qpat_assum `caller.msgParams = _` (fn tp =>
-    simp_tac (srw_ss()) [expand_memory_def, get_current_context_def,
-      set_current_context_def, get_callee_def, bind_def, return_def, tm, tp])) >>
-  `~((lookup_account p.callee rb.accounts).balance < value)` by decide_tac >>
-  `~(1024 < SUC (LENGTH cs))` by decide_tac >>
-  qpat_assum `~(_ < value)` (fn tb =>
-    qpat_assum `~(1024 < _)` (fn td =>
-    simp_tac (srw_ss()) [tb, td, LET_THM, set_return_data_def, get_num_contexts_def,
-      get_current_context_def, set_current_context_def, bind_def, return_def])) >>
-  map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[th]))
-    [`newRb = _`, `newDom = _`, `s.rollback = _`, `s.msdomain = _`,
-     `calleeCode = _`, `em = _`] >>
-  simp_tac (srw_ss()) [expanded_memory_def, memory_expand_by_def] >>
-  qpat_assum `~(1024 < _)` (fn td =>
-    simp_tac (srw_ss()) [arithmeticTheory.GREATER_DEF, td]) >>
-  AP_TERM_TAC >>
-  qpat_assum `s.rollback = _` (fn tr =>
-    qpat_assum `s.msdomain = _` (fn td =>
-    simp_tac (srw_ss()) [execution_state_component_equality, tr, td]))
+  `g + (static_gas op + access_cost rb addr + vCost + dCost + mCost) <= p.gasLimit` by
+    (irule call_base_cost_bound >> qexists_tac `dynamicGas` >>
+     qpat_x_assum `g + gasCost <= _` mp_tac >> simp[]) >>
+  once_rewrite_tac[step_call_prefix_bridge] >>
+  qmatch_goalsub_abbrev_tac `call_prefix_prog op kont s` >>
+  `call_prefix_prog op kont s =
+    kont addr value argsOffset argsSize retOffset retSize rb.accounts calleeCode
+      newAccountCharged p.callee stipend
+      (s with <|rollback := newRb; msdomain := newDom; contexts :=
+        (caller with <|stack := DROP (6 + vOff) ss; memory := em;
+          gasUsed := g + gasCost;
+          stateGasLeft := caller.stateGasLeft - stateCost|>,cb)::cs|>)` by
+    (irule call_prefix_prog_apply_result >>
+     qexistsl [`addr`,`argsOffset`,`TAKE (6 + vOff) ss`,`argsSize`,
+       `static_gas op + access_cost rb addr + vCost + dCost + mCost`,
+       `caller`,`newAccountCharged`,`calleeCode`,
+       `cs`,`d`,`dCost`,`dynamicGas`,`gas`,`cb`,`newDom`,`newRb`,
+       `offset`,`rb`,`retOffset`,`retSize`,`stipend`,`sz`,`value`,`vOff`] >>
+     `vOff <= 1` by (Cases_on `call_has_value op` >> simp[]) >>
+     gvs[EL_TAKE,GSYM ADD_ASSOC] >>
+     Cases_on `call_has_value op` >> simp[EL_TAKE,HD_TAKE]) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  gvs[] >>
+  gvs[Abbr `kont`,GSYM NOT_LESS_EQUAL,ignore_bind_def,bind_def,
+    set_return_data_def,get_num_contexts_def,
+    get_current_context_def,set_current_context_def,return_def]
+QED
+
+Theorem proceed_call_precompile_success_meter[local]:
+  s.contexts = (parent,prb)::rest /\ s.rollback = rb /\
+  parent.msgParams.callee = sender /\
+  data = buffer_take argsOffset argsSize parent.memory /\
+  fIN addr precompile_addresses /\
+  (!s ctxt crb rest.
+    s.contexts = (ctxt,crb)::rest /\
+    ctxt.msgParams.data = buffer_of_list data /\
+    ctxt.msgParams.gasLimit = stipend /\
+    ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
+    (dispatch_precompiles addr s : unit execution_result) =
+      (INR NONE, s with contexts :=
+        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
+  ?c. c.msgParams.outputTo = outputTo /\
+      c.msgParams.gasLimit = stipend /\ c.gasUsed = pg /\
+      c.returnData = out /\
+      c.logs = transfer_log sender
+        (if op = CallCode \/ op = DelegateCall then sender else addr) value /\
+      c.addRefund = 0 /\ c.subRefund = 0 /\
+      c.stateGasLeft = parent.stateGasLeft /\ c.stateGasSpilled = 0 /\
+      c.stateGasCommitted = 0 /\ c.stateGasBaseline = parent.stateGasLeft /\
+      proceed_call op sender addr value argsOffset argsSize code stipend outputTo s =
+        (INR NONE, s with <|
+          rollback := rb with accounts updated_by
+            (if op <> CallCode /\ 0 < value
+             then transfer_value sender addr value else I);
+          contexts := (c,rb)::(parent with <|stateGasLeft := 0|>,prb)::rest |> )
+Proof
+  strip_tac >>
+  Cases_on `op <> CallCode /\ 0 < value` >>
+  simp[proceed_call_def, drain_state_gas_reservoir_def,
+       get_rollback_def, get_accounts_def, read_memory_def,
+       update_accounts_def, get_caller_def, get_value_def, get_static_def,
+       get_current_context_def, set_current_context_def, push_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `CONS (ctxt,rb)` >>
+  qmatch_goalsub_abbrev_tac `dispatch_precompiles addr ds` >>
+  `ds.contexts = (ctxt,rb)::(parent with stateGasLeft := 0,prb)::rest` by
+    simp[Abbr `ds`] >>
+  `ctxt.msgParams.data = buffer_of_list data /\
+   ctxt.msgParams.gasLimit = stipend /\ ctxt.gasUsed = 0 /\
+   ctxt.returnData = []` by
+    simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def] >>
+  qpat_x_assum `!s ctxt crb rest. _` drule_all >>
+  disch_then SUBST1_TAC >>
+  qexists_tac `ctxt with <|gasUsed := pg; returnData := out|>` >>
+  simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def,
+       Abbr `ds`, execution_state_component_equality,
+       rollback_state_component_equality]
 QED
 
 Theorem proceed_call_precompile_success:
@@ -4897,53 +6569,48 @@ Theorem proceed_call_precompile_success:
         (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
   ?c. c.msgParams.outputTo = outputTo /\
       c.msgParams.gasLimit = stipend /\ c.gasUsed = pg /\
-      c.returnData = out /\ c.logs = [] /\
+      c.returnData = out /\
+      c.logs = transfer_log sender
+        (if op = CallCode ∨ op = DelegateCall then sender else addr) value /\
       c.addRefund = 0 /\ c.subRefund = 0 /\
       proceed_call op sender addr value argsOffset argsSize code stipend outputTo s =
         (INR NONE, s with <|
           rollback := rb with accounts updated_by
             (if op <> CallCode /\ 0 < value
              then transfer_value sender addr value else I);
-          contexts := (c,rb)::(parent,prb)::rest |> )
+          contexts := (c,rb)::(parent with <|stateGasLeft := 0|>,prb)::rest |> )
 Proof
   strip_tac >>
-  Cases_on `op <> CallCode /\ 0 < value` >>
-  simp[proceed_call_def, get_rollback_def, read_memory_def,
-       update_accounts_def, get_caller_def, get_value_def, get_static_def,
-       get_current_context_def, push_context_def,
-       bind_def, ignore_bind_def, return_def] >>
-  qmatch_goalsub_abbrev_tac `CONS (ctxt,rb)` >>
-  qmatch_goalsub_abbrev_tac `dispatch_precompiles addr ds` >>
-  `ds.contexts = (ctxt,rb)::(parent,prb)::rest` by simp[Abbr `ds`] >>
-  `ctxt.msgParams.data = buffer_of_list data /\
-   ctxt.msgParams.gasLimit = stipend /\ ctxt.gasUsed = 0 /\
-   ctxt.returnData = []` by
-    simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def] >>
-  qpat_x_assum `!s ctxt crb rest. _` drule_all >>
-  disch_then SUBST1_TAC >>
-  qexists_tac `ctxt with <|gasUsed := pg; returnData := out|>` >>
-  simp[Abbr `ctxt`, initial_context_def, initial_msg_params_def,
-       Abbr `ds`, execution_state_component_equality,
-       rollback_state_component_equality]
+  drule_all proceed_call_precompile_success_meter >>
+  disch_then (qspecl_then [`value`, `outputTo`, `op`, `code`] strip_assume_tac) >>
+  qexists_tac `c` >> simp[]
 QED
 
 Theorem handle_step_success_memory_exact:
   s.contexts = (c,crb)::(parent,prb)::rest /\
   c.msgParams.outputTo = Memory mr /\
-  c.logs = [] /\ c.addRefund = 0 /\ c.subRefund = 0 /\
+  c.addRefund = 0 /\ c.subRefund = 0 /\
   c.msgParams.gasLimit - c.gasUsed <= parent.gasUsed /\
-  LENGTH parent.stack < stack_limit ==>
+  LENGTH parent.stack < stack_limit /\
+  merged = repay_state_gas_spill_context
+             (absorb_state_gas
+                (parent with gasUsed :=
+                   parent.gasUsed - (c.msgParams.gasLimit - c.gasUsed))
+                c.stateGasLeft c.stateGasSpilled c.stateGasCommitted) ==>
   handle_step NONE s =
     (INL (), s with contexts :=
-      (parent with <|
-         gasUsed := parent.gasUsed - (c.msgParams.gasLimit - c.gasUsed);
+      (merged with <|
          pc := parent.pc + 1; returnData := c.returnData;
          stack := 1w::parent.stack;
-         memory := buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory
+         memory := buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory;
+         logs := parent.logs ++ c.logs
        |>,prb)::rest)
 Proof
   strip_tac >>
-  simp[handle_step_def, handle_create_def, handle_exception_def,
+  qpat_x_assum `merged = _` SUBST1_TAC >>
+  simp[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+       absorb_state_gas_def,
+       handle_step_def, handle_create_def, handle_exception_def,
        pop_and_incorporate_context_def, get_gas_left_def,
        get_return_data_def, get_output_to_def, get_num_contexts_def,
        pop_context_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
@@ -4972,14 +6639,17 @@ Theorem step_precompile_success_exact:
   em = expanded_memory m offset sz /\ access_check d addr /\
   toAccount = lookup_account addr rb.accounts /\
   vCost = (if 0 < value then call_value_cost else 0) /\
-  cCost = (if op = Call /\ 0 < value /\ account_empty toAccount
-           then new_account_cost else 0) /\
+  newAccountCharged = (op = Call /\ 0 < value /\ account_empty toAccount) /\
+  stateCost = (if newAccountCharged then new_account_state_gas else 0) /\
+  (if newAccountCharged then new_account_state_gas else 0) <= caller.stateGasLeft /\
   delegate_check toAccount.code (msdomain_add addr d)
     (accesses_add addr rb) dCost newRb newDom /\
   mCost = memory_cost m offset sz /\
-  call_gas value gas (p.gasLimit - g) mCost
-    (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas,stipend) /\
-  gasCost = static_gas op + dynamicGas + mCost /\
+  call_gas value gas
+    (p.gasLimit - (g + (static_gas op + access_cost rb addr + vCost + dCost + mCost)))
+    0 0 = (dynamicGas,stipend) /\
+  gasCost = static_gas op + access_cost rb addr + vCost + dCost + mCost +
+            dynamicGas /\
   g + gasCost <= p.gasLimit /\
   is_call op /\ op <> Create /\ op <> Create2 /\
   (0 < value ==> ~p.static) /\
@@ -4993,7 +6663,13 @@ Theorem step_precompile_success_exact:
     ctxt.gasUsed = 0 /\ ctxt.returnData = [] ==>
     (dispatch_precompiles addr s : unit execution_result) =
       (INR NONE, s with contexts :=
-        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) ==>
+        (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest)) /\
+  merged = repay_state_gas_spill_context
+             (absorb_state_gas
+                (caller with <|stack := DROP (6 + vOff) ss; memory := em;
+                               returnData := []; stateGasLeft := 0;
+                               gasUsed := g + gasCost - (stipend - pg)|>)
+                (caller.stateGasLeft - stateCost) 0 0) ==>
   step s =
     (INL (),s with <|
       rollback := newRb with accounts updated_by
@@ -5002,9 +6678,16 @@ Theorem step_precompile_success_exact:
       msdomain := newDom;
       contexts := (caller with <|
         stack := 1w::DROP (6 + vOff) ss; pc := pc + 1;
-        gasUsed := g + gasCost - (stipend - pg);
+        gasUsed := merged.gasUsed;
+        stateGasLeft := merged.stateGasLeft;
+        stateGasSpilled := merged.stateGasSpilled;
+        stateGasBaseline := merged.stateGasBaseline;
+        stateGasCommitted := merged.stateGasCommitted;
         memory := buffer_write retOffset (TAKE retSize out) em;
-        returnData := out|>,cb)::cs|>)
+        returnData := out;
+        logs := caller.logs ++ transfer_log p.callee
+          (if op = CallCode ∨ op = DelegateCall then p.callee else addr)
+          value|>,cb)::cs|>)
 Proof
   strip_tac >>
   `LENGTH ss <= stack_limit` by
@@ -5014,9 +6697,9 @@ Proof
     (irule call_stack_after_pop_has_room >> simp[]) >>
   `stipend <= gasCost` by
     (qpat_assum `gasCost = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `vCost = _` (fn th => pure_rewrite_tac[th]) >>
      irule call_gas_cost_covers_stipend >>
      qpat_x_assum `call_gas _ _ _ _ _ = _` mp_tac >>
-     qpat_assum `vCost = _` (fn th => pure_rewrite_tac[th]) >>
      strip_tac >> goal_assum (drule_at Any)) >>
   drule_all (PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES] (Q.INST
     [`calleeCode` |-> `case get_delegate toAccount.code of
@@ -5026,28 +6709,38 @@ Proof
   qmatch_abbrev_tac `step s = final` >>
   qmatch_asmsub_abbrev_tac `proceed_call op _ _ _ _ _ code _ _ prepared` >>
   `prepared.contexts = (caller with <|stack := DROP (6 + vOff) ss;
-    memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs` by
+    memory := em; gasUsed := g + gasCost; returnData := [];
+    stateGasLeft := caller.stateGasLeft - stateCost|>,cb)::cs` by
     simp[Abbr `prepared`] >>
   `prepared.rollback = newRb` by simp[Abbr `prepared`] >>
   `(caller with <|stack := DROP (6 + vOff) ss;
-    memory := em; gasUsed := g + gasCost; returnData := []|>).msgParams.callee = p.callee` by simp[] >>
+    memory := em; gasUsed := g + gasCost; returnData := [];
+    stateGasLeft := caller.stateGasLeft - stateCost|>).msgParams.callee = p.callee` by simp[] >>
   `data = buffer_take argsOffset argsSize
     (caller with <|stack := DROP (6 + vOff) ss;
-    memory := em; gasUsed := g + gasCost; returnData := []|>).memory` by simp[] >>
+    memory := em; gasUsed := g + gasCost; returnData := [];
+    stateGasLeft := caller.stateGasLeft - stateCost|>).memory` by simp[] >>
   drule_all (Q.INST
     [`outputTo` |-> `Memory <|offset := retOffset; size := retSize|>`]
-    proceed_call_precompile_success) >>
+    proceed_call_precompile_success_meter) >>
   disch_then (qspecl_then [`value`, `retSize`, `retOffset`, `op`, `code`] strip_assume_tac) >>
   qpat_x_assum `proceed_call _ _ _ _ _ _ _ _ _ _ = _` (fn th =>
     qpat_x_assum `step_call op s = _` (assume_tac o REWRITE_RULE [th])) >>
   qmatch_asmsub_abbrev_tac `step_call op s = (INR NONE, returned)` >>
   `returned.contexts = (c,newRb)::
     (caller with <|stack := DROP (6 + vOff) ss;
-     memory := em; gasUsed := g + gasCost; returnData := []|>,cb)::cs` by
+     memory := em; gasUsed := g + gasCost; returnData := [];
+     stateGasLeft := 0|>,cb)::cs` by
     simp[Abbr `returned`] >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`gasCost = _`, `vCost = _`, `addr = _`, `value = _`,
+     `vOff = _`, `mCost = _`, `retOffset = _`, `retSize = _`,
+     `em = _`, `stateCost = _`, `newAccountCharged = _`] >>
   drule (Q.INST [`s` |-> `returned`] handle_step_success_memory_exact) >>
   simp[] >>
-  (impl_tac >- (fs[stack_limit_def] >> decide_tac)) >>
+  (impl_tac >-
+    (qpat_x_assum `LENGTH (DROP (6 + vOff) ss) < stack_limit` mp_tac >>
+     simp[stack_limit_def])) >>
   disch_then (assume_tac o REWRITE_RULE []) >>
   `step_inst op = step_call op` by
     (map_every (fn q => qpat_x_assum q mp_tac)
@@ -5056,7 +6749,8 @@ Proof
      Cases_on `op` >> simp[is_call_def, step_inst_def]) >>
   simp[step_def, handle_def, bind_def, ignore_bind_def, return_def, get_current_context_def] >>
   simp[Abbr `final`, Abbr `returned`, Abbr `prepared`,
-       execution_state_component_equality, context_component_equality]
+       execution_state_component_equality, context_component_equality] >>
+  simp[repay_state_gas_spill_context_def, absorb_state_gas_def]
 QED
 
 (* A call to a precompile runs the precompile and returns to the caller in
@@ -5070,24 +6764,51 @@ QED
    - proceed_call pushes (initial_context callee calleeCode ... (Memory ...)
      tx, newRb) and, since fIN addr precompile_addresses, runs
      dispatch_precompiles addr on that state. The new context has
-     msgParams.data = buffer_of_list data, gasLimit = stipend, gasUsed = 0 and
-     returnData = [], so the hypothesis applies and the result is INR NONE.
+     msgParams.data = buffer_of_list data, gasLimit = stipend, gasUsed = 0,
+     returnData = [] and logs = transfer_log p.callee callee value (EIP-7708),
+     so the hypothesis applies and the result is INR NONE.
    - step_inst raised, so inc_pc_or_jump does not run; handle_step NONE goes
      through handle_create (outputTo is Memory, so no effect) to
      handle_exception NONE. There are 2 + LENGTH cs contexts, so it pops the
      callee with success = T: unuse_gas (stipend - pg) (stipend ≤ gasCost by
-     call_gas_def, so the assert holds), push_logs [], update_gas_refund
-     (0,0), no rollback reset; then inc_pc, set_return_data out, push_stack
-     1w (the stack fits: wf_state gives LENGTH ss ≤ stack_limit and 6 values
-     were popped) and write_memory retOffset (TAKE retSize out). *)
+     call_gas_def, so the assert holds), push_logs (that transfer log),
+     update_gas_refund (0,0), no rollback reset; then inc_pc,
+     set_return_data out, push_stack 1w (the stack fits: wf_state gives
+     LENGTH ss ≤ stack_limit and 6 values were popped) and write_memory
+     retOffset (TAKE retSize out). *)
+
+Theorem repay_absorb_meter_fields[local]:
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).gasUsed =
+    c.gasUsed - MIN (c.stateGasLeft + sg) (c.stateGasSpilled + sp) /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasLeft =
+    c.stateGasLeft + sg - MIN (c.stateGasLeft + sg) (c.stateGasSpilled + sp) /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasSpilled =
+    c.stateGasSpilled + sp - MIN (c.stateGasLeft + sg) (c.stateGasSpilled + sp) /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasBaseline =
+    c.stateGasBaseline /\
+  (repay_state_gas_spill_context (absorb_state_gas c sg sp cm)).stateGasCommitted =
+    c.stateGasCommitted + cm
+Proof
+  simp[repay_state_gas_spill_context_def, absorb_state_gas_def]
+QED
 
 Theorem SPEC_Call_precompile:
   SPEC EVM_MODEL
-  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+  (evm_Stack ss * evm_PC pc * evm_GasUsed g *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl * evm_StateGasCommitted cm * evm_MsgParams p *
    evm_Memory m * evm_Rollback rb * evm_Msdomain d * evm_ReturnData rd *
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
    evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   cond (6 + vOff ≤ LENGTH ss ∧
+   cond (merged = repay_state_gas_spill_context
+                    (absorb_state_gas
+                       <|stack := DROP (6 + vOff) ss; memory := em; pc := pc;
+                         jumpDest := j; returnData := []; gasUsed := g + gasCost;
+                         addRefund := ar; subRefund := sr; stateGasLeft := 0;
+                         stateGasSpilled := sp; stateGasBaseline := bsl;
+                         stateGasCommitted := cm; logs := l; msgParams := p|>
+                       (sg - stateCost) 0 0) ∧
+         6 + vOff ≤ LENGTH ss ∧
          vOff = (if call_has_value call_inst then 1 else 0) ∧
          ISL e ∧
          gas = w2n (EL 0 ss) ∧ addr = w2w (EL 1 ss) ∧
@@ -5101,14 +6822,19 @@ Theorem SPEC_Call_precompile:
          access_check d addr ∧
          toAccount = lookup_account addr rb.accounts ∧
          vCost = (if 0 < value then call_value_cost else 0) ∧
-         cCost = (if call_inst = Call ∧ 0 < value ∧ account_empty toAccount
-                  then new_account_cost else 0) ∧
+         newAccountCharged = (call_inst = Call ∧ 0 < value ∧
+                              account_empty toAccount) ∧
+         stateCost = (if newAccountCharged then new_account_state_gas else 0) ∧
+         (if newAccountCharged then new_account_state_gas else 0) ≤ sg ∧
          delegate_check toAccount.code
            (msdomain_add addr d) (accesses_add addr rb) dCost newRb newDom ∧
          mCost = memory_cost m offset sz ∧
-         call_gas value gas (p.gasLimit - g) mCost
-           (access_cost rb addr + vCost + cCost + dCost) = (dynamicGas, stipend) ∧
-         gasCost = static_gas call_inst + dynamicGas + mCost ∧
+         call_gas value gas
+           (p.gasLimit - (g + (static_gas call_inst +
+              access_cost rb addr + vCost + dCost + mCost))) 0 0 =
+             (dynamicGas, stipend) ∧
+         gasCost = static_gas call_inst + access_cost rb addr + vCost + dCost +
+                   mCost + dynamicGas ∧
          g + gasCost ≤ p.gasLimit ∧
          is_call call_inst ∧ call_inst ≠ Create ∧ call_inst ≠ Create2 ∧
          (0 < value ⇒ ¬p.static) ∧
@@ -5128,7 +6854,11 @@ Theorem SPEC_Call_precompile:
                (ctxt with <|gasUsed := pg; returnData := out|>,crb)::rest))))
   {(pc,call_inst)}
   (evm_Stack (1w :: DROP (6 + vOff) ss) * evm_PC (pc + 1) *
-   evm_GasUsed (g + gasCost - (stipend - pg)) * evm_MsgParams p *
+   evm_GasUsed (merged.gasUsed - (stipend - pg)) *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted * evm_MsgParams p *
    evm_Memory (buffer_write retOffset (TAKE retSize out) em) *
    evm_Rollback (newRb with accounts updated_by
                  (if call_inst ≠ CallCode ∧ 0 < value
@@ -5136,7 +6866,10 @@ Theorem SPEC_Call_precompile:
                   else I)) *
    evm_Msdomain newDom * evm_ReturnData out *
    evm_JumpDest j * evm_Exception e * evm_CachedRB cb * evm_Contexts cs *
-   evm_AddRefund ar * evm_SubRefund sr * evm_Logs l)
+   evm_AddRefund ar * evm_SubRefund sr *
+   evm_Logs (l ++ transfer_log p.callee
+     (if call_inst = CallCode ∨ call_inst = DelegateCall then p.callee
+      else addr) value))
 Proof
   irule IMP_EVM_SPEC >> rpt strip_tac >>
   rewrite_tac[STAR_evm2set, GSYM STAR_ASSOC, STAR_CODE_POOL_evm2set] >>
@@ -5153,7 +6886,12 @@ Proof
   rename1 `evm2set_without dom r = _` >>
   mp_tac (Q.INST [`s` |-> `SND (r : (unit + exception option) # execution_state)`,
     `caller` |-> `FST (HD (SND (r : (unit + exception option) # execution_state)).contexts)`, `op` |-> `call_inst`]
-    step_precompile_success_exact) >>
+    (Q.INST [`merged` |-> `repay_state_gas_spill_context
+      (absorb_state_gas
+        (caller with <|stack := DROP (6 + vOff) ss; memory := em;
+          returnData := []; stateGasLeft := 0;
+          gasUsed := g + gasCost - (stipend - pg)|>)
+        (caller.stateGasLeft - stateCost) 0 0)`] step_precompile_success_exact)) >>
   (impl_tac >- gvs[]) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `step (SND r) = result` >>
@@ -5162,10 +6900,25 @@ Proof
        pure_rewrite_tac[GSYM th]) >>
      irule step_preserves_wf_state >> simp[]) >>
   qexists_tac `result` >>
-  simp[] >>
+  qpat_x_assum `~ISR (FST r)` (fn th => rewrite_tac[th]) >>
+  qpat_assum `step (SND r) = result` (fn th => rewrite_tac[th]) >>
+  qpat_assum `wf_state (SND result)` (fn th => rewrite_tac[th]) >>
+  `FST r = INL ()` by
+    (qpat_x_assum `ISL e` mp_tac >>
+     qpat_assum `e = _` (fn th => pure_rewrite_tac[th]) >>
+     Cases_on `FST r` >> simp[]) >>
   conj_tac >-
-    (simp[Abbr `result`] >>
-     Cases_on `FST r` >> gvs[]) >>
+    (simp_tac (srw_ss()) [Abbr `result`, repay_absorb_meter_fields] >>
+     rpt conj_tac >>
+     map_every (fn q => qpat_assum q (fn th => pure_rewrite_tac[th]))
+       [`gasCost = _`, `stateCost = _`, `newAccountCharged = _`,
+        `toAccount = _`, `vCost = _`, `mCost = _`, `em = _`,
+        `retOffset = _`, `retSize = _`, `addr = _`, `value = _`, `vOff = _`,
+        `ss = _`, `pc = _`, `g = _`, `sg = _`, `sp = _`,
+        `bsl = _`, `cm = _`, `FST r = INL ()`, `p = _`, `m = _`, `rb = _`, `cb = _`, `cs = _`, `l = _`] >>
+     qpat_assum `pc = _` (fn th =>
+       rule_assum_tac (PURE_REWRITE_RULE [th])) >>
+     asm_simp_tac bool_ss [GSYM SUB_PLUS, ADD_COMM]) >>
   sym_tac >> irule UPDATE_evm2set_without_original >>
   gvs[Abbr `result`]
 QED
@@ -5191,6 +6944,119 @@ Proof
         set_return_data_def,finish_def]
 QED
 
+(* Witnesses for SPEC_Return_outermost as it stood before the Revert correction
+   below: it concluded evm_GasUsed (g + gasCost) and left the head frame's refund
+   counters alone for Revert too, but a failing frame runs restore_state_gas,
+   which hands the spill back to execution gas and zeroes addRefund/subRefund.
+   A positive-spill Revert instance, the negated SPEC instance at that state, and
+   the rule's side conditions there. *)
+Theorem revert_positive_spill_probe[local]:
+  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+                       gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      c = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+                     memory := empty_buffer; gasUsed := 1;
+                     stateGasSpilled := 1; stateGasBaseline := 0;
+                     stateGasLeft := 0; stateGasCommitted := 0|>;
+      s = initial with <|contexts := [(c, cached)];
+                         rollback := initial.rollback with accounts := empty_accounts|>
+  in wf_state s /\
+     FLOOKUP p.parsed 0 = SOME Revert /\
+     step s = (INR (SOME Reverted), s with contexts :=
+       [(c with <|stack := []; returnData := []; gasUsed := 0;
+                  stateGasSpilled := 0; addRefund := 0; subRefund := 0|>,cached)])
+Proof
+  simp[LET_THM] >> conj_tac
+  >- simp[wf_state_def, wf_context_def, all_accounts_def,
+          stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def,
+          outputTo_consistent_ctx_def, wf_accounts_def, wf_account_state_def,
+          empty_accounts_def, empty_account_state_def, stack_limit_def, context_limit_def]
+  >> `FLOOKUP (parse_code 0 FEMPTY [253w]) 0 = SOME Revert` by
+       (simp[Once parse_code_def, vfmOperationTheory.parse_opcode_cond_thm, vfmOperationTheory.opcode_def] >>
+        simp[Once parse_code_def, finite_mapTheory.FLOOKUP_UPDATE])
+  >> simp[step_def, get_current_context_def, bind_def, return_def, handle_def]
+  >> simp[step_inst_def, step_return_def, ignore_bind_def, pop_stack_def,
+          assert_def, set_current_context_def, memory_expansion_info_def,
+          consume_gas_def, expand_memory_def, read_memory_def,
+          set_return_data_def, revert_def, handle_step_def, handle_create_def,
+          reraise_def, get_return_data_def, get_output_to_def,
+          handle_exception_def, get_num_contexts_def, restore_state_gas_def,
+          bind_def, return_def, get_current_context_def, handle_def,
+          empty_buffer_def, buffer_length_def]
+  >> simp[buffer_take_def] >> simp[Once read_bytes_def]
+QED
+
+Theorem SPEC_Return_outermost_counterexample[local]:
+  let p = params with <|code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+                       gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      c = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+                     memory := empty_buffer; gasUsed := 1;
+                     stateGasSpilled := 1; stateGasBaseline := 0;
+                     stateGasLeft := 0; stateGasCommitted := 0|>;
+      rb = initial.rollback with accounts := empty_accounts;
+      pre = evm_Stack [0w;0w] * evm_PC 0 * evm_Contexts [] *
+            evm_Memory empty_buffer * evm_ReturnData c.returnData *
+            evm_MsgParams p * evm_GasUsed 1 * evm_Exception (INL ()) *
+            evm_Rollback rb;
+      post = evm_Stack [] * evm_ReturnData [] * evm_PC 0 * evm_Contexts [] *
+             evm_Rollback rb * evm_Memory empty_buffer * evm_MsgParams p *
+             evm_GasUsed 1 * evm_Exception (INR (SOME Reverted))
+  in ~SPEC EVM_MODEL pre {(0,Revert)} post
+Proof
+  simp[LET_THM] >>
+  qmatch_goalsub_abbrev_tac `evm_MsgParams p` >>
+  qmatch_goalsub_abbrev_tac `evm_Rollback rb` >>
+  qabbrev_tac `c = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+     memory := empty_buffer; gasUsed := 1; stateGasSpilled := 1;
+     stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>` >>
+  qabbrev_tac `s = initial with <|contexts := [(c,cached)]; rollback := rb|>` >>
+  `wf_state s /\ FLOOKUP p.parsed 0 = SOME Revert /\
+   step s = (INR (SOME Reverted), s with contexts :=
+     [(c with <|stack := []; returnData := []; gasUsed := 0;
+                stateGasSpilled := 0; addRefund := 0; subRefund := 0|>,cached)])`
+    by (simp[Abbr `s`, Abbr `c`, Abbr `p`, Abbr `rb`] >>
+        irule (SRULE [LET_THM] revert_positive_spill_probe)) >>
+  rewrite_tac[GSYM V_SPEC_CODE, EVM_SPEC_SEMANTICS] >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `{HasParsed 0; HasStack; HasPC; HasContexts; HasMemory;
+              HasReturnData; HasMsgParams; HasGasUsed; HasException; HasRollback}` >>
+  CONV_TAC NOT_FORALL_CONV >> qexists `(INL (),s)` >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `\n. if n = 0 then (INL (),s) else step s` >>
+  pure_rewrite_tac[NOT_IMP] >> conj_tac
+  >- (conj_tac
+      >- (rewrite_tac[GSYM evm_Parsed_CODE_POOL, GSYM STAR_ASSOC, STAR_evm2set] >>
+          simp[STAR_evm2set, EMPTY_evm2set, Abbr `s`, Abbr `c`,
+               DELETE_INSERT, evm_Rollback_def, SEP_EQ_def, evm2set_on_def,
+               EXTENSION])
+      >> simp[rel_sequence_def, EVM_NEXT_REL_def] >> gen_tac >>
+         Cases_on `n = 0` >> simp[])
+  >> simp[GSYM evm_Parsed_CODE_POOL, GSYM STAR_ASSOC, STAR_evm2set] >>
+     gen_tac >> Cases_on `k = 0` >>
+     simp[STAR_evm2set, Abbr `s`, Abbr `c`]
+QED
+
+(* All cond conjuncts of the frozen rule, at offset=sz=gasCost=codeCost=0,
+   inst=Revert, em=empty_buffer, data=[], returnCode=F. *)
+Theorem revert_positive_spill_side_conditions[local]:
+  2 <= LENGTH ([0w;0w]:bytes32 list) /\ NULL ([]:(context # rollback_state) list) /\
+  ISL (INL ():unit + exception option) /\
+  0 = w2n (EL 0 ([0w;0w]:bytes32 list)) /\
+  0 = w2n (EL 1 ([0w;0w]:bytes32 list)) /\
+  (Revert = Return \/ Revert = Revert) /\
+  empty_buffer = expanded_memory empty_buffer 0 0 /\
+  [] = buffer_take 0 0 empty_buffer /\
+  0 = static_gas Revert + memory_cost empty_buffer 0 0 + 0 /\
+  F = (Revert = Return /\ is_code_dest (Memory <|offset := 0; size := 0|>)) /\
+  (if F then (case ([]:byte list) of [] => T | h::_ => h <> 239w) /\
+      0 = keccak256_per_word_cost * word_size (LENGTH ([]:byte list)) /\
+      LENGTH ([]:byte list) <= max_code_size else 0 = 0) /\
+  1 + 0 <= 10
+Proof
+  simp[expanded_memory_def, memory_expand_by_def, memory_cost_def,
+       vfmOperationTheory.static_gas_def, empty_buffer_def, buffer_length_def,
+       buffer_take_def, Once read_bytes_def]
+QED
+
 Theorem SPEC_Return_outermost:
   SPEC EVM_MODEL
   (evm_Stack ss *
@@ -5200,6 +7066,12 @@ Theorem SPEC_Return_outermost:
    evm_ReturnData rd *
    evm_MsgParams p *
    evm_GasUsed g *
+   evm_StateGasLeft sg *
+   evm_StateGasSpilled sp *
+   evm_StateGasBaseline bsl *
+   evm_StateGasCommitted cm *
+   evm_AddRefund ar *
+   evm_SubRefund sr *
    evm_Exception e *
    evm_Rollback rb *
    cond (2 ≤ LENGTH ss ∧ NULL cs ∧ ISL e ∧
@@ -5212,9 +7084,11 @@ Theorem SPEC_Return_outermost:
          returnCode = (inst = Return ∧ is_code_dest p.outputTo) ∧
          (if returnCode then
             (case data of [] => T | h::_ => h ≠ 239w) ∧
-            (codeCost = code_deposit_cost * LENGTH data) ∧
+            (codeCost = keccak256_per_word_cost * word_size (LENGTH data)) ∧
             LENGTH data ≤ max_code_size
           else codeCost = 0) ∧
+         stateCost = (if returnCode then cost_per_state_byte * LENGTH data else 0) ∧
+         (if returnCode then cost_per_state_byte * LENGTH data else 0) ≤ sg ∧
          g + gasCost ≤ p.gasLimit))
   {(pc,inst)}
   (evm_Stack (DROP 2 ss) *
@@ -5229,7 +7103,13 @@ Theorem SPEC_Return_outermost:
                  else rb) *
    evm_Memory em *
    evm_MsgParams p *
-   evm_GasUsed (g + gasCost) *
+   evm_GasUsed (g + gasCost - (if inst = Return then 0 else sp)) *
+   evm_StateGasLeft (if inst = Return then sg - stateCost else bsl) *
+   evm_StateGasSpilled (if inst = Return then sp else 0) *
+   evm_StateGasBaseline bsl *
+   evm_StateGasCommitted cm *
+   evm_AddRefund (if inst = Return then ar else 0) *
+   evm_SubRefund (if inst = Return then sr else 0) *
    evm_Exception (INR (if inst = Revert then SOME Reverted else NONE)))
 Proof
   irule IMP_EVM_SPEC \\ rpt strip_tac
@@ -5276,6 +7156,7 @@ Proof
         handle_def,bind_def,ignore_bind_def,reraise_def,get_return_data_def,
         get_current_context_def,return_def,get_output_to_def,EL_TAKE,HD_TAKE,
         return_destination_case_elim,handle_exception_def,get_num_contexts_def,
+        restore_state_gas_def,set_current_context_def,
         NULL_EQ]
   >- (
     gvs[Abbr`em`, memory_cost_def, expanded_memory_def, memory_expand_by_def]
@@ -5286,7 +7167,7 @@ Proof
   \\ Cases_on`p.outputTo` \\ gvs[reraise_def,return_def]
   >- (
     gvs[Abbr`em`, memory_cost_def, expanded_memory_def, memory_expand_by_def,
-        Abbr`gasCost`,is_code_dest_def]
+        Abbr`gasCost`, Abbr`stateCost`, is_code_dest_def]
     \\ conj_tac >-
          (qpat_assum ‘{_} = _’ $ rewrite_tac o single o GSYM
           \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
@@ -5294,21 +7175,214 @@ Proof
   \\ gvs[ignore_bind_def,bind_def,assert_def,return_def,Abbr`em`,
          expanded_memory_def,memory_expand_by_def,is_code_dest_def,
          consume_gas_def,get_current_context_def,memory_cost_def,
-         set_current_context_def,update_accounts_def,reraise_def]
+         set_current_context_def,update_accounts_def,reraise_def,
+         charge_state_gas_apply]
   \\ conj_tac >-
        (qpat_assum ‘{_} = _’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw [])
   \\ end_tac
 QED
 
+(* Witnesses for SPEC_Return_inner as it stood before the spillRefund
+   correction below: its postcondition took the whole of the child's spill back
+   off the parent's gasUsed, but restore_state_gas lands in the child's own
+   gasUsed (gasUsed := gasUsed - stateGasSpilled, which cannot go below zero) and
+   reaches the parent only through the child's remaining gas, so the refund is
+   capped by the gas the child had used.  A Revert child with gasUsed 0 and
+   stateGasSpilled 1, popped into a parent at gasUsed 11, and the negated rule
+   instance at that state. *)
+Theorem inner_revert_spill_execution[local]:
+  let p = params with <|newAccountCharged := F;
+          code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+          gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      q = params with <|code := []; parsed := FEMPTY; gasLimit := 20;
+          outputTo := Memory <|offset := 0; size := 0|> |>;
+      child = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+          memory := empty_buffer; gasUsed := 0; stateGasSpilled := 1;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      parent = ctx_base with <|msgParams := q; stack := []; pc := 0;
+          memory := empty_buffer; gasUsed := 11; stateGasSpilled := 0;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      rb = initial.rollback with accounts := empty_accounts;
+      s = initial with <|contexts := [(child,rb);(parent,rb)]; rollback := rb|>;
+      out = initial with <|contexts := [(parent with <|stack := [0w]; pc := 1;
+          returnData := []; gasUsed := 1|>,rb)]; rollback := rb|>
+  in wf_state s /\ step s = (INL (),out) /\
+     FST (step out) = INR NONE /\
+     (FST (HD (SND (step out)).contexts)).gasUsed = 1
+Proof
+  simp[LET_THM] >> conj_tac
+  >- (simp[wf_state_def, wf_context_def, all_accounts_def,
+          stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def,
+          outputTo_consistent_ctx_def, wf_accounts_def, wf_account_state_def,
+          empty_accounts_def, empty_account_state_def, stack_limit_def, context_limit_def,
+          unused_gas_def, frame_unused_gas_def, Once parse_code_def] >>
+      simp[Once parse_code_def] >> rpt strip_tac >>
+      `i = 0` by decide_tac >> gvs[])
+  >> `FLOOKUP (parse_code 0 FEMPTY [253w]) 0 = SOME Revert` by
+       (simp[Once parse_code_def, vfmOperationTheory.parse_opcode_cond_thm,
+             vfmOperationTheory.opcode_def] >>
+        simp[Once parse_code_def, finite_mapTheory.FLOOKUP_UPDATE])
+  >> simp[step_def, get_current_context_def, bind_def, return_def, handle_def,
+          finite_mapTheory.FLOOKUP_EMPTY]
+  >> simp[step_inst_def, step_return_def, ignore_bind_def, pop_stack_def,
+          assert_def, set_current_context_def, memory_expansion_info_def,
+          consume_gas_def, expand_memory_def, read_memory_def,
+          set_return_data_def, revert_def, handle_step_def, handle_create_def,
+          reraise_def, get_return_data_def, get_output_to_def,
+          handle_exception_def, get_num_contexts_def, restore_state_gas_def,
+          pop_and_incorporate_context_def, get_gas_left_def, pop_context_def,
+          unuse_gas_def, set_rollback_def, inc_pc_def, push_stack_def,
+          write_memory_def, absorb_state_gas_def, credit_new_account_def,
+          bind_def, ignore_bind_def, return_def, get_current_context_def,
+          set_current_context_def, handle_def, assert_def,
+          empty_buffer_def, buffer_length_def]
+  >> simp[buffer_take_def, Once read_bytes_def, finish_def,
+          handle_step_def, handle_create_def, handle_exception_def,
+          reraise_def, handle_def, bind_def, ignore_bind_def,
+          get_current_context_def, get_return_data_def, get_output_to_def,
+          get_num_contexts_def, return_def, vfm_abort_def,
+          context_component_equality, execution_state_component_equality]
+QED
+
+Theorem SPEC_Return_inner_spill_counterexample[local]:
+  let p = params with <|newAccountCharged := F;
+          code := [253w]; parsed := parse_code 0 FEMPTY [253w];
+          gasLimit := 10; outputTo := Memory <|offset := 0; size := 0|> |>;
+      q = params with <|code := []; parsed := FEMPTY; gasLimit := 20;
+          outputTo := Memory <|offset := 0; size := 0|> |>;
+      child = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+          memory := empty_buffer; gasUsed := 0; stateGasSpilled := 1;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      parent = ctx_base with <|msgParams := q; stack := []; pc := 0;
+          memory := empty_buffer; gasUsed := 11; stateGasSpilled := 0;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>;
+      rb = initial.rollback with accounts := empty_accounts;
+      pre = evm_Stack [0w;0w] * evm_PC 0 * evm_GasUsed 0 * evm_MsgParams p *
+        evm_StateGasLeft 0 * evm_StateGasSpilled 1 * evm_StateGasBaseline 0 *
+        evm_StateGasCommitted 0 * evm_Contexts [(parent,rb)] *
+        evm_ReturnData child.returnData * evm_Exception (INL ()) * evm_Rollback rb *
+        evm_CachedRB rb * evm_Memory empty_buffer * evm_AddRefund child.addRefund *
+        evm_SubRefund child.subRefund * evm_Logs child.logs * evm_JumpDest child.jumpDest *
+        evm_Parsed 0 Revert * evm_hide_Parsed
+          ((FDOM parent.msgParams.parsed UNION FDOM p.parsed) DELETE 0) *
+        cond (
+          absorb_state_gas parent 0 0 0 =
+            (if Revert = Return then repay_state_gas_spill_context
+              (absorb_state_gas parent 0 1 0) else absorb_state_gas parent 0 0 0) /\
+          [(parent,rb)] <> [] /\ 2 <= LENGTH child.stack /\
+          ISL (INL ():unit + exception option) /\
+          0 = w2n (EL 0 child.stack) /\ 0 = w2n (EL 1 child.stack) /\
+          LENGTH parent.stack < stack_limit /\ (Revert = Return \/ Revert = Revert) /\
+          F = (Revert = Return /\ is_code_dest p.outputTo) /\
+          parent = FST (HD [(parent,rb)]) /\
+          empty_buffer = expanded_memory empty_buffer 0 0 /\
+          [] = buffer_take 0 0 empty_buffer /\
+          0 = static_gas Revert + memory_cost empty_buffer 0 0 + 0 /\
+          (FDOM parent.msgParams.parsed UNION FDOM p.parsed) =
+            (FDOM parent.msgParams.parsed UNION FDOM p.parsed) /\
+          0 + 0 <= p.gasLimit /\ 10 = p.gasLimit - 0 - 0 /\
+          10 <= parent.gasUsed /\
+          (if F then (case ([]:byte list) of [] => T | h::_ => h <> 239w) /\
+            0 = keccak256_per_word_cost * word_size (LENGTH ([]:byte list)) /\
+            LENGTH ([]:byte list) <= max_code_size else 0 = 0));
+      post = evm_Stack [0w] *
+        evm_Memory (buffer_write 0 (TAKE 0 ([]:byte list)) parent.memory) *
+        evm_PC (SUC parent.pc) *
+        evm_hide_Parsed ((FDOM parent.msgParams.parsed UNION FDOM p.parsed)
+                         DIFF FDOM parent.msgParams.parsed) *
+        CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP parent.msgParams.parsed pc = SOME inst} *
+        evm_Contexts [] * evm_CachedRB rb * evm_MsgParams parent.msgParams *
+        evm_ReturnData [] * evm_Exception (INL ()) * evm_Rollback rb *
+        evm_GasUsed ((absorb_state_gas parent 0 0 0).gasUsed - 10 - 1) *
+        evm_StateGasLeft (absorb_state_gas parent 0 0 0).stateGasLeft *
+        evm_StateGasSpilled (absorb_state_gas parent 0 0 0).stateGasSpilled *
+        evm_StateGasBaseline (absorb_state_gas parent 0 0 0).stateGasBaseline *
+        evm_StateGasCommitted (absorb_state_gas parent 0 0 0).stateGasCommitted *
+        evm_JumpDest parent.jumpDest * evm_Logs (parent.logs ++ []) *
+        evm_AddRefund (parent.addRefund + 0) * evm_SubRefund (parent.subRefund + 0)
+  in ~SPEC EVM_MODEL pre {} post
+Proof
+  simp[LET_THM] >>
+  qmatch_goalsub_abbrev_tac `evm_MsgParams p` >>
+  qmatch_goalsub_abbrev_tac `evm_Contexts [(parent,rb)]` >>
+  qabbrev_tac `child = ctx_base with <|msgParams := p; stack := [0w;0w]; pc := 0;
+          memory := empty_buffer; gasUsed := 0; stateGasSpilled := 1;
+          stateGasBaseline := 0; stateGasLeft := 0; stateGasCommitted := 0|>` >>
+  qabbrev_tac `s = initial with <|contexts := [(child,rb);(parent,rb)]; rollback := rb|>` >>
+  qabbrev_tac `out = initial with <|contexts := [(parent with <|stack := [0w]; pc := 1;
+          returnData := []; gasUsed := 1|>,rb)]; rollback := rb|>` >>
+  `wf_state s /\ step s = (INL (),out) /\ FST (step out) = INR NONE /\
+     (FST (HD (SND (step out)).contexts)).gasUsed = 1` by
+    (simp[Abbr `s`, Abbr `child`, Abbr `parent`, Abbr `p`, Abbr `rb`, Abbr `out`] >>
+     irule (SRULE [LET_THM] inner_revert_spill_execution)) >>
+  `parse_code 0 FEMPTY [253w] = FEMPTY |+ (0,Revert)` by
+    (simp[Once parse_code_def, vfmOperationTheory.parse_opcode_cond_thm,
+          vfmOperationTheory.opcode_def] >> simp[Once parse_code_def]) >>
+  simp[Abbr `p`, Abbr `parent`, expanded_memory_def, memory_expand_by_def,
+       memory_cost_def, vfmOperationTheory.static_gas_def, stack_limit_def,
+       empty_buffer_def, buffer_length_def, buffer_take_def, Once read_bytes_def,
+       absorb_state_gas_def, finite_mapTheory.FDOM_FUPDATE] >>
+  rewrite_tac[EVM_SPEC_SEMANTICS] >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `{HasStack; HasPC; HasGasUsed; HasMsgParams; HasStateGasLeft;
+    HasStateGasSpilled; HasStateGasBaseline; HasStateGasCommitted;
+    HasContexts; HasReturnData; HasException; HasRollback; HasCachedRB;
+    HasMemory; HasAddRefund; HasSubRefund; HasLogs; HasJumpDest; HasParsed 0}` >>
+  CONV_TAC NOT_FORALL_CONV >> qexists `(INL (),s)` >>
+  CONV_TAC NOT_FORALL_CONV >>
+  qexists `\n. if n = 0 then (INL (),s) else if n = 1 then (INL (),out) else step out` >>
+  pure_rewrite_tac[NOT_IMP] >> conj_tac
+  >- (conj_tac
+      >- (rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set, STAR_evm_hide_Parsed] >>
+          simp[STAR_evm2set, EMPTY_evm2set, Abbr `s`, Abbr `child`,
+               evm2set_on_def, evm_hide_Parsed_def, EXTENSION] >>
+          simp[empty_buffer_def, finite_mapTheory.FLOOKUP_UPDATE, cond_def])
+      >> simp[rel_sequence_def, EVM_NEXT_REL_def] >> gen_tac >>
+         Cases_on `n = 0` >- simp[] >> Cases_on `n = 1` >> simp[])
+  >> simp[GSYM STAR_ASSOC, STAR_CODE_POOL_evm2set,
+          STAR_evm_hide_Parsed, STAR_evm2set, EMPTY_evm2set] >> gen_tac >>
+     Cases_on `k = 0` >- simp[Abbr `s`, Abbr `child`] >>
+     Cases_on `k = 1` >> gvs[Abbr `out`, STAR_evm2set,
+       STAR_evm_hide_Parsed, EMPTY_evm2set, evm2set_on_def]
+QED
+
+Theorem restored_unused_gas[local]:
+  x <= limit ==> limit - (x - sp) = (limit - x) + MIN sp x
+Proof
+  strip_tac >> Cases_on `sp <= x` >> simp[MIN_DEF] >> decide_tac
+QED
+
+Theorem restored_unused_gas_bound[local]:
+  x <= limit /\ (limit - x) + MIN sp x <= callerGas ==>
+  limit - (x - sp) <= callerGas
+Proof
+  strip_tac >> asm_simp_tac pure_ss [restored_unused_gas]
+QED
+
+Theorem restored_unused_gas_sub[local]:
+  x <= limit ==>
+  callerGas - (limit - (x - sp)) = callerGas - (limit - x) - MIN sp x
+Proof
+  strip_tac >> asm_simp_tac pure_ss [restored_unused_gas] >> decide_tac
+QED
+
 Theorem SPEC_Return_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc inst * evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ 2 ≤ LENGTH ss ∧ ISL e ∧
+   cond (
+         merged = (if inst = Return
+                   then repay_state_gas_spill_context
+                          (absorb_state_gas caller (sg - stateCost) sp cm)
+                   else credit_new_account_context
+                          (absorb_state_gas caller bsl 0 cm)
+                          p.newAccountCharged) ∧
+         cs ≠ [] ∧ 2 ≤ LENGTH ss ∧ ISL e ∧
          offset = w2n (EL 0 ss) ∧ sz = w2n (EL 1 ss) ∧
          LENGTH caller.stack < stack_limit ∧
          (inst = Return ∨ inst = Revert) ∧
@@ -5320,10 +7394,13 @@ Theorem SPEC_Return_inner:
          all_pcs = (FDOM caller.msgParams.parsed ∪ FDOM p.parsed) ∧
          g + gasCost ≤ p.gasLimit ∧
          calleeGasLeft = p.gasLimit - g - gasCost ∧
-         calleeGasLeft ≤ caller.gasUsed ∧
+         spillRefund = (if inst = Return then 0 else MIN sp (g + gasCost)) ∧
+         calleeGasLeft + spillRefund ≤ caller.gasUsed ∧
+         stateCost = (if returnCode then cost_per_state_byte * LENGTH data else 0) ∧
+         (if returnCode then cost_per_state_byte * LENGTH data else 0) ≤ sg ∧
          (if returnCode then
           (case data of [] => T | h::_ => h ≠ 239w) ∧
-          (codeCost = code_deposit_cost * LENGTH data) ∧
+          (codeCost = keccak256_per_word_cost * word_size (LENGTH data)) ∧
           (LENGTH data ≤ max_code_size) else codeCost = 0)))
   {}
   (evm_Stack ((case p.outputTo of
@@ -5345,7 +7422,11 @@ Theorem SPEC_Return_inner:
                     update_account addr
                       (lookup_account addr accounts with code := data)
                       accounts) else if inst = Revert then cb else rb) *
-   evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   evm_GasUsed (merged.gasUsed - calleeGasLeft - spillRefund) *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs (caller.logs ++ if inst = Revert then [] else l) *
    evm_AddRefund (caller.addRefund + if inst = Revert then 0 else ar) *
@@ -5403,30 +7484,54 @@ Proof
      gvs[expanded_memory_def, memory_expand_by_def]
   \\ gs[Abbr`ex`]
   \\ pop_assum kall_tac
+  \\ `p.gasLimit <= g - sp + caller.gasUsed` by
+     (qpat_assum `wf_state (SND r)`
+        (mp_tac o REWRITE_RULE [wf_state_def, gas_stack_ok_def])
+      \\ strip_tac
+      \\ first_x_assum (qspec_then `0` mp_tac)
+      \\ Cases_on `(SND r).contexts` \\ gvs[Abbr`cs`]
+      \\ Cases_on `t` \\ gvs[Abbr`caller`, Abbr`p`, Abbr`g`, Abbr`sp`,
+                                  unused_gas_def, frame_unused_gas_def]
+      \\ decide_tac)
   \\ Cases_on`inst = Revert`
   >- (
-    gvs[revert_def, handle_step_def, handle_create_def, handle_def,
-        return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
+    gvs[Abbr`is_ret`, Abbr`returnCode`, Abbr`gasCost`, Abbr`stateCost`]
+    \\ `p.gasLimit - (g + memory_cost m offset sz - sp) =
+          calleeGasLeft + spillRefund` by
+         (asm_simp_tac pure_ss [restored_unused_gas] >>
+          simp[Abbr `calleeGasLeft`, Abbr `spillRefund`])
+    \\ gvs[revert_def, handle_step_def, handle_create_def, handle_def,
+        reraise_def, bind_def, ignore_bind_def, get_return_data_def,
+        get_current_context_def, return_def, get_output_to_def,
+        handle_exception_def, get_num_contexts_def, restore_state_gas_def,
+        set_current_context_def]
+    \\ `p.gasLimit <= g + memory_cost m offset sz - sp + caller.gasUsed`
+         by decide_tac
+    \\ gvs[ExclSF "ARITH", exn_inner_length_guard, return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
         get_return_data_def, get_current_context_def, return_def, get_output_to_def,
-        handle_exception_def, get_num_contexts_def, pop_and_incorporate_context_def,
+        pop_and_incorporate_context_def,
         get_gas_left_def, pop_context_def, unuse_gas_def, set_rollback_def,
         assert_def,set_current_context_def,inc_pc_def,return_destination_case_rator,
         CaseEq"return_destination",CaseEq"prod",CaseEq"sum",set_return_data_def,
         push_stack_def,write_memory_def,EMPTY_evm2set,SUBSET_DEF,PULL_EXISTS,
+        restore_state_gas_def, credit_new_account_apply,
+        credit_new_account_context_def,
         Abbr`calleeGasLeft`,Abbr`all_pcs`,TO_FLOOKUP]
+    \\ gs[ExclSF "ARITH", absorb_state_gas_def, Abbr`merged`,
+           GSYM SUB_PLUS, AC ADD_ASSOC ADD_COMM]
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >-
          (qpat_x_assum ‘_ = {}’ mp_tac
-          \\ fs [EXTENSION]
+          \\ simp [ExclSF "ARITH", EXTENSION]
           \\ srw_tac[DNF_ss][TO_FLOOKUP]
           \\ eq_tac \\ rw []
           \\ first_x_assum(qspec_then`x`mp_tac)
           \\ simp[]
           \\ rw[] \\ metis_tac[option_CASES]))
     \\ irule UPDATE_evm2set_without_original
-    \\ simp[]
-    \\ gvs[TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+    \\ simp[ExclSF "ARITH"]
+    \\ gvs[ExclSF "ARITH", TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
     \\ metis_tac[])
   \\ gvs[finish_def,handle_step_def,handle_create_def,handle_def,
          get_return_data_def,bind_def,ignore_bind_def,get_output_to_def,
@@ -5440,6 +7545,11 @@ Proof
         pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
         assert_def,is_code_dest_def,SUBSET_DEF,PULL_EXISTS,EMPTY_evm2set,
         Abbr`calleeGasLeft`,Abbr`all_pcs`,TO_FLOOKUP]
+    \\ gvs[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+           absorb_state_gas_def, Abbr `merged`, bind_def, ignore_bind_def,
+           get_current_context_def, set_current_context_def, return_def,
+           inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
+           assert_def, Abbr `codeCost`, Abbr `gasCost`]
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >-
@@ -5460,7 +7570,13 @@ Proof
       get_current_context_def,set_current_context_def,get_gas_left_def,
       pop_context_def,unuse_gas_def,push_logs_def,update_gas_refund_def,
       assert_def,is_code_dest_def,SUBSET_DEF,PULL_EXISTS,EMPTY_evm2set,
-      consume_gas_def,update_accounts_def,Abbr`all_pcs`,TO_FLOOKUP]
+      consume_gas_def,update_accounts_def,Abbr`all_pcs`,TO_FLOOKUP,
+      charge_state_gas_apply]
+  \\ gvs[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+         absorb_state_gas_def, Abbr `merged`, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def, return_def,
+         inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
+         assert_def, Abbr `spillRefund`]
   \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
   \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
   \\ (conj_tac >-
@@ -5480,10 +7596,17 @@ QED
 Theorem SPEC_Invalid_outermost:
   SPEC EVM_MODEL
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft sg * evm_StateGasSpilled sp *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund ar * evm_SubRefund sr *
      evm_GasUsed g * evm_ReturnData rd * evm_Exception e *
      cond (NULL cs ∧ ISL e))
     {(pc,Invalid)}
     (evm_PC pc * evm_MsgParams p * evm_Contexts cs *
+     evm_StateGasLeft bsl *
+     evm_StateGasSpilled 0 *
+     evm_StateGasBaseline bsl *
+     evm_AddRefund 0 * evm_SubRefund 0 *
      evm_GasUsed p.gasLimit * evm_ReturnData [] *
      evm_Exception (INR (SOME InvalidOpcode)))
 Proof
@@ -5495,18 +7618,29 @@ Proof
           set_return_data_def,get_current_context_def,return_def,
           set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
           return_destination_case_elim]
+  \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, set_return_data_def,
+         get_num_contexts_def, reraise_def, assert_def]
+  \\ gvs[get_gas_left_def, consume_gas_def, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def, return_def,
+         set_return_data_def, get_num_contexts_def, reraise_def, assert_def]
   \\ end_tac
 QED
 
 Theorem SPEC_Invalid_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc Invalid *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = credit_new_account_context
+                    (absorb_state_gas caller bsl 0 cm) p.newAccountCharged ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed)))
   {}
@@ -5522,7 +7656,11 @@ Theorem SPEC_Invalid_inner:
    evm_ReturnData [] *
    evm_Exception (INL ()) *
    evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
+   evm_GasUsed merged.gasUsed *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
    evm_Logs caller.logs *
    evm_AddRefund caller.addRefund *
@@ -5560,14 +7698,52 @@ Proof
       parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
   \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
-  \\ Cases_on`p.outputTo`
-  \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
-         inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
-         bind_def,ignore_bind_def,return_def,get_current_context_def,
-         set_current_context_def,assert_def,get_return_data_def,
-         get_output_to_def,set_return_data_def,get_gas_left_def,
-         consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
-         set_rollback_def]
+  \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, get_gas_left_def,
+         consume_gas_def, set_return_data_def, assert_def]
+  \\ Cases_on `cs` >- gvs[]
+  \\ rename1 `Abbrev (caller = FST (HD (h::t)))`
+  \\ PairCases_on `h`
+  \\ gvs[Abbr `caller`]
+  \\ Cases_on `p.outputTo`
+  \\ qpat_assum `(SND r).contexts <> []` (fn ne =>
+       qpat_assum `TL (SND r).contexts = _` (fn tail =>
+       qpat_x_assum `_ = (q,r2)`
+         (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [LET_THM, ne, tail, handle_exception_def, get_num_contexts_def,
+            restore_state_gas_def, forfeit_remaining_gas_def,
+            get_gas_left_def, consume_gas_def,
+            bind_def, ignore_bind_def, return_def,
+            get_current_context_def, set_current_context_def,
+            set_return_data_def, assert_def])))
+  \\ disch_then assume_tac
+  \\ imp_res_tac exn_inner_forfeit_guard
+  \\ qpat_assum `Abbrev (p = _)` (fn pth =>
+       qpat_assum `Abbrev (g = _)` (fn gth =>
+       qpat_assum `!spill. _ - spill + (p.gasLimit - (_ - spill)) = p.gasLimit`
+         (fn gas => qpat_x_assum `_ = (q,r2)`
+           (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+             [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] pth),
+              GSYM (REWRITE_RULE [markerTheory.Abbrev_def] gth),
+              gas, AC ADD_ASSOC ADD_COMM,
+              saturated_failed_child_pop_update, bind_def, ignore_bind_def,
+              return_def, get_current_context_def, set_current_context_def,
+              assert_def, inc_pc_def, get_output_to_def,
+              get_return_data_def, set_return_data_def, push_stack_def,
+              write_memory_def]))))
+  \\ disch_then assume_tac
+  \\ qpat_assum `p.outputTo = _` (fn output =>
+       qpat_assum `LENGTH _.stack < 1024` (fn stack =>
+       qpat_x_assum `_ = (q,r2)`
+         (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [output, stack, LET_THM, absorb_state_gas_def,
+            credit_new_account_context_def, bind_def, ignore_bind_def,
+            return_def, get_current_context_def, set_current_context_def,
+            assert_def])))
+  \\ disch_then exn_computed_eq_tac
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`, Abbr `cb`,
+         absorb_state_gas_def, credit_new_account_context_def]
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
@@ -5595,31 +7771,35 @@ QED
 Theorem SPEC_SelfDestruct_outermost:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp *
    evm_Contexts cs * evm_CachedRB cb * evm_ReturnData rd *
    evm_Exception e * evm_Rollback rb * evm_Msdomain d *
-   evm_OriginalAccounts orig *
+   evm_OriginalAccounts orig * evm_Logs l *
    cond (NULL cs ∧ ISL e ∧ ss ≠ [] ∧ ¬p.static ∧
          addr = w2w (HD ss) ∧ access_check d addr ∧
          sender = lookup_account p.callee rb.accounts ∧
          transferCost = (if 0 < sender.balance ∧
                             account_empty (lookup_account addr rb.accounts)
-                         then self_destruct_new_account_cost else 0) ∧
+                         then account_write_cost else 0) ∧
+         stateCost = (if 0 < sender.balance ∧
+                         account_empty (lookup_account addr rb.accounts)
+                      then new_account_state_gas else 0) ∧
+         (if 0 < sender.balance ∧ account_empty (lookup_account addr rb.accounts) then new_account_state_gas else 0) ≤ sg ∧
          gasCost = static_gas SelfDestruct +
                    zero_warm (access_cost rb addr) + transferCost ∧
          g + gasCost ≤ p.gasLimit ∧
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
          rb2 = (if account_empty (lookup_account p.callee orig)
-                then rb1 with <| accounts updated_by
-                                   update_account p.callee
-                                     (sender with balance := 0);
-                                 toDelete updated_by CONS p.callee |>
+                then rb1 with toDelete updated_by CONS p.callee
                 else rb1)))
   {(pc,SelfDestruct)}
   (evm_Stack (TL ss) * evm_PC pc * evm_GasUsed (g + gasCost) *
+   evm_StateGasLeft (sg - stateCost) * evm_StateGasSpilled sp *
    evm_MsgParams p * evm_Contexts cs * evm_CachedRB cb *
    evm_ReturnData [] * evm_Exception (INR NONE) *
    evm_Msdomain (msdomain_add addr d) * evm_OriginalAccounts orig *
+   evm_Logs (l ++ transfer_log p.callee addr sender.balance) *
    evm_Rollback (case p.outputTo of Memory _ => rb2 | Code a =>
                  rb2 with accounts updated_by (λaccounts.
                     update_account a
@@ -5634,7 +7814,8 @@ Proof
          set_current_context_def,access_address_split,get_callee_def,
          set_return_data_def,get_accounts_def,consume_gas_def,
          assert_not_static_def,get_static_def,update_accounts_def,
-         get_original_def,add_to_delete_def,finish_def,HD_TAKE]
+         get_original_def,add_to_delete_def,finish_def,HD_TAKE,
+         charge_new_account_apply]
   \\ Cases_on`account_empty (lookup_account (FST h).msgParams.callee
                                              (SND r).originalAccounts)`
   \\ Cases_on`(FST h).msgParams.outputTo`
@@ -5643,7 +7824,8 @@ Proof
          handle_create_def,get_return_data_def,get_output_to_def,
          get_current_context_def,reraise_def,handle_exception_def,
          get_num_contexts_def,consume_gas_def,assert_def,
-         set_current_context_def,CaseEq"prod",CaseEq"sum"]
+         set_current_context_def,push_logs_def,charge_state_gas_apply,
+         word_size_def, CaseEq"prod",CaseEq"sum"]
   \\ (conj_tac >-
        (qpat_x_assum ‘_ = {_}’ $ rewrite_tac o single o GSYM
         \\ fs [EXTENSION] \\ rw [] \\ eq_tac \\ rw []))
@@ -5655,12 +7837,16 @@ QED
 Theorem SPEC_SelfDestruct_inner:
   SPEC EVM_MODEL
   (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
+   evm_StateGasLeft sg * evm_StateGasSpilled sp * evm_StateGasBaseline bsl * evm_StateGasCommitted cm *
    evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
    evm_CachedRB cb * evm_Msdomain d * evm_OriginalAccounts orig *
    evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
    evm_JumpDest j * evm_Parsed pc SelfDestruct *
    evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
+   cond (
+         merged = repay_state_gas_spill_context
+                    (absorb_state_gas caller (sg - stateCost) sp cm) ∧
+         cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
          caller = FST (HD cs) ∧
          all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
          ss ≠ [] ∧ ¬p.static ∧
@@ -5668,17 +7854,18 @@ Theorem SPEC_SelfDestruct_inner:
          sender = lookup_account p.callee rb.accounts ∧
          transferCost = (if 0 < sender.balance ∧
                             account_empty (lookup_account addr rb.accounts)
-                         then self_destruct_new_account_cost else 0) ∧
+                         then account_write_cost else 0) ∧
+         stateCost = (if 0 < sender.balance ∧
+                         account_empty (lookup_account addr rb.accounts)
+                      then new_account_state_gas else 0) ∧
+         (if 0 < sender.balance ∧ account_empty (lookup_account addr rb.accounts) then new_account_state_gas else 0) ≤ sg ∧
          gasCost = static_gas SelfDestruct +
                    zero_warm (access_cost rb addr) + transferCost ∧
          g + gasCost ≤ p.gasLimit ∧
          rb1 = (accesses_add addr rb with accounts updated_by
                   transfer_value p.callee addr sender.balance) ∧
          rb2 = (if account_empty (lookup_account p.callee orig)
-                then rb1 with <| accounts updated_by
-                                   update_account p.callee
-                                     (sender with balance := 0);
-                                 toDelete updated_by CONS p.callee |>
+                then rb1 with toDelete updated_by CONS p.callee
                 else rb1) ∧
          calleeGasLeft = p.gasLimit - (g + gasCost) ∧
          calleeGasLeft ≤ caller.gasUsed))
@@ -5701,9 +7888,13 @@ Theorem SPEC_SelfDestruct_inner:
                     update_account a
                       (lookup_account a accounts with code := [])
                       accounts)) *
-   evm_GasUsed (caller.gasUsed - calleeGasLeft) *
+   evm_GasUsed (merged.gasUsed - calleeGasLeft) *
+   evm_StateGasLeft merged.stateGasLeft *
+   evm_StateGasSpilled merged.stateGasSpilled *
+   evm_StateGasBaseline merged.stateGasBaseline *
+   evm_StateGasCommitted merged.stateGasCommitted *
    evm_JumpDest caller.jumpDest *
-   evm_Logs (caller.logs ++ l) *
+   evm_Logs (caller.logs ++ l ++ transfer_log p.callee addr sender.balance) *
    evm_AddRefund (caller.addRefund + ar) *
    evm_SubRefund (caller.subRefund + sr))
 Proof
@@ -5737,6 +7928,7 @@ Proof
          set_return_data_def,get_accounts_def,consume_gas_def,
          assert_not_static_def,get_static_def,update_accounts_def,
          get_original_def,add_to_delete_def,finish_def,HD_TAKE,
+         charge_new_account_apply,
          LAST_CONS_cond]
   \\ qmatch_assum_rename_tac`wf_state r2`
   \\ `(FST (HD r2.contexts)).msgParams.parsed =
@@ -5744,15 +7936,43 @@ Proof
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
   \\ Cases_on`account_empty (lookup_account p.callee orig)`
   \\ Cases_on`p.outputTo`
-  \\ gvs[CaseEq"prod",CaseEq"sum",bind_def,ignore_bind_def,return_def,
-         update_accounts_def,add_to_delete_def,handle_step_def,vfm_abort_def,
-         handle_def,handle_create_def,get_return_data_def,get_output_to_def,
-         get_current_context_def,reraise_def,handle_exception_def,
-         get_num_contexts_def,consume_gas_def,assert_def,
-         set_current_context_def,inc_pc_def,pop_and_incorporate_context_def,
-         push_stack_def,set_return_data_def,get_gas_left_def,
-         write_memory_def,pop_context_def,unuse_gas_def,push_logs_def,
-         update_gas_refund_def,Abbr`calleeGasLeft`]
+  \\ gvs[ExclSF "ARITH", Abbr `orig`]
+  \\ qpat_x_assum `_ = (q,r2)` (fn execution =>
+       ASSUM_LIST (fn facts =>
+       assume_tac (SIMP_RULE (srw_ss())
+         (facts @ [LET_THM, word_size_def, exn_inner_length_guard,
+          bind_def, ignore_bind_def, return_def,
+          update_accounts_def, add_to_delete_def, handle_step_def, vfm_abort_def,
+          handle_def, handle_create_def, get_return_data_def, get_output_to_def,
+          get_current_context_def, reraise_def, handle_exception_def,
+          get_num_contexts_def, consume_gas_def, assert_def,
+          set_current_context_def, inc_pc_def, pop_and_incorporate_context_def,
+          push_stack_def, set_return_data_def, get_gas_left_def,
+          write_memory_def, pop_context_def, unuse_gas_def, push_logs_def,
+          update_gas_refund_def, charge_state_gas_apply]) execution)))
+  \\ qpat_x_assum `_ = (q,r2)` (fn execution =>
+       ASSUM_LIST (fn facts =>
+       assume_tac (SIMP_RULE (srw_ss())
+         (facts @ [repay_state_gas_spill_def,
+          repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
+          return_def, get_current_context_def, set_current_context_def,
+          inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
+          assert_def, word_size_def]) execution)))
+  \\ `p.gasLimit <= g + gasCost + caller.gasUsed` by
+       (qpat_x_assum `calleeGasLeft <= caller.gasUsed` mp_tac
+        \\ simp[Abbr `calleeGasLeft`] \\ decide_tac)
+  \\ qpat_x_assum `_ = (q,r2)` (fn execution =>
+       ASSUM_LIST (fn facts =>
+       assume_tac (SIMP_RULE (srw_ss())
+         (facts @ [absorb_state_gas_def]) execution)))
+  \\ qpat_x_assum `_ /\ _` strip_assume_tac
+  \\ qpat_x_assum `_ = r2` (SUBST_ALL_TAC o SYM)
+  \\ gvs[ExclSF "ARITH", Abbr `calleeGasLeft`]
+  \\ gvs[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+         absorb_state_gas_def, Abbr `merged`, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def, return_def,
+         inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
+         assert_def, word_size_def]
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
@@ -5820,3 +8040,10 @@ Definition zero_value_call_def:
     initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
     gas ≤ (FST (HD s.contexts)).msgParams.gasLimit
 End
+
+(* Build-time integrity audit: exported facts must have no proof-search oracle. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail ("Unexpected oracle in " ^ name)
+  end) (DB.thms "vfmProg");

@@ -205,6 +205,15 @@ Proof
   irule (SRULE [] preserves_deletion_exact_imp_rel) >> simp[]
 QED
 
+Theorem push_logs_deletion_exact:
+  preserves_when (λs. s.contexts ≠ []) ^deletion_exact (push_logs logs)
+Proof
+  rw[preserves_when_def, push_logs_def, bind_def, get_current_context_def,
+     set_current_context_def, return_def] >>
+  Cases_on `s.contexts` >> gvs[] >>
+  rename1 `s.contexts = h::tail` >> Cases_on `tail` >> gvs[]
+QED
+
 Theorem step_self_destruct_deletion_rel:
   preserves_when (λs. s.contexts ≠ []) (^deletion_rel a) step_self_destruct
 Proof
@@ -221,10 +230,15 @@ Proof
   simp[cp_deletion_exact] >> gen_tac >>
   irule (SRULE [] deletion_rel_ignore_bind_exact) >>
   simp[cp_deletion_exact] >>
+  (* EIP-8037: the creation charge for a self-destruct to a fresh account. *)
+  irule (SRULE [] deletion_rel_ignore_bind_exact) >>
+  simp[cp_deletion_exact] >>
   irule (SRULE [] deletion_rel_ignore_bind_exact) >>
   simp[cp_deletion_exact] >>
   irule (SRULE [] deletion_rel_ignore_bind_exact) >>
   simp[update_accounts_deletion_exact] >>
+  irule (SRULE [] deletion_rel_ignore_bind_exact) >>
+  simp[push_logs_deletion_exact] >>
   irule (SRULE [] deletion_rel_bind_get_original) >>
   rpt gen_tac >> simp[] >> strip_tac >>
   gvs[ignore_bind_def, bind_def, update_accounts_def,
@@ -253,15 +267,6 @@ Proof
   simp[write_transient_storage_def] >>
   irule deletion_exact_bind >> simp[cp_deletion_exact] >> gen_tac >>
   rw[preserves_when_def, set_tStorage_def, return_def] >> gvs[]
-QED
-
-Theorem push_logs_deletion_exact:
-  preserves_when (λs. s.contexts ≠ []) ^deletion_exact (push_logs logs)
-Proof
-  rw[preserves_when_def, push_logs_def, bind_def, get_current_context_def,
-     set_current_context_def, return_def] >>
-  Cases_on `s.contexts` >> gvs[] >>
-  rename1 `s.contexts = h::tail` >> Cases_on `tail` >> gvs[]
 QED
 
 Theorem step_sstore_deletion_exact:
@@ -331,6 +336,19 @@ Proof
   simp[set_last_accounts_def, FRONT_SNOC]
 QED
 
+Theorem deletion_drain_state_gas_reservoir_effect[local]:
+  s.contexts ≠ [] ⇒
+  drain_state_gas_reservoir s =
+    (INL (FST (HD s.contexts)).stateGasLeft,
+     s with contexts :=
+       (FST (HD s.contexts) with stateGasLeft := 0, SND (HD s.contexts)) ::
+       TL s.contexts)
+Proof
+  Cases_on `s.contexts` >>
+  simp[drain_state_gas_reservoir_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def, return_def]
+QED
+
 Theorem proceed_create_deletion_projections:
   s.contexts ≠ [] ∧
   proceed_create sender address value code gas s = (r,t) ⇒
@@ -343,10 +361,10 @@ Theorem proceed_create_deletion_projections:
       s.originalAccounts
 Proof
   strip_tac >> qhdtm_x_assum `proceed_create` mp_tac >>
-  simp[proceed_create_def, ignore_bind_def, bind_def,
+  simp[proceed_create_def, get_accounts_def, deletion_drain_state_gas_reservoir_effect, ignore_bind_def, bind_def,
        update_accounts_def, get_rollback_def, get_original_def,
        set_original_def, push_context_def, return_def] >>
-  strip_tac >> gvs[]
+  strip_tac >> gvs[] >> Cases_on `s.contexts` >> gvs[]
 QED
 
 Theorem proceed_call_deletion_projections:
@@ -360,7 +378,8 @@ Theorem proceed_call_deletion_projections:
   t.originalAccounts = s.originalAccounts
 Proof
   strip_tac >> qhdtm_x_assum `proceed_call` mp_tac >>
-  simp[proceed_call_def, bind_def, ignore_bind_def, get_rollback_def,
+  simp[proceed_call_def, get_accounts_def, deletion_drain_state_gas_reservoir_effect,
+       bind_def, ignore_bind_def, get_rollback_def,
        read_memory_def, get_current_context_def, return_def] >>
   Cases_on `op ≠ CallCode ∧ 0 < value` >>
   simp[update_accounts_def, return_def, get_caller_def, get_value_def,
@@ -377,7 +396,7 @@ Proof
   gvs[] >>
   `LENGTH t.contexts = LENGTH ss.contexts` by
     metis_tac[LENGTH_MAP] >>
-  simp[Abbr `ss`, LAST_DEF]
+  Cases_on `s.contexts` >> gvs[Abbr `ss`, LAST_DEF]
 QED
 
 
@@ -436,12 +455,18 @@ Proof
     (irule cp_deletion_exact >>
      CASE_TAC >> simp[]) >>
   qx_gen_tac `codecost` >> PairCases_on `codecost` >>
-  simp[] >> irule deletion_call_bind_exact >>
-  simp[cp_deletion_exact] >> gen_tac >>
-  pairarg_tac >> simp[] >>
+  simp[] >>
+  irule deletion_call_ignore_bind_exact >> simp[cp_deletion_exact] >>
+  (* EIP-8037: the creation charge for a value transfer to a fresh account,
+     before the static check and the memory expansion. *)
   irule deletion_call_ignore_bind_exact >> simp[cp_deletion_exact] >>
   irule deletion_call_ignore_bind_exact >> conj_tac >-
     (irule cp_deletion_exact >> IF_CASES_TAC >> simp[]) >>
+  irule deletion_call_ignore_bind_exact >> simp[cp_deletion_exact] >>
+  irule deletion_call_bind_exact >>
+  simp[cp_deletion_exact] >> gen_tac >>
+  pairarg_tac >> simp[] >>
+  (* EIP-8037: the child's grant, charged after its creation. *)
   irule deletion_call_ignore_bind_exact >> simp[cp_deletion_exact] >>
   irule deletion_call_bind_exact >> simp[cp_deletion_exact] >> gen_tac >>
   IF_CASES_TAC >- (irule cp_deletion_call >> simp[]) >>
@@ -636,8 +661,6 @@ Proof
   irule fixed_accounts_get_accounts_eq >>
   simp[] >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
-  irule (SRULE [] deletion_create_bind_cp) >> simp[] >> gen_tac >>
-  irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
   irule (SRULE [] deletion_create_bind_cp) >> simp[] >> gen_tac >>
@@ -646,6 +669,9 @@ Proof
      irule cp_deletion_exact >> simp[]) >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
   irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
+  (* EIP-8037: the creation charge, before the child's grant is withheld. *)
+  irule (SRULE [] deletion_create_ignore_bind_cp) >> simp[] >>
+  irule (SRULE [] deletion_create_bind_cp) >> simp[cp_state_gas_meter] >> gen_tac >>
   IF_CASES_TAC >-
     (irule (SRULE [] deletion_exact_preserves_create) >>
      simp[abort_create_exists_deletion_exact]) >>
@@ -672,6 +698,8 @@ Proof
   simp[cp_deletion_exact, ignore_bind_def] >>
   irule deletion_exact_bind >> simp[cp_deletion_exact] >>
   irule deletion_exact_bind >> simp[cp_deletion_exact] >>
+  (* EIP-8037: the deposit's bytes, charged to state gas after the hash cost. *)
+  irule deletion_exact_bind >> simp[cp_deletion_exact] >>
   irule deletion_exact_bind >> simp[cp_deletion_exact] >>
   irule deletion_exact_bind >>
   simp[update_accounts_deletion_exact, cp_deletion_exact]
@@ -691,14 +719,21 @@ Proof
   Cases_on `s.contexts` >> simp[] >>
   Cases_on `t'` >> simp[] >>
   PairCases_on `h` >> PairCases_on `h'` >>
-  simp[pop_and_incorporate_context_def, bind_def, ignore_bind_def,
+  (* EIP-8037: the failed child's creation charge is a flag on the child
+     frame, so split it before unfolding the merge. *)
+  Cases_on `h0.msgParams.newAccountCharged` >>
+  simp[pop_and_incorporate_context_def, absorb_state_gas_def,
+       repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+       credit_new_account_def, credit_state_gas_refund_def,
+       bind_def, ignore_bind_def,
        get_gas_left_def, get_current_context_def, return_def,
        pop_context_def, unuse_gas_def, assert_def, fail_def,
        set_current_context_def, push_logs_def, update_gas_refund_def,
        set_rollback_def] >>
   Cases_on `success` >>
   simp[bind_def, ignore_bind_def, get_current_context_def,
-       set_current_context_def, set_rollback_def, return_def, AllCaseEqs()] >>
+       set_current_context_def, set_rollback_def, return_def,
+       credit_new_account_def, credit_state_gas_refund_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> Cases_on `t''` >> gvs[]
 QED
 
@@ -720,7 +755,8 @@ Proof
   Cases_on `s.contexts` >> simp[] >> PairCases_on `h` >>
   Cases_on `t'` >> simp[]
   >- (Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-      simp[handle_exception_def, bind_def, ignore_bind_def,
+      simp[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
+           bind_def, ignore_bind_def,
            get_gas_left_def, get_current_context_def, return_def,
            consume_gas_def, set_return_data_def, set_current_context_def,
            get_num_contexts_def, reraise_def, assert_def, fail_def] >>
@@ -728,18 +764,21 @@ Proof
       Cases_on `h0.msgParams.gasLimit - h0.gasUsed + h0.gasUsed ≤ h0.msgParams.gasLimit` >>
       gvs[]) >>
   PairCases_on `h` >>
-  Cases_on `h0.msgParams.outputTo` >>
   Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
-  simp[handle_exception_def, bind_def, ignore_bind_def,
+  simp[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
+       bind_def, ignore_bind_def,
        get_gas_left_def, get_current_context_def, return_def,
        consume_gas_def, set_return_data_def, set_current_context_def,
        get_num_contexts_def, get_return_data_def, get_output_to_def,
-       reraise_def, assert_def, fail_def,
-       inc_pc_def, push_stack_def, write_memory_def,
-       pop_and_incorporate_context_def, pop_context_def,
-       set_rollback_def, unuse_gas_def,
-       update_gas_refund_def, push_logs_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> Cases_on `t''` >> gvs[AllCaseEqs()]
+       reraise_def, assert_def, fail_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule_at (Pat `pop_and_incorporate_context`) pop_context_deletion_projections >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  Cases_on `h0.msgParams.outputTo` >>
+  gvs[inc_pc_def, push_stack_def, write_memory_def, bind_def, ignore_bind_def,
+      get_current_context_def, set_current_context_def, return_def,
+      assert_def, fail_def, AllCaseEqs()] >>
+  Cases_on `s''.contexts` >> gvs[]
 QED
 
 Theorem handle_step_deletion_projections:
@@ -838,6 +877,16 @@ Proof
   rw[] >> first_x_assum drule >> simp[]
 QED
 
+(* EIP-8037's create aborts and the branches that only charge state gas do
+   not enter a child at all: they leave the frame alone, so a push_post goal
+   for them is vacuous. *)
+Theorem push_post_of_psf:
+  preserves_same_frame m ⇒ ^push_post Q m
+Proof
+  strip_tac >> irule push_post_nongrowing >> rpt strip_tac >>
+  drule_all vfmSameFrameTheory.psf_imp_length_contexts_preserved >> simp[]
+QED
+
 val push_post_unit = inst [alpha |-> ``:unit``] push_post;
 
 Theorem proceed_create_nonce_certificate_prefix:
@@ -866,15 +915,22 @@ Proof
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
+  (* EIP-8037: the static check, the return data and the depth now come
+     before the abort, which pushes the zero and steps the pc. *)
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >>
+  simp[preserves_same_frame_state_gas_meter] >> gen_tac >>
   IF_CASES_TAC
-  >- (rpt strip_tac >> drule_all vfmStepLengthTheory.abort_unuse_length >> simp[]) >>
+  >- (ho_match_mp_tac (SRULE [] push_post_of_psf) >> simp[abort_create_def]) >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
+  (* EIP-8037: the destination's creation, charged before the child's
+     grant is withheld. *)
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >>
+  (conj_tac >- simp[charge_new_account_def]) >> simp[] >>
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >>
+  simp[preserves_same_frame_state_gas_meter] >> gen_tac >>
   IF_CASES_TAC
   >- (rpt strip_tac >> drule_all vfmStepLengthTheory.abort_create_exists_length >> simp[]) >>
   rpt strip_tac >> drule_all proceed_create_nonce_certificate >>
@@ -894,22 +950,28 @@ Proof
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
   Cases >> simp[] >>
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
+  (* EIP-8037: the recipient's creation, charged before the grant is
+     computed and before the memory expansion. *)
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >>
+  (conj_tac >- simp[charge_new_account_def]) >> simp[] >>
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
   pairarg_tac >> simp[] >>
+  (* EIP-8037: the child's grant, in execution gas. *)
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >>
+  simp[preserves_same_frame_state_gas_meter] >> gen_tac >>
   IF_CASES_TAC
-  >- (rpt strip_tac >>
-      mp_tac (Q.INST [`n` |-> `stipend`] preserves_same_frame_abort_call_value) >>
-      rewrite_tac[preserves_same_frame_def] >>
-      disch_then drule >> simp[] >> strip_tac >>
-      gvs[same_frame_rel_def]) >>
+  >- (ho_match_mp_tac (SRULE [] push_post_of_psf) >>
+      CONV_TAC (RAND_CONV ETA_CONV) >> simp[credit_new_account_def]) >>
   ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >>
-  ho_match_mp_tac (SRULE [] push_post_bind_psf) >> simp[] >> gen_tac >>
+  ho_match_mp_tac (SRULE [] push_post_bind_psf) >>
+  simp[preserves_same_frame_state_gas_meter] >> gen_tac >>
   IF_CASES_TAC
-  >- (rpt strip_tac >> drule_all vfmStepLengthTheory.abort_unuse_length >> simp[]) >>
+  >- (ho_match_mp_tac (SRULE [] push_post_of_psf) >>
+      CONV_TAC (RAND_CONV ETA_CONV) >> simp[credit_new_account_def]) >>
   rpt strip_tac >> drule_all proceed_call_memory_output >> simp[]
 QED
 
@@ -1478,11 +1540,11 @@ Proof
       mp_tac (BETA_RULE deletion_saved_protected_push) >>
       (impl_tac >- fs[]) >> simp[]) >>
   Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+  >- (drule_all step_same_frame >> strip_tac >>
       `∀i. i < LENGTH s.contexts ⇒
         lookup_account a (SND (EL i t.contexts)).accounts =
         lookup_account a (SND (EL i s.contexts)).accounts` by
-        (rpt strip_tac >> drule_all deletion_same_frame_saved_projections >> simp[]) >>
+        (rpt strip_tac >> fs[same_frame_rel_def] >> Cases_on `i` >> gvs[EL]) >>
       mp_tac (BETA_RULE deletion_saved_protected_same_depth) >>
       (impl_tac >- fs[]) >> simp[]) >>
   `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
@@ -1524,10 +1586,10 @@ Proof
       mp_tac (BETA_RULE deletion_saved_absent_push) >>
       (impl_tac >- fs[]) >> simp[]) >>
   Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+  >- (drule_all step_same_frame >> strip_tac >>
       `∀i. i < LENGTH s.contexts ⇒
         (SND (EL i t.contexts)).toDelete = (SND (EL i s.contexts)).toDelete` by
-        (rpt strip_tac >> drule_all deletion_same_frame_saved_projections >> simp[]) >>
+        (rpt strip_tac >> fs[same_frame_rel_def] >> Cases_on `i` >> gvs[EL]) >>
       mp_tac (BETA_RULE deletion_saved_absent_same_depth) >>
       (impl_tac >- fs[]) >> simp[]) >>
   `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
@@ -1625,12 +1687,12 @@ Proof
       mp_tac (BETA_RULE deletion_creation_certificate_push) >>
       (impl_tac >- (fs[] >> metis_tac[])) >> simp[]) >>
   Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (`same_frame_rel s t` by (irule step_same_frame >> metis_tac[]) >>
+  >- (drule_all step_same_frame >> strip_tac >>
       `∀i. i < LENGTH s.contexts ⇒
         SND (EL i t.contexts) = SND (EL i s.contexts) ∧
         (FST (EL i t.contexts)).msgParams.outputTo =
         (FST (EL i s.contexts)).msgParams.outputTo` by
-        (gen_tac >> strip_tac >> drule_all deletion_same_frame_saved_projections >> simp[]) >>
+        (gen_tac >> strip_tac >> fs[same_frame_rel_def] >> Cases_on `i` >> gvs[EL]) >>
       `(lookup_account a s.rollback.accounts).nonce ≤
         (lookup_account a t.rollback.accounts).nonce` by
         (drule_all same_frame_nonce_monotone >> simp[]) >>

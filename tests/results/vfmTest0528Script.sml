@@ -1,7 +1,7 @@
 Theory vfmTest0528[no_sig_docs]
 Ancestors vfmTestDefs0528
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result0528_0.nsv"];
+val () = holbuild_extra_outputs ["result0528_0.nsv", "result0528_1.nsv", "result0528_2.nsv"];
 val thyn = "vfmTestDefs0528";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

@@ -1,5 +1,5 @@
 Theory vfmTestDefs0930[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stMemoryTest/mem33b_single_byte/mem33b_single_byte.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stMemoryTest/mem33b_single_byte/mem33b_single_byte.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/cancun/eip4788_beacon_root/beacon_root_contract/beacon_root_equal_to_timestamp.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/cancun/eip4788_beacon_root/beacon_root_contract/beacon_root_equal_to_timestamp.json");
 val defs = mapi (define_test "0930") tests;
