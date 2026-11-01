@@ -219,6 +219,25 @@ Definition stack_original_run_create_def:
     let ctxt = FST crb in
     let calleeAddress = ctxt.msgParams.callee in
     let rbAccounts = s.rollback.accounts in
+    let preAuthAccounts =
+          THE $ pre_transaction_updates accounts
+                  (base_fee_per_blob_gas blk.excessBlobGas) tx in
+    let (_, _, _, _, authCharges) =
+          process_authorizations chainId
+            (authorization_paid_writes tx calleeAddress)
+            preAuthAccounts tx.authorizationList preAuthAccounts
+            (initial_access_sets blk.coinBase calleeAddress tx)
+            fEMPTY fEMPTY [] in
+    (case apply_authorization_charges authCharges ctxt of
+     | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                      preAuthAccounts
+                      (s with contexts := [
+                        (ctxt with <|
+                           gasUsed := ctxt.msgParams.gasLimit;
+                           stateGasLeft := ctxt.stateGasBaseline;
+                           stateGasSpilled := 0 |>,
+                         SND crb)])
+     | SOME ctxt =>
     if IS_SOME tx.to then
       let charge = if 0 < tx.value ∧
                        account_empty (lookup_account calleeAddress
@@ -270,7 +289,7 @@ Definition stack_original_run_create_def:
               set_last_accounts $
               update_account calleeAddress empty_account_state
                 (SND crb).accounts
-            )|>, NONE))
+            )|>, NONE)))
 End
 
 Definition stack_original_run_transaction_def:
@@ -1415,8 +1434,12 @@ Proof
   rewrite_tac[stack_original_run_create_def, run_create_def] >>
   Cases_on `initial_state dom static chainId prevHashes blk accounts tx` >> simp[] >>
   drule original_state_initial >> strip_tac >>
+  pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `apply_authorization_charges charges ctxt` >>
+  Cases_on `apply_authorization_charges charges ctxt` >> simp[] >>
+  rename1 `apply_authorization_charges charges ctxt = SOME charged` >>
   Cases_on `IS_SOME tx.to`
-  >- (Cases_on `charge_state_gas_context (FST (HD x.contexts))
+  >- (Cases_on `charge_state_gas_context charged
                  (if 0 < tx.value /\
                      account_empty
                        (lookup_account (FST (HD x.contexts)).msgParams.callee
@@ -1425,7 +1448,7 @@ Proof
       `HD x.contexts = LAST x.contexts` by (Cases_on `x.contexts` >> gvs[]) >>
       gvs[original_state_rel_def]) >>
   simp[] >> IF_CASES_TAC >> simp[] >>
-  Cases_on `charge_state_gas_context (FST (HD x.contexts))
+  Cases_on `charge_state_gas_context charged
               (if account_empty
                     (lookup_account (FST (HD x.contexts)).msgParams.callee
                                     accounts)
