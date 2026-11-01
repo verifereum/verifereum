@@ -25,7 +25,6 @@ Beyond executable specification and test-suite validation, the repository contai
 Other active directions include:
 
 - Program logic and proof infrastructure in `prog/`
-- Example and experimental contract-verification developments in `examples/`
 - Support for compiler verification targeting the EVM
 - The sister project [Vyper-HOL](https://github.com/verifereum/vyper-hol), developing Vyper semantics and compiler verification
 
@@ -44,8 +43,6 @@ verifereum/
 │   ├── merklePatriciaTrieScript.sml
 │   ├── secp256k1Script.sml
 │   └── contractABIScript.sml
-├── examples/       # Example contract verifications
-│   └── wrappedEtherScript.sml    # WETH contract verification
 ├── tests/          # EVM test suite
 ├── website/        # Project website source
 └── docs/           # Documentation

@@ -1949,20 +1949,31 @@ Definition is_deposit_event_def:
     HD e.topics = deposit_event_topic
 End
 
+(* The deposit contract's DepositEvent data has a fixed ABI layout: five
+   head words holding the offsets of the five byte fields, then each field
+   as a size word followed by its padded bytes. Anything else makes the
+   block invalid. *)
 Definition parse_deposit_request_def:
   parse_deposit_request (data: byte list) =
-  if LENGTH data < 576 then NONE else
-  let pubkey_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 data)) in
-  let withdrawal_creds_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 32 data))) in
-  let amount_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 64 data))) in
-  let signature_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 96 data))) in
-  let index_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 128 data))) in
-  let pubkey = TAKE 48 (DROP (pubkey_offset + 32) data) in
-  let withdrawal_creds = TAKE 32 (DROP (withdrawal_creds_offset + 32) data) in
-  let amount = TAKE 8 (DROP (amount_offset + 32) data) in
-  let signature = TAKE 96 (DROP (signature_offset + 32) data) in
-  let index = TAKE 8 (DROP (index_offset + 32) data) in
-  SOME (pubkey ++ withdrawal_creds ++ amount ++ signature ++ index)
+  if LENGTH data = 576 ∧
+     num_of_be_bytes (TAKE 32 data) = 160 ∧
+     num_of_be_bytes (TAKE 32 (DROP 32 data)) = 256 ∧
+     num_of_be_bytes (TAKE 32 (DROP 64 data)) = 320 ∧
+     num_of_be_bytes (TAKE 32 (DROP 96 data)) = 384 ∧
+     num_of_be_bytes (TAKE 32 (DROP 128 data)) = 512 ∧
+     num_of_be_bytes (TAKE 32 (DROP 160 data)) = 48 ∧
+     num_of_be_bytes (TAKE 32 (DROP 256 data)) = 32 ∧
+     num_of_be_bytes (TAKE 32 (DROP 320 data)) = 8 ∧
+     num_of_be_bytes (TAKE 32 (DROP 384 data)) = 96 ∧
+     num_of_be_bytes (TAKE 32 (DROP 512 data)) = 8
+  then
+    let pubkey = TAKE 48 (DROP 192 data) in
+    let withdrawal_creds = TAKE 32 (DROP 288 data) in
+    let amount = TAKE 8 (DROP 352 data) in
+    let signature = TAKE 96 (DROP 416 data) in
+    let index = TAKE 8 (DROP 544 data) in
+    SOME (pubkey ++ withdrawal_creds ++ amount ++ signature ++ index)
+  else NONE
 End
 
 Definition parse_deposit_events_def:

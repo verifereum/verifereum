@@ -1,1 +1,0 @@
-INCLUDES = ../spec ../spec/prop ../prog $(HOLDIR)/examples/machine-code/hoare-triple

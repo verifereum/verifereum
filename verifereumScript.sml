@@ -5,12 +5,10 @@ open HolKernel
   vfmDomainCollectionTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib vfmChainIdTheory
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
-  vfmCreateCollisionTheory
+  vfmCreateCollisionTheory vfmDepositLogTheory
   vfmOriginalStateTheory vfmOriginalAccountsTheory
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
-  vfmProgTheory vfmProgCallTheory wrappedEtherTheory wrappedEtherNameTheory
-  wrappedEtherTransferTheory wrappedEtherBranchesTheory wrappedEtherGettersTheory
-  wrappedEtherDepositTheory wrappedEtherWithdrawTheory
+  vfmProgTheory vfmProgCallTheory
 
 val () = new_theory "verifereum";
 
