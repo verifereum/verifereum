@@ -5154,10 +5154,10 @@ Proof
          read_memory_def, get_callee_def, get_accounts_def,
          access_address_split, memory_expansion_info_split,
          expand_memory_split, get_gas_left_def, withhold_create_gas_def,
-         charge_new_account_apply, charge_new_account_def,
-         charge_state_gas_apply, charge_state_gas_def,
-         assert_not_static_def, get_static_def, set_return_data_def,
-         get_num_contexts_def, access_storage_split,
+         charge_new_account_apply]
+  \\ gvs[charge_new_account_def, charge_state_gas_apply,
+         charge_state_gas_def, assert_not_static_def, get_static_def,
+         set_return_data_def, get_num_contexts_def, access_storage_split,
          proceed_create_def, drain_state_gas_reservoir_def,
          update_accounts_def, get_rollback_def, get_original_def,
          set_original_def, push_context_def, inc_pc_or_jump_def,
@@ -5165,7 +5165,28 @@ Proof
          initial_msg_params_def,
          Abbr`stateCost`, Abbr`sg`, Abbr`cappedGas`, Abbr`gasLeft`]
   \\ gs[EMPTY_evm2set]
-  \\ ntac 8
+  \\ ntac 4
+     ((conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
+                    \\ metis_tac[NOT_SOME_NONE])) ORELSE
+      (conj_tac >- simp[initial_msg_params_def]) ORELSE
+      (conj_tac >- (simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`]
+                    \\ simp[context_component_equality]
+                    \\ simp[Abbr`cappedGas`,Abbr`gasLeft`])) ORELSE
+      (conj_tac >-
+         (qpat_x_assum ‘_ = {}’ mp_tac
+          \\ fs [EXTENSION, Abbr`all_pcs`]
+          \\ srw_tac[DNF_ss][TO_FLOOKUP]
+          \\ eq_tac \\ rw []
+          \\ first_x_assum(qspec_then`x`mp_tac)
+          \\ simp[]
+          \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
+          \\ metis_tac[option_CASES])) ORELSE
+      (irule UPDATE_evm2set_without_original
+       \\ simp[]
+       \\ gvs[Abbr`all_pcs`,TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+       \\ simp[initial_msg_params_def]
+       \\ metis_tac[]) ORELSE ALL_TAC)
+  \\ ntac 4
      ((conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
                     \\ metis_tac[NOT_SOME_NONE])) ORELSE
       (conj_tac >- simp[initial_msg_params_def]) ORELSE
@@ -7581,10 +7602,10 @@ Proof
   \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
          inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
          bind_def,ignore_bind_def,return_def,get_current_context_def,
-         set_current_context_def,assert_def,get_return_data_def,
-         get_output_to_def,set_return_data_def,get_gas_left_def,
+         set_current_context_def,assert_def,get_return_data_def]
+  \\ gvs[get_output_to_def,set_return_data_def,get_gas_left_def,
          consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
-         set_rollback_def]
+         set_rollback_def,CaseEq"prod",CaseEq"sum"]
   \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
          bind_def, ignore_bind_def, get_current_context_def,
          set_current_context_def, return_def, get_gas_left_def,
