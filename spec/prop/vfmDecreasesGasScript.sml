@@ -2052,6 +2052,56 @@ Proof
   \\ irule_at Any decreases_gas_set_jump_dest
 QED
 
+Theorem step_create_lemma:
+  do
+    _ <- set_return_data [];
+    sucDepth <- get_num_contexts;
+    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else do
+      _ <- access_address v4;
+      _ <- ensure_storage_in_domain v4;
+      if b3 then m2 else
+      proceed_create senderAddress address value code cappedGas
+    od
+  od = do
+    _ <- set_return_data [];
+    sucDepth <- get_num_contexts;
+    if b1 ∨ b2 ∨ sucDepth > 1024 then m1 else do
+      _ <- access_address v4;
+      _ <- ensure_storage_in_domain v4;
+      if b3 then m2 else do
+        accounts <- get_accounts;
+        charged <<- account_empty $ lookup_account address accounts;
+        reservoir <- drain_state_gas_reservoir;
+        _ <- update_accounts $ increment_nonce senderAddress;
+        subContextTx <<- <|
+            from     := senderAddress
+          ; to       := SOME address
+          ; value    := value
+          ; gasLimit := cappedGas
+          ; data     := []
+          (* unused: for concreteness *)
+          ; nonce := 0; gasPrice := 0; accessList := []
+          ; blobVersionedHashes := []
+          ; maxFeePerGas := NONE; maxFeePerBlobGas := NONE
+          ; authorizationList := []
+        |>;
+        rollback <- get_rollback;
+        original <- get_original;
+        set_original $ update_account address empty_account_state original;
+        _ <- update_accounts $
+          transfer_value senderAddress address value o
+          increment_nonce address o
+          clear_storage address;
+        push_context $
+          (initial_context address code F (Code address) charged reservoir subContextTx with
+             logs := transfer_log senderAddress address value, rollback)
+      od
+    od
+  od
+Proof
+  simp[proceed_create_def, ignore_bind_def]
+QED
+
 Theorem decreases_gas_ensure_storage_in_domain[simp]:
   decreases_gas F (ensure_storage_in_domain _)
 Proof

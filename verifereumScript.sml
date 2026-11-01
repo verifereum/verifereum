@@ -5,11 +5,10 @@ open HolKernel
   vfmDomainCollectionTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib vfmChainIdTheory
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
+  vfmCreateCollisionTheory vfmDepositLogTheory
   vfmOriginalStateTheory vfmOriginalAccountsTheory
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
-  vfmProgTheory vfmProgCallTheory wrappedEtherTheory wrappedEtherNameTheory
-  wrappedEtherTransferTheory wrappedEtherBranchesTheory wrappedEtherGettersTheory
-  wrappedEtherDepositTheory wrappedEtherWithdrawTheory
+  vfmProgTheory vfmProgCallTheory
   (* Checked counterexamples, evidence for the state-gas hypotheses this
      series added to published theorems: each one is a witness that its
      namesake is false without the hypothesis its comment points at.

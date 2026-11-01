@@ -661,6 +661,172 @@ Proof
   \\ rw[]
 QED
 
+Definition failed_child_meter_def:
+  failed_child_meter g c = do
+    unuse_gas g;
+    context <- get_current_context;
+    set_current_context (absorb_state_gas context c.stateGasLeft
+                           c.stateGasSpilled c.stateGasCommitted);
+    credit_new_account c.msgParams.newAccountCharged
+  od
+End
+
+Theorem failed_child_meter_ignores_extra_domain[local]:
+  ignores_extra_domain (failed_child_meter g c)
+Proof
+  rw[failed_child_meter_def] \\ tac
+QED
+
+Theorem failed_child_meter_empty[local]:
+  s.contexts = [] ==> FST (failed_child_meter g c s) = INR (SOME Impossible)
+Proof
+  simp[failed_child_meter_def, unuse_gas_def, get_current_context_def,
+       bind_def, ignore_bind_def, fail_def]
+QED
+
+Theorem failed_child_meter_snapshots[local]:
+  (SND (failed_child_meter g c s)).rollback = s.rollback /\
+  (SND (failed_child_meter g c s)).originalAccounts = s.originalAccounts /\
+  (SND (failed_child_meter g c s)).msdomain = s.msdomain /\
+  MAP SND (SND (failed_child_meter g c s)).contexts = MAP SND s.contexts
+Proof
+  Cases_on `s.contexts`
+  >- simp[failed_child_meter_def, unuse_gas_def, get_current_context_def,
+          bind_def, ignore_bind_def, fail_def]
+  \\ rename1 `s.contexts = h::t`
+  \\ PairCases_on `h`
+  \\ simp[failed_child_meter_def, unuse_gas_def, get_current_context_def,
+          set_current_context_def, bind_def, ignore_bind_def, return_def,
+          assert_def]
+  \\ Cases_on `g <= h0.gasUsed`
+  >- (Cases_on `c.msgParams.newAccountCharged`
+      \\ simp[credit_new_account_def, credit_state_gas_refund_def,
+              get_current_context_def, set_current_context_def,
+              bind_def, return_def])
+  \\ simp[]
+QED
+
+Theorem failed_child_meter_snapshots_result[local]:
+  failed_child_meter g c s = (r,t) ==>
+  t.rollback = s.rollback /\ t.originalAccounts = s.originalAccounts /\
+  t.msdomain = s.msdomain /\ MAP SND t.contexts = MAP SND s.contexts
+Proof
+  strip_tac \\ rpt conj_tac
+  >- metis_tac[cj 1 failed_child_meter_snapshots, SND]
+  >- metis_tac[cj 2 failed_child_meter_snapshots, SND]
+  >- metis_tac[cj 3 failed_child_meter_snapshots, SND]
+  \\ metis_tac[cj 4 failed_child_meter_snapshots, SND]
+QED
+
+Theorem domain_compatible_pop_restore[local]:
+  domain_compatible s t /\
+  s.contexts = (c,r)::xs /\ t.contexts = (c,r')::ys /\
+  xs <> [] /\ ys <> [] ==>
+  domain_compatible (s with <|contexts updated_by TL; rollback := r|>)
+                    (t with <|contexts updated_by TL; rollback := r'|>)
+Proof
+  strip_tac
+  \\ Cases_on `xs` >- gvs[]
+  \\ Cases_on `ys` >- gvs[]
+  \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def,
+         LIST_REL_domain_accounts]
+  \\ Cases_on `t.msdomain`
+  \\ gvs[]
+  \\ metis_tac[]
+QED
+
+Theorem domain_compatible_transfer_rollback[local]:
+  domain_compatible s t /\
+  domain_compatible (u with rollback := r) (v with rollback := r') /\
+  s.msdomain = u.msdomain ==>
+  domain_compatible (s with rollback := r) (t with rollback := r')
+Proof
+  strip_tac
+  \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def,
+      LIST_REL_domain_accounts]
+  \\ Cases_on `v.msdomain` \\ gvs[]
+  \\ metis_tac[]
+QED
+
+Theorem domain_compatible_pop[local]:
+  domain_compatible s t ==>
+  domain_compatible (s with contexts updated_by TL)
+                    (t with contexts updated_by TL)
+Proof
+  strip_tac
+  \\ drule domain_compatible_lengths
+  \\ gvs[domain_compatible_def, states_agree_modulo_accounts_def,
+         LIST_REL_domain_accounts]
+  \\ Cases_on `s.contexts` \\ Cases_on `t.contexts` \\ gvs[]
+  \\ Cases_on `t.msdomain` \\ gvs[]
+  \\ Cases_on `t'` \\ Cases_on `t''` \\ gvs[]
+  \\ metis_tac[]
+QED
+
+Theorem failed_child_pop_ignores_extra_domain[local]:
+  ignores_extra_domain
+    (do cr <- pop_context;
+        failed_child_meter g (FST cr);
+        set_rollback (SND cr)
+     od)
+Proof
+  rw[ignores_extra_domain_def]
+  >- (gvs[bind_def, ignore_bind_def, pop_context_def, fail_def,
+          return_def, set_rollback_def, AllCaseEqs()]
+      \\ qmatch_asmsub_abbrev_tac `failed_child_meter g c ss = (_,tt)`
+      \\ `tt.msdomain = ss.msdomain` by
+           metis_tac[cj 3 failed_child_meter_snapshots, SND]
+      \\ gvs[Abbr `ss`])
+  >- suspend "extension"
+  \\ suspend "simulation"
+QED
+
+Resume failed_child_pop_ignores_extra_domain[extension]:
+  gvs[bind_def, ignore_bind_def, pop_context_def, fail_def,
+      return_def, set_rollback_def, AllCaseEqs()]
+  \\ drule (SRULE [ignores_extra_domain_def]
+                   failed_child_meter_ignores_extra_domain)
+  \\ simp[]
+QED
+
+Resume failed_child_pop_ignores_extra_domain[simulation]:
+  drule domain_compatible_lengths
+  \\ Cases_on `s.contexts`
+  >- (strip_tac \\ Cases_on `s'.contexts` \\ gvs[]
+      \\ gvs[pop_context_def, bind_def, fail_def]
+      \\ goal_assum drule \\ simp[])
+  \\ Cases_on `s'.contexts` >- simp[]
+  \\ strip_tac
+  \\ `FST h = FST h'` by
+       gvs[domain_compatible_def, states_agree_modulo_accounts_def]
+  \\ drule domain_compatible_pop \\ strip_tac
+  \\ gvs[pop_context_def, bind_def, return_def, ignore_bind_def,
+         set_rollback_def, AllCaseEqs()]
+  \\ drule (cj 3 (SRULE [ignores_extra_domain_def]
+                        failed_child_meter_ignores_extra_domain))
+  \\ simp[] \\ disch_then drule \\ strip_tac
+  \\ imp_res_tac failed_child_meter_snapshots_result
+  \\ Cases_on `t'`
+  >- (`(s with contexts updated_by TL).contexts = []` by simp[]
+      \\ drule failed_child_meter_empty
+      \\ disch_then (qspecl_then [`g`, `FST h'`] mp_tac)
+      \\ simp[])
+  \\ Cases_on `t''` >- gvs[]
+  \\ qmatch_asmsub_rename_tac `domain_compatible s'' u`
+  \\ qexists_tac `u with rollback := SND h'`
+  \\ reverse conj_tac >- (goal_assum drule \\ simp[])
+  \\ irule domain_compatible_transfer_rollback
+  \\ conj_tac >- simp[]
+  \\ qexistsl_tac [`s with contexts updated_by TL`,
+                   `s' with contexts updated_by TL`]
+  \\ simp[]
+  \\ irule domain_compatible_pop_restore
+  \\ gvs[]
+  \\ PairCases_on `h` \\ PairCases_on `h'` \\ gvs[]
+QED
+
+Finalise failed_child_pop_ignores_extra_domain
+
 Theorem pop_and_incorporate_context_ignores_extra_domain[simp]:
   ignores_extra_domain (pop_and_incorporate_context x)
 Proof
@@ -670,51 +836,9 @@ Proof
   >- (
     irule FST_pop_context_ignores_extra_domain \\ rw[]
     \\ tac )
-  \\ rw[bind_def, ignores_extra_domain_def, ignore_bind_def,
-        pop_context_def, unuse_gas_def, set_rollback_def, return_def,
-        credit_new_account_def, credit_state_gas_refund_def,
-        fail_def, get_current_context_def, set_current_context_def,
-        assert_def, CaseEq"prod", CaseEq"sum", CaseEq"bool"]
-  \\ srw_tac[DNF_ss][] \\ gvs[]
-  \\ TRY (gvs[return_def, bind_def, get_current_context_def,
-             set_current_context_def, fail_def, ignore_bind_def,
-             assert_def, COND_RAND, COND_RATOR, CaseEq"bool",
-             CaseEq"prod", CaseEq"sum"] \\ NO_TAC)
-  \\ TRY (qpat_x_assum `(if _ then _ else _) _ = (INL (),_)` mp_tac
-          \\ rw[return_def, bind_def, get_current_context_def,
-                set_current_context_def, fail_def, ignore_bind_def,
-                assert_def] \\ gvs[] \\ NO_TAC)
-  \\ drule domain_compatible_lengths \\ rw[]
-  \\ TRY (strip_tac \\ gvs[])
-  \\ TRY (Cases_on`s.contexts` \\ gvs[])
-  \\ qmatch_asmsub_rename_tac`domain_compatible s s2`
-  \\ Cases_on`s2.contexts` \\ gvs[]
-  \\ TRY (
-    gs[domain_compatible_def, states_agree_modulo_accounts_def,
-       domain_accounts_def, domain_check_def]
-    \\ TOP_CASE_TAC \\ gs[]
-    \\ qmatch_goalsub_rename_tac`FST (HD ls)`
-    \\ Cases_on`ls` \\ gs[]
-    \\ qmatch_asmsub_rename_tac`MAP FST ls = _::_`
-    \\ Cases_on`ls` \\ gvs[]
-    \\ NO_TAC)
-  \\ Cases_on`t` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`HD t`
-  \\ Cases_on`t` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`FST p`
-  \\ Cases_on`p` \\ gvs[]
-  \\ TRY (qmatch_goalsub_rename_tac`FST p`
-          \\ Cases_on`p` \\ gvs[])
-  \\ gvs[domain_compatible_def, domain_check_def, return_def, bind_def,
-        get_current_context_def, set_current_context_def, fail_def,
-        ignore_bind_def, CaseEq"bool", CaseEq"prod", CaseEq"sum"]
-  \\ TRY TOP_CASE_TAC
-  \\ gvs[states_agree_modulo_accounts_def]
-  \\ gvs[domain_accounts_def]
-  \\ TRY (qpat_x_assum `_ = (INL (),_)` mp_tac
-          \\ rw[return_def, bind_def, get_current_context_def,
-                set_current_context_def, fail_def, ignore_bind_def]
-          \\ gvs[] \\ NO_TAC)
+  \\ simp[ignore_bind_def, bind_assoc]
+  \\ MATCH_ACCEPT_TAC (SRULE [failed_child_meter_def, ignore_bind_def,
+                              bind_assoc] failed_child_pop_ignores_extra_domain)
 QED
 
 Theorem write_memory_ignores_extra_domain[simp]:
@@ -2052,6 +2176,19 @@ Proof
          lookup_account_def]
   \\ rw[APPLY_UPDATE_THM]
   \\ rw[]
+QED
+
+Theorem ignores_extra_domain_update_accounts_clear_storage[simp]:
+  ignores_extra_domain (update_accounts (clear_storage a))
+Proof
+  rw[update_accounts_def, ignores_extra_domain_def, return_def]
+  \\ gvs[domain_compatible_def, domain_accounts_def,
+         states_agree_modulo_accounts_def, rollback_state_component_equality,
+         rollback_states_agree_modulo_accounts_def, APPLY_UPDATE_THM,
+         accounts_agree_modulo_storage_def, clear_storage_def,
+         update_account_def, lookup_account_def, domain_check_def]
+  \\ CASE_TAC
+  \\ gvs[account_state_component_equality] \\ rw[]
 QED
 
 Theorem ignores_extra_domain_update_accounts_o[simp]:

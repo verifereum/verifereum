@@ -1318,8 +1318,7 @@ Proof
   \\ Cases_on`x` \\ gs[]
 QED
 
-val () = cv_auto_trans $ REWRITE_RULE [GSYM word_of_bytes_be_def]
-  parse_deposit_request_def;
+val () = cv_auto_trans parse_deposit_request_def;
 
 val () = cv_auto_trans process_withdrawal_def;
 

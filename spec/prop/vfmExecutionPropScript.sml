@@ -1344,32 +1344,41 @@ Proof
   rw[] \\ Cases_on `l` \\ gvs[]
 QED
 
+Theorem guarded_bind_preserves_nonempty_contexts[local]:
+  (!s. 2 <= LENGTH s.contexts ==> (SND (f s)).contexts <> []) /\
+  (!x s. s.contexts <> [] ==> (SND (g x s)).contexts <> []) ==>
+  2 <= LENGTH s.contexts ==> (SND (bind f g s)).contexts <> []
+Proof
+  ntac 2 strip_tac >> irule this_bind_preserves_nonempty_contexts >> simp[]
+QED
+
+Theorem exception_output_reads[local]:
+  s.contexts <> [] ==>
+  get_return_data s = (INL (FST (HD s.contexts)).returnData, s) /\
+  get_output_to s = (INL (FST (HD s.contexts)).msgParams.outputTo, s)
+Proof
+  simp[get_return_data_def, get_output_to_def, get_current_context_def,
+       bind_def, return_def]
+QED
+
 Theorem handle_exception_preserves_nonempty_contexts:
   st.contexts ≠ [] ⇒ (SND (handle_exception e st)).contexts ≠ []
 Proof
-  strip_tac
-  \\ simp[handle_exception_def, ignore_bind_def, bind_def,
-          get_num_contexts_def, return_def]
-  \\ TOP_CASE_TAC
-  \\ reverse TOP_CASE_TAC
-  >- ( pop_assum(SUBST1_TAC o SYM) \\ rw[] \\ preserves_nonempty_tac )
-  \\ sg `LENGTH r.contexts = LENGTH st.contexts`
-  >- (
-    gvs[bind_def,COND_RATOR,get_gas_left_def,CaseEq"bool",return_def,
-        get_current_context_def,consume_gas_def,ignore_bind_def,
-        assert_def,set_current_context_def,CaseEq"sum",CaseEq"prod",
-        set_return_data_def, restore_state_gas_def,
-        forfeit_remaining_gas_def] \\ drule(CONTRAPOS(SPEC_ALL(iffLR LENGTH_NIL)))
-    \\ decide_tac)
-  \\ rpt (CASE_TAC \\ gvs [return_def, reraise_def, set_return_data_def,
-          forfeit_remaining_gas_def, get_gas_left_def, consume_gas_def,
-          get_current_context_def, set_current_context_def, assert_def,
-          fail_def, bind_def, ignore_bind_def, get_return_data_def,
-          get_output_to_def, inc_pc_def, push_stack_def, write_memory_def])
-  \\ rpt (qpat_x_assum `_ = (_, _)`
-           (mp_tac o Q.AP_TERM `\x. (SND x).contexts`))
-  \\ rpt strip_tac
-  \\ gvs [LENGTH_TL, LENGTH_NIL, two_le_length_cons_tl, not_le_one_thm]
+  strip_tac >> simp[handle_exception_def, ignore_bind_def] >>
+  ntac 2 (BETA_TAC >> irule bind_preserves_nonempty_contexts >>
+    reverse conj_tac >- (rw[] >> preserves_nonempty_tac) >>
+    rpt gen_tac >> disch_tac) >>
+  simp[get_num_contexts_def, Once bind_def, return_def] >>
+  IF_CASES_TAC >- simp[] >>
+  simp[exception_output_reads, Ntimes bind_def 2] >>
+  irule guarded_bind_preserves_nonempty_contexts >>
+  simp[pop_and_incorporate_context_contexts_nonempty] >>
+  rpt gen_tac >> strip_tac >>
+  irule bind_preserves_nonempty_contexts >>
+  reverse conj_tac >- simp[] >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  Cases_on `e = NONE` >> Cases_on `(FST (HD s'.contexts)).msgParams.outputTo` >>
+  simp[] >> preserves_nonempty_tac
 QED
 
 (* Helper: handle_step preserves non-empty contexts *)
@@ -2575,6 +2584,34 @@ Proof
   \\ rpt (CASE_TAC \\ gvs[])
 QED
 
+Theorem clear_storage_apply:
+  clear_storage x a y =
+  if x = y then a x with storage := empty_storage else a y
+Proof
+  simp_tac std_ss [clear_storage_def, update_account_def,
+                   lookup_account_def, LET_THM, APPLY_UPDATE_THM]
+QED
+
+Theorem clear_storage_nonce_code_balance[simp]:
+  (lookup_account a (clear_storage b accounts)).nonce =
+    (lookup_account a accounts).nonce ∧
+  (lookup_account a (clear_storage b accounts)).code =
+    (lookup_account a accounts).code ∧
+  (lookup_account a (clear_storage b accounts)).balance =
+    (lookup_account a accounts).balance
+Proof
+  simp_tac std_ss [lookup_account_def, clear_storage_apply]
+  \\ IF_CASES_TAC \\ simp[]
+QED
+
+Theorem wf_accounts_clear_storage[simp]:
+  wf_accounts a ⇒ wf_accounts (clear_storage x a)
+Proof
+  simp_tac std_ss [wf_accounts_def, clear_storage_apply]
+  \\ rpt strip_tac
+  \\ IF_CASES_TAC \\ gvs[wf_account_state_def]
+QED
+
 Theorem preserves_wf_accounts_pred_proceed_create:
   preserves_wf_accounts_pred (λs.
     SUC (s.rollback.accounts a).nonce < 2 ** 64 ∧
@@ -2619,7 +2656,7 @@ Proof
     >- (
       irule wf_accounts_transfer_value
       \\ irule wf_accounts_increment_nonce
-      \\ gs[] )
+      \\ gs[clear_storage_apply] )
     \\ Cases_on `s.contexts` \\ gvs[] )
   >- ( rw[drain_state_gas_reservoir_rollback] )
 QED

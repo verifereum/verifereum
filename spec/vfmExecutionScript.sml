@@ -115,7 +115,7 @@ End
 
 Definition account_already_created_def:
   account_already_created a =
-    ¬(a.nonce = 0 ∧ NULL a.code ∧ storage_empty a.storage)
+    ¬(a.nonce = 0 ∧ NULL a.code)
 End
 
 Definition memory_cost_def:
@@ -883,6 +883,12 @@ Definition increment_nonce_def:
     update_account address (account with nonce updated_by SUC) accounts
 End
 
+Definition clear_storage_def:
+  clear_storage address accounts =
+  let account = lookup_account address accounts in
+    update_account address (account with storage := empty_storage) accounts
+End
+
 Definition step_binop_def:
   step_binop op f = do
     args <- pop_stack 2;
@@ -1476,7 +1482,8 @@ Definition proceed_create_def:
     set_original $ update_account address empty_account_state original;
     update_accounts $
       transfer_value senderAddress address value o
-      increment_nonce address;
+      increment_nonce address o
+      clear_storage address;
     (* EIP-7708: the created frame starts with its endowment logged. *)
     push_context
       (initial_context address code F (Code address) charged reservoir subContextTx with
@@ -2403,7 +2410,8 @@ Definition run_create_def:
             contexts := [(ctxt', SND crb)];
             rollback updated_by (λr. r with accounts updated_by (
               transfer_value tx.from calleeAddress tx.value o
-              increment_nonce calleeAddress
+              increment_nonce calleeAddress o
+              clear_storage calleeAddress
             ));
             originalAccounts :=
               update_account calleeAddress empty_account_state s.originalAccounts
@@ -2477,20 +2485,31 @@ Definition is_deposit_event_def:
     HD e.topics = deposit_event_topic
 End
 
+(* The deposit contract's DepositEvent data has a fixed ABI layout: five
+   head words holding the offsets of the five byte fields, then each field
+   as a size word followed by its padded bytes. Anything else makes the
+   block invalid. *)
 Definition parse_deposit_request_def:
   parse_deposit_request (data: byte list) =
-  if LENGTH data < 576 then NONE else
-  let pubkey_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 data)) in
-  let withdrawal_creds_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 32 data))) in
-  let amount_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 64 data))) in
-  let signature_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 96 data))) in
-  let index_offset = w2n (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 128 data))) in
-  let pubkey = TAKE 48 (DROP (pubkey_offset + 32) data) in
-  let withdrawal_creds = TAKE 32 (DROP (withdrawal_creds_offset + 32) data) in
-  let amount = TAKE 8 (DROP (amount_offset + 32) data) in
-  let signature = TAKE 96 (DROP (signature_offset + 32) data) in
-  let index = TAKE 8 (DROP (index_offset + 32) data) in
-  SOME (pubkey ++ withdrawal_creds ++ amount ++ signature ++ index)
+  if LENGTH data = 576 ∧
+     num_of_be_bytes (TAKE 32 data) = 160 ∧
+     num_of_be_bytes (TAKE 32 (DROP 32 data)) = 256 ∧
+     num_of_be_bytes (TAKE 32 (DROP 64 data)) = 320 ∧
+     num_of_be_bytes (TAKE 32 (DROP 96 data)) = 384 ∧
+     num_of_be_bytes (TAKE 32 (DROP 128 data)) = 512 ∧
+     num_of_be_bytes (TAKE 32 (DROP 160 data)) = 48 ∧
+     num_of_be_bytes (TAKE 32 (DROP 256 data)) = 32 ∧
+     num_of_be_bytes (TAKE 32 (DROP 320 data)) = 8 ∧
+     num_of_be_bytes (TAKE 32 (DROP 384 data)) = 96 ∧
+     num_of_be_bytes (TAKE 32 (DROP 512 data)) = 8
+  then
+    let pubkey = TAKE 48 (DROP 192 data) in
+    let withdrawal_creds = TAKE 32 (DROP 288 data) in
+    let amount = TAKE 8 (DROP 352 data) in
+    let signature = TAKE 96 (DROP 416 data) in
+    let index = TAKE 8 (DROP 544 data) in
+    SOME (pubkey ++ withdrawal_creds ++ amount ++ signature ++ index)
+  else NONE
 End
 
 Definition parse_deposit_events_def:

@@ -845,10 +845,18 @@ Theorem preserves_same_frame_state_gas_meter[simp]:
 Proof
   rpt conj_tac
   >- (rw[get_state_gas_left_def] >> irule preserves_same_frame_bind >> simp[])
-  >- (rewrite_tac[charge_state_gas_def] >> psf_head_tac >>
-      gvs[set_current_context_def, consume_gas_def, bind_def,
-          ignore_bind_def, get_current_context_def, assert_def,
-          return_def, fail_def, AllCaseEqs()])
+  >- (rw[preserves_same_frame_def] >>
+      Cases_on `s.contexts` >- gvs[] >> PairCases_on `h` >>
+      gvs[charge_state_gas_def, get_current_context_def, bind_def, return_def] >>
+      Cases_on `n <= h0.stateGasLeft`
+      >- gvs[set_current_context_def, return_def, same_frame_rel_def,
+             callee_local_changes_def] >>
+      Cases_on `n <= h0.stateGasLeft + (h0.msgParams.gasLimit - h0.gasUsed)`
+      >- (gvs[set_current_context_def, get_current_context_def, consume_gas_def,
+              bind_def, ignore_bind_def, assert_def, return_def, fail_def,
+              AllCaseEqs()] >>
+          gvs[same_frame_rel_def, callee_local_changes_def]) >>
+      gvs[fail_def, same_frame_rel_refl])
   >- (rewrite_tac[credit_state_gas_refund_def] >> psf_head_tac)
   >- (simp[restore_state_gas_same_frame_iff])
   >- (rewrite_tac[commit_state_gas_def] >> psf_head_tac)
@@ -870,7 +878,8 @@ Theorem preserves_same_frame_new_account_charge[simp]:
   preserves_same_frame (credit_new_account charged)
 Proof
   Cases_on `charged`
-  >> rw[charge_new_account_def, credit_new_account_def]
+  >> rw[charge_new_account_def, credit_new_account_def,
+        preserves_same_frame_state_gas_meter]
 QED
 
 Theorem preserves_same_frame_abort_create[simp]:
@@ -947,14 +956,14 @@ Theorem preserves_same_frame_step_sstore_gas_consumption[simp]:
   preserves_same_frame (step_sstore_gas_consumption a k v)
 Proof
   rw[step_sstore_gas_consumption_def] >>
-  irule preserves_same_frame_bind >> rw[] >>
-  irule preserves_same_frame_ignore_bind >> rw[] >>
-  irule preserves_same_frame_bind >> rw[] >>
-  irule preserves_same_frame_bind >> rw[] >>
-  irule preserves_same_frame_bind >> rw[] >>
-  irule preserves_same_frame_ignore_bind >> rw[] >>
-  irule preserves_same_frame_ignore_bind >> rw[] >>
-  irule preserves_same_frame_ignore_bind >> rw[]
+  irule preserves_same_frame_bind >> rw[preserves_same_frame_state_gas_meter] >>
+  irule preserves_same_frame_ignore_bind >> rw[preserves_same_frame_state_gas_meter] >>
+  irule preserves_same_frame_bind >> rw[preserves_same_frame_state_gas_meter] >>
+  irule preserves_same_frame_bind >> rw[preserves_same_frame_state_gas_meter] >>
+  irule preserves_same_frame_bind >> rw[preserves_same_frame_state_gas_meter] >>
+  irule preserves_same_frame_ignore_bind >> rw[preserves_same_frame_state_gas_meter] >>
+  irule preserves_same_frame_ignore_bind >> rw[preserves_same_frame_state_gas_meter] >>
+  irule preserves_same_frame_ignore_bind >> rw[preserves_same_frame_state_gas_meter]
 QED
 
 (* `preserves_same_frame (step_sstore transient)` and the SSTORE/TSTORE
@@ -1675,9 +1684,11 @@ Proof
   \\ qexists_tac `λx s. T`
   \\ simp[] \\ gen_tac
   \\ irule psf_bind_get_callee
-  \\ rw[] >>
+  \\ rw[] >> (
     qmatch_goalsub_abbrev_tac`psf pcont` >>
-    irule psf_ignore_bind >> rw[] >>
+    irule psf_ignore_bind >>
+    reverse conj_tac >- (irule preserves_same_frame_imp_psf >>
+      simp[preserves_same_frame_step_sstore_gas_consumption]) >>
     qexists_tac`pcont` >> (rw[] >-
     metis_tac[psf_preserves_head_callee, preserves_same_frame_imp_psf,
               preserves_same_frame_consume_gas,
@@ -1691,7 +1702,7 @@ Proof
             \\ qexists_tac`K T` >> rw[] )) >>
     rw[Abbr`pcont`] >>
     (irule psf_write_transient_storage ORELSE
-     irule psf_write_storage)
+     irule psf_write_storage))
 QED
 
 Theorem preserves_same_frame_step_sstore[simp]:

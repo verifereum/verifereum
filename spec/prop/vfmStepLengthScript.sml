@@ -440,12 +440,17 @@ Proof
     >> disch_then drule >> rw[]
     >> drule same_frame_rel_callee
     >> gvs[Abbr`pco`])
-  >> irule psf_or_grow_bind >> simp[] >>
-  qexists_tac `λx s. pco s` >> simp[] >>
+  >> irule psf_or_grow_bind
+  >> reverse conj_tac
+  >- (irule psf_or_grow_of_same_frame_or_grow
+      >> irule same_frame_or_grow_of_preserves
+      >> simp[preserves_same_frame_state_gas_meter])
+  >> qexists_tac `λx s. pco s` >> simp[] >>
   conj_tac
   >- (
     rpt strip_tac
-    >> `preserves_same_frame withhold_create_gas` by simp[]
+    >> `preserves_same_frame withhold_create_gas` by
+         simp[preserves_same_frame_state_gas_meter]
     >> pop_assum mp_tac >> rewrite_tac[preserves_same_frame_def]
     >> disch_then drule >> rw[]
     >> drule same_frame_rel_callee
@@ -859,7 +864,8 @@ Proof
      abort_create_exists (length_preserves), or proceed_create
      (length_or_inl_grow). *)
   >> rpt (
-       (irule length_or_inl_grow_bind_preserves_g >> simp[] >> gen_tac)
+       (irule length_or_inl_grow_bind_preserves_g >>
+        simp[preserves_same_frame_state_gas_meter] >> gen_tac)
        ORELSE
        (irule length_or_inl_grow_ignore_bind_preserves_g >> simp[])
        ORELSE
@@ -1073,7 +1079,7 @@ Proof
   disch_then irule >> simp[] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   drule_at(Pat`bind`)bind_length_preserves_imp_grow >>
-  disch_then irule >> simp[] >>
+  disch_then irule >> simp[preserves_same_frame_state_gas_meter] >>
   qpat_x_assum`_ = (_,_)`kall_tac >> rpt gen_tac >> strip_tac >>
   gvs[COND_RATOR,CaseEq"bool"] >>
   TRY (

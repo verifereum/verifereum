@@ -117,7 +117,8 @@ Definition stack_original_proceed_create_def:
     stack_original_set_original $ update_account address empty_account_state original;
     update_accounts $
       transfer_value senderAddress address value o
-      increment_nonce address;
+      increment_nonce address o
+      clear_storage address;
     push_context
       (initial_context address code F (Code address) charged reservoir subContextTx with
          logs := transfer_log senderAddress address value, rollback)
@@ -262,8 +263,14 @@ Definition stack_original_run_create_def:
                               (SND crb).accounts)];
             rollback updated_by (λr. r with accounts updated_by (
               transfer_value tx.from calleeAddress tx.value o
-              increment_nonce calleeAddress
-            ))|>, NONE))
+              increment_nonce calleeAddress o
+              clear_storage calleeAddress
+            ));
+            contexts updated_by (
+              set_last_accounts $
+              update_account calleeAddress empty_account_state
+                (SND crb).accounts
+            )|>, NONE))
 End
 
 Definition stack_original_run_transaction_def:

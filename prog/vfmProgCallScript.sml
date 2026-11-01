@@ -7,7 +7,7 @@ Ancestors
   vfmCallReturn vfmCallBudget vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
   vfmDecreasesGas vfmRunCall vfmContextLength vfmAccountFrame vfmStaticCalls
   vfmRunWithinFrame vfmSameFrame vfmDomainCollection vfmStepLength
-  vfmTypes vfmBuffer vfmHandleStep
+  vfmTypes vfmBuffer vfmHandleStep vfmStoragePredicates
   prog set_sep pred_set pair list arithmetic option finite_map combin
 
 (* Structural reachability and final-pop facts live in vfmCallReturnTheory. *)

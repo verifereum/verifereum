@@ -284,6 +284,51 @@ Proof
   rw[execution_state_component_equality]
 QED
 
+(* Child-only settlement boundaries: retain the saved snapshot and tail. *)
+Theorem restore_state_gas_head[local]:
+  s.contexts = (c, rb)::tail /\ restore_state_gas s = (q, t) ==>
+  q = INL () /\ t.rollback = s.rollback /\
+  ?d. t.contexts = (d, rb)::tail /\ d.msgParams = c.msgParams
+Proof
+  rw[restore_state_gas_def, bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def]
+  >> gvs[]
+QED
+
+Theorem forfeit_remaining_gas_head[local]:
+  s.contexts = (c, rb)::tail /\ forfeit_remaining_gas s = (q, t) ==>
+  t.rollback = s.rollback /\
+  ?d. t.contexts = (d, rb)::tail /\ d.msgParams = c.msgParams /\
+      (q = INL () ==> get_gas_left t = (INL 0, t))
+Proof
+  rw[forfeit_remaining_gas_def, get_gas_left_def, consume_gas_def,
+     bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, assert_def, return_def, fail_def,
+     AllCaseEqs()]
+  >> gvs[]
+QED
+
+Theorem exceptional_child_prefix[local]:
+  s.contexts = (c, rb)::tail /\
+  ignore_bind restore_state_gas
+    (ignore_bind forfeit_remaining_gas (set_return_data [])) s = (q, t) ==>
+  t.rollback = s.rollback /\
+  ?d. t.contexts = (d, rb)::tail /\ d.msgParams = c.msgParams /\
+      (q = INL () ==> d.returnData = [] /\
+         get_gas_left t = (INL 0, t))
+Proof
+  strip_tac
+  >> Cases_on `restore_state_gas s` >> rename1 `restore_state_gas s = (a,u)`
+  >> drule_all restore_state_gas_head >> strip_tac >> gvs[]
+  >> Cases_on `forfeit_remaining_gas u`
+  >> rename1 `forfeit_remaining_gas u = (a,v)`
+  >> drule_all forfeit_remaining_gas_head >> strip_tac
+  >> Cases_on `a`
+  >> gvs[ignore_bind_def, bind_def, set_return_data_def,
+         get_current_context_def, set_current_context_def,
+         return_def, fail_def, get_gas_left_def]
+QED
+
 (* ---- Behaviour of pop_and_incorporate_context on failure ------- *)
 
 (* When called with success = F on a non-empty context stack with at
@@ -334,14 +379,72 @@ Proof
   (* EIP-8037: the credit that the pop's failure branch wraps in its own
      `if` is not the one the abbreviation above took, so its branch is
      still inside a hypothesis.  Take it into the goal and split it. *)
-  >> TRY (qpat_x_assum `chgeq = (res,s')` mp_tac
-          >> rpt IF_CASES_TAC
-          >> gvs[credit_new_account_def, credit_state_gas_refund_def,
-                 get_current_context_def, set_current_context_def, bind_def,
-                 ignore_bind_def, return_def, fail_def, AllCaseEqs(),
-                 pairTheory.PAIR_FST_SND_EQ]
-          >> rw[]
-          >> simp[APPLY_UPDATE_THM])
+  >> qpat_x_assum `chgeq = (res,s')` mp_tac
+  >> rpt IF_CASES_TAC
+  >> gvs[credit_new_account_def, credit_state_gas_refund_def,
+         get_current_context_def, set_current_context_def, bind_def,
+         ignore_bind_def, return_def, fail_def, AllCaseEqs(),
+         pairTheory.PAIR_FST_SND_EQ]
+  >> rw[]
+  >> simp[APPLY_UPDATE_THM]
+QED
+
+Theorem pop_failure_zero_gas[local]:
+  s.contexts = (callee, rb)::parent::rest /\
+  get_gas_left s = (INL 0, s) ==>
+  ?t. pop_and_incorporate_context F s = (INL (), t)
+Proof
+  strip_tac >> Cases_on `parent`
+  >> Cases_on `callee.msgParams.newAccountCharged`
+  >> gvs[pop_and_incorporate_context_def, bind_def, ignore_bind_def,
+         pop_context_def, unuse_gas_def, assert_def,
+         get_current_context_def, set_current_context_def,
+         credit_new_account_def, credit_state_gas_refund_def,
+         set_rollback_def, return_def, fail_def]
+QED
+
+Theorem pop_success_structure[local]:
+  s.contexts = (callee, rb)::parent::rest /\
+  pop_and_incorporate_context T s = (q, t) ==>
+  t.rollback = s.rollback /\
+  ?d. t.contexts = (d, SND parent)::rest /\
+      d.msgParams = (FST parent).msgParams /\
+      IS_PREFIX d.logs (FST parent).logs /\
+      d.addRefund >= (FST parent).addRefund /\
+      d.subRefund >= (FST parent).subRefund
+Proof
+  strip_tac >> Cases_on `parent`
+  >> gvs[pop_and_incorporate_context_def, get_gas_left_def,
+         bind_def, ignore_bind_def, pop_context_def,
+         unuse_gas_def, assert_def, get_current_context_def,
+         set_current_context_def, return_def, fail_def,
+         AllCaseEqs()]
+  >> gvs[push_logs_def, update_gas_refund_def,
+         repay_state_gas_spill_def, absorb_state_gas_def,
+         repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def,
+         return_def, fail_def, AllCaseEqs()]
+QED
+
+Definition memory_output_tail_def[local]:
+  memory_output_tail success output mr =
+    ignore_bind inc_pc (ignore_bind (set_return_data output)
+      (ignore_bind (push_stack (b2w success))
+        (write_memory mr.offset (TAKE mr.size output))))
+End
+
+Theorem memory_output_suffix[local]:
+  s.contexts = (c, rb)::tail /\
+  memory_output_tail success output mr s = (q,t) ==>
+  t.rollback = s.rollback /\
+  ?d. t.contexts = (d,rb)::tail /\ d.msgParams = c.msgParams /\
+      d.logs = c.logs /\ d.addRefund = c.addRefund /\
+      d.subRefund = c.subRefund
+Proof
+  rw[memory_output_tail_def, inc_pc_def, set_return_data_def, push_stack_def, write_memory_def,
+     bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, assert_def, return_def, fail_def,
+     AllCaseEqs()] >> gvs[]
 QED
 
 (* ---- Behaviour of handle_exception's pop-failure branch -------- *)
@@ -376,97 +479,79 @@ Theorem handle_exception_pop_failure_memory_effect:
        new_parent_ctx.subRefund = (FST parent).subRefund)
 Proof
   strip_tac
-  >> Cases_on `parent`
-  >> Cases_on `e = SOME Reverted` >> gvs[]
-  >> gvs[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
-         absorb_state_gas_def, repay_state_gas_spill_def,
-         repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, credit_new_account_def,
-         credit_state_gas_refund_def, pop_context_def,
-         set_rollback_def, unuse_gas_def, AllCaseEqs()]
-  (* EIP-8037: the credit's `if` is left in a hypothesis, so its output is
-     still the variable `s''`; take the branch in the goal and reduce it. *)
-  >> TRY (qpat_x_assum `chgeq = (res,s'')` mp_tac
-          >> rpt IF_CASES_TAC
-          >> gvs[credit_new_account_def, credit_state_gas_refund_def,
-                 get_current_context_def, set_current_context_def, bind_def,
-                 ignore_bind_def, return_def, fail_def, AllCaseEqs(),
-                 pairTheory.PAIR_FST_SND_EQ]
-          >> rw[]
-          >> simp[APPLY_UPDATE_THM])
+  >> Cases_on `restore_state_gas s`
+  >> rename1 `restore_state_gas s = (a,u)`
+  >> drule_all restore_state_gas_head >> strip_tac >> gvs[]
+  >> Cases_on `forfeit_remaining_gas u`
+  >> rename1 `forfeit_remaining_gas u = (a,v)`
+  >> drule_all forfeit_remaining_gas_head >> strip_tac
+  >> Cases_on `e = SOME Reverted` >> Cases_on `a`
+  >> gvs[handle_exception_def, ignore_bind_def, bind_def,
+         set_return_data_def, get_current_context_def,
+         set_current_context_def, get_num_contexts_def,
+         get_return_data_def, get_output_to_def, return_def, fail_def]
+  >> qmatch_asmsub_abbrev_tac `pop_and_incorporate_context F w`
+  >> `?h. w.contexts = (h,callee_rb)::parent::rest` by simp[Abbr `w`]
+  >> Cases_on `pop_and_incorporate_context F w`
+  >> rename1 `pop_and_incorporate_context F w = (a,t)`
+  >> Cases_on `a` >> gvs[]
+  >> drule_all pop_and_incorporate_context_failure_effect >> strip_tac
+  >> gvs[]
+  >> `?output. memory_output_tail F output mr t = (INL (),s')` by
+       (FIRST
+         [qexists `d.returnData` >>
+          gvs[memory_output_tail_def, inc_pc_def, bind_def, ignore_bind_def,
+              set_return_data_def, get_current_context_def,
+              set_current_context_def, return_def, fail_def] >> NO_TAC,
+          qexists `[]` >>
+          gvs[memory_output_tail_def, inc_pc_def, bind_def, ignore_bind_def,
+              set_return_data_def, get_current_context_def,
+              set_current_context_def, return_def, fail_def]])
+  >> drule_all memory_output_suffix >> strip_tac >> gvs[]
 QED
 
-(* Variant for the success path (e = NONE): pop_and_incorporate_context T
-   keeps rollback as-is. No set_rollback call. *)
-Theorem handle_exception_pop_success_memory_effect:
-  s.contexts = (callee, callee_rb) :: parent :: rest ∧
-  callee.msgParams.outputTo = Memory mr ∧
-  handle_exception NONE s = (INL (), s') ⇒
-    s'.rollback = s.rollback ∧
-    (∃new_parent_ctx.
-       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
-       new_parent_ctx.msgParams = (FST parent).msgParams ∧
-       IS_PREFIX new_parent_ctx.logs (FST parent).logs ∧
-       new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
-       new_parent_ctx.subRefund ≥ (FST parent).subRefund)
-Proof
-  strip_tac
-  >> Cases_on `parent`
-  >> gvs[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
-         absorb_state_gas_def, repay_state_gas_spill_def,
-         repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, credit_new_account_def,
-         credit_state_gas_refund_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
-QED
-
-(* Generalised variant: drops `= (INL (), s')` requirement. Even if
-   handle_exception returns INR (due to unuse_gas failing Impossible,
-   or push_stack failing StackOverflow), the structural conclusions
-   still hold. This is because:
-   - unuse_gas Impossible fails BEFORE any state modification, so s' = s
-     after pop_context only (head = parent, not updated);
-   - push_stack StackOverflow fails AFTER inc_pc, set_return_data, so
-     the parent head has been modified but stack not updated;
-   - rollback is NEVER modified in the success path (no set_rollback).
-*)
+(* Arbitrary-result success path: even a failed output write preserves
+   the structural parent fields established by pop. *)
 Theorem handle_exception_pop_success_memory_effect_gen:
-  s.contexts = (callee, callee_rb) :: parent :: rest ∧
-  callee.msgParams.outputTo = Memory mr ∧
-  handle_exception NONE s = (q, s') ⇒
-    s'.rollback = s.rollback ∧
-    (∃new_parent_ctx.
-       s'.contexts = (new_parent_ctx, SND parent) :: rest ∧
-       new_parent_ctx.msgParams = (FST parent).msgParams ∧
-       IS_PREFIX new_parent_ctx.logs (FST parent).logs ∧
-       new_parent_ctx.addRefund ≥ (FST parent).addRefund ∧
-       new_parent_ctx.subRefund ≥ (FST parent).subRefund)
+  s.contexts = (callee, callee_rb) :: parent :: rest /\
+  callee.msgParams.outputTo = Memory mr /\
+  handle_exception NONE s = (q, s') ==>
+    s'.rollback = s.rollback /\
+    (?new_parent_ctx.
+       s'.contexts = (new_parent_ctx, SND parent) :: rest /\
+       new_parent_ctx.msgParams = (FST parent).msgParams /\
+       IS_PREFIX new_parent_ctx.logs (FST parent).logs /\
+       new_parent_ctx.addRefund >= (FST parent).addRefund /\
+       new_parent_ctx.subRefund >= (FST parent).subRefund)
 Proof
   strip_tac
-  >> Cases_on `parent`
-  >> gvs[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
-         absorb_state_gas_def, repay_state_gas_spill_def,
-         repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
+  >> Cases_on `pop_and_incorporate_context T s`
+  >> rename1 `pop_and_incorporate_context T s = (a,t)`
+  >> drule_all pop_success_structure >> strip_tac
+  >> Cases_on `a`
+  >> gvs[handle_exception_def, bind_def, ignore_bind_def,
          get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, credit_new_account_def,
-         credit_state_gas_refund_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+         get_current_context_def, return_def, fail_def]
+  >> `memory_output_tail T callee.returnData mr t = (q,s')` by
+       gvs[memory_output_tail_def, inc_pc_def, bind_def, ignore_bind_def,
+           set_return_data_def, get_current_context_def,
+           set_current_context_def, return_def, fail_def]
+  >> drule_all memory_output_suffix >> strip_tac >> gvs[]
+QED
+
+Theorem handle_exception_pop_success_memory_effect:
+  s.contexts = (callee, callee_rb) :: parent :: rest /\
+  callee.msgParams.outputTo = Memory mr /\
+  handle_exception NONE s = (INL (), s') ==>
+    s'.rollback = s.rollback /\
+    (?new_parent_ctx.
+       s'.contexts = (new_parent_ctx, SND parent) :: rest /\
+       new_parent_ctx.msgParams = (FST parent).msgParams /\
+       IS_PREFIX new_parent_ctx.logs (FST parent).logs /\
+       new_parent_ctx.addRefund >= (FST parent).addRefund /\
+       new_parent_ctx.subRefund >= (FST parent).subRefund)
+Proof
+  metis_tac[handle_exception_pop_success_memory_effect_gen]
 QED
 
 (* Generalised variant for failure path: drops INL () requirement.
@@ -502,32 +587,31 @@ Theorem handle_exception_pop_failure_memory_effect_gen:
        new_parent_ctx.subRefund ≥ (FST parent).subRefund)
 Proof
   strip_tac
-  >> Cases_on `parent`
-  >> gvs[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
-         absorb_state_gas_def, repay_state_gas_spill_def,
-         repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, credit_new_account_def,
-         credit_state_gas_refund_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
-  (* EIP-8037: the credit's `if` is left in a hypothesis, so its output is
-     still the variable `s''`; take the branch in the goal and reduce it. *)
-  >> TRY (qpat_x_assum `chgeq = (res,s'')` mp_tac
-          >> rpt IF_CASES_TAC
-          >> gvs[credit_new_account_def, credit_state_gas_refund_def,
-                 get_current_context_def, set_current_context_def, bind_def,
-                 ignore_bind_def, return_def, fail_def, AllCaseEqs(),
-                 pairTheory.PAIR_FST_SND_EQ]
-          >> rw[]
-          >> simp[APPLY_UPDATE_THM]
-          >> rewrite_tac[execution_state_component_equality]
-          >> qpat_x_assum `x.contexts = []` (fn th => rewrite_tac [th])
-          >> simp[APPLY_UPDATE_THM])
+  >> Cases_on `restore_state_gas s`
+  >> rename1 `restore_state_gas s = (a,u)`
+  >> drule_all restore_state_gas_head >> strip_tac >> gvs[]
+  >> Cases_on `forfeit_remaining_gas u`
+  >> rename1 `forfeit_remaining_gas u = (a,v)`
+  >> drule_all forfeit_remaining_gas_head >> strip_tac
+  >> Cases_on `a`
+  >> gvs[handle_exception_def, ignore_bind_def, bind_def,
+         set_return_data_def, get_current_context_def,
+         set_current_context_def, get_num_contexts_def,
+         get_return_data_def, get_output_to_def, return_def, fail_def]
+  >> qmatch_asmsub_abbrev_tac `pop_and_incorporate_context F w`
+  >> `w.contexts = (d' with returnData := [],callee_rb)::parent::rest` by
+       simp[Abbr `w`]
+  >> `get_gas_left w = (INL 0,w)` by
+       gvs[Abbr `w`, get_gas_left_def, bind_def,
+           get_current_context_def, return_def, fail_def]
+  >> drule_all pop_failure_zero_gas >> strip_tac
+  >> drule_all pop_and_incorporate_context_failure_effect >> strip_tac
+  >> gvs[]
+  >> `memory_output_tail F [] mr t = (q,s')` by
+       gvs[memory_output_tail_def, inc_pc_def, bind_def, ignore_bind_def,
+           set_return_data_def, get_current_context_def,
+           set_current_context_def, return_def, fail_def]
+  >> drule_all memory_output_suffix >> strip_tac >> gvs[]
 QED
 
 (* ---- Behaviour of handle_step when the pushed frame has Memory
@@ -654,6 +738,17 @@ Proof
   >> simp[]
 QED
 
+Theorem code_failure_output_rollback[local]:
+  s.contexts = (c,rb)::tail /\
+  ignore_bind inc_pc (ignore_bind (set_return_data output)
+    (push_stack 0w)) s = (q,t) ==> t.rollback = s.rollback
+Proof
+  rw[inc_pc_def, set_return_data_def, push_stack_def,
+     bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, assert_def, return_def, fail_def,
+     AllCaseEqs()] >> gvs[]
+QED
+
 (* Rollback-only version of handle_exception_pop_failure_memory_effect_gen.
    Drops the Memory precondition because rollback after a failure pop
    is always callee_rb regardless of outputTo. *)
@@ -666,30 +761,34 @@ Theorem handle_exception_pop_failure_rollback_gen:
     s'.rollback = callee_rb
 Proof
   strip_tac
-  >> Cases_on `parent`
   >> Cases_on `callee.msgParams.outputTo`
-  >> gvs[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
-         absorb_state_gas_def, repay_state_gas_spill_def,
-         repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
-         get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, credit_new_account_def,
-         credit_state_gas_refund_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def, AllCaseEqs()]
-  (* EIP-8037: the credit's `if` is left in a hypothesis, so its output is
-     still the variable `s''`; take the branch in the goal and reduce it. *)
-  >> TRY (qpat_x_assum `chgeq = (res,s'')` mp_tac
-          >> rpt IF_CASES_TAC
-          >> gvs[credit_new_account_def, credit_state_gas_refund_def,
-                 get_current_context_def, set_current_context_def, bind_def,
-                 ignore_bind_def, return_def, fail_def, AllCaseEqs(),
-                 pairTheory.PAIR_FST_SND_EQ]
-          >> rw[]
-          >> simp[APPLY_UPDATE_THM])
+  >- metis_tac[handle_exception_pop_failure_memory_effect_gen]
+  >> Cases_on `restore_state_gas s`
+  >> rename1 `restore_state_gas s = (a,u)`
+  >> drule_all restore_state_gas_head >> strip_tac >> gvs[]
+  >> Cases_on `forfeit_remaining_gas u`
+  >> rename1 `forfeit_remaining_gas u = (a,v)`
+  >> drule_all forfeit_remaining_gas_head >> strip_tac
+  >> Cases_on `a`
+  >> gvs[handle_exception_def, ignore_bind_def, bind_def,
+         set_return_data_def, get_current_context_def,
+         set_current_context_def, get_num_contexts_def,
+         get_return_data_def, get_output_to_def, return_def, fail_def]
+  >> qmatch_asmsub_abbrev_tac `pop_and_incorporate_context F w`
+  >> `w.contexts = (d' with returnData := [],callee_rb)::parent::rest` by
+       simp[Abbr `w`]
+  >> `get_gas_left w = (INL 0,w)` by
+       gvs[Abbr `w`, get_gas_left_def, bind_def,
+           get_current_context_def, return_def, fail_def]
+  >> drule_all pop_failure_zero_gas >> strip_tac
+  >> drule_all pop_and_incorporate_context_failure_effect >> strip_tac
+  >> gvs[]
+  >> `ignore_bind inc_pc (ignore_bind (set_return_data [])
+        (push_stack 0w)) t = (q,s')` by
+       gvs[inc_pc_def, bind_def, ignore_bind_def,
+           set_return_data_def, get_current_context_def,
+           set_current_context_def, return_def, fail_def]
+  >> drule_all code_failure_output_rollback >> simp[]
 QED
 
 (* When e <> NONE, handle_create always reraises regardless of outputTo.
@@ -1018,6 +1117,121 @@ QED
    and the rollback is either s.rollback (success) or callee_rb (failure). *)
 
 
+Theorem pop_meter_bound[local]:
+  s.contexts = (c,rb)::p::tail /\
+  pop_and_incorporate_context success s = (q,t) ==>
+  (t.rollback = s.rollback \/ t.rollback = rb) /\
+  ?d. t.contexts = (d,SND p)::tail /\
+      d.msgParams = (FST p).msgParams /\
+      d.gasUsed >= (FST p).gasUsed -
+        (c.msgParams.gasLimit - c.gasUsed) -
+        (if success then MIN ((FST p).stateGasLeft + c.stateGasLeft)
+          ((FST p).stateGasSpilled + c.stateGasSpilled)
+         else MIN new_account_state_gas
+          ((FST p).stateGasSpilled + c.stateGasSpilled))
+Proof
+  strip_tac >> Cases_on `p` >> Cases_on `success`
+  >> Cases_on `c.msgParams.newAccountCharged`
+  >> gvs[pop_and_incorporate_context_def, get_gas_left_def,
+         bind_def, ignore_bind_def, pop_context_def,
+         unuse_gas_def, assert_def, get_current_context_def,
+         set_current_context_def, return_def, fail_def, AllCaseEqs()]
+  >> gvs[push_logs_def, update_gas_refund_def,
+         repay_state_gas_spill_def, absorb_state_gas_def,
+         repay_state_gas_spill_context_def, credit_new_account_def,
+         credit_state_gas_refund_def, set_rollback_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, fail_def, AllCaseEqs()]
+QED
+
+Definition exception_output_tail_def[local]:
+  exception_output_tail success output dest =
+    ignore_bind inc_pc
+      (case dest of
+       | Code address => ignore_bind
+           (set_return_data (if success then [] else output))
+           (push_stack (if success then w2w address else b2w F))
+       | Memory mr => ignore_bind (set_return_data output)
+           (ignore_bind (push_stack (b2w success))
+             (write_memory mr.offset (TAKE mr.size output))))
+End
+
+Theorem exception_output_tail_effect[local]:
+  s.contexts = (c,rb)::tail /\
+  exception_output_tail success output dest s = (q,t) ==>
+  t.rollback = s.rollback /\
+  ?d. t.contexts = (d,rb)::tail /\ d.msgParams = c.msgParams /\
+      d.gasUsed = c.gasUsed
+Proof
+  strip_tac >> Cases_on `dest` >> Cases_on `success`
+  >> gvs[exception_output_tail_def, inc_pc_def, set_return_data_def,
+         push_stack_def, write_memory_def, bind_def, ignore_bind_def,
+         get_current_context_def, set_current_context_def,
+         assert_def, return_def, fail_def, AllCaseEqs()]
+QED
+
+Theorem restore_state_gas_meter[local]:
+  s.contexts = (c,rb)::tail /\ restore_state_gas s = (q,t) ==>
+  ?d. q = INL () /\ t.rollback = s.rollback /\
+      t.contexts = (d,rb)::tail /\ d.msgParams = c.msgParams /\
+      d.stateGasSpilled = 0 /\
+      d.gasUsed = c.gasUsed - c.stateGasSpilled
+Proof
+  rw[restore_state_gas_def, bind_def, get_current_context_def,
+     set_current_context_def, return_def, fail_def]
+  >> gvs[]
+QED
+
+Definition failure_child_prefix_def[local]:
+  failure_child_prefix e = ignore_bind restore_state_gas
+    (if e = SOME Reverted then return () else
+     ignore_bind forfeit_remaining_gas (set_return_data []))
+End
+
+Theorem failure_child_prefix_meter[local]:
+  s.contexts = (c,rb)::tail /\ failure_child_prefix e s = (q,t) ==>
+  t.rollback = s.rollback /\
+  ?d. t.contexts = (d,rb)::tail /\ d.msgParams = c.msgParams /\
+      d.stateGasSpilled = 0 /\
+      (q = INL () ==> c.msgParams.gasLimit - d.gasUsed =
+        (if e = SOME Reverted then
+         c.msgParams.gasLimit - (c.gasUsed - MIN c.stateGasSpilled c.gasUsed)
+         else 0))
+Proof
+  strip_tac
+  >> Cases_on `restore_state_gas s`
+  >> rename1 `restore_state_gas s = (a,u)`
+  >> drule_all restore_state_gas_meter >> strip_tac >> gvs[]
+  >> Cases_on `e = SOME Reverted`
+  >- (gvs[failure_child_prefix_def, ignore_bind_def, bind_def, return_def]
+      >> Cases_on `c.stateGasSpilled <= c.gasUsed` >> simp[MIN_DEF])
+  >> gvs[failure_child_prefix_def, forfeit_remaining_gas_def,
+         get_gas_left_def, consume_gas_def, set_return_data_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, assert_def, return_def, fail_def,
+         AllCaseEqs()]
+QED
+
+Theorem handle_exception_failure_decomp[local]:
+  e <> NONE ==> handle_exception e =
+    ignore_bind (failure_child_prefix e) do
+      n <- get_num_contexts;
+      if n <= 1 then reraise e else do
+        output <- get_return_data;
+        dest <- get_output_to;
+        pop_and_incorporate_context F;
+        exception_output_tail F output dest
+      od
+    od
+Proof
+  strip_tac
+  >> simp[handle_exception_def, failure_child_prefix_def,
+          ignore_bind_def, bind_assoc]
+  >> Cases_on `e = SOME Reverted` >> simp[exception_output_tail_def,
+       ignore_bind_def, bind_assoc, return_def, bind_def, FUN_EQ_THM]
+  >> rpt gen_tac >> rpt (CASE_TAC >> simp[])
+QED
+
 Theorem handle_exception_pop_generic_gen:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
   handle_exception e s = (q, s') ∧
@@ -1038,55 +1252,38 @@ Theorem handle_exception_pop_generic_gen:
         MIN new_account_state_gas (FST parent).stateGasSpilled
 Proof
   strip_tac
-  >> Cases_on `parent`
-  >> Cases_on `callee.msgParams.outputTo`
   >> Cases_on `e = NONE`
-  >> Cases_on `e = SOME Reverted`
-  >> gvs[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
-         absorb_state_gas_def, repay_state_gas_spill_def,
-         repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
-         get_gas_left_def, get_current_context_def, return_def,
-         consume_gas_def, set_return_data_def, set_current_context_def,
+  >- (gvs[]
+      >> Cases_on `pop_and_incorporate_context T s`
+      >> rename1 `pop_and_incorporate_context T s = (a,t)`
+      >> drule_all pop_meter_bound >> strip_tac
+      >> Cases_on `a`
+      >> gvs[handle_exception_def, ignore_bind_def, bind_def,
+             get_num_contexts_def, get_return_data_def, get_output_to_def,
+             get_current_context_def, return_def, fail_def]
+      >> `exception_output_tail T callee.returnData
+            callee.msgParams.outputTo t = (q,s')` by
+           (Cases_on `callee.msgParams.outputTo` >>
+            gvs[exception_output_tail_def, inc_pc_def, ignore_bind_def,
+                bind_def, get_current_context_def, set_current_context_def,
+                set_return_data_def, return_def, fail_def])
+      >> drule_all exception_output_tail_effect >> strip_tac >> gvs[])
+  >> Cases_on `failure_child_prefix e s`
+  >> rename1 `failure_child_prefix e s = (a,u)`
+  >> drule_all failure_child_prefix_meter >> strip_tac
+  >> Cases_on `a`
+  >> gvs[handle_exception_failure_decomp, ignore_bind_def, bind_def,
          get_num_contexts_def, get_return_data_def, get_output_to_def,
-         reraise_def, assert_def, fail_def,
-         inc_pc_def, push_stack_def, write_memory_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, unuse_gas_def,
-         update_gas_refund_def, push_logs_def]
-  (* Split off the datatype case analysis: with it in the same step the
-     unfolding and the splits together run over the per-step budget. *)
-  >> gvs[AllCaseEqs()]
-  (* EIP-8037: the credit is left opaque by the blast above, so its output is
-     the variable `s''` and nothing can split the branch inside it.  Replace
-     `s''` by the credit's second component, unfold the credit in the goal,
-     take its branch, and reduce it to a concrete state. *)
-  >> (qpat_x_assum `chgeq = (INL (),s'')`
-        (fn th => SUBST_ALL_TAC
-          (SYM (CONJUNCT2 (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th))))
-      ORELSE all_tac)
-  >> (qpat_x_assum `chgeq = (INR err,s')`
-        (fn th => SUBST_ALL_TAC
-          (SYM (CONJUNCT2 (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th))))
-      ORELSE all_tac)
-  (* EIP-8037: the credit's branch sits in a hypothesis, where nothing splits
-     its `if`, so its output stays the variable `s''` (or `s'` when the credit
-     fails).  With the charge flag known, the credit collapses once it is
-     unfolded; replace its output by the projection the equation bounds, so
-     the reductions above and the frame lemmas can read it. *)
-  >> Cases_on `callee.msgParams.newAccountCharged`
-  >> (qpat_x_assum `chgeq = (INL (),s'')`
-        (fn th => SUBST_ALL_TAC
-          (SYM (CONJUNCT2 (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th))))
-      ORELSE all_tac)
-  >> (qpat_x_assum `chgeq = (INR err,s')`
-        (fn th => SUBST_ALL_TAC
-          (SYM (CONJUNCT2 (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th))))
-      ORELSE all_tac)
-  >> gvs[credit_new_account_def, credit_state_gas_refund_def,
-         get_current_context_def, set_current_context_def, bind_def,
-         ignore_bind_def, return_def, fail_def, APPLY_UPDATE_THM] >>
-  rw[] >>
-  pure_rewrite_tac[MIN_DEF] >> rpt IF_CASES_TAC >> decide_tac
+         get_current_context_def, return_def, fail_def]
+  >> Cases_on `pop_and_incorporate_context F u`
+  >> rename1 `pop_and_incorporate_context F u = (a,t)`
+  >> drule_all pop_meter_bound
+  >> Cases_on `a`
+  >- (strip_tac >> gvs[] >> drule_all exception_output_tail_effect
+      >> strip_tac >> gvs[]
+      >> Cases_on `e = SOME Reverted` >> gvs[] >> decide_tac)
+  >> strip_tac >> gvs[]
+  >> Cases_on `e = SOME Reverted` >> gvs[] >> decide_tac
 QED
 
 (* handle_create preserves TL(contexts) and SND(HD contexts).
@@ -1325,11 +1522,78 @@ QED
 
 Theorem MIN_add_le_of_spill_move[local]:
   l' <= l /\ sp' - sp <= d ==>
-  MIN (p + l') (q + sp') <= MIN (l + p) (sp + q) + d
+  MIN (p + l') (q + sp') <= MIN (p + l) (q + sp) + d
 Proof
   strip_tac >> `sp' <= sp + d` by decide_tac
   >> rewrite_tac[MIN_DEF] >> rpt IF_CASES_TAC >> decide_tac
 QED
+Theorem total_refund_transfer[local]:
+  u <= v /\ (v <= lim \/ v <= u) /\ l1 <= l0 /\
+  sp1 - sp0 <= v - u /\ x <= lim - v ==>
+  x + MIN (p + l1) (q + sp1) <=
+  (lim - u) + MIN (p + l0) (q + sp0)
+Proof
+  strip_tac
+  >> `MIN (p + l1) (q + sp1) <=
+        MIN (p + l0) (q + sp0) + (v-u)` by
+       (irule MIN_add_le_of_spill_move >> simp[])
+  >> decide_tac
+QED
+
+Definition effective_leftover_def[local]:
+  effective_leftover e c =
+    if e = NONE then c.msgParams.gasLimit - c.gasUsed
+    else if e = SOME Reverted then c.msgParams.gasLimit -
+      (c.gasUsed - MIN c.stateGasSpilled c.gasUsed) else 0
+End
+
+Definition parent_repayment_def[local]:
+  parent_repayment p c = MIN (p.stateGasLeft + c.stateGasLeft)
+    (p.stateGasSpilled + c.stateGasSpilled)
+End
+
+Theorem handle_create_total_refund[local]:
+  handle_create e s = (INR e',s1) /\ s.contexts <> [] ==>
+  effective_leftover e' (FST (HD s1.contexts)) +
+    parent_repayment p (FST (HD s1.contexts)) <=
+  effective_leftover e (FST (HD s.contexts)) +
+    parent_repayment p (FST (HD s.contexts))
+Proof
+  strip_tac >> Cases_on `e = NONE`
+  >- (gvs[]
+      >> drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac
+      >> drule_all handle_create_effective_leftover >> strip_tac
+      >> drule_all handle_create_gasUsed_le_limit >> disch_tac
+      >> drule_all handle_create_reverted_iff >> strip_tac
+      >> asm_simp_tac (srw_ss())
+           [effective_leftover_def, parent_repayment_def]
+      >> irule total_refund_transfer
+      >> conj_tac >- (first_assum ACCEPT_TAC)
+      >> qexists_tac `(FST (HD s1.contexts)).gasUsed`
+      >> simp[] >> Cases_on `e' = NONE` >> simp[])
+  >> drule_all handle_create_reraises_when_some >> strip_tac
+  >> gvs[reraise_def]
+QED
+
+Theorem exception_pop_refund[local]:
+  s.contexts = (c,rb)::p::tail /\ handle_exception e s = (q,t) /\
+  LENGTH t.contexts < LENGTH s.contexts ==>
+  (t.rollback = s.rollback \/ t.rollback = rb) /\
+  ?d. t.contexts = (d,SND p)::tail /\
+      d.msgParams = (FST p).msgParams /\
+      d.gasUsed >= (FST p).gasUsed - effective_leftover e c -
+        parent_repayment (FST p) c -
+        MIN new_account_state_gas (FST p).stateGasSpilled
+Proof
+  strip_tac
+  >> simp_tac (srw_ss()) [parent_repayment_def]
+  >> irule handle_exception_pop_generic_gen
+  >> conj_tac >- (first_assum ACCEPT_TAC)
+  >> conj_tac >- (first_assum ACCEPT_TAC)
+  >> qexistsl_tac [`e`, `q`]
+  >> simp[effective_leftover_def]
+QED
+
 
 (* Generic handle_step pop structure — storage-aware.
 
@@ -1341,6 +1605,13 @@ QED
    For Code+NONE+success case, handle_create deposits bytecode before
    pop. This changes .code but not .storage. So the storage equality
    still holds. *)
+Theorem refund_bound_mono[local]:
+  (n:num) >= used - l1 - r1 - a /\ l1 + r1 <= l0 + r0 ==>
+  n >= used - l0 - r0 - a
+Proof
+  decide_tac
+QED
+
 Theorem handle_step_pop_generic_gen:
   s.contexts = (callee, callee_rb) :: parent :: rest ∧
   handle_step e s = (q, s') ∧
@@ -1365,13 +1636,15 @@ Theorem handle_step_pop_generic_gen:
 Proof
   strip_tac
   >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def]
+  >> pure_rewrite_tac[handle_step_def]
   >> IF_CASES_TAC
-  >- (simp[reraise_def] >> strip_tac >> gvs[])
-  >> simp[handle_def]
+  >- (pure_rewrite_tac[reraise_def, pairTheory.PAIR_EQ]
+      >> strip_tac >> gvs[])
+  >> pure_rewrite_tac[handle_def]
   >> `s.contexts ≠ []` by simp[]
   >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> simp[]
+  >> qpat_assum `handle_create e s = _`
+       (fn th => simp_tac (srw_ss()) [th])
   >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
   >> drule_all handle_create_preserves_tl_and_snd_hd
   >> strip_tac
@@ -1382,110 +1655,22 @@ Proof
   >> strip_tac
   >> strip_tac
   >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
-  >> TRY (drule_all handle_create_reverted_iff >> strip_tac)
-  >> drule_all handle_create_effective_leftover >> strip_tac
-  >> drule handle_create_gasUsed_le_limit >> strip_tac
-  >> drule_at (Pat `handle_exception _ _ = _`) handle_exception_pop_generic_gen
-  >> simp[] >> strip_tac >> first_x_assum drule >> strip_tac >> fs[]
-  >> mp_tac (INST_TYPE[alpha|->``:unit``]preserves_storage_handle_create)
+  >> drule_all handle_create_total_refund
+  >> disch_then (qspec_then `FST parent` assume_tac)
+  >> drule_all exception_pop_refund
+  >> disch_then (CONJUNCTS_THEN2 assume_tac STRIP_ASSUME_TAC)
+  >> mp_tac (INST_TYPE[alpha |-> ``:unit``] preserves_storage_handle_create)
   >> rewrite_tac[preserves_storage_def]
-  >> disch_then drule
-  >> strip_tac
-  (* EIP-8037: the storage disjunct needs only the pointwise hypothesis from
-     `preserves_storage_handle_create`: unfold `lookup_storage` in it and
-     extensionality settles the disjunct.  `gvs` with these same rewrites has
-     to generalise and strip on top of that, which blows the tactic timeout on
-     the gas arithmetic in the goal and its hypotheses; `fs` does the same
-     simplification without it. *)
-  >> fs[lookup_storage_def, FUN_EQ_THM]
-  >> qpat_x_assum `(if _ then _ else _) <= _` mp_tac
-  (* EIP-8037: that leftover inequality is stated about `FST (HD s.contexts)`
-     and the gas bound about `callee`; the two are the same frame only up to
-     the head of `s.contexts`.  Rewrite the gas bound into the inequality's
-     form, so the two abbreviations below name matching occurrences and the
-     `MIN_add_le_of_spill_move` premises are stated the way the hypotheses
-     `handle_create_effective_leftover` left them. *)
-  >> `callee = FST (HD s.contexts)` by simp[]
-  >> pop_assum (fn th => rewrite_tac[th])
-  (* EIP-8037: the pop's own bound reads its leftover through `e'`, while the
-     leftover inequality it hands back reads its two sides through `e'` and
-     `e`; the create lemma's iff identifies those two `Reverted` guards, so
-     after this rewrite all three leftover terms are the one term the
-     abbreviations below name.  The pop's bound comes into the goal first, so
-     its copies of the repayment term and the leftover are named with the
-     rest; the repayment term reads the head frame's reservoir and spill, so
-     keeping it a single variable is what leaves the arithmetic linear. *)
-  >> qpat_x_assum `new_parent_ctx.gasUsed >= _` mp_tac
-  >> qabbrev_tac `repay1 =
-       MIN ((FST parent).stateGasLeft + (FST (HD s1.contexts)).stateGasLeft)
-           ((FST parent).stateGasSpilled + (FST (HD s1.contexts)).stateGasSpilled)`
-  >> `e = SOME Reverted <=> e' = SOME Reverted` by simp[]
-  >> pop_assum (fn th => rewrite_tac[th])
-  >> qmatch_goalsub_abbrev_tac `newLeft <= oldLeft`
-  >> qmatch_goalsub_abbrev_tac `_ >= used - oldLeft - repayment - newAcctMin`
-  >> `repay1 <= repayment + (oldLeft - newLeft)`
-       by (qunabbrev_tac `repay1` >> qunabbrev_tac `repayment`
-           >> qunabbrev_tac `oldLeft` >> qunabbrev_tac `newLeft`
-           (* EIP-8037: the deposit's charge and the account update it is
-              followed by each leave their output in an opaque variable, and
-              these goals read the head frame off that variable.  Replace
-              each output by the state its equation bounds, so that unfolding
-              the charge below lands the frame's gas fields on concrete
-              records -- left as it is, the simplifier reads them off the
-              variable and the branch's assertion never reaches the
-              arithmetic. *)
-           >> TRY (qpat_x_assum `update_accounts _ _ = (INL (), sv)`
-                     (fn th => SUBST_ALL_TAC
-                        (SYM (CONJUNCT2
-                          (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th)))))
-           >> TRY (qpat_x_assum `(if _ then _ else _) _ = (INL (), sv)`
-                     (fn th => SUBST_ALL_TAC
-                        (SYM (CONJUNCT2
-                          (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th)))))
-           >> irule MIN_add_le_of_spill_move >> conj_tac
-           >> TRY (qpat_x_assum
-                     `(FST (HD s1.contexts)).stateGasLeft ≤
-                      (FST (HD s.contexts)).stateGasLeft` ACCEPT_TAC)
-           >> Cases_on `callee.msgParams.outputTo`
-           (* EIP-8037: a create that did not reach the deposit takes the
-              `reraise e` path, which leaves the meter alone; taking `e`'s
-              two shapes here lets that path show itself instead of staying
-              a `case`. *)
-           >> Cases_on `e`
-           >> rpt IF_CASES_TAC
-           >> gvs[handle_create_def, bind_def, ignore_bind_def,
-                  get_return_data_def, get_output_to_def,
-                  get_current_context_def, return_def, reraise_def,
-                  charge_state_gas_def, consume_gas_def,
-                  charge_new_account_def, assert_def,
-                  set_current_context_def, AllCaseEqs(),
-                  sub_left_cancel, APPLY_UPDATE_THM]
-           (* EIP-8037: the deposit charge's branch is left inside a
-              hypothesis, where nothing splits its `if`, and the arithmetic
-              needs what the taken branch asserts -- that the gas the charge
-              spilled still fits the frame's grant.  Take those two
-              hypotheses into the goal and split there, carrying nothing else
-              along: the whole hypothesis list is far too big to generalise
-              and strip inside the time a step gets. *)
-           >> TRY (qpat_x_assum `update_accounts _ _ = (INL (), _)` mp_tac
-                   >> qpat_x_assum `(if _ then _ else _) _ = (INL (), _)` mp_tac
-                   >> rpt IF_CASES_TAC >> rpt disch_tac
-                   >> gvs[consume_gas_def, get_current_context_def,
-                          set_current_context_def, charge_state_gas_def,
-                          charge_new_account_def, assert_def, bind_def,
-                          ignore_bind_def, return_def, fail_def,
-                          update_accounts_def, AllCaseEqs(),
-                          sub_left_cancel, APPLY_UPDATE_THM]
-                   >> rw[])
-           (* EIP-8037: the repayment terms are `MIN`s, and the arithmetic
-              has to see which way each one falls; `decide_tac` does not
-              look through `MIN`. *)
-           >> TRY (pure_rewrite_tac[MIN_DEF] >> rpt IF_CASES_TAC)
-           >> decide_tac)
-  (* EIP-8037: with the leftover terms named and the two exceptions' guards
-     identified, the pop's bound, the leftover inequality and the `repay1`
-     fact are all stated about the same terms, so what is left is linear. *)
-  >> decide_tac
+  >> disch_then drule >> strip_tac
+  >> conj_tac
+  >- gvs[lookup_storage_def, FUN_EQ_THM]
+  >> qexists_tac `d`
+  >> asm_simp_tac (srw_ss()) []
+  >> qpat_x_assum `_ + _ <= _ + _` mp_tac
+  >> qpat_x_assum `d.gasUsed >= _` mp_tac
+  >> `FST (HD s.contexts) = callee` by simp[]
+  >> asm_simp_tac (srw_ss()) [effective_leftover_def, parent_repayment_def]
+  >> rpt strip_tac >> metis_tac[refund_bound_mono]
 QED
 
 (* Strengthening of handle_step_pop_generic_gen that pairs each
@@ -1517,119 +1702,36 @@ Theorem handle_step_pop_generic_gen_paired:
              (lookup_account a callee_rb.accounts).storage)))
 Proof
   strip_tac
+  >> drule_all handle_step_pop_generic_gen
+  >> disch_then (CONJUNCTS_THEN2 assume_tac STRIP_ASSUME_TAC)
   >> qhdtm_x_assum `handle_step` mp_tac
-  >> simp[handle_step_def]
+  >> pure_rewrite_tac[handle_step_def]
   >> IF_CASES_TAC
-  >- (simp[reraise_def] >> strip_tac >> gvs[])
-  >> simp[handle_def]
-  >> `s.contexts ≠ []` by simp[]
-  >> strip_assume_tac
-       (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
-  >> simp[]
-  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e', s1)`
-  >> drule_all handle_create_preserves_tl_and_snd_hd
-  >> strip_tac
-  >> `s1.contexts = (FST (HD s1.contexts), callee_rb) :: parent :: rest` by (
-       Cases_on `s1.contexts` >> fs[]
-       >> PairCases_on `h` >> fs[])
-  >> drule_all handle_create_preserves_length
-  >> strip_tac
+  >- (pure_rewrite_tac[reraise_def, pairTheory.PAIR_EQ]
+      >> strip_tac >> gvs[])
+  >> pure_rewrite_tac[handle_def]
+  >> `s.contexts <> []` by simp[]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> qpat_assum `handle_create e s = _`
+       (fn th => simp_tac (srw_ss()) [th])
+  >> qmatch_asmsub_rename_tac `handle_create e s = (INR e',s1)`
+  >> drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac
+  >> `s1.contexts = (FST (HD s1.contexts),callee_rb)::parent::rest` by
+       (Cases_on `s1.contexts` >> full_simp_tac (srw_ss()) []
+        >> PairCases_on `h` >> full_simp_tac (srw_ss()) [])
+  >> drule_all handle_create_preserves_length >> strip_tac
   >> strip_tac
   >> `LENGTH s'.contexts < LENGTH s1.contexts` by decide_tac
-  >> TRY (drule_all handle_create_reverted_iff >> strip_tac)
-  >> drule_all handle_create_effective_leftover >> strip_tac
-  >> drule handle_create_gasUsed_le_limit >> strip_tac
-  >> drule_at (Pat `handle_exception _ _ = _`) handle_exception_pop_generic_gen
-  >> simp[] >> strip_tac >> first_x_assum drule >> strip_tac >> fs[]
-  >> drule handle_create_preserves_accesses
-  >> mp_tac (INST_TYPE[alpha|->``:unit``]preserves_storage_handle_create)
+  >> drule_all exception_pop_refund
+  >> disch_then (CONJUNCTS_THEN2 assume_tac STRIP_ASSUME_TAC)
+  >> drule handle_create_preserves_accesses >> strip_tac
+  >> mp_tac (INST_TYPE [alpha |-> ``:unit``] preserves_storage_handle_create)
   >> rewrite_tac[preserves_storage_def]
-  >> disch_then drule
-  >> fs[lookup_storage_def, FUN_EQ_THM]
-  >> rpt strip_tac
-  >> qpat_x_assum `(if _ then _ else _) <= _` mp_tac
-  (* EIP-8037: the gas bound is stated about `callee` and the leftover
-     inequality about `FST (HD s.contexts)`; the two are the same frame only
-     up to the head of `s.contexts`, so rewriting the bound into the
-     inequality's form lets the abbreviations below name both.  The pop's own
-     bound reads its leftover through `e'` while the inequality reads its two
-     sides through `e'` and `e`; the create lemma's iff identifies those two
-     `Reverted` guards, so after the rewrite all three leftover terms are one
-     term.  The pop's bound comes into the goal first so its copies of the
-     repayment term and the leftover are named with the rest. *)
-  >> `callee = FST (HD s.contexts)` by simp[]
-  >> pop_assum (fn th => rewrite_tac[th])
-  >> qpat_x_assum `new_parent_ctx.gasUsed >= _` mp_tac
-  >> qabbrev_tac `repay1 =
-       MIN ((FST parent).stateGasLeft + (FST (HD s1.contexts)).stateGasLeft)
-           ((FST parent).stateGasSpilled + (FST (HD s1.contexts)).stateGasSpilled)`
-  >> `e = SOME Reverted <=> e' = SOME Reverted` by simp[]
-  >> pop_assum (fn th => rewrite_tac[th])
-  >> qmatch_goalsub_abbrev_tac `newLeft <= oldLeft`
-  >> qmatch_goalsub_abbrev_tac `_ >= used - oldLeft - repayment - newAcctMin`
-  >> `repay1 <= repayment + (oldLeft - newLeft)`
-       by (qunabbrev_tac `repay1` >> qunabbrev_tac `repayment`
-           >> qunabbrev_tac `oldLeft` >> qunabbrev_tac `newLeft`
-           (* EIP-8037: the deposit's charge and the account update it is
-              followed by each leave their output in an opaque variable, and
-              these goals read the head frame off that variable.  Replace
-              each output by the state its equation bounds, so that unfolding
-              the charge below lands the frame's gas fields on concrete
-              records -- left as it is, the simplifier reads them off the
-              variable and the branch's assertion never reaches the
-              arithmetic. *)
-           >> TRY (qpat_x_assum `update_accounts _ _ = (INL (), sv)`
-                     (fn th => SUBST_ALL_TAC
-                        (SYM (CONJUNCT2
-                          (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th)))))
-           >> TRY (qpat_x_assum `(if _ then _ else _) _ = (INL (), sv)`
-                     (fn th => SUBST_ALL_TAC
-                        (SYM (CONJUNCT2
-                          (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th)))))
-           >> irule MIN_add_le_of_spill_move >> conj_tac
-           >> TRY (qpat_x_assum
-                     `(FST (HD s1.contexts)).stateGasLeft ≤
-                      (FST (HD s.contexts)).stateGasLeft` ACCEPT_TAC)
-           >> Cases_on `callee.msgParams.outputTo`
-           (* EIP-8037: a create that did not reach the deposit takes the
-              `reraise e` path, which leaves the meter alone; taking `e`'s
-              two shapes here lets that path show itself instead of staying
-              a `case`. *)
-           >> Cases_on `e`
-           >> rpt IF_CASES_TAC
-           >> gvs[handle_create_def, bind_def, ignore_bind_def,
-                  get_return_data_def, get_output_to_def,
-                  get_current_context_def, return_def, reraise_def,
-                  charge_state_gas_def, consume_gas_def,
-                  charge_new_account_def, assert_def,
-                  set_current_context_def, AllCaseEqs(),
-                  sub_left_cancel, APPLY_UPDATE_THM]
-           (* EIP-8037: the deposit charge's branch is left inside a
-              hypothesis, where nothing splits its `if`, and the arithmetic
-              needs what the taken branch asserts -- that the gas the charge
-              spilled still fits the frame's grant.  Take those two
-              hypotheses into the goal and split there, carrying nothing else
-              along: the whole hypothesis list is far too big to generalise
-              and strip inside the time a step gets. *)
-           >> TRY (qpat_x_assum `update_accounts _ _ = (INL (), _)` mp_tac
-                   >> qpat_x_assum `(if _ then _ else _) _ = (INL (), _)` mp_tac
-                   >> rpt IF_CASES_TAC >> rpt disch_tac
-                   >> gvs[consume_gas_def, get_current_context_def,
-                          set_current_context_def, charge_state_gas_def,
-                          charge_new_account_def, assert_def, bind_def,
-                          ignore_bind_def, return_def, fail_def,
-                          update_accounts_def, AllCaseEqs(),
-                          sub_left_cancel, APPLY_UPDATE_THM]
-                   >> rw[])
-           (* EIP-8037: the repayment terms are `MIN`s, and the arithmetic
-              has to see which way each one falls; `decide_tac` does not
-              look through `MIN`. *)
-           >> TRY (pure_rewrite_tac[MIN_DEF] >> rpt IF_CASES_TAC)
-           >> decide_tac)
-  (* EIP-8037: with the leftover terms named and the two exceptions' guards
-     identified, the pop's bound, the leftover inequality and the `repay1`
-     fact are all stated about the same terms, so what is left is linear. *)
-  >> decide_tac
+  >> disch_then drule >> strip_tac
+  >> qexists_tac `new_parent_ctx`
+  >> asm_simp_tac (srw_ss()) []
+  >> full_simp_tac (srw_ss()) [lookup_storage_def, FUN_EQ_THM]
+  >> metis_tac[]
 QED
 
 (* Saved rollback's accesses are in s'.rollback's accesses, regardless
@@ -1651,10 +1753,11 @@ Theorem handle_step_pop_accesses_bound:
   toSet callee_rb.accesses.storageKeys ⊆
     toSet s'.rollback.accesses.storageKeys
 Proof
-  rw[] >>
-  drule_then drule handle_step_pop_generic_gen_paired >>
-  rw[] >>
-  gvs[SUBSET_DEF]
+  strip_tac
+  >> drule_then drule handle_step_pop_generic_gen_paired
+  >> disch_then (qspec_then `effective_leftover e callee` mp_tac)
+  >> asm_simp_tac (srw_ss()) [effective_leftover_def]
+  >> strip_tac >> metis_tac[SUBSET_TRANS]
 QED
 
 Theorem handle_step_preserves_length_1:
