@@ -7911,7 +7911,6 @@ Proof
        ASSUM_LIST (fn facts =>
        assume_tac (SIMP_RULE (srw_ss())
          (facts @ [LET_THM, word_size_def, exn_inner_length_guard,
-          repay_state_gas_spill_def, repay_state_gas_spill_context_def,
           bind_def, ignore_bind_def, return_def,
           update_accounts_def, add_to_delete_def, handle_step_def, vfm_abort_def,
           handle_def, handle_create_def, get_return_data_def, get_output_to_def,
@@ -7921,6 +7920,14 @@ Proof
           push_stack_def, set_return_data_def, get_gas_left_def,
           write_memory_def, pop_context_def, unuse_gas_def, push_logs_def,
           update_gas_refund_def, charge_state_gas_apply]) execution)))
+  \\ qpat_x_assum `_ = (q,r2)` (fn execution =>
+       ASSUM_LIST (fn facts =>
+       assume_tac (SIMP_RULE (srw_ss())
+         (facts @ [repay_state_gas_spill_def,
+          repay_state_gas_spill_context_def, bind_def, ignore_bind_def,
+          return_def, get_current_context_def, set_current_context_def,
+          inc_pc_def, push_stack_def, write_memory_def, set_return_data_def,
+          assert_def, word_size_def]) execution)))
   \\ `p.gasLimit <= g + gasCost + caller.gasUsed` by
        (qpat_x_assum `calleeGasLeft <= caller.gasUsed` mp_tac
         \\ simp[Abbr `calleeGasLeft`] \\ decide_tac)
