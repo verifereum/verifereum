@@ -23,7 +23,6 @@ The [repository](https://github.com/verifereum/verifereum) is GPLv3. It contains
 - The semantics, in `spec/`: EVM state (`vfmStateScript.sml`), operations (`vfmOperationScript.sml`), and execution (`vfmExecutionScript.sml`) as a definitional interpreter, with block and transaction processing.
 - Theorems about the semantics, in `spec/prop/`: frame theorems about what execution can touch, such as `run_call_preserves_storage_outside_accessed_slots` in `vfmRunCallScript.sml` (a storage slot a call never accesses is unchanged by it) and `run_static_preserves` in `vfmStaticCallsScript.sml` (a static call changes no account, transient storage, or deletion); the gas accounting theorems of `vfmDecreasesGasScript.sml`; and the `preserves` combinators of `vfmPreservesScript.sml` for proving invariants of the monadic semantics.
 - A program logic, in `prog/vfmProgScript.sml`: a separation-logic model of the EVM, with `EVM_SPEC_SEMANTICS` relating specifications to execution traces.
-- Examples, in `examples/`: the WETH contract (`wrappedEtherScript.sml`), with `deploy_result_correct` proving that deploying its bytecode produces the expected state.
 - Utilities, in `util/`: RLP, Merkle Patricia tries, the contract ABI, and the precompiles' cryptography (secp256k1, secp256r1, BN254, BLS12-381, Blake2f).
 - The test driver, in `tests/`, which fetches the EEST fixtures, runs them through the semantics, and writes the results table.
 
