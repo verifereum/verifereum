@@ -1825,22 +1825,6 @@ Proof
        combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem clear_storage_nonce[simp]:
-  (lookup_account a (clear_storage b accounts)).nonce =
-    (lookup_account a accounts).nonce
-Proof
-  rw[clear_storage_def, lookup_account_def, update_account_def,
-     combinTheory.APPLY_UPDATE_THM]
-QED
-
-Theorem clear_storage_code[simp]:
-  (lookup_account a (clear_storage b accounts)).code =
-    (lookup_account a accounts).code
-Proof
-  rw[clear_storage_def, lookup_account_def, update_account_def,
-     combinTheory.APPLY_UPDATE_THM]
-QED
-
 Theorem proceed_create_nonce_certificate:
   s.contexts <> [] /\
   proceed_create sender address value code gas s = (r, t) ==>
@@ -2024,7 +2008,8 @@ QED
 (* step_inst returning INR preserves storage unconditionally.
    This is because write_storage (the only storage-modifying primitive)
    always succeeds, so if step_inst returns INR, write_storage didn't run.
-   - For call/create ops: preserves_storage_step_call/create is unconditional
+   - For call ops: preserves_storage_step_call is unconditional; for create
+     ops step_create_storage clears storage only on success
    - For SStore: if it fails, it's before write_storage
    - For other ops: they don't write storage at all (cp or preserves_storage) *)
 Theorem step_inst_inr_preserves_storage:

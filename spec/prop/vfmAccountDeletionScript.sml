@@ -778,11 +778,8 @@ Proof
   simp[account_already_created_def, NULL_EQ]
 QED
 
-(* increment_nonce_lookup and increment_nonce_code are shared upstream. *)
 
-(* deposit_code_nonce and deposit_code_other are shared in RunCall. *)
 
-(* proceed_create_nonce_certificate is shared in vfmStoragePredicates. *)
 
 val push_post = ``λQ (m:execution_state -> ('a + exception option) # execution_state). ∀s r t.
   m s = (r,t) ∧ s.contexts ≠ [] ∧
@@ -884,7 +881,6 @@ Proof
   strip_tac >> gvs[]
 QED
 
-(* proceed_call_memory_output is shared in RunCall. *)
 
 Theorem step_call_growth_not_code:
   ^push_post_unit (λs t. ∀b.
@@ -926,15 +922,10 @@ val nonce_code_rel = ``λa (s:execution_state) (t:execution_state).
 
 (* Generic nonce/code transport theorems are provided by vfmRunCallTheory. *)
 
-(* Old-snapshot lookup transport is shared in RunCall. *)
 
-(* step_growth_nonce_code is shared upstream in vfmRunCallTheory. *)
 
-(* Saved-head nonce/code interfaces are shared in RunCall. *)
 
-(* step_growth_nonce_certificate is shared in RunCall. *)
 
-(* Same-frame and handle_create protection boundaries are shared in RunCall. *)
 
 (* Depth-indexed bookkeeping for continuing run_call states.  Only the
  * newly pushed snapshots need account protection.  The initial saved head

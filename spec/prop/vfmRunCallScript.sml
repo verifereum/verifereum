@@ -1,5 +1,6 @@
 (* ==========================================================================
- * run_call storage preservation: slots not in final storageKeys are unchanged.
+ * run_call storage preservation: slots not in final storageKeys are unchanged,
+ * unless a CREATE cleared the storage of an account that was not yet created.
  * The invariant tracks txParams and rollback states reachable by revert.
  * ========================================================================== *)
 Theory vfmRunCall
@@ -71,8 +72,9 @@ End
    invariant that does hold: for each active rollback rb, a slot outside
    rb's storageKeys either equals its value in es.rollback, or is 0w and the
    account had nonce 0 and no code in es.rollback. Creation sets the nonce
-   to 1 and nonces never decrease within a run, so an account created at or
-   before a saved rollback is also created in every later state. *)
+   to 1, and the invariant also tracks that an account created in es.rollback
+   stays created in the current rollback and in every saved rollback above
+   es. *)
 Definition run_call_inv_def:
   run_call_inv es (q:unit + exception option) s ⇔
     s.txParams = es.txParams ∧
@@ -4526,8 +4528,6 @@ Proof
   >> qexistsl_tac [`r''`, `s''`]
   >> simp[]
 QED
-
-(* Headline corollary: untouched storageKeys imply unchanged storage slot. *)
 
 (* A slot nobody accessed keeps its value, unless a CREATE cleared the
    storage of an address that had no nonce and no code (EELS

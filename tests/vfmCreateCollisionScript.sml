@@ -65,3 +65,14 @@ Theorem create_op_storage_only_target:
 Proof
   CONV_TAC cv_eval
 QED
+
+(* A creation transaction whose initcode reverts (PUSH0 PUSH0 REVERT): the
+   creation is rolled back, so the target keeps nonce 0 and its storage. *)
+Theorem create_tx_storage_only_target_revert:
+  collision_outcome (address_for_create 0x100w 0) collision_tx_accounts
+    (settlement_tx with <| to := NONE; gasLimit := 153000;
+                           data := [0x5fw; 0x5fw; 0xfdw] |>) =
+    SOME (SOME Reverted, 0, 1w)
+Proof
+  CONV_TAC cv_eval
+QED

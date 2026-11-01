@@ -2,9 +2,10 @@
  * Per-account frame for run_call.
  *
  * A step whose current context's callee is not `a` changes account `a` only
- * by a foreign_account_change: its code and storage stay, and its nonce
- * stays unless `a` is not yet created (a CREATE at `a`).  So during run_call
- * `a`'s code and storage change only inside frames executing as `a`.
+ * by a foreign_account_change: its code stays, and its nonce and storage
+ * stay unless `a` is not yet created (a CREATE at `a` sets the nonce and
+ * clears the storage).  So during run_call `a`'s code changes only inside
+ * frames executing as `a`.
  *
  * run_call_account_frame is the rely form: if every frame entered as `a`
  * preserves a predicate P of `a`'s account, then run_call preserves P.
@@ -944,9 +945,7 @@ Proof
         foreign_account_change_def]
 QED
 
-(* Shared prefix interface is supplied by vfmStoragePredicates. *)
 
-(* CALL prefix extraction and saved rollback interface are shared in RunCall. *)
 
 Theorem proceed_call_nonprecompile_frame:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
@@ -991,9 +990,7 @@ Proof
   >> Cases_on `op = DelegateCall` >> simp[]
 QED
 
-(* Terminal precompile combinators are shared in RunCall. *)
 
-(* proceed_call_inl_nonprecompile is shared in RunCall. *)
 
 Theorem step_call_push_storage_keys:
   step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
@@ -1077,7 +1074,6 @@ Proof
   >> gvs[]
 QED
 
-(* CREATE prefix and frame effects are shared upstream in vfmStoragePredicates. *)
 
 Theorem create_foreign_account_updates:
   y ≠ sender ∧ ¬account_already_created (lookup_account address accounts) ⇒
@@ -1175,7 +1171,6 @@ Proof
   >> qexistsl_tac [`code`, `t`] >> simp[]
 QED
 
-(* step_grow_dispatch is shared upstream in vfmRunCallTheory. *)
 
 (* A push copies the stack below, except that CREATE's set_original may
  * change the last saved rollback.  Only the callee's nonce and the created
