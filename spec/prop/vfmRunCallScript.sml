@@ -397,9 +397,9 @@ QED
    `contexts updated_by CONS crb`.  So the output's tail is the parent
    *with its reservoir zeroed*, and the tail equality holds only of the
    frames below the parent; the parent's one moved field is named here.
-   Checked witness for the old form:
-   `spec/prop/vfmCallDrainProbeScript.sml`
-   `proceed_call_push_structure_counterexample`. *)
+   Checked witness for the old form (since removed with the other
+   probes): a return whose parent frame has had its reservoir zeroed
+   while the frames below it are unchanged. *)
 
 (* CALL/CREATE wrappers: same-frame storage-preserving prefixes, then proceed_*. *)
 
@@ -2772,9 +2772,9 @@ QED
    takes `MIN n stateGasSpilled` out of the frame's `gasUsed`, and
    `step_sstore_gas_consumption` runs it before its charges (`:1016`, charges
    at `:1021-1022`), so a slot-clearing SSTORE on a frame that has already
-   spilled can end below its starting `gasUsed`.  Checked witness:
-   `spec/prop/vfmSstoreGasProbeScript.sml`
-   `step_inst_same_frame_gas_monotone_counterexample`.
+   spilled can end below its starting `gasUsed`.  Checked witness (since
+   removed with the other probes): the slot-clearing SSTORE on an
+   already-spilled frame whose refund lands before the charges.
 
    The measure is what survives: the credit lowers `gasUsed` and the spill
    together and puts the excess in the reservoir, which `frame_unused_gas`
