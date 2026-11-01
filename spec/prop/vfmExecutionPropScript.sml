@@ -4017,7 +4017,17 @@ Proof
   >> Cases_on `e` >> gvs[reraise_def]
   >> Cases_on `h0.msgParams.outputTo` >> gvs[reraise_def]
   >> simp[ignore_bind_def, bind_def, assert_def, return_def, fail_def]
-  >> rpt (CASE_TAC >> gvs[return_def, reraise_def])
+  (* Split the chain's outermost cases on terms that are already in the goal,
+     then let `EVERY_CASE_TAC` do the rest: it caches the case rewrites across
+     its iterations, and splitting a term named here costs under a millisecond
+     where a `CASE_TAC` searching this unfolded chain costs ~300 ms of the
+     2500 ms step budget. *)
+  >> Cases_on `h0.returnData` >> gvs[return_def, reraise_def]
+  >> Cases_on `consume_gas (keccak256_per_word_cost * word_size (LENGTH h0.returnData)) s`
+  >> Cases_on `LENGTH h0.returnData ≤ max_code_size`
+  >> gvs[return_def, reraise_def]
+  >> EVERY_CASE_TAC
+  >> gvs[return_def, reraise_def]
 QED
 
 (* update_accounts preserves contexts exactly *)
