@@ -313,11 +313,15 @@ Proof
       EVAL_TAC >> rw[] ) >>
     qpat_x_assum `outputTo_consistent_ctx ctxt` mp_tac >>
     rw[outputTo_consistent_ctx_def] )
-  \\ irule wf_accounts_process_authorizations
-  \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
-  \\ irule wf_accounts_pre_transaction_updates
-  \\ goal_assum $ drule_at(Pos(Lib.first is_eq))
-  \\ rw[]
+  \\ qspecl_then
+       [`c`, `authorization_paid_writes t (callee_from_tx_to t.from t.nonce t.to)`,
+        `accounts`, `t.authorizationList`, `accounts`,
+        `initial_access_sets b.coinBase (callee_from_tx_to t.from t.nonce t.to) t`,
+        `fEMPTY`, `fEMPTY`, `[]`, `postAuthAccounts`, `postAuthAccesses`,
+        `authPaidWrites`, `authDelegations`, `authCharges`]
+       mp_tac wf_accounts_process_authorizations
+  \\ imp_res_tac wf_accounts_pre_transaction_updates
+  \\ gvs[]
 QED
 
 Theorem pop_and_incorporate_context_preserves:
