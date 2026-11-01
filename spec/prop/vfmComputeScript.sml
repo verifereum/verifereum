@@ -1222,6 +1222,16 @@ QED
 
 val () = cv_auto_trans empty_return_destination_def;
 
+val apply_authorization_charges_pre_def =
+  cv_auto_trans_pre "apply_authorization_charges_pre" apply_authorization_charges_def;
+
+Theorem apply_authorization_charges_pre[cv_pre]:
+  !cs ctxt. apply_authorization_charges_pre cs ctxt
+Proof
+  Induct >> simp[Once apply_authorization_charges_pre_def] >>
+  Cases_on `h` >> simp[Once apply_authorization_charges_pre_def]
+QED
+
 val run_create_pre_def = run_create_def
   |> SIMP_RULE std_ss [o_DEF]
   |> cv_auto_trans_pre "run_create_pre";
@@ -1229,13 +1239,21 @@ val run_create_pre_def = run_create_def
 Theorem run_create_pre[cv_pre]:
   run_create_pre d st c p b a t
 Proof
-  rw[run_create_pre_def, initial_state_def,
-     pre_transaction_updates_def, execution_state_component_equality,
-     initial_rollback_def, code_from_tx_def]
-  \\ strip_tac \\ gvs[CaseEq"option", UNCURRY]
+  rw[run_create_pre_def]
+  >> gvs[initial_state_def, CaseEq "option"]
+  >> pairarg_tac >> gvs[]
+  >> pairarg_tac >> gvs[CaseEq "option"]
 QED
 
-val () = run_transaction_def |> cv_auto_trans;
+val run_transaction_pre_def =
+  cv_auto_trans_pre "run_transaction_pre" run_transaction_def;
+
+Theorem run_transaction_pre[cv_pre]:
+  !dom static chainId prevHashes blk accounts tx.
+    run_transaction_pre dom static chainId prevHashes blk accounts tx
+Proof
+  simp[run_transaction_pre_def, run_create_pre]
+QED
 
 Definition run_transactions_def:
   run_transactions d st c h b a rs [] = SOME (REVERSE rs, a, d) ∧
