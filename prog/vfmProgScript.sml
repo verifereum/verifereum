@@ -838,6 +838,9 @@ Theorem run_create_call:
   initial_state dom static chainId prevHashes blk accounts tx = SOME s ∧
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for
+     the callee to be entered with the initial state's contexts. *)
+  tx.authorizationList = [] ∧
   ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts))
   ⇒
   run_create dom static chainId prevHashes blk accounts tx =
@@ -847,7 +850,7 @@ Theorem run_create_call:
                   transfer_value tx.from callee tx.value),
              NONE))
 Proof
-  rw[run_create_def]
+  rw[run_create_def, process_authorizations_def, apply_authorization_charges_def]
   \\ imp_res_tac initial_state_callee
   \\ imp_res_tac initial_state_contexts_length
   \\ `s.contexts = [(FST (HD s.contexts), SND (HD s.contexts))]` by
@@ -1249,6 +1252,9 @@ QED
 Theorem run_to_run_transaction:
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for
+     the callee to be entered with the initial state's contexts. *)
+  tx.authorizationList = [] ∧
   (* EIP-8037: as in `SPEC_to_run_transaction`, the prelude's own charge for
      creating the callee has to be nought for the callee to be entered. *)
   ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts)) ∧
@@ -1345,6 +1351,9 @@ Theorem SPEC_to_run_transaction:
   (* Transaction is a message call to a non-precompile *)
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for
+     the callee to be entered with the initial state's contexts. *)
+  tx.authorizationList = [] ∧
   (* EIP-8037: the prelude's own charge for creating the callee is nought,
      which holds whenever the callee already exists or no value moves, so
      that the state `run_create` hands the callee is the one `P` and `Q`
@@ -1472,6 +1481,9 @@ QED
 Theorem run_to_run_transaction_failure:
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for
+     the callee to be entered with the initial state's contexts. *)
+  tx.authorizationList = [] ∧
   (* EIP-8037: as in `SPEC_to_run_transaction_failure`, the prelude's own
      charge for creating the callee has to be nought for the callee to be
      entered. *)
@@ -1536,6 +1548,9 @@ Theorem SPEC_to_run_transaction_failure:
   SPEC EVM_MODEL P {} Q ∧
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-7702: the prelude's authorization charge has to be nought for
+     the callee to be entered with the initial state's contexts. *)
+  tx.authorizationList = [] ∧
   (* EIP-8037: as in `SPEC_to_run_transaction`, the prelude's own charge for
      creating the callee has to be nought for the callee to be entered at
      all. *)
