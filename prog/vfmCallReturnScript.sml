@@ -187,20 +187,33 @@ Theorem call_return_handle_exception_memory:
 Proof
   strip_tac >> Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
   Cases_on `c.msgParams.newAccountCharged` >>
-  gvs[call_return_context_def, call_meter_settle_def,
-      call_return_gas_def, call_return_data_def,
-      LET_THM, restore_state_gas_def, forfeit_remaining_gas_def,
-      repay_state_gas_spill_def, credit_new_account_def,
-      credit_state_gas_refund_def, absorb_state_gas_def,
-      repay_state_gas_spill_context_def,
-      handle_exception_def, pop_and_incorporate_context_def,
-      get_gas_left_def, get_num_contexts_def, get_output_to_def,
-      get_return_data_def, get_current_context_def, pop_context_def,
-      consume_gas_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
-      set_rollback_def, set_current_context_def, set_return_data_def,
-      inc_pc_def, push_stack_def, write_memory_def,
-      bind_def, ignore_bind_def, return_def, assert_def, fail_def,
-      combinTheory.o_DEF, combinTheory.C_DEF] >>
+  (* Expose the restored/forfeited frame before reading its contexts. *)
+  gvs[handle_exception_def, restore_state_gas_def,
+       forfeit_remaining_gas_def, get_current_context_def,
+       set_current_context_def, set_rollback_def,
+       bind_def, ignore_bind_def, return_def, fail_def, LET_THM] >>
+  simp[get_num_contexts_def, get_return_data_def, get_output_to_def,
+       get_current_context_def, bind_def, ignore_bind_def, return_def,
+       fail_def] >>
+  simp[pop_and_incorporate_context_def, LET_THM,
+       get_gas_left_def, get_num_contexts_def, get_output_to_def,
+       get_return_data_def, get_current_context_def, pop_context_def,
+       consume_gas_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
+       set_rollback_def, set_current_context_def, set_return_data_def,
+       inc_pc_def, push_stack_def, write_memory_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def,
+       combinTheory.o_DEF, combinTheory.C_DEF] >>
+  simp[repay_state_gas_spill_def, credit_new_account_def,
+       credit_state_gas_refund_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       fail_def, inc_pc_def, set_return_data_def, push_stack_def,
+       write_memory_def, assert_def] >>
+  simp[call_return_context_def, call_meter_settle_def,
+       call_return_gas_def, call_return_data_def, LET_THM,
+       restore_state_gas_def, forfeit_remaining_gas_def,
+       repay_state_gas_spill_def, credit_new_account_def,
+       credit_state_gas_refund_def, absorb_state_gas_def,
+       repay_state_gas_spill_context_def] >>
   cong_tac (SOME 4) >> simp[context_component_equality, ADD_COMM]
 QED
 
