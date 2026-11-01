@@ -953,7 +953,6 @@ Proof
   Cases_on `s.contexts` >> simp[]
   >> PairCases_on `h`
   >> Cases_on `t'` >> gvs[]
-  >> Cases_on `h0.msgParams.outputTo`
   >> Cases_on `e = NONE`
   >> Cases_on `e = SOME Reverted` >> gvs[]
   >> rw[handle_exception_def, bind_def, ignore_bind_def,
@@ -970,6 +969,9 @@ Proof
         set_rollback_def, unuse_gas_def,
         update_gas_refund_def, push_logs_def, AllCaseEqs()]
   >> gvs[AllCaseEqs()]
+  >> Cases_on `h0.msgParams.outputTo`
+  >> gvs[bind_def, ignore_bind_def, get_current_context_def,
+         set_current_context_def, return_def, assert_def, fail_def, AllCaseEqs()]
 QED
 
 Theorem handle_step_storage_keys[local]:
