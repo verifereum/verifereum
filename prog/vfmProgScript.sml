@@ -4449,7 +4449,8 @@ Proof
      (impl_tac >- (gvs[Abbr `st2`] >> decide_tac)) >>
      strip_tac >>
      gvs[bind_def, get_current_context_def, set_current_context_def,
-         return_def, Abbr `st2`, inc_pc_or_jump_def, is_call_def] >>
+         return_def, Abbr `st2`, inc_pc_or_jump_def, is_call_def,
+         ExclSF "ARITH"] >>
      qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
      qpat_x_assum `charge_state_gas _ _ = _` kall_tac >>
      conj_tac >- (Cases_on `FST r` >> gvs[]) >>
@@ -7309,7 +7310,9 @@ Proof
         get_current_context_def, return_def, get_output_to_def,
         handle_exception_def, get_num_contexts_def, restore_state_gas_def,
         set_current_context_def]
-    \\ gvs[return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
+    \\ `p.gasLimit <= g + memory_cost m offset sz - sp + caller.gasUsed`
+         by decide_tac
+    \\ gvs[ExclSF "ARITH", exn_inner_length_guard, return_destination_case_elim, reraise_def, bind_def, ignore_bind_def,
         get_return_data_def, get_current_context_def, return_def, get_output_to_def,
         pop_and_incorporate_context_def,
         get_gas_left_def, pop_context_def, unuse_gas_def, set_rollback_def,
@@ -7319,20 +7322,21 @@ Proof
         restore_state_gas_def, credit_new_account_apply,
         credit_new_account_context_def,
         Abbr`calleeGasLeft`,Abbr`all_pcs`,TO_FLOOKUP]
-    \\ gs[absorb_state_gas_def, Abbr`merged`]
+    \\ gs[ExclSF "ARITH", absorb_state_gas_def, Abbr`merged`,
+           GSYM SUB_PLUS, AC ADD_ASSOC ADD_COMM]
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >- metis_tac[NOT_SOME_NONE])
     \\ (conj_tac >-
          (qpat_x_assum ‘_ = {}’ mp_tac
-          \\ fs [EXTENSION]
+          \\ simp [ExclSF "ARITH", EXTENSION]
           \\ srw_tac[DNF_ss][TO_FLOOKUP]
           \\ eq_tac \\ rw []
           \\ first_x_assum(qspec_then`x`mp_tac)
           \\ simp[]
           \\ rw[] \\ metis_tac[option_CASES]))
     \\ irule UPDATE_evm2set_without_original
-    \\ simp[]
-    \\ gvs[TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
+    \\ simp[ExclSF "ARITH"]
+    \\ gvs[ExclSF "ARITH", TO_FLOOKUP,Once EXTENSION,SUBSET_DEF,PULL_EXISTS]
     \\ metis_tac[])
   \\ gvs[finish_def,handle_step_def,handle_create_def,handle_def,
          get_return_data_def,bind_def,ignore_bind_def,get_output_to_def,
@@ -7504,6 +7508,42 @@ Proof
          set_current_context_def, return_def, get_gas_left_def,
          consume_gas_def, set_return_data_def, assert_def]
   \\ Cases_on`p.outputTo`
+  \\ qpat_assum `~((SND r).contexts = [])` (fn initial_guard =>
+       qpat_assum `~(cs = [])` (fn guard =>
+       qpat_x_assum `_ = (q,r2)`
+         (assume_tac o SIMP_RULE (srw_ss())
+           [LET_THM, initial_guard, guard, handle_exception_def, get_num_contexts_def,
+            exn_inner_length_guard, pop_and_incorporate_context_def,
+            pop_context_def, bind_def, ignore_bind_def, return_def,
+            get_current_context_def, set_current_context_def,
+            restore_state_gas_def, forfeit_remaining_gas_def,
+            get_gas_left_def, consume_gas_def, set_return_data_def,
+            assert_def, unuse_gas_def, set_rollback_def,
+            credit_new_account_apply, inc_pc_def, push_stack_def,
+            write_memory_def, get_return_data_def, get_output_to_def])))
+  \\ qpat_x_assum `_ = (q,r2)`
+       (assume_tac o SIMP_RULE (srw_ss())
+         [LET_THM, credit_new_account_apply, bind_def, ignore_bind_def, return_def,
+          get_current_context_def, set_current_context_def, set_rollback_def,
+          inc_pc_def, set_return_data_def, push_stack_def, assert_def,
+          write_memory_def])
+  \\ gvs[ExclSF "ARITH", exn_inner_forfeit_guard,
+         exn_inner_length_guard]
+  \\ qpat_x_assum `_ = (q,r2)`
+       (assume_tac o SIMP_RULE (srw_ss())
+         [LET_THM, credit_new_account_def, credit_state_gas_refund_def,
+          bind_def, ignore_bind_def,
+          return_def, get_current_context_def, set_current_context_def,
+          set_rollback_def, inc_pc_def, set_return_data_def, push_stack_def,
+          assert_def, write_memory_def])
+  \\ Cases_on `p.newAccountCharged`
+  \\ gvs[ExclSF "ARITH"]
+  \\ qpat_x_assum `_ = (q,r2)`
+       (assume_tac o SIMP_RULE (srw_ss())
+         [LET_THM, bind_def, ignore_bind_def, return_def,
+          get_current_context_def, set_current_context_def, set_rollback_def,
+          inc_pc_def, set_return_data_def, push_stack_def, assert_def,
+          write_memory_def])
   \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
          inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
          bind_def,ignore_bind_def,return_def,get_current_context_def,
@@ -7714,15 +7754,31 @@ Proof
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
   \\ Cases_on`account_empty (lookup_account p.callee orig)`
   \\ Cases_on`p.outputTo`
-  \\ gvs[CaseEq"prod",CaseEq"sum",bind_def,ignore_bind_def,return_def,
-         update_accounts_def,add_to_delete_def,handle_step_def,vfm_abort_def,
-         handle_def,handle_create_def,get_return_data_def,get_output_to_def,
-         get_current_context_def,reraise_def,handle_exception_def,
-         get_num_contexts_def,consume_gas_def,assert_def,
-         set_current_context_def,inc_pc_def,pop_and_incorporate_context_def,
-         push_stack_def,set_return_data_def,get_gas_left_def,
-         write_memory_def,pop_context_def,unuse_gas_def,push_logs_def,
-         update_gas_refund_def,Abbr`calleeGasLeft`,charge_state_gas_apply]
+  \\ gvs[ExclSF "ARITH", Abbr `orig`]
+  \\ qpat_x_assum `_ = (q,r2)` (fn execution =>
+       ASSUM_LIST (fn facts =>
+       assume_tac (SIMP_RULE (srw_ss())
+         (facts @ [LET_THM, word_size_def, exn_inner_length_guard,
+          repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+          bind_def, ignore_bind_def, return_def,
+          update_accounts_def, add_to_delete_def, handle_step_def, vfm_abort_def,
+          handle_def, handle_create_def, get_return_data_def, get_output_to_def,
+          get_current_context_def, reraise_def, handle_exception_def,
+          get_num_contexts_def, consume_gas_def, assert_def,
+          set_current_context_def, inc_pc_def, pop_and_incorporate_context_def,
+          push_stack_def, set_return_data_def, get_gas_left_def,
+          write_memory_def, pop_context_def, unuse_gas_def, push_logs_def,
+          update_gas_refund_def, charge_state_gas_apply]) execution)))
+  \\ `p.gasLimit <= g + gasCost + caller.gasUsed` by
+       (qpat_x_assum `calleeGasLeft <= caller.gasUsed` mp_tac
+        \\ simp[Abbr `calleeGasLeft`] \\ decide_tac)
+  \\ qpat_x_assum `_ = (q,r2)` (fn execution =>
+       ASSUM_LIST (fn facts =>
+       assume_tac (SIMP_RULE (srw_ss())
+         (facts @ [absorb_state_gas_def]) execution)))
+  \\ qpat_x_assum `_ /\ _` strip_assume_tac
+  \\ qpat_x_assum `_ = r2` (SUBST_ALL_TAC o SYM)
+  \\ gvs[ExclSF "ARITH", Abbr `calleeGasLeft`]
   \\ gvs[repay_state_gas_spill_def, repay_state_gas_spill_context_def,
          absorb_state_gas_def, Abbr `merged`, bind_def, ignore_bind_def,
          get_current_context_def, set_current_context_def, return_def,
