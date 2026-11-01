@@ -1149,9 +1149,16 @@ Proof
   simp[inc_pc_or_jump_def, return_def] >>
   TOP_CASE_TAC >> rw[] >>
   drule_at Any handle_step_pop_generic_gen >>
-  Cases_on`r'.contexts` >> gvs[] >>
-  Cases_on`h` >> gvs[] >>
-  Cases_on`t` >> gvs[] >>
+  Cases_on`r'.contexts`
+  >- (qpat_x_assum `LENGTH [] >= _` mp_tac >> simp[]) >>
+  gvs[ExclSF "ARITH"] >>
+  Cases_on`h` >> gvs[ExclSF "ARITH"] >>
+  Cases_on`t`
+  >- (qpat_x_assum `SUC (LENGTH []) >= _` mp_tac >>
+      Cases_on `s.contexts`
+      >- (qpat_x_assum `[] <> []` mp_tac >> simp[]) >> simp[]) >>
+  gvs[ExclSF "ARITH"] >>
+  (impl_tac >- (qpat_x_assum `SUC _ >= _` mp_tac >> simp[])) >>
   disch_then assume_tac >>
   irule EQ_TRANS >>
   qmatch_goalsub_abbrev_tac`lookup_storage k (lookup_account a _).storage` >>
@@ -1173,12 +1180,18 @@ Proof
       (lookup_account a s.rollback.accounts).storage` by (
        `LENGTH r'.contexts > LENGTH s.contexts` by simp[]
        >> `SND (HD r'.contexts) = r''` by simp[]
-       >> Cases_on `op` >> fs[is_call_def, step_inst_def]
+       >> qpat_x_assum `is_call op` mp_tac
+       >> Cases_on `op` >> simp[is_call_def]
+       >> qpat_x_assum `step_inst _ _ = _`
+            (assume_tac o REWRITE_RULE[step_inst_def])
        >> metis_tac[step_call_pushed_rb_storage,
                     step_create_pushed_rb_storage])
   >> `lookup_storage k (lookup_account a s.rollback.accounts).storage =
       lookup_storage k (lookup_account a r'.rollback.accounts).storage` by (
-       Cases_on `op` >> fs[is_call_def, step_inst_def]
+       qpat_x_assum `is_call op` mp_tac
+       >> Cases_on `op` >> simp[is_call_def]
+       >> qpat_x_assum `step_inst _ _ = _`
+            (assume_tac o REWRITE_RULE[step_inst_def])
        >> metis_tac[preserves_storage_step_call, preserves_storage_step_create,
                     preserves_storage_def])
   >> `lookup_storage k (lookup_account a s'.rollback.accounts).storage =
