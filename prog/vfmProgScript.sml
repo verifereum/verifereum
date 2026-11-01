@@ -2421,6 +2421,28 @@ Proof
     context_component_equality, execution_state_component_equality, ADD_COMM]
 QED
 
+Theorem restore_state_gas_context_apply[local]:
+  restore_state_gas (s with contexts := (c,k)::cs) =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - c.stateGasSpilled;
+                stateGasSpilled := 0; stateGasLeft := c.stateGasBaseline;
+                addRefund := 0; subRefund := 0|>,k)::cs)
+Proof
+  simp[restore_state_gas_def, bind_def, get_current_context_def,
+       set_current_context_def, return_def]
+QED
+
+Theorem restore_state_gas_to_entry_context_apply[local]:
+  restore_state_gas_to_entry sg (s with contexts := (c,k)::cs) =
+    (INL (), s with contexts :=
+      (c with <|gasUsed := c.gasUsed - c.stateGasSpilled - c.stateGasCommitted;
+                stateGasSpilled := 0; stateGasCommitted := 0;
+                stateGasLeft := sg; stateGasBaseline := sg|>,k)::cs)
+Proof
+  simp[restore_state_gas_to_entry_def, bind_def, get_current_context_def,
+       set_current_context_def, return_def]
+QED
+
 Theorem guarded_credit_state_gas_refund_apply[local]:
   s.contexts = (c,k)::cs ==>
   (if n = 0 then return () else credit_state_gas_refund n) s =
@@ -2545,7 +2567,7 @@ QED
    Both steps stay `gvs` (the equations the pop leaves have to be substituted),
    with different rewrite sets. *)
 fun exn_inner_merged_tac ths =
-  gvs ([restore_state_gas_def, restore_state_gas_to_entry_def] @
+  gvs ([restore_state_gas_context_apply, restore_state_gas_to_entry_context_apply] @
        [ExclSF "ARITH",
         CaseEq "sum", CaseEq "bool", CaseEq "prod",
         bind_def, ignore_bind_def, return_def, get_current_context_def,
@@ -5159,12 +5181,14 @@ Proof
          charge_state_gas_apply, charge_state_gas_def,
          assert_not_static_def, get_static_def, set_return_data_def,
          get_num_contexts_def, access_storage_split,
-         proceed_create_def, drain_state_gas_reservoir_def,
+         HD_TAKE, LENGTH_DROP,
+         Abbr`stateCost`, Abbr`sg`, Abbr`cappedGas`, Abbr`gasLeft`]
+  \\ gvs[proceed_create_def, drain_state_gas_reservoir_def,
          update_accounts_def, get_rollback_def, get_original_def,
          set_original_def, push_context_def, inc_pc_or_jump_def,
-         handle_step_def, increment_nonce_def, HD_TAKE, LENGTH_DROP,
-         initial_msg_params_def,
-         Abbr`stateCost`, Abbr`sg`, Abbr`cappedGas`, Abbr`gasLeft`]
+         handle_step_def, increment_nonce_def, initial_msg_params_def,
+         bind_def, ignore_bind_def, return_def, get_current_context_def,
+         set_current_context_def]
   \\ gs[EMPTY_evm2set]
   \\ ntac 4
      ((conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
@@ -7603,8 +7627,8 @@ Proof
   \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
          inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
          bind_def,ignore_bind_def,return_def,get_current_context_def,
-         set_current_context_def,assert_def,get_return_data_def]
-  \\ gvs[get_output_to_def,set_return_data_def,get_gas_left_def,
+         set_current_context_def,assert_def,get_return_data_def,
+         get_output_to_def,set_return_data_def,get_gas_left_def,
          consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
          set_rollback_def,CaseEq"prod",CaseEq"sum"]
   \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
