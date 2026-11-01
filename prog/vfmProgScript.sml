@@ -1236,6 +1236,106 @@ Proof
         compute_gas_left_def, LET_THM, COND_CLAUSES]
 QED
 
+Theorem transfer_value_zero:
+  transfer_value f t 0 = I
+Proof
+  rw[FUN_EQ_THM, transfer_value_def]
+QED
+
+(* run_transaction from a run of the call that ends in a state of the
+   success shape *)
+Theorem run_to_run_transaction:
+  tx.to = SOME callee ∧
+  ¬fIN callee precompile_addresses ∧
+  (* EIP-8037: as in `SPEC_to_run_transaction`, the prelude's own charge for
+     creating the callee has to be nought for the callee to be entered. *)
+  ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts)) ∧
+  wf_accounts accounts ∧
+  initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
+  run (s with rollback updated_by
+       (λr. r with accounts updated_by transfer_value tx.from callee tx.value))
+    = SOME rs2 ∧
+  (evm_Exception (INR NONE) * evm_ReturnData returnData *
+   evm_Logs logs * evm_Rollback rb * evm_Contexts [] *
+   evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+   evm_MsgParams msgParams *
+   evm_AddRefund addRefund * evm_SubRefund subRefund *
+   evm_TxParams txParams * R) (evm2set rs2)
+  ⇒
+  ∃result accounts'.
+    run_transaction dom F chainId prevHashes blk accounts tx =
+      SOME (result, accounts') ∧
+    result.result = NONE ∧
+    result.output = returnData ∧
+    result.logs = logs ∧
+    (* Fees accumulate at aliased addresses; successful deletions happen last. *)
+    (∀addr.
+       lookup_account addr accounts' =
+       clear_deleted (MEM addr rb.toDelete)
+       ((lookup_account addr rb.accounts) with balance :=
+         (lookup_account addr rb.accounts).balance +
+         (if addr = tx.from then
+            compute_refund_ether tx.gasLimit tx.gasPrice tx.accessList tx.data
+              tx.to tx.from tx.value
+              msgParams.gasLimit gasUsed stateGasLeft addRefund subRefund
+              txParams.authRefund
+          else 0) +
+         (if addr = blk.coinBase then
+            compute_transaction_fee tx.gasLimit tx.gasPrice blk.baseFeePerGas
+              tx.accessList tx.data tx.to tx.from tx.value
+              msgParams.gasLimit gasUsed stateGasLeft addRefund
+              subRefund txParams.authRefund
+          else 0)))
+Proof
+  strip_tac
+  \\ simp[run_transaction_def]
+  \\ `run_create dom F chainId prevHashes blk accounts tx =
+      SOME (INR (s.rollback.accounts,
+                 s with rollback updated_by
+                   (λr. r with accounts updated_by
+                          transfer_value tx.from callee tx.value),
+                 NONE))`
+       by (imp_res_tac run_create_call >> gvs[])
+  \\ gvs[]
+  \\ `FST rs2 = INR NONE` by
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+      \\ simp[evm2set_def]
+      \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+      \\ simp[])
+  \\ Cases_on `rs2` \\ gvs[]
+  \\ `r.contexts <> []` by
+     (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+      \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ simp[evm2set_def, STAR_evm2set]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+  \\ strip_tac
+  \\ qexistsl_tac
+       [`FST (post_transaction_accounting blk tx NONE s.rollback.accounts r)`,
+        `SND (post_transaction_accounting blk tx NONE s.rollback.accounts r)`]
+  \\ `~NULL r.contexts /\ NULL (TL r.contexts)` by simp[NULL_EQ]
+  \\ drule_all post_transaction_accounting_success
+  \\ disch_then (qspecl_then [`tx`, `blk`, `s.rollback.accounts`] strip_assume_tac)
+  \\ simp[]
+  \\ gen_tac
+  \\ drule_all post_transaction_accounting_success_lookup
+  \\ disch_then (qspecl_then [`tx`, `blk`, `addr`, `s.rollback.accounts`] mp_tac)
+  \\ disch_then SUBST1_TAC
+  (* This branch's `compute_*` calls take the transaction's recipient and value,
+     and the steps above have already rewritten the goal's own copy of them --
+     `tx.to` to `SOME callee`, and `tx.value` to 0 in the case where the
+     prelude's creation charge is nought.  The accounting lemma's copy of the
+     same formula only appears here, so substitute those equalities through
+     before `AP_TERM_TAC`, which needs the same function on both sides. *)
+  \\ gvs[]
+  \\ AP_TERM_TAC
+  \\ qmatch_goalsub_abbrev_tac `_ with balance := balance + refund + fee`
+  \\ simp[NoAsms, account_state_component_equality, AC ADD_ASSOC ADD_COMM]
+QED
+
+(* Main bridging theorem: connects SPEC to run_transaction for message calls *)
+
 (* Main bridging theorem: connects SPEC to run_transaction for message calls *)
 Theorem SPEC_to_run_transaction:
   (* SPEC preconditions *)
@@ -1291,8 +1391,13 @@ Theorem SPEC_to_run_transaction:
           else 0)))
 Proof
   strip_tac
-  \\ `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
-  by (irule run_from_SPEC
+  \\ simp[run_transaction_def]
+  \\ `run_create dom F chainId prevHashes blk accounts tx =
+      SOME (INR (s.rollback.accounts, s', NONE))`
+       by (imp_res_tac run_create_call >> gvs[])
+  \\ simp[]
+  \\ sg `?rs2. run s' = SOME rs2 /\ Q (evm2set rs2)`
+  >- (irule run_from_SPEC
       \\ conj_tac
       >- (qexists_tac `evm_ReturnData returnData * evm_Logs logs *
             evm_Rollback rb * evm_Contexts [] * evm_GasUsed gasUsed *
@@ -1302,7 +1407,39 @@ Proof
           \\ qexists_tac `NONE` \\ gvs[] \\ simp[STAR_ASSOC])
       >- (qexists_tac `P` \\ simp[]))
   \\ gvs[]
-  \\ drule_all run_to_run_transaction \\ simp[]
+  \\ `FST rs2 = INR NONE` by
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+      \\ simp[evm2set_def]
+      \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+      \\ simp[])
+  \\ Cases_on `rs2` \\ gvs[]
+  \\ `r.contexts <> []` by
+     (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+      \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ simp[evm2set_def, STAR_evm2set]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+  \\ strip_tac
+  \\ qexistsl_tac
+       [`FST (post_transaction_accounting blk tx NONE s.rollback.accounts r)`,
+        `SND (post_transaction_accounting blk tx NONE s.rollback.accounts r)`]
+  \\ `~NULL r.contexts /\ NULL (TL r.contexts)` by simp[NULL_EQ]
+  \\ drule_all post_transaction_accounting_success
+  \\ disch_then (qspecl_then [`tx`, `blk`, `s.rollback.accounts`] strip_assume_tac)
+  \\ simp[]
+  \\ gen_tac
+  \\ drule_all post_transaction_accounting_success_lookup
+  \\ disch_then (qspecl_then [`tx`, `blk`, `addr`, `s.rollback.accounts`] mp_tac)
+  \\ disch_then SUBST1_TAC
+  \\ AP_TERM_TAC
+  (* The two sides disagree on the recipient: the spec keeps `tx.to`, the
+     accounting lemma's instance was already rewritten to `SOME callee`.
+     Rewrite before abbreviating, or the abbreviation hides the occurrence
+     from the rewriter and the AC step cannot close. *)
+  \\ qpat_x_assum `tx.to = SOME callee` (fn th => simp [th])
+  \\ qmatch_goalsub_abbrev_tac `_ with balance := balance + refund + fee`
+  \\ simp[NoAsms, account_state_component_equality, AC ADD_ASSOC ADD_COMM]
 QED
 
 Theorem post_transaction_accounting_failure:
@@ -1333,12 +1470,17 @@ QED
 Theorem run_to_run_transaction_failure:
   tx.to = SOME callee ∧
   ¬fIN callee precompile_addresses ∧
+  (* EIP-8037: as in `SPEC_to_run_transaction_failure`, the prelude's own
+     charge for creating the callee has to be nought for the callee to be
+     entered. *)
+  ¬(0 < tx.value ∧ account_empty (lookup_account callee s.rollback.accounts)) ∧
   initial_state dom F chainId prevHashes blk accounts tx = SOME s ∧
   run (s with rollback updated_by
        (λr. r with accounts updated_by transfer_value tx.from callee tx.value))
     = SOME rs2 ∧
   (evm_Exception (INR (SOME e)) * evm_ReturnData returnData *
-   evm_Contexts [] * evm_GasUsed gasUsed * evm_MsgParams msgParams *
+   evm_Contexts [] * evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
+   evm_MsgParams msgParams *
    evm_TxParams txParams * R) (evm2set rs2)
   ⇒
   ∃result accounts'.
@@ -1348,10 +1490,11 @@ Theorem run_to_run_transaction_failure:
     result.output = returnData ∧
     result.logs = [] ∧
     result.gasUsed =
-      compute_total_gas_used tx.gasLimit tx.data msgParams.gasLimit gasUsed
-        0 0 txParams.authRefund ∧
+      compute_total_gas_used tx.gasLimit tx.accessList tx.data tx.to tx.from
+        tx.value msgParams.gasLimit gasUsed stateGasLeft 0 0
+        txParams.authRefund ∧
     accounts' =
-      pay_transaction_gas blk tx msgParams.gasLimit gasUsed 0 0
+      pay_transaction_gas blk tx msgParams.gasLimit gasUsed stateGasLeft 0 0
         txParams.authRefund s.rollback.accounts
 Proof
   strip_tac
@@ -1365,7 +1508,7 @@ Proof
        by (imp_res_tac run_create_call >> gvs[])
   \\ gvs[]
   \\ `FST rs2 = INR (SOME e)` by
-     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _) _` mp_tac
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
       \\ simp[evm2set_def]
       \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
       \\ simp[])
@@ -1373,7 +1516,7 @@ Proof
   \\ `r.contexts <> []` by
      (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
       \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
-  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
   \\ simp[evm2set_def, STAR_evm2set]
   \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
   \\ simp[]
@@ -1419,8 +1562,13 @@ Theorem SPEC_to_run_transaction_failure:
         txParams.authRefund s.rollback.accounts
 Proof
   strip_tac
-  \\ `∃rs2. run s' = SOME rs2 ∧ Q (evm2set rs2)`
-  by (irule run_from_SPEC
+  \\ simp[run_transaction_def]
+  \\ `run_create dom F chainId prevHashes blk accounts tx =
+      SOME (INR (s.rollback.accounts, s', NONE))`
+       by (imp_res_tac run_create_call >> gvs[])
+  \\ simp[]
+  \\ sg `?rs2. run s' = SOME rs2 /\ Q (evm2set rs2)`
+  >- (irule run_from_SPEC
       \\ conj_tac
       >- (qexists_tac `evm_ReturnData returnData * evm_Contexts [] *
             evm_GasUsed gasUsed * evm_StateGasLeft stateGasLeft *
@@ -1429,7 +1577,24 @@ Proof
           \\ qexists_tac `SOME e` \\ gvs[] \\ simp[STAR_ASSOC])
       >- (qexists_tac `P` \\ simp[]))
   \\ gvs[]
-  \\ drule_all run_to_run_transaction_failure \\ simp[]
+  \\ `FST rs2 = INR (SOME e)` by
+     (qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+      \\ simp[evm2set_def]
+      \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+      \\ simp[])
+  \\ Cases_on `rs2` \\ gvs[]
+  \\ `r.contexts <> []` by
+     (`s.contexts <> []` by (drule initial_state_nonempty_contexts >> simp[])
+      \\ imp_res_tac run_preserves_nonempty_contexts \\ gvs[])
+  \\ qpat_x_assum `(_ * _ * _ * _ * _ * _ * _ * _) _` mp_tac
+  \\ simp[evm2set_def, STAR_evm2set]
+  \\ rewrite_tac[GSYM STAR_ASSOC, STAR_evm2set]
+  \\ simp[]
+  \\ strip_tac
+  \\ `~NULL r.contexts /\ NULL (TL r.contexts)` by simp[NULL_EQ]
+  \\ qexists_tac
+       `FST (post_transaction_accounting blk tx (SOME e) s.rollback.accounts r)`
+  \\ simp[PAIR_FST_SND_EQ, post_transaction_accounting_failure]
 QED
 
 (*-------------------------------------------------------------------------------*
@@ -1815,13 +1980,16 @@ Definition SStore_state_gas_def:
   in (sstore_state_gas_refund originalValue currentValue value,
       sstore_state_gas originalValue currentValue value)
 End
-(* an SSTORE to a slot just read pays no cold surcharge *)
+(* an SSTORE to a slot just read pays the warm access, not the cold surcharge:
+   this variant of `SStore_gas` charges the access cost itself rather than its
+   cold surcharge, so the access cost here is the warm one. *)
 Theorem SStore_gas_add_slot:
   FST (SStore_gas original (accesses_add_slot (SK a k) rb) a k v) =
   sstore_base_gas (lookup_storage k (lookup_account a original).storage)
-                  (lookup_storage k (lookup_account a rb.accounts).storage) v
+                  (lookup_storage k (lookup_account a rb.accounts).storage) v +
+  warm_access_cost
 Proof
-  rw[SStore_gas_def, access_slot_cost_add_slot, zero_warm_def,
+  rw[SStore_gas_def, access_slot_cost_add_slot,
      warm_access_cost_def, accesses_add_slot_accounts]
   \\ pairarg_tac \\ gvs[]
 QED
@@ -1829,16 +1997,18 @@ QED
 Theorem sstore_base_gas_le:
   sstore_base_gas ov cv v ≤ 20000
 Proof
-  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, warm_access_cost_def]
+  rw[sstore_base_gas_def, storage_write_cost_def]
 QED
 
-(* the first write to a slot that was nonzero, or that isn't changed *)
+(* EIP-8038 prices the write itself, whether the slot was set or updated, so
+   this is at most one `STORAGE_WRITE`, not the old
+   `storage_update_cost - cold_sload_cost`; the slot's access is a separate
+   term of the charge. *)
 Theorem sstore_base_gas_same_le:
-  (c = 0w ⇒ v = c) ⇒ sstore_base_gas c c v ≤ 2900
+  (c = 0w ⇒ v = c) ⇒
+  sstore_base_gas c c v ≤ storage_write_cost
 Proof
-  rw[sstore_base_gas_def, storage_set_cost_def, storage_update_cost_def,
-     cold_sload_cost_def, warm_access_cost_def]
+  rw[sstore_base_gas_def, storage_write_cost_def]
   \\ gvs[]
 QED
 
@@ -2301,62 +2471,20 @@ fun exn_outer_tac ths =
   \\ gvs[DELETE_COMM]
   \\ end_tac
 
-Theorem step_exception_inner[local]:
-  s.contexts = (callee,cb)::(caller,crb)::rest ∧
-  FLOOKUP callee.msgParams.parsed callee.pc = SOME inst ∧
-  ignore_bind (step_inst inst) (inc_pc_or_jump inst) s = (INR (SOME exc), s') ∧
-  s'.contexts = (callee',cb)::(caller,crb)::rest ∧
-  callee'.gasUsed ≤ callee'.msgParams.gasLimit ∧
-  exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
-  LENGTH caller.stack < stack_limit
-  ⇒
-  step s =
-  (INL (),
-   s' with <| contexts :=
-                (caller with <| stack := b2w F :: caller.stack;
-                                pc := SUC caller.pc; returnData := [] |>,
-                 crb)::rest;
-              rollback := cb |>)
-Proof
-  strip_tac
-  \\ simp[step_def, handle_def, bind_def, get_current_context_def, return_def]
-  \\ Cases_on`callee'.msgParams.outputTo`
-  \\ simp[handle_step_def, handle_def, handle_create_def, handle_exception_def,
-          bind_def, ignore_bind_def, return_def, reraise_def,
-          get_return_data_def, get_output_to_def, get_current_context_def,
-          get_gas_left_def, consume_gas_def, assert_def,
-          set_current_context_def, set_return_data_def, get_num_contexts_def,
-          pop_and_incorporate_context_def, pop_context_def, unuse_gas_def,
-          set_rollback_def, inc_pc_def, push_stack_def, write_memory_def,
-          buffer_write_def, execution_state_component_equality]
-  \\ gvs[execution_state_component_equality, context_component_equality]
-QED
-
-val exn_inner_start_tac =
+fun exn_inner_intro_tac ths =
   irule IMP_EVM_SPEC \\ rpt strip_tac
   \\ rewrite_tac [STAR_evm2set, GSYM STAR_ASSOC, CODE_POOL_EMPTY,
                   EMPTY_evm2set,STAR_evm_hide_Parsed, STAR_CODE_POOL_evm2set]
   \\ qmatch_goalsub_abbrev_tac ‘b ⇒ _’
   \\ reverse $ Cases_on ‘b’ >- simp[]
   \\ qmatch_asmsub_abbrev_tac`_ < stack_limit ∧ is_ret ∧ _`
-  \\ qpat_x_assum `Abbrev (b = _)`
-       (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
+  \\ last_x_assum (strip_assume_tac o REWRITE_RULE[markerTheory.Abbrev_def])
   \\ rpt (qpat_x_assum`_ = _`(assume_tac o
                               ONCE_REWRITE_RULE[GSYM markerTheory.Abbrev_def]))
   \\ gvs[]
-  \\ ‘¬ISR (FST s)’ by (Cases_on ‘FST s’ \\ fs[])
-  \\ pop_assum (fn th => rewrite_tac[th])
-  \\ ‘∃callee cb caller crb rest.
-        (SND s).contexts = (callee,cb)::(caller,crb)::rest’
-     by (Cases_on ‘(SND s).contexts’ \\ gvs[] \\ Cases_on ‘t’ \\ gvs[]
-         \\ Cases_on ‘h’ \\ Cases_on ‘h'’ \\ simp[])
-  \\ gvs[]
-  \\ ‘wf_context callee’ by gvs[wf_state_def]
 
-val exn_inner_end_tac =
-  drule_at (Pat ‘ignore_bind _ _ _ = _’) step_exception_inner
-  \\ simp[] \\ strip_tac
-  \\ drule step_preserves_wf_state
+fun exn_inner_step_tac ths =
+  drule step_preserves_wf_state
   \\ qmatch_assum_rename_tac ‘wf_state (SND r)’
   \\ Cases_on `ISR e` >- gvs[quantHeuristicsTheory.ISL_exists]
   \\ pop_assum (SUBST_ALL_TAC o EQF_INTRO)
@@ -2377,7 +2505,9 @@ val exn_inner_end_tac =
          get_return_data_def,get_output_to_def,reraise_def,
          get_current_context_def,return_def,set_current_context_def,
          assert_def,consume_gas_def,get_gas_left_def,return_destination_case_rator])
-  \\ qmatch_assum_rename_tac`wf_state r2`
+
+fun exn_inner_pop_tac ths =
+  qmatch_assum_rename_tac`wf_state r2`
   \\ `(FST (HD r2.contexts)).msgParams.parsed =
       parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
      by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
@@ -2390,12 +2520,16 @@ val exn_inner_end_tac =
          get_output_to_def,set_return_data_def,get_gas_left_def,
          consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
          set_rollback_def]
-  \\ gvs (state_gas_defs @
-          [bind_def, ignore_bind_def, return_def, get_current_context_def,
-           set_current_context_def, get_gas_left_def, consume_gas_def,
-           fail_def, assert_def, pop_context_def, set_rollback_def,
-           Abbr`merged`])
-  \\ (rpt (conj_tac >- (
+
+fun exn_inner_merged_tac ths =
+  gvs (state_gas_defs @
+       [bind_def, ignore_bind_def, return_def, get_current_context_def,
+        set_current_context_def, get_gas_left_def, consume_gas_def,
+        fail_def, assert_def, pop_context_def, set_rollback_def,
+        Abbr`merged`])
+
+fun exn_inner_conj_tac ths =
+  (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
              \\ simp[] \\ NO_TAC)
@@ -2408,69 +2542,19 @@ val exn_inner_end_tac =
         \\ simp[]
         \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
         \\ metis_tac[option_CASES]))
-  \\ irule UPDATE_evm2set_without_original
+
+fun exn_inner_allpcs_tac ths =
+  irule UPDATE_evm2set_without_original
   \\ simp[execution_state_component_equality]
-  \\ rpt strip_tac
-  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP]
-  \\ first_x_assum(qspec_then`pc`mp_tac)
-  \\ simp[] \\ strip_tac \\ gvs[]
+  \\ Cases_on ‘(SND r).contexts’ \\ gvs[]
+  \\ ntac 2 strip_tac
+  \\ gvs[SUBSET_DEF, PULL_EXISTS, TO_FLOOKUP, Abbr`all_pcs`]
+  \\ qmatch_assum_rename_tac`HasParsed pc2 ∉ dom`
+  \\ first_x_assum(qspec_then`pc2`mp_tac)
+  \\ simp[]
+  \\ strip_tac \\ gvs[]
 
-Theorem SPEC_exception_inner[local]:
-  (P ⇒
-   ∀s ctx.
-     s.contexts = (ctx,cb)::cs ∧ wf_context ctx ∧
-     ctx.stack = ss ∧ ctx.gasUsed = g ∧ ctx.msgParams = p ∧
-     ctx.returnData = rd ∧ ctx.memory = m ⇒
-     ∃exc ctx'.
-       ignore_bind (step_inst inst) (inc_pc_or_jump inst) s =
-         (INR (SOME exc), s with contexts := (ctx',cb)::cs) ∧
-       exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
-       ctx'.gasUsed ≤ ctx'.msgParams.gasLimit)
-  ⇒
-  SPEC EVM_MODEL
-  (evm_Stack ss * evm_PC pc * evm_GasUsed g * evm_MsgParams p *
-   evm_Contexts cs * evm_ReturnData rd * evm_Exception e * evm_Rollback rb *
-   evm_CachedRB cb *
-   evm_Memory m * evm_AddRefund ar * evm_SubRefund sr * evm_Logs l *
-   evm_JumpDest j * evm_Parsed pc inst *
-   evm_hide_Parsed (all_pcs DELETE pc) *
-   cond (cs ≠ [] ∧ LENGTH caller.stack < stack_limit ∧ ISL e ∧
-         caller = FST (HD cs) ∧
-         all_pcs = (FDOM p.parsed ∪ FDOM caller.msgParams.parsed) ∧
-         P))
-  {}
-  (evm_Stack (b2w F::caller.stack) *
-   evm_Memory (caller.memory) *
-   evm_PC (SUC caller.pc) *
-   CODE_POOL EVM_INSTR {(pc,inst) |
-                        FLOOKUP caller.msgParams.parsed pc = SOME inst} *
-   evm_hide_Parsed (all_pcs DIFF FDOM caller.msgParams.parsed) *
-   evm_Contexts (TL cs) *
-   evm_CachedRB (SND (HD cs)) *
-   evm_MsgParams (caller.msgParams) *
-   evm_ReturnData [] *
-   evm_Exception (INL ()) *
-   evm_Rollback cb *
-   evm_GasUsed caller.gasUsed *
-   evm_JumpDest caller.jumpDest *
-   evm_Logs caller.logs *
-   evm_AddRefund caller.addRefund *
-   evm_SubRefund caller.subRefund)
-Proof
-  strip_tac \\ exn_inner_start_tac
-  \\ first_x_assum (qspecl_then [‘SND s’, ‘callee’] mp_tac)
-  \\ simp[] \\ strip_tac
-  \\ exn_inner_end_tac
-QED
 
-val exn_inner_thms =
-  [pop_stack_def,fail_def,bind_def,ignore_bind_def,vfm_abort_def,
-   get_current_context_def,return_def,set_current_context_def,
-   assert_def,consume_gas_def,get_return_data_def,
-   execution_state_component_equality,wf_context_def]
-
-fun exn_inner_tac ths =
-  irule SPEC_exception_inner \\ rpt strip_tac \\ gvs (ths @ exn_inner_thms)
 
 Theorem SPEC_StackUnderflow_outermost:
   SPEC EVM_MODEL
@@ -2603,7 +2687,12 @@ Theorem SPEC_StackUnderflow_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_inner_pop_tac []
+  \\ exn_inner_merged_tac []
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Theorem SPEC_OutOfGas_pop_inner:
@@ -2648,7 +2737,12 @@ Theorem SPEC_OutOfGas_pop_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_inner_pop_tac []
+  \\ exn_inner_merged_tac []
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Theorem SPEC_OutOfGas_inner:
@@ -2691,7 +2785,12 @@ Theorem SPEC_OutOfGas_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_inner_pop_tac []
+  \\ exn_inner_merged_tac []
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Theorem SPEC_StackOverflow_inner:
@@ -2737,7 +2836,12 @@ Theorem SPEC_StackOverflow_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac []
+  exn_inner_intro_tac []
+  \\ exn_inner_step_tac []
+  \\ exn_inner_pop_tac []
+  \\ exn_inner_merged_tac []
+  \\ exn_inner_conj_tac []
+  \\ exn_inner_allpcs_tac []
 QED
 
 Triviality one_le_LENGTH:
@@ -2865,9 +2969,24 @@ Theorem SPEC_InvalidJumpDest_Jump_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
-                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                 one_le_LENGTH,SF CONJ_ss]
+  exn_inner_intro_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                      is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                      one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_step_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_pop_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                       is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                       one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_merged_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                          one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_conj_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_allpcs_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
+                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                          one_le_LENGTH,SF CONJ_ss]
 QED
 
 Theorem SPEC_InvalidJumpDest_JumpI_inner:
@@ -2912,9 +3031,24 @@ Theorem SPEC_InvalidJumpDest_JumpI_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
-                 is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                 SF CONJ_ss]
+  exn_inner_intro_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                      is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                      SF CONJ_ss]
+  \\ exn_inner_step_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        SF CONJ_ss]
+  \\ exn_inner_pop_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                       is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                       SF CONJ_ss]
+  \\ exn_inner_merged_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                          SF CONJ_ss]
+  \\ exn_inner_conj_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                        is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                        SF CONJ_ss]
+  \\ exn_inner_allpcs_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
+                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
+                          SF CONJ_ss]
 QED
 
 Theorem SPEC_OutOfBoundsRead_inner:
@@ -2960,9 +3094,24 @@ Theorem SPEC_OutOfBoundsRead_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
-                 memory_expansion_info_def,get_return_data_check_def,
-                 ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  exn_inner_intro_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                      memory_expansion_info_def,get_return_data_check_def,
+                      ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_step_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                        memory_expansion_info_def,get_return_data_check_def,
+                        ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_pop_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                       memory_expansion_info_def,get_return_data_check_def,
+                       ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_merged_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                          memory_expansion_info_def,get_return_data_check_def,
+                          ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_conj_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                        memory_expansion_info_def,get_return_data_check_def,
+                        ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_allpcs_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
+                          memory_expansion_info_def,get_return_data_check_def,
+                          ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
 QED
 
 Theorem SPEC_WriteInStaticContext_TStore_outermost:
@@ -3093,8 +3242,18 @@ Theorem SPEC_WriteInStaticContext_TStore_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
-                 get_callee_def]
+  exn_inner_intro_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                      get_callee_def]
+  \\ exn_inner_step_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                        get_callee_def]
+  \\ exn_inner_pop_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                       get_callee_def]
+  \\ exn_inner_merged_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                          get_callee_def]
+  \\ exn_inner_conj_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                        get_callee_def]
+  \\ exn_inner_allpcs_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
+                          get_callee_def]
 QED
 
 Theorem SPEC_WriteInStaticContext_Log_inner:
@@ -3140,9 +3299,30 @@ Theorem SPEC_WriteInStaticContext_Log_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_tac [step_inst_def,step_log_def,memory_expansion_info_def,
-                 expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
-                 assert_not_static_def,get_static_def,get_callee_def]
+  exn_inner_intro_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                      expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                      assert_not_static_def,get_static_def,get_callee_def,
+                      Abbr`dynamicGas`]
+  \\ exn_inner_step_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                        expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                        assert_not_static_def,get_static_def,get_callee_def,
+                        Abbr`dynamicGas`]
+  \\ exn_inner_pop_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                       expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                       assert_not_static_def,get_static_def,get_callee_def,
+                       Abbr`dynamicGas`]
+  \\ exn_inner_merged_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                          expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                          assert_not_static_def,get_static_def,get_callee_def,
+                          Abbr`dynamicGas`]
+  \\ exn_inner_conj_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                        expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                        assert_not_static_def,get_static_def,get_callee_def,
+                        Abbr`dynamicGas`]
+  \\ exn_inner_allpcs_tac [step_inst_def,step_log_def,memory_expansion_info_def,
+                          expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
+                          assert_not_static_def,get_static_def,get_callee_def,
+                          Abbr`dynamicGas`]
 QED
 
 Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
@@ -3197,21 +3377,24 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
    evm_AddRefund caller.addRefund *
    evm_SubRefund caller.subRefund)
 Proof
-  exn_inner_start_tac
-  \\ ‘∃exc callee' rb'.
-        ignore_bind (step_inst SelfDestruct) (inc_pc_or_jump SelfDestruct)
-          (SND s) =
-        (INR (SOME exc),
-         SND s with <| contexts := (callee',cb)::(caller,crb)::rest;
-                       rollback := rb';
-                       msdomain := msdomain_add (w2w (HD callee.stack))
-                                     (SND s).msdomain |>) ∧
-        exc ≠ Reverted ∧ ¬vfm_abort (SOME exc) ∧
-        callee'.gasUsed ≤ callee'.msgParams.gasLimit’
-     by gvs([step_inst_def,step_self_destruct_def,access_address_split,
-            set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
-            assert_not_static_def,get_static_def,get_callee_def] @ exn_inner_thms)
-  \\ exn_inner_end_tac
+  exn_inner_intro_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                      set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                      assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_step_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                        set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                        assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_pop_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                       set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                       assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_merged_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                          set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                          assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_conj_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                        set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                        assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_allpcs_tac [step_inst_def,step_self_destruct_def,access_address_split,
+                          set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
+                          assert_not_static_def,get_static_def,get_callee_def]
 QED
 
 (* Non-vacuity witnesses: concrete opcodes meet the shape hypotheses of the
