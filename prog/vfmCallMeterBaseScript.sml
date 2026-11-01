@@ -340,6 +340,34 @@ Proof
   rpt strip_tac >> decide_tac
 QED
 
+(* Taking on a child's reservoirs and repaying the spill each leave the
+   claim's currency alone, so the cancellation below is plain arithmetic on
+   one side's fields instead of a pass over the merged record. *)
+Theorem call_meter_absorb_claim[local]:
+  call_meter_claim (absorb_state_gas c sg sp sc) =
+  call_meter_claim c + sp + sc
+Proof
+  simp[call_meter_claim_def, absorb_state_gas_def]
+QED
+
+Theorem call_meter_repay_claim[local]:
+  call_meter_backed c /\ c.gasUsed <= c.msgParams.gasLimit ==>
+  call_meter_claim (repay_state_gas_spill_context c) = call_meter_claim c
+Proof
+  rpt strip_tac >>
+  `c.stateGasSpilled + c.stateGasCommitted <= c.gasUsed` by
+     fs[call_meter_backed_def] >>
+  simp[call_meter_claim_def, repay_state_gas_spill_context_def, MIN_DEF] >>
+  IF_CASES_TAC >> decide_tac
+QED
+
+Theorem call_meter_gas_reduced_claim[local]:
+  X <= c.gasUsed /\ c.gasUsed <= c.msgParams.gasLimit ==>
+  call_meter_claim (c with gasUsed := c.gasUsed - X) = call_meter_claim c + X
+Proof
+  rpt strip_tac >> simp[call_meter_claim_def] >> decide_tac
+QED
+
 (* Cancelling a child into its parent conserves the ancestor's total claim,
    even when the merged reservoir repays spill. This is independent of logs. *)
 Theorem call_meter_success_pop_claim:
@@ -353,9 +381,28 @@ Theorem call_meter_success_pop_claim:
       callee.stateGasLeft callee.stateGasSpilled callee.stateGasCommitted)) =
   call_meter_claim caller + call_meter_claim callee
 Proof
-  simp[call_meter_claim_def, repay_state_gas_spill_context_def,
-       absorb_state_gas_def, MIN_DEF] >>
-  IF_CASES_TAC >> decide_tac
+  rpt strip_tac >>
+  qabbrev_tac `X = callee.msgParams.gasLimit - callee.gasUsed` >>
+  qabbrev_tac `c1 = caller with gasUsed := caller.gasUsed - X` >>
+  `call_meter_claim callee =
+     X + callee.stateGasSpilled + callee.stateGasCommitted`
+     by simp[Abbr `X`, call_meter_claim_def] >>
+  `X <= caller.gasUsed` by decide_tac >>
+  `call_meter_claim c1 = call_meter_claim caller + X` by
+     (qunabbrev_tac `c1` >> irule call_meter_gas_reduced_claim >>
+      simp[] >> decide_tac) >>
+  `call_meter_claim
+     (repay_state_gas_spill_context
+        (absorb_state_gas c1 callee.stateGasLeft callee.stateGasSpilled
+           callee.stateGasCommitted)) =
+   call_meter_claim
+     (absorb_state_gas c1 callee.stateGasLeft callee.stateGasSpilled
+        callee.stateGasCommitted)` by
+     (irule call_meter_repay_claim >> qunabbrev_tac `c1` >> conj_tac
+      >- (rw[call_meter_backed_def, absorb_state_gas_def] >> decide_tac)
+      >- (rw[absorb_state_gas_def] >> decide_tac)) >>
+  pop_assum (fn th => rewrite_tac[th]) >>
+  simp[call_meter_absorb_claim] >> decide_tac
 QED
 
 Theorem call_meter_initial_claim:
