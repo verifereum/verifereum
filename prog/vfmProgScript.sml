@@ -2179,12 +2179,46 @@ Proof
       context_component_equality, execution_state_component_equality]
 QED
 
-(* EIP-8038: the creation charge, reduced without knowing whether it fires.
-   It draws on the frame's own reservoir and lowers it by the creation's
-   state gas when `charged` holds, by nothing when it does not.  Unlike
-   `charge_state_gas_no_spill_apply` this rule has no variable outside its
-   left-hand side, so it works as a rewrite, with the affordability of the
-   charge as its side condition. *)
+(* A failed, gas-saturated child returns no execution gas. Compute the
+   merge on two explicit frames without unfolding either meter function. *)
+Theorem saturated_failed_child_pop[local]:
+  s.contexts = (child,rb)::(caller,caller_rb)::rest /\
+  child.gasUsed = child.msgParams.gasLimit ==>
+  pop_and_incorporate_context F s =
+    (INL (), s with <|
+      contexts :=
+        (credit_new_account_context
+          (absorb_state_gas caller child.stateGasLeft child.stateGasSpilled
+                            child.stateGasCommitted)
+          child.msgParams.newAccountCharged, caller_rb)::rest;
+      rollback := rb |> )
+Proof
+  strip_tac >>
+  simp[pop_and_incorporate_context_def, get_gas_left_def,
+       pop_context_def, unuse_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, credit_new_account_apply, set_rollback_def]
+QED
+
+Theorem saturated_failed_child_pop_update[local]:
+  child.gasUsed = child.msgParams.gasLimit ==>
+  pop_and_incorporate_context F
+    (s with contexts := (child,rb)::(caller,caller_rb)::rest) =
+    (INL (), s with <|
+      contexts :=
+        (credit_new_account_context
+          (absorb_state_gas caller child.stateGasLeft child.stateGasSpilled
+                            child.stateGasCommitted)
+          child.msgParams.newAccountCharged, caller_rb)::rest;
+      rollback := rb |> )
+Proof
+  strip_tac >>
+  simp[pop_and_incorporate_context_def, get_gas_left_def,
+       pop_context_def, unuse_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, credit_new_account_apply, set_rollback_def]
+QED
+
 Theorem charge_new_account_apply[local]:
   s.contexts <> [] /\
   (if charged then new_account_state_gas else 0) <=
@@ -2528,21 +2562,6 @@ fun exn_inner_step_tac ths =
          get_current_context_def,return_def,set_current_context_def,
          assert_def,consume_gas_def,get_gas_left_def,return_destination_case_rator])
 
-fun exn_inner_pop_tac ths =
-  qmatch_assum_rename_tac`wf_state r2`
-  \\ `(FST (HD r2.contexts)).msgParams.parsed =
-      parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
-     by (gvs[wf_state_def] \\ Cases_on`r2.contexts` \\ gvs[wf_context_def])
-  \\ `¬(SUC (LENGTH cs) ≤ 1)` by (Cases_on`cs` \\ gvs[])
-  \\ Cases_on`p.outputTo`
-  \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
-         inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
-         bind_def,ignore_bind_def,return_def,get_current_context_def,
-         set_current_context_def,assert_def,get_return_data_def,
-         get_output_to_def,set_return_data_def,get_gas_left_def,
-         consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
-         set_rollback_def]
-
 Theorem exn_inner_length_guard[local]:
   !xs:'a list. (SUC (LENGTH xs) <= 1) <=> (xs = [])
 Proof
@@ -2561,37 +2580,84 @@ Proof
   rpt strip_tac >> decide_tac
 QED
 
-(* The four frame-restoring definitions come apart in two steps: over the ten
-   goals the pop leaves, one step rewriting all four runs close to the 2.5s
-   per-step budget on a loaded box, and holbuild times each step separately.
-   Both steps stay `gvs` (the equations the pop leaves have to be substituted),
-   with different rewrite sets. *)
-fun exn_inner_merged_tac ths =
-  gvs ([restore_state_gas_context_apply, restore_state_gas_to_entry_context_apply] @
-       [ExclSF "ARITH",
-        CaseEq "sum", CaseEq "bool", CaseEq "prod",
-        bind_def, ignore_bind_def, return_def, get_current_context_def,
-        set_current_context_def, get_gas_left_def, consume_gas_def,
-        fail_def, assert_def, pop_context_def, set_rollback_def])
-
-fun exn_inner_forfeit_tac ths =
-  gvs ([forfeit_remaining_gas_def, drain_state_gas_reservoir_def] @
-       [ExclSF "ARITH",
-        CaseEq "sum", CaseEq "bool", CaseEq "prod"])
-
-fun exn_inner_guards_tac ths =
-  imp_res_tac exn_inner_gas_saturation
-  \\ imp_res_tac exn_inner_forfeit_guard
-  \\ gvs (state_gas_defs @
-       [ExclSF "ARITH", exn_inner_length_guard, AC ADD_ASSOC ADD_COMM, Abbr`merged`,
-        CaseEq "sum", CaseEq "bool", CaseEq "prod",
-        bind_def, ignore_bind_def, return_def, get_current_context_def,
-        set_current_context_def, get_gas_left_def, consume_gas_def,
-        fail_def, assert_def, pop_context_def, set_rollback_def])
-
 (* The conjunction loop and the set-equality tail are separate steps: run
    together they go past holbuild's per-step budget, and each is timed on its
    own. *)
+(* Each phase is invoked separately at consumers, so computation does not
+   share a timing fragment with unrelated conjunction/parsed-set work. *)
+fun exn_computed_eq_tac th =
+  if is_conj (concl th) then CONJUNCTS_THEN exn_computed_eq_tac th
+  else if is_eq (concl th) andalso is_var (rhs (concl th)) then
+    SUBST_ALL_TAC (SYM th)
+  else strip_assume_tac th
+
+fun exn_boundary_prepare_tac () =
+  qmatch_assum_rename_tac `wf_state r2`
+  \\ `(FST (HD r2.contexts)).msgParams.parsed =
+        parse_code 0 FEMPTY (FST (HD r2.contexts)).msgParams.code`
+       by (gvs[wf_state_def] \\ Cases_on `r2.contexts` \\ gvs[wf_context_def])
+  \\ `~(SUC (LENGTH cs) <= 1)` by (Cases_on `cs` \\ gvs[])
+  \\ Cases_on `cs` >- gvs[]
+  \\ rename1 `Abbrev (caller = FST (HD (hdcs::tlcs)))`
+  \\ PairCases_on `hdcs`
+  \\ Cases_on `p.outputTo`
+  \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
+         inc_pc_def,push_stack_def,bind_def,ignore_bind_def,return_def,
+         get_current_context_def,set_current_context_def,assert_def,
+         get_return_data_def,get_output_to_def,set_return_data_def,
+         write_memory_def]
+
+fun exn_boundary_restore_tac () =
+  qpat_assum `(SND r).contexts <> []` (fn ne =>
+    qpat_x_assum `restore_state_gas _ = _`
+       (mp_tac o SIMP_RULE (srw_ss())
+         [ne, restore_state_gas_context_apply, restore_state_gas_def,
+          bind_def, get_current_context_def, set_current_context_def,
+          return_def, ExclSF "ARITH"]))
+  \\ disch_then (fn th =>
+       if is_eq (concl th) then SUBST_ALL_TAC (SYM th)
+       else strip_assume_tac th)
+
+fun exn_boundary_forfeit_tac () =
+  imp_res_tac exn_inner_forfeit_guard
+  \\ qpat_assum `Abbrev (p = _)` (fn pth =>
+       qpat_assum `Abbrev (g = _)` (fn gth =>
+       qpat_assum `!spill. _ - spill + (p.gasLimit - (_ - spill)) = p.gasLimit`
+         (fn gas => qpat_x_assum `forfeit_remaining_gas _ = _`
+           (mp_tac o SIMP_RULE (srw_ss())
+             [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] pth),
+              GSYM (REWRITE_RULE [markerTheory.Abbrev_def] gth),
+              gas, LET_THM, forfeit_remaining_gas_def, get_gas_left_def,
+              consume_gas_def, bind_def, ignore_bind_def, return_def,
+              get_current_context_def, set_current_context_def,
+              assert_def, fail_def, ExclSF "ARITH"]))))
+  \\ disch_then exn_computed_eq_tac
+
+fun exn_boundary_reads_tac () =
+  qpat_x_assum `(if _.contexts = [] then _ else (INL (FST (HD _.contexts)),_)) = _`
+       (exn_computed_eq_tac o SIMP_RULE (srw_ss()) [ExclSF "ARITH"])
+  \\ qpat_x_assum `(if _.contexts = [] then _ else (INL (),_)) = _`
+       (exn_computed_eq_tac o SIMP_RULE (srw_ss()) [ExclSF "ARITH"])
+
+fun exn_boundary_merge_tac () =
+  qpat_assum `TL (SND r).contexts = _` (fn tail =>
+    qpat_assum `Abbrev (p = _)` (fn pth =>
+       qpat_x_assum `(if LENGTH _.contexts <= 1 then _ else _) _ = _`
+         (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [tail, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] pth),
+            saturated_failed_child_pop_update, bind_def, ignore_bind_def,
+            return_def, get_current_context_def, set_current_context_def,
+            assert_def])))
+
+fun exn_boundary_output_tac () =
+  qpat_assum `p.outputTo = _` (fn output =>
+       qpat_assum `LENGTH caller.stack < 1024` (fn stack =>
+         disch_then (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [output, stack, absorb_state_gas_def, credit_new_account_context_def,
+            bind_def, ignore_bind_def, return_def, get_current_context_def,
+            set_current_context_def, assert_def])))
+  \\ disch_then exn_computed_eq_tac
+
 fun exn_inner_conj_tac ths =
   rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
@@ -2755,10 +2821,13 @@ Theorem SPEC_StackUnderflow_inner:
 Proof
   exn_inner_intro_tac []
   \\ exn_inner_step_tac []
-  \\ exn_inner_pop_tac []
-  \\ exn_inner_merged_tac []
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac []
   \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
@@ -2808,10 +2877,13 @@ Theorem SPEC_OutOfGas_pop_inner:
 Proof
   exn_inner_intro_tac []
   \\ exn_inner_step_tac []
-  \\ exn_inner_pop_tac []
-  \\ exn_inner_merged_tac []
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac []
   \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
@@ -2859,10 +2931,13 @@ Theorem SPEC_OutOfGas_inner:
 Proof
   exn_inner_intro_tac []
   \\ exn_inner_step_tac []
-  \\ exn_inner_pop_tac []
-  \\ exn_inner_merged_tac []
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac []
   \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
@@ -2913,10 +2988,13 @@ Theorem SPEC_StackOverflow_inner:
 Proof
   exn_inner_intro_tac []
   \\ exn_inner_step_tac []
-  \\ exn_inner_pop_tac []
-  \\ exn_inner_merged_tac []
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac []
   \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
@@ -3053,14 +3131,13 @@ Proof
   \\ exn_inner_step_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         one_le_LENGTH,SF CONJ_ss]
-  \\ exn_inner_pop_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
-                       is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                       one_le_LENGTH,SF CONJ_ss]
-  \\ exn_inner_merged_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
-                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                          one_le_LENGTH,SF CONJ_ss]
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         one_le_LENGTH,SF CONJ_ss]
@@ -3118,14 +3195,13 @@ Proof
   \\ exn_inner_step_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         SF CONJ_ss]
-  \\ exn_inner_pop_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
-                       is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                       SF CONJ_ss]
-  \\ exn_inner_merged_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
-                          is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
-                          SF CONJ_ss]
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         SF CONJ_ss]
@@ -3184,14 +3260,13 @@ Proof
   \\ exn_inner_step_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
                         memory_expansion_info_def,get_return_data_check_def,
                         ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
-  \\ exn_inner_pop_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
-                       memory_expansion_info_def,get_return_data_check_def,
-                       ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
-  \\ exn_inner_merged_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
-                          memory_expansion_info_def,get_return_data_check_def,
-                          ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
                         memory_expansion_info_def,get_return_data_check_def,
                         ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
@@ -3246,10 +3321,21 @@ Theorem SPEC_WriteInStaticContext_Log_outermost:
      evm_Memory (expanded_memory m offset sz) *
      evm_Exception (INR (SOME WriteInStaticContext)))
 Proof
-  exn_outer_tac [step_inst_def,step_log_def,memory_expansion_info_def,
-                 expand_memory_def,memory_cost_def,expanded_memory_def,
-                 memory_expand_by_def,EL_TAKE,HD_TAKE,assert_not_static_def,
-                 get_static_def,get_callee_def]
+  start_tac
+  \\ gvs (state_gas_defs @
+          [step_inst_def,step_log_def,memory_expansion_info_def,
+           expand_memory_def,memory_cost_def,expanded_memory_def,
+           memory_expand_by_def,EL_TAKE,HD_TAKE,assert_not_static_def,
+           get_static_def,get_callee_def,
+           pop_stack_def,fail_def,bind_def,ignore_bind_def,
+           handle_step_def,vfm_abort_def,handle_def,handle_create_def,
+           get_return_data_def,get_output_to_def,reraise_def,
+           handle_exception_def,get_gas_left_def,consume_gas_def,
+           set_return_data_def,get_current_context_def,return_def,
+           set_current_context_def,get_num_contexts_def,NULL_EQ,assert_def,
+           return_destination_case_elim])
+  \\ gvs[DELETE_COMM]
+  \\ end_tac
 QED
 
 Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
@@ -3333,12 +3419,13 @@ Proof
                       get_callee_def]
   \\ exn_inner_step_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
                         get_callee_def]
-  \\ exn_inner_pop_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
-                       get_callee_def]
-  \\ exn_inner_merged_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
-                          get_callee_def]
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
                         get_callee_def]
   \\ exn_inner_pcs_tac []
@@ -3397,16 +3484,13 @@ Proof
                         expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
                         assert_not_static_def,get_static_def,get_callee_def,
                         Abbr`dynamicGas`]
-  \\ exn_inner_pop_tac [step_inst_def,step_log_def,memory_expansion_info_def,
-                       expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
-                       assert_not_static_def,get_static_def,get_callee_def,
-                       Abbr`dynamicGas`]
-  \\ exn_inner_merged_tac [step_inst_def,step_log_def,memory_expansion_info_def,
-                          expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
-                          assert_not_static_def,get_static_def,get_callee_def,
-                          Abbr`dynamicGas`]
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac [step_inst_def,step_log_def,memory_expansion_info_def,
                         expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
                         assert_not_static_def,get_static_def,get_callee_def,
@@ -3476,14 +3560,13 @@ Proof
   \\ exn_inner_step_tac [step_inst_def,step_self_destruct_def,access_address_split,
                         set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                         assert_not_static_def,get_static_def,get_callee_def]
-  \\ exn_inner_pop_tac [step_inst_def,step_self_destruct_def,access_address_split,
-                       set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
-                       assert_not_static_def,get_static_def,get_callee_def]
-  \\ exn_inner_merged_tac [step_inst_def,step_self_destruct_def,access_address_split,
-                          set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
-                          assert_not_static_def,get_static_def,get_callee_def]
-  \\ exn_inner_forfeit_tac []
-  \\ exn_inner_guards_tac []
+  \\ exn_boundary_prepare_tac ()
+  \\ exn_boundary_restore_tac ()
+  \\ exn_boundary_forfeit_tac ()
+  \\ exn_boundary_reads_tac ()
+  \\ exn_boundary_merge_tac ()
+  \\ exn_boundary_output_tac ()
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`]
   \\ exn_inner_conj_tac [step_inst_def,step_self_destruct_def,access_address_split,
                         set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                         assert_not_static_def,get_static_def,get_callee_def]
@@ -5191,7 +5274,8 @@ Proof
          set_current_context_def]
   \\ gs[EMPTY_evm2set]
   \\ ntac 4
-     ((conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
+     ((conj_tac >- (qmatch_goalsub_rename_tac `IMAGE _ _ SUBSET _`
+                    \\ gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
                     \\ metis_tac[NOT_SOME_NONE])) ORELSE
       (conj_tac >- simp[initial_msg_params_def]) ORELSE
       (conj_tac >- (simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`]
@@ -5212,7 +5296,8 @@ Proof
        \\ simp[initial_msg_params_def]
        \\ metis_tac[]) ORELSE ALL_TAC)
   \\ ntac 4
-     ((conj_tac >- (gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
+     ((conj_tac >- (qmatch_goalsub_rename_tac `IMAGE _ _ SUBSET _`
+                    \\ gvs[SUBSET_DEF, PULL_EXISTS,Abbr`all_pcs`,TO_FLOOKUP]
                     \\ metis_tac[NOT_SOME_NONE])) ORELSE
       (conj_tac >- simp[initial_msg_params_def]) ORELSE
       (conj_tac >- (simp[Abbr`orig`, Abbr`caller_rb`, Abbr`caller`]
@@ -7587,61 +7672,48 @@ Proof
          bind_def, ignore_bind_def, get_current_context_def,
          set_current_context_def, return_def, get_gas_left_def,
          consume_gas_def, set_return_data_def, assert_def]
-  \\ Cases_on`p.outputTo`
-  \\ qpat_assum `~((SND r).contexts = [])` (fn initial_guard =>
-       qpat_assum `~(cs = [])` (fn guard =>
+  \\ Cases_on `cs` >- gvs[]
+  \\ rename1 `Abbrev (caller = FST (HD (h::t)))`
+  \\ PairCases_on `h`
+  \\ gvs[Abbr `caller`]
+  \\ Cases_on `p.outputTo`
+  \\ qpat_assum `(SND r).contexts <> []` (fn ne =>
+       qpat_assum `TL (SND r).contexts = _` (fn tail =>
        qpat_x_assum `_ = (q,r2)`
-         (assume_tac o SIMP_RULE (srw_ss())
-           [LET_THM, initial_guard, guard, handle_exception_def, get_num_contexts_def,
-            exn_inner_length_guard, pop_and_incorporate_context_def,
-            pop_context_def, bind_def, ignore_bind_def, return_def,
-            get_current_context_def, set_current_context_def,
+         (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [LET_THM, ne, tail, handle_exception_def, get_num_contexts_def,
             restore_state_gas_def, forfeit_remaining_gas_def,
-            get_gas_left_def, consume_gas_def, set_return_data_def,
-            assert_def, unuse_gas_def, set_rollback_def,
-            credit_new_account_apply, inc_pc_def, push_stack_def,
-            write_memory_def, get_return_data_def, get_output_to_def])))
-  \\ qpat_x_assum `_ = (q,r2)`
-       (assume_tac o SIMP_RULE (srw_ss())
-         [LET_THM, credit_new_account_apply, bind_def, ignore_bind_def, return_def,
-          get_current_context_def, set_current_context_def, set_rollback_def,
-          inc_pc_def, set_return_data_def, push_stack_def, assert_def,
-          write_memory_def])
-  \\ gvs[ExclSF "ARITH", exn_inner_forfeit_guard,
-         exn_inner_length_guard]
-  \\ qpat_x_assum `_ = (q,r2)`
-       (assume_tac o SIMP_RULE (srw_ss())
-         [LET_THM, credit_new_account_def, credit_state_gas_refund_def,
-          bind_def, ignore_bind_def,
-          return_def, get_current_context_def, set_current_context_def,
-          set_rollback_def, inc_pc_def, set_return_data_def, push_stack_def,
-          assert_def, write_memory_def])
-  \\ Cases_on `p.newAccountCharged`
-  \\ gvs[ExclSF "ARITH"]
-  \\ qpat_x_assum `_ = (q,r2)`
-       (assume_tac o SIMP_RULE (srw_ss())
-         [LET_THM, bind_def, ignore_bind_def, return_def,
-          get_current_context_def, set_current_context_def, set_rollback_def,
-          inc_pc_def, set_return_data_def, push_stack_def, assert_def,
-          write_memory_def])
-  \\ gvs[CaseEq"prod",CaseEq"sum",handle_exception_def,get_num_contexts_def,
-         inc_pc_def,pop_and_incorporate_context_def,push_stack_def,
-         bind_def,ignore_bind_def,return_def,get_current_context_def,
-         set_current_context_def,assert_def,get_return_data_def,
-         get_output_to_def,set_return_data_def,get_gas_left_def,
-         consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
-         set_rollback_def,CaseEq"prod",CaseEq"sum"]
-  \\ gvs[restore_state_gas_def, forfeit_remaining_gas_def,
-         bind_def, ignore_bind_def, get_current_context_def,
-         set_current_context_def, return_def, get_gas_left_def,
-         consume_gas_def, set_return_data_def, assert_def,
-         CaseEq "prod", CaseEq "sum"]
-  \\ gvs[pop_context_def, set_rollback_def, get_current_context_def,
-         set_current_context_def, bind_def, ignore_bind_def, return_def,
-         inc_pc_def, push_stack_def, write_memory_def, assert_def,
-         absorb_state_gas_def, credit_new_account_apply,
-         credit_new_account_context_def,
-         Abbr `merged`, Abbr `caller`]
+            get_gas_left_def, consume_gas_def,
+            bind_def, ignore_bind_def, return_def,
+            get_current_context_def, set_current_context_def,
+            set_return_data_def, assert_def])))
+  \\ disch_then assume_tac
+  \\ imp_res_tac exn_inner_forfeit_guard
+  \\ qpat_assum `Abbrev (p = _)` (fn pth =>
+       qpat_assum `Abbrev (g = _)` (fn gth =>
+       qpat_assum `!spill. _ - spill + (p.gasLimit - (_ - spill)) = p.gasLimit`
+         (fn gas => qpat_x_assum `_ = (q,r2)`
+           (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+             [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] pth),
+              GSYM (REWRITE_RULE [markerTheory.Abbrev_def] gth),
+              gas, AC ADD_ASSOC ADD_COMM,
+              saturated_failed_child_pop_update, bind_def, ignore_bind_def,
+              return_def, get_current_context_def, set_current_context_def,
+              assert_def, inc_pc_def, get_output_to_def,
+              get_return_data_def, set_return_data_def, push_stack_def,
+              write_memory_def]))))
+  \\ disch_then assume_tac
+  \\ qpat_assum `p.outputTo = _` (fn output =>
+       qpat_assum `LENGTH _.stack < 1024` (fn stack =>
+       qpat_x_assum `_ = (q,r2)`
+         (mp_tac o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+           [output, stack, LET_THM, absorb_state_gas_def,
+            credit_new_account_context_def, bind_def, ignore_bind_def,
+            return_def, get_current_context_def, set_current_context_def,
+            assert_def])))
+  \\ disch_then exn_computed_eq_tac
+  \\ gvs[Abbr `merged`, Abbr `bsl`, Abbr `cm`, Abbr `cb`,
+         absorb_state_gas_def, credit_new_account_context_def]
   \\ (rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
