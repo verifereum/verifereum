@@ -528,6 +528,27 @@ Definition pre_transaction_updates_def:
   SOME $ update_account t.from updatedSender a
 End
 
+(* EIP-8037: the authorization costs a transaction owes, in the order
+   `run_create` settles them on its top frame, named so that a spec can ask
+   for them to be nought.  Nought admits a transaction whose authorizations
+   are free -- an authority the sender already pays to write, or one that
+   only clears a delegation -- and not just one that carries none.  The
+   account state is the one the transaction's own updates leave, which is
+   what `run_create` folds over; its first case is unreachable there, since
+   `run_create` has already returned when those updates fail. *)
+Definition authorization_charges_def:
+  authorization_charges chainId blk accounts tx =
+  case pre_transaction_updates accounts
+         (base_fee_per_blob_gas blk.excessBlobGas) tx
+  of NONE => [] | SOME startAccounts =>
+    let callee = callee_from_tx_to tx.from tx.nonce tx.to in
+    let (_, _, _, _, charges) =
+      process_authorizations chainId (authorization_paid_writes tx callee)
+        startAccounts tx.authorizationList startAccounts
+        (initial_access_sets blk.coinBase callee tx) fEMPTY fEMPTY [] in
+    charges
+End
+
 Definition code_from_tx_def:
   code_from_tx a (c: access_sets) t =
   case t.to of

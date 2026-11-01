@@ -2379,21 +2379,17 @@ Definition run_create_def:
     let rbAccounts = s.rollback.accounts in
     (* EIP-8037: EIP-7702's state-dependent authorization costs come off the
        top frame before it is dispatched -- after the intrinsic and before
-       the dispatch charges below, as EELS's `create_evm` has them.  The fold
-       is the one `initial_state` ran for the accounts, over the transaction's
-       own start state, so the two agree on which authorizations are valid.  A
-       charge the frame cannot cover is a preparation failure: the frame's
-       state gas returns to entry, the authorizations roll back with the
-       state, and the transaction settles without dispatching. *)
+       the dispatch charges below, as EELS's `create_evm` has them.  They are
+       the fold `initial_state` ran for the accounts, over the transaction's
+       own start state, named by `authorization_charges` so a spec can ask for
+       them to be nought.  A charge the frame cannot cover is a preparation
+       failure: the frame's state gas returns to entry, the authorizations
+       roll back with the state, and the transaction settles without
+       dispatching. *)
     let preAuthAccounts =
           THE $ pre_transaction_updates accounts
                   (base_fee_per_blob_gas blk.excessBlobGas) tx in
-    let (_, _, _, _, authCharges) =
-          process_authorizations chainId
-            (authorization_paid_writes tx calleeAddress)
-            preAuthAccounts tx.authorizationList preAuthAccounts
-            (initial_access_sets blk.coinBase calleeAddress tx)
-            fEMPTY fEMPTY [] in
+    let authCharges = authorization_charges chainId blk accounts tx in
     (case apply_authorization_charges authCharges ctxt of
      | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
                       preAuthAccounts
