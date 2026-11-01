@@ -3,7 +3,7 @@ Ancestors vfmCallInner vfmCallBudget vfmCallMeterBase vfmRunCall vfmContextLengt
           vfmExecutionProp vfmExecution vfmState vfmContext vfmTypes
           vfmDecreasesGas vfmStepLength vfmHandleStep vfmBuffer
           vfmConstants vfmSameFrame vfmTxParams vfmRunWithinFrame
-          vfmAccountFrame vfmStaticCalls
+          vfmAccountFrame vfmStaticCalls vfmStoragePredicates
           arithmetic list pair While combin words
 
 Theorem call_meter_step_collect_not_outside:
