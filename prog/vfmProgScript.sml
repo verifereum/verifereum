@@ -2539,14 +2539,23 @@ Proof
   rpt strip_tac >> decide_tac
 QED
 
+(* The four frame-restoring definitions come apart in two steps: over the ten
+   goals the pop leaves, one step rewriting all four runs close to the 2.5s
+   per-step budget on a loaded box, and holbuild times each step separately.
+   Both steps stay `gvs` (the equations the pop leaves have to be substituted),
+   with different rewrite sets. *)
 fun exn_inner_merged_tac ths =
-  gvs ([restore_state_gas_def, restore_state_gas_to_entry_def,
-        forfeit_remaining_gas_def, drain_state_gas_reservoir_def] @
+  gvs ([restore_state_gas_def, restore_state_gas_to_entry_def] @
        [ExclSF "ARITH",
         CaseEq "sum", CaseEq "bool", CaseEq "prod",
         bind_def, ignore_bind_def, return_def, get_current_context_def,
         set_current_context_def, get_gas_left_def, consume_gas_def,
         fail_def, assert_def, pop_context_def, set_rollback_def])
+
+fun exn_inner_forfeit_tac ths =
+  gvs ([forfeit_remaining_gas_def, drain_state_gas_reservoir_def] @
+       [ExclSF "ARITH",
+        CaseEq "sum", CaseEq "bool", CaseEq "prod"])
 
 fun exn_inner_guards_tac ths =
   imp_res_tac exn_inner_gas_saturation
@@ -2558,20 +2567,25 @@ fun exn_inner_guards_tac ths =
         set_current_context_def, get_gas_left_def, consume_gas_def,
         fail_def, assert_def, pop_context_def, set_rollback_def])
 
+(* The conjunction loop and the set-equality tail are separate steps: run
+   together they go past holbuild's per-step budget, and each is timed on its
+   own. *)
 fun exn_inner_conj_tac ths =
-  (rpt (conj_tac >- (
+  rpt (conj_tac >- (
         gvs[Abbr`all_pcs`,TO_FLOOKUP,SUBSET_DEF, PULL_EXISTS] \\
         TRY (rpt strip_tac \\ drule FLOOKUP_parse_code_SOME_less_LENGTH
              \\ simp[] \\ NO_TAC)
-        \\ metis_tac[NOT_SOME_NONE])))
-  \\ (conj_tac >-
-       (qpat_x_assum ‘_ = {}’ mp_tac
-        \\ simp[EXTENSION,Abbr`all_pcs`] \\ rw [EQ_IMP_THM]
-        \\ gvs[SUBSET_DEF,PULL_EXISTS]
-        \\ last_x_assum(qspec_then`x`mp_tac)
-        \\ simp[]
-        \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
-        \\ metis_tac[option_CASES]))
+        \\ metis_tac[NOT_SOME_NONE]))
+
+fun exn_inner_pcs_tac ths =
+  conj_tac >-
+    (qpat_x_assum ‘_ = {}’ mp_tac
+     \\ simp[EXTENSION,Abbr`all_pcs`] \\ rw [EQ_IMP_THM]
+     \\ gvs[SUBSET_DEF,PULL_EXISTS]
+     \\ last_x_assum(qspec_then`x`mp_tac)
+     \\ simp[]
+     \\ strip_tac \\ gvs[FORALL_PROD, TO_FLOOKUP]
+     \\ metis_tac[option_CASES])
 
 fun exn_inner_allpcs_tac ths =
   irule UPDATE_evm2set_without_original
@@ -2721,8 +2735,10 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
 QED
 
@@ -2772,8 +2788,10 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
 QED
 
@@ -2821,8 +2839,10 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
 QED
 
@@ -2873,8 +2893,10 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac []
 QED
 
@@ -3015,10 +3037,12 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
                           is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                           one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
                           is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                           one_le_LENGTH,SF CONJ_ss]
@@ -3078,10 +3102,12 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
                           is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                           SF CONJ_ss]
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         SF CONJ_ss]
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
                           is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                           SF CONJ_ss]
@@ -3142,10 +3168,12 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
                           memory_expansion_info_def,get_return_data_check_def,
                           ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
                         memory_expansion_info_def,get_return_data_check_def,
                         ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
                           memory_expansion_info_def,get_return_data_check_def,
                           ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
@@ -3287,9 +3315,11 @@ Proof
                        get_callee_def]
   \\ exn_inner_merged_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
                           get_callee_def]
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
                         get_callee_def]
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
                           get_callee_def]
 QED
@@ -3353,11 +3383,13 @@ Proof
                           expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
                           assert_not_static_def,get_static_def,get_callee_def,
                           Abbr`dynamicGas`]
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_log_def,memory_expansion_info_def,
                         expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
                         assert_not_static_def,get_static_def,get_callee_def,
                         Abbr`dynamicGas`]
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac [step_inst_def,step_log_def,memory_expansion_info_def,
                           expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
                           assert_not_static_def,get_static_def,get_callee_def,
@@ -3428,10 +3460,12 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_self_destruct_def,access_address_split,
                           set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                           assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_forfeit_tac []
   \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_self_destruct_def,access_address_split,
                         set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                         assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_pcs_tac []
   \\ exn_inner_allpcs_tac [step_inst_def,step_self_destruct_def,access_address_split,
                           set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                           assert_not_static_def,get_static_def,get_callee_def]
