@@ -943,6 +943,21 @@ Proof
   >> drule step_inst_saved_storage_keys_grow >> simp[]
 QED
 
+Theorem handle_exception_result_observations[local]:
+  (case z of INL x => (a,u) | INR y => (INR y,v)) = (r,t) ==>
+  ((t.rollback,LENGTH t.contexts) = (u.rollback,LENGTH u.contexts) \/
+   (t.rollback,LENGTH t.contexts) = (v.rollback,LENGTH v.contexts))
+Proof
+  Cases_on `z` >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem contexts_update_length_observation[local]:
+  (s with contexts := cs) = mid ==>
+  LENGTH mid.contexts = LENGTH cs
+Proof
+  strip_tac >> gvs[]
+QED
+
 Theorem handle_exception_storage_keys[local]:
   s.contexts ≠ [] ∧ handle_exception e s = (r,t) ⇒
   t.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys ∨
@@ -955,10 +970,15 @@ Proof
   >> Cases_on `t'` >> gvs[]
   >> Cases_on `e = NONE`
   >> Cases_on `e = SOME Reverted` >> gvs[]
-  >> rw[handle_exception_def, bind_def, ignore_bind_def,
-        restore_state_gas_def, forfeit_remaining_gas_def,
-        absorb_state_gas_def, repay_state_gas_spill_def,
-        repay_state_gas_spill_context_def,
+  >> fs[handle_exception_def, restore_state_gas_def,
+        forfeit_remaining_gas_def, get_current_context_def,
+        set_current_context_def, set_rollback_def,
+        bind_def, ignore_bind_def, return_def, fail_def]
+  >> fs[get_num_contexts_def, get_return_data_def, get_output_to_def,
+        get_current_context_def, bind_def, ignore_bind_def, return_def,
+        reraise_def]
+  >> fs[bind_def, ignore_bind_def,
+        repay_state_gas_spill_def,
         credit_new_account_def, credit_state_gas_refund_def,
         get_gas_left_def, get_current_context_def, return_def,
         consume_gas_def, set_return_data_def, set_current_context_def,
@@ -968,10 +988,51 @@ Proof
         pop_and_incorporate_context_def, pop_context_def,
         set_rollback_def, unuse_gas_def,
         update_gas_refund_def, push_logs_def, AllCaseEqs()]
+  >> rpt strip_tac >> gvs[reraise_def]
   >> gvs[AllCaseEqs()]
+  >> gvs[reraise_def]
   >> Cases_on `h0.msgParams.outputTo`
-  >> gvs[bind_def, ignore_bind_def, get_current_context_def,
-         set_current_context_def, return_def, assert_def, fail_def, AllCaseEqs()]
+  >> fs[bind_def, ignore_bind_def, get_current_context_def,
+        set_current_context_def, return_def, assert_def, fail_def]
+  >- (dxrule handle_exception_result_observations
+      >> simp[] >> rpt strip_tac >> gvs[])
+  >- (dxrule handle_exception_result_observations
+      >> simp[] >> rpt strip_tac >> gvs[])
+  >- (dxrule handle_exception_result_observations
+      >> simp[] >> rpt strip_tac >> gvs[]
+      >> Cases_on `h0.msgParams.newAccountCharged`
+      >> qpat_x_assum `(_ (s with contexts := _) = _)` mp_tac
+      >> simp[bind_def, get_current_context_def, set_current_context_def,
+              return_def, fail_def]
+      >> strip_tac >> dxrule contexts_update_length_observation
+      >> simp[])
+  >- (dxrule handle_exception_result_observations
+      >> simp[] >> rpt strip_tac >> gvs[]
+      >> Cases_on `h0.msgParams.newAccountCharged`
+      >> qpat_x_assum `(_ (s with contexts := _) = _)` mp_tac
+      >> simp[bind_def, get_current_context_def, set_current_context_def,
+              return_def, fail_def]
+      >> strip_tac >> dxrule contexts_update_length_observation
+      >> simp[])
+  >- (Cases_on `h0.msgParams.newAccountCharged`
+      >> qpat_x_assum `(_ (s with contexts := _) = _)` mp_tac
+      >> simp[bind_def, get_current_context_def, set_current_context_def,
+              return_def, fail_def])
+  >- (Cases_on `h0.msgParams.newAccountCharged`
+      >> qpat_x_assum `(_ (s with contexts := _) = _)` mp_tac
+      >> simp[bind_def, get_current_context_def, set_current_context_def,
+              return_def, fail_def])
+  >> qpat_x_assum `_ = (r,t)` mp_tac
+  >> simp[pop_context_def, get_current_context_def, set_current_context_def,
+          set_rollback_def, return_def, fail_def, bind_def, ignore_bind_def]
+  >> strip_tac
+  >> Cases_on `h0.msgParams.newAccountCharged`
+  >> qpat_x_assum `_ = (r,t)` mp_tac
+  >> simp[bind_def, get_current_context_def, set_current_context_def,
+          return_def, fail_def]
+  >> strip_tac
+  >> dxrule handle_exception_result_observations
+  >> simp[] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem handle_step_storage_keys[local]:
