@@ -764,7 +764,6 @@ Proof
       Cases_on `h0.msgParams.gasLimit - h0.gasUsed + h0.gasUsed ≤ h0.msgParams.gasLimit` >>
       gvs[]) >>
   PairCases_on `h` >>
-  Cases_on `h0.msgParams.outputTo` >>
   Cases_on `e = NONE` >> Cases_on `e = SOME Reverted` >>
   simp[handle_exception_def, restore_state_gas_def, forfeit_remaining_gas_def,
        bind_def, ignore_bind_def,
@@ -775,6 +774,7 @@ Proof
   rpt strip_tac >> gvs[] >>
   drule_at (Pat `pop_and_incorporate_context`) pop_context_deletion_projections >>
   (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  Cases_on `h0.msgParams.outputTo` >>
   gvs[inc_pc_def, push_stack_def, write_memory_def, bind_def, ignore_bind_def,
       get_current_context_def, set_current_context_def, return_def,
       assert_def, fail_def, AllCaseEqs()] >>
