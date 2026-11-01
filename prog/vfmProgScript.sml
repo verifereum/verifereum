@@ -2521,12 +2521,42 @@ fun exn_inner_pop_tac ths =
          consume_gas_def,write_memory_def,pop_context_def,unuse_gas_def,
          set_rollback_def]
 
+Theorem exn_inner_length_guard[local]:
+  !xs:'a list. (SUC (LENGTH xs) <= 1) <=> (xs = [])
+Proof
+  Cases >> simp[]
+QED
+
+Theorem exn_inner_gas_saturation[local]:
+  !a b:num. a + (b - a) <= b ==> a + (b - a) = b
+Proof
+  rpt strip_tac >> decide_tac
+QED
+
+Theorem exn_inner_forfeit_guard[local]:
+  !g sp limit:num. g <= limit ==> g - sp + (limit - (g - sp)) = limit
+Proof
+  rpt strip_tac >> decide_tac
+QED
+
 fun exn_inner_merged_tac ths =
-  gvs (state_gas_defs @
-       [bind_def, ignore_bind_def, return_def, get_current_context_def,
+  gvs ([restore_state_gas_def, restore_state_gas_to_entry_def,
+        forfeit_remaining_gas_def, drain_state_gas_reservoir_def] @
+       [ExclSF "ARITH",
+        CaseEq "sum", CaseEq "bool", CaseEq "prod",
+        bind_def, ignore_bind_def, return_def, get_current_context_def,
         set_current_context_def, get_gas_left_def, consume_gas_def,
-        fail_def, assert_def, pop_context_def, set_rollback_def,
-        Abbr`merged`])
+        fail_def, assert_def, pop_context_def, set_rollback_def])
+
+fun exn_inner_guards_tac ths =
+  imp_res_tac exn_inner_gas_saturation
+  \\ imp_res_tac exn_inner_forfeit_guard
+  \\ gvs (state_gas_defs @
+       [ExclSF "ARITH", exn_inner_length_guard, AC ADD_ASSOC ADD_COMM, Abbr`merged`,
+        CaseEq "sum", CaseEq "bool", CaseEq "prod",
+        bind_def, ignore_bind_def, return_def, get_current_context_def,
+        set_current_context_def, get_gas_left_def, consume_gas_def,
+        fail_def, assert_def, pop_context_def, set_rollback_def])
 
 fun exn_inner_conj_tac ths =
   (rpt (conj_tac >- (
@@ -2691,6 +2721,7 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
   \\ exn_inner_allpcs_tac []
 QED
@@ -2741,6 +2772,7 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
   \\ exn_inner_allpcs_tac []
 QED
@@ -2789,6 +2821,7 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
   \\ exn_inner_allpcs_tac []
 QED
@@ -2840,6 +2873,7 @@ Proof
   \\ exn_inner_step_tac []
   \\ exn_inner_pop_tac []
   \\ exn_inner_merged_tac []
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac []
   \\ exn_inner_allpcs_tac []
 QED
@@ -2981,6 +3015,7 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
                           is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                           one_le_LENGTH,SF CONJ_ss]
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_jump_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         one_le_LENGTH,SF CONJ_ss]
@@ -3043,6 +3078,7 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
                           is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                           SF CONJ_ss]
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_jumpi_def,set_jump_dest_def,inc_pc_or_jump_def,
                         is_call_def,EL_TAKE,HD_TAKE,GSYM rich_listTheory.TAIL_BY_DROP,
                         SF CONJ_ss]
@@ -3106,6 +3142,7 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
                           memory_expansion_info_def,get_return_data_check_def,
                           ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_return_data_copy_def,copy_to_memory_def,
                         memory_expansion_info_def,get_return_data_check_def,
                         ReturnDataCopy_gas_def,memory_cost_def,EL_TAKE,HD_TAKE]
@@ -3250,6 +3287,7 @@ Proof
                        get_callee_def]
   \\ exn_inner_merged_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
                           get_callee_def]
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
                         get_callee_def]
   \\ exn_inner_allpcs_tac [step_inst_def,step_sstore_def,assert_not_static_def,get_static_def,
@@ -3315,6 +3353,7 @@ Proof
                           expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
                           assert_not_static_def,get_static_def,get_callee_def,
                           Abbr`dynamicGas`]
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_log_def,memory_expansion_info_def,
                         expand_memory_def,memory_cost_def,EL_TAKE,HD_TAKE,
                         assert_not_static_def,get_static_def,get_callee_def,
@@ -3389,6 +3428,7 @@ Proof
   \\ exn_inner_merged_tac [step_inst_def,step_self_destruct_def,access_address_split,
                           set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                           assert_not_static_def,get_static_def,get_callee_def]
+  \\ exn_inner_guards_tac []
   \\ exn_inner_conj_tac [step_inst_def,step_self_destruct_def,access_address_split,
                         set_return_data_def,get_accounts_def,HD_TAKE,one_le_LENGTH,
                         assert_not_static_def,get_static_def,get_callee_def]
