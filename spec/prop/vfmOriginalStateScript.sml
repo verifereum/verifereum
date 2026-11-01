@@ -1062,15 +1062,21 @@ Proof
   irule orig_exec_bind >> simp[orig_exec_context_updates] >>
   qx_gen_tac `args` >> pairarg_tac >> gvs[] >>
   rewrite_tac[ignore_bind_def] >>
-  rpt (irule orig_exec_bind >>
-       simp[orig_exec_bind, orig_exec_cond, orig_exec_option, orig_exec_pair,
-            FORALL_PROD, orig_exec_return, orig_exec_assert,
-            orig_exec_context_reads, orig_exec_context_updates,
-            orig_exec_get_accounts, orig_exec_get_gas_left,
-            orig_exec_get_num_contexts, orig_exec_access_address,
-            orig_exec_simple_wrappers, orig_exec_create_aborts,
-            orig_exec_new_account,
-            orig_exec_proceed_call] >> rpt gen_tac) >>
+  (* Discharge the primitive side of each bind without traversing its
+     whole continuation with the broad relational simplifier. *)
+  irule orig_exec_bind >> reverse conj_tac
+  >- simp[orig_exec_context_reads] >>
+  qx_gen_tac `mx` >> BETA_TAC >>
+  irule orig_exec_bind >> reverse conj_tac
+  >- simp[orig_exec_access_address] >>
+  qx_gen_tac `accessCost` >> BETA_TAC >>
+  irule orig_exec_bind >> reverse conj_tac
+  >- simp[orig_exec_get_accounts] >>
+  qx_gen_tac `accounts` >> BETA_TAC >>
+  irule orig_exec_bind >> reverse conj_tac
+  >- simp[orig_exec_option, orig_exec_bind, orig_exec_access_address,
+          orig_exec_return] >>
+  qx_gen_tac `code_cost` >> BETA_TAC >>
   pairarg_tac >> gvs[] >>
   rpt (irule orig_exec_bind >>
        simp[orig_exec_bind, orig_exec_cond, orig_exec_return,
@@ -1079,6 +1085,10 @@ Proof
             orig_exec_get_gas_left, orig_exec_create_aborts,
             orig_exec_new_account,
             orig_exec_proceed_call] >> rpt gen_tac) >>
+  pairarg_tac >> gvs[] >>
+  rpt (irule orig_exec_bind >>
+       simp[orig_exec_bind, orig_exec_return,
+            orig_exec_context_reads, orig_exec_context_updates] >> rpt gen_tac) >>
   (* not enough balance for the value, so the creation refills *)
   irule orig_exec_cond >>
   conj_tac >- simp[orig_exec_bind, orig_exec_new_account, orig_exec_create_aborts] >>
