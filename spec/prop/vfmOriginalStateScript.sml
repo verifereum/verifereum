@@ -885,14 +885,16 @@ val create_step_lemmas = [
 Theorem orig_exec_create[local]:
   orig_exec_rel (stack_original_step_create two) (step_create two)
 Proof
-  rewrite_tac[stack_original_step_create_def, step_create_def, ignore_bind_def] >>
-  rpt (irule orig_exec_bind >> simp create_step_lemmas >> rpt gen_tac) >>
-  (* the preflight abort *)
-  irule orig_exec_cond >> conj_tac >- simp[orig_exec_create_aborts] >>
-  rpt (irule orig_exec_bind >> simp create_step_lemmas >> rpt gen_tac) >>
-  (* the collision abort *)
-  irule orig_exec_cond >> conj_tac >- simp[orig_exec_create_aborts] >>
-  simp[orig_exec_proceed_create]
+  rewrite_tac[stack_original_step_create_def, step_create_def, ignore_bind_def,
+              LET_THM] >>
+  BETA_TAC >>
+  rpt (FIRST [irule orig_exec_bind, irule orig_exec_cond] >>
+       rpt conj_tac >> rpt gen_tac >> BETA_TAC) >>
+  simp[orig_exec_context_reads, orig_exec_context_updates,
+       orig_exec_get_accounts, orig_exec_get_gas_left, orig_exec_get_num_contexts,
+       orig_exec_assert, orig_exec_simple_wrappers, orig_exec_access_address,
+       orig_exec_ensure_storage, orig_exec_create_aborts, orig_exec_proceed_create,
+       orig_exec_state_gas_updates, orig_exec_new_account]
 QED
 
 (* Unchanged instructions use only the compatible primitive interface. *)

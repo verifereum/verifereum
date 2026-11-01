@@ -166,16 +166,30 @@ Proof
   >> rw[]
 QED
 
+Theorem SND_bind_msdomain[local]:
+  (∀s. (SND (g s)).msdomain = s.msdomain) ∧
+  (∀x s. (SND (f x s)).msdomain = s.msdomain) ⇒
+  (SND (bind g f s)).msdomain = s.msdomain
+Proof
+  rw[bind_def] >> Cases_on `g s` >> Cases_on `q` >> simp[] >> metis_tac[SND]
+QED
+
+Theorem SND_ignore_bind_msdomain[local]:
+  (∀s. (SND (g s)).msdomain = s.msdomain) ∧
+  (∀s. (SND (f s)).msdomain = s.msdomain) ⇒
+  (SND (ignore_bind g f s)).msdomain = s.msdomain
+Proof
+  rw[ignore_bind_def] >> irule SND_bind_msdomain >> simp[]
+QED
+
 Theorem SND_handle_exception_msdomain[simp]:
   ∀e s. (SND (handle_exception e s)).msdomain = s.msdomain
 Proof
   rpt gen_tac
-  >> simp[handle_exception_def, bind_def, ignore_bind_def, return_def,
-          fail_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
+  >> simp[handle_exception_def]
+  >> rpt (FIRST [irule SND_bind_msdomain, irule SND_ignore_bind_msdomain,
+                 IF_CASES_TAC, CASE_TAC]
+          >> rpt conj_tac >> rpt gen_tac >> BETA_TAC)
   >> simp[]
 QED
 

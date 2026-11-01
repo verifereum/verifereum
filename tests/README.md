@@ -249,3 +249,11 @@ collection.
    table above.
 4. After the full run, update the pass count and EEST version in the
    Status section of `website/index.md` from the new `table.html`.
+
+`expected-failures.txt` lists, by case name (the first line of its `.nsv`
+file), the cases CI's unchecked run is known to fail. The holbuild workflow
+fails when any other case does not pass, and its job summary lists the
+listed cases that did not fail. Remove those from the list; that includes
+cases a new release renamed or dropped. Add a case only when its failure
+cannot be fixed in the same change, with a comment pointing at the issue
+that tracks it.

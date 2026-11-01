@@ -950,8 +950,12 @@ QED
 Theorem preserves_txParams_step_create[simp]:
   preserves_txParams (step_create b)
 Proof
-  rw[step_create_def, LET_THM] >> ptx_tac
-  >> rpt (IF_CASES_TAC >> gvs[]) >> ptx_tac
+  simp[step_create_def]
+  >> rpt (FIRST [irule preserves_txParams_bind,
+                 irule preserves_txParams_ignore_bind,
+                 irule preserves_txParams_cond]
+          >> rpt conj_tac >> rpt gen_tac >> BETA_TAC)
+  >> simp[]
 QED
 
 Theorem preserves_txParams_step_call[simp]:

@@ -3,12 +3,13 @@
 open HolKernel
   contractABITheory contractABISyntax
   vfmDomainCollectionTheory
-  vfmTestRunTheory vfmTestDefLib vfmTestResultLib
+  vfmTestRunTheory vfmTestDefLib vfmTestResultLib vfmChainIdTheory
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
   vfmOriginalStateTheory vfmOriginalAccountsTheory
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
   vfmProgTheory vfmProgCallTheory wrappedEtherTheory wrappedEtherNameTheory
   wrappedEtherTransferTheory wrappedEtherBranchesTheory wrappedEtherGettersTheory
+  wrappedEtherDepositTheory wrappedEtherWithdrawTheory
   (* Checked counterexamples, evidence for the state-gas hypotheses this
      series added to published theorems: each one is a witness that its
      namesake is false without the hypothesis its comment points at.

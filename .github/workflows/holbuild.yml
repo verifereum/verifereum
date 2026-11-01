@@ -172,8 +172,8 @@ jobs:
             holbuild executable runtests_unchecked
           } 2>&1 | tee -a "$RUNNER_TEMP/holbuild.log"
 
-      # After the test runners: they request a 30 s tactic timeout, which the
-      # main build's entries (built with none) don't satisfy, so a snapshot
+      # After the test runners: they check proof steps, which the main
+      # build's entries (built with none) don't satisfy, so a snapshot
       # saved before them makes every run rebuild those theories.
       - name: Save holbuild project snapshot
         if: always()
@@ -266,6 +266,38 @@ jobs:
               if malformed:
                   summary.write("\nMalformed files:\n\n")
                   summary.writelines(f"- `{path}`\n" for path in malformed)
+          PY
+
+      - name: Check EEST failures against the expected list
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          expected = {
+              line for line in Path("tests/expected-failures.txt").read_text().splitlines()
+              if line and not line.startswith("#")
+          }
+          failed = set()
+          for path in Path("tests/results").glob("result*.nsv"):
+              name, status = (path.read_text().splitlines() + ["", ""])[:2]
+              if status != "Passed":
+                  failed.add(name or str(path))
+          unexpected = sorted(failed - expected)
+          not_failing = sorted(expected - failed)
+
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+              summary.write("\n## EEST expected failures\n\n")
+              summary.write(f"- Failures not in `tests/expected-failures.txt`: **{len(unexpected)}**\n")
+              summary.write(f"- Listed cases that did not fail (remove them from the list): **{len(not_failing)}**\n")
+              for title, names in (("Unexpected failures", unexpected), ("Listed cases that did not fail", not_failing)):
+                  if names:
+                      summary.write(f"\n{title}:\n\n")
+                      summary.writelines(f"- `{name}`\n" for name in names)
+          for name in unexpected:
+              print(f"::error::EEST case failed and is not in tests/expected-failures.txt: {name}")
+          sys.exit(1 if unexpected else 0)
           PY
 
       - name: Upload EEST results

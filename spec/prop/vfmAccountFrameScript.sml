@@ -405,8 +405,9 @@ Proof
   simp[step_create_def, abort_create_exists_def, abort_create_def]
   >> rpt (FIRST [irule storage_keys_bind,
                  irule storage_keys_ignore_bind, irule preserves_cond] >>
-          rw[rollback_preserves_storage_keys, update_accounts_storage_keys,
-             access_address_storage_keys, proceed_create_storage_keys])
+          rpt conj_tac >> rpt gen_tac >> BETA_TAC)
+  >> rw[rollback_preserves_storage_keys, update_accounts_storage_keys,
+        access_address_storage_keys, proceed_create_storage_keys]
 QED
 
 Theorem step_call_storage_keys[local]:

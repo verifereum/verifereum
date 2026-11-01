@@ -1643,9 +1643,10 @@ Theorem preserves_storage_proceed_call[simp]:
     (proceed_call op sender address value argsOffset argsSize code stipend outputTo)
 Proof
   simp[proceed_call_def]
-  >> rpt (irule preserves_storage_bind >> rw[]
-          ORELSE irule preserves_storage_ignore_bind >> rw[]
-          ORELSE irule preserves_storage_cond >> rw[])
+  >> rpt (FIRST [irule preserves_storage_bind,
+                 irule preserves_storage_ignore_bind,
+                 irule preserves_storage_cond]
+          >> rpt conj_tac >> rpt gen_tac >> BETA_TAC)
   >> simp[preserves_rollback_dispatch_precompiles, preserves_rollback_imp_preserves_storage]
 QED
 

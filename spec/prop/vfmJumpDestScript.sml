@@ -2415,6 +2415,36 @@ Proof
   rw[same_frame_rel_def]
 QED
 
+(* Popping a context whose callers all have jumpDest = NONE establishes
+   all_jumpDest_NONE, and a preserving continuation keeps it. *)
+Theorem pop_and_incorporate_context_all_jumpDest_NONE[local]:
+  pop_and_incorporate_context b s = (r, s') ∧
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ⇒
+  all_jumpDest_NONE s'
+Proof
+  strip_tac >> Cases_on `s.contexts`
+  >- gvs[pop_and_incorporate_context_def, bind_def, get_gas_left_def,
+         get_current_context_def, fail_def, all_jumpDest_NONE_def]
+  >> gvs[pop_and_incorporate_context_def, bind_def, get_gas_left_def,
+         get_current_context_def, pop_context_def, return_def]
+  >> qmatch_asmsub_abbrev_tac `m (s with contexts updated_by TL) = _`
+  >> `preserves_all_jumpDest_NONE m` by (Cases_on `b` >> simp[Abbr`m`])
+  >> gvs[preserves_all_jumpDest_NONE_def, all_jumpDest_NONE_def]
+  >> first_x_assum drule >> simp[]
+QED
+
+Theorem pop_and_incorporate_context_then_all_jumpDest_NONE[local]:
+  do pop_and_incorporate_context b; k od s = (r, s') ∧
+  preserves_all_jumpDest_NONE k ∧
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ⇒
+  all_jumpDest_NONE s'
+Proof
+  rw[ignore_bind_def, bind_def, AllCaseEqs()]
+  >> drule_all pop_and_incorporate_context_all_jumpDest_NONE
+  >> gvs[preserves_all_jumpDest_NONE_def]
+  >> metis_tac[]
+QED
+
 (*) handle_step INL establishes all_jumpDest_NONE given only TL has jumpDest NONE.
 
    Motivation: when the inner block of step returns INR because step_inst Jump
