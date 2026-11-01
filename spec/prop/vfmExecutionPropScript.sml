@@ -2199,6 +2199,34 @@ Proof
   \\ rw[] \\ rw[]
 QED
 
+Theorem clear_storage_apply:
+  clear_storage x a y =
+  if x = y then a x with storage := empty_storage else a y
+Proof
+  simp_tac std_ss [clear_storage_def, update_account_def,
+                   lookup_account_def, LET_THM, APPLY_UPDATE_THM]
+QED
+
+Theorem clear_storage_nonce_code_balance[simp]:
+  (lookup_account a (clear_storage b accounts)).nonce =
+    (lookup_account a accounts).nonce ∧
+  (lookup_account a (clear_storage b accounts)).code =
+    (lookup_account a accounts).code ∧
+  (lookup_account a (clear_storage b accounts)).balance =
+    (lookup_account a accounts).balance
+Proof
+  simp_tac std_ss [lookup_account_def, clear_storage_apply]
+  \\ IF_CASES_TAC \\ simp[]
+QED
+
+Theorem wf_accounts_clear_storage[simp]:
+  wf_accounts a ⇒ wf_accounts (clear_storage x a)
+Proof
+  simp_tac std_ss [wf_accounts_def, clear_storage_apply]
+  \\ rpt strip_tac
+  \\ IF_CASES_TAC \\ gvs[wf_account_state_def]
+QED
+
 Theorem preserves_wf_accounts_pred_proceed_create:
   preserves_wf_accounts_pred (λs.
     SUC (s.rollback.accounts a).nonce < 2 ** 64 ∧
@@ -2233,7 +2261,7 @@ Proof
   >- (
     irule wf_accounts_transfer_value
     \\ irule wf_accounts_increment_nonce
-    \\ gs[] )
+    \\ gs[clear_storage_apply] )
   \\ Cases_on `s.contexts` \\ gvs[]
 QED
 

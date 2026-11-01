@@ -4184,7 +4184,8 @@ Theorem SPEC_Create_original:
    evm_JumpDest NONE *
    evm_Exception (INL ()) * evm_ReturnData [] *
    evm_Rollback (caller_rb with accounts updated_by
-                 (transfer_value p.callee addr value o increment_nonce addr)) *
+                 (transfer_value p.callee addr value o increment_nonce addr o
+                  clear_storage addr)) *
    evm_Memory empty_buffer *
    evm_AddRefund 0 * evm_SubRefund 0 * evm_Logs [] *
    CODE_POOL EVM_INSTR {(pc,inst) | FLOOKUP new_parsed pc = SOME inst} *

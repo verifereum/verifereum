@@ -115,7 +115,7 @@ End
 
 Definition account_already_created_def:
   account_already_created a =
-    ¬(a.nonce = 0 ∧ NULL a.code ∧ storage_empty a.storage)
+    ¬(a.nonce = 0 ∧ NULL a.code)
 End
 
 Definition memory_cost_def:
@@ -641,6 +641,12 @@ Definition increment_nonce_def:
     update_account address (account with nonce updated_by SUC) accounts
 End
 
+Definition clear_storage_def:
+  clear_storage address accounts =
+  let account = lookup_account address accounts in
+    update_account address (account with storage := empty_storage) accounts
+End
+
 Definition step_binop_def:
   step_binop op f = do
     args <- pop_stack 2;
@@ -1108,7 +1114,8 @@ Definition proceed_create_def:
     set_original $ update_account address empty_account_state original;
     update_accounts $
       transfer_value senderAddress address value o
-      increment_nonce address;
+      increment_nonce address o
+      clear_storage address;
     push_context
       (initial_context address code F (Code address) subContextTx, rollback)
   od
@@ -1867,7 +1874,8 @@ Definition run_create_def:
         INR $ (accounts, s with <|
             rollback updated_by (λr. r with accounts updated_by (
               transfer_value tx.from calleeAddress tx.value o
-              increment_nonce calleeAddress
+              increment_nonce calleeAddress o
+              clear_storage calleeAddress
             ));
             originalAccounts :=
               update_account calleeAddress empty_account_state s.originalAccounts
