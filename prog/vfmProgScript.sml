@@ -858,7 +858,8 @@ QED
 
 (* The transaction prelude leaves a contract's code and storage alone *)
 Theorem process_authorization_contract:
-  process_authorization c auth (accs, acc, r) = (accs', acc', r') ∧
+  process_authorization c paid preAccs auth (accs, acc, pw, ds, ch) =
+    (accs', acc', pw', ds', ch') ∧
   ¬NULL (lookup_account a accs).code ∧
   ¬is_delegation (lookup_account a accs).code ⇒
   lookup_account a accs' = lookup_account a accs
@@ -869,8 +870,9 @@ Proof
 QED
 
 Theorem process_authorizations_contract:
-  ∀auths accs acc r accs' acc' r'.
-    process_authorizations c auths accs acc r = (accs', acc', r') ∧
+  ∀auths accs acc pw ds ch accs' acc' pw' ds' ch'.
+    process_authorizations c paid preAccs auths accs acc pw ds ch =
+      (accs', acc', pw', ds', ch') ∧
     ¬NULL (lookup_account a accs).code ∧
     ¬is_delegation (lookup_account a accs).code ⇒
     lookup_account a accs' = lookup_account a accs
@@ -3351,7 +3353,7 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_outermost:
            sender = lookup_account p.callee rb.accounts ∧
            transferCost = (if 0 < sender.balance ∧
                               account_empty (lookup_account addr rb.accounts)
-                           then self_destruct_new_account_cost else 0) ∧
+                           then account_write_cost else 0) ∧
            stateCost = (if 0 < sender.balance ∧
                            account_empty (lookup_account addr rb.accounts)
                         then new_account_state_gas else 0) ∧
@@ -3523,7 +3525,7 @@ Theorem SPEC_WriteInStaticContext_SelfDestruct_inner:
          sender = lookup_account p.callee rb.accounts ∧
          transferCost = (if 0 < sender.balance ∧
                             account_empty (lookup_account addr rb.accounts)
-                         then self_destruct_new_account_cost else 0) ∧
+                         then account_write_cost else 0) ∧
          stateCost = (if 0 < sender.balance ∧
                          account_empty (lookup_account addr rb.accounts)
                       then new_account_state_gas else 0) ∧
@@ -7750,7 +7752,7 @@ Theorem SPEC_SelfDestruct_outermost:
          sender = lookup_account p.callee rb.accounts ∧
          transferCost = (if 0 < sender.balance ∧
                             account_empty (lookup_account addr rb.accounts)
-                         then self_destruct_new_account_cost else 0) ∧
+                         then account_write_cost else 0) ∧
          stateCost = (if 0 < sender.balance ∧
                          account_empty (lookup_account addr rb.accounts)
                       then new_account_state_gas else 0) ∧
@@ -7824,7 +7826,7 @@ Theorem SPEC_SelfDestruct_inner:
          sender = lookup_account p.callee rb.accounts ∧
          transferCost = (if 0 < sender.balance ∧
                             account_empty (lookup_account addr rb.accounts)
-                         then self_destruct_new_account_cost else 0) ∧
+                         then account_write_cost else 0) ∧
          stateCost = (if 0 < sender.balance ∧
                          account_empty (lookup_account addr rb.accounts)
                       then new_account_state_gas else 0) ∧

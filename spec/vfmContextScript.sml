@@ -340,36 +340,74 @@ Definition get_delegate_def:
     else NONE
 End
 
+(* EIP-8037: the leaves EIP-2780 prices for EIP-7702 are the sender's, which
+   `TX_BASE` covers, and -- for a value-bearing or creating transaction -- the
+   recipient's, which `TX_VALUE_COST` or the creation's own charge covers.  An
+   authorization writing any other authority's leaf owes EIP-8038's
+   `ACCOUNT_WRITE` for it, which is why the set travels with the fold. *)
+Definition authorization_paid_writes_def:
+  authorization_paid_writes tx callee : address fset =
+  fINSERT tx.from
+    (if IS_NONE tx.to ∨ 0 < tx.value
+     then fINSERT callee fEMPTY else fEMPTY)
+End
+
+(* EIP-8037: EIP-7702's state-dependent authorization costs, in the order
+   EELS's `set_delegation` charges them, as (isStateGas, amount) entries the
+   top frame settles with `apply_authorization_charges`: `NEW_ACCOUNT` in
+   state gas when the authority's leaf does not yet exist; `ACCOUNT_WRITE` in
+   execution gas on the transaction's first write to it, once per authority;
+   and `AUTH_BASE` in state gas when a net-new delegation indicator is
+   written -- once per authority, and not when one is cleared. *)
 Definition process_authorization_def:
-  process_authorization chainId (auth: authorization)
-                        (accs, accesses: access_sets, refund: num) =
+  process_authorization chainId paid preAccs (auth: authorization)
+                        (accs, accesses: access_sets, paidWrites: address fset,
+                         delegationSet: address fset,
+                         charges: (bool # num) list) =
     let authority = auth.authority in
     let delegate = auth.delegate in
     let authChainId = auth.authChainId in
     let authNonce = auth.authNonce in
     let authS = auth.authS in
-    if 2 * authS > secp256k1N then (accs, accesses, refund) else
-    if authority = 0w then (accs, accesses, refund) else
-    if authChainId ≠ 0 ∧ authChainId ≠ chainId then (accs, accesses, refund) else
-    if authNonce ≥ 2 ** 64 - 1 then (accs, accesses, refund) else
+    if 2 * authS > secp256k1N
+    then (accs, accesses, paidWrites, delegationSet, charges) else
+    if authority = 0w
+    then (accs, accesses, paidWrites, delegationSet, charges) else
+    if authChainId ≠ 0 ∧ authChainId ≠ chainId
+    then (accs, accesses, paidWrites, delegationSet, charges) else
+    if authNonce ≥ 2 ** 64 - 1
+    then (accs, accesses, paidWrites, delegationSet, charges) else
     let newAccesses = accesses with addresses updated_by (λa. fINSERT authority a) in
     let acc = lookup_account authority accs in
-    if ¬NULL acc.code ∧ ¬is_delegation acc.code then (accs, newAccesses, refund) else
-    if acc.nonce ≠ authNonce then (accs, newAccesses, refund) else
+    if ¬NULL acc.code ∧ ¬is_delegation acc.code
+    then (accs, newAccesses, paidWrites, delegationSet, charges) else
+    if acc.nonce ≠ authNonce
+    then (accs, newAccesses, paidWrites, delegationSet, charges) else
+    let setDelegation = (delegate ≠ 0w ∧ ¬fIN authority delegationSet ∧
+          IS_NONE (get_delegate (lookup_account authority preAccs).code)) in
+    let newCharges = (if account_empty acc then [(T, new_account_state_gas)] else []) ++
+      (if fIN authority paidWrites then [] else [(F, account_write_cost)]) ++
+      (if setDelegation then [(T, auth_base_state_gas)] else []) in
     let newCode = if delegate = 0w then [] else make_delegation delegate in
     let newAcc = acc with <| code := newCode; nonce := SUC acc.nonce |> in
     let newAccs = update_account authority newAcc accs in
     (* EIP-2780: the intrinsic charge for an authorization no longer includes
        the new-account cost, so an existing authority has nothing to refund.
        What a new one costs is state gas, charged at the top frame. *)
-    (newAccs, newAccesses, refund)
+    (newAccs, newAccesses, fINSERT authority paidWrites,
+     if delegate = 0w then delegationSet else fINSERT authority delegationSet,
+     charges ++ newCharges)
 End
 
 Definition process_authorizations_def:
-  process_authorizations chainId [] accs accesses refund = (accs, accesses, refund) ∧
-  process_authorizations chainId (auth::auths) accs accesses refund =
-    let (accs', accesses', refund') = process_authorization chainId auth (accs, accesses, refund) in
-    process_authorizations chainId auths accs' accesses' refund'
+  process_authorizations chainId paid preAccs [] accs accesses paidWrites
+                         delegationSet charges =
+    (accs, accesses, paidWrites, delegationSet, charges) ∧
+  process_authorizations chainId paid preAccs (auth::auths) accs accesses
+                         paidWrites delegationSet charges =
+    let (accs', accesses', paidWrites', delegationSet', charges') =
+      process_authorization chainId paid preAccs auth (accs, accesses, paidWrites, delegationSet, charges) in
+    process_authorizations chainId paid preAccs auths accs' accesses' paidWrites' delegationSet' charges'
 End
 
 Definition initial_access_sets_def:
@@ -510,8 +548,13 @@ Definition initial_state_def:
   of NONE => NONE | SOME accounts =>
     let callee = callee_from_tx_to tx.from tx.nonce tx.to in
     let baseAccesses = initial_access_sets blk.coinBase callee tx in
-    let (postAuthAccounts, postAuthAccesses, authRefund) =
-          process_authorizations chainId tx.authorizationList accounts baseAccesses 0 in
+    let paidWrites = authorization_paid_writes tx callee in
+    (* The fold's charges are applied to the top frame by the caller, which
+       owns the meter; the frame this builds only needs the accounts. *)
+    let (postAuthAccounts, postAuthAccesses, authPaidWrites, authDelegations,
+         authCharges) =
+          process_authorizations chainId paidWrites accounts tx.authorizationList
+            accounts baseAccesses fEMPTY fEMPTY [] in
     let (code, accesses) = code_from_tx postAuthAccounts postAuthAccesses tx in
     let rd = if IS_SOME tx.to then empty_return_destination else Code callee in
     let rb = initial_rollback postAuthAccounts accesses in
@@ -542,7 +585,7 @@ Definition initial_state_def:
     let ctxt = ctxt with logs := transfer_log tx.from callee tx.value in
     SOME $
     <| contexts := [(ctxt, rb)]
-     ; txParams := initial_tx_params chainId prevHashes blk tx authRefund reservoir
+     ; txParams := initial_tx_params chainId prevHashes blk tx 0 reservoir
      ; rollback := rb
      ; originalAccounts := postAuthAccounts
      ; msdomain := dom

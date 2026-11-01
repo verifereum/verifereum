@@ -228,8 +228,10 @@ Proof
 QED
 
 Theorem wf_accounts_process_authorizations:
-  ∀chainId authList a accesses r x y z.
-    wf_accounts a ∧ process_authorizations chainId authList a accesses r = (x,y,z) ⇒
+  ∀chainId paid preAccs authList a accesses pw ds ch x y pw' ds' ch'.
+    wf_accounts a ∧
+    process_authorizations chainId paid preAccs authList a accesses pw ds ch =
+      (x,y,pw',ds',ch') ⇒
     wf_accounts x
 Proof
   Induct_on `authList` \\ rw[process_authorizations_def] \\ simp[]

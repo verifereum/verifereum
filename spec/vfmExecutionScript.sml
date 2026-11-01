@@ -703,6 +703,23 @@ Definition charge_state_gas_context_def:
     else NONE
 End
 
+(* EIP-8037: EIP-7702's authorization costs, settled on the top frame in the
+   order the fold decided them and stopping at the first one the frame cannot
+   cover.  An execution charge comes off the frame's own budget, exactly as
+   EELS's `charge_gas_from_meter`; a state charge draws on the reservoir and
+   spills into that budget, as `charge_state_gas_context` does. *)
+Definition apply_authorization_charges_def:
+  apply_authorization_charges [] ctxt = SOME ctxt ∧
+  apply_authorization_charges ((isStateGas, n)::cs) ctxt =
+    (case (if isStateGas
+           then charge_state_gas_context ctxt n
+           else if n ≤ ctxt.msgParams.gasLimit - ctxt.gasUsed
+                then SOME $ ctxt with gasUsed := ctxt.gasUsed + n
+                else NONE)
+     of NONE => NONE
+      | SOME ctxt' => apply_authorization_charges cs ctxt')
+End
+
 Definition pop_stack_def:
   pop_stack n =
   do
@@ -1394,7 +1411,7 @@ Definition step_self_destruct_def:
     balance <<- sender.balance;
     beneficiaryEmpty <<- account_empty $ lookup_account address accounts;
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty
-                     then self_destruct_new_account_cost else 0;
+                     then account_write_cost else 0;
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     (* EIP-8037: the account leaf the sweep creates, in state gas, after the
        execution gas above so an execution out-of-gas never consumes state
@@ -2360,6 +2377,33 @@ Definition run_create_def:
        fee) applied, and nothing else.  The charges below are decided by the
        account at transaction start, `accounts`, which is the parameter. *)
     let rbAccounts = s.rollback.accounts in
+    (* EIP-8037: EIP-7702's state-dependent authorization costs come off the
+       top frame before it is dispatched -- after the intrinsic and before
+       the dispatch charges below, as EELS's `create_evm` has them.  The fold
+       is the one `initial_state` ran for the accounts, over the transaction's
+       own start state, so the two agree on which authorizations are valid.  A
+       charge the frame cannot cover is a preparation failure: the frame's
+       state gas returns to entry, the authorizations roll back with the
+       state, and the transaction settles without dispatching. *)
+    let preAuthAccounts =
+          THE $ pre_transaction_updates accounts
+                  (base_fee_per_blob_gas blk.excessBlobGas) tx in
+    let (_, _, _, _, authCharges) =
+          process_authorizations chainId
+            (authorization_paid_writes tx calleeAddress)
+            preAuthAccounts tx.authorizationList preAuthAccounts
+            (initial_access_sets blk.coinBase calleeAddress tx)
+            fEMPTY fEMPTY [] in
+    (case apply_authorization_charges authCharges ctxt of
+     | NONE => INL $ post_transaction_accounting blk tx (SOME OutOfGas)
+                      preAuthAccounts
+                      (s with contexts := [
+                        (ctxt with <|
+                           gasUsed := ctxt.msgParams.gasLimit;
+                           stateGasLeft := ctxt.stateGasBaseline;
+                           stateGasSpilled := 0 |>,
+                         SND crb)])
+     | SOME ctxt =>
     if IS_SOME tx.to then
       (* EIP-8037: a value transfer to an account that is not alive creates
          it, and the top frame pays for that out of its own meter before it
@@ -2415,7 +2459,7 @@ Definition run_create_def:
             ));
             originalAccounts :=
               update_account calleeAddress empty_account_state s.originalAccounts
-            |>, NONE))
+            |>, NONE)))
 End
 
 Definition run_transaction_def:

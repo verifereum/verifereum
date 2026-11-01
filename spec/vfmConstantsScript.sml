@@ -130,6 +130,17 @@ Definition new_account_state_gas_def:
     state_bytes_per_new_account * cost_per_state_byte
 End
 
+(* EIP-8037: the 23 state bytes a net-new delegation indicator costs, charged
+   at the top frame when EIP-7702's authorizations run. *)
+Definition state_bytes_per_auth_base_def:
+  state_bytes_per_auth_base = 23n
+End
+
+Definition auth_base_state_gas_def:
+  auth_base_state_gas =
+    state_bytes_per_auth_base * cost_per_state_byte
+End
+
 Definition log_topic_cost_def:
   log_topic_cost = 375n
 End
@@ -151,10 +162,12 @@ Definition call_value_cost_def:
   call_value_cost = 11300n
 End
 
-(* EIP-8038: ACCOUNT_WRITE, the execution-gas charge for the account leaf a
-   sweep creates; its state gas is EIP-8037's and charged separately. *)
-Definition self_destruct_new_account_cost_def:
-  self_destruct_new_account_cost = 9000n
+(* EIP-8038: ACCOUNT_WRITE, the execution-gas charge for the first write to
+   an account leaf.  A sweep that creates its beneficiary pays it, and so does
+   each EIP-7702 authorization that writes its authority's leaf; the state gas
+   a creation also carries is EIP-8037's and charged separately. *)
+Definition account_write_cost_def:
+  account_write_cost = 9000n
 End
 
 Definition call_stipend_def:

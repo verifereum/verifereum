@@ -78,7 +78,7 @@ Definition stack_original_step_self_destruct_def:
     balance <<- sender.balance;
     beneficiaryEmpty <<- account_empty $ lookup_account address accounts;
     transferCost <<- if 0 < balance ∧ beneficiaryEmpty
-                     then self_destruct_new_account_cost else 0;
+                     then account_write_cost else 0;
     consume_gas $ static_gas SelfDestruct + zero_warm accessCost + transferCost;
     charge_new_account (0 < balance ∧ beneficiaryEmpty);
     assert_not_static;
