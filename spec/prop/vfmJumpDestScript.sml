@@ -2417,19 +2417,83 @@ QED
 
 (* Popping a context whose callers all have jumpDest = NONE establishes
    all_jumpDest_NONE, and a preserving continuation keeps it. *)
+Theorem pop_prefix_all_jumpDest_NONE[local]:
+  (!g crb. preserves_all_jumpDest_NONE (k g crb)) /\
+  bind get_gas_left (\g. bind pop_context (k g)) s = (r, s') /\
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ==>
+  all_jumpDest_NONE s'
+Proof
+  Cases_on `s.contexts` >>
+  simp[get_gas_left_def, get_current_context_def, pop_context_def,
+       bind_def, return_def, fail_def, all_jumpDest_NONE_def] >>
+  rpt strip_tac >>
+  fs[preserves_all_jumpDest_NONE_def] >>
+  rewrite_tac[GSYM all_jumpDest_NONE_def] >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[all_jumpDest_NONE_def]
+QED
+
+Theorem pop_suffix_preserves_all_jumpDest_NONE[local]:
+  preserves_all_jumpDest_NONE
+    (do
+       unuse_gas g;
+       context <- get_current_context;
+       set_current_context
+         (absorb_state_gas context (FST crb).stateGasLeft
+           (FST crb).stateGasSpilled (FST crb).stateGasCommitted);
+       if b then do
+         push_logs (FST crb).logs;
+         update_gas_refund ((FST crb).addRefund, (FST crb).subRefund);
+         repay_state_gas_spill
+       od else do
+         credit_new_account (FST crb).msgParams.newAccountCharged;
+         set_rollback (SND crb)
+       od
+     od)
+Proof
+  irule preserves_all_jumpDest_NONE_ignore_bind >> simp[] >>
+  ho_match_mp_tac preserves_all_jumpDest_NONE_get_update_then >>
+  simp[absorb_state_gas_def] >>
+  Cases_on `b` >> simp[] >>
+  irule preserves_all_jumpDest_NONE_ignore_bind >> simp[] >>
+  irule preserves_all_jumpDest_NONE_ignore_bind >> simp[]
+QED
+
+Theorem pop_prefix_all_jumpDest_NONE_eta[local]:
+  (!g crb. preserves_all_jumpDest_NONE (k g crb)) /\
+  bind get_gas_left (\g. bind pop_context (\crb. k g crb)) s = (r, s') /\
+  EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ==>
+  all_jumpDest_NONE s'
+Proof
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  MATCH_ACCEPT_TAC pop_prefix_all_jumpDest_NONE
+QED
+
 Theorem pop_and_incorporate_context_all_jumpDest_NONE[local]:
   pop_and_incorporate_context b s = (r, s') ∧
   EVERY (λc. (FST c).jumpDest = NONE) (TL s.contexts) ⇒
   all_jumpDest_NONE s'
-(* TEMPORARY: this is the pop lemma as it came from main, whose proof was
-   written for a pop that only moved the child's execution gas back to the
-   parent.  EIP-8037's pop also absorbs the child's state-gas meter and, on
-   failure, credits the creation charge back, so the unfoldings that proof
-   drives no longer reduce the way it expects.  Replaced by a cheat while
-   the prover proves it; restore a proof, not the old one blindly.  The
-   original proof is in this file's history. *)
 Proof
-  cheat
+  rewrite_tac[pop_and_incorporate_context_def, LET_THM] >>
+  BETA_TAC >> strip_tac >>
+  irule (INST_TYPE [alpha |-> ``:unit``] pop_prefix_all_jumpDest_NONE_eta) >>
+  qexists_tac `\g crb. do
+    unuse_gas g;
+    context <- get_current_context;
+    set_current_context
+      (absorb_state_gas context (FST crb).stateGasLeft
+        (FST crb).stateGasSpilled (FST crb).stateGasCommitted);
+    if b then do
+      push_logs (FST crb).logs;
+      update_gas_refund ((FST crb).addRefund, (FST crb).subRefund);
+      repay_state_gas_spill
+    od else do
+      credit_new_account (FST crb).msgParams.newAccountCharged;
+      set_rollback (SND crb)
+    od
+  od` >>
+  qexistsl_tac [`r`, `s`] >>
+  simp[pop_suffix_preserves_all_jumpDest_NONE]
 QED
 
 Theorem pop_and_incorporate_context_then_all_jumpDest_NONE[local]:
@@ -2506,19 +2570,22 @@ Proof
   `s1.contexts ≠ []` by (Cases_on `s1.contexts` >> gvs[])
   >> gvs[handle_exception_def]
   >> simp[all_jumpDest_NONE_def]
-  >> gvs[bind_def, ignore_bind_def, AllCaseEqs(),
-         get_gas_left_def, consume_gas_def, set_return_data_def,
-         get_current_context_def, return_def, set_current_context_def,
-         fail_def, get_return_data_def, get_output_to_def,
-         get_num_contexts_def, COND_RATOR, vfmTypesTheory.option_CASE_rator,
-         assert_def, get_current_context_def, unuse_gas_def,
-         pop_and_incorporate_context_def, pop_context_def,
-         set_rollback_def, inc_pc_def, push_stack_def,
-         write_memory_def, update_gas_refund_def, push_logs_def,
-         outputTo_consistent_def, return_destination_CASE_rator,
-         restore_state_gas_def, forfeit_remaining_gas_def,
-         repay_state_gas_spill_def, repay_state_gas_spill_context_def,
-         absorb_state_gas_def, reraise_def]
+  >> Cases_on `eout = NONE`
+  >> Cases_on `eout = SOME Reverted`
+  >> gvs[restore_state_gas_def, forfeit_remaining_gas_def,
+         get_gas_left_def, get_return_data_def, get_output_to_def,
+         get_num_contexts_def, pop_and_incorporate_context_def,
+         inc_pc_def, push_stack_def, write_memory_def,
+         update_gas_refund_def, push_logs_def, set_return_data_def,
+         unuse_gas_def, consume_gas_def, repay_state_gas_spill_def]
+  >> gvs[bind_def, ignore_bind_def, AllCaseEqs(), COND_RATOR,
+         vfmTypesTheory.option_CASE_rator, return_destination_CASE_rator]
+  >> gvs[get_num_contexts_def, get_current_context_def, return_def,
+         fail_def, pop_context_def, set_rollback_def, reraise_def,
+         AllCaseEqs()]
+  >> gvs[set_current_context_def, assert_def, return_def, fail_def,
+         outputTo_consistent_def, repay_state_gas_spill_context_def,
+         absorb_state_gas_def, AllCaseEqs()]
   (* EIP-8037: the failure path's refund of the child's creation charge is
      an opaque output whose own `if` sits in a hypothesis, so the branches
      below read the frames off a variable nothing can unfold.  Replace that
@@ -2531,9 +2598,19 @@ Proof
                  (REWRITE_RULE [pairTheory.PAIR_FST_SND_EQ] th)))))
   >> Cases_on `(FST (HD s1.contexts)).msgParams.newAccountCharged`
   >> Cases_on `s.contexts`
-  >> fs[vfmStoragePredicatesTheory.credit_new_account_contexts]
+  >- (qpat_x_assum `[] <> []` mp_tac >> simp_tac bool_ss [])
+  >> full_simp_tac bool_ss [TL_DEF, HD, EVERY_DEF, NOT_CONS_NIL]
   >> Cases_on `t`
-  >> fs[vfmStoragePredicatesTheory.credit_new_account_contexts]
+  >> full_simp_tac bool_ss [TL_DEF, HD, EVERY_DEF, NOT_CONS_NIL,
+       vfmStoragePredicatesTheory.credit_new_account_contexts]
+  >> full_simp_tac bool_ss [execution_state_accfupds, context_accfupds,
+       context_accessors, combinTheory.K_THM,
+       TL_DEF, HD, EVERY_DEF, NOT_CONS_NIL, FST, SND]
+  >> qmatch_goalsub_abbrev_tac `if charged then _ else _`
+  >> Cases_on `charged`
+  >> full_simp_tac bool_ss [execution_state_accfupds, context_accfupds,
+       context_accessors, combinTheory.K_THM,
+       TL_DEF, HD, EVERY_DEF, NOT_CONS_NIL, FST, SND]
 QED
 
 (* Main theorem: step INL preserves all_jumpDest_NONE *)
