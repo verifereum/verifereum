@@ -1245,15 +1245,7 @@ Proof
   >> pairarg_tac >> gvs[CaseEq "option"]
 QED
 
-val run_transaction_pre_def =
-  cv_auto_trans_pre "run_transaction_pre" run_transaction_def;
-
-Theorem run_transaction_pre[cv_pre]:
-  !dom static chainId prevHashes blk accounts tx.
-    run_transaction_pre dom static chainId prevHashes blk accounts tx
-Proof
-  simp[run_transaction_pre_def, run_create_pre]
-QED
+val () = run_transaction_def |> cv_auto_trans;
 
 Definition run_transactions_def:
   run_transactions d st c h b a rs [] = SOME (REVERSE rs, a, d) ∧
