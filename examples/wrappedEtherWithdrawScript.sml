@@ -422,6 +422,24 @@ val withdraw_post_conv =
 val withdraw_lift =
   let
     val th = CONV_RULE (RAND_CONV withdraw_post_conv) withdraw_spec
+    (* the memory reads in the CALL's arguments and the log, evaluated
+       here, once: each read is otherwise a copy of the memory in every
+       proof step *)
+    fun at p c = DEPTH_CONV (fn t => if p t then c t else NO_CONV t)
+    val ground_ranges = at (fn t => is_app "max_expansion_range" 2 t andalso
+                                    null (free_vars t)) EVAL
+    val reads = at (fn t => is_app "buffer_take" 3 t orelse
+                            is_app "memory_cost" 3 t)
+                   (fn t => with_ground_div reads_conv t
+                            handle UNCHANGED => NO_CONV t)
+    val step = QCONV ground_ranges THENC QCONV reads THENC
+               QCONV word_of_bytes_conv THENC ground_reverse_conv
+    (* and the CALL's stack arguments picked out of the stack *)
+    val stack_args = at (fn t => is_app "EL" 2 t andalso
+                                 numSyntax.is_numeral (rand (rator t)) andalso
+                                 listSyntax.is_list (rand t))
+                        (SIMP_CONV (srw_ss()) [])
+    val th = CONV_RULE (step THENC step THENC QCONV stack_args) th
     val th = MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] run_from_SPEC_halts)
                th
     val (_, rest) = dest_imp (concl th)
@@ -547,6 +565,12 @@ fun on_goals p tac (g as (_, w)) = if p w then tac g else ALL_TAC g
 (* the domain side conditions: a field in the domain left after the code *)
 fun is_domain_goal t = pred_setSyntax.is_in t orelse pred_setSyntax.is_subset t
 
+(* the CALL's value and kind; run on the gas goals and on the rest as
+   separate steps, since the gas goals are large *)
+val call_simp_tac =
+  simp_tac (srw_ss()) [call_has_value_def, is_call_def, w2w_w2w_address,
+                       w2w_id]
+
 val withdraw_rest_tac =
   simp[transfer_value_zero, rollback_accounts_I,
        execution_state_component_equality,
@@ -651,15 +675,6 @@ Theorem word_add_neg_mul[local]:
 Proof
   simp[]
 QED
-
-(* with the memory abbreviated as mem, evaluates the free memory pointer
-   read from it once, for all its occurrences *)
-fun read_pointer_tac g =
-  qpat_assum `Abbrev (mem = _)` (fn th =>
-    PURE_REWRITE_TAC
-      [(RAND_CONV (REWR_CONV (PURE_REWRITE_RULE [markerTheory.Abbrev_def] th))
-        THENC QCONV (with_ground_div reads_conv))
-         “buffer_take 64 32 mem”]) g
 
 (* the leading SEP_EXISTSs of an assertion applied to a state, as ∃s,
    without rewriting inside the (large) assertion *)
@@ -772,8 +787,8 @@ Proof
     \\ qpat_assum `s.contexts = _` (fn th => PURE_REWRITE_TAC [th, HD, FST])
     \\ rpt conj_tac
     \\ on_goals is_domain_goal (simp_tac (srw_ss()) [])
-    \\ simp_tac (srw_ss()) [call_has_value_def, is_call_def,
-                            w2w_w2w_address, w2w_id]
+    \\ on_goals is_gas_goal call_simp_tac
+    \\ on_goals (not o is_gas_goal) call_simp_tac
     \\ rpt conj_tac
     \\ on_goals (fn w => not (is_gas_goal w) andalso
                           not (mentions "delegate_check" w)) withdraw_rest_tac
@@ -839,9 +854,6 @@ Proof
     \\ conj_tac
     >- (qexists_tac `calleeLogs`
         \\ qpat_x_assum `result.logs = _` SUBST1_TAC
-        \\ qmatch_goalsub_abbrev_tac `buffer_take 64 32 mem`
-        \\ read_pointer_tac
-        \\ qunabbrev_tac `mem`
         \\ CONV_TAC (QCONV (with_ground_div reads_conv))
         \\ rewrite_tac[REVERSE_word_to_bytes_bytes32])
     \\ conj_tac
@@ -851,7 +863,7 @@ Proof
              rewrite_tac[MATCH_MP lookup_account_transfer_value_to th,
                          SStore_write_fields, EQF_INTRO (GSYM th),
                          accesses_add_slot_accounts])
-        \\ simp_tac (srw_ss()) []
+        \\ PURE_REWRITE_TAC [account_state_accfupds, combinTheory.K_THM]
         \\ irule (DECIDE “a ≤ b ⇒ a ≤ b + c + d:num”)
         \\ decide_tac)
     \\ qpat_x_assum `∀a. lookup_account a accounts' = _`
