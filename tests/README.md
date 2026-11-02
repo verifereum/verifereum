@@ -235,12 +235,17 @@ Linux holbuild rejects it
 ([HOL-Theorem-Prover/holbuild#237](https://github.com/HOL-Theorem-Prover/holbuild/issues/237)).
 
 The Poly/ML 5.9.2 release is not enough for a full run: under the 24000 MB
-cap, `sstore_combinations_initial.json` and `frontier/scenarios/scenarios.json`
+cap, tests 0225 (`frontier/scenarios/scenarios/scenarios.json`) and 0243
+(`istanbul/eip2200_net_gas_metering/sstore_combinations/sstore_combinations_initial.json`)
 never finish; the process sits at the cap without completing a case.
-Use a Poly/ML built from master, or 5.9.2 with the commits listed in
-[polyml/polyml#321](https://github.com/polyml/polyml/issues/321) applied (the
-fix for [polyml/polyml#206](https://github.com/polyml/polyml/issues/206) plus
-an arm64 code-generator fix). With either, both pass under the cap.
+Use a Poly/ML built from master, or 5.9.2 with four commits cherry-picked in
+this order: `5fa1d28d`, `35b564b9` and `c4ed1899`, the fix for
+[polyml/polyml#206](https://github.com/polyml/polyml/issues/206) whose
+backport [polyml/polyml#321](https://github.com/polyml/polyml/issues/321)
+requests, then `c775fb9c`, an arm64 code-generator fix
+([polyml/polyml#241](https://github.com/polyml/polyml/issues/241)) without
+which that build crashes while bootstrapping on arm64. With either, both
+tests pass under the cap.
 
 At 21.0.1, `intrinsic_gas_cost.json` grew past 55 GB without a cap, and
 built in about the same time with any cap from 16000 to 50000 MB. With
