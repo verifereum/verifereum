@@ -234,6 +234,14 @@ Use `--max-heap`, not `--maxheap`: holbuild's own Poly/ML runtime consumes
 Linux holbuild rejects it
 ([HOL-Theorem-Prover/holbuild#237](https://github.com/HOL-Theorem-Prover/holbuild/issues/237)).
 
+The Poly/ML 5.9.2 release is not enough for a full run: under the 24000 MB
+cap, `sstore_combinations_initial.json` and `frontier/scenarios/scenarios.json`
+never finish; the process sits at the cap without completing a case.
+Use a Poly/ML built from master, or 5.9.2 with the commits listed in
+[polyml/polyml#321](https://github.com/polyml/polyml/issues/321) applied (the
+fix for [polyml/polyml#206](https://github.com/polyml/polyml/issues/206) plus
+an arm64 code-generator fix). With either, both pass under the cap.
+
 At 21.0.1, `intrinsic_gas_cost.json` grew past 55 GB without a cap, and
 built in about the same time with any cap from 16000 to 50000 MB. With
 8000 MB it made no progress in 18 minutes, spending its time in garbage
