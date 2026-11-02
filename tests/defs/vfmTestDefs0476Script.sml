@@ -1,5 +1,5 @@
 Theory vfmTestDefs0476[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCallCreateCallCodeTest/create_init_oo_gfor_create/create_init_oo_gfor_create.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCallCreateCallCodeTest/create_init_oo_gfor_create/create_init_oo_gfor_create.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8024_dupn_swapn_exchange/swapn/swapn_preserves_other_stack_items.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8024_dupn_swapn_exchange/swapn/swapn_preserves_other_stack_items.json");
 val defs = mapi (define_test "0476") tests;

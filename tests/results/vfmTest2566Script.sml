@@ -1,0 +1,8 @@
+Theory vfmTest2566[no_sig_docs]
+Ancestors vfmTestDefs2566
+Libs wordsLib vfmTestAuxLib vfmTestResultLib
+val () = holbuild_extra_outputs ["result2566_0.nsv", "result2566_1.nsv"];
+val thyn = "vfmTestDefs2566";
+val defs = get_result_defs thyn;
+val () = vfmTestLib.remove_nsv_files thyn;
+val () = List.app (ignore o save_result_thm thyn) defs;

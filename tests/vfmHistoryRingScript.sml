@@ -8,7 +8,8 @@ Definition history_ring_block_def:
     baseFeePerGas := 0; excessBlobGas := 0; gasUsed := 0; blobGasUsed := 0;
     number := number; timeStamp := timestamp; coinBase := 0w;
     gasLimit := 30000000; prevRandao := 0w; hash := 0w; rlpSize := 0;
-    parentBeaconBlockRoot := 7w; requestsHash := 0w; stateRoot := 0w;
+    parentBeaconBlockRoot := 7w; requestsHash := 0w;
+    blockAccessListHash := 0w; slotNumber := 0; stateRoot := 0w;
     withdrawalsRoot := 0w; transactions := []; withdrawals := [] |>
 End
 val () = cv_auto_trans history_ring_block_def;

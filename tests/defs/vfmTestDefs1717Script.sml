@@ -1,5 +1,5 @@
 Theory vfmTestDefs1717[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stShift/shr_2_255_255/shr_2_255_255.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stShift/shr_2_255_255/shr_2_255_255.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stPreCompiledContracts2/call_ecrecover0_complete_return_value/call_ecrecover0_complete_return_value.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stPreCompiledContracts2/call_ecrecover0_complete_return_value/call_ecrecover0_complete_return_value.json");
 val defs = mapi (define_test "1717") tests;

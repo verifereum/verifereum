@@ -1,0 +1,5 @@
+Theory vfmTestDefs3053[no_sig_docs]
+Libs vfmTestAuxLib vfmTestDefLib
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/prague/eip7623_increase_calldata_cost/execution_gas/full_gas_consumption.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/prague/eip7623_increase_calldata_cost/execution_gas/full_gas_consumption.json");
+val defs = mapi (define_test "3053") tests;

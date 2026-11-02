@@ -262,6 +262,35 @@ Proof
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
 QED
 
+Theorem state_gas_meter_computes_minimal_domain[simp]:
+  computes_minimal_domain get_state_gas_left /\
+  (!n. computes_minimal_domain (charge_state_gas n)) /\
+  (!n. computes_minimal_domain (credit_state_gas_refund n)) /\
+  computes_minimal_domain restore_state_gas /\
+  computes_minimal_domain commit_state_gas /\
+  (!sg. computes_minimal_domain (restore_state_gas_to_entry sg)) /\
+  computes_minimal_domain repay_state_gas_spill /\
+  computes_minimal_domain forfeit_remaining_gas /\
+  computes_minimal_domain withhold_create_gas /\
+  computes_minimal_domain drain_state_gas_reservoir /\
+  (!gas reservoir. computes_minimal_domain (restore_child_gas gas reservoir))
+Proof
+  rw[get_state_gas_left_def, charge_state_gas_def,
+     credit_state_gas_refund_def, restore_state_gas_def, commit_state_gas_def,
+     restore_state_gas_to_entry_def, repay_state_gas_spill_def,
+     forfeit_remaining_gas_def, withhold_create_gas_def,
+     drain_state_gas_reservoir_def, restore_child_gas_def]
+  \\ rpt ((irule bind_computes_minimal_domain ORELSE
+            irule ignore_bind_computes_minimal_domain) \\ rw[])
+QED
+
+Theorem credit_new_account_computes_minimal_domain[simp]:
+  computes_minimal_domain (credit_new_account charged)
+Proof
+  rw[credit_new_account_def]
+  \\ rpt IF_CASES_TAC \\ rw[]
+QED
+
 Theorem set_rollback_computes_minimal_domain[simp]:
   computes_minimal_domain (set_rollback x)
 Proof
@@ -288,10 +317,8 @@ Theorem pop_and_incorporate_context_computes_minimal_domain[simp]:
   computes_minimal_domain (pop_and_incorporate_context x)
 Proof
   rw[pop_and_incorporate_context_def]
-  \\ irule bind_computes_minimal_domain \\ rw[]
-  \\ irule bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ rpt ((irule bind_computes_minimal_domain ORELSE
+            irule ignore_bind_computes_minimal_domain) \\ rw[])
 QED
 
 Theorem inc_pc_computes_minimal_domain[simp]:
@@ -328,10 +355,13 @@ Proof
     rw[]
     \\ irule bind_computes_minimal_domain \\ rw[]
     \\ irule ignore_bind_computes_minimal_domain \\ rw[] )
+  \\ irule ignore_bind_computes_minimal_domain
+  \\ conj_tac >- (rw[] \\ irule ignore_bind_computes_minimal_domain \\ rw[])
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ irule bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  \\ irule ignore_bind_computes_minimal_domain
+  \\ rw[pop_and_incorporate_context_computes_minimal_domain]
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
   \\ irule ignore_bind_computes_minimal_domain \\ rw[]
@@ -354,10 +384,27 @@ Proof
   \\ irule bind_computes_minimal_domain \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
   \\ TOP_CASE_TAC \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
-  \\ irule ignore_bind_computes_minimal_domain \\ rw[]
+  (* The deposit path gained its state charge and its account update, so the
+     peel repeats rather than counting the statements out. *)
+  \\ rpt ((irule bind_computes_minimal_domain ORELSE
+            irule ignore_bind_computes_minimal_domain) \\ rw[])
+QED
+
+(* The deposit's state charge, like the other meter operations, reports an
+   outside-domain error to nobody: it either writes the meter back or fails
+   with out-of-gas.  The case analysis in `handle_step_computes_minimal_domain`
+   needs that fact about the charge the phase 3 deposit path adds. *)
+Theorem charge_state_gas_not_outside_domain[local,simp]:
+  charge_state_gas n s ≠ (INR (SOME (OutsideDomain x)), t)
+Proof
+  gvs[charge_state_gas_def, bind_def, ignore_bind_def, get_current_context_def,
+      set_current_context_def, consume_gas_def, get_gas_left_def, assert_def,
+      fail_def, return_def, LET_THM]
+  \\ rpt (CASE_TAC
+          \\ gvs[bind_def, ignore_bind_def, get_current_context_def,
+                 set_current_context_def, consume_gas_def, get_gas_left_def,
+                 assert_def, fail_def, return_def, LET_THM,
+                 CaseEq"prod", CaseEq"sum", CaseEq"option", CaseEq"bool"])
 QED
 
 Theorem handle_step_computes_minimal_domain[simp]:
@@ -366,7 +413,7 @@ Theorem handle_step_computes_minimal_domain[simp]:
 Proof
   rw[handle_step_def]
   \\ irule handle_computes_minimal_domain
-  \\ rw[]
+  \\ rw[handle_exception_computes_minimal_domain]
   \\ gvs[handle_create_def, bind_def, get_return_data_def,
          get_current_context_def, CaseEq"prod", CaseEq"sum",
          CaseEq"bool", fail_def, return_def, get_output_to_def,
@@ -868,6 +915,24 @@ Proof
   rw[step_dup_def] \\ tac
 QED
 
+Theorem step_dupn_computes_minimal_domain[simp]:
+  computes_minimal_domain step_dupn
+Proof
+  rw[step_dupn_def] \\ tac
+QED
+
+Theorem step_swapn_computes_minimal_domain[simp]:
+  computes_minimal_domain step_swapn
+Proof
+  rw[step_swapn_def] \\ tac
+QED
+
+Theorem step_exchange_computes_minimal_domain[simp]:
+  computes_minimal_domain step_exchange
+Proof
+  rw[step_exchange_def] \\ tac
+QED
+
 Theorem step_log_computes_minimal_domain[simp]:
   computes_minimal_domain (step_log x)
 Proof
@@ -896,6 +961,18 @@ Theorem abort_create_exists_computes_minimal_domain[simp]:
   computes_minimal_domain (abort_create_exists x)
 Proof
   rw[abort_create_exists_def] \\ tac
+QED
+
+Theorem abort_create_computes_minimal_domain[simp]:
+  computes_minimal_domain abort_create
+Proof
+  rw[abort_create_def] \\ tac
+QED
+
+Theorem charge_new_account_computes_minimal_domain[simp]:
+  computes_minimal_domain (charge_new_account charged)
+Proof
+  rw[charge_new_account_def] \\ tac
 QED
 
 Theorem get_rollback_computes_minimal_domain[simp]:

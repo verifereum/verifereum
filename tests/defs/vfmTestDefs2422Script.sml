@@ -1,5 +1,5 @@
 Theory vfmTestDefs2422[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/shanghai/eip3860_initcode/initcode/contract_creating_tx.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/shanghai/eip3860_initcode/initcode/contract_creating_tx.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stShift/sar_2_255_257/sar_2_255_257.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stShift/sar_2_255_257/sar_2_255_257.json");
 val defs = mapi (define_test "2422") tests;

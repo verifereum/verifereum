@@ -385,6 +385,8 @@ val () = cv_auto_trans $
 val () = cv_auto_trans $
   REWRITE_RULE [GSYM word_of_bytes_be_def] address_for_create2_def;
 
+val () = cv_auto_trans vfmConstantsTheory.transfer_log_def;
+
 val () = “get_gas_left s” |>
   SIMP_CONV std_ss [get_gas_left_def, bind_def]
   |> cv_auto_trans;
@@ -474,6 +476,65 @@ val () = “consume_gas n s” |>
 val () = “unuse_gas n s” |>
   SIMP_CONV std_ss [unuse_gas_def, bind_def, ignore_bind_def, LET_RATOR] |>
   cv_auto_trans;
+
+(* EIP-8037's state gas meter operations. *)
+val () = “get_state_gas_left s” |>
+  SIMP_CONV std_ss [get_state_gas_left_def, bind_def] |>
+  cv_auto_trans;
+
+val () = “charge_state_gas n s” |>
+  SIMP_CONV std_ss [charge_state_gas_def, bind_def, ignore_bind_def,
+                    LET_RATOR, COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “credit_state_gas_refund n s” |>
+  SIMP_CONV std_ss [credit_state_gas_refund_def, bind_def, ignore_bind_def,
+                    LET_RATOR, COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “restore_state_gas s” |>
+  SIMP_CONV std_ss [restore_state_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “commit_state_gas s” |>
+  SIMP_CONV std_ss [commit_state_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “restore_state_gas_to_entry sg s” |>
+  SIMP_CONV std_ss [restore_state_gas_to_entry_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “repay_state_gas_spill s” |>
+  SIMP_CONV std_ss [repay_state_gas_spill_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “forfeit_remaining_gas s” |>
+  SIMP_CONV std_ss [forfeit_remaining_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “withhold_create_gas s” |>
+  SIMP_CONV std_ss [withhold_create_gas_def, bind_def, ignore_bind_def,
+                    LET_RATOR, COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “drain_state_gas_reservoir s” |>
+  SIMP_CONV std_ss [drain_state_gas_reservoir_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
+  cv_auto_trans;
+
+val () = “restore_child_gas g sr s” |>
+  SIMP_CONV std_ss [restore_child_gas_def, bind_def, ignore_bind_def,
+                    COND_RATOR] |>
+  cv_auto_trans;
+
+(* EIP-8037: the top frame's own state-gas charge, as a pure function used by
+   `run_create` before any step runs. *)
+val () = cv_auto_trans charge_state_gas_context_def;
 
 val () = “pop_stack n s” |>
   SIMP_CONV std_ss [pop_stack_def, bind_def, ignore_bind_def, LET_RATOR] |>
@@ -735,6 +796,7 @@ QED
 fun mconv def =
   SIMP_CONV std_ss [
     def, copy_to_memory_def,
+    code_byte_def, exchange_stack_def,
     bind_def,
     ignore_bind_def,
     COND_RATOR,
@@ -812,6 +874,37 @@ val th = tf step_push_def;
 val th = tf step_pop_def;
 val th = tt step_dup_def;
 val th = tt step_swap_def;
+val th = tt step_dupn_def;
+val th = tt step_swapn_def;
+
+(* EXCHANGE asserts on a decoded pair, so the translation precondition
+   (which bounds both decoded indices) is not discharged by step_x_pre_tac.
+   Expose it and prove it directly. *)
+val step_exchange_pre_def = let
+    val const_app = step_exchange_def |> SPEC_ALL |> concl |> lhs
+    val stype = #1 $ dom_rng $ type_of const_app
+    val s = mk_var("s", stype)
+    val xdef = mconv step_exchange_def (mk_comb(const_app, s))
+  in
+    cv_auto_trans_pre "step_exchange_pre" xdef
+  end;
+
+Theorem step_exchange_pre[cv_pre]:
+  ∀s. step_exchange_pre s
+Proof
+  rw[step_exchange_pre_def]
+QED
+(* EIP-8037's account-creation charge and credit are monadic operations over
+   the state-gas meter, so the step bodies that use them need a translation of
+   each before they can be translated themselves. *)
+val () = “charge_new_account b s” |>
+  SIMP_CONV std_ss [charge_new_account_def, COND_RATOR, bind_def] |>
+  cv_auto_trans;
+
+val () = “credit_new_account b s” |>
+  SIMP_CONV std_ss [credit_new_account_def, COND_RATOR, bind_def] |>
+  cv_auto_trans;
+
 val th = tt step_log_def;
 val th = tt step_return_def;
 val th = tt step_self_destruct_def;
@@ -819,6 +912,11 @@ val th = tt step_self_destruct_def;
 val () = “abort_unuse n s” |>
   SIMP_CONV std_ss [
     abort_unuse_def, bind_def, ignore_bind_def
+  ] |> cv_auto_trans;
+
+val () = “abort_create s” |>
+  SIMP_CONV std_ss [
+    abort_create_def, bind_def, ignore_bind_def
   ] |> cv_auto_trans;
 
 val () = “abort_create_exists x s” |>
@@ -847,6 +945,10 @@ val () = “dispatch_precompiles a s” |>
 Theorem proceed_call_eq:
   proceed_call op sender address value argsOffset argsSize code stipend
     outputTo = do
+    accounts <- get_accounts;
+    charged <<- op = Call ∧ 0 < value ∧
+               account_empty $ lookup_account address accounts;
+    reservoir <- drain_state_gas_reservoir;
     rollback <- get_rollback;
     data <- read_memory_sub argsOffset argsSize;
     if op ≠ CallCode ∧ 0 < value then
@@ -869,9 +971,9 @@ Theorem proceed_call_eq:
     |>;
     static <- get_static;
     subStatic <<- (op = StaticCall ∨ static);
-    context <<- initial_context callee code subStatic outputTo subContextTx;
+    context <<- initial_context callee code subStatic outputTo charged reservoir subContextTx;
     context <<- context with msgParams := context.msgParams with data := data;
-    push_context (context, rollback);
+    push_context (context with logs := transfer_log sender callee value, rollback);
     if fIN address precompile_addresses
     then dispatch_precompiles address
     else return ()
@@ -881,7 +983,8 @@ Proof
   \\ rw[proceed_call_def, read_memory_def, read_memory_sub_def,
      bind_def, ignore_bind_def, get_rollback_def, get_current_context_def,
      get_caller_def, get_value_def, get_static_def, update_accounts_def,
-     push_context_def, return_def, fail_def]
+     get_accounts_def, push_context_def, return_def, fail_def,
+     drain_state_gas_reservoir_def, set_current_context_def]
   \\ gvs[initial_context_def, initial_msg_params_def,
          vfmBufferTheory.buffer_of_list_take]
 QED
@@ -1119,6 +1222,16 @@ QED
 
 val () = cv_auto_trans empty_return_destination_def;
 
+val apply_authorization_charges_pre_def =
+  cv_auto_trans_pre "apply_authorization_charges_pre" apply_authorization_charges_def;
+
+Theorem apply_authorization_charges_pre[cv_pre]:
+  !cs ctxt. apply_authorization_charges_pre cs ctxt
+Proof
+  Induct >> simp[Once apply_authorization_charges_pre_def] >>
+  Cases_on `h` >> simp[Once apply_authorization_charges_pre_def]
+QED
+
 val run_create_pre_def = run_create_def
   |> SIMP_RULE std_ss [o_DEF]
   |> cv_auto_trans_pre "run_create_pre";
@@ -1126,10 +1239,10 @@ val run_create_pre_def = run_create_def
 Theorem run_create_pre[cv_pre]:
   run_create_pre d st c p b a t
 Proof
-  rw[run_create_pre_def, initial_state_def,
-     pre_transaction_updates_def, execution_state_component_equality,
-     initial_rollback_def, code_from_tx_def]
-  \\ strip_tac \\ gvs[CaseEq"option", UNCURRY]
+  rw[run_create_pre_def]
+  >> gvs[initial_state_def, CaseEq "option"]
+  >> pairarg_tac >> gvs[]
+  >> pairarg_tac >> gvs[CaseEq "option"]
 QED
 
 val () = run_transaction_def |> cv_auto_trans;
@@ -1137,7 +1250,9 @@ val () = run_transaction_def |> cv_auto_trans;
 Definition run_transactions_def:
   run_transactions d st c h b a rs [] = SOME (REVERSE rs, a, d) ∧
   run_transactions d st c h b a rs (tx::txs) =
-  if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.gasUsed) rs) ∨
+  if MIN tx_max_gas_limit tx.gasLimit >
+       b.gasLimit - SUM (MAP (λr. r.executionGasUsed) rs) ∨
+     tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.stateGasUsed) rs) ∨
      (case tx.maxFeePerGas of SOME x => x | NONE => tx.gasPrice)
        < b.baseFeePerGas
   then NONE else

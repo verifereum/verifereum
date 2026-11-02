@@ -1,5 +1,5 @@
 Theory vfmTestDefs2044[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stSystemOperationsTest/create_name_registrator_oog_mem_expansion_oov/create_name_registrator_oog_mem_expansion_oov.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stSystemOperationsTest/create_name_registrator_oog_mem_expansion_oov/create_name_registrator_oog_mem_expansion_oov.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stRandom/random_statetest63/random_statetest63.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stRandom/random_statetest63/random_statetest63.json");
 val defs = mapi (define_test "2044") tests;

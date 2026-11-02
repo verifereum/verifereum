@@ -1,5 +1,5 @@
 Theory vfmTestDefs2011[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stStaticFlagEnabled/delegatecall_to_precompile_from_transaction/delegatecall_to_precompile_from_transaction.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stStaticFlagEnabled/delegatecall_to_precompile_from_transaction/delegatecall_to_precompile_from_transaction.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stRandom/random_statetest367/random_statetest367.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stRandom/random_statetest367/random_statetest367.json");
 val defs = mapi (define_test "2011") tests;

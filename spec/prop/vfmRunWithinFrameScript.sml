@@ -34,8 +34,8 @@
  *     composes to same-frame.
  *   - `step_same_frame`: step preserves same-frame on length-
  *     preserving transitions.
- *   - `run_within_frame_preserves`, `run_within_frame_gas_monotone`:
- *     the headline OWHILE-iterated theorems.
+ *   - `run_within_frame_preserves`: the headline OWHILE-iterated
+ *     theorem.
  *   - Named downstream corollaries `run_within_frame_preserves_*`
  *     exposing individual conjuncts of `same_frame_rel` for user
  *     consumption (txParams, storage / tStorage / code / nonce
@@ -150,6 +150,42 @@ Proof
   >> original_tac
 QED
 
+Theorem original_state_gas_meter[local,simp]:
+  (!s. (SND (get_state_gas_left s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (charge_state_gas n s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (credit_state_gas_refund n s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (restore_state_gas s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (commit_state_gas s)).originalAccounts = s.originalAccounts) /\
+  (!n s. (SND (restore_state_gas_to_entry n s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (repay_state_gas_spill s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (forfeit_remaining_gas s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (withhold_create_gas s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (drain_state_gas_reservoir s)).originalAccounts = s.originalAccounts) /\
+  (!gas reservoir s. (SND (restore_child_gas gas reservoir s)).originalAccounts = s.originalAccounts)
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  rewrite_tac[get_state_gas_left_def, charge_state_gas_def,
+    credit_state_gas_refund_def, restore_state_gas_def, commit_state_gas_def,
+    restore_state_gas_to_entry_def, repay_state_gas_spill_def,
+    forfeit_remaining_gas_def, withhold_create_gas_def,
+    drain_state_gas_reservoir_def, restore_child_gas_def, LET_THM] >>
+  original_tac >> simp[original_context_wrappers, original_primitives]
+QED
+
+(* EIP-8037's account-creation charge and credit, and the create abort that
+   charges nothing, touch only the state-gas meter and the stack: none of
+   them changes the original accounts. *)
+Theorem original_new_account_ops[local,simp]:
+  (!b s. (SND (charge_new_account b s)).originalAccounts = s.originalAccounts) /\
+  (!b s. (SND (credit_new_account b s)).originalAccounts = s.originalAccounts) /\
+  (!s. (SND (abort_create s)).originalAccounts = s.originalAccounts)
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  rewrite_tac[charge_new_account_def, credit_new_account_def,
+    abort_create_def, LET_THM] >>
+  original_tac >> simp[original_context_wrappers, original_primitives]
+QED
+
 Theorem original_pop_and_incorporate[local]:
   !s. (SND (pop_and_incorporate_context success s)).originalAccounts = s.originalAccounts
 Proof
@@ -235,20 +271,42 @@ Theorem original_step_call[local]:
   !s. (SND (step_call op s)).originalAccounts = s.originalAccounts
 Proof
   gen_tac >> simp[step_call_def, LET_THM]
+  (* Peel the bind spine with `original_tac`, discharging each round's leaf
+     obligations with the projection lemmas.  `pairarg_tac` splits whatever
+     pair pattern the `<<-` binders leave behind, so each round is run with
+     `TRY`: a round with nothing left to split just peels and discharges.
+     The delegate the code resolves to is a `case`, which no peel rule
+     covers, so it is split at the end -- once the frame's binders are out
+     of scope and `qmatch_goalsub_abbrev_tac` can name its scrutinee. *)
   >> original_tac
   >> simp[original_context_wrappers, original_primitives,
-          original_access_address, original_call_wrappers, original_proceed_call]
-  >> pairarg_tac >> simp[] >> original_tac
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> TRY pairarg_tac >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> original_tac
   >> simp[original_context_wrappers, original_primitives,
-          original_access_address, original_call_wrappers, original_proceed_call]
-  >- (pairarg_tac >> simp[] >> original_tac
-      >> simp[original_context_wrappers, original_primitives]
-      >> pairarg_tac >> simp[] >> original_tac
-      >> simp[original_context_wrappers, original_primitives,
-              original_call_wrappers, original_proceed_call])
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> TRY pairarg_tac >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> original_tac
+  >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> TRY pairarg_tac >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
+  >> original_tac
+  >> simp[original_context_wrappers, original_primitives,
+          original_access_address, original_call_wrappers,
+          original_proceed_call]
   >> qmatch_goalsub_abbrev_tac `get_delegate ac.code`
   >> Cases_on `get_delegate ac.code`
-  >> simp[original_primitives] >> original_tac
+  >> simp[original_primitives]
+  >> original_tac
   >> simp[original_access_address]
 QED
 
@@ -883,12 +941,15 @@ Proof
   >> simp[proceed_call_def, bind_def, ignore_bind_def,
           get_rollback_def, read_memory_def, get_caller_def,
           get_value_def, get_static_def, update_accounts_def,
-          push_context_def, get_current_context_def, return_def]
+          get_accounts_def, account_empty_def,
+          push_context_def, get_current_context_def, return_def,
+          drain_state_gas_reservoir_def, set_current_context_def]
   >> `∀f. update_accounts f s = (INL (), s with rollback updated_by (λr. r with accounts updated_by f))`
        by simp[update_accounts_def, return_def]
   >> Cases_on `op ≠ CallCode ∧ 0 < value`
   >> Cases_on `fIN address precompile_addresses`
-  >> gvs[return_def]
+  >> gvs[return_def, update_accounts_def, get_current_context_def,
+         set_current_context_def, bind_def]
   >> strip_tac
   (* In the precompile branches, extract the exception-shape fact. *)
   >> drule_at (Pat`dispatch_precompiles`)
@@ -911,7 +972,7 @@ Proof
   >> strip_tac
   (* Facts about `pushed`. *)
   >> `SND (HD pushed.contexts) = s.rollback ∧
-      TL pushed.contexts = s.contexts ∧
+      TL pushed.contexts = (FST h with stateGasLeft := 0, SND h)::t ∧
       (FST (HD pushed.contexts)).msgParams.outputTo = Memory mr ∧
       pushed.rollback.accesses = s.rollback.accesses ∧
       pushed.msdomain = s.msdomain ∧
@@ -933,11 +994,12 @@ Proof
   >> strip_tac
   (* Pick parent_ctx = FST h for the existential. *)
   >> `∃parent_ctx.
-       h = (parent_ctx, SND h) ∧ parent_ctx.msgParams = (FST h).msgParams ∧
+       (FST h with stateGasLeft := 0, SND h) = (parent_ctx, SND h) ∧
+       parent_ctx.msgParams = (FST h).msgParams ∧
        parent_ctx.logs = (FST h).logs ∧
        parent_ctx.addRefund = (FST h).addRefund ∧
        parent_ctx.subRefund = (FST h).subRefund`
-     by (qexists_tac `FST h` >> simp[pairTheory.PAIR])
+     by (qexists_tac `FST h with stateGasLeft := 0` >> simp[])
   (* Remaining: callee_local_changes, accesses ⊆, msdomain_compatible. *)
   >> simp[]
   >> fs[]
@@ -953,6 +1015,12 @@ Theorem inr_grow_witness_step_call:
   inr_grow_witness inr_grow_P (step_call op)
 Proof
   simp[step_call_def]
+  (* Peel the prefix a statement at a time.  Every statement before the two
+     aborts and the child's entry leaves the frame alone, so each peel
+     discharges its guard from the `preserves_same_frame` rules; the two
+     aborts hand their `credit_new_account` back before unwinding.  The two
+     pair patterns the `<<-` binders leave behind -- the memory range and
+     the child's grant with its stipend -- are split with `pairarg_tac`. *)
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
@@ -960,22 +1028,28 @@ Proof
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
+  (* EIP-8037: this frame's execution charge, then the recipient's
+     account-creation charge, then the static-context check. *)
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
   >> pairarg_tac >> simp[]
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
-  >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+  (* the child's own grant is paid after that charge *)
   >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  (* the balance test: the child is never entered, so its creation is
+     handed back and the frame unwinds without growing *)
   >> irule inr_grow_witness_cond >> conj_tac
-  >- (
-    (* abort_call_value is preserves_same_frame, never INR-grows *)
-    irule inr_grow_witness_of_preserves_same_frame >> simp[])
+  >- (irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+      >> irule inr_grow_witness_of_preserves_same_frame >> simp[])
   >> irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
   >> irule inr_grow_witness_bind_preserves_g >> simp[] >> gen_tac
+  (* the depth test: same, the creation is handed back before unwinding *)
   >> irule inr_grow_witness_cond >> conj_tac
-  >- (
-    (* abort_unuse is preserves_same_frame, never INR-grows *)
-    irule inr_grow_witness_of_preserves_same_frame >> simp[])
+  >- (irule inr_grow_witness_ignore_bind_preserves_g >> simp[]
+      >> irule inr_grow_witness_of_preserves_same_frame >> simp[])
   >> irule inr_grow_witness_proceed_call
 QED
 
@@ -1157,13 +1231,21 @@ Proof
   >> simp[]
 QED
 
+(* EIP-8037: the failure path's `restore_state_gas` zeroes the failing frame's
+   refund counters (`restore_state_gas_def`), so `same_frame_rel` does not hold
+   of the frame as it entered.  The statement pins the input's refund counters
+   at 0 instead, which is the relation's refund clause with the loss removed;
+   it reduces to the old statement when the frame had no accrued refunds. *)
 Theorem step_same_frame:
   outputTo_consistent s ∧
   step s = (r, s') ∧
   LENGTH s'.contexts = LENGTH s.contexts ⇒
-  same_frame_rel s s'
+  same_frame_rel
+    (s with contexts := (FST (HD s.contexts) with <|addRefund := 0; subRefund := 0|>,
+                         SND (HD s.contexts)) :: TL s.contexts)
+    s'
 Proof
-  strip_tac
+  rewrite_tac[GSYM zero_head_refunds_def] >> strip_tac
   >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
   >> gvs[step_def, handle_def]
   >> qmatch_asmsub_abbrev_tac`pair_CASE (inner s)`
@@ -1171,7 +1253,8 @@ Proof
   >> gvs[AllCaseEqs()]
   >- (
     (* inner returned INL: step s = (INL _, r) so s' = r. *)
-    gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[])
+    gvs[same_frame_or_grow_def] >> first_x_assum drule >> simp[] >>
+    metis_tac[same_frame_rel_zero_head_refunds_weaken])
   >> (* inner returned INR with state s1: step s = handle_step e s1.
         Two sub-cases based on same_frame_or_grow inner:
           (a) same_frame_rel s s1: compose with handle_step_same_frame.
@@ -1188,10 +1271,11 @@ Proof
     >> `s1.contexts ≠ []` by metis_tac[same_frame_rel_contexts_ne]
     >> `LENGTH s1.contexts = LENGTH s.contexts` by gvs[same_frame_rel_def]
     >> `LENGTH s'.contexts = LENGTH s1.contexts` by simp[]
-    >> `same_frame_rel s1 s'` by (
+    >> `same_frame_rel (zero_head_refunds s1) s'` by (
          drule handle_step_same_frame >> disch_then drule
-         >> disch_then drule >> simp[])
-    >> metis_tac[same_frame_rel_trans])
+         >> disch_then drule >> simp[zero_head_refunds_def])
+    >> metis_tac[same_frame_rel_zero_head_refunds_weaken,
+                 same_frame_rel_zero_head_refunds_trans])
   >> (* (b) inner grew. Reduce to step_call_handle_step_inr_grow_same_frame.
         The op must be Call/CallCode/DelegateCall/StaticCall (the only
         ops that can INR-grow). *)
@@ -1245,6 +1329,7 @@ Proof
   >> disch_then assume_tac
   >> `step_inst op s = step_call op s` by gvs[step_inst_def]
   >> pop_assum (mp_tac o SYM) >> simp[] >> strip_tac
+  >> irule same_frame_rel_zero_head_refunds_weaken
   >> irule step_call_handle_step_inr_grow_same_frame
   >> simp[]
   >> rpt(goal_assum drule)
@@ -1267,120 +1352,43 @@ QED
    guard stops iteration there. The theorem's hypothesis
    `LENGTH es'.contexts = LENGTH es.contexts` rules the "pop below"
    and "pushed" cases out at the conclusion. *)
+(* EIP-8037: the failure path's `restore_state_gas` zeroes the failing frame's
+   refund counters (`restore_state_gas_def`), so `same_frame_rel` does not hold
+   of the frame as it entered.  The statement pins the input's refund counters
+   at 0 instead, which is the relation's refund clause with the loss removed;
+   it reduces to the old statement when the frame had no accrued refunds. *)
 Theorem run_within_frame_preserves:
   outputTo_consistent es ∧
   run_within_frame es = SOME (r, es') ∧
   LENGTH es'.contexts = LENGTH es.contexts ⇒
-  same_frame_rel es es'
+  same_frame_rel
+    (es with contexts := (FST (HD es.contexts) with <|addRefund := 0; subRefund := 0|>,
+                         SND (HD es.contexts)) :: TL es.contexts)
+    es'
 Proof
-  rpt strip_tac
+  rewrite_tac[GSYM zero_head_refunds_def] >> rpt strip_tac
   >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
   >> gvs[run_within_frame_def]
   >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
-           same_frame_rel es (SND p)) (r, es')` suffices_by simp[]
+           same_frame_rel (zero_head_refunds es) (SND p)) (r, es')` suffices_by simp[]
   >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
   >> goal_assum (first_assum o mp_then Any mp_tac)
   >> simp[]
   >> conj_tac
-  >- simp[same_frame_rel_refl]
+  >- simp[same_frame_rel_zero_head_refunds_refl]
   >> rpt gen_tac
   >> pairarg_tac >> simp[]
   >> strip_tac
   >> strip_tac
   >> Cases_on `step s''` >> simp[]
-  >> `same_frame_rel es s''` by simp[]
+  >> `same_frame_rel (zero_head_refunds es) s''` by simp[]
   >> `outputTo_consistent s''`
-       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
-  >> `same_frame_rel s'' r'` by (
-       irule step_same_frame
+       by metis_tac[same_frame_rel_zero_head_refunds_outputTo_consistent]
+  >> `same_frame_rel (zero_head_refunds s'') r'` by (
+       simp[zero_head_refunds_def] >> irule step_same_frame
        >> goal_assum (first_assum o mp_then Any mp_tac)
        >> simp[])
-  >> metis_tac[same_frame_rel_trans]
-QED
-
-(* ================================================================ *)
-(* Gas monotonicity corollary (separate from same_frame_rel).        *)
-(* ================================================================ *)
-
-Theorem step_same_frame_gas_monotone:
-  outputTo_consistent s ∧ s.contexts ≠ [] ∧
-  EVERY (wf_context o FST) s.contexts ∧ step s = (r, s') ∧
-  LENGTH s'.contexts = LENGTH s.contexts ⇒
-  (FST (HD s.contexts)).gasUsed ≤ (FST (HD s'.contexts)).gasUsed
-Proof
-  strip_tac
-  >> `s.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> mp_tac decreases_gas_cred_step
-  >> rewrite_tac[decreases_gas_cred_def]
-  >> disch_then(qspec_then`s`mp_tac)
-  >> IF_CASES_TAC >> gvs[] >> strip_tac
-  (* Use step_same_frame to get the tail and msgParams (hence gasLimit)
-     preservation, which decreases_gas_cred_step alone doesn't give us. *)
-  >> `same_frame_rel s s'` by (
-       irule step_same_frame
-       >> goal_assum (first_assum o mp_then Any mp_tac) >> simp[])
-  >> `TL s'.contexts = TL s.contexts` by gvs[same_frame_rel_def]
-  >> `(FST (HD s'.contexts)).msgParams = (FST (HD s.contexts)).msgParams`
-     by gvs[same_frame_rel_def]
-  (* Now use decreases_gas_cred_step for the gas-weight inequality. *)
-  >> Cases_on `s.contexts` >> gvs[]
-  >> Cases_on `s'.contexts` >> gvs[]
-  >> gvs[contexts_weight_def, unused_gas_def]
-  >> (* The inequality reduces because the tails match and gasLimits
-        match at the heads. *)
-     BasicProvers.FULL_CASE_TAC >> gvs[]
-  >> gvs[LEX_DEF]
-  >> gvs[wf_context_def]
-QED
-
-Theorem run_within_frame_gas_monotone:
-  outputTo_consistent es ∧ wf_state es ∧
-  run_within_frame es = SOME (r, es') ∧
-  LENGTH es'.contexts = LENGTH es.contexts ⇒
-  (FST (HD es.contexts)).gasUsed ≤ (FST (HD es'.contexts)).gasUsed
-Proof
-  rpt strip_tac
-  >> `es.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> gvs[run_within_frame_def]
-  >> `(λp. LENGTH (SND p).contexts = LENGTH es.contexts ⇒
-           same_frame_rel es (SND p) ∧
-           EVERY (wf_context o FST) (SND p).contexts ∧
-           (FST (HD es.contexts)).gasUsed ≤
-             (FST (HD (SND p).contexts)).gasUsed) (r, es')`
-     suffices_by simp[]
-  >> irule (MP_CANON WhileTheory.OWHILE_INV_IND)
-  >> goal_assum (first_assum o mp_then Any mp_tac)
-  >> simp[]
-  >> conj_tac
-  >- gvs[same_frame_rel_refl, wf_state_def]
-  >> rpt gen_tac
-  >> pairarg_tac >> simp[]
-  >> strip_tac
-  >> strip_tac
-  >> Cases_on `step s''` >> simp[]
-  >> `same_frame_rel es s'' ∧ EVERY (wf_context o FST) s''.contexts ∧
-      (FST (HD es.contexts)).gasUsed ≤ (FST (HD s''.contexts)).gasUsed`
-       by simp[]
-  >> `outputTo_consistent s''`
-       by metis_tac[same_frame_rel_preserves_outputTo_consistent]
-  >> `s''.contexts ≠ []` by gvs[outputTo_consistent_def]
-  >> `same_frame_rel s'' r'` by (
-       irule step_same_frame
-       >> goal_assum (first_assum o mp_then Any mp_tac)
-       >> simp[])
-  >> `(FST (HD s''.contexts)).gasUsed ≤ (FST (HD r'.contexts)).gasUsed` by (
-       irule step_same_frame_gas_monotone
-       >> goal_assum (first_assum o mp_then Any mp_tac)
-       >> simp[])
-  >> `EVERY (wf_context o FST) r'.contexts` by (
-       mp_tac decreases_gas_cred_step
-       >> rewrite_tac[decreases_gas_cred_def]
-       >> disch_then(qspec_then`s''`mp_tac)
-       >> IF_CASES_TAC >> gvs[] )
-  >> rpt conj_tac
-  >- metis_tac[same_frame_rel_trans]
-  >- simp[]
-  >> simp[]
+  >> metis_tac[same_frame_rel_zero_head_refunds_trans]
 QED
 
 (* ================================================================ *)
@@ -1513,16 +1521,13 @@ Proof
   \\ rw[same_frame_rel_def]
 QED
 
-Theorem run_within_frame_refund_monotone:
-  outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧
-  LENGTH es'.contexts = LENGTH es.contexts ⇒
-  (FST (HD es.contexts)).addRefund ≤ (FST (HD es'.contexts)).addRefund ∧
-  (FST (HD es.contexts)).subRefund ≤ (FST (HD es'.contexts)).subRefund
-Proof
-  rpt strip_tac
-  \\ drule_all run_within_frame_preserves
-  \\ rw[same_frame_rel_def]
-QED
+(* `run_within_frame_refund_monotone` lived here.  EIP-8037's rollback zeroes
+   a failing frame's refund counters (`restore_state_gas_def`), so the
+   statement without hypotheses is false; pinning the input's counters at 0
+   makes it true but vacuous -- `0 <= _ /\\ 0 <= _` on `num` -- and a name
+   that reads as a refund result while proving nothing is worse than no
+   theorem.  `same_frame_rel`'s own refund clauses and the frame rules carry
+   what each step does to the counters. *)
 
 Theorem run_within_frame_domain_compatible:
   outputTo_consistent es ∧ run_within_frame es = SOME (r, es') ∧

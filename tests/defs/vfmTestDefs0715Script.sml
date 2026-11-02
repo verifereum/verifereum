@@ -1,5 +1,5 @@
 Theory vfmTestDefs0715[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stEIP150Specific/suicide_to_not_existing_contract/suicide_to_not_existing_contract.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stEIP150Specific/suicide_to_not_existing_contract/suicide_to_not_existing_contract.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_set_code/same_tx_clear_then_reset_pre_delegated.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_set_code/same_tx_clear_then_reset_pre_delegated.json");
 val defs = mapi (define_test "0715") tests;

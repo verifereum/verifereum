@@ -1,5 +1,5 @@
 Theory vfmTestDefs2411[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip7702_set_code_tx/set_code_txs_2/pointer_reverts.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip7702_set_code_tx/set_code_txs_2/pointer_reverts.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stSelfBalance/self_balance_gas_cost/self_balance_gas_cost.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stSelfBalance/self_balance_gas_cost/self_balance_gas_cost.json");
 val defs = mapi (define_test "2411") tests;

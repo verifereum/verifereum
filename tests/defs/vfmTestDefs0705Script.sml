@@ -1,5 +1,5 @@
 Theory vfmTestDefs0705[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stEIP1153_transientStorage/trans_storage_ok/trans_storage_ok.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stEIP1153_transientStorage/trans_storage_ok/trans_storage_ok.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_set_code/invalid_auth_no_top_frame_charge.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_set_code/invalid_auth_no_top_frame_charge.json");
 val defs = mapi (define_test "0705") tests;
