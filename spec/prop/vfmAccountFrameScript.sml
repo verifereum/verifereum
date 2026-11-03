@@ -1058,6 +1058,25 @@ Proof
   simp[transfer_value_def]
 QED
 
+Theorem step_call_push_balance:
+  step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH s'.contexts ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
+  (lookup_account y s.rollback.accounts).balance ≤
+    (lookup_account y s'.rollback.accounts).balance ∧
+  (lookup_account y (SND (HD s'.contexts)).accounts).balance =
+    (lookup_account y s.rollback.accounts).balance
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_call_inl_nonprecompile >> strip_tac
+  >> drule_all proceed_call_saved_rollback >> strip_tac
+  >> drule_all proceed_call_nonprecompile_frame >> strip_tac
+  >> gvs[cp_rel_def]
+  >> IF_CASES_TAC >> simp[]
+  >> irule transfer_value_foreign_balance >> simp[]
+QED
+
 Theorem step_call_push_new_frame:
   step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
   LENGTH s.contexts < LENGTH s'.contexts ∧
@@ -1135,6 +1154,29 @@ Proof
   >> drule_all proceed_create_frame_effects >> strip_tac
   >> `u.rollback.accounts = s.rollback.accounts` by gvs[cp_rel_def]
   >> gvs[] >> irule create_foreign_account_updates >> simp[]
+QED
+
+Theorem step_create_push_balance:
+  s.contexts ≠ [] ∧ step_create two s = (r,s') ∧
+  LENGTH s.contexts < LENGTH s'.contexts ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
+  (lookup_account y s.rollback.accounts).balance ≤
+    (lookup_account y s'.rollback.accounts).balance ∧
+  (lookup_account y (SND (HD s'.contexts)).accounts).balance =
+    (lookup_account y s.rollback.accounts).balance
+Proof
+  strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_create_frame_effects >> strip_tac
+  >> `u.rollback.accounts = s.rollback.accounts` by gvs[cp_rel_def]
+  >> gvs[]
+  >> irule arithmeticTheory.LESS_EQ_TRANS
+  >> qexists_tac `(lookup_account y
+      (increment_nonce address (clear_storage address
+        (increment_nonce (FST (HD s.contexts)).msgParams.callee
+          s.rollback.accounts)))).balance`
+  >> conj_tac >- simp[]
+  >> irule transfer_value_foreign_balance >> simp[]
 QED
 
 Theorem proceed_create_stack_effects:
@@ -1231,6 +1273,22 @@ Proof
   >> drule_all step_create_push_stack >> strip_tac
   >> simp[] >> gen_tac >> disch_tac
   >> drule_all step_create_push_foreign_accounts >> simp[]
+QED
+
+Theorem step_push_balance:
+  wf_state s ∧ step s = (r,s') ∧
+  LENGTH s.contexts < LENGTH s'.contexts ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
+  (lookup_account y s.rollback.accounts).balance ≤
+    (lookup_account y s'.rollback.accounts).balance ∧
+  (lookup_account y (SND (HD s'.contexts)).accounts).balance =
+    (lookup_account y s.rollback.accounts).balance
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> drule_all step_grow_dispatch >> strip_tac
+  >- (drule_all step_call_push_balance >> simp[])
+  >> drule_all step_create_push_balance >> simp[]
 QED
 
 (* The frame a push enters as a new callee: a CALL or STATICCALL running the
