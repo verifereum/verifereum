@@ -34,6 +34,36 @@ Definition foreign_account_change_def:
      ¬account_already_created acc)
 End
 
+Theorem transfer_value_foreign_balance:
+  y ≠ sender ⇒
+  (lookup_account y accounts).balance ≤
+  (lookup_account y (transfer_value sender address value accounts)).balance
+Proof
+  strip_tac >> simp[transfer_value_def]
+  >> Cases_on `value = 0 ∨ sender = address` >> simp[]
+  >> Cases_on `y = address`
+  >> gvs[lookup_account_def, update_account_def,
+         combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem increment_nonce_preserves_balance[simp]:
+  (lookup_account y (increment_nonce address accounts)).balance =
+  (lookup_account y accounts).balance
+Proof
+  simp[increment_nonce_def, lookup_account_def, update_account_def,
+       combinTheory.APPLY_UPDATE_THM]
+  >> Cases_on `y = address` >> simp[]
+QED
+
+Theorem clear_storage_preserves_balance[simp]:
+  (lookup_account y (clear_storage address accounts)).balance =
+  (lookup_account y accounts).balance
+Proof
+  simp[clear_storage_def, lookup_account_def, update_account_def,
+       combinTheory.APPLY_UPDATE_THM]
+  >> Cases_on `y = address` >> simp[]
+QED
+
 Theorem foreign_account_change_refl[simp]:
   foreign_account_change acc acc
 Proof
