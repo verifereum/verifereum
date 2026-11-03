@@ -56,7 +56,7 @@ Proof
          combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem increment_nonce_preserves_balance[local,simp]:
+Theorem increment_nonce_preserves_balance[simp]:
   (lookup_account y (increment_nonce address accounts)).balance =
   (lookup_account y accounts).balance
 Proof
