@@ -1457,6 +1457,83 @@ Proof
   >> drule_all proceed_create_saved_balance >> gvs[cp_rel_def]
 QED
 
+Theorem step_inst_foreign_balance:
+  s.contexts ≠ [] ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  step_inst op s = (r,t) ⇒ balance_le a s t
+Proof
+  strip_tac >> Cases_on `is_call op`
+  >- (Cases_on `op` >> gvs[is_call_def, step_inst_def]
+      >> metis_tac[REWRITE_RULE[preserves_when_def] balance_le_step_call,
+                   REWRITE_RULE[preserves_when_def] balance_le_step_create])
+  >> drule balance_frame_step_inst_non_call
+  >> simp[preserves_when_def] >> disch_then drule_all
+  >> simp[balance_frame_def]
+QED
+
+Theorem step_inst_saved_balance[local]:
+  step_inst op s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac
+  >> `is_call op` by
+    (Cases_on `r`
+     >- (Cases_on `x` >> drule step_inst_inl_grew_is_call
+         >> simp[arithmeticTheory.GREATER_DEF])
+     >> drule step_inst_inr_grew_is_call_family
+     >> simp[arithmeticTheory.GREATER_DEF] >> strip_tac >> gvs[is_call_def])
+  >> Cases_on `op` >> gvs[is_call_def, step_inst_def]
+  >> metis_tac[step_call_saved_balance, step_create_saved_balance]
+QED
+
+Theorem step_inner_foreign_balance:
+  s.contexts ≠ [] ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  step_inner s = (r,t) ⇒ balance_le a s t
+Proof
+  rw[step_inner_def, bind_def, ignore_bind_def, get_current_context_def,
+     return_def, fail_def, COND_RATOR, AllCaseEqs()]
+  >> gvs[vfmTypesTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()]
+  >> gvs[bind_def, AllCaseEqs()]
+  >> imp_res_tac step_inst_foreign_balance
+  >> gvs[balance_le_def]
+  >> metis_tac[REWRITE_RULE[preserves_rollback_def]
+                preserves_rollback_inc_pc_or_jump]
+QED
+
+Theorem step_inner_saved_balance:
+  s.contexts ≠ [] ∧ step_inner s = (r,t) ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  rw[step_inner_def, bind_def, ignore_bind_def, get_current_context_def,
+     return_def, fail_def, COND_RATOR, AllCaseEqs()]
+  >> gvs[vfmTypesTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()]
+  >~ [`step_inst Stop s = _`]
+  >- (drule_all step_inst_saved_balance >> simp[])
+  >~ [`step_inst Invalid s = _`]
+  >- (drule_all step_inst_saved_balance >> simp[])
+  >> gvs[bind_def, AllCaseEqs()]
+  >~ [`inc_pc_or_jump op mid = _`]
+  >- (`LENGTH mid.contexts ≥ LENGTH s.contexts` by
+        (irule (INST_TYPE [``:'a`` |-> ``:unit``] same_frame_or_grow_length)
+         >> simp[] >> qexistsl [`step_inst op`, `INL ()`] >> simp[])
+      >> `mid.contexts ≠ []` by
+        (Cases_on `mid.contexts` >> gvs[arithmeticTheory.GREATER_EQ])
+      >> `preserves_same_frame (inc_pc_or_jump op)` by simp[]
+      >> drule_all psf_imp_length_contexts_preserved >> strip_tac
+      >> `LENGTH s.contexts < LENGTH mid.contexts` by decide_tac
+      >> `is_call op` by
+        (drule step_inst_inl_grew_is_call >> simp[arithmeticTheory.GREATER_DEF])
+      >> qpat_x_assum `preserves_same_frame _` kall_tac
+      >> qpat_x_assum `inc_pc_or_jump op mid = _` mp_tac
+      >> simp[inc_pc_or_jump_def, return_def] >> strip_tac
+      >> qpat_x_assum `mid = t` SUBST_ALL_TAC
+      >> drule_all step_inst_saved_balance >> simp[])
+  >> drule_all step_inst_saved_balance >> simp[]
+QED
+
 Theorem proceed_call_nonprecompile_frame:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
   s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
