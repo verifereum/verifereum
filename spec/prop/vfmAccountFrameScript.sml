@@ -1244,6 +1244,219 @@ QED
 
 
 
+Theorem proceed_call_account_effects[local]:
+  proceed_call op sender address value ao az code gas rd s = (r,t) ∧
+  s.contexts ≠ [] ⇒
+  t.rollback.accounts =
+    (if op ≠ CallCode ∧ 0 < value then
+       transfer_value sender address value s.rollback.accounts
+     else s.rollback.accounts) ∧
+  (SND (HD t.contexts)).accounts = s.rollback.accounts
+Proof
+  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+  >> qmatch_asmsub_abbrev_tac `(if _ then _ else _) ss = _`
+  >> (Cases_on `fIN address precompile_addresses`
+  >- (gvs[]
+      >> qmatch_asmsub_abbrev_tac `dpa ss = _`
+      >> `cp dpa` by simp[Abbr `dpa`]
+      >> `ss.contexts ≠ []` by simp[Abbr `ss`]
+      >> qpat_x_assum `cp dpa` mp_tac >> rewrite_tac[cp_def]
+      >> disch_then drule_all >> strip_tac
+      >> gvs[Abbr `ss`])
+  >> gvs[return_def, Abbr `ss`])
+QED
+
+Theorem balance_le_bind[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) g ∧
+  (∀x. preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_le a) (f x)) ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_le a) (bind g f)
+Proof
+  rw[preserves_when_def, bind_def, AllCaseEqs()]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> gvs[balance_frame_def]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> metis_tac[balance_le_trans]
+QED
+
+Theorem balance_le_cp[local]:
+  cp m ⇒ preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_le a) m
+Proof
+  strip_tac >> drule (GEN_ALL balance_frame_cp)
+  >> simp[preserves_when_def] >> metis_tac[balance_frame_imp_le]
+QED
+
+Theorem balance_le_bind_get_callee[local]:
+  (∀sender. preserves_when
+    (λs. s.contexts ≠ [] ∧ sender ≠ a) (balance_le a) (f sender)) ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_le a) (bind get_callee f)
+Proof
+  rw[preserves_when_def, get_callee_def, bind_def,
+     get_current_context_def, return_def, fail_def, AllCaseEqs()]
+  >> first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem proceed_call_balance[local]:
+  proceed_call op sender address value ao az code gas rd s = (r,t) ∧
+  s.contexts ≠ [] ∧ sender ≠ a ⇒ balance_le a s t
+Proof
+  strip_tac >> drule_all proceed_call_account_effects >> strip_tac
+  >> simp[balance_le_def]
+  >> Cases_on `op ≠ CallCode ∧ 0 < value` >> simp[]
+  >> irule transfer_value_foreign_balance >> simp[]
+QED
+
+Theorem proceed_create_balance[local]:
+  proceed_create sender address value code gas s = (r,t) ∧
+  s.contexts ≠ [] ∧ sender ≠ a ⇒ balance_le a s t
+Proof
+  strip_tac >> drule_all proceed_create_frame_effects >> strip_tac
+  >> simp[balance_le_def]
+  >> irule arithmeticTheory.LESS_EQ_TRANS
+  >> qexists_tac `(lookup_account a
+       (increment_nonce address (clear_storage address
+         (increment_nonce sender s.rollback.accounts)))).balance`
+  >> simp[transfer_value_foreign_balance]
+QED
+
+Theorem proceed_create_saved_balance[local]:
+  proceed_create sender address value code gas s = (r,t) ∧
+  s.contexts ≠ [] ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac >> drule_all proceed_create_frame_effects >> simp[]
+QED
+
+Theorem balance_le_step_call[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_le a) (step_call op)
+Proof
+  simp[step_call_def, ignore_bind_def]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> qx_gen_tac `args` >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> qx_gen_tac `accounts` >> ho_match_mp_tac balance_le_bind
+  >> conj_tac
+  >- (ho_match_mp_tac balance_frame_cp
+      >> Cases_on `get_delegate (lookup_account (w2w (EL 1 args)) accounts).code`
+      >> simp[])
+  >> Cases >> simp[] >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> irule balance_le_bind_get_callee >> gen_tac >> simp[]
+  >> IF_CASES_TAC
+  >- (ho_match_mp_tac balance_le_cp >> simp[])
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> IF_CASES_TAC
+  >- (ho_match_mp_tac balance_le_cp >> simp[])
+  >> rw[preserves_when_def] >> irule proceed_call_balance >> metis_tac[]
+QED
+
+Theorem balance_frame_increment_nonce[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a)
+    (update_accounts (increment_nonce sender))
+Proof
+  rw[preserves_when_def, update_accounts_def, return_def,
+     balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_le_step_create[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_le a) (step_create two)
+Proof
+  simp[step_create_def, ignore_bind_def]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> irule balance_le_bind_get_callee >> gen_tac >> simp[]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> IF_CASES_TAC
+  >- (ho_match_mp_tac balance_le_cp >> simp[])
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> IF_CASES_TAC
+  >- (simp[abort_create_exists_def, ignore_bind_def]
+      >> ho_match_mp_tac balance_le_bind
+      >> conj_tac >- (MATCH_ACCEPT_TAC (BETA_RULE (Q.INST
+           [`Q` |-> `λc:address. sender ≠ a`] balance_frame_increment_nonce)))
+      >> gen_tac >> ho_match_mp_tac balance_le_cp >> simp[])
+  >> rw[preserves_when_def] >> irule proceed_create_balance >> metis_tac[]
+QED
+
+Theorem step_call_saved_balance[local]:
+  step_call op s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
+  >> `u.contexts ≠ []` by (drule_all call_prefix_contexts >> simp[])
+  >> drule_all proceed_call_account_effects >> strip_tac
+  >> gvs[cp_rel_def]
+QED
+
+Theorem step_create_saved_balance[local]:
+  step_create two s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac
+  >> `u.contexts ≠ []` by (drule_all call_prefix_contexts >> simp[])
+  >> drule_all proceed_create_saved_balance >> gvs[cp_rel_def]
+QED
+
 Theorem proceed_call_nonprecompile_frame:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
   s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
