@@ -96,7 +96,7 @@ Proof
   \\ Cases_on `rest` \\ gvs[calldata_bounded_def]
 QED
 
-Theorem LENGTH_le_call_data_tokens:
+Theorem LENGTH_le_call_data_tokens[local]:
   ∀data. LENGTH data ≤ call_data_tokens data
 Proof
   Induct \\ rw[call_data_tokens_def]
