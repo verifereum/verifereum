@@ -64,6 +64,98 @@ Proof
   >> Cases_on `y = address` >> simp[]
 QED
 
+Definition balance_le_def:
+  balance_le a s t ⇔
+    (lookup_account a s.rollback.accounts).balance ≤
+    (lookup_account a t.rollback.accounts).balance
+End
+
+Definition balance_frame_def:
+  balance_frame a s t ⇔
+    balance_le a s t ∧ s.contexts ≠ [] ∧ t.contexts ≠ [] ∧
+    (FST (HD t.contexts)).msgParams.callee =
+    (FST (HD s.contexts)).msgParams.callee
+End
+
+Theorem balance_le_trans[local]:
+  balance_le a s t ∧ balance_le a t u ⇒ balance_le a s u
+Proof
+  simp[balance_le_def] >> decide_tac
+QED
+
+Theorem balance_frame_trans[local]:
+  balance_frame a s t ∧ balance_frame a t u ⇒ balance_frame a s u
+Proof
+  rw[balance_frame_def] >> metis_tac[balance_le_trans]
+QED
+
+Theorem balance_frame_refl[local,simp]:
+  balance_frame a s s ⇔ s.contexts ≠ []
+Proof
+  simp[balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_imp_le[local]:
+  balance_frame a s t ⇒ balance_le a s t
+Proof
+  simp[balance_frame_def]
+QED
+
+Theorem cp_balance_frame[local]:
+  cp m ⇒ preserves_when (λs. s.contexts ≠ []) (balance_frame a) m
+Proof
+  rw[cp_def, preserves_when_def]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> simp[balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_transfer[local]:
+  sender ≠ a ⇒
+  preserves_when (λs. s.contexts ≠ []) (balance_frame a)
+    (update_accounts (transfer_value sender address value))
+Proof
+  rw[preserves_when_def, update_accounts_def, return_def,
+     balance_frame_def, balance_le_def]
+  >> irule transfer_value_foreign_balance >> simp[]
+QED
+
+Theorem balance_frame_update_foreign[local]:
+  sender ≠ a ⇒
+  preserves_when (λs. s.contexts ≠ []) (balance_frame a)
+    (update_accounts (update_account sender account))
+Proof
+  rw[preserves_when_def, update_accounts_def, return_def,
+     balance_frame_def, balance_le_def, lookup_account_def,
+     update_account_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem balance_frame_bind_get_callee[local]:
+  (∀sender. preserves_when
+    (λs. s.contexts ≠ [] ∧
+         sender = (FST (HD s.contexts)).msgParams.callee ∧ sender ≠ a)
+    (balance_frame a) (f sender)) ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_frame a) (bind get_callee f)
+Proof
+  rw[preserves_when_def, get_callee_def, bind_def,
+     get_current_context_def, return_def, fail_def, AllCaseEqs()]
+  >> first_x_assum irule >> simp[]
+QED
+
+Theorem balance_frame_get_callee_transfer[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_frame a)
+    (bind get_callee (λsender.
+      update_accounts (transfer_value sender address value)))
+Proof
+  irule balance_frame_bind_get_callee >> gen_tac
+  >> rw[preserves_when_def]
+  >> drule (GEN_ALL balance_frame_transfer)
+  >> simp[preserves_when_def] >> metis_tac[]
+QED
+
 Theorem foreign_account_change_refl[simp]:
   foreign_account_change acc acc
 Proof
