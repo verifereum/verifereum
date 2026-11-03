@@ -612,3 +612,187 @@ Proof
   \\ simp[tb_pres_def, balance_bounded_def]
   \\ disch_then irule \\ gvs[wf_state_def]
 QED
+
+(* -------------------------------------------------------------------------
+ * A transaction.
+ * ------------------------------------------------------------------------- *)
+
+Theorem balance_bounded_rollback:
+  balance_bounded B s ⇒ total_balance s.rollback.accounts ≤ B
+Proof
+  rw[balance_bounded_def, all_accounts_def]
+QED
+
+Theorem balance_bounded_one_context:
+  LENGTH s.contexts = 1 ⇒
+  (balance_bounded B s ⇔ total_balance s.rollback.accounts ≤ B)
+Proof
+  Cases_on `s.contexts` \\ rw[balance_bounded_def, all_accounts_def]
+  \\ gvs[LENGTH_EQ_NUM_compute, FRONT_DEF]
+QED
+
+Theorem run_balance_bounded:
+  run s = SOME (r, t) ∧ s.contexts ≠ [] ∧ balance_bounded B s ⇒
+  balance_bounded B t
+Proof
+  qsuff_tac
+    `∀p q. OWHILE (ISL o FST) (step o SND) p = SOME q ⇒
+           (SND p).contexts ≠ [] ∧ balance_bounded B (SND p) ⇒
+           balance_bounded B (SND q)`
+  >- (rw[run_def] \\ first_x_assum drule \\ simp[])
+  \\ ho_match_mp_tac OWHILE_IND \\ rw[]
+  \\ first_x_assum irule
+  \\ simp[step_preserves_nonempty_contexts]
+  \\ mp_tac (Q.INST [`P` |-> `K T`] tb_pres_step)
+  \\ simp[tb_pres_def]
+QED
+
+Theorem tb_pres_precompile:
+  tb_pres B P (handle (dispatch_precompiles a) handle_step)
+Proof
+  ho_match_mp_tac (GEN_ALL tb_pres_handle)
+  \\ qexists_tac `K (K T)`
+  \\ simp[tb_pres_cp, tb_pres_handle_step]
+  \\ rpt strip_tac
+  \\ drule_all (REWRITE_RULE [cp_def] cp_dispatch_precompiles)
+  \\ rw[] \\ gvs[]
+QED
+
+Theorem precompile_balance_bounded:
+  handle (dispatch_precompiles a) handle_step s = (r, t) ∧
+  s.contexts ≠ [] ∧ balance_bounded B s ⇒
+  balance_bounded B t
+Proof
+  strip_tac
+  \\ mp_tac (Q.INST [`P` |-> `K T`] tb_pres_precompile)
+  \\ rw[tb_pres_def] \\ first_x_assum drule \\ gvs[]
+QED
+
+Theorem total_balance_pre_transaction_updates:
+  pre_transaction_updates a bbf t = SOME a' ⇒
+  total_balance a' + t.gasLimit * t.gasPrice ≤ total_balance a ∧
+  t.value ≤ (lookup_account t.from a').balance ∧
+  calldata_floor_cost t.data ≤ t.gasLimit
+Proof
+  strip_tac \\ gvs[pre_transaction_updates_def, AllCaseEqs()]
+  \\ qmatch_goalsub_abbrev_tac `update_account t.from v a`
+  \\ qspecl_then [`t.from`, `v`, `a`] mp_tac
+       (GEN_ALL total_balance_update_account)
+  \\ qabbrev_tac `f1 = t.gasLimit * t.gasPrice`
+  \\ qabbrev_tac `f2 = total_blob_gas t * bbf`
+  \\ gvs[Abbr`v`, lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+QED
+
+Theorem lookup_balance_process_authorization:
+  process_authorization c au (a, x, r) = (a', x', r') ⇒
+  (lookup_account y a').balance = (lookup_account y a).balance
+Proof
+  rw[process_authorization_def]
+  \\ gvs[lookup_account_def, update_account_def, APPLY_UPDATE_THM]
+  \\ rw[]
+QED
+
+Theorem lookup_balance_process_authorizations:
+  ∀auths a x r a' x' r'.
+    process_authorizations c auths a x r = (a', x', r') ⇒
+    ∀y. (lookup_account y a').balance = (lookup_account y a).balance
+Proof
+  Induct \\ rw[process_authorizations_def]
+  \\ pairarg_tac \\ gvs[]
+  \\ first_x_assum drule \\ rw[]
+  \\ drule lookup_balance_process_authorization \\ simp[]
+QED
+
+Theorem initial_state_total_balance:
+  initial_state dom static chainId prevHashes blk accs tx = SOME s ⇒
+  total_balance s.rollback.accounts + tx.gasLimit * tx.gasPrice ≤
+    total_balance accs ∧
+  tx.value ≤ (lookup_account tx.from s.rollback.accounts).balance ∧
+  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  LENGTH s.contexts = 1 ∧ s.contexts ≠ []
+Proof
+  strip_tac \\ gvs[initial_state_def, AllCaseEqs(), initial_rollback_def]
+  \\ rpt (pairarg_tac \\ gvs[])
+  \\ drule total_balance_pre_transaction_updates \\ strip_tac
+  \\ drule lookup_balance_process_authorizations \\ strip_tac
+  \\ `total_balance postAuthAccounts = total_balance accounts`
+       by simp[total_balance_def]
+  \\ gvs[AllCaseEqs()]
+QED
+
+Theorem transaction_gas_accounting_le:
+  transaction_gas_accounting gp bf gL floor (gl, sr, ar) = (tu, re, tf) ∧
+  floor ≤ gL ⇒
+  re + tf ≤ gL * gp
+Proof
+  strip_tac
+  \\ qpat_x_assum `transaction_gas_accounting _ _ _ _ _ = _` mp_tac
+  \\ simp_tac std_ss [transaction_gas_accounting_def, LET_THM, PAIR_EQ]
+  \\ strip_tac
+  \\ `tu ≤ gL`
+       by (qpat_x_assum `MAX _ _ = tu` (SUBST1_TAC o SYM) \\ simp[MAX_LE])
+  \\ `tf ≤ tu * gp`
+       by (qpat_x_assum `_ = tf` (SUBST1_TAC o SYM) \\ simp[])
+  \\ `re + tu * gp = gL * gp`
+       by (qpat_x_assum `_ = re` (SUBST1_TAC o SYM)
+           \\ simp[GSYM RIGHT_ADD_DISTRIB])
+  \\ qabbrev_tac `X = tu * gp` \\ qabbrev_tac `Y = gL * gp`
+  \\ qpat_x_assum `tf ≤ X` mp_tac \\ qpat_x_assum `re + X = Y` mp_tac
+  \\ rpt (pop_assum kall_tac)
+  \\ decide_tac
+QED
+
+Theorem total_balance_add_balance[local]:
+  total_balance
+    (update_account x (lookup_account x a with balance updated_by $+ n) a) =
+  total_balance a + n
+Proof
+  qspecl_then [`x`, `lookup_account x a with balance updated_by $+ n`, `a`]
+    mp_tac (GEN_ALL total_balance_update_account)
+  \\ simp[]
+QED
+
+Theorem total_balance_post_transaction_accounting:
+  post_transaction_accounting blk tx result acc t = (r, a') ∧
+  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  total_balance acc ≤ B ∧ total_balance t.rollback.accounts ≤ B ⇒
+  total_balance a' ≤ B + tx.gasLimit * tx.gasPrice
+Proof
+  strip_tac \\ gvs[post_transaction_accounting_def]
+  \\ rpt (pairarg_tac \\ gvs[])
+  \\ drule_all transaction_gas_accounting_le \\ strip_tac
+  \\ qabbrev_tac `fee = tx.gasLimit * tx.gasPrice`
+  \\ Cases_on `result` \\ gvs[total_balance_add_balance]
+  \\ irule LESS_EQ_TRANS \\ irule_at Any total_balance_process_deletions
+  \\ simp[total_balance_add_balance]
+QED
+
+Theorem post_transaction_accounting_le:
+  post_transaction_accounting blk tx r0 acc t = (r, a') ⇒
+  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  total_balance acc + tx.gasLimit * tx.gasPrice ≤ total_balance A ∧
+  total_balance t.rollback.accounts ≤ total_balance acc ⇒
+  total_balance a' ≤ total_balance A
+Proof
+  rpt strip_tac
+  \\ drule total_balance_post_transaction_accounting
+  \\ disch_then (qspec_then `total_balance acc` mp_tac) \\ simp[]
+  \\ qabbrev_tac `fee = tx.gasLimit * tx.gasPrice`
+  \\ decide_tac
+QED
+
+Theorem run_transaction_total_balance:
+  run_transaction dom static chainId prevHashes blk accounts tx =
+    SOME (r, accounts') ⇒
+  total_balance accounts' ≤ total_balance accounts
+Proof
+  strip_tac \\ gvs[run_transaction_def, run_create_def, AllCaseEqs()]
+  \\ drule initial_state_total_balance \\ strip_tac
+  \\ drule post_transaction_accounting_le \\ disch_then irule \\ simp[]
+  \\ irule balance_bounded_rollback
+  >~ [`handle (dispatch_precompiles _) handle_step _ = _`]
+  >- (drule precompile_balance_bounded \\ disch_then irule
+      \\ gvs[balance_bounded_one_context, total_balance_transfer_value])
+  \\ drule run_balance_bounded \\ disch_then irule
+  \\ gvs[balance_bounded_one_context, total_balance_transfer_value]
+QED
