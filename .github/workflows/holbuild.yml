@@ -36,22 +36,10 @@ jobs:
       - uses: ./.github/actions/setup-polyml
         id: polyml
 
-      - name: Get minimum holbuild version from holproject.toml
-        id: holbuild-version
-        run: |
-          holbuild_ref="$(python3 - <<'PY'
-          import tomllib
-          with open("holproject.toml", "rb") as f:
-              data = tomllib.load(f)
-          print("v" + data["holbuild"]["minimum_version"])
-          PY
-          )"
-          echo "ref=$holbuild_ref" >> "$GITHUB_OUTPUT"
-
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
+          holbuild-ref: v0.13.1
 
       - name: Report selected holbuild version
         run: holbuild --version
