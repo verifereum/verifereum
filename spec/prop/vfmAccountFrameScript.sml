@@ -1930,6 +1930,52 @@ Proof
   >> drule_all handle_create_balance >> simp[]
 QED
 
+Theorem handle_step_balance_sources:
+  s.contexts ≠ [] ∧ handle_step e s = (r,t) ∧
+  n ≤ (lookup_account a s.rollback.accounts).balance ∧
+  (2 ≤ LENGTH s.contexts ⇒
+   n ≤ (lookup_account a (SND (HD s.contexts)).accounts).balance) ⇒
+  n ≤ (lookup_account a t.rollback.accounts).balance
+Proof
+  strip_tac >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def] >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[])
+  >> simp[handle_def]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[] >> strip_tac
+  >> drule_all handle_create_preserves_length >> strip_tac
+  >> drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac
+  >> drule_all handle_create_balance >> strip_tac
+  >> drule_all handle_exception_rollback_sources >> strip_tac >> gvs[]
+QED
+
+Theorem step_same_length_foreign_balance:
+  wf_state s ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  step s = (r,t) ∧ LENGTH t.contexts = LENGTH s.contexts ⇒
+  balance_le a s t
+Proof
+  strip_tac >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> `step s = handle step_inner handle_step s` by simp[NoAsms, step_def, step_inner_def]
+  >> gvs[handle_def, AllCaseEqs()]
+  >~ [`step_inner s = (INL _, t)`]
+  >- (irule step_inner_foreign_balance >> metis_tac[])
+  >> rename1 `step_inner s = (INR e, mid)`
+  >> `balance_le a s mid` by (irule step_inner_foreign_balance >> metis_tac[])
+  >> `LENGTH mid.contexts ≥ LENGTH s.contexts` by
+    (irule (INST_TYPE [``:'a`` |-> ``:unit``] same_frame_or_grow_length)
+     >> simp[] >> qexistsl [`step_inner`, `INR e`] >> simp[])
+  >> `mid.contexts ≠ []` by
+    (Cases_on `mid.contexts` >> gvs[arithmeticTheory.GREATER_EQ])
+  >> Cases_on `LENGTH mid.contexts = LENGTH s.contexts`
+  >- (`LENGTH t.contexts = LENGTH mid.contexts` by decide_tac
+      >> drule_all handle_step_same_length_balance >> gvs[balance_le_def])
+  >> `LENGTH s.contexts < LENGTH mid.contexts` by decide_tac
+  >> drule_all step_inner_saved_balance >> strip_tac
+  >> simp[balance_le_def]
+  >> irule handle_step_balance_sources
+  >> qexistsl [`e`, `r`, `mid`] >> simp[] >> gvs[balance_le_def]
+QED
+
 Theorem handle_create_foreign_accounts:
   handle_create e s = (q,s') ∧ s.contexts ≠ [] ∧ outputTo_consistent s ⇒
   ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
