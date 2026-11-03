@@ -423,6 +423,15 @@ Definition pre_transaction_updates_def:
   SOME $ update_account t.from updatedSender a
 End
 
+Theorem pre_transaction_updates_data_length:
+  pre_transaction_updates accs b t = SOME accs' ⇒
+  LENGTH t.data ≤ 2 ** 24
+Proof
+  rw[pre_transaction_updates_def, CaseEq"bool", calldata_floor_cost_def]
+  \\ qspec_then `t.data` assume_tac LENGTH_le_call_data_tokens
+  \\ gvs[floor_call_data_cost_def]
+QED
+
 Definition code_from_tx_def:
   code_from_tx a (c: access_sets) t =
   case t.to of

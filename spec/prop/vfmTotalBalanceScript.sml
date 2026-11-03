@@ -13,7 +13,7 @@ Theory vfmTotalBalance
 Ancestors
   arithmetic list rich_list pred_set combin pair words While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmDecreasesGas vfmStaticCalls vfmAccountFrame
+  vfmDecreasesGas vfmPreserves vfmStaticCalls vfmAccountFrame
 Libs
   BasicProvers
 
@@ -131,10 +131,22 @@ Definition tb_pres_def:
         balance_bounded B (SND (m s))
 End
 
+Theorem tb_pres_preserves_when:
+  tb_pres B P m ⇔
+  preserves_when (λs. s.contexts ≠ [] ∧ P s ∧ balance_bounded B s)
+                 (λ_ t. balance_bounded B t) m
+Proof
+  rw[tb_pres_def, preserves_when_def] \\ eq_tac \\ rw[]
+  >- (first_x_assum drule_all \\ gvs[])
+  \\ Cases_on `m s` \\ gvs[] \\ metis_tac[]
+QED
+
 Theorem tb_pres_mono:
   tb_pres B P m ∧ (∀s. Q s ⇒ P s) ⇒ tb_pres B Q m
 Proof
-  rw[tb_pres_def]
+  rpt strip_tac \\ fs[tb_pres_preserves_when]
+  \\ irule preserves_when_mono_pre
+  \\ qpat_x_assum `preserves_when _ _ _` (irule_at Any) \\ rw[]
 QED
 
 Theorem tb_pres_any:
@@ -149,11 +161,10 @@ Theorem tb_pres_bind:
            g s = (INL x, t) ⇒ t.contexts ≠ [] ∧ Q x t) ⇒
   tb_pres B P (bind g f)
 Proof
-  rw[tb_pres_def, bind_def]
-  \\ Cases_on `g s`
-  \\ `balance_bounded B r` by metis_tac[SND]
-  \\ Cases_on `q` \\ gvs[]
-  \\ metis_tac[]
+  rpt strip_tac \\ fs[tb_pres_preserves_when]
+  \\ irule preserves_when_bind_gen \\ simp[]
+  \\ qexists_tac `λx s. s.contexts ≠ [] ∧ Q x s ∧ balance_bounded B s`
+  \\ gvs[preserves_when_def] \\ metis_tac[]
 QED
 
 Theorem tb_pres_ignore_bind:
@@ -184,11 +195,10 @@ Theorem tb_pres_handle:
            f s = (INR e, t) ⇒ t.contexts ≠ [] ∧ Q e t) ⇒
   tb_pres B P (handle f h)
 Proof
-  rw[tb_pres_def, handle_def]
-  \\ Cases_on `f s`
-  \\ `balance_bounded B r` by metis_tac[SND]
-  \\ Cases_on `q` \\ gvs[]
-  \\ metis_tac[]
+  rpt strip_tac \\ fs[tb_pres_preserves_when]
+  \\ irule preserves_when_handle_gen \\ simp[]
+  \\ qexists_tac `λe s. s.contexts ≠ [] ∧ Q e s ∧ balance_bounded B s`
+  \\ gvs[preserves_when_def] \\ metis_tac[]
 QED
 
 Theorem cp_all_accounts:

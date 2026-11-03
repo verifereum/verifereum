@@ -104,8 +104,5 @@ Proof
   \\ rpt (pairarg_tac \\ gvs[])
   \\ gvs[apply_intrinsic_cost_def, AllCaseEqs(), calldata_bounded_def,
          initial_msg_params_def]
-  \\ gvs[pre_transaction_updates_def, AllCaseEqs()]
-  \\ qspec_then `tx.data` assume_tac LENGTH_le_call_data_tokens
-  \\ gvs[calldata_floor_cost_def, floor_call_data_cost_def]
-  \\ rw[]
+  \\ drule pre_transaction_updates_data_length \\ rw[]
 QED
