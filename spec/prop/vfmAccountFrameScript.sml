@@ -9,6 +9,9 @@
  *
  * run_call_account_frame is the rely form: if every frame entered as `a`
  * preserves a predicate P of `a`'s account, then run_call preserves P.
+ * run_call_account_balance_frame is the same with P closed only under
+ * foreign_balance_change, which also keeps or raises `a`'s balance: frames
+ * not executing as `a` never lower its balance, so P may bound it.
  * run_call_empty_code_account instantiates it for an account with no code.
  * ========================================================================== *)
 Theory vfmAccountFrame
@@ -34,6 +37,13 @@ Definition foreign_account_change_def:
      ¬account_already_created acc)
 End
 
+(* foreign_account_change that also keeps or raises the balance: what a frame
+ * not executing as an account can do to it, balance included. *)
+Definition foreign_balance_change_def:
+  foreign_balance_change acc acc' ⇔
+    foreign_account_change acc acc' ∧ acc.balance ≤ acc'.balance
+End
+
 Theorem transfer_value_foreign_balance:
   y ≠ sender ⇒
   (lookup_account y accounts).balance ≤
@@ -46,7 +56,7 @@ Proof
          combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem increment_nonce_preserves_balance[simp]:
+Theorem increment_nonce_preserves_balance[local,simp]:
   (lookup_account y (increment_nonce address accounts)).balance =
   (lookup_account y accounts).balance
 Proof
@@ -92,22 +102,14 @@ Proof
   simp[balance_frame_def]
 QED
 
-Theorem cp_balance_frame[local]:
-  cp m ⇒ preserves_when (λs. s.contexts ≠ []) (balance_frame a) m
-Proof
-  rw[cp_def, preserves_when_def]
-  >> first_x_assum drule >> simp[] >> strip_tac
-  >> simp[balance_frame_def, balance_le_def]
-QED
-
-Theorem balance_frame_bind_get_callee[local]:
+Theorem bind_get_callee_preserves[local]:
   (∀sender. preserves_when
     (λs. s.contexts ≠ [] ∧
          sender = (FST (HD s.contexts)).msgParams.callee ∧ sender ≠ a)
-    (balance_frame a) (f sender)) ⇒
+    R (f sender)) ⇒
   preserves_when (λs. s.contexts ≠ [] ∧
     (FST (HD s.contexts)).msgParams.callee ≠ a)
-    (balance_frame a) (bind get_callee f)
+    R (bind get_callee f)
 Proof
   rw[preserves_when_def, get_callee_def, bind_def,
      get_current_context_def, return_def, fail_def, AllCaseEqs()]
@@ -132,8 +134,9 @@ Theorem balance_frame_cp[local]:
   cp m ⇒ preserves_when (λs. s.contexts ≠ [] ∧
     Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) m
 Proof
-  strip_tac >> irule preserves_when_mono_pre
-  >> qexists_tac `λs. s.contexts ≠ []` >> simp[cp_balance_frame]
+  rw[cp_def, preserves_when_def]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> simp[balance_frame_def, balance_le_def]
 QED
 
 Theorem balance_frame_push_logs[local]:
@@ -230,7 +233,7 @@ Proof
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
-  >> gen_tac >> simp[] >> irule balance_frame_bind_get_callee
+  >> gen_tac >> simp[] >> irule bind_get_callee_preserves
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
@@ -1245,18 +1248,6 @@ Proof
   >> simp[preserves_when_def] >> metis_tac[balance_frame_imp_le]
 QED
 
-Theorem balance_le_bind_get_callee[local]:
-  (∀sender. preserves_when
-    (λs. s.contexts ≠ [] ∧ sender ≠ a) (balance_le a) (f sender)) ⇒
-  preserves_when (λs. s.contexts ≠ [] ∧
-    (FST (HD s.contexts)).msgParams.callee ≠ a)
-    (balance_le a) (bind get_callee f)
-Proof
-  rw[preserves_when_def, get_callee_def, bind_def,
-     get_current_context_def, return_def, fail_def, AllCaseEqs()]
-  >> first_x_assum irule >> simp[] >> metis_tac[]
-QED
-
 Theorem proceed_call_balance[local]:
   proceed_call op sender address value ao az code gas rd s = (r,t) ∧
   s.contexts ≠ [] ∧ sender ≠ a ⇒ balance_le a s t
@@ -1318,7 +1309,7 @@ Proof
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
-  >> gen_tac >> irule balance_le_bind_get_callee >> gen_tac >> simp[]
+  >> gen_tac >> irule bind_get_callee_preserves >> gen_tac >> simp[]
   >> IF_CASES_TAC
   >- (ho_match_mp_tac balance_le_cp >> simp[])
   >> ho_match_mp_tac balance_le_bind
@@ -1355,7 +1346,7 @@ Proof
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
-  >> gen_tac >> irule balance_le_bind_get_callee >> gen_tac >> simp[]
+  >> gen_tac >> irule bind_get_callee_preserves >> gen_tac >> simp[]
   >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> ho_match_mp_tac balance_le_bind
@@ -1380,7 +1371,7 @@ Proof
   >- (simp[abort_create_exists_def, ignore_bind_def]
       >> ho_match_mp_tac balance_le_bind
       >> conj_tac >- (MATCH_ACCEPT_TAC (BETA_RULE (Q.INST
-           [`Q` |-> `λc:address. sender ≠ a`] balance_frame_increment_nonce)))
+           [`Q` |-> `λc:address. sender = c ∧ sender ≠ a`] balance_frame_increment_nonce)))
       >> gen_tac >> ho_match_mp_tac balance_le_cp >> simp[])
   >> rw[preserves_when_def] >> irule proceed_create_balance >> metis_tac[]
 QED
@@ -1888,11 +1879,6 @@ Proof
   >> first_x_assum drule >> simp[]
   >> rw[same_frame_rel_def, callee_local_changes_def, foreign_account_change_def]
 QED
-
-Definition foreign_balance_change_def:
-  foreign_balance_change acc acc' ⇔
-    foreign_account_change acc acc' ∧ acc.balance ≤ acc'.balance
-End
 
 Theorem handle_step_pop_foreign_balance_boundary:
   s.contexts = (callee,callee_rb)::parent::rest ∧
@@ -2721,6 +2707,28 @@ Proof
   >> Cases_on `k` >> simp[]
 QED
 
+Theorem step_same_frame_balance_invariant:
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts = LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
+  >> drule_all step_same_frame_foreign >> strip_tac
+  >> drule_all step_same_length_foreign_balance >> strip_tac
+  >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
+       by (irule active_rollbacks_same_stack >> simp[])
+  >> `P (lookup_account a s.rollback.accounts) ∧
+      EVERY (λrb. P (lookup_account a rb.accounts))
+        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
+  >> `P (lookup_account a t.rollback.accounts)` by
+       metis_tac[foreign_balance_change_def, balance_le_def]
+  >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_same_frame_account_invariant:
   wf_state s ∧ step s = (r,t) ∧
   LENGTH t.contexts = LENGTH s.contexts ∧
@@ -2730,17 +2738,9 @@ Theorem step_same_frame_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
   strip_tac
-  >> drule_all step_same_frame_foreign >> strip_tac
-  >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
-       by (irule active_rollbacks_same_stack >> simp[])
-  >> `P (lookup_account a s.rollback.accounts)`
-       by gvs[active_rollbacks_def]
-  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
-  >> `EVERY (λrb. P (lookup_account a rb.accounts))
-            (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-  >> `EVERY (λrb. P (lookup_account a rb.accounts))
-            (TL (active_rollbacks d t))` by metis_tac[]
-  >> gvs[active_rollbacks_def]
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_same_frame_balance_invariant >> metis_tac[]
 QED
 
 Theorem active_rollbacks_push_tail:
@@ -2766,6 +2766,31 @@ Proof
   >> metis_tac[TAKE_FRONT, NOT_CONS_NIL, LENGTH_NIL, prim_recTheory.NOT_LESS_0]
 QED
 
+Theorem step_push_balance_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH s.contexts < LENGTH t.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
+  >> drule_all step_push_foreign >> strip_tac
+  >> drule_all step_push_balance >> strip_tac
+  >> `TL (active_rollbacks d t) =
+       SND (HD t.contexts) :: TL (active_rollbacks d s)`
+       by (irule active_rollbacks_push_tail >> simp[])
+  >> `P (lookup_account a s.rollback.accounts) ∧
+      EVERY (λrb. P (lookup_account a rb.accounts))
+        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
+  >> `P (lookup_account a t.rollback.accounts) ∧
+      P (lookup_account a (SND (HD t.contexts)).accounts)` by
+       metis_tac[foreign_balance_change_def, LESS_EQ_REFL]
+  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_push_account_invariant:
   0 < d ∧ d ≤ LENGTH s.contexts ∧
   wf_state s ∧ step s = (r,t) ∧
@@ -2775,16 +2800,10 @@ Theorem step_push_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac >> drule_all step_push_foreign >> strip_tac
-  >> `TL (active_rollbacks d t) =
-       SND (HD t.contexts) :: TL (active_rollbacks d s)`
-       by (irule active_rollbacks_push_tail >> simp[])
-  >> `P (lookup_account a s.rollback.accounts) ∧
-      EVERY (λrb. P (lookup_account a rb.accounts))
-        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-  >> `P (lookup_account a t.rollback.accounts) ∧
-      P (lookup_account a (SND (HD t.contexts)).accounts)` by metis_tac[]
-  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+  strip_tac
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_push_balance_invariant >> metis_tac[]
 QED
 
 Theorem active_rollbacks_pop:
@@ -2811,6 +2830,21 @@ Proof
   >> Cases_on `rest` >> gvs[]
 QED
 
+Theorem step_pop_balance_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts < LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac >> drule_all step_pop_foreign_balance >> strip_tac
+  >> drule_all active_rollbacks_pop >> strip_tac
+  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
+  >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_pop_account_invariant:
   0 < d ∧ d ≤ LENGTH s.contexts ∧
   wf_state s ∧ step s = (r,t) ∧
@@ -2820,10 +2854,28 @@ Theorem step_pop_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac >> drule_all step_pop_foreign >> strip_tac
-  >> drule_all active_rollbacks_pop >> strip_tac
-  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
-  >> gvs[active_rollbacks_def]
+  strip_tac
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_pop_balance_invariant >> metis_tac[]
+QED
+
+
+Theorem step_foreign_balance_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (irule step_same_frame_balance_invariant >> metis_tac[])
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (irule step_push_balance_invariant >> metis_tac[])
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> irule step_pop_balance_invariant >> metis_tac[]
 QED
 
 Theorem step_foreign_account_invariant:
@@ -2835,53 +2887,9 @@ Theorem step_foreign_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
   strip_tac
-  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (irule step_same_frame_account_invariant >> metis_tac[])
-  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
-  >- (irule step_push_account_invariant >> metis_tac[])
-  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
-  >> irule step_pop_account_invariant >> metis_tac[]
-QED
-
-Theorem step_foreign_balance_invariant:
-  0 < d ∧ d ≤ LENGTH s.contexts ∧
-  wf_state s ∧ step s = (r,t) ∧
-  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
-  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
-  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
-  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
-Proof
-  strip_tac
-  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
-  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (drule_all step_same_frame_foreign >> strip_tac
-      >> drule_all step_same_length_foreign_balance >> strip_tac
-      >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
-           by (irule active_rollbacks_same_stack >> simp[])
-      >> `P (lookup_account a s.rollback.accounts) ∧
-          EVERY (λrb. P (lookup_account a rb.accounts))
-            (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-      >> `P (lookup_account a t.rollback.accounts)` by
-           metis_tac[foreign_balance_change_def, balance_le_def]
-      >> gvs[active_rollbacks_def])
-  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
-  >- (drule_all step_push_foreign >> strip_tac
-      >> drule_all step_push_balance >> strip_tac
-      >> `TL (active_rollbacks d t) =
-           SND (HD t.contexts) :: TL (active_rollbacks d s)`
-           by (irule active_rollbacks_push_tail >> simp[])
-      >> `P (lookup_account a s.rollback.accounts) ∧
-          EVERY (λrb. P (lookup_account a rb.accounts))
-            (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-      >> `P (lookup_account a t.rollback.accounts) ∧
-          P (lookup_account a (SND (HD t.contexts)).accounts)` by
-           metis_tac[foreign_balance_change_def, LESS_EQ_REFL]
-      >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def])
-  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
-  >> drule_all step_pop_foreign_balance >> strip_tac
-  >> drule_all active_rollbacks_pop >> strip_tac
-  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
-  >> gvs[active_rollbacks_def]
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_foreign_balance_invariant >> metis_tac[]
 QED
 
 Theorem step_outer_saved_rollbacks:
