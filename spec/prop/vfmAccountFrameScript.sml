@@ -2952,3 +2952,46 @@ Proof
   >> Cases_on `v` >> simp[]
   >> irule run_call_reaches_step >> goal_assum drule >> simp[]
 QED
+
+(* -------------------------------------------------------------------------
+ * Balances: a frame not executing as an account never lowers its balance.
+ *
+ * Value leaves an account only from a frame executing as it (CALL/CALLCODE
+ * and CREATE value, SELFDESTRUCT), so outside such frames its balance only
+ * grows, except that a reverting frame restores a snapshot.  The rely form
+ * below therefore asks P to be closed only under foreign changes that keep
+ * or raise the balance, which admits predicates such as solvency bounds.
+ * ------------------------------------------------------------------------- *)
+
+Definition foreign_balance_change_def:
+  foreign_balance_change acc acc' ⇔
+    foreign_account_change acc acc' ∧ acc.balance ≤ acc'.balance
+End
+
+Theorem run_call_account_balance_frame:
+  wf_state es ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  P (lookup_account a es.rollback.accounts) ∧
+  (2 ≤ LENGTH es.contexts ⇒
+     P (lookup_account a (SND (HD es.contexts)).accounts)) ∧
+  (∀e r e'.
+     (FST (HD e.contexts)).msgParams.callee = a ∧
+     wf_state e ∧ P (lookup_account a e.rollback.accounts) ∧
+     (2 ≤ LENGTH e.contexts ⇒
+        P (lookup_account a (SND (HD e.contexts)).accounts)) ∧
+     (e = es ∨
+      ∃s u. run_call_reaches es s ∧
+            LENGTH es.contexts ≤ LENGTH s.contexts ∧
+            wf_state s ∧
+            (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+            P (lookup_account a s.rollback.accounts) ∧
+            step s = (INL u, e) ∧
+            LENGTH s.contexts < LENGTH e.contexts ∧
+            ¬(FST (HD e.contexts)).msgParams.static) ∧
+     run_call e = SOME (r, e') ⇒
+     P (lookup_account a e'.rollback.accounts)) ∧
+  run_call es = SOME (r, es') ⇒
+  P (lookup_account a es'.rollback.accounts)
+Proof
+  cheat
+QED
