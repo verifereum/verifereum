@@ -807,12 +807,6 @@ Proof
   \\ rw[]
 QED
 
-Theorem LENGTH_le_call_data_tokens:
-  ∀l. LENGTH l ≤ call_data_tokens l
-Proof
-  Induct \\ rw[call_data_tokens_def] \\ gvs[call_data_tokens_def]
-QED
-
 Theorem pre_transaction_updates_data_length:
   pre_transaction_updates accs b t = SOME accs' ⇒
   LENGTH t.data ≤ 2 ** 24

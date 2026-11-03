@@ -352,6 +352,12 @@ Definition call_data_tokens_def:
   SUM (MAP (λb. if b = 0w then 1n else 4) data)
 End
 
+Theorem LENGTH_le_call_data_tokens:
+  ∀l. LENGTH l ≤ call_data_tokens l
+Proof
+  Induct \\ rw[call_data_tokens_def] \\ gvs[call_data_tokens_def]
+QED
+
 Definition calldata_floor_cost_def:
   calldata_floor_cost data =
   base_cost + floor_call_data_cost * call_data_tokens data

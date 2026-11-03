@@ -96,13 +96,6 @@ Proof
   \\ Cases_on `rest` \\ gvs[calldata_bounded_def]
 QED
 
-Theorem LENGTH_le_call_data_tokens[local]:
-  ∀data. LENGTH data ≤ call_data_tokens data
-Proof
-  Induct \\ rw[call_data_tokens_def]
-  \\ gvs[call_data_tokens_def]
-QED
-
 Theorem initial_state_calldata_bounded:
   initial_state dom static chainId prevHashes blk accs tx = SOME s ⇒
   calldata_bounded s

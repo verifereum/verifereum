@@ -13,7 +13,7 @@ Theory vfmTotalBalance
 Ancestors
   arithmetic list rich_list pred_set combin pair words While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmDecreasesGas vfmStaticCalls
+  vfmDecreasesGas vfmStaticCalls vfmAccountFrame
 Libs
   BasicProvers
 
@@ -25,12 +25,6 @@ End
 (* -------------------------------------------------------------------------
  * The total under updates of one account.
  * ------------------------------------------------------------------------- *)
-
-Theorem num_eq_le[local]:
-  (m:num) = n ⇒ m ≤ n
-Proof
-  simp[]
-QED
 
 Theorem lookup_balance_le_total_balance:
   (lookup_account x a).balance ≤ total_balance a
@@ -108,15 +102,6 @@ Theorem total_balance_clear_storage[simp]:
 Proof
   rw[clear_storage_def]
   \\ irule total_balance_update_account_same \\ simp[]
-QED
-
-Theorem lookup_balance_increment_nonce[simp]:
-  (lookup_account y (increment_nonce x a)).balance =
-  (lookup_account y a).balance
-Proof
-  rw[increment_nonce_def, lookup_account_def, update_account_def,
-     APPLY_UPDATE_THM]
-  \\ rw[]
 QED
 
 Theorem total_balance_process_deletions:
@@ -381,7 +366,8 @@ Proof
       \\ simp[tb_pres_set_tStorage])
   \\ simp[write_storage_def]
   \\ irule tb_pres_update_accounts \\ rw[]
-  \\ irule num_eq_le \\ irule total_balance_update_account_same \\ simp[]
+  \\ irule (iffRL LESS_OR_EQ) \\ disj2_tac
+  \\ irule total_balance_update_account_same \\ simp[]
 QED
 
 Theorem tb_pres_step_log:
@@ -399,7 +385,8 @@ Proof
   \\ simp[step_self_destruct_def] \\ tb_peel
   \\ ho_match_mp_tac tb_pres_ignore_bind_K \\ rpt conj_tac
   >- (irule tb_pres_update_accounts \\ rw[]
-      \\ irule num_eq_le \\ irule total_balance_transfer_value \\ simp[])
+      \\ irule (iffRL LESS_OR_EQ) \\ disj2_tac
+      \\ irule total_balance_transfer_value \\ simp[])
   >- (tb_peel
       \\ ho_match_mp_tac tb_pres_ignore_bind_K \\ rpt conj_tac
       >- (IF_CASES_TAC \\ simp[tb_pres_cp]
@@ -423,7 +410,8 @@ Proof
   \\ rpt conj_tac
   >- (IF_CASES_TAC \\ simp[tb_pres_cp]
       \\ irule tb_pres_update_accounts \\ rw[]
-      \\ irule num_eq_le \\ irule total_balance_transfer_value \\ simp[])
+      \\ irule (iffRL LESS_OR_EQ) \\ disj2_tac
+      \\ irule total_balance_transfer_value \\ simp[])
   >- (tb_peel
       \\ ho_match_mp_tac (GEN_ALL tb_pres_ignore_bind)
       \\ qexists_tac `K T` \\ simp[]
@@ -469,7 +457,7 @@ Proof
           \\ simp[]
           \\ rpt conj_tac
           >- (irule tb_pres_update_accounts \\ rw[]
-              \\ irule num_eq_le
+              \\ irule (iffRL LESS_OR_EQ) \\ disj2_tac
               \\ qmatch_goalsub_abbrev_tac `transfer_value _ _ _ a'`
               \\ `total_balance a' = total_balance s.rollback.accounts`
                    by simp[Abbr`a'`]
@@ -524,7 +512,8 @@ Proof
   \\ tb_peel
   \\ ho_match_mp_tac tb_pres_ignore_bind_K \\ rpt conj_tac
   \\ TRY (irule tb_pres_update_accounts \\ rw[]
-           \\ irule num_eq_le \\ irule total_balance_update_account_same
+           \\ irule (iffRL LESS_OR_EQ) \\ disj2_tac
+           \\ irule total_balance_update_account_same
            \\ simp[] \\ NO_TAC)
   \\ TRY (simp[tb_pres_cp] \\ NO_TAC)
   \\ ctx_tac
@@ -742,7 +731,7 @@ Proof
   \\ decide_tac
 QED
 
-Theorem total_balance_add_balance[local]:
+Theorem total_balance_add_balance:
   total_balance
     (update_account x (lookup_account x a with balance updated_by $+ n) a) =
   total_balance a + n
