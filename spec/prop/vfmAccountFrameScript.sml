@@ -1278,6 +1278,43 @@ Proof
   >> simp[]
 QED
 
+Theorem handle_create_balance:
+  s.contexts ≠ [] ∧ handle_create e s = (r,t) ⇒
+  (lookup_account a t.rollback.accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  rw[handle_create_def, bind_def, get_return_data_def,
+     get_output_to_def, get_current_context_def, return_def]
+  >> Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+  >> Cases_on `e` >> Cases_on `h0.msgParams.outputTo`
+  >> gvs[reraise_def, ignore_bind_def, bind_def, assert_def,
+      return_def, fail_def, AllCaseEqs(), consume_gas_def,
+      get_current_context_def, set_current_context_def,
+      update_accounts_def, lookup_account_def, update_account_def,
+      combinTheory.APPLY_UPDATE_THM]
+  >> rw[]
+QED
+
+Theorem handle_step_same_length_balance:
+  s.contexts ≠ [] ∧ handle_step e s = (r,t) ∧
+  LENGTH t.contexts = LENGTH s.contexts ⇒
+  (lookup_account a t.rollback.accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[])
+  >> simp[handle_def]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[] >> strip_tac
+  >> drule_all handle_create_preserves_length >> strip_tac
+  >> `LENGTH t.contexts = LENGTH s'.contexts` by simp[]
+  >> drule_all handle_exception_same_length_preserves_rollback >> strip_tac
+  >> drule_all handle_create_balance >> simp[]
+QED
+
 Theorem handle_create_foreign_accounts:
   handle_create e s = (q,s') ∧ s.contexts ≠ [] ∧ outputTo_consistent s ⇒
   ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
