@@ -9,6 +9,9 @@
  *
  * run_call_account_frame is the rely form: if every frame entered as `a`
  * preserves a predicate P of `a`'s account, then run_call preserves P.
+ * run_call_account_balance_frame is the same with P closed only under
+ * foreign_balance_change, which also keeps or raises `a`'s balance: frames
+ * not executing as `a` never lower its balance, so P may bound it.
  * run_call_empty_code_account instantiates it for an account with no code.
  * ========================================================================== *)
 Theory vfmAccountFrame
@@ -33,6 +36,255 @@ Definition foreign_account_change_def:
     (acc'.nonce = acc.nonce ∧ acc'.storage = acc.storage ∨
      ¬account_already_created acc)
 End
+
+(* foreign_account_change that also keeps or raises the balance: what a frame
+ * not executing as an account can do to it, balance included. *)
+Definition foreign_balance_change_def:
+  foreign_balance_change acc acc' ⇔
+    foreign_account_change acc acc' ∧ acc.balance ≤ acc'.balance
+End
+
+Theorem transfer_value_foreign_balance:
+  y ≠ sender ⇒
+  (lookup_account y accounts).balance ≤
+  (lookup_account y (transfer_value sender address value accounts)).balance
+Proof
+  strip_tac >> simp[transfer_value_def]
+  >> Cases_on `value = 0 ∨ sender = address` >> simp[]
+  >> Cases_on `y = address`
+  >> gvs[lookup_account_def, update_account_def,
+         combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem increment_nonce_preserves_balance[local,simp]:
+  (lookup_account y (increment_nonce address accounts)).balance =
+  (lookup_account y accounts).balance
+Proof
+  simp[increment_nonce_def, lookup_account_def, update_account_def,
+       combinTheory.APPLY_UPDATE_THM]
+  >> Cases_on `y = address` >> simp[]
+QED
+
+Definition balance_le_def:
+  balance_le a s t ⇔
+    (lookup_account a s.rollback.accounts).balance ≤
+    (lookup_account a t.rollback.accounts).balance
+End
+
+Definition balance_frame_def:
+  balance_frame a s t ⇔
+    balance_le a s t ∧ s.contexts ≠ [] ∧ t.contexts ≠ [] ∧
+    (FST (HD t.contexts)).msgParams.callee =
+    (FST (HD s.contexts)).msgParams.callee
+End
+
+Theorem balance_le_trans[local]:
+  balance_le a s t ∧ balance_le a t u ⇒ balance_le a s u
+Proof
+  simp[balance_le_def] >> decide_tac
+QED
+
+Theorem balance_frame_trans[local]:
+  balance_frame a s t ∧ balance_frame a t u ⇒ balance_frame a s u
+Proof
+  rw[balance_frame_def] >> metis_tac[balance_le_trans]
+QED
+
+Theorem balance_frame_refl[local,simp]:
+  balance_frame a s s ⇔ s.contexts ≠ []
+Proof
+  simp[balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_imp_le[local]:
+  balance_frame a s t ⇒ balance_le a s t
+Proof
+  simp[balance_frame_def]
+QED
+
+Theorem bind_get_callee_preserves[local]:
+  (∀sender. preserves_when
+    (λs. s.contexts ≠ [] ∧
+         sender = (FST (HD s.contexts)).msgParams.callee ∧ sender ≠ a)
+    R (f sender)) ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    R (bind get_callee f)
+Proof
+  rw[preserves_when_def, get_callee_def, bind_def,
+     get_current_context_def, return_def, fail_def, AllCaseEqs()]
+  >> first_x_assum irule >> simp[]
+QED
+
+Theorem balance_frame_bind[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) g ∧
+  (∀x. preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) (f x)) ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) (bind g f)
+Proof
+  strip_tac >> irule preserves_when_bind >> simp[]
+  >> conj_tac
+  >- metis_tac[balance_frame_trans]
+  >> simp[balance_frame_def]
+QED
+
+Theorem balance_frame_cp[local]:
+  cp m ⇒ preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) m
+Proof
+  rw[cp_def, preserves_when_def]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> simp[balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_push_logs[local]:
+  preserves_when (λs. s.contexts ≠ []) (balance_frame a) (push_logs logs)
+Proof
+  rw[preserves_when_def, push_logs_def, bind_def,
+     get_current_context_def, set_current_context_def, return_def,
+     fail_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+  >> simp[balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_step_log[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (step_log n)
+Proof
+  simp[step_log_def, ignore_bind_def]
+  >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac
+  >> irule preserves_when_mono_pre
+  >> qexists_tac `λs. s.contexts ≠ []`
+  >> simp[balance_frame_push_logs]
+QED
+
+Theorem balance_frame_write_storage[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (write_storage address key value)
+Proof
+  rw[preserves_when_def, write_storage_def, update_accounts_def,
+     return_def, balance_frame_def, balance_le_def,
+     lookup_account_def, update_account_def, combinTheory.APPLY_UPDATE_THM]
+  >> Cases_on `a = address` >> simp[]
+QED
+
+Theorem balance_frame_write_transient_storage[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (write_transient_storage address key value)
+Proof
+  rw[preserves_when_def, write_transient_storage_def, get_tStorage_def,
+     set_tStorage_def, bind_def, return_def, balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_step_sstore[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (step_sstore transient)
+Proof
+  simp[step_sstore_def, ignore_bind_def]
+  >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac
+  >- (Cases_on `transient` >> simp[] >> irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> Cases_on `transient` >> simp[]
+  >- irule balance_frame_write_transient_storage
+  >> irule balance_frame_write_storage
+QED
+
+Theorem balance_frame_add_to_delete[local]:
+  (∀s. pre s ⇒ s.contexts ≠ []) ⇒
+  preserves_when pre (balance_frame a) (add_to_delete address)
+Proof
+  rw[preserves_when_def, add_to_delete_def, return_def,
+     balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_step_self_destruct[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_frame a) step_self_destruct
+Proof
+  simp[step_self_destruct_def, ignore_bind_def]
+  >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule bind_get_callee_preserves
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac
+  >- (rw[preserves_when_def, update_accounts_def, return_def,
+         balance_frame_def, balance_le_def]
+      >> irule transfer_value_foreign_balance >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac
+  >- (IF_CASES_TAC >> simp[]
+      >- (ho_match_mp_tac balance_frame_bind
+          >> conj_tac
+          >- (rw[preserves_when_def, update_accounts_def, return_def,
+                 balance_frame_def, balance_le_def, lookup_account_def,
+                 update_account_def, combinTheory.APPLY_UPDATE_THM]
+              >> gvs[])
+          >> gen_tac >> simp[]
+          >> irule balance_frame_add_to_delete >> simp[])
+      >> ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_cp >> simp[]
+QED
+
+Theorem balance_frame_step_inst_non_call[local]:
+  ¬is_call op ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_frame a) (step_inst op)
+Proof
+  strip_tac >> Cases_on `op` >> gvs[is_call_def]
+  >~ [`step_inst SStore`]
+  >- (simp[step_inst_def]
+      >> irule (BETA_RULE (Q.INST [`Q` |-> `λc. c ≠ (a:address)`] balance_frame_step_sstore)))
+  >~ [`step_inst TStore`]
+  >- (simp[step_inst_def]
+      >> irule (BETA_RULE (Q.INST [`Q` |-> `λc. c ≠ (a:address)`] balance_frame_step_sstore)))
+  >~ [`step_inst (Log _)`]
+  >- (simp[step_inst_def]
+      >> irule (BETA_RULE (Q.INST [`Q` |-> `λc. c ≠ (a:address)`] balance_frame_step_log)))
+  >~ [`step_inst SelfDestruct`]
+  >- simp[step_inst_def, balance_frame_step_self_destruct]
+  >> ho_match_mp_tac balance_frame_cp
+  >> irule cp_step_inst_non_call >> simp[]
+QED
 
 Theorem foreign_account_change_refl[simp]:
   foreign_account_change acc acc
@@ -947,6 +1199,271 @@ QED
 
 
 
+Theorem proceed_call_account_effects[local]:
+  proceed_call op sender address value ao az code gas rd s = (r,t) ∧
+  s.contexts ≠ [] ⇒
+  t.rollback.accounts =
+    (if op ≠ CallCode ∧ 0 < value then
+       transfer_value sender address value s.rollback.accounts
+     else s.rollback.accounts)
+Proof
+  strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
+  >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_rollback_def, read_memory_def, get_current_context_def,
+       get_caller_def, get_value_def, get_static_def,
+       push_context_def, update_accounts_def, return_def, fail_def,
+       AllCaseEqs()]
+  >> qmatch_asmsub_abbrev_tac `(if _ then _ else _) ss = _`
+  >> (Cases_on `fIN address precompile_addresses`
+  >- (gvs[]
+      >> qmatch_asmsub_abbrev_tac `dpa ss = _`
+      >> `cp dpa` by simp[Abbr `dpa`]
+      >> `ss.contexts ≠ []` by simp[Abbr `ss`]
+      >> qpat_x_assum `cp dpa` mp_tac >> rewrite_tac[cp_def]
+      >> disch_then drule_all >> strip_tac
+      >> gvs[Abbr `ss`])
+  >> gvs[return_def, Abbr `ss`])
+QED
+
+Theorem balance_le_bind[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) g ∧
+  (∀x. preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_le a) (f x)) ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_le a) (bind g f)
+Proof
+  rw[preserves_when_def, bind_def, AllCaseEqs()]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> gvs[balance_frame_def]
+  >> first_x_assum drule >> simp[] >> strip_tac
+  >> metis_tac[balance_le_trans]
+QED
+
+Theorem balance_le_cp[local]:
+  cp m ⇒ preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_le a) m
+Proof
+  strip_tac >> drule (GEN_ALL balance_frame_cp)
+  >> simp[preserves_when_def] >> metis_tac[balance_frame_imp_le]
+QED
+
+Theorem proceed_call_balance[local]:
+  proceed_call op sender address value ao az code gas rd s = (r,t) ∧
+  s.contexts ≠ [] ∧ sender ≠ a ⇒ balance_le a s t
+Proof
+  strip_tac >> drule_all proceed_call_account_effects >> strip_tac
+  >> simp[balance_le_def]
+  >> Cases_on `op ≠ CallCode ∧ 0 < value` >> simp[]
+  >> irule transfer_value_foreign_balance >> simp[]
+QED
+
+Theorem proceed_create_balance[local]:
+  proceed_create sender address value code gas s = (r,t) ∧
+  s.contexts ≠ [] ∧ sender ≠ a ⇒ balance_le a s t
+Proof
+  strip_tac >> drule_all proceed_create_frame_effects >> strip_tac
+  >> simp[balance_le_def]
+  >> irule arithmeticTheory.LESS_EQ_TRANS
+  >> qexists_tac `(lookup_account a
+       (increment_nonce address (clear_storage address
+         (increment_nonce sender s.rollback.accounts)))).balance`
+  >> simp[transfer_value_foreign_balance]
+QED
+
+Theorem proceed_create_saved_balance[local]:
+  proceed_create sender address value code gas s = (r,t) ∧
+  s.contexts ≠ [] ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac >> drule_all proceed_create_frame_effects >> simp[]
+QED
+
+Theorem balance_le_step_call[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_le a) (step_call op)
+Proof
+  simp[step_call_def, ignore_bind_def]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> qx_gen_tac `args` >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> qx_gen_tac `accounts` >> ho_match_mp_tac balance_le_bind
+  >> conj_tac
+  >- (ho_match_mp_tac balance_frame_cp
+      >> Cases_on `get_delegate (lookup_account (w2w (EL 1 args)) accounts).code`
+      >> simp[])
+  >> Cases >> simp[] >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> irule bind_get_callee_preserves >> gen_tac >> simp[]
+  >> IF_CASES_TAC
+  >- (ho_match_mp_tac balance_le_cp >> simp[])
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> IF_CASES_TAC
+  >- (ho_match_mp_tac balance_le_cp >> simp[])
+  >> rw[preserves_when_def] >> irule proceed_call_balance >> metis_tac[]
+QED
+
+Theorem balance_frame_increment_nonce[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a)
+    (update_accounts (increment_nonce sender))
+Proof
+  rw[preserves_when_def, update_accounts_def, return_def,
+     balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_le_step_create[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_le a) (step_create two)
+Proof
+  simp[step_create_def, ignore_bind_def]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> irule bind_get_callee_preserves >> gen_tac >> simp[]
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> IF_CASES_TAC
+  >- (ho_match_mp_tac balance_le_cp >> simp[])
+  >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> IF_CASES_TAC
+  >- (simp[abort_create_exists_def, ignore_bind_def]
+      >> ho_match_mp_tac balance_le_bind
+      >> conj_tac >- (MATCH_ACCEPT_TAC (BETA_RULE (Q.INST
+           [`Q` |-> `λc:address. sender = c ∧ sender ≠ a`] balance_frame_increment_nonce)))
+      >> gen_tac >> ho_match_mp_tac balance_le_cp >> simp[])
+  >> rw[preserves_when_def] >> irule proceed_create_balance >> metis_tac[]
+QED
+
+Theorem step_create_saved_balance[local]:
+  step_create two s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac
+  >> `u.contexts ≠ []` by (drule_all call_prefix_contexts >> simp[])
+  >> drule_all proceed_create_saved_balance >> gvs[cp_rel_def]
+QED
+
+Theorem step_inst_foreign_balance:
+  s.contexts ≠ [] ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  step_inst op s = (r,t) ⇒ balance_le a s t
+Proof
+  strip_tac >> Cases_on `is_call op`
+  >- (Cases_on `op` >> gvs[is_call_def, step_inst_def]
+      >> metis_tac[REWRITE_RULE[preserves_when_def] balance_le_step_call,
+                   REWRITE_RULE[preserves_when_def] balance_le_step_create])
+  >> drule balance_frame_step_inst_non_call
+  >> simp[preserves_when_def] >> disch_then drule_all
+  >> simp[balance_frame_def]
+QED
+
+Theorem step_inst_saved_balance[local]:
+  step_inst op s = (r,t) ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac
+  >> `is_call op` by
+    (Cases_on `r`
+     >- (Cases_on `x` >> drule step_inst_inl_grew_is_call
+         >> simp[arithmeticTheory.GREATER_DEF])
+     >> drule step_inst_inr_grew_is_call_family
+     >> simp[arithmeticTheory.GREATER_DEF] >> strip_tac >> gvs[is_call_def])
+  >> Cases_on `op` >> gvs[is_call_def, step_inst_def]
+  >> metis_tac[step_call_grow_saved_accounts, step_create_saved_balance]
+QED
+
+Theorem step_inner_foreign_balance:
+  s.contexts ≠ [] ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  step_inner s = (r,t) ⇒ balance_le a s t
+Proof
+  rw[step_inner_def, bind_def, ignore_bind_def, get_current_context_def,
+     return_def, fail_def, COND_RATOR, AllCaseEqs()]
+  >> gvs[vfmTypesTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()]
+  >> gvs[bind_def, AllCaseEqs()]
+  >> imp_res_tac step_inst_foreign_balance
+  >> gvs[balance_le_def]
+  >> metis_tac[REWRITE_RULE[preserves_rollback_def]
+                preserves_rollback_inc_pc_or_jump]
+QED
+
+Theorem step_inner_saved_balance:
+  s.contexts ≠ [] ∧ step_inner s = (r,t) ∧
+  LENGTH s.contexts < LENGTH t.contexts ⇒
+  (lookup_account a (SND (HD t.contexts)).accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  rw[step_inner_def, bind_def, ignore_bind_def, get_current_context_def,
+     return_def, fail_def, COND_RATOR, AllCaseEqs()]
+  >> gvs[vfmTypesTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()]
+  >~ [`step_inst Stop s = _`]
+  >- (drule_all step_inst_saved_balance >> simp[])
+  >~ [`step_inst Invalid s = _`]
+  >- (drule_all step_inst_saved_balance >> simp[])
+  >> gvs[bind_def, AllCaseEqs()]
+  >~ [`inc_pc_or_jump op mid = _`]
+  >- (`LENGTH mid.contexts ≥ LENGTH s.contexts` by
+        (irule (INST_TYPE [``:'a`` |-> ``:unit``] same_frame_or_grow_length)
+         >> simp[] >> qexistsl [`step_inst op`, `INL ()`] >> simp[])
+      >> `mid.contexts ≠ []` by
+        (Cases_on `mid.contexts` >> gvs[arithmeticTheory.GREATER_EQ])
+      >> `preserves_same_frame (inc_pc_or_jump op)` by simp[]
+      >> drule_all psf_imp_length_contexts_preserved >> strip_tac
+      >> `LENGTH s.contexts < LENGTH mid.contexts` by decide_tac
+      >> `is_call op` by
+        (drule step_inst_inl_grew_is_call >> simp[arithmeticTheory.GREATER_DEF])
+      >> qpat_x_assum `preserves_same_frame _` kall_tac
+      >> qpat_x_assum `inc_pc_or_jump op mid = _` mp_tac
+      >> simp[inc_pc_or_jump_def, return_def] >> strip_tac
+      >> qpat_x_assum `mid = t` SUBST_ALL_TAC
+      >> drule_all step_inst_saved_balance >> simp[])
+  >> drule_all step_inst_saved_balance >> simp[]
+QED
+
 Theorem proceed_call_nonprecompile_frame:
   proceed_call op sender address value ao az code gas rd s = (r, s') ∧
   s.contexts ≠ [] ∧ ¬fIN address precompile_addresses ⇒
@@ -1203,6 +1720,26 @@ Proof
   >> drule_all step_create_push_foreign_accounts >> simp[]
 QED
 
+Theorem step_push_balance:
+  wf_state s ∧ step s = (r,s') ∧
+  LENGTH s.contexts < LENGTH s'.contexts ∧
+  y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
+  (lookup_account y s.rollback.accounts).balance ≤
+    (lookup_account y s'.rollback.accounts).balance ∧
+  (lookup_account y (SND (HD s'.contexts)).accounts).balance =
+    (lookup_account y s.rollback.accounts).balance
+Proof
+  strip_tac
+  >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> drule_all step_grow_dispatch >> strip_tac
+  >- (`balance_le y s s'` by
+        metis_tac[SIMP_RULE bool_ss [preserves_when_def] balance_le_step_call]
+      >> drule_all step_call_grow_saved_accounts >> gvs[balance_le_def])
+  >> `balance_le y s s'` by
+       metis_tac[SIMP_RULE bool_ss [preserves_when_def] balance_le_step_create]
+  >> drule_all step_create_saved_balance >> gvs[balance_le_def]
+QED
+
 (* The frame a push enters as a new callee: a CALL or STATICCALL running the
  * target's code (or its EIP-7702 delegate's), or a CREATE at an address
  * that is not yet created. *)
@@ -1248,6 +1785,89 @@ Proof
   >> simp[]
 QED
 
+Theorem handle_create_balance:
+  s.contexts ≠ [] ∧ handle_create e s = (r,t) ⇒
+  (lookup_account a t.rollback.accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  rw[handle_create_def, bind_def, get_return_data_def,
+     get_output_to_def, get_current_context_def, return_def]
+  >> Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+  >> Cases_on `e` >> Cases_on `h0.msgParams.outputTo`
+  >> gvs[reraise_def, ignore_bind_def, bind_def, assert_def,
+      return_def, fail_def, AllCaseEqs(), consume_gas_def,
+      get_current_context_def, set_current_context_def,
+      update_accounts_def, lookup_account_def, update_account_def,
+      combinTheory.APPLY_UPDATE_THM]
+  >> rw[]
+QED
+
+Theorem handle_step_same_length_balance:
+  s.contexts ≠ [] ∧ handle_step e s = (r,t) ∧
+  LENGTH t.contexts = LENGTH s.contexts ⇒
+  (lookup_account a t.rollback.accounts).balance =
+  (lookup_account a s.rollback.accounts).balance
+Proof
+  strip_tac
+  >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def]
+  >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[])
+  >> simp[handle_def]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[] >> strip_tac
+  >> drule_all handle_create_preserves_length >> strip_tac
+  >> `LENGTH t.contexts = LENGTH s'.contexts` by simp[]
+  >> drule_all handle_exception_same_length_preserves_rollback >> strip_tac
+  >> drule_all handle_create_balance >> simp[]
+QED
+
+Theorem handle_step_balance_sources:
+  s.contexts ≠ [] ∧ handle_step e s = (r,t) ∧
+  n ≤ (lookup_account a s.rollback.accounts).balance ∧
+  (2 ≤ LENGTH s.contexts ⇒
+   n ≤ (lookup_account a (SND (HD s.contexts)).accounts).balance) ⇒
+  n ≤ (lookup_account a t.rollback.accounts).balance
+Proof
+  strip_tac >> qhdtm_x_assum `handle_step` mp_tac
+  >> simp[handle_step_def] >> IF_CASES_TAC
+  >- (simp[reraise_def] >> strip_tac >> gvs[])
+  >> simp[handle_def]
+  >> strip_assume_tac (INST_TYPE [alpha |-> ``:unit``] handle_create_INR)
+  >> simp[] >> strip_tac
+  >> drule_all handle_create_preserves_length >> strip_tac
+  >> drule_all handle_create_preserves_tl_and_snd_hd >> strip_tac
+  >> drule_all handle_create_balance >> strip_tac
+  >> drule_all handle_exception_rollback_sources >> strip_tac >> gvs[]
+QED
+
+Theorem step_same_length_foreign_balance:
+  wf_state s ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  step s = (r,t) ∧ LENGTH t.contexts = LENGTH s.contexts ⇒
+  balance_le a s t
+Proof
+  strip_tac >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> `step s = handle step_inner handle_step s` by simp[NoAsms, step_def, step_inner_def]
+  >> gvs[handle_def, AllCaseEqs()]
+  >~ [`step_inner s = (INL _, t)`]
+  >- (irule step_inner_foreign_balance >> metis_tac[])
+  >> rename1 `step_inner s = (INR e, mid)`
+  >> `balance_le a s mid` by (irule step_inner_foreign_balance >> metis_tac[])
+  >> `LENGTH mid.contexts ≥ LENGTH s.contexts` by
+    (irule (INST_TYPE [``:'a`` |-> ``:unit``] same_frame_or_grow_length)
+     >> simp[] >> qexistsl [`step_inner`, `INR e`] >> simp[])
+  >> `mid.contexts ≠ []` by
+    (Cases_on `mid.contexts` >> gvs[arithmeticTheory.GREATER_EQ])
+  >> Cases_on `LENGTH mid.contexts = LENGTH s.contexts`
+  >- (`LENGTH t.contexts = LENGTH mid.contexts` by decide_tac
+      >> drule_all handle_step_same_length_balance >> gvs[balance_le_def])
+  >> `LENGTH s.contexts < LENGTH mid.contexts` by decide_tac
+  >> drule_all step_inner_saved_balance >> strip_tac
+  >> simp[balance_le_def]
+  >> irule handle_step_balance_sources
+  >> qexistsl [`e`, `r`, `mid`] >> simp[] >> gvs[balance_le_def]
+QED
+
 Theorem handle_create_foreign_accounts:
   handle_create e s = (q,s') ∧ s.contexts ≠ [] ∧ outputTo_consistent s ⇒
   ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
@@ -1260,7 +1880,7 @@ Proof
   >> rw[same_frame_rel_def, callee_local_changes_def, foreign_account_change_def]
 QED
 
-Theorem handle_step_pop_foreign_boundary:
+Theorem handle_step_pop_foreign_balance_boundary:
   s.contexts = (callee,callee_rb)::parent::rest ∧
   outputTo_consistent_ctx callee ∧ handle_step e s = (q,s') ∧
   LENGTH s'.contexts < LENGTH s.contexts ⇒
@@ -1269,7 +1889,7 @@ Theorem handle_step_pop_foreign_boundary:
     new_parent.msgParams = (FST parent).msgParams ∧
     (s'.rollback.accounts = callee_rb.accounts ∨
      ∀y. y ≠ callee.msgParams.callee ⇒
-       foreign_account_change (lookup_account y s.rollback.accounts)
+       foreign_balance_change (lookup_account y s.rollback.accounts)
          (lookup_account y s'.rollback.accounts))
 Proof
   strip_tac
@@ -1292,12 +1912,29 @@ Proof
   >> disj2_tac
   >> `s.contexts ≠ [] ∧ outputTo_consistent s`
     by gvs[outputTo_consistent_def, outputTo_consistent_ctx_def]
-  >> drule handle_create_foreign_accounts >> simp[]
+  >> drule_all handle_create_balance >> strip_tac
+  >> drule handle_create_foreign_accounts >> simp[foreign_balance_change_def]
+QED
+
+Theorem handle_step_pop_foreign_boundary:
+  s.contexts = (callee,callee_rb)::parent::rest ∧
+  outputTo_consistent_ctx callee ∧ handle_step e s = (q,s') ∧
+  LENGTH s'.contexts < LENGTH s.contexts ⇒
+  ∃new_parent.
+    s'.contexts = (new_parent,SND parent)::rest ∧
+    new_parent.msgParams = (FST parent).msgParams ∧
+    (s'.rollback.accounts = callee_rb.accounts ∨
+     ∀y. y ≠ callee.msgParams.callee ⇒
+       foreign_account_change (lookup_account y s.rollback.accounts)
+         (lookup_account y s'.rollback.accounts))
+Proof
+  strip_tac >> drule_all handle_step_pop_foreign_balance_boundary
+  >> metis_tac[foreign_balance_change_def]
 QED
 
 (* A pop restores the popped frame's saved rollback (failure) or keeps the
  * current one, where only the popped frame's callee changed (success). *)
-Theorem step_pop_foreign:
+Theorem step_pop_foreign_balance:
   wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts < LENGTH s.contexts ⇒
   ∃new_head parent rest.
     s.contexts = HD s.contexts :: parent :: rest ∧
@@ -1305,7 +1942,7 @@ Theorem step_pop_foreign:
     new_head.msgParams = (FST parent).msgParams ∧
     (s'.rollback.accounts = (SND (HD s.contexts)).accounts ∨
      ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
-         foreign_account_change (lookup_account y s.rollback.accounts)
+         foreign_balance_change (lookup_account y s.rollback.accounts)
                                 (lookup_account y s'.rollback.accounts))
 Proof
   strip_tac
@@ -1327,6 +1964,9 @@ Proof
       by (drule handle_step_shrinks_by_one >> fs[])
   >> `LENGTH r'.contexts = LENGTH s.contexts` by decide_tac
   >> `same_frame_rel s r'` by (drule_all same_frame_or_grow_eq_length >> fs[])
+  >> `∀a. a ≠ (FST (HD s.contexts)).msgParams.callee ⇒ balance_le a s r'` by
+      (rpt strip_tac >> irule step_inner_foreign_balance
+       >> simp[step_inner_def, Abbr `inner`] >> metis_tac[])
   >> `LENGTH s.contexts ≥ 2` by
       (CCONTR_TAC >> fs[]
        >> `LENGTH s.contexts = 1` by decide_tac
@@ -1340,11 +1980,28 @@ Proof
   >> `outputTo_consistent_ctx (FST (HD r'.contexts))` by
       gvs[same_frame_rel_def, outputTo_consistent_stack_def,
           outputTo_consistent_ctx_def]
-  >> drule handle_step_pop_foreign_boundary >> simp[]
+  >> drule handle_step_pop_foreign_balance_boundary >> simp[]
   >> disch_then (qspecl_then [`s'`,`r`,`y`] mp_tac) >> simp[]
   >> strip_tac >> qexists_tac `new_parent` >> simp[]
   >> gvs[same_frame_rel_def, callee_local_changes_def,
-         foreign_account_change_def, account_already_created_def]
+         foreign_balance_change_def, foreign_account_change_def,
+         account_already_created_def, balance_le_def]
+  >> metis_tac[LESS_EQ_TRANS]
+QED
+
+Theorem step_pop_foreign:
+  wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts < LENGTH s.contexts ⇒
+  ∃new_head parent rest.
+    s.contexts = HD s.contexts :: parent :: rest ∧
+    s'.contexts = (new_head, SND parent) :: rest ∧
+    new_head.msgParams = (FST parent).msgParams ∧
+    (s'.rollback.accounts = (SND (HD s.contexts)).accounts ∨
+     ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
+         foreign_account_change (lookup_account y s.rollback.accounts)
+                                (lookup_account y s'.rollback.accounts))
+Proof
+  strip_tac >> drule_all step_pop_foreign_balance
+  >> metis_tac[foreign_balance_change_def]
 QED
 
 Theorem account_prefix_bind[local]:
@@ -2050,6 +2707,28 @@ Proof
   >> Cases_on `k` >> simp[]
 QED
 
+Theorem step_same_frame_balance_invariant:
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts = LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
+  >> drule_all step_same_frame_foreign >> strip_tac
+  >> drule_all step_same_length_foreign_balance >> strip_tac
+  >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
+       by (irule active_rollbacks_same_stack >> simp[])
+  >> `P (lookup_account a s.rollback.accounts) ∧
+      EVERY (λrb. P (lookup_account a rb.accounts))
+        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
+  >> `P (lookup_account a t.rollback.accounts)` by
+       metis_tac[foreign_balance_change_def, balance_le_def]
+  >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_same_frame_account_invariant:
   wf_state s ∧ step s = (r,t) ∧
   LENGTH t.contexts = LENGTH s.contexts ∧
@@ -2059,17 +2738,9 @@ Theorem step_same_frame_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
   strip_tac
-  >> drule_all step_same_frame_foreign >> strip_tac
-  >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
-       by (irule active_rollbacks_same_stack >> simp[])
-  >> `P (lookup_account a s.rollback.accounts)`
-       by gvs[active_rollbacks_def]
-  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
-  >> `EVERY (λrb. P (lookup_account a rb.accounts))
-            (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-  >> `EVERY (λrb. P (lookup_account a rb.accounts))
-            (TL (active_rollbacks d t))` by metis_tac[]
-  >> gvs[active_rollbacks_def]
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_same_frame_balance_invariant >> metis_tac[]
 QED
 
 Theorem active_rollbacks_push_tail:
@@ -2095,6 +2766,31 @@ Proof
   >> metis_tac[TAKE_FRONT, NOT_CONS_NIL, LENGTH_NIL, prim_recTheory.NOT_LESS_0]
 QED
 
+Theorem step_push_balance_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH s.contexts < LENGTH t.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
+  >> drule_all step_push_foreign >> strip_tac
+  >> drule_all step_push_balance >> strip_tac
+  >> `TL (active_rollbacks d t) =
+       SND (HD t.contexts) :: TL (active_rollbacks d s)`
+       by (irule active_rollbacks_push_tail >> simp[])
+  >> `P (lookup_account a s.rollback.accounts) ∧
+      EVERY (λrb. P (lookup_account a rb.accounts))
+        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
+  >> `P (lookup_account a t.rollback.accounts) ∧
+      P (lookup_account a (SND (HD t.contexts)).accounts)` by
+       metis_tac[foreign_balance_change_def, LESS_EQ_REFL]
+  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_push_account_invariant:
   0 < d ∧ d ≤ LENGTH s.contexts ∧
   wf_state s ∧ step s = (r,t) ∧
@@ -2104,16 +2800,10 @@ Theorem step_push_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac >> drule_all step_push_foreign >> strip_tac
-  >> `TL (active_rollbacks d t) =
-       SND (HD t.contexts) :: TL (active_rollbacks d s)`
-       by (irule active_rollbacks_push_tail >> simp[])
-  >> `P (lookup_account a s.rollback.accounts) ∧
-      EVERY (λrb. P (lookup_account a rb.accounts))
-        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-  >> `P (lookup_account a t.rollback.accounts) ∧
-      P (lookup_account a (SND (HD t.contexts)).accounts)` by metis_tac[]
-  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+  strip_tac
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_push_balance_invariant >> metis_tac[]
 QED
 
 Theorem active_rollbacks_pop:
@@ -2140,6 +2830,21 @@ Proof
   >> Cases_on `rest` >> gvs[]
 QED
 
+Theorem step_pop_balance_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts < LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac >> drule_all step_pop_foreign_balance >> strip_tac
+  >> drule_all active_rollbacks_pop >> strip_tac
+  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
+  >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_pop_account_invariant:
   0 < d ∧ d ≤ LENGTH s.contexts ∧
   wf_state s ∧ step s = (r,t) ∧
@@ -2149,10 +2854,28 @@ Theorem step_pop_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac >> drule_all step_pop_foreign >> strip_tac
-  >> drule_all active_rollbacks_pop >> strip_tac
-  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
-  >> gvs[active_rollbacks_def]
+  strip_tac
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_pop_balance_invariant >> metis_tac[]
+QED
+
+
+Theorem step_foreign_balance_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
+  EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
+Proof
+  strip_tac
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (irule step_same_frame_balance_invariant >> metis_tac[])
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (irule step_push_balance_invariant >> metis_tac[])
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> irule step_pop_balance_invariant >> metis_tac[]
 QED
 
 Theorem step_foreign_account_invariant:
@@ -2164,12 +2887,9 @@ Theorem step_foreign_account_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
   strip_tac
-  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (irule step_same_frame_account_invariant >> metis_tac[])
-  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
-  >- (irule step_push_account_invariant >> metis_tac[])
-  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
-  >> irule step_pop_account_invariant >> metis_tac[]
+  >> `∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc'`
+       by metis_tac[foreign_balance_change_def]
+  >> irule step_foreign_balance_invariant >> metis_tac[]
 QED
 
 Theorem step_outer_saved_rollbacks:
@@ -2379,12 +3099,15 @@ Proof
   >> metis_tac[]
 QED
 
-Theorem run_call_foreign_trace:
-  (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
+Theorem run_call_foreign_balance_trace[local]:
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
   (∀s c q t.
      run_call_reaches es s ∧ LENGTH es.contexts ≤ LENGTH s.contexts ∧
      wf_state s ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
      P (lookup_account a s.rollback.accounts) ∧
+     P (lookup_account a c.rollback.accounts) ∧
+     (2 ≤ LENGTH c.contexts ⇒
+        P (lookup_account a (SND (HD c.contexts)).accounts)) ∧
      step s = (INL (),c) ∧ LENGTH s.contexts < LENGTH c.contexts ∧
      (FST (HD c.contexts)).msgParams.callee = a ∧
      run_call c = SOME (q,t) ⇒ P (lookup_account a t.rollback.accounts)) ⇒
@@ -2405,16 +3128,19 @@ Proof
   >> `wf_state c` by metis_tac[step_preserves_wf_state, SND]
   >> `EVERY (λrb. P (lookup_account a rb.accounts))
         (active_rollbacks (LENGTH e.contexts) c)`
-       by (irule step_foreign_account_invariant >> metis_tac[LESS_EQ_REFL])
+       by (irule step_foreign_balance_invariant >> metis_tac[LESS_EQ_REFL])
   >> `P (lookup_account a e.rollback.accounts) ∧
-      P (lookup_account a c.rollback.accounts)` by gvs[active_rollbacks_def]
+      P (lookup_account a c.rollback.accounts)` by
+       (conj_tac
+        >- (qpat_x_assum `EVERY _ (active_rollbacks _ e)` mp_tac >> simp[active_rollbacks_def])
+        >> qpat_x_assum `EVERY _ (active_rollbacks _ c)` mp_tac >> simp[active_rollbacks_def])
   >> drule run_call_step_equation >> strip_tac
   >> Cases_on `q`
   >- suspend "continuing"
   >> gvs[Once OWHILE_THM]
 QED
 
-Resume run_call_foreign_trace[continuing]:
+Resume run_call_foreign_balance_trace[continuing]:
   Cases_on `x` >> gvs[]
   >> Cases_on `LENGTH c.contexts < LENGTH e.contexts`
   >- gvs[Once OWHILE_THM]
@@ -2423,7 +3149,7 @@ Resume run_call_foreign_trace[continuing]:
   >> suspend "push"
 QED
 
-Resume run_call_foreign_trace[same_depth]:
+Resume run_call_foreign_balance_trace[same_depth]:
   `run_call_reaches es c` by (irule run_call_reaches_step >> metis_tac[])
   >> `(FST (HD c.contexts)).msgParams.callee ≠ a`
        by (drule_all step_same_frame_foreign >> metis_tac[])
@@ -2434,7 +3160,7 @@ Resume run_call_foreign_trace[same_depth]:
   >> gvs[FUNPOW, combinTheory.o_DEF]
 QED
 
-Resume run_call_foreign_trace[push]:
+Resume run_call_foreign_balance_trace[push]:
   `LENGTH e.contexts < LENGTH c.contexts` by decide_tac
   >> `run_call_reaches es c` by (irule run_call_reaches_step >> metis_tac[])
   >> qpat_x_assum `¬(λ(q,s). _) _` mp_tac
@@ -2444,6 +3170,15 @@ Resume run_call_foreign_trace[push]:
   >> rename1 `m ≤ j`
   >> Cases_on `FUNPOW (step o SND) m (INL (),c)`
   >> rename1 `run_call c = SOME (q,v)`
+  >> `P (lookup_account a (SND (HD c.contexts)).accounts)` by
+       (drule_all step_push_foreign >> strip_tac
+        >> `TL (active_rollbacks (LENGTH e.contexts) c) =
+             SND (HD c.contexts) :: TL (active_rollbacks (LENGTH e.contexts) e)`
+             by (irule active_rollbacks_push_tail >> simp[])
+        >> qpat_x_assum `∀acc acc'. P acc ∧ foreign_balance_change _ _ ⇒ _` kall_tac
+        >> qpat_x_assum `∀s c q t. _` kall_tac
+        >> qpat_x_assum `∀m. _` kall_tac
+        >> Cases_on `active_rollbacks (LENGTH e.contexts) c` >> gvs[])
   >> `P (lookup_account a v.rollback.accounts)` by
        (Cases_on `(FST (HD c.contexts)).msgParams.callee = a`
         >- (qpat_x_assum `∀s c q t. _` irule >>
@@ -2451,9 +3186,7 @@ Resume run_call_foreign_trace[push]:
         >> qpat_x_assum `∀m. m < SUC j ⇒ _` (qspec_then `m` mp_tac)
         >> simp[] >> disch_then irule
         >> qexists_tac `c` >> qexists_tac `q` >> simp[]
-        >> irule active_rollbacks_initial
-        >> drule_all step_push_foreign >> strip_tac
-        >> gvs[active_rollbacks_def] >> metis_tac[])
+        >> irule active_rollbacks_initial >> simp[])
   >> `OWHILE (λ(r,s). ISL r ∧ LENGTH e.contexts ≤ LENGTH s.contexts)
         (step o SND) (INL (),c) =
       OWHILE (λ(r,s). ISL r ∧ LENGTH e.contexts ≤ LENGTH s.contexts)
@@ -2464,7 +3197,7 @@ Resume run_call_foreign_trace[push]:
   >> gvs[Once OWHILE_THM]
 QED
 
-Resume run_call_foreign_trace[child_return]:
+Resume run_call_foreign_balance_trace[child_return]:
   Cases_on `x` >> gvs[]
   >> drule_all step_push_foreign >> strip_tac
   >> `LENGTH e.contexts ≤ LENGTH v.contexts`
@@ -2480,7 +3213,9 @@ Resume run_call_foreign_trace[child_return]:
   >> `EVERY (λrb. P (lookup_account a rb.accounts))
         (active_rollbacks (LENGTH e.contexts) v)`
        by (irule run_call_saved_account_invariant >> simp[] >>
-           qexists_tac `c` >> simp[] >> gvs[active_rollbacks_def])
+           qexists_tac `c` >> simp[] >>
+           qpat_x_assum `EVERY _ (active_rollbacks _ c)` mp_tac >>
+           simp[active_rollbacks_def])
   >> `run_call_reaches c v`
        by (`run_call_reaches c (SND (FUNPOW (step o SND) m (INL (),c)))`
              suffices_by gvs[] >>
@@ -2497,11 +3232,46 @@ Resume run_call_foreign_trace[child_return]:
   >> qexistsl_tac [`v`,`r`] >> simp[] >> metis_tac[]
 QED
 
-Finalise run_call_foreign_trace
+Finalise run_call_foreign_balance_trace
 
-Theorem run_call_account_frame:
-  wf_state es ∧
+Theorem run_call_foreign_trace:
   (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
+  (∀s c q t.
+     run_call_reaches es s ∧ LENGTH es.contexts ≤ LENGTH s.contexts ∧
+     wf_state s ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+     P (lookup_account a s.rollback.accounts) ∧
+     step s = (INL (),c) ∧ LENGTH s.contexts < LENGTH c.contexts ∧
+     (FST (HD c.contexts)).msgParams.callee = a ∧
+     run_call c = SOME (q,t) ⇒ P (lookup_account a t.rollback.accounts)) ⇒
+  ∀n e r t.
+    ¬(λ(q,s). ISL q ∧ LENGTH e.contexts ≤ LENGTH s.contexts)
+       (FUNPOW (step o SND) n (INL (),e)) ∧
+    run_call_reaches es e ∧ LENGTH es.contexts ≤ LENGTH e.contexts ∧
+    wf_state e ∧ (FST (HD e.contexts)).msgParams.callee ≠ a ∧
+    EVERY (λrb. P (lookup_account a rb.accounts))
+      (active_rollbacks (LENGTH e.contexts) e) ∧
+    run_call e = SOME (r,t) ⇒ P (lookup_account a t.rollback.accounts)
+Proof
+  strip_tac >> match_mp_tac run_call_foreign_balance_trace
+  >> conj_tac >- metis_tac[foreign_balance_change_def]
+  >> rpt gen_tac >> strip_tac
+  >> qpat_x_assum `∀s c q t. _` irule
+  >> qexistsl [`c`, `q`, `s`] >> simp[]
+QED
+
+(* -------------------------------------------------------------------------
+ * Balances: a frame not executing as an account never lowers its balance.
+ *
+ * Value leaves an account only from a frame executing as it (CALL/CALLCODE
+ * and CREATE value, SELFDESTRUCT), so outside such frames its balance only
+ * grows, except that a reverting frame restores a snapshot.  The rely form
+ * below therefore asks P to be closed only under foreign changes that keep
+ * or raise the balance, which admits predicates such as solvency bounds.
+ * ------------------------------------------------------------------------- *)
+
+Theorem run_call_account_balance_frame:
+  wf_state es ∧
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
   P (lookup_account a es.rollback.accounts) ∧
   (2 ≤ LENGTH es.contexts ⇒
      P (lookup_account a (SND (HD es.contexts)).accounts)) ∧
@@ -2528,20 +3298,18 @@ Proof
   >> Cases_on `(FST (HD es.contexts)).msgParams.callee = a`
   >- (qpat_x_assum `∀e r e'. _` irule >> qexistsl_tac [`es`,`r`] >> simp[])
   >> drule run_call_finite_trace >> strip_tac
-  >> irule run_call_foreign_trace
-  >> conj_tac >- metis_tac[]
+  >> irule run_call_foreign_balance_trace
+  >> conj_tac >- (qpat_x_assum `∀acc acc'. P acc ∧ foreign_balance_change _ _ ⇒ _` ACCEPT_TAC)
   >> qexistsl_tac [`es`,`es`,`n`,`r`]
   >> simp[]
   >> conj_tac >- suspend "rely_push"
   >> irule active_rollbacks_initial >> simp[]
 QED
 
-Resume run_call_account_frame[rely_push]:
+Resume run_call_account_balance_frame[rely_push]:
   rpt gen_tac >> strip_tac
   >> `wf_state c` by metis_tac[step_preserves_wf_state, SND]
   >> drule_all step_push_foreign >> strip_tac
-  >> `P (lookup_account a c.rollback.accounts) ∧
-      P (lookup_account a (SND (HD c.contexts)).accounts)` by metis_tac[]
   >> Cases_on `(FST (HD c.contexts)).msgParams.static`
   >- suspend "static_push"
   >> qpat_x_assum `∀e r e'. _` irule
@@ -2549,7 +3317,7 @@ Resume run_call_account_frame[rely_push]:
   >> disj2_tac >> qexists_tac `s` >> simp[]
 QED
 
-Resume run_call_account_frame[static_push]:
+Resume run_call_account_balance_frame[static_push]:
   `(FST (HD c.contexts)).msgParams.callee ≠ (FST (HD s.contexts)).msgParams.callee`
     by simp[]
   >> `t.rollback.accounts = c.rollback.accounts` suffices_by metis_tac[]
@@ -2565,7 +3333,37 @@ Resume run_call_account_frame[static_push]:
   >> irule run_call_static_frame >> gvs[] >> metis_tac[]
 QED
 
-Finalise run_call_account_frame
+Finalise run_call_account_balance_frame
+
+Theorem run_call_account_frame:
+  wf_state es ∧
+  (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
+  P (lookup_account a es.rollback.accounts) ∧
+  (2 ≤ LENGTH es.contexts ⇒
+     P (lookup_account a (SND (HD es.contexts)).accounts)) ∧
+  (∀e r e'.
+     (FST (HD e.contexts)).msgParams.callee = a ∧
+     wf_state e ∧ P (lookup_account a e.rollback.accounts) ∧
+     (2 ≤ LENGTH e.contexts ⇒
+        P (lookup_account a (SND (HD e.contexts)).accounts)) ∧
+     (e = es ∨
+      ∃s u. run_call_reaches es s ∧
+            LENGTH es.contexts ≤ LENGTH s.contexts ∧
+            wf_state s ∧
+            (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+            P (lookup_account a s.rollback.accounts) ∧
+            step s = (INL u, e) ∧
+            LENGTH s.contexts < LENGTH e.contexts ∧
+            ¬(FST (HD e.contexts)).msgParams.static) ∧
+     run_call e = SOME (r, e') ⇒
+     P (lookup_account a e'.rollback.accounts)) ∧
+  run_call es = SOME (r, es') ⇒
+  P (lookup_account a es'.rollback.accounts)
+Proof
+  strip_tac >> irule run_call_account_balance_frame
+  >> conj_tac >- metis_tac[foreign_balance_change_def]
+  >> qexistsl [`es`, `r`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
 
 (* -------------------------------------------------------------------------
  * Accounts with no code.
