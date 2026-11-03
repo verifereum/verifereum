@@ -156,6 +156,181 @@ Proof
   >> simp[preserves_when_def] >> metis_tac[]
 QED
 
+Theorem balance_frame_bind[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) g ∧
+  (∀x. preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) (f x)) ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) (bind g f)
+Proof
+  strip_tac >> irule preserves_when_bind >> simp[]
+  >> conj_tac
+  >- metis_tac[balance_frame_trans]
+  >> simp[balance_frame_def]
+QED
+
+Theorem balance_frame_cp[local]:
+  cp m ⇒ preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee) (balance_frame a) m
+Proof
+  strip_tac >> irule preserves_when_mono_pre
+  >> qexists_tac `λs. s.contexts ≠ []` >> simp[cp_balance_frame]
+QED
+
+Theorem balance_frame_inc_pc_or_jump[local]:
+  preserves_when (λs. s.contexts ≠ []) (balance_frame a) (inc_pc_or_jump op)
+Proof
+  irule cp_balance_frame >> simp[]
+QED
+
+Theorem balance_frame_push_logs[local]:
+  preserves_when (λs. s.contexts ≠ []) (balance_frame a) (push_logs logs)
+Proof
+  rw[preserves_when_def, push_logs_def, bind_def,
+     get_current_context_def, set_current_context_def, return_def,
+     fail_def, AllCaseEqs()]
+  >> Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+  >> simp[balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_step_log[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (step_log n)
+Proof
+  simp[step_log_def, ignore_bind_def]
+  >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac
+  >> irule preserves_when_mono_pre
+  >> qexists_tac `λs. s.contexts ≠ []`
+  >> simp[balance_frame_push_logs]
+QED
+
+Theorem balance_frame_write_storage[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (write_storage address key value)
+Proof
+  rw[preserves_when_def, write_storage_def, update_accounts_def,
+     return_def, balance_frame_def, balance_le_def,
+     lookup_account_def, update_account_def, combinTheory.APPLY_UPDATE_THM]
+  >> Cases_on `a = address` >> simp[]
+QED
+
+Theorem balance_frame_write_transient_storage[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (write_transient_storage address key value)
+Proof
+  rw[preserves_when_def, write_transient_storage_def, get_tStorage_def,
+     set_tStorage_def, bind_def, return_def, balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_step_sstore[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    Q (FST (HD s.contexts)).msgParams.callee)
+    (balance_frame a) (step_sstore transient)
+Proof
+  simp[step_sstore_def, ignore_bind_def]
+  >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac
+  >- (Cases_on `transient` >> simp[] >> irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind
+  >> reverse conj_tac >- (irule balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> Cases_on `transient` >> simp[]
+  >- irule balance_frame_write_transient_storage
+  >> irule balance_frame_write_storage
+QED
+
+Theorem balance_frame_add_to_delete[local]:
+  (∀s. pre s ⇒ s.contexts ≠ []) ⇒
+  preserves_when pre (balance_frame a) (add_to_delete address)
+Proof
+  rw[preserves_when_def, add_to_delete_def, return_def,
+     balance_frame_def, balance_le_def]
+QED
+
+Theorem balance_frame_step_self_destruct[local]:
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_frame a) step_self_destruct
+Proof
+  simp[step_self_destruct_def, ignore_bind_def]
+  >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> irule balance_frame_bind_get_callee
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac
+  >- (rw[preserves_when_def, update_accounts_def, return_def,
+         balance_frame_def, balance_le_def]
+      >> irule transfer_value_foreign_balance >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac
+  >- (IF_CASES_TAC >> simp[]
+      >- (ho_match_mp_tac balance_frame_bind
+          >> conj_tac
+          >- (rw[preserves_when_def, update_accounts_def, return_def,
+                 balance_frame_def, balance_le_def, lookup_account_def,
+                 update_account_def, combinTheory.APPLY_UPDATE_THM]
+              >> gvs[])
+          >> gen_tac >> simp[]
+          >> irule balance_frame_add_to_delete >> simp[])
+      >> ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_cp >> simp[]
+QED
+
+Theorem balance_frame_step_inst_non_call[local]:
+  ¬is_call op ⇒
+  preserves_when (λs. s.contexts ≠ [] ∧
+    (FST (HD s.contexts)).msgParams.callee ≠ a)
+    (balance_frame a) (step_inst op)
+Proof
+  strip_tac >> Cases_on `op` >> gvs[is_call_def]
+  >~ [`step_inst SStore`]
+  >- (simp[step_inst_def]
+      >> irule (BETA_RULE (Q.INST [`Q` |-> `λc. c ≠ (a:address)`] balance_frame_step_sstore)))
+  >~ [`step_inst TStore`]
+  >- (simp[step_inst_def]
+      >> irule (BETA_RULE (Q.INST [`Q` |-> `λc. c ≠ (a:address)`] balance_frame_step_sstore)))
+  >~ [`step_inst (Log _)`]
+  >- (simp[step_inst_def]
+      >> irule (BETA_RULE (Q.INST [`Q` |-> `λc. c ≠ (a:address)`] balance_frame_step_log)))
+  >~ [`step_inst SelfDestruct`]
+  >- simp[step_inst_def, balance_frame_step_self_destruct]
+  >> ho_match_mp_tac balance_frame_cp
+  >> irule cp_step_inst_non_call >> simp[]
+QED
+
 Theorem foreign_account_change_refl[simp]:
   foreign_account_change acc acc
 Proof
