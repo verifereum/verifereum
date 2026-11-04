@@ -3365,6 +3365,42 @@ Proof
   >> qexistsl [`es`, `r`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+(* The rely form over both of `a`'s storage backends: its account and its
+ * transient storage.  A frame not executing as `a` leaves `a`'s transient
+ * storage alone (TSTORE writes the executing account's), and a revert
+ * restores the whole saved rollback, transient storage included. *)
+Theorem run_call_account_transient_frame:
+  wf_state es ∧
+  (∀acc acc' ts. P (acc, ts) ∧ foreign_account_change acc acc' ⇒
+                 P (acc', ts)) ∧
+  P (lookup_account a es.rollback.accounts, es.rollback.tStorage a) ∧
+  (2 ≤ LENGTH es.contexts ⇒
+     P (lookup_account a (SND (HD es.contexts)).accounts,
+        (SND (HD es.contexts)).tStorage a)) ∧
+  (∀e r e'.
+     (FST (HD e.contexts)).msgParams.callee = a ∧
+     wf_state e ∧
+     P (lookup_account a e.rollback.accounts, e.rollback.tStorage a) ∧
+     (2 ≤ LENGTH e.contexts ⇒
+        P (lookup_account a (SND (HD e.contexts)).accounts,
+           (SND (HD e.contexts)).tStorage a)) ∧
+     (e = es ∨
+      ∃s u. run_call_reaches es s ∧
+            LENGTH es.contexts ≤ LENGTH s.contexts ∧
+            wf_state s ∧
+            (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+            P (lookup_account a s.rollback.accounts, s.rollback.tStorage a) ∧
+            step s = (INL u, e) ∧
+            LENGTH s.contexts < LENGTH e.contexts ∧
+            ¬(FST (HD e.contexts)).msgParams.static) ∧
+     run_call e = SOME (r, e') ⇒
+     P (lookup_account a e'.rollback.accounts, e'.rollback.tStorage a)) ∧
+  run_call es = SOME (r, es') ⇒
+  P (lookup_account a es'.rollback.accounts, es'.rollback.tStorage a)
+Proof
+  cheat
+QED
+
 (* -------------------------------------------------------------------------
  * Accounts with no code.
  * ------------------------------------------------------------------------- *)
