@@ -2833,6 +2833,29 @@ Proof
   >> Cases_on `k` >> simp[]
 QED
 
+Theorem step_same_frame_rollback_invariant:
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts = LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀rb rb'. Q rb ∧
+     foreign_balance_change (lookup_account a rb.accounts)
+       (lookup_account a rb'.accounts) ∧
+     rb'.tStorage a = rb.tStorage a ⇒ Q rb') ∧
+  EVERY Q (active_rollbacks d s) ⇒
+  EVERY Q (active_rollbacks d t)
+Proof
+  strip_tac
+  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
+  >> drule_all step_same_frame_foreign >> strip_tac
+  >> drule_all step_same_length_foreign_transient_balance >> strip_tac
+  >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
+       by (irule active_rollbacks_same_stack >> simp[])
+  >> `Q s.rollback ∧ EVERY Q (TL (active_rollbacks d s))`
+       by gvs[active_rollbacks_def]
+  >> `Q t.rollback` by metis_tac[]
+  >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_same_frame_balance_invariant:
   wf_state s ∧ step s = (r,t) ∧
   LENGTH t.contexts = LENGTH s.contexts ∧
@@ -2844,15 +2867,9 @@ Proof
   strip_tac
   >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
   >> drule_all step_same_frame_foreign >> strip_tac
-  >> drule_all step_same_length_foreign_balance >> strip_tac
-  >> `TL (active_rollbacks d t) = TL (active_rollbacks d s)`
-       by (irule active_rollbacks_same_stack >> simp[])
-  >> `P (lookup_account a s.rollback.accounts) ∧
-      EVERY (λrb. P (lookup_account a rb.accounts))
-        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-  >> `P (lookup_account a t.rollback.accounts)` by
-       metis_tac[foreign_balance_change_def, balance_le_def]
-  >> gvs[active_rollbacks_def]
+  >> irule step_same_frame_rollback_invariant
+  >> qexistsl [`a`, `r`, `s`] >> simp[]
+  >> metis_tac[]
 QED
 
 Theorem step_same_frame_account_invariant:
@@ -2892,6 +2909,33 @@ Proof
   >> metis_tac[TAKE_FRONT, NOT_CONS_NIL, LENGTH_NIL, prim_recTheory.NOT_LESS_0]
 QED
 
+Theorem step_push_rollback_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH s.contexts < LENGTH t.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀rb rb'. Q rb ∧
+     foreign_balance_change (lookup_account a rb.accounts)
+       (lookup_account a rb'.accounts) ∧
+     rb'.tStorage a = rb.tStorage a ⇒ Q rb') ∧
+  EVERY Q (active_rollbacks d s) ⇒
+  EVERY Q (active_rollbacks d t)
+Proof
+  strip_tac
+  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
+  >> drule_all step_push_foreign >> strip_tac
+  >> drule_all step_push_balance >> strip_tac
+  >> drule_all step_push_transient >> strip_tac
+  >> `TL (active_rollbacks d t) =
+       SND (HD t.contexts) :: TL (active_rollbacks d s)`
+       by (irule active_rollbacks_push_tail >> simp[])
+  >> `Q s.rollback ∧ EVERY Q (TL (active_rollbacks d s))`
+       by gvs[active_rollbacks_def]
+  >> `Q t.rollback ∧ Q (SND (HD t.contexts))` by
+       metis_tac[foreign_balance_change_def, LESS_EQ_REFL]
+  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_push_balance_invariant:
   0 < d ∧ d ≤ LENGTH s.contexts ∧
   wf_state s ∧ step s = (r,t) ∧
@@ -2901,20 +2945,8 @@ Theorem step_push_balance_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac
-  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
-  >> drule_all step_push_foreign >> strip_tac
-  >> drule_all step_push_balance >> strip_tac
-  >> `TL (active_rollbacks d t) =
-       SND (HD t.contexts) :: TL (active_rollbacks d s)`
-       by (irule active_rollbacks_push_tail >> simp[])
-  >> `P (lookup_account a s.rollback.accounts) ∧
-      EVERY (λrb. P (lookup_account a rb.accounts))
-        (TL (active_rollbacks d s))` by gvs[active_rollbacks_def]
-  >> `P (lookup_account a t.rollback.accounts) ∧
-      P (lookup_account a (SND (HD t.contexts)).accounts)` by
-       metis_tac[foreign_balance_change_def, LESS_EQ_REFL]
-  >> Cases_on `active_rollbacks d t` >> gvs[active_rollbacks_def]
+  strip_tac >> irule step_push_rollback_invariant >> simp[]
+  >> qexistsl [`a`, `r`, `s`] >> simp[] >> metis_tac[]
 QED
 
 Theorem step_push_account_invariant:
@@ -2956,6 +2988,26 @@ Proof
   >> Cases_on `rest` >> gvs[]
 QED
 
+Theorem step_pop_rollback_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  LENGTH t.contexts < LENGTH s.contexts ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀rb rb'. Q rb ∧
+     foreign_balance_change (lookup_account a rb.accounts)
+       (lookup_account a rb'.accounts) ∧
+     rb'.tStorage a = rb.tStorage a ⇒ Q rb') ∧
+  EVERY Q (active_rollbacks d s) ⇒
+  EVERY Q (active_rollbacks d t)
+Proof
+  strip_tac >> drule_all step_pop_foreign_transient_balance >> strip_tac
+  >> drule_all active_rollbacks_pop >> strip_tac
+  >> `Q t.rollback` by
+       metis_tac[foreign_balance_change_def, foreign_account_change_def,
+                 LESS_EQ_REFL]
+  >> gvs[active_rollbacks_def]
+QED
+
 Theorem step_pop_balance_invariant:
   0 < d ∧ d ≤ LENGTH s.contexts ∧
   wf_state s ∧ step s = (r,t) ∧
@@ -2965,10 +3017,8 @@ Theorem step_pop_balance_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac >> drule_all step_pop_foreign_balance >> strip_tac
-  >> drule_all active_rollbacks_pop >> strip_tac
-  >> `P (lookup_account a t.rollback.accounts)` by metis_tac[]
-  >> gvs[active_rollbacks_def]
+  strip_tac >> irule step_pop_rollback_invariant >> simp[]
+  >> qexistsl [`a`, `r`, `s`] >> simp[] >> metis_tac[]
 QED
 
 Theorem step_pop_account_invariant:
@@ -2987,6 +3037,29 @@ Proof
 QED
 
 
+Theorem step_foreign_rollback_invariant:
+  0 < d ∧ d ≤ LENGTH s.contexts ∧
+  wf_state s ∧ step s = (r,t) ∧
+  (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  (∀rb rb'. Q rb ∧
+     foreign_balance_change (lookup_account a rb.accounts)
+       (lookup_account a rb'.accounts) ∧
+     rb'.tStorage a = rb.tStorage a ⇒ Q rb') ∧
+  EVERY Q (active_rollbacks d s) ⇒
+  EVERY Q (active_rollbacks d t)
+Proof
+  strip_tac
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (irule step_same_frame_rollback_invariant
+      >> qexistsl [`a`, `r`, `s`] >> simp[] >> metis_tac[])
+  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (irule step_push_rollback_invariant >> simp[]
+      >> qexistsl [`a`, `r`, `s`] >> simp[] >> metis_tac[])
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
+  >> irule step_pop_rollback_invariant >> simp[]
+  >> qexistsl [`a`, `r`, `s`] >> simp[] >> metis_tac[]
+QED
+
 Theorem step_foreign_balance_invariant:
   0 < d ∧ d ≤ LENGTH s.contexts ∧
   wf_state s ∧ step s = (r,t) ∧
@@ -2995,13 +3068,8 @@ Theorem step_foreign_balance_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac
-  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (irule step_same_frame_balance_invariant >> metis_tac[])
-  >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
-  >- (irule step_push_balance_invariant >> metis_tac[])
-  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac
-  >> irule step_pop_balance_invariant >> metis_tac[]
+  strip_tac >> irule step_foreign_rollback_invariant >> simp[]
+  >> qexistsl [`a`, `r`, `s`] >> simp[] >> metis_tac[]
 QED
 
 Theorem step_foreign_account_invariant:
