@@ -12,7 +12,11 @@
  * run_call_account_balance_frame is the same with P closed only under
  * foreign_balance_change, which also keeps or raises `a`'s balance: frames
  * not executing as `a` never lower its balance, so P may bound it.
- * run_call_empty_code_account instantiates it for an account with no code.
+ * run_call_account_transient_frame is the same with P reading `a`'s account
+ * and its transient storage: frames not executing as `a` leave the latter
+ * alone, and a revert restores it with the rest of the rollback.
+ * run_call_empty_code_account instantiates run_call_account_frame for an
+ * account with no code.
  * ========================================================================== *)
 Theory vfmAccountFrame
 Ancestors
