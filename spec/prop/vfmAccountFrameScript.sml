@@ -1720,6 +1720,47 @@ Proof
   >> drule_all step_create_push_foreign_accounts >> simp[]
 QED
 
+Theorem step_call_push_transient:
+  step_call op s = (INL (),s') ∧ s.contexts ≠ [] ∧
+  LENGTH s.contexts < LENGTH s'.contexts ⇒
+  s'.rollback.tStorage = s.rollback.tStorage ∧
+  (SND (HD s'.contexts)).tStorage = s.rollback.tStorage
+Proof
+  strip_tac >> drule_all step_call_reaches_proceed_call >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> drule_all proceed_call_inl_nonprecompile >> strip_tac
+  >> drule_all proceed_call_saved_rollback >> strip_tac
+  >> drule_all proceed_call_nonprecompile_message >> strip_tac
+  >> gvs[cp_rel_def]
+QED
+
+Theorem step_create_push_transient:
+  s.contexts ≠ [] ∧ step_create two s = (r,s') ∧
+  LENGTH s.contexts < LENGTH s'.contexts ⇒
+  s'.rollback.tStorage = s.rollback.tStorage ∧
+  (SND (HD s'.contexts)).tStorage = s.rollback.tStorage
+Proof
+  strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac
+  >> drule_all call_prefix_contexts >> strip_tac
+  >> qpat_x_assum `proceed_create _ _ _ _ _ _ = _` mp_tac
+  >> simp[proceed_create_def, update_accounts_def, get_rollback_def,
+          get_original_def, set_original_def, push_context_def,
+          ignore_bind_def, bind_def, return_def, fail_def, AllCaseEqs()]
+  >> strip_tac >> gvs[cp_rel_def, AllCaseEqs()]
+QED
+
+Theorem step_push_transient:
+  wf_state s ∧ step s = (r,s') ∧
+  LENGTH s.contexts < LENGTH s'.contexts ⇒
+  s'.rollback.tStorage = s.rollback.tStorage ∧
+  (SND (HD s'.contexts)).tStorage = s.rollback.tStorage
+Proof
+  strip_tac >> `s.contexts ≠ []` by gvs[wf_state_def]
+  >> drule_all step_grow_dispatch >> strip_tac
+  >- (drule_all step_call_push_transient >> simp[])
+  >> drule_all step_create_push_transient >> simp[]
+QED
+
 Theorem step_push_balance:
   wf_state s ∧ step s = (r,s') ∧
   LENGTH s.contexts < LENGTH s'.contexts ∧
@@ -1880,17 +1921,36 @@ Proof
   >> rw[same_frame_rel_def, callee_local_changes_def, foreign_account_change_def]
 QED
 
-Theorem handle_step_pop_foreign_balance_boundary:
+Theorem step_same_length_foreign_transient_balance:
+  wf_state s ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+  step s = (r,t) ∧ LENGTH t.contexts = LENGTH s.contexts ⇒
+  foreign_balance_change (lookup_account a s.rollback.accounts)
+    (lookup_account a t.rollback.accounts) ∧
+  t.rollback.tStorage a = s.rollback.tStorage a
+Proof
+  strip_tac
+  >> drule_all step_same_length_foreign_balance >> strip_tac
+  >> `outputTo_consistent s` by
+    metis_tac[outputTo_consistent_stack_imp_consistent, wf_state_def]
+  >> drule_all step_same_frame
+  >> rw[same_frame_rel_def, callee_local_changes_def,
+        foreign_balance_change_def, foreign_account_change_def, balance_le_def]
+  >> gvs[balance_le_def]
+QED
+
+Theorem handle_step_pop_foreign_transient_balance_boundary:
   s.contexts = (callee,callee_rb)::parent::rest ∧
   outputTo_consistent_ctx callee ∧ handle_step e s = (q,s') ∧
   LENGTH s'.contexts < LENGTH s.contexts ⇒
   ∃new_parent.
     s'.contexts = (new_parent,SND parent)::rest ∧
     new_parent.msgParams = (FST parent).msgParams ∧
-    (s'.rollback.accounts = callee_rb.accounts ∨
+    ((s'.rollback.accounts = callee_rb.accounts ∧
+      s'.rollback.tStorage = callee_rb.tStorage) ∨
      ∀y. y ≠ callee.msgParams.callee ⇒
        foreign_balance_change (lookup_account y s.rollback.accounts)
-         (lookup_account y s'.rollback.accounts))
+         (lookup_account y s'.rollback.accounts) ∧
+       s'.rollback.tStorage y = s.rollback.tStorage y)
 Proof
   strip_tac
   >> qhdtm_x_assum `handle_step` mp_tac
@@ -1913,7 +1973,28 @@ Proof
   >> `s.contexts ≠ [] ∧ outputTo_consistent s`
     by gvs[outputTo_consistent_def, outputTo_consistent_ctx_def]
   >> drule_all handle_create_balance >> strip_tac
-  >> drule handle_create_foreign_accounts >> simp[foreign_balance_change_def]
+  >> `same_frame_rel s s1` by
+    (mp_tac (INST_TYPE [alpha |-> ``:unit``] psf_handle_create)
+     >> simp[psf_def] >> metis_tac[])
+  >> drule handle_create_foreign_accounts
+  >> gvs[same_frame_rel_def, callee_local_changes_def,
+         foreign_balance_change_def]
+QED
+
+Theorem handle_step_pop_foreign_balance_boundary:
+  s.contexts = (callee,callee_rb)::parent::rest ∧
+  outputTo_consistent_ctx callee ∧ handle_step e s = (q,s') ∧
+  LENGTH s'.contexts < LENGTH s.contexts ⇒
+  ∃new_parent.
+    s'.contexts = (new_parent,SND parent)::rest ∧
+    new_parent.msgParams = (FST parent).msgParams ∧
+    (s'.rollback.accounts = callee_rb.accounts ∨
+     ∀y. y ≠ callee.msgParams.callee ⇒
+       foreign_balance_change (lookup_account y s.rollback.accounts)
+         (lookup_account y s'.rollback.accounts))
+Proof
+  strip_tac >> drule_all handle_step_pop_foreign_transient_balance_boundary
+  >> metis_tac[]
 QED
 
 Theorem handle_step_pop_foreign_boundary:
@@ -1934,16 +2015,18 @@ QED
 
 (* A pop restores the popped frame's saved rollback (failure) or keeps the
  * current one, where only the popped frame's callee changed (success). *)
-Theorem step_pop_foreign_balance:
+Theorem step_pop_foreign_transient_balance:
   wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts < LENGTH s.contexts ⇒
   ∃new_head parent rest.
     s.contexts = HD s.contexts :: parent :: rest ∧
     s'.contexts = (new_head, SND parent) :: rest ∧
     new_head.msgParams = (FST parent).msgParams ∧
-    (s'.rollback.accounts = (SND (HD s.contexts)).accounts ∨
+    ((s'.rollback.accounts = (SND (HD s.contexts)).accounts ∧
+      s'.rollback.tStorage = (SND (HD s.contexts)).tStorage) ∨
      ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
          foreign_balance_change (lookup_account y s.rollback.accounts)
-                                (lookup_account y s'.rollback.accounts))
+                                (lookup_account y s'.rollback.accounts) ∧
+         s'.rollback.tStorage y = s.rollback.tStorage y)
 Proof
   strip_tac
   >> `s.contexts ≠ [] ∧ outputTo_consistent_stack s` by gvs[wf_state_def]
@@ -1980,13 +2063,28 @@ Proof
   >> `outputTo_consistent_ctx (FST (HD r'.contexts))` by
       gvs[same_frame_rel_def, outputTo_consistent_stack_def,
           outputTo_consistent_ctx_def]
-  >> drule handle_step_pop_foreign_balance_boundary >> simp[]
+  >> drule handle_step_pop_foreign_transient_balance_boundary >> simp[]
   >> disch_then (qspecl_then [`s'`,`r`,`y`] mp_tac) >> simp[]
   >> strip_tac >> qexists_tac `new_parent` >> simp[]
   >> gvs[same_frame_rel_def, callee_local_changes_def,
          foreign_balance_change_def, foreign_account_change_def,
          account_already_created_def, balance_le_def]
   >> metis_tac[LESS_EQ_TRANS]
+QED
+
+Theorem step_pop_foreign_balance:
+  wf_state s ∧ step s = (r, s') ∧ LENGTH s'.contexts < LENGTH s.contexts ⇒
+  ∃new_head parent rest.
+    s.contexts = HD s.contexts :: parent :: rest ∧
+    s'.contexts = (new_head, SND parent) :: rest ∧
+    new_head.msgParams = (FST parent).msgParams ∧
+    (s'.rollback.accounts = (SND (HD s.contexts)).accounts ∨
+     ∀y. y ≠ (FST (HD s.contexts)).msgParams.callee ⇒
+         foreign_balance_change (lookup_account y s.rollback.accounts)
+                                (lookup_account y s'.rollback.accounts))
+Proof
+  strip_tac >> drule_all step_pop_foreign_transient_balance
+  >> metis_tac[]
 QED
 
 Theorem step_pop_foreign:
