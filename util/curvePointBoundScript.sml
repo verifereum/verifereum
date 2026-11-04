@@ -365,12 +365,6 @@ Proof
   PairCases_on `x` \\ rw[encode_fq2_def, LENGTH_encode_fq]
 QED
 
-Theorem bls12381_f2inv_lt:
-  FST (f2inv a) < bls12381p ∧ SND (f2inv a) < bls12381p
-Proof
-  PairCases_on `a` \\ simp[f2inv_def, bls12381_field_lt]
-QED
-
 Theorem LENGTH_encode_g2:
   FST (FST p) < bls12381p ∧ SND (FST p) < bls12381p ∧
   FST (FST (SND p)) < bls12381p ∧ SND (FST (SND p)) < bls12381p ⇒
