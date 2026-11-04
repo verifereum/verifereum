@@ -2150,14 +2150,14 @@ QED
 
 Theorem cp_preserves_static_prefix[local]:
   cp m ⇒ ∀s.
-  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
   (0 < n ∧ n ≤ LENGTH (SND (m s)).contexts ∧
-   (SND (m s)).rollback.accounts = A ∧
+   obs ((SND (m s)).rollback.accounts,(SND (m s)).rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (m s)).contexts - n + 1) (SND (m s)).contexts))
 Proof
   rw[cp_def]
@@ -2171,15 +2171,16 @@ QED
 
 Theorem proceed_call_preserves_static_prefix[local]:
   value = 0 ∨ op = CallCode ⇒ ∀s.
-  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
   (0 < n ∧
    n ≤ LENGTH (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).contexts ∧
-   (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).rollback.accounts = A ∧
+   obs ((SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).rollback.accounts,
+        (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).contexts - n + 1)
        (SND (proceed_call op sender address value argsOff argsSize code stipend (Memory mr) s)).contexts))
 Proof
@@ -2297,13 +2298,13 @@ Proof
 QED
 
 Theorem static_prefix_cp_rel[local]:
-  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ∧ cp_rel s s' ⇒
-  (0 < n ∧ n ≤ LENGTH s'.contexts ∧ s'.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s'.contexts ∧ obs (s'.rollback.accounts,s'.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s'.contexts - n + 1) s'.contexts))
 Proof
   rw[cp_rel_def]
@@ -2313,9 +2314,9 @@ Proof
 QED
 
 Theorem static_prefix_head[local]:
-  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
   s.contexts ≠ [] ∧ (FST (HD s.contexts)).msgParams.static
 Proof
@@ -2327,21 +2328,21 @@ QED
 
 Theorem step_call_preserves_static_prefix[local]:
   ∀s.
-  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
   (0 < n ∧ n ≤ LENGTH (SND (step_call op s)).contexts ∧
-   (SND (step_call op s)).rollback.accounts = A ∧
+   obs ((SND (step_call op s)).rollback.accounts,(SND (step_call op s)).rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (step_call op s)).contexts - n + 1)
        (SND (step_call op s)).contexts))
 Proof
   match_mp_tac (BETA_RULE (Q.INST [`Q` |->
-    `λs. 0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+    `λs. 0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
       EVERY (λ(c,rb). c.msgParams.static ∧
-        (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+        (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
         (TAKE (LENGTH s.contexts - n + 1) s.contexts)`]
     account_prefix_step_call))
   >> rpt conj_tac
@@ -2478,21 +2479,21 @@ QED
 
 Theorem step_inst_preserves_static_prefix[local]:
   ∀s.
-  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ⇒
   (0 < n ∧ n ≤ LENGTH (SND (step_inst op s)).contexts ∧
-   (SND (step_inst op s)).rollback.accounts = A ∧
+   obs ((SND (step_inst op s)).rollback.accounts,(SND (step_inst op s)).rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (step_inst op s)).contexts - n + 1)
        (SND (step_inst op s)).contexts))
 Proof
   match_mp_tac (BETA_RULE (Q.INST [`Q` |->
-    `λs. 0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+    `λs. 0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
       EVERY (λ(c,rb). c.msgParams.static ∧
-        (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+        (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
         (TAKE (LENGTH s.contexts - n + 1) s.contexts)`]
     account_prefix_step_inst))
   >> rpt conj_tac
@@ -2524,9 +2525,9 @@ Proof
 QED
 
 Theorem inner_preserves_static_prefix[local]:
-  (0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ∧
   (do
     ctxt <- get_current_context;
@@ -2535,16 +2536,16 @@ Theorem inner_preserves_static_prefix[local]:
     | NONE => if LENGTH ctxt.msgParams.code ≤ ctxt.pc then step_inst Stop
               else step_inst Invalid
   od) s = (r,s') ⇒
-  (0 < n ∧ n ≤ LENGTH s'.contexts ∧ s'.rollback.accounts = A ∧
+  (0 < n ∧ n ≤ LENGTH s'.contexts ∧ obs (s'.rollback.accounts,s'.rollback.tStorage) = A ∧
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s'.contexts - n + 1) s'.contexts))
 Proof
   strip_tac
   >> mp_tac (BETA_RULE (Q.INST [`Q` |->
-    `λs. 0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+    `λs. 0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
       EVERY (λ(c,rb). c.msgParams.static ∧
-        (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+        (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
         (TAKE (LENGTH s.contexts - n + 1) s.contexts)`]
     account_prefix_inner))
   >> impl_tac
@@ -2557,14 +2558,15 @@ QED
 
 Theorem pop_incorporate_account_prefix[local]:
   0 < n ∧ n ≤ LENGTH s.contexts ∧ 1 < LENGTH s.contexts ∧
-  s.rollback.accounts = A ∧
+  obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
   EVERY (λ(c,rb). c.msgParams.static ∧
-    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
     (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
-  (SND (pop_and_incorporate_context success s)).rollback.accounts = A ∧
+  obs ((SND (pop_and_incorporate_context success s)).rollback.accounts,
+       (SND (pop_and_incorporate_context success s)).rollback.tStorage) = A ∧
   (n ≤ LENGTH (SND (pop_and_incorporate_context success s)).contexts ⇒
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (pop_and_incorporate_context success s)).contexts - n + 1)
        (SND (pop_and_incorporate_context success s)).contexts))
 Proof
@@ -2591,17 +2593,17 @@ Proof
 QED
 
 Theorem cp_preserves_account_prefix_exit[local]:
-  cp m ∧ s.contexts ≠ [] ∧ s.rollback.accounts = A ∧
+  cp m ∧ s.contexts ≠ [] ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
   (n ≤ LENGTH s.contexts ⇒
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
-     (TAKE (LENGTH s.contexts - n + 1) s.contexts)) ∧
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
+     (TAKE (LENGTH s.contexts + 1 - n) s.contexts)) ∧
   m s = (r,s') ⇒
-  s'.rollback.accounts = A ∧
+  obs (s'.rollback.accounts,s'.rollback.tStorage) = A ∧
   (n ≤ LENGTH s'.contexts ⇒
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
-     (TAKE (LENGTH s'.contexts - n + 1) s'.contexts))
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
+     (TAKE (LENGTH s'.contexts + 1 - n) s'.contexts))
 Proof
   rw[cp_def]
   >> first_x_assum drule >> disch_then drule >> strip_tac
@@ -2611,14 +2613,15 @@ Proof
 QED
 
 Theorem handle_ex_helper_account_prefix[local]:
-  0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
   EVERY (λ(c,rb). c.msgParams.static ∧
-    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
     (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
-  (SND (handle_ex_helper e s)).rollback.accounts = A ∧
+  obs ((SND (handle_ex_helper e s)).rollback.accounts,
+       (SND (handle_ex_helper e s)).rollback.tStorage) = A ∧
   (n ≤ LENGTH (SND (handle_ex_helper e s)).contexts ⇒
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (handle_ex_helper e s)).contexts - n + 1)
        (SND (handle_ex_helper e s)).contexts))
 Proof
@@ -2632,7 +2635,7 @@ Proof
   >> simp[bind_def, get_return_data_def, get_output_to_def,
     get_current_context_def, return_def, ignore_bind_def]
   >> `1 < LENGTH s.contexts` by simp[]
-  >> mp_tac (Q.INST [`A` |-> `s.rollback.accounts`,
+  >> mp_tac (Q.INST [`A` |-> `obs (s.rollback.accounts,s.rollback.tStorage)`,
       `success` |-> `(e : exception option) = NONE`] pop_incorporate_account_prefix)
   >> impl_tac >- gvs[]
   >> strip_tac
@@ -2643,45 +2646,52 @@ Proof
         >> goal_assum (drule_at Any) >> simp[])
   >> Cases_on `after_pop h0.returnData h0.msgParams.outputTo (e = NONE) r`
   >> gvs[]
-  >> drule_at (Pos (el 5)) cp_preserves_account_prefix_exit
-  >> disch_then (qspecl_then [`n`, `s.rollback.accounts`] mp_tac)
+  >> irule (INST_TYPE [alpha |-> ``:unit``] cp_preserves_account_prefix_exit)
+  >> goal_assum (drule_at (Pos (el 5)))
   >> simp[]
+  >> qexists_tac `after_pop h0.returnData h0.msgParams.outputTo (e = NONE)`
+  >> simp[] >> metis_tac[]
 QED
 
 Theorem handle_exception_account_prefix[local]:
-  0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
   EVERY (λ(c,rb). c.msgParams.static ∧
-    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
     (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
-  (SND (handle_exception e s)).rollback.accounts = A ∧
+  obs ((SND (handle_exception e s)).rollback.accounts,
+       (SND (handle_exception e s)).rollback.tStorage) = A ∧
   (n ≤ LENGTH (SND (handle_exception e s)).contexts ⇒
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (handle_exception e s)).contexts - n + 1)
        (SND (handle_exception e s)).contexts))
 Proof
   strip_tac >> simp[handle_exception_decomp, LET_THM]
   >> qmatch_goalsub_abbrev_tac `bind prefix _ s`
   >> `cp prefix` by simp[Abbr `prefix`]
-  >> drule cp_preserves_static_prefix
-  >> disch_then (qspecl_then [`n`, `A`, `s`] mp_tac)
-  >> simp[] >> strip_tac
+  >> `0 < n ∧ n ≤ LENGTH (SND (prefix s)).contexts ∧
+       obs ((SND (prefix s)).rollback.accounts,(SND (prefix s)).rollback.tStorage) = A ∧
+       EVERY (λ(c,rb). c.msgParams.static ∧
+         (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
+         (TAKE (LENGTH (SND (prefix s)).contexts - n + 1) (SND (prefix s)).contexts)` by
+    (irule cp_preserves_static_prefix >> simp[])
   >> simp[bind_def]
   >> Cases_on `prefix s` >> Cases_on `q` >> gvs[]
-  >> mp_tac (Q.INST [`s` |-> `r`, `A` |-> `s.rollback.accounts`]
+  >> mp_tac (Q.INST [`s` |-> `r`, `A` |-> `obs (s.rollback.accounts,s.rollback.tStorage)`]
       handle_ex_helper_account_prefix)
   >> simp[]
 QED
 
 Theorem handle_step_account_prefix[local]:
-  0 < n ∧ n ≤ LENGTH s.contexts ∧ s.rollback.accounts = A ∧
+  0 < n ∧ n ≤ LENGTH s.contexts ∧ obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
   EVERY (λ(c,rb). c.msgParams.static ∧
-    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
     (TAKE (LENGTH s.contexts - n + 1) s.contexts) ⇒
-  (SND (handle_step e s)).rollback.accounts = A ∧
+  obs ((SND (handle_step e s)).rollback.accounts,
+       (SND (handle_step e s)).rollback.tStorage) = A ∧
   (n ≤ LENGTH (SND (handle_step e s)).contexts ⇒
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH (SND (handle_step e s)).contexts - n + 1)
        (SND (handle_step e s)).contexts))
 Proof
@@ -2700,15 +2710,15 @@ QED
 
 Theorem step_preserves_static_account_prefix[local]:
   wf_state s ∧ 0 < n ∧ n ≤ LENGTH s.contexts ∧
-  s.rollback.accounts = A ∧
+  obs (s.rollback.accounts,s.rollback.tStorage) = A ∧
   EVERY (λ(c,rb). c.msgParams.static ∧
-    (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+    (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
     (TAKE (LENGTH s.contexts - n + 1) s.contexts) ∧
   step s = (r,s') ⇒
-  wf_state s' ∧ s'.rollback.accounts = A ∧
+  wf_state s' ∧ obs (s'.rollback.accounts,s'.rollback.tStorage) = A ∧
   (n ≤ LENGTH s'.contexts ⇒
    EVERY (λ(c,rb). c.msgParams.static ∧
-     (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+     (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
      (TAKE (LENGTH s'.contexts - n + 1) s'.contexts))
 Proof
   strip_tac
@@ -2718,9 +2728,9 @@ Proof
   >> simp[step_def, LET_THM]
   >> qmatch_goalsub_abbrev_tac `handle inner handle_step s`
   >> `∀r s'. inner s = (r,s') ⇒
-       0 < n ∧ n ≤ LENGTH s'.contexts ∧ s'.rollback.accounts = A ∧
+       0 < n ∧ n ≤ LENGTH s'.contexts ∧ obs (s'.rollback.accounts,s'.rollback.tStorage) = A ∧
        EVERY (λ(c,rb). c.msgParams.static ∧
-         (∀a. c.msgParams.outputTo ≠ Code a) ∧ rb.accounts = A)
+         (∀a. c.msgParams.outputTo ≠ Code a) ∧ obs (rb.accounts,rb.tStorage) = A)
          (TAKE (LENGTH s'.contexts - n + 1) s'.contexts)` by
     (map_every qx_gen_tac [`res`, `st`] >> disch_tac
      >> irule inner_preserves_static_prefix >> conj_tac >- simp[]
@@ -2730,7 +2740,7 @@ Proof
   >- (strip_tac >> gvs[])
   >> rename1 `inner s = (INR ex, mid)`
   >> mp_tac (Q.INST [`s` |-> `mid`, `e` |-> `ex`,
-       `A` |-> `s.rollback.accounts`] handle_step_account_prefix)
+       `A` |-> `obs (s.rollback.accounts,s.rollback.tStorage)`] handle_step_account_prefix)
   >> simp[] >> strip_tac >> Cases_on `handle_step ex mid` >> gvs[]
   >> strip_tac >> gvs[]
 QED
@@ -2738,23 +2748,26 @@ QED
 (* A static frame changes no account: SSTORE, CREATE, SELFDESTRUCT and
  * value-carrying CALL fail in it, and the frames it calls are static too.
  * Its saved rollback must agree on accounts, since a failure restores it. *)
-Theorem run_call_static_frame:
+Theorem run_call_static_observation:
   wf_state e ∧
   (FST (HD e.contexts)).msgParams.static ∧
   (∀x. (FST (HD e.contexts)).msgParams.outputTo ≠ Code x) ∧
-  (SND (HD e.contexts)).accounts = e.rollback.accounts ∧
+  obs ((SND (HD e.contexts)).accounts,(SND (HD e.contexts)).tStorage) =
+    obs (e.rollback.accounts,e.rollback.tStorage) ∧
   run_call e = SOME (r, e') ⇒
-  e'.rollback.accounts = e.rollback.accounts
+  obs (e'.rollback.accounts,e'.rollback.tStorage) =
+    obs (e.rollback.accounts,e.rollback.tStorage)
 Proof
   strip_tac
   >> `0 < LENGTH e.contexts` by (gvs[wf_state_def] >> Cases_on `e.contexts` >> gvs[])
   >> gvs[run_call_def]
   >> `(λp. wf_state (SND p) ∧
-       (SND p).rollback.accounts = e.rollback.accounts ∧
+       obs ((SND p).rollback.accounts,(SND p).rollback.tStorage) =
+         obs (e.rollback.accounts,e.rollback.tStorage) ∧
        (LENGTH e.contexts ≤ LENGTH (SND p).contexts ⇒
         EVERY (λ(c,rb). c.msgParams.static ∧
           (∀a. c.msgParams.outputTo ≠ Code a) ∧
-          rb.accounts = e.rollback.accounts)
+          obs (rb.accounts,rb.tStorage) = obs (e.rollback.accounts,e.rollback.tStorage))
           (TAKE (LENGTH (SND p).contexts - LENGTH e.contexts + 1)
                 (SND p).contexts))) (r,e')` suffices_by simp[]
   >> irule (MP_CANON OWHILE_INV_IND)
@@ -2765,9 +2778,24 @@ Proof
   >> qx_gen_tac `p` >> PairCases_on `p` >> simp[]
   >> strip_tac >> Cases_on `step p1` >> simp[]
   >> mp_tac (Q.INST [`s` |-> `p1`, `s'` |-> `r'`, `r` |-> `q`,
-       `n` |-> `LENGTH e.contexts`, `A` |-> `e.rollback.accounts`]
+       `n` |-> `LENGTH e.contexts`,
+       `A` |-> `obs (e.rollback.accounts,e.rollback.tStorage)`]
        step_preserves_static_account_prefix)
   >> simp[]
+QED
+
+Theorem run_call_static_frame:
+  wf_state e ∧
+  (FST (HD e.contexts)).msgParams.static ∧
+  (∀x. (FST (HD e.contexts)).msgParams.outputTo ≠ Code x) ∧
+  (SND (HD e.contexts)).accounts = e.rollback.accounts ∧
+  run_call e = SOME (r, e') ⇒
+  e'.rollback.accounts = e.rollback.accounts
+Proof
+  strip_tac
+  >> mp_tac (Q.INST [`obs` |-> `FST`]
+       (INST_TYPE [alpha |-> ``:evm_accounts``] run_call_static_observation))
+  >> simp[] >> disch_then irule >> metis_tac[]
 QED
 
 (* -------------------------------------------------------------------------
