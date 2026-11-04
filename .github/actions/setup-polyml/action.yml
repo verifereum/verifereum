@@ -9,7 +9,7 @@ inputs:
   polyml-tag:
     description: 'Poly/ML git tag to use'
     required: false
-    default: 'v5.9.2-seq1'
+    default: 'v5.9.2-seq2'
 
 outputs:
   polyml-rev:
