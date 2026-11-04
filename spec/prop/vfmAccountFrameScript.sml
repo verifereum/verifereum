@@ -3295,7 +3295,10 @@ Proof
   >> metis_tac[]
 QED
 
-Theorem run_call_foreign_balance_trace[local]:
+(* The finite-trace core of the rely form, for any predicate Q of rollbacks
+ * that survives what a frame not executing as `a` does: a foreign balance
+ * change to `a`'s account with its transient storage unchanged. *)
+Theorem run_call_foreign_rollback_trace:
   (∀rb rb'. Q rb ∧
      foreign_balance_change (lookup_account a rb.accounts)
        (lookup_account a rb'.accounts) ∧
@@ -3336,7 +3339,7 @@ Proof
   >> gvs[Once OWHILE_THM]
 QED
 
-Resume run_call_foreign_balance_trace[continuing]:
+Resume run_call_foreign_rollback_trace[continuing]:
   Cases_on `x` >> gvs[]
   >> Cases_on `LENGTH c.contexts < LENGTH e.contexts`
   >- gvs[Once OWHILE_THM]
@@ -3345,7 +3348,7 @@ Resume run_call_foreign_balance_trace[continuing]:
   >> suspend "push"
 QED
 
-Resume run_call_foreign_balance_trace[same_depth]:
+Resume run_call_foreign_rollback_trace[same_depth]:
   `run_call_reaches es c` by (irule run_call_reaches_step >> metis_tac[])
   >> `(FST (HD c.contexts)).msgParams.callee ≠ a`
        by (drule_all step_same_frame_foreign >> metis_tac[])
@@ -3356,7 +3359,7 @@ Resume run_call_foreign_balance_trace[same_depth]:
   >> gvs[FUNPOW, combinTheory.o_DEF]
 QED
 
-Resume run_call_foreign_balance_trace[push]:
+Resume run_call_foreign_rollback_trace[push]:
   `LENGTH e.contexts < LENGTH c.contexts` by decide_tac
   >> `run_call_reaches es c` by (irule run_call_reaches_step >> metis_tac[])
   >> qpat_x_assum `¬(λ(q,s). _) _` mp_tac
@@ -3393,7 +3396,7 @@ Resume run_call_foreign_balance_trace[push]:
   >> gvs[Once OWHILE_THM]
 QED
 
-Resume run_call_foreign_balance_trace[child_return]:
+Resume run_call_foreign_rollback_trace[child_return]:
   Cases_on `x` >> gvs[]
   >> drule_all step_push_foreign >> strip_tac
   >> `LENGTH e.contexts ≤ LENGTH v.contexts`
@@ -3427,7 +3430,35 @@ Resume run_call_foreign_balance_trace[child_return]:
   >> qexistsl_tac [`v`,`r`] >> simp[] >> metis_tac[]
 QED
 
-Finalise run_call_foreign_balance_trace
+Finalise run_call_foreign_rollback_trace
+
+Theorem run_call_foreign_balance_trace:
+  (∀acc acc'. P acc ∧ foreign_balance_change acc acc' ⇒ P acc') ∧
+  (∀s c q t.
+     run_call_reaches es s ∧ LENGTH es.contexts ≤ LENGTH s.contexts ∧
+     wf_state s ∧ (FST (HD s.contexts)).msgParams.callee ≠ a ∧
+     P (lookup_account a s.rollback.accounts) ∧
+     P (lookup_account a c.rollback.accounts) ∧
+     (2 ≤ LENGTH c.contexts ⇒
+        P (lookup_account a (SND (HD c.contexts)).accounts)) ∧
+     step s = (INL (),c) ∧ LENGTH s.contexts < LENGTH c.contexts ∧
+     (FST (HD c.contexts)).msgParams.callee = a ∧
+     run_call c = SOME (q,t) ⇒ P (lookup_account a t.rollback.accounts)) ⇒
+  ∀n e r t.
+    ¬(λ(q,s). ISL q ∧ LENGTH e.contexts ≤ LENGTH s.contexts)
+       (FUNPOW (step o SND) n (INL (),e)) ∧
+    run_call_reaches es e ∧ LENGTH es.contexts ≤ LENGTH e.contexts ∧
+    wf_state e ∧ (FST (HD e.contexts)).msgParams.callee ≠ a ∧
+    EVERY (λrb. P (lookup_account a rb.accounts))
+      (active_rollbacks (LENGTH e.contexts) e) ∧
+    run_call e = SOME (r,t) ⇒ P (lookup_account a t.rollback.accounts)
+Proof
+  strip_tac
+  >> mp_tac (BETA_RULE (Q.INST [`Q` |-> `λrb. P (lookup_account a rb.accounts)`]
+       run_call_foreign_rollback_trace))
+  >> impl_tac >- (conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC)
+  >> disch_then ACCEPT_TAC
+QED
 
 Theorem run_call_foreign_trace:
   (∀acc acc'. P acc ∧ foreign_account_change acc acc' ⇒ P acc') ∧
@@ -3494,7 +3525,7 @@ Proof
   >- (qpat_x_assum `∀e r e'. _` irule >> qexistsl_tac [`es`,`r`] >> simp[])
   >> drule run_call_finite_trace >> strip_tac
   >> irule (BETA_RULE (Q.INST [`Q` |-> `λrb. P (lookup_account a rb.accounts)`]
-              run_call_foreign_balance_trace))
+              run_call_foreign_rollback_trace))
   >> conj_tac >- metis_tac[]
   >> qexistsl_tac [`es`,`es`,`n`,`r`]
   >> simp[]
@@ -3600,7 +3631,7 @@ Proof
   >> drule run_call_finite_trace >> strip_tac
   >> irule (BETA_RULE (Q.INST
        [`Q` |-> `λrb. P (lookup_account a rb.accounts, rb.tStorage a)`]
-       run_call_foreign_balance_trace))
+       run_call_foreign_rollback_trace))
   >> conj_tac >- metis_tac[foreign_balance_change_def]
   >> qexistsl [`es`,`es`,`n`,`r`] >> simp[]
   >> conj_tac >- suspend "rely_push"
