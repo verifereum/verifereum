@@ -2745,9 +2745,10 @@ Proof
   >> strip_tac >> gvs[]
 QED
 
-(* A static frame changes no account: SSTORE, CREATE, SELFDESTRUCT and
- * value-carrying CALL fail in it, and the frames it calls are static too.
- * Its saved rollback must agree on accounts, since a failure restores it. *)
+(* A static frame preserves any observation of accounts and transient storage:
+ * SSTORE, TSTORE, CREATE, SELFDESTRUCT and value-carrying CALL fail in it,
+ * and the frames it calls are static too.  Its saved rollback must agree on
+ * the observation, since a failure restores that whole snapshot. *)
 Theorem run_call_static_observation:
   wf_state e ∧
   (FST (HD e.contexts)).msgParams.static ∧
@@ -2864,10 +2865,7 @@ Theorem step_same_frame_balance_invariant:
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d s) ⇒
   EVERY (λrb. P (lookup_account a rb.accounts)) (active_rollbacks d t)
 Proof
-  strip_tac
-  >> `a ≠ (FST (HD s.contexts)).msgParams.callee` by metis_tac[]
-  >> drule_all step_same_frame_foreign >> strip_tac
-  >> irule step_same_frame_rollback_invariant
+  strip_tac >> irule step_same_frame_rollback_invariant
   >> qexistsl [`a`, `r`, `s`] >> simp[]
   >> metis_tac[]
 QED
@@ -3592,8 +3590,52 @@ Theorem run_call_account_transient_frame:
   run_call es = SOME (r, es') ⇒
   P (lookup_account a es'.rollback.accounts, es'.rollback.tStorage a)
 Proof
-  cheat
+  strip_tac
+  >> Cases_on `(FST (HD es.contexts)).msgParams.callee = a`
+  >- (qpat_x_assum `∀e r e'. _` irule >> qexistsl [`es`,`r`] >> simp[])
+  >> drule run_call_finite_trace >> strip_tac
+  >> irule (BETA_RULE (Q.INST
+       [`Q` |-> `λrb. P (lookup_account a rb.accounts, rb.tStorage a)`]
+       run_call_foreign_balance_trace))
+  >> conj_tac >- metis_tac[foreign_balance_change_def]
+  >> qexistsl [`es`,`es`,`n`,`r`] >> simp[]
+  >> conj_tac >- suspend "rely_push"
+  >> irule active_rollbacks_initial >> simp[]
 QED
+
+Resume run_call_account_transient_frame[rely_push]:
+  rpt gen_tac >> strip_tac
+  >> `wf_state c` by metis_tac[step_preserves_wf_state, SND]
+  >> drule_all step_push_foreign >> strip_tac
+  >> Cases_on `(FST (HD c.contexts)).msgParams.static`
+  >- suspend "static_push"
+  >> qpat_x_assum `∀e r e'. _` irule
+  >> qexistsl [`c`,`q`] >> simp[]
+  >> disj2_tac >> qexists `s` >> simp[]
+QED
+
+Resume run_call_account_transient_frame[static_push]:
+  `(FST (HD c.contexts)).msgParams.callee ≠ (FST (HD s.contexts)).msgParams.callee`
+    by simp[]
+  >> `(t.rollback.accounts,t.rollback.tStorage) =
+      (c.rollback.accounts,c.rollback.tStorage)` suffices_by simp[]
+  >> qpat_x_assum `∀e r e'. _` kall_tac
+  >> qpat_x_assum `∀k. k < n ⇒ _` kall_tac
+  >> drule_all step_push_transient >> strip_tac
+  >> drule_all step_push_new_frame >> strip_tac
+  >> `(FST (HD c.contexts)).msgParams.static = static ∧
+      (FST (HD c.contexts)).msgParams.outputTo = rd`
+       by (qpat_assum `FST (HD c.contexts) = initial_context _ _ _ _ _`
+             (once_rewrite_tac o single) >>
+           simp[initial_context_def, initial_msg_params_def])
+  >> qpat_x_assum `FST (HD c.contexts) = initial_context _ _ _ _ _` kall_tac
+  >> irule (BETA_RULE (Q.INST [`obs` |-> `λp. p`]
+       (INST_TYPE [alpha |-> ``:evm_accounts # transient_storage``]
+         run_call_static_observation)))
+  >> gvs[] >> metis_tac[]
+QED
+
+Finalise run_call_account_transient_frame
 
 (* -------------------------------------------------------------------------
  * Accounts with no code.
