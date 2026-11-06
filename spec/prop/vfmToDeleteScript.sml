@@ -259,10 +259,19 @@ fun td_compose ths goal =
          irule TD_exec_finish,
          irule TD_exec_revert,
          irule TD_exec_reraise,
-         irule TD_exec_bind >> qexists_tac `(=)` >> conj_tac
-           >- (rpt gen_tac >> disch_then SUBST1_TAC >>
-               BETA_TAC >> td_compose ths) >> td_compose ths,
-         CHANGED_TAC (rewrite_tac[ignore_bind_def]) >> td_compose ths] goal;
+         irule TD_exec_ignore_bind >> conj_tac
+           >- (qexists_tac `(=)` >> td_compose ths) >> td_compose ths,
+         irule TD_exec_bind >> qexists_tac `(=)` >> reverse conj_tac
+           >- td_compose ths >>
+           rpt gen_tac >> disch_then SUBST1_TAC >> BETA_TAC >> td_compose ths,
+         CHANGED_TAC (rewrite_tac[ignore_bind_def]) >> td_compose ths,
+         irule TD_exec_push_context >> simp[TD_frame_def],
+         irule TD_exec_bind >> qexists_tac `TD_rollback` >> reverse conj_tac
+           >- MATCH_ACCEPT_TAC TD_exec_get_rollback >>
+           rpt gen_tac >> disch_tac >> BETA_TAC >> td_compose ths,
+         IF_CASES_TAC >> td_compose ths,
+         CASE_TAC >> simp[] >> td_compose ths,
+         pairarg_tac >> simp[] >> td_compose ths] goal;
 
 Theorem TD_exec_get_callee[local]:
   TD_exec (=) get_callee get_callee
@@ -482,6 +491,527 @@ Proof
               TD_exec_consume_gas, TD_exec_expand_memory, TD_exec_write_memory]
 QED
 
+val td_primitives =
+  [TD_exec_get_current_context, TD_exec_set_current_context,
+   TD_exec_get_tx_params, TD_exec_get_accounts, TD_exec_update_accounts,
+   TD_exec_get_tStorage, TD_exec_set_tStorage, TD_exec_get_original,
+   TD_exec_get_gas_left, TD_exec_get_callee, TD_exec_get_caller,
+   TD_exec_get_value, TD_exec_get_output_to, TD_exec_get_return_data,
+   TD_exec_set_return_data, TD_exec_get_static, TD_exec_get_code,
+   TD_exec_get_current_code, TD_exec_get_call_data, TD_exec_set_jump_dest,
+   TD_exec_push_logs, TD_exec_update_gas_refund, TD_exec_consume_gas,
+   TD_exec_unuse_gas, TD_exec_pop_stack, TD_exec_push_stack,
+   TD_exec_access_address, TD_exec_access_slot, TD_exec_ensure_storage_in_domain,
+   TD_exec_memory_expansion_info, TD_exec_expand_memory, TD_exec_read_memory,
+   TD_exec_write_memory, TD_exec_write_storage, TD_exec_write_transient_storage,
+   TD_exec_assert_not_static, TD_exec_add_to_delete];
+
+Theorem TD_exec_step_binop[local]:
+  TD_exec (=) (step_binop op f) (step_binop op f)
+Proof
+  simp[step_binop_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_monop[local]:
+  TD_exec (=) (step_monop op f) (step_monop op f)
+Proof
+  simp[step_monop_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_modop[local]:
+  TD_exec (=) (step_modop op f) (step_modop op f)
+Proof
+  simp[step_modop_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_context[local]:
+  TD_exec (=) (step_context op f) (step_context op f)
+Proof
+  simp[step_context_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_msgParams[local]:
+  TD_exec (=) (step_msgParams op f) (step_msgParams op f)
+Proof
+  simp[step_msgParams_def, TD_exec_step_context]
+QED
+
+Theorem TD_exec_step_txParams[local]:
+  TD_exec (=) (step_txParams op f) (step_txParams op f)
+Proof
+  simp[step_txParams_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_exp[local]:
+  TD_exec (=) step_exp step_exp
+Proof
+  simp[step_exp_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_keccak256[local]:
+  TD_exec (=) step_keccak256 step_keccak256
+Proof
+  simp[step_keccak256_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_sload[local]:
+  TD_exec (=) (step_sload b) (step_sload b)
+Proof
+  Cases_on `b` >> simp[step_sload_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_sstore_gas_consumption[local]:
+  TD_exec (=) (step_sstore_gas_consumption a k v)
+              (step_sstore_gas_consumption a k v)
+Proof
+  simp[step_sstore_gas_consumption_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_sstore[local]:
+  TD_exec (=) (step_sstore b) (step_sstore b)
+Proof
+  Cases_on `b` >> simp[step_sstore_def] >>
+  td_compose (TD_exec_step_sstore_gas_consumption :: td_primitives)
+QED
+
+Theorem TD_exec_step_balance[local]:
+  TD_exec (=) step_balance step_balance
+Proof
+  simp[step_balance_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_call_data_load[local]:
+  TD_exec (=) step_call_data_load step_call_data_load
+Proof
+  simp[step_call_data_load_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_copy_to_memory[local]:
+  (!f. src = SOME f ==> TD_exec (=) f f) ==>
+  TD_exec (=) (step_copy_to_memory op src) (step_copy_to_memory op src)
+Proof
+  strip_tac >> simp[step_copy_to_memory_def] >>
+  irule TD_exec_bind >> qexists_tac `(=)` >> conj_tac
+  >- (rpt gen_tac >> disch_then SUBST1_TAC >> simp[] >>
+      irule TD_exec_copy_to_memory >> simp[]) >>
+  simp[TD_exec_pop_stack]
+QED
+
+Theorem TD_exec_step_return_data_copy[local]:
+  TD_exec (=) step_return_data_copy step_return_data_copy
+Proof
+  simp[step_return_data_copy_def] >>
+  irule TD_exec_bind >> qexists_tac `(=)` >> conj_tac
+  >- (rpt gen_tac >> disch_then SUBST1_TAC >> simp[] >>
+      irule TD_exec_copy_to_memory >> simp[TD_exec_get_return_data_check]) >>
+  simp[TD_exec_pop_stack]
+QED
+
+Theorem TD_exec_step_ext_code_size[local]:
+  TD_exec (=) step_ext_code_size step_ext_code_size
+Proof
+  simp[step_ext_code_size_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_ext_code_copy[local]:
+  TD_exec (=) step_ext_code_copy step_ext_code_copy
+Proof
+  simp[step_ext_code_copy_def] >>
+  irule TD_exec_bind >> qexists_tac `(=)` >> conj_tac
+  >- (rpt gen_tac >> disch_then SUBST1_TAC >> simp[] >>
+      irule TD_exec_bind >> qexists_tac `(=)` >> conj_tac
+      >- (rpt gen_tac >> disch_then SUBST1_TAC >> simp[] >>
+          irule TD_exec_copy_to_memory >> simp[TD_exec_get_code]) >>
+      simp[TD_exec_access_address]) >> simp[TD_exec_pop_stack]
+QED
+
+Theorem TD_exec_step_ext_code_hash[local]:
+  TD_exec (=) step_ext_code_hash step_ext_code_hash
+Proof
+  simp[step_ext_code_hash_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_block_hash[local]:
+  TD_exec (=) step_block_hash step_block_hash
+Proof
+  simp[step_block_hash_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_blob_hash[local]:
+  TD_exec (=) step_blob_hash step_blob_hash
+Proof
+  simp[step_blob_hash_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_self_balance[local]:
+  TD_exec (=) step_self_balance step_self_balance
+Proof
+  simp[step_self_balance_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_mload[local]:
+  TD_exec (=) step_mload step_mload
+Proof
+  simp[step_mload_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_mstore[local]:
+  TD_exec (=) (step_mstore op) (step_mstore op)
+Proof
+  simp[step_mstore_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_jump[local]:
+  TD_exec (=) step_jump step_jump
+Proof
+  simp[step_jump_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_jumpi[local]:
+  TD_exec (=) step_jumpi step_jumpi
+Proof
+  simp[step_jumpi_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_push[local]:
+  TD_exec (=) (step_push n ws) (step_push n ws)
+Proof
+  simp[step_push_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_pop[local]:
+  TD_exec (=) step_pop step_pop
+Proof
+  simp[step_pop_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_dup[local]:
+  TD_exec (=) (step_dup n) (step_dup n)
+Proof
+  simp[step_dup_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_swap[local]:
+  TD_exec (=) (step_swap n) (step_swap n)
+Proof
+  simp[step_swap_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_log[local]:
+  TD_exec (=) (step_log n) (step_log n)
+Proof
+  simp[step_log_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_return[local]:
+  TD_exec (=) (step_return b) (step_return b)
+Proof
+  Cases_on `b` >> simp[step_return_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_self_destruct[local]:
+  TD_exec (=) step_self_destruct step_self_destruct
+Proof
+  simp[step_self_destruct_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_ecrecover[local]:
+  TD_exec (=) precompile_ecrecover precompile_ecrecover
+Proof
+  simp[precompile_ecrecover_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_identity[local]:
+  TD_exec (=) precompile_identity precompile_identity
+Proof
+  simp[precompile_identity_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_modexp[local]:
+  TD_exec (=) precompile_modexp precompile_modexp
+Proof
+  simp[precompile_modexp_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_sha2_256[local]:
+  TD_exec (=) precompile_sha2_256 precompile_sha2_256
+Proof
+  simp[precompile_sha2_256_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_ripemd_160[local]:
+  TD_exec (=) precompile_ripemd_160 precompile_ripemd_160
+Proof
+  simp[precompile_ripemd_160_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_ecadd[local]:
+  TD_exec (=) precompile_ecadd precompile_ecadd
+Proof
+  simp[precompile_ecadd_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_ecmul[local]:
+  TD_exec (=) precompile_ecmul precompile_ecmul
+Proof
+  simp[precompile_ecmul_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_ecpairing[local]:
+  TD_exec (=) precompile_ecpairing precompile_ecpairing
+Proof
+  simp[precompile_ecpairing_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_blake2f[local]:
+  TD_exec (=) precompile_blake2f precompile_blake2f
+Proof
+  simp[precompile_blake2f_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_point_eval[local]:
+  TD_exec (=) precompile_point_eval precompile_point_eval
+Proof
+  simp[precompile_point_eval_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_bls_g1add[local]:
+  TD_exec (=) precompile_bls_g1add precompile_bls_g1add
+Proof
+  simp[precompile_bls_g1add_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_bls_g1msm[local]:
+  TD_exec (=) precompile_bls_g1msm precompile_bls_g1msm
+Proof
+  simp[precompile_bls_g1msm_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_bls_g2add[local]:
+  TD_exec (=) precompile_bls_g2add precompile_bls_g2add
+Proof
+  simp[precompile_bls_g2add_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_bls_g2msm[local]:
+  TD_exec (=) precompile_bls_g2msm precompile_bls_g2msm
+Proof
+  simp[precompile_bls_g2msm_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_bls_pairing[local]:
+  TD_exec (=) precompile_bls_pairing precompile_bls_pairing
+Proof
+  simp[precompile_bls_pairing_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_bls_map_fp_to_g1[local]:
+  TD_exec (=) precompile_bls_map_fp_to_g1 precompile_bls_map_fp_to_g1
+Proof
+  simp[precompile_bls_map_fp_to_g1_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_bls_map_fp2_to_g2[local]:
+  TD_exec (=) precompile_bls_map_fp2_to_g2 precompile_bls_map_fp2_to_g2
+Proof
+  simp[precompile_bls_map_fp2_to_g2_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_precompile_p256verify[local]:
+  TD_exec (=) precompile_p256verify precompile_p256verify
+Proof
+  simp[precompile_p256verify_def] >> td_compose td_primitives
+QED
+
+val td_precompiles =
+  [TD_exec_precompile_ecrecover, TD_exec_precompile_identity,
+   TD_exec_precompile_modexp, TD_exec_precompile_sha2_256,
+   TD_exec_precompile_ripemd_160, TD_exec_precompile_ecadd,
+   TD_exec_precompile_ecmul, TD_exec_precompile_ecpairing,
+   TD_exec_precompile_blake2f, TD_exec_precompile_point_eval,
+   TD_exec_precompile_bls_g1add, TD_exec_precompile_bls_g1msm,
+   TD_exec_precompile_bls_g2add, TD_exec_precompile_bls_g2msm,
+   TD_exec_precompile_bls_pairing, TD_exec_precompile_bls_map_fp_to_g1,
+   TD_exec_precompile_bls_map_fp2_to_g2, TD_exec_precompile_p256verify];
+
+Theorem TD_exec_dispatch_precompiles[local]:
+  TD_exec (=) (dispatch_precompiles a) (dispatch_precompiles a)
+Proof
+  rewrite_tac[dispatch_precompiles_def] >> td_compose td_precompiles
+QED
+
+Theorem TD_exec_inc_pc[local]:
+  TD_exec (=) inc_pc inc_pc
+Proof
+  simp[inc_pc_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_abort_unuse[local]:
+  TD_exec (=) (abort_unuse n) (abort_unuse n)
+Proof
+  simp[abort_unuse_def] >> td_compose (TD_exec_inc_pc :: td_primitives)
+QED
+
+Theorem TD_exec_abort_create_exists[local]:
+  TD_exec (=) (abort_create_exists a) (abort_create_exists a)
+Proof
+  simp[abort_create_exists_def] >> td_compose (TD_exec_inc_pc :: td_primitives)
+QED
+
+Theorem TD_exec_abort_call_value[local]:
+  TD_exec (=) (abort_call_value n) (abort_call_value n)
+Proof
+  simp[abort_call_value_def] >> td_compose (TD_exec_inc_pc :: td_primitives)
+QED
+
+Theorem TD_exec_proceed_create[local]:
+  TD_exec (=) (proceed_create sender a value code gas)
+              (proceed_create sender a value code gas)
+Proof
+  simp[proceed_create_def] >>
+  td_compose (TD_exec_set_original :: td_primitives)
+QED
+
+Theorem TD_exec_proceed_call[local]:
+  TD_exec (=) (proceed_call op sender a value off sz code gas dest)
+              (proceed_call op sender a value off sz code gas dest)
+Proof
+  simp[proceed_call_def] >>
+  td_compose (TD_exec_dispatch_precompiles :: td_primitives)
+QED
+
+Theorem TD_exec_step_create[local]:
+  TD_exec (=) (step_create b) (step_create b)
+Proof
+  simp[step_create_def] >>
+  td_compose ([TD_exec_proceed_create, TD_exec_abort_unuse,
+               TD_exec_abort_create_exists, TD_exec_get_num_contexts] @ td_primitives)
+QED
+
+Theorem TD_exec_step_call[local]:
+  TD_exec (=) (step_call op) (step_call op)
+Proof
+  simp[step_call_def] >>
+  td_compose ([TD_exec_proceed_call, TD_exec_abort_unuse,
+               TD_exec_abort_call_value, TD_exec_get_num_contexts] @ td_primitives)
+QED
+
+Theorem TD_exec_pop_and_incorporate_context[local]:
+  TD_exec (=) (pop_and_incorporate_context b) (pop_and_incorporate_context b)
+Proof
+  simp[pop_and_incorporate_context_def] >>
+  irule TD_exec_bind >> qexists_tac `(=)` >> reverse conj_tac
+  >- simp[TD_exec_get_gas_left] >>
+  rpt gen_tac >> disch_then SUBST1_TAC >> BETA_TAC >>
+  irule TD_exec_bind >> qexists_tac `TD_frame` >> reverse conj_tac
+  >- simp[TD_exec_pop_context] >>
+  qx_gen_tac `frame1` >> qx_gen_tac `frame2` >>
+  PairCases_on `frame1` >> PairCases_on `frame2` >>
+  simp[TD_frame_def] >> strip_tac >> gvs[] >>
+  Cases_on `b` >> simp[] >>
+  metis_tac[TD_exec_ignore_bind, TD_exec_unuse_gas, TD_exec_push_logs,
+            TD_exec_update_gas_refund, TD_exec_set_rollback]
+QED
+
+Theorem TD_exec_handle_create[local]:
+  TD_exec (=) (handle_create e) (handle_create e)
+Proof
+  simp[handle_create_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_handle_exception[local]:
+  TD_exec (=) (handle_exception e) (handle_exception e)
+Proof
+  simp[handle_exception_def] >>
+  td_compose ([TD_exec_pop_and_incorporate_context, TD_exec_inc_pc,
+               TD_exec_get_num_contexts] @ td_primitives)
+QED
+
+Theorem TD_exec_handle_step[local]:
+  TD_exec (=) (handle_step e) (handle_step e)
+Proof
+  rewrite_tac[handle_step_def] >> IF_CASES_TAC
+  >- simp[TD_exec_reraise] >>
+  irule TD_exec_handle >>
+  simp[TD_exec_handle_create, TD_exec_handle_exception]
+QED
+
+Theorem TD_exec_inc_pc_or_jump[local]:
+  TD_exec (=) (inc_pc_or_jump op) (inc_pc_or_jump op)
+Proof
+  simp[inc_pc_or_jump_def] >> td_compose td_primitives
+QED
+
+val td_instructions =
+  [TD_exec_step_binop, TD_exec_step_monop, TD_exec_step_modop,
+   TD_exec_step_context, TD_exec_step_msgParams, TD_exec_step_txParams,
+   TD_exec_step_exp, TD_exec_step_keccak256, TD_exec_step_sload,
+   TD_exec_step_sstore, TD_exec_step_balance, TD_exec_step_call_data_load,
+   TD_exec_step_return_data_copy, TD_exec_step_ext_code_size,
+   TD_exec_step_ext_code_copy, TD_exec_step_ext_code_hash,
+   TD_exec_step_block_hash, TD_exec_step_blob_hash, TD_exec_step_self_balance,
+   TD_exec_step_mload, TD_exec_step_mstore, TD_exec_step_jump,
+   TD_exec_step_jumpi, TD_exec_step_push, TD_exec_step_pop,
+   TD_exec_step_dup, TD_exec_step_swap, TD_exec_step_log,
+   TD_exec_step_return, TD_exec_step_self_destruct,
+   TD_exec_step_call, TD_exec_step_create];
+
+Theorem TD_exec_step_inst[local]:
+  TD_exec (=) (step_inst op) (step_inst op)
+Proof
+  Cases_on `op` >> rewrite_tac[step_inst_def] >>
+  FIRST [td_compose (td_instructions @ td_primitives),
+         irule TD_exec_step_copy_to_memory >>
+         simp[TD_exec_get_call_data, TD_exec_get_current_code]]
+QED
+
+Theorem TD_exec_step[local]:
+  TD_exec (=) step step
+Proof
+  simp[step_def] >> irule TD_exec_handle >> conj_tac
+  >- simp[TD_exec_handle_step] >>
+  td_compose ([TD_exec_step_inst, TD_exec_inc_pc_or_jump] @ td_primitives)
+QED
+
+Theorem TD_owhile_some[local]:
+  (!x y. R x y ==> (P x = Q y)) /\
+  (!x y. R x y /\ P x ==> R (f x) (g y)) ==>
+  !x z. OWHILE P f x = SOME z ==>
+  !y. R x y ==> ?w. OWHILE Q g y = SOME w /\ R z w
+Proof
+  strip_tac >> ho_match_mp_tac OWHILE_IND >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `y` >>
+      simp[Once OWHILE_THM] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `Q y /\ R (f x) (g y)` by metis_tac[] >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  qexists_tac `w` >> simp[Once OWHILE_THM]
+QED
+
+Theorem TD_step_result[local]:
+  erase_toDelete s = erase_toDelete t ==>
+  FST (step s) = FST (step t) /\
+  erase_toDelete (SND (step s)) = erase_toDelete (SND (step t))
+Proof
+  mp_tac TD_exec_step >> simp[TD_exec_def]
+QED
+
+Theorem TD_call_loop[local]:
+  !x z.
+    OWHILE (\(r,s). ISL r /\ LENGTH s.contexts >= n) (step o SND) x = SOME z ==>
+    !y. FST x = FST y /\ erase_toDelete (SND x) = erase_toDelete (SND y) ==>
+    ?w. OWHILE (\(r,s). ISL r /\ LENGTH s.contexts >= n) (step o SND) y = SOME w /\
+        FST z = FST w /\ erase_toDelete (SND z) = erase_toDelete (SND w)
+Proof
+  ho_match_mp_tac TD_owhile_some >> conj_tac
+  >- (qx_gen_tac `a` >> qx_gen_tac `b` >>
+      PairCases_on `a` >> PairCases_on `b` >>
+      simp[] >> metis_tac[erase_toDelete_contexts]) >>
+  qx_gen_tac `a` >> qx_gen_tac `b` >>
+  PairCases_on `a` >> PairCases_on `b` >>
+  simp[] >> metis_tac[TD_step_result]
+QED
+
 (* Proof intuition: step preserves "equal up to erase_toDelete" and returns
    the same result: add_to_delete conses onto both queues, a push saves
    related current rollbacks, a pop restores related saved rollbacks or
@@ -497,5 +1027,11 @@ Theorem run_call_toDelete:
   erase_toDelete s1 = erase_toDelete s2 ∧ run_call s1 = SOME (r, t1) ⇒
   ∃t2. run_call s2 = SOME (r, t2) ∧ erase_toDelete t2 = erase_toDelete t1
 Proof
-  cheat
+  strip_tac >>
+  `LENGTH s1.contexts = LENGTH s2.contexts` by
+    metis_tac[erase_toDelete_contexts] >>
+  fs[run_call_def] >> drule TD_call_loop >>
+  disch_then (qspec_then `(INL (),s2)` mp_tac) >>
+  simp[] >> strip_tac >> PairCases_on `w` >> gvs[] >>
+  metis_tac[]
 QED
