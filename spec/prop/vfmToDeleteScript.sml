@@ -404,11 +404,11 @@ Theorem TD_exec_domain_check[local]:
 Proof
   strip_tac >> pure_rewrite_tac[TD_exec_def] >> rpt gen_tac >> disch_tac >>
   `s.msdomain = t.msdomain` by gvs[erase_toDelete_fields] >>
-  Cases_on `t.msdomain` >> fs[] >> simp[domain_check_def] 
+  namedCases_on `t.msdomain` ["dom", "dom"] >> fs[] >> simp[domain_check_def]
   >- (IF_CASES_TAC >> simp[fail_def] >>
       fs[TD_exec_def] >> first_x_assum drule >> simp[]) >>
-  `TD_exec (=) (ignore_bind (set_domain (Collect (upd d))) cont)
-                   (ignore_bind (set_domain (Collect (upd d))) cont)`
+  `TD_exec (=) (ignore_bind (set_domain (Collect (upd dom))) cont)
+                   (ignore_bind (set_domain (Collect (upd dom))) cont)`
     by (irule TD_exec_ignore_bind >> simp[] >> qexists_tac `(=)` >>
         simp[TD_exec_set_domain]) >>
   fs[TD_exec_def] >> first_x_assum drule >> simp[]
