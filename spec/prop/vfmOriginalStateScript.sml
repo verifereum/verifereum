@@ -1107,8 +1107,10 @@ Proof
   metis_tac[orig_exec_step, orig_exec_rel_def]
 QED
 
-(* Partial loops synchronize termination as well as their terminal values. *)
-Theorem original_owhile_some[local]:
+(* Partial loops synchronize termination as well as their terminal values:
+   related loops terminate together, at related values, when the guards
+   agree on related states and the bodies preserve the relation. *)
+Theorem OWHILE_simulation:
   (!x y. R x y ==> (P x = Q y)) /\
   (!x y. R x y /\ P x ==> R (f x) (g y)) ==>
   !x z. OWHILE P f x = SOME z ==>
@@ -1131,10 +1133,10 @@ Proof
   strip_tac >>
   `!y w. OWHILE Q g y = SOME w ==>
      !x. R x y ==> ?z. OWHILE P f x = SOME z /\ R z w` by
-    (ho_match_mp_tac original_owhile_some >> metis_tac[]) >>
+    (ho_match_mp_tac OWHILE_simulation >> metis_tac[]) >>
   `!x z. OWHILE P f x = SOME z ==>
      !y. R x y ==> ?w. OWHILE Q g y = SOME w /\ R z w` by
-    (ho_match_mp_tac original_owhile_some >> simp[]) >>
+    (ho_match_mp_tac OWHILE_simulation >> simp[]) >>
   qpat_x_assum `!x y. R x y ==> _` kall_tac >>
   qpat_x_assum `!x y. R x y /\ P x ==> _` kall_tac >>
   Cases_on `OWHILE P f x`
