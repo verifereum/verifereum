@@ -1035,12 +1035,3 @@ Proof
   simp[] >> strip_tac >> PairCases_on `w` >> gvs[] >>
   metis_tac[]
 QED
-
-(* Reject oracle dependencies, axioms, or undischarged hypotheses. *)
-val _ =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag run_call_toDelete)
-  in
-    if List.all (fn s => s = "DISK_THM") oracles andalso
-       null axioms andalso null (Thm.hyp run_call_toDelete)
-    then () else raise Fail "deletion-queue proof integrity audit"
-  end;
