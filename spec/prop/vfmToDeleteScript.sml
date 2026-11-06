@@ -11,7 +11,7 @@
 Theory vfmToDelete
 Ancestors
   arithmetic list pair While
-  vfmTypes vfmState vfmContext vfmExecution
+  vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
 
 (* Two states that differ only in their deletion queues: the current
    rollback's and the saved rollbacks' in every frame. *)
@@ -1034,4 +1034,25 @@ Proof
   disch_then (qspec_then `(INL (),s2)` mp_tac) >>
   simp[] >> strip_tac >> PairCases_on `w` >> gvs[] >>
   metis_tac[]
+QED
+
+Theorem erase_toDelete_idem:
+  erase_toDelete (erase_toDelete s) = erase_toDelete s
+Proof
+  simp[erase_toDelete_def, MAP_MAP_o, combinTheory.o_DEF, LAMBDA_PROD]
+QED
+
+(* Well-formedness reads no deletion queue. *)
+Theorem wf_state_erase_toDelete:
+  wf_state (erase_toDelete s) <=> wf_state s
+Proof
+  `!x. FST ((\(c:context,rb:rollback_state). (c, rb with toDelete := [])) x) = FST x /\
+       (SND ((\(c:context,rb:rollback_state). (c, rb with toDelete := [])) x)).accounts =
+       (SND x).accounts` by simp[FORALL_PROD] >>
+  simp[erase_toDelete_def, wf_state_def, all_accounts_def, stack_room_ok_def,
+       gas_stack_ok_def, outputTo_consistent_stack_def] >>
+  Cases_on `s.contexts` >>
+  simp[EVERY_MAP, EL_MAP, GSYM MAP_TAKE, MAP_MAP_o, combinTheory.o_DEF,
+       MAP_FRONT, ETA_THM] >>
+  simp[GSYM combinTheory.o_DEF, GSYM MAP_MAP_o, MAP_FRONT]
 QED
