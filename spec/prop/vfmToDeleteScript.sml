@@ -11,7 +11,7 @@
 Theory vfmToDelete
 Ancestors
   arithmetic list pair While
-  vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
+  vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp vfmOriginalState
 
 (* Two states that differ only in their deletion queues: the current
    rollback's and the saved rollbacks' in every frame. *)
@@ -68,8 +68,8 @@ Theorem TD_exec_bind[local]:
 Proof
   rw[TD_exec_def] >>
   first_x_assum drule >>
-  Cases_on `f s` >> Cases_on `g t` >>
-  Cases_on `q` >> Cases_on `q'` >>
+  namedCases_on `f s` ["r1 s1"] >> namedCases_on `g t` ["r2 t1"] >>
+  Cases_on `r1` >> Cases_on `r2` >>
   gvs[bind_def] >> metis_tac[]
 QED
 
@@ -87,8 +87,8 @@ Proof
   rw[TD_exec_def] >>
   qpat_x_assum `!s t. _` (qspecl_then [`s`,`t`] mp_tac) >>
   simp[] >> strip_tac >>
-  Cases_on `f s` >> Cases_on `g t` >>
-  Cases_on `q` >> Cases_on `q'` >>
+  namedCases_on `f s` ["r1 s1"] >> namedCases_on `g t` ["r2 t1"] >>
+  Cases_on `r1` >> Cases_on `r2` >>
   gvs[handle_def] >> metis_tac[]
 QED
 
@@ -153,9 +153,10 @@ Theorem TD_exec_pop_context[local]:
 Proof
   rw[TD_exec_def] >>
   drule erase_toDelete_contexts >>
-  Cases_on `s.contexts` >> Cases_on `t.contexts` >>
+  namedCases_on `s.contexts` ["", "c1 cs1"] >>
+  namedCases_on `t.contexts` ["", "c2 cs2"] >>
   gvs[pop_context_def, fail_def, return_def, erase_toDelete_fields] >>
-  PairCases_on `h` >> PairCases_on `h'` >>
+  PairCases_on `c1` >> PairCases_on `c2` >>
   gvs[TD_frame_def, TD_rollback_def, erase_toDelete_fields]
 QED
 
@@ -170,18 +171,20 @@ Theorem TD_exec_get_current_context[local]:
   TD_exec (=) get_current_context get_current_context
 Proof
   rw[TD_exec_def] >> drule erase_toDelete_contexts >>
-  Cases_on `s.contexts` >> Cases_on `t.contexts` >>
+  namedCases_on `s.contexts` ["", "c1 cs1"] >>
+  namedCases_on `t.contexts` ["", "c2 cs2"] >>
   gvs[get_current_context_def, fail_def, return_def, erase_toDelete_fields] >>
-  PairCases_on `h` >> PairCases_on `h'` >> gvs[]
+  PairCases_on `c1` >> PairCases_on `c2` >> gvs[]
 QED
 
 Theorem TD_exec_set_current_context[local]:
   TD_exec (=) (set_current_context c) (set_current_context c)
 Proof
   rw[TD_exec_def] >> drule erase_toDelete_contexts >>
-  Cases_on `s.contexts` >> Cases_on `t.contexts` >>
+  namedCases_on `s.contexts` ["", "c1 cs1"] >>
+  namedCases_on `t.contexts` ["", "c2 cs2"] >>
   gvs[set_current_context_def, fail_def, return_def, erase_toDelete_fields] >>
-  PairCases_on `h` >> PairCases_on `h'` >>
+  PairCases_on `c1` >> PairCases_on `c2` >>
   gvs[erase_toDelete_fields]
 QED
 
@@ -973,22 +976,8 @@ Proof
   td_compose ([TD_exec_step_inst, TD_exec_inc_pc_or_jump] @ td_primitives)
 QED
 
-Theorem TD_owhile_some[local]:
-  (!x y. R x y ==> (P x = Q y)) /\
-  (!x y. R x y /\ P x ==> R (f x) (g y)) ==>
-  !x z. OWHILE P f x = SOME z ==>
-  !y. R x y ==> ?w. OWHILE Q g y = SOME w /\ R z w
-Proof
-  strip_tac >> ho_match_mp_tac OWHILE_IND >> conj_tac
-  >- (rpt strip_tac >> qexists_tac `y` >>
-      simp[Once OWHILE_THM] >> metis_tac[]) >>
-  rpt strip_tac >>
-  `Q y /\ R (f x) (g y)` by metis_tac[] >>
-  first_x_assum (drule_then strip_assume_tac) >>
-  qexists_tac `w` >> simp[Once OWHILE_THM]
-QED
-
-Theorem TD_step_result[local]:
+(* One step of states that differ only in their deletion queues. *)
+Theorem step_toDelete:
   erase_toDelete s = erase_toDelete t ==>
   FST (step s) = FST (step t) /\
   erase_toDelete (SND (step s)) = erase_toDelete (SND (step t))
@@ -1003,13 +992,13 @@ Theorem TD_call_loop[local]:
     ?w. OWHILE (\(r,s). ISL r /\ LENGTH s.contexts >= n) (step o SND) y = SOME w /\
         FST z = FST w /\ erase_toDelete (SND z) = erase_toDelete (SND w)
 Proof
-  ho_match_mp_tac TD_owhile_some >> conj_tac
+  ho_match_mp_tac OWHILE_simulation >> conj_tac
   >- (qx_gen_tac `a` >> qx_gen_tac `b` >>
       PairCases_on `a` >> PairCases_on `b` >>
       simp[] >> metis_tac[erase_toDelete_contexts]) >>
   qx_gen_tac `a` >> qx_gen_tac `b` >>
   PairCases_on `a` >> PairCases_on `b` >>
-  simp[] >> metis_tac[TD_step_result]
+  simp[] >> metis_tac[step_toDelete]
 QED
 
 (* Proof intuition: step preserves "equal up to erase_toDelete" and returns
