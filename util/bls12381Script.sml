@@ -1716,9 +1716,8 @@ Definition decode_g2_def:
            case decode_fq2 (DROP 128 bytes) of
              NONE => NONE
            | SOME y =>
-             if ¬g2_on_curve x y then NONE
-             else if ¬g2_in_subgroup (x, y, f2one) then NONE
-             else SOME (x, y, f2one)
+             if g2_on_curve x y then SOME (x, y, f2one)
+             else NONE
 End
 
 val () = cv_trans decode_g2_def;
