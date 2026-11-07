@@ -247,23 +247,22 @@ Proof
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
   >> conj_tac
   >- (rw[preserves_when_def, update_accounts_def, return_def,
          balance_frame_def, balance_le_def]
       >> irule transfer_value_foreign_balance >> simp[])
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
+  >> conj_tac
+  >- (irule preserves_when_mono_pre >> qexists_tac `λs. s.contexts ≠ []`
+      >> simp[balance_frame_push_logs])
+  >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_bind
   >> conj_tac
   >- (IF_CASES_TAC >> simp[]
-      >- (ho_match_mp_tac balance_frame_bind
-          >> conj_tac
-          >- (rw[preserves_when_def, update_accounts_def, return_def,
-                 balance_frame_def, balance_le_def, lookup_account_def,
-                 update_account_def, combinTheory.APPLY_UPDATE_THM]
-              >> gvs[])
-          >> gen_tac >> simp[]
-          >> irule balance_frame_add_to_delete >> simp[])
+      >- (irule balance_frame_add_to_delete >> simp[])
       >> ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> simp[] >> ho_match_mp_tac balance_frame_cp >> simp[]
 QED
