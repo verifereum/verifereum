@@ -1356,6 +1356,7 @@ Theorem proceed_call_account_effects[local]:
 Proof
   strip_tac >> Cases_on `op ≠ CallCode ∧ 0 < value`
   >> gvs[proceed_call_def, bind_def, ignore_bind_def,
+       get_accounts_def, drain_state_gas_reservoir_effect,
        get_rollback_def, read_memory_def, get_current_context_def,
        get_caller_def, get_value_def, get_static_def,
        push_context_def, update_accounts_def, return_def, fail_def,
