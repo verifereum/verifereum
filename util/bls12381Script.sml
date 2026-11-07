@@ -1502,6 +1502,22 @@ End
 
 val () = cv_trans verify_kzg_proof_def;
 
+(* Subgroup check: P is in subgroup iff n * P = infinity
+   Note: We call g1_mul_loop/g2_mul_loop directly instead of g1_mul/g2_mul
+   because g1_mul reduces n MOD bls12381n, which gives 0 when n = bls12381n *)
+Definition g1_in_subgroup_def:
+  g1_in_subgroup p = g1_is_inf (g1_mul_loop g1_zero p bls12381n)
+End
+
+val () = cv_trans g1_in_subgroup_def;
+
+Definition g2_in_subgroup_def:
+  g2_in_subgroup p = g2_is_inf (g2_mul_loop g2_zero p bls12381n)
+End
+
+val () = cv_trans g2_in_subgroup_def;
+
+
 (* ============================================================ *)
 (* G1 Point Compression/Decompression                          *)
 (* ============================================================ *)
@@ -1546,6 +1562,7 @@ Definition g1_decompress_def:
     else if x >= bls12381p then NONE
     (* Verify y² = y_squared (i.e., y_squared is a quadratic residue) *)
     else if fmul y y ≠ y_squared then NONE
+    else if ¬g1_in_subgroup (x, y_final, 1n) then NONE
     else SOME (x, y_final, 1n)
 End
 
@@ -1680,22 +1697,6 @@ Definition encode_g2_def:
 End
 
 val () = cv_trans encode_g2_def;
-
-(* Subgroup check: P is in subgroup iff n * P = infinity
-   Note: We call g1_mul_loop/g2_mul_loop directly instead of g1_mul/g2_mul
-   because g1_mul reduces n MOD bls12381n, which gives 0 when n = bls12381n *)
-Definition g1_in_subgroup_def:
-  g1_in_subgroup p = g1_is_inf (g1_mul_loop g1_zero p bls12381n)
-End
-
-val () = cv_trans g1_in_subgroup_def;
-
-Definition g2_in_subgroup_def:
-  g2_in_subgroup p = g2_is_inf (g2_mul_loop g2_zero p bls12381n)
-End
-
-val () = cv_trans g2_in_subgroup_def;
-
 (* ============================================================ *)
 (* Multi-Scalar Multiplication (MSM)                            *)
 (* ============================================================ *)
