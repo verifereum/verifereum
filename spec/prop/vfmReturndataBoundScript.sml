@@ -601,7 +601,8 @@ Proof
           \\ rw (buffer_length_initial_context ::
                  buffer_length_initial_msg_params :: pres_simps))
   \\ gvs[dispatch_precompiles_returndata_bounded, return_def]
-  \\ rw[buffer_length_initial_msg_params, LENGTH_buffer_take_lt]
+  \\ rw[initial_msg_params_def, buffer_length_initial_context,
+        buffer_length_initial_msg_params, LENGTH_buffer_take_lt]
 QED
 
 Theorem preserves_returndata_bounded_step_call[simp]:
