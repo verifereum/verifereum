@@ -993,10 +993,11 @@ Proof
   PairCases_on `frame1` >> PairCases_on `frame2` >>
   simp[TD_frame_def] >> strip_tac >> gvs[] >>
   Cases_on `b` >> simp[] >>
-  metis_tac[TD_exec_ignore_bind, TD_exec_unuse_gas, TD_exec_push_logs,
-            TD_exec_update_gas_refund, TD_exec_set_rollback,
-            TD_exec_get_current_context, TD_exec_set_current_context,
-            TD_exec_repay_state_gas_spill, TD_exec_credit_new_account]
+  td_compose ([TD_exec_unuse_gas, TD_exec_get_current_context,
+               TD_exec_set_current_context, TD_exec_push_logs,
+               TD_exec_update_gas_refund, TD_exec_set_rollback,
+               TD_exec_repay_state_gas_spill, TD_exec_credit_new_account]
+              @ td_primitives)
 QED
 
 Theorem TD_exec_handle_create[local]:
