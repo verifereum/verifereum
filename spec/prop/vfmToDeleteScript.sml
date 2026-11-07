@@ -980,6 +980,13 @@ Proof
                TD_exec_abort_call_value, TD_exec_get_num_contexts] @ td_primitives)
 QED
 
+Theorem TD_exec_set_rollback_snd[local]:
+  TD_frame a b ==> TD_exec (=) (set_rollback (SND a)) (set_rollback (SND b))
+Proof
+  Cases_on `a` >> Cases_on `b` >> simp[TD_frame_def] >>
+  irule TD_exec_set_rollback >> first_assum ACCEPT_TAC
+QED
+
 Theorem TD_exec_pop_and_incorporate_context[local]:
   TD_exec (=) (pop_and_incorporate_context b) (pop_and_incorporate_context b)
 Proof
@@ -989,15 +996,14 @@ Proof
   rpt gen_tac >> disch_then SUBST1_TAC >> BETA_TAC >>
   irule TD_exec_bind >> qexists_tac `TD_frame` >> reverse conj_tac
   >- simp[TD_exec_pop_context] >>
-  qx_gen_tac `frame1` >> qx_gen_tac `frame2` >>
-  PairCases_on `frame1` >> PairCases_on `frame2` >>
-  simp[TD_frame_def] >> strip_tac >> gvs[] >>
+  qx_gen_tac `frame1` >> qx_gen_tac `frame2` >> strip_tac >>
+  `TD_exec (=) (set_rollback (SND frame1)) (set_rollback (SND frame2))`
+    by (irule TD_exec_set_rollback_snd >> first_assum ACCEPT_TAC) >>
   Cases_on `b` >> simp[] >>
   td_compose ([TD_exec_unuse_gas, TD_exec_get_current_context,
                TD_exec_set_current_context, TD_exec_push_logs,
-               TD_exec_update_gas_refund, TD_exec_set_rollback,
-               TD_exec_repay_state_gas_spill, TD_exec_credit_new_account]
-              @ td_primitives)
+               TD_exec_update_gas_refund, TD_exec_repay_state_gas_spill,
+               TD_exec_credit_new_account] @ td_primitives)
 QED
 
 Theorem TD_exec_handle_create[local]:
