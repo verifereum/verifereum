@@ -107,6 +107,16 @@ Proof
   rw[initial_context_def, initial_msg_params_def]
 QED
 
+(* initial_context_simp rewrites a frame's msgParams to initial_msg_params,
+   so the same bound is needed in that form. *)
+Theorem buffer_length_initial_msg_params:
+  LENGTH t.data < 2 ** 256 ⇒
+  buffer_length (initial_msg_params callee code static rd charged t).data <
+  2 ** 256
+Proof
+  rw[initial_msg_params_def]
+QED
+
 Theorem w2n_bytes32_lt:
   w2n (w: bytes32) < 2 ** 256
 Proof
@@ -588,7 +598,8 @@ Proof
                  irule preserves_returndata_bounded_bind,
                  irule preserves_returndata_bounded_ignore_bind,
                  CASE_TAC, pairarg_tac]
-          \\ rw (buffer_length_initial_context :: pres_simps))
+          \\ rw (buffer_length_initial_context ::
+                 buffer_length_initial_msg_params :: pres_simps))
   \\ gvs[dispatch_precompiles_returndata_bounded, return_def]
 QED
 
