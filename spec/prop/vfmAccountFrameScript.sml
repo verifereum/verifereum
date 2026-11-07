@@ -1448,14 +1448,23 @@ Proof
   >- (ho_match_mp_tac balance_frame_cp
       >> Cases_on `get_delegate (lookup_account (w2w (EL 1 args)) accounts).code`
       >> simp[])
-  >> Cases >> simp[] >> ho_match_mp_tac balance_le_bind
-  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
-  >> gen_tac >> pairarg_tac >> simp[]
+  >> Cases >> simp[]
+  (* EIP-8037/8038: the branch charges the call's own execution gas, then the
+     recipient's creation in state gas, before the child's grant is computed,
+     and it grants the child only the call gas, so the decompositions below
+     are main's with those actions inserted. *)
   >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> pairarg_tac >> simp[]
+  >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> irule bind_get_callee_preserves >> gen_tac >> simp[]
   >> IF_CASES_TAC
@@ -1495,11 +1504,12 @@ Proof
   >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> irule bind_get_callee_preserves >> gen_tac >> simp[]
+  (* EIP-8037/8038: the branch's create computes no capped grant of its own
+     and consumes none, and it charges the destination's creation in state gas
+     before the grant it withholds, so main's last two decompositions before
+     the abort test go and the charge and the withholding take their place
+     inside the else branch. *)
   >> ho_match_mp_tac balance_le_bind
-  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
-  >> gen_tac >> ho_match_mp_tac balance_le_bind
-  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
-  >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
@@ -1512,6 +1522,10 @@ Proof
   >> gen_tac >> simp[] >> IF_CASES_TAC
   >- (ho_match_mp_tac balance_le_cp >> simp[])
   >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
+  >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
+  >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
   >> gen_tac >> ho_match_mp_tac balance_le_bind
   >> conj_tac >- (ho_match_mp_tac balance_frame_cp >> simp[])
@@ -1910,8 +1924,12 @@ Proof
   strip_tac >> drule_all step_create_reaches_proceed_create >> strip_tac
   >> drule_all call_prefix_contexts >> strip_tac
   >> qpat_x_assum `proceed_create _ _ _ _ _ _ = _` mp_tac
+  (* EIP-8037: the branch's create reads the accounts to decide the creation
+     charge and drains the parent's state gas reservoir before it touches the
+     rollback, so both actions are unfolded here as in the call's port. *)
   >> simp[proceed_create_def, update_accounts_def, get_rollback_def,
           get_original_def, set_original_def, push_context_def,
+          get_accounts_def, drain_state_gas_reservoir_effect,
           ignore_bind_def, bind_def, return_def, fail_def, AllCaseEqs()]
   >> strip_tac >> gvs[cp_rel_def, AllCaseEqs()]
 QED
@@ -2007,8 +2025,13 @@ Proof
   >> gvs[reraise_def, ignore_bind_def, bind_def, assert_def,
       return_def, fail_def, AllCaseEqs(), consume_gas_def,
       get_current_context_def, set_current_context_def,
+      (* EIP-8037: the deposit's state gas charge branches on two gas bounds
+         with an inline `if`, so it needs `COND_RATOR` to reach the state
+         argument, as `charge_state_gas_preserves_nonempty_contexts` does. *)
+      charge_state_gas_def, COND_RATOR,
       update_accounts_def, lookup_account_def, update_account_def,
       combinTheory.APPLY_UPDATE_THM]
+  >> rpt (IF_CASES_TAC >> simp[])
   >> rw[]
 QED
 
@@ -3862,10 +3885,10 @@ Resume run_call_account_transient_frame[static_push]:
   >> drule_all step_push_new_frame >> strip_tac
   >> `(FST (HD c.contexts)).msgParams.static = static ∧
       (FST (HD c.contexts)).msgParams.outputTo = rd`
-       by (qpat_assum `FST (HD c.contexts) = initial_context _ _ _ _ _`
+       by (qpat_assum `FST (HD c.contexts) = (initial_context _ _ _ _ _ _ _) with logs := _`
              (once_rewrite_tac o single) >>
            simp[initial_context_def, initial_msg_params_def])
-  >> qpat_x_assum `FST (HD c.contexts) = initial_context _ _ _ _ _` kall_tac
+  >> qpat_x_assum `FST (HD c.contexts) = (initial_context _ _ _ _ _ _ _) with logs := _` kall_tac
   >> irule (BETA_RULE (Q.INST [`obs` |-> `λp. p`]
        (INST_TYPE [alpha |-> ``:evm_accounts # transient_storage``]
          run_call_static_observation)))
