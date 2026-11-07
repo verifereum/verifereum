@@ -332,7 +332,7 @@ Proof
      repay_state_gas_spill_def, repay_state_gas_spill_context_def,
      forfeit_remaining_gas_def, withhold_create_gas_def,
      drain_state_gas_reservoir_def, abort_create_def]
-  \ pres_tac
+  \\ pres_tac
 QED
 
 Theorem preserves_returndata_bounded_copy_to_memory[simp]:
