@@ -262,9 +262,12 @@ fun pres_tac_with simps =
               irule preserves_returndata_bounded_ignore_bind,
               CASE_TAC, pairarg_tac] \\ rw simps);
 
+(* A frame merge absorbs the child's state-gas counters into the context it
+   goes back to, so the return-data bound has to see through it. *)
 val pres_simps = [preserves_returndata_bounded_set_current_context,
                   preserves_returndata_bounded_push_context,
-                  w2n_bytes32_lt, LENGTH_buffer_take_lt, UNCURRY];
+                  absorb_state_gas_def, w2n_bytes32_lt, LENGTH_buffer_take_lt,
+                  UNCURRY];
 
 val pres_tac = pres_tac_with pres_simps;
 
