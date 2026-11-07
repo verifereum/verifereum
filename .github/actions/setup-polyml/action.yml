@@ -2,10 +2,14 @@ name: 'Setup Poly/ML'
 description: 'Builds/restores Poly/ML and adds it to PATH'
 
 inputs:
+  polyml-repo:
+    description: 'Poly/ML git repository to clone'
+    required: false
+    default: 'https://github.com/sequent-dev-bot/polyml.git'
   polyml-tag:
     description: 'Poly/ML git tag to use'
     required: false
-    default: 'v5.9.2'
+    default: 'v5.9.2-seq3'
 
 outputs:
   polyml-rev:
@@ -19,7 +23,7 @@ runs:
       id: version
       shell: bash
       run: |
-        rev=$(git ls-remote https://github.com/polyml/polyml.git "refs/tags/${{ inputs.polyml-tag }}" | cut -f1)
+        rev=$(git ls-remote "${{ inputs.polyml-repo }}" "refs/tags/${{ inputs.polyml-tag }}" | cut -f1)
         if [[ ! "$rev" =~ ^[0-9a-f]{40}$ ]]; then
           echo "Could not resolve Poly/ML tag ${{ inputs.polyml-tag }} to a commit: $rev" >&2
           exit 1
@@ -39,7 +43,7 @@ runs:
       run: |
         src="$(mktemp -d)"
         trap 'rm -rf "$src"' EXIT
-        git clone -b "${{ inputs.polyml-tag }}" --depth 1 https://github.com/polyml/polyml.git "$src"
+        git clone -b "${{ inputs.polyml-tag }}" --depth 1 "${{ inputs.polyml-repo }}" "$src"
         cd "$src"
         ./configure --prefix="$HOME/polyml-install"
         make

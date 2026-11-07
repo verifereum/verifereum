@@ -901,21 +901,6 @@ Proof
   \\ rw[]
 QED
 
-Theorem LENGTH_le_call_data_tokens:
-  ∀l. LENGTH l ≤ call_data_tokens l
-Proof
-  Induct \\ rw[call_data_tokens_def] \\ gvs[call_data_tokens_def]
-QED
-
-Theorem pre_transaction_updates_data_length:
-  pre_transaction_updates accs b t = SOME accs' ⇒
-  LENGTH t.data ≤ 2 ** 24
-Proof
-  rw[pre_transaction_updates_def, CaseEq"bool", calldata_floor_cost_def]
-  \\ qspec_then `t.data` assume_tac LENGTH_le_call_data_tokens
-  \\ gvs[floor_call_data_cost_def]
-QED
-
 (* the initial state of a message call to a contract (code that is not a
    delegation)
 

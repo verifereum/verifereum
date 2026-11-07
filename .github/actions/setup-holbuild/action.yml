@@ -18,12 +18,20 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Identify Poly/ML
+      id: poly
+      shell: bash
+      # holbuild is a Poly/ML executable: one built on another Poly/ML runtime must not be restored.
+      run: |
+        id=$(poly -v | sha256sum | cut -c1-16)
+        echo "id=$id" >> "$GITHUB_OUTPUT"
+
     - name: Cache holbuild checkout/build
       uses: actions/cache@v6
       id: cache-holbuild
       with:
         path: ~/holbuild
-        key: holbuild-tool-${{ runner.os }}-${{ runner.arch }}-${{ inputs.holbuild-ref }}
+        key: holbuild-tool-${{ runner.os }}-${{ runner.arch }}-${{ inputs.holbuild-ref }}-poly-${{ steps.poly.outputs.id }}
 
     - name: Clone holbuild
       shell: bash

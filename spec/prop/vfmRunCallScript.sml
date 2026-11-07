@@ -4113,7 +4113,8 @@ Theorem step_call_reaches_proceed_call:
       NONE => (lookup_account address s.rollback.accounts).code
     | SOME d => (lookup_account d s.rollback.accounts).code) /\
     (~call_has_value op ==> value = 0) /\
-    (op = Call /\ 0 < value ==> ~(FST (HD s.contexts)).msgParams.static)
+    (op = Call /\ 0 < value ==> ~(FST (HD s.contexts)).msgParams.static) /\
+    az < 2 ** 256
 Proof
   simp[step_call_def] >> strip_tac
   >> `cp_rel s s /\ s.rollback.accesses.storageKeys = s.rollback.accesses.storageKeys`
@@ -4173,6 +4174,10 @@ Proof
   >> qexists_tac `<|offset := w2n (EL ((if call_has_value op then 1 else 0) + 4) x);
                    size := w2n (EL ((if call_has_value op then 1 else 0) + 5) x)|>`
   >> simp[] >> simp[Abbr `value`]
+  >> simp[Abbr `az`]
+  >> qmatch_goalsub_abbrev_tac `w2n w`
+  >> mp_tac (Q.ISPEC `w:bytes32` wordsTheory.w2n_lt)
+  >> CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> simp[]
 QED
 
 Theorem proceed_call_saved_rollback:

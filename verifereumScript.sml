@@ -2,7 +2,8 @@
    for ease of "building everything" *)
 open HolKernel
   contractABITheory contractABISyntax
-  vfmDomainCollectionTheory
+  vfmDomainCollectionTheory vfmTotalBalanceTheory vfmCalldataBoundTheory
+  vfmReturndataBoundTheory vfmToDeleteTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib vfmChainIdTheory
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
   vfmCreateCollisionTheory vfmDepositLogTheory
