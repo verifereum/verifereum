@@ -311,6 +311,30 @@ Proof
   \\ pres_tac
 QED
 
+(* EIP-8037: the state-gas meter actions the Amsterdam step definitions
+   added.  They move gas between the current frame's execution and state
+   meters and leave every frame's return data alone. *)
+
+Theorem preserves_returndata_bounded_state_gas[simp]:
+  preserves_returndata_bounded (charge_state_gas n) ∧
+  preserves_returndata_bounded (credit_state_gas_refund n) ∧
+  preserves_returndata_bounded (charge_new_account charged) ∧
+  preserves_returndata_bounded (credit_new_account charged) ∧
+  preserves_returndata_bounded restore_state_gas ∧
+  preserves_returndata_bounded repay_state_gas_spill ∧
+  preserves_returndata_bounded forfeit_remaining_gas ∧
+  preserves_returndata_bounded withhold_create_gas ∧
+  preserves_returndata_bounded drain_state_gas_reservoir ∧
+  preserves_returndata_bounded abort_create
+Proof
+  rw[charge_state_gas_def, credit_state_gas_refund_def,
+     charge_new_account_def, credit_new_account_def, restore_state_gas_def,
+     repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+     forfeit_remaining_gas_def, withhold_create_gas_def,
+     drain_state_gas_reservoir_def, abort_create_def]
+  \ pres_tac
+QED
+
 Theorem preserves_returndata_bounded_copy_to_memory[simp]:
   (∀f. src = SOME f ⇒ preserves_returndata_bounded f) ⇒
   preserves_returndata_bounded (copy_to_memory gas off soff sz src) ∧
@@ -350,7 +374,10 @@ Theorem preserves_returndata_bounded_steps[simp]:
   preserves_returndata_bounded (step_swap n) ∧
   preserves_returndata_bounded (step_log n) ∧
   preserves_returndata_bounded (step_return b) ∧
-  preserves_returndata_bounded step_self_destruct
+  preserves_returndata_bounded step_self_destruct ∧
+  preserves_returndata_bounded step_dupn ∧
+  preserves_returndata_bounded step_swapn ∧
+  preserves_returndata_bounded step_exchange
 Proof
   rw[step_binop_def, step_monop_def, step_modop_def, step_context_def,
      step_msgParams_def, step_txParams_def, step_exp_def,
@@ -361,7 +388,8 @@ Proof
      step_blob_hash_def, step_self_balance_def, step_mload_def,
      step_mstore_def, step_jump_def, step_jumpi_def, step_push_def,
      step_pop_def, step_dup_def, step_swap_def, step_log_def,
-     step_return_def, step_self_destruct_def, write_storage_def,
+     step_return_def, step_self_destruct_def, step_dupn_def,
+     step_swapn_def, step_exchange_def, write_storage_def,
      write_transient_storage_def, read_memory_def]
   \\ pres_tac
 QED
