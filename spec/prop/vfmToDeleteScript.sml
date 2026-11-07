@@ -502,7 +502,7 @@ QED
 Theorem TD_exec_charge_state_gas[local]:
   TD_exec (=) (charge_state_gas n) (charge_state_gas n)
 Proof
-  rewrite_tac[charge_state_gas_def] >>
+  simp[charge_state_gas_def] >>
   td_compose [TD_exec_get_current_context, TD_exec_set_current_context,
               TD_exec_consume_gas]
 QED
@@ -510,7 +510,7 @@ QED
 Theorem TD_exec_credit_state_gas_refund[local]:
   TD_exec (=) (credit_state_gas_refund n) (credit_state_gas_refund n)
 Proof
-  rewrite_tac[credit_state_gas_refund_def] >>
+  simp[credit_state_gas_refund_def] >>
   td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
 QED
 
@@ -531,35 +531,35 @@ QED
 Theorem TD_exec_restore_state_gas[local]:
   TD_exec (=) restore_state_gas restore_state_gas
 Proof
-  rewrite_tac[restore_state_gas_def] >>
+  simp[restore_state_gas_def] >>
   td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
 QED
 
 Theorem TD_exec_repay_state_gas_spill[local]:
   TD_exec (=) repay_state_gas_spill repay_state_gas_spill
 Proof
-  rewrite_tac[repay_state_gas_spill_def] >>
+  simp[repay_state_gas_spill_def] >>
   td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
 QED
 
 Theorem TD_exec_forfeit_remaining_gas[local]:
   TD_exec (=) forfeit_remaining_gas forfeit_remaining_gas
 Proof
-  rewrite_tac[forfeit_remaining_gas_def] >>
+  simp[forfeit_remaining_gas_def] >>
   td_compose [TD_exec_get_gas_left, TD_exec_consume_gas]
 QED
 
 Theorem TD_exec_withhold_create_gas[local]:
   TD_exec (=) withhold_create_gas withhold_create_gas
 Proof
-  rewrite_tac[withhold_create_gas_def] >>
+  simp[withhold_create_gas_def] >>
   td_compose [TD_exec_get_gas_left, TD_exec_consume_gas]
 QED
 
 Theorem TD_exec_drain_state_gas_reservoir[local]:
   TD_exec (=) drain_state_gas_reservoir drain_state_gas_reservoir
 Proof
-  rewrite_tac[drain_state_gas_reservoir_def] >>
+  simp[drain_state_gas_reservoir_def] >>
   td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
 QED
 
