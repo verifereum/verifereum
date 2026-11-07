@@ -494,6 +494,75 @@ Proof
               TD_exec_consume_gas, TD_exec_expand_memory, TD_exec_write_memory]
 QED
 
+(* EIP-8037: the state-gas meter actions the Amsterdam step definitions
+   added.  Each reads or writes only the current frame's state-gas and gas
+   fields, none of which the deletion queue is part of, so each is its own
+   lockstep witness. *)
+
+Theorem TD_exec_charge_state_gas[local]:
+  TD_exec (=) (charge_state_gas n) (charge_state_gas n)
+Proof
+  rewrite_tac[charge_state_gas_def] >>
+  td_compose [TD_exec_get_current_context, TD_exec_set_current_context,
+              TD_exec_consume_gas]
+QED
+
+Theorem TD_exec_credit_state_gas_refund[local]:
+  TD_exec (=) (credit_state_gas_refund n) (credit_state_gas_refund n)
+Proof
+  rewrite_tac[credit_state_gas_refund_def] >>
+  td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
+QED
+
+Theorem TD_exec_charge_new_account[local]:
+  TD_exec (=) (charge_new_account charged) (charge_new_account charged)
+Proof
+  Cases_on `charged` >> simp[charge_new_account_def] >>
+  td_compose [TD_exec_charge_state_gas]
+QED
+
+Theorem TD_exec_credit_new_account[local]:
+  TD_exec (=) (credit_new_account charged) (credit_new_account charged)
+Proof
+  Cases_on `charged` >> simp[credit_new_account_def] >>
+  td_compose [TD_exec_credit_state_gas_refund]
+QED
+
+Theorem TD_exec_restore_state_gas[local]:
+  TD_exec (=) restore_state_gas restore_state_gas
+Proof
+  rewrite_tac[restore_state_gas_def] >>
+  td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
+QED
+
+Theorem TD_exec_repay_state_gas_spill[local]:
+  TD_exec (=) repay_state_gas_spill repay_state_gas_spill
+Proof
+  rewrite_tac[repay_state_gas_spill_def] >>
+  td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
+QED
+
+Theorem TD_exec_forfeit_remaining_gas[local]:
+  TD_exec (=) forfeit_remaining_gas forfeit_remaining_gas
+Proof
+  rewrite_tac[forfeit_remaining_gas_def] >>
+  td_compose [TD_exec_get_gas_left, TD_exec_consume_gas]
+QED
+
+Theorem TD_exec_withhold_create_gas[local]:
+  TD_exec (=) withhold_create_gas withhold_create_gas
+Proof
+  rewrite_tac[withhold_create_gas_def] >>
+  td_compose [TD_exec_get_gas_left, TD_exec_consume_gas]
+QED
+
+Theorem TD_exec_drain_state_gas_reservoir[local]:
+  TD_exec (=) drain_state_gas_reservoir drain_state_gas_reservoir
+Proof
+  rewrite_tac[drain_state_gas_reservoir_def] >>
+  td_compose [TD_exec_get_current_context, TD_exec_set_current_context]
+QED
+
 val td_primitives =
   [TD_exec_get_current_context, TD_exec_set_current_context,
    TD_exec_get_tx_params, TD_exec_get_accounts, TD_exec_update_accounts,
@@ -507,7 +576,12 @@ val td_primitives =
    TD_exec_access_address, TD_exec_access_slot, TD_exec_ensure_storage_in_domain,
    TD_exec_memory_expansion_info, TD_exec_expand_memory, TD_exec_read_memory,
    TD_exec_write_memory, TD_exec_write_storage, TD_exec_write_transient_storage,
-   TD_exec_assert_not_static, TD_exec_add_to_delete];
+   TD_exec_assert_not_static, TD_exec_add_to_delete,
+   TD_exec_charge_state_gas, TD_exec_credit_state_gas_refund,
+   TD_exec_charge_new_account, TD_exec_credit_new_account,
+   TD_exec_restore_state_gas, TD_exec_repay_state_gas_spill,
+   TD_exec_forfeit_remaining_gas, TD_exec_withhold_create_gas,
+   TD_exec_drain_state_gas_reservoir];
 
 Theorem TD_exec_step_binop[local]:
   TD_exec (=) (step_binop op f) (step_binop op f)
@@ -849,6 +923,12 @@ Proof
   simp[inc_pc_def] >> td_compose td_primitives
 QED
 
+Theorem TD_exec_abort_create[local]:
+  TD_exec (=) abort_create abort_create
+Proof
+  simp[abort_create_def] >> td_compose (TD_exec_inc_pc :: td_primitives)
+QED
+
 Theorem TD_exec_abort_unuse[local]:
   TD_exec (=) (abort_unuse n) (abort_unuse n)
 Proof
@@ -888,7 +968,8 @@ Theorem TD_exec_step_create[local]:
 Proof
   simp[step_create_def] >>
   td_compose ([TD_exec_proceed_create, TD_exec_abort_unuse,
-               TD_exec_abort_create_exists, TD_exec_get_num_contexts] @ td_primitives)
+               TD_exec_abort_create, TD_exec_abort_create_exists,
+               TD_exec_get_num_contexts] @ td_primitives)
 QED
 
 Theorem TD_exec_step_call[local]:
@@ -913,7 +994,9 @@ Proof
   simp[TD_frame_def] >> strip_tac >> gvs[] >>
   Cases_on `b` >> simp[] >>
   metis_tac[TD_exec_ignore_bind, TD_exec_unuse_gas, TD_exec_push_logs,
-            TD_exec_update_gas_refund, TD_exec_set_rollback]
+            TD_exec_update_gas_refund, TD_exec_set_rollback,
+            TD_exec_get_current_context, TD_exec_set_current_context,
+            TD_exec_repay_state_gas_spill, TD_exec_credit_new_account]
 QED
 
 Theorem TD_exec_handle_create[local]:
@@ -945,6 +1028,24 @@ Proof
   simp[inc_pc_or_jump_def] >> td_compose td_primitives
 QED
 
+Theorem TD_exec_step_dupn[local]:
+  TD_exec (=) step_dupn step_dupn
+Proof
+  simp[step_dupn_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_swapn[local]:
+  TD_exec (=) step_swapn step_swapn
+Proof
+  simp[step_swapn_def] >> td_compose td_primitives
+QED
+
+Theorem TD_exec_step_exchange[local]:
+  TD_exec (=) step_exchange step_exchange
+Proof
+  simp[step_exchange_def] >> td_compose td_primitives
+QED
+
 val td_instructions =
   [TD_exec_step_binop, TD_exec_step_monop, TD_exec_step_modop,
    TD_exec_step_context, TD_exec_step_msgParams, TD_exec_step_txParams,
@@ -957,7 +1058,8 @@ val td_instructions =
    TD_exec_step_jumpi, TD_exec_step_push, TD_exec_step_pop,
    TD_exec_step_dup, TD_exec_step_swap, TD_exec_step_log,
    TD_exec_step_return, TD_exec_step_self_destruct,
-   TD_exec_step_call, TD_exec_step_create];
+   TD_exec_step_call, TD_exec_step_create, TD_exec_step_dupn,
+   TD_exec_step_swapn, TD_exec_step_exchange];
 
 Theorem TD_exec_step_inst[local]:
   TD_exec (=) (step_inst op) (step_inst op)

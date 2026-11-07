@@ -100,7 +100,8 @@ QED
 
 Theorem buffer_length_initial_context:
   LENGTH t.data < 2 ** 256 ⇒
-  buffer_length (initial_context callee code static rd t).msgParams.data <
+  buffer_length
+    (initial_context callee code static rd charged sg t).msgParams.data <
   2 ** 256
 Proof
   rw[initial_context_def, initial_msg_params_def]

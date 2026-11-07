@@ -671,7 +671,8 @@ Theorem total_balance_pre_transaction_updates:
   pre_transaction_updates a bbf t = SOME a' ⇒
   total_balance a' + t.gasLimit * t.gasPrice ≤ total_balance a ∧
   t.value ≤ (lookup_account t.from a').balance ∧
-  calldata_floor_cost t.data ≤ t.gasLimit
+  calldata_floor_cost t.accessList (IS_NONE t.to) (t.to = SOME t.from)
+    t.value t.data ≤ t.gasLimit
 Proof
   strip_tac \\ gvs[pre_transaction_updates_def, AllCaseEqs()]
   \\ qmatch_goalsub_abbrev_tac `update_account t.from v a`
@@ -683,7 +684,8 @@ Proof
 QED
 
 Theorem lookup_balance_process_authorization:
-  process_authorization c au (a, x, r) = (a', x', r') ⇒
+  process_authorization chainId paid preAccs au (a, x, pw, ds, ch) =
+    (a', x', pw', ds', ch') ⇒
   (lookup_account y a').balance = (lookup_account y a).balance
 Proof
   rw[process_authorization_def]
@@ -692,12 +694,13 @@ Proof
 QED
 
 Theorem lookup_balance_process_authorizations:
-  ∀auths a x r a' x' r'.
-    process_authorizations c auths a x r = (a', x', r') ⇒
+  ∀auths a x pw ds ch a' x' pw' ds' ch'.
+    process_authorizations chainId paid preAccs auths a x pw ds ch =
+      (a', x', pw', ds', ch') ⇒
     ∀y. (lookup_account y a').balance = (lookup_account y a).balance
 Proof
   Induct \\ rw[process_authorizations_def]
-  \\ pairarg_tac \\ gvs[]
+  \\ rpt pairarg_tac \\ gvs[]
   \\ first_x_assum drule \\ rw[]
   \\ drule lookup_balance_process_authorization \\ simp[]
 QED
@@ -707,7 +710,8 @@ Theorem initial_state_total_balance:
   total_balance s.rollback.accounts + tx.gasLimit * tx.gasPrice ≤
     total_balance accs ∧
   tx.value ≤ (lookup_account tx.from s.rollback.accounts).balance ∧
-  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  calldata_floor_cost tx.accessList (IS_NONE tx.to) (tx.to = SOME tx.from)
+    tx.value tx.data ≤ tx.gasLimit ∧
   LENGTH s.contexts = 1 ∧ s.contexts ≠ []
 Proof
   strip_tac \\ gvs[initial_state_def, AllCaseEqs(), initial_rollback_def]
@@ -720,12 +724,14 @@ Proof
 QED
 
 Theorem transaction_gas_accounting_le:
-  transaction_gas_accounting gp bf gL floor (gl, sr, ar) = (tu, re, tf) ∧
+  transaction_gas_accounting gp bf gL res spill comm floor
+    (gl, sgl, sr, ar) = (tu, eu, su, re, tf) ∧
   floor ≤ gL ⇒
   re + tf ≤ gL * gp
 Proof
   strip_tac
-  \\ qpat_x_assum `transaction_gas_accounting _ _ _ _ _ = _` mp_tac
+  \\ qpat_x_assum
+       `transaction_gas_accounting _ _ _ _ _ _ _ _ _ = _` mp_tac
   \\ simp_tac std_ss [transaction_gas_accounting_def, LET_THM, PAIR_EQ]
   \\ strip_tac
   \\ `tu ≤ gL`
@@ -753,7 +759,8 @@ QED
 
 Theorem total_balance_post_transaction_accounting:
   post_transaction_accounting blk tx result acc t = (r, a') ∧
-  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  calldata_floor_cost tx.accessList (IS_NONE tx.to) (tx.to = SOME tx.from)
+    tx.value tx.data ≤ tx.gasLimit ∧
   total_balance acc ≤ B ∧ total_balance t.rollback.accounts ≤ B ⇒
   total_balance a' ≤ B + tx.gasLimit * tx.gasPrice
 Proof
@@ -768,7 +775,8 @@ QED
 
 Theorem post_transaction_accounting_le:
   post_transaction_accounting blk tx r0 acc t = (r, a') ⇒
-  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  calldata_floor_cost tx.accessList (IS_NONE tx.to) (tx.to = SOME tx.from)
+    tx.value tx.data ≤ tx.gasLimit ∧
   total_balance acc + tx.gasLimit * tx.gasPrice ≤ total_balance A ∧
   total_balance t.rollback.accounts ≤ total_balance acc ⇒
   total_balance a' ≤ total_balance A
