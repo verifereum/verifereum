@@ -983,7 +983,7 @@ QED
 Theorem TD_exec_set_rollback_snd[local]:
   TD_frame a b ==> TD_exec (=) (set_rollback (SND a)) (set_rollback (SND b))
 Proof
-  Cases_on `a` >> Cases_on `b` >> simp[TD_frame_def] >>
+  Cases_on `a` >> Cases_on `b` >> simp[TD_frame_def] >> strip_tac >>
   irule TD_exec_set_rollback >> first_assum ACCEPT_TAC
 QED
 
