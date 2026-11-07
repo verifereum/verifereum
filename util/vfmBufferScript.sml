@@ -375,7 +375,12 @@ Theorem write_bytes_arith[local]:
      p MOD 32 − offset MOD 32 = p − offset) ∧
     (p DIV 32 ≠ offset DIV 32 ⇒ ¬(offset ≤ p ∧ p < offset + c))
 Proof
-  rpt gen_tac \\ strip_tac \\ conj_tac \\ strip_tac \\ intLib.ARITH_TAC
+  rpt gen_tac \\ strip_tac \\ conj_tac
+  >- (strip_tac \\ conj_tac
+      >- intLib.ARITH_TAC
+      \\ qpat_x_assum `c ≤ _` (K ALL_TAC)
+      \\ intLib.ARITH_TAC)
+  \\ strip_tac \\ intLib.ARITH_TAC
 QED
 
 Theorem byte_at_splice[local]:
@@ -413,7 +418,15 @@ Proof
   \\ Cases_on ‘p DIV 32 = offset DIV 32’
   >- (asm_rewrite_tac[] \\ rw[] \\ gvs[])
   \\ drule_then (qspec_then ‘p’ strip_assume_tac) write_bytes_arith
-  \\ asm_rewrite_tac[] \\ rw[] \\ gvs[]
+  \\ qpat_x_assum ‘p DIV 32 = offset DIV 32 ⇒ _’ (K ALL_TAC)
+  \\ qpat_x_assum ‘p DIV 32 ≠ offset DIV 32 ⇒ _’ mp_tac
+  \\ asm_rewrite_tac[] \\ strip_tac
+  \\ qsuff_tac ‘¬(offset ≤ p ∧ p < n + offset)’
+  >- simp[]
+  \\ qpat_x_assum ‘¬(offset ≤ p ∧ p < offset + c)’ mp_tac
+  \\ qpat_x_assum ‘¬(c + offset ≤ p ∧ p < n + offset)’ mp_tac
+  \\ rpt (pop_assum (K ALL_TAC))
+  \\ intLib.ARITH_TAC
 QED
 
 Theorem word_at_clear_words:
