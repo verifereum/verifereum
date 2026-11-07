@@ -13,7 +13,7 @@ datatype options = Help | Results | NoResults | Fresh | NoSerialFirst
 
 (* Below the slowest rate GitHub's runners showed on a heavy case; see
    tests/README.md. *)
-val default_gas_rate = 300000
+val default_gas_rate = 150000
 
 val cline_options = [
   {short="h", long=["help"], desc=NoArg (K Help), help="only print help"},

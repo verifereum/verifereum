@@ -2568,100 +2568,91 @@ Definition extract_deposit_requests_def:
   parse_deposit_events (FILTER is_deposit_event logs)
 End
 
-Definition read_withdrawal_request_def:
-  read_withdrawal_request storage idx =
-  let base = 4 + idx * 3 in
-  let slot0 = lookup_storage (n2w base) storage in
-  let slot1 = lookup_storage (n2w (base + 1)) storage in
-  let slot2 = lookup_storage (n2w (base + 2)) storage in
-  let source_addr = DROP 12 (word_to_bytes slot0 T) in
-  let pubkey_part1 = word_to_bytes slot1 T in
-  let slot2_bytes = word_to_bytes slot2 T in
-  let pubkey_part2 = TAKE 16 slot2_bytes in
-  let amount = REVERSE (TAKE 8 (DROP 16 slot2_bytes)) in
-  source_addr ++ pubkey_part1 ++ pubkey_part2 ++ amount
+(* EIP-7685: the request types the block's post-execution phase produces, each
+   by calling its contract after the transactions, in ascending type order (as
+   EELS's `process_general_purpose_requests` calls them).  Deposits are the
+   other source, out of the block's logs, and are type 0x00. *)
+Definition general_purpose_requests_def:
+  general_purpose_requests : (byte # address) list =
+  [ (0x01w, withdrawal_request_contract)
+  ; (0x02w, consolidation_request_contract)
+  ; (0x03w, builder_deposit_request_contract)
+  ; (0x04w, builder_exit_request_contract) ]
 End
 
-Definition dequeue_withdrawal_requests_def:
-  dequeue_withdrawal_requests accounts =
-  let contract = lookup_account withdrawal_request_contract accounts in
-  let storage = contract.storage in
-  let head = w2n (lookup_storage 2w storage) in
-  let tail = w2n (lookup_storage 3w storage) in
-  let dequeue_count = MIN (tail - head) max_withdrawal_requests_per_block in
-  let requests = GENLIST (λi. read_withdrawal_request storage (head + i)) dequeue_count in
-  let new_head = head + dequeue_count in
-  let old_excess = w2n (lookup_storage 0w storage) in
-  let add_count = w2n (lookup_storage 1w storage) in
-  let new_excess = if old_excess + add_count > target_withdrawal_requests_per_block
-                   then old_excess + add_count - target_withdrawal_requests_per_block
-                   else 0 in
-  let storage1 = update_storage 0w (n2w new_excess) storage in
-  let storage2 = update_storage 1w 0w storage1 in
-  let storage3 = if new_head = tail
-                 then update_storage 3w 0w (update_storage 2w 0w storage2)
-                 else update_storage 2w (n2w new_head) storage2 in
-  let updated_contract = contract with storage := storage3 in
-  let updated_accounts = update_account withdrawal_request_contract updated_contract accounts in
-  (requests, updated_accounts)
+(* EIP-7685: a request contract runs as a **system transaction**: called from
+   the system address with no value and no fee, with the block's accumulated
+   state and the same access sets a transaction starts with.  It gets
+   `SYSTEM_TRANSACTION_GAS` execution gas and a state gas reservoir instead of
+   an intrinsic-cost split, and its call data is empty.  What the block takes
+   from it is its return data, and, on success, the accounts it leaves.  A
+   call that cannot run at all -- no code at the target, or a call that fails
+   -- invalidates the block, as EELS's `process_checked_system_transaction`
+   raises `InvalidBlock`. *)
+Definition run_system_transaction_def:
+  run_system_transaction dom chainId prevHashes blk accounts target =
+  let code = (lookup_account target accounts).code in
+  if NULL code then NONE else
+  let tx = <| from               := system_address
+            ; to                 := SOME target
+            ; value              := 0
+            ; gasLimit           := system_transaction_gas
+            ; data               := []
+            ; nonce              := 0
+            ; gasPrice           := blk.baseFeePerGas
+            ; accessList         := []
+            ; blobVersionedHashes := []
+            ; maxFeePerGas       := NONE
+            ; maxFeePerBlobGas   := NONE
+            ; authorizationList  := [] |> in
+  let rb = initial_rollback accounts
+             (initial_access_sets blk.coinBase target tx) in
+  let ctxt = initial_context target code F empty_return_destination F
+               system_state_gas_reservoir tx in
+  let st = <| contexts := [(ctxt, rb)]
+            ; txParams := initial_tx_params chainId prevHashes blk tx 0
+                            system_state_gas_reservoir
+            ; rollback := rb
+            ; originalAccounts := accounts
+            ; msdomain := dom |> in
+  case run st of
+    SOME (INR e, s) =>
+      if e = NONE
+      then (case s.contexts of
+              (* a call that succeeded has a frame left; an empty list can
+                 only come of a call that did not, and is treated as one *)
+              [] => NONE
+            | (c, _) :: _ =>
+                SOME (process_deletions s.rollback.toDelete s.rollback.accounts,
+                      c.returnData))
+      else NONE
+  | _ => NONE
 End
 
-Definition read_consolidation_request_def:
-  read_consolidation_request storage idx =
-  let base = 4 + idx * 4 in
-  let slot0 = lookup_storage (n2w base) storage in
-  let slot1 = lookup_storage (n2w (base + 1)) storage in
-  let slot2 = lookup_storage (n2w (base + 2)) storage in
-  let slot3 = lookup_storage (n2w (base + 3)) storage in
-  let source_addr = DROP 12 (word_to_bytes slot0 T) in
-  let source_pubkey_part1 = word_to_bytes slot1 T in
-  let slot2_bytes = word_to_bytes slot2 T in
-  let source_pubkey_part2 = TAKE 16 slot2_bytes in
-  let target_pubkey_part1 = DROP 16 slot2_bytes in
-  let target_pubkey_part2 = word_to_bytes slot3 T in
-  source_addr ++ source_pubkey_part1 ++ source_pubkey_part2 ++
-  target_pubkey_part1 ++ target_pubkey_part2
+(* The block's requests from execution: a call's return data, prefixed with its
+   type byte, and no request at all for a type that produced none. *)
+Definition run_general_purpose_requests_def:
+  run_general_purpose_requests dom chainId prevHashes blk accounts [] =
+    SOME (accounts, []) ∧
+  run_general_purpose_requests dom chainId prevHashes blk accounts
+                               ((ty, target) :: rest) =
+  case run_system_transaction dom chainId prevHashes blk accounts target of
+    NONE => NONE
+  | SOME (accounts, data) =>
+    case run_general_purpose_requests dom chainId prevHashes blk accounts
+                                        rest of
+      NONE => NONE
+    | SOME (accounts, requests) =>
+      SOME (accounts, if NULL data then requests
+                      else (ty :: data) :: requests)
 End
 
-Definition dequeue_consolidation_requests_def:
-  dequeue_consolidation_requests accounts =
-  let contract = lookup_account consolidation_request_contract accounts in
-  let storage = contract.storage in
-  let head = w2n (lookup_storage 2w storage) in
-  let tail = w2n (lookup_storage 3w storage) in
-  let dequeue_count = MIN (tail - head) max_consolidation_requests_per_block in
-  let requests = GENLIST (λi. read_consolidation_request storage (head + i)) dequeue_count in
-  let new_head = head + dequeue_count in
-  let old_excess = w2n (lookup_storage 0w storage) in
-  let add_count = w2n (lookup_storage 1w storage) in
-  let new_excess = if old_excess + add_count > target_consolidation_requests_per_block
-                   then old_excess + add_count - target_consolidation_requests_per_block
-                   else 0 in
-  let storage1 = update_storage 0w (n2w new_excess) storage in
-  let storage2 = update_storage 1w 0w storage1 in
-  let storage3 = if new_head = tail
-                 then update_storage 3w 0w (update_storage 2w 0w storage2)
-                 else update_storage 2w (n2w new_head) storage2 in
-  let updated_contract = contract with storage := storage3 in
-  let updated_accounts = update_account consolidation_request_contract updated_contract accounts in
-  (requests, updated_accounts)
-End
-
+(* EIP-7685: the header commits to the SHA2-256 hash of the concatenation of
+   the SHA2-256 hashes of the block's type-prefixed requests. *)
 Definition compute_requests_hash_def:
-  compute_requests_hash (deposits: byte list list)
-                        (withdrawals: byte list list)
-                        (consolidations: byte list list) =
-  let deposit_data = FLAT deposits in
-  let deposit_hash = if NULL deposit_data then []
-                     else word_to_bytes (SHA_256_bytes (0x00w :: deposit_data)) T in
-  let withdrawal_data = FLAT withdrawals in
-  let withdrawal_hash = if NULL withdrawal_data then []
-                        else word_to_bytes (SHA_256_bytes (0x01w :: withdrawal_data)) T in
-  let consolidation_data = FLAT consolidations in
-  let consolidation_hash = if NULL consolidation_data then []
-                           else word_to_bytes (SHA_256_bytes (0x02w :: consolidation_data)) T in
-  let all_hashes = deposit_hash ++ withdrawal_hash ++ consolidation_hash in
-  SHA_256_bytes all_hashes
+  compute_requests_hash (requests: byte list list) =
+  SHA_256_bytes $
+    FLAT $ MAP (λr. word_to_bytes (SHA_256_bytes r) T) requests
 End
 
 Definition expected_base_fee_def:
@@ -2711,11 +2702,11 @@ Definition header_invalid_def:
 End
 
 Definition block_invalid_def:
-  block_invalid rs deposits withdrawals consolidations b ⇔
+  block_invalid rs requests b ⇔
     let blobGasUsed = SUM (MAP total_blob_gas b.transactions) in
     let blockGasUsed = SUM (MAP (λr. r.executionGasUsed) rs) in
     let blockStateGasUsed = SUM (MAP (λr. r.stateGasUsed) rs) in
-    let requestsHash = compute_requests_hash deposits withdrawals consolidations in
+    let requestsHash = compute_requests_hash requests in
     let expectedWithdrawalsRoot = word_of_bytes T 0w (withdrawals_root b.withdrawals) in
     ¬(blobGasUsed ≤ max_blob_gas_per_block ∧
       blobGasUsed = b.blobGasUsed ∧
@@ -2754,12 +2745,18 @@ Definition run_block_def:
   (λ(rs, a, d).
     let all_logs = FLAT (MAP (λr. r.logs) rs) in
     OPTION_BIND (extract_deposit_requests all_logs) (λdeposits.
-      let (withdrawals, a1) = dequeue_withdrawal_requests a in
-      let (consolidations, a2) = dequeue_consolidation_requests a1 in
-      if block_invalid rs deposits withdrawals consolidations b then NONE
-      else
-        OPTION_BIND (process_withdrawals b.withdrawals (a2, d))
-          (λ(a, d). SOME (rs, a, d))))
+      (* EIP-7685: the withdrawals are credited before the request contracts
+         are called, and the requests the block commits to are the deposits
+         from its logs followed by what those calls returned. *)
+      OPTION_BIND (process_withdrawals b.withdrawals (a, d)) (λ(a, d).
+        OPTION_BIND
+          (run_general_purpose_requests d chainId prevHashes b a
+                                        general_purpose_requests)
+          (λ(a, requests).
+            let requests = if NULL deposits then requests
+                           else (0x00w :: FLAT deposits) :: requests in
+            if block_invalid rs requests b then NONE
+            else SOME (rs, a, d)))))
 End
 
 Definition run_blocks_def:

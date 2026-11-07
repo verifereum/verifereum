@@ -1293,12 +1293,17 @@ Theorem run_block_eq:
      case extract_deposit_requests all_logs of
        NONE => NONE
      | SOME deposits =>
-         let (withdrawals, a1) = dequeue_withdrawal_requests a in
-         let (consolidations, a2) = dequeue_consolidation_requests a1 in
-         (if block_invalid rs deposits withdrawals consolidations b then NONE else
-          case process_withdrawals b.withdrawals (a2, d) of
-               NONE => NONE
-             | SOME (a, d) => SOME (rs, a, d))
+         case process_withdrawals b.withdrawals (a, d) of
+           NONE => NONE
+         | SOME (a, d) =>
+             case run_general_purpose_requests d chainId h b a
+                    general_purpose_requests
+             of NONE => NONE
+              | SOME (a, requests) =>
+                  let requests = if NULL deposits then requests
+                                 else (0x00w :: FLAT deposits) :: requests in
+                  (if block_invalid rs requests b then NONE else
+                   SOME (rs, a, d))
 Proof
   rw[run_block_def]
   \\ qspec_tac(`b.transactions`,`ts`)
@@ -1310,7 +1315,7 @@ Proof
   \\ Induct_on`ts`
   \\ rw[run_transactions_def, MAP_REVERSE, SUM_REVERSE]
   >- ( gs[OPTION_BIND_eq_case, UNCURRY, CaseEq"prod"]
-       \\ CASE_TAC \\ gs[] \\ Cases_on`x` \\ gs[] )
+       \\ rpt (CASE_TAC \\ gvs[]) )
   \\ qmatch_goalsub_abbrev_tac`FOLDL f`
   \\ `∀ts. FOLDL f NONE ts = NONE` by (simp[Abbr`f`] \\ Induct \\ simp[])
   \\ TRY (simp[] \\ NO_TAC)
@@ -1324,8 +1329,7 @@ Proof
     \\ Induct_on`ts` \\ rw[] )
   \\ qmatch_goalsub_rename_tac`SOME q`
   \\ PairCases_on`q` \\ gvs[OPTION_BIND_eq_case]
-  \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
-  \\ Cases_on`x` \\ gs[]
+  \\ rpt (CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND])
 QED
 
 val () = cv_auto_trans parse_deposit_request_def;
@@ -1335,6 +1339,26 @@ val () = cv_auto_trans process_withdrawal_def;
 val () = process_withdrawals_def
          |> SRULE [OPTION_BIND_eq_case]
          |> cv_auto_trans;
+
+val () = cv_auto_trans general_purpose_requests_def;
+
+val () = cv_auto_trans compute_requests_hash_def;
+
+val () = cv_auto_trans run_system_transaction_def;
+
+val run_general_purpose_requests_pre_def =
+  cv_auto_trans_pre "run_general_purpose_requests_pre"
+    run_general_purpose_requests_def;
+
+Theorem run_general_purpose_requests_pre[cv_pre]:
+  !dom chainId prevHashes blk accounts targets.
+    run_general_purpose_requests_pre dom chainId prevHashes blk accounts targets
+Proof
+  Induct_on `targets`
+  >- simp[Once run_general_purpose_requests_pre_def]
+  \\ Cases_on `h`
+  \\ simp[Once run_general_purpose_requests_pre_def]
+QED
 
 val () = cv_auto_trans run_block_eq;
 

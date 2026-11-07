@@ -277,20 +277,31 @@ Definition consolidation_request_contract_def:
     0x0000BBdDc7CE488642fb579F8B00f3a590007251w
 End
 
-Definition max_withdrawal_requests_per_block_def:
-  max_withdrawal_requests_per_block = 16n
+(* EIP-8282: the predeploys for the two builder request types. *)
+Definition builder_deposit_request_contract_def:
+  builder_deposit_request_contract : address =
+    0x0000BFF46984E3725691FA540A8C7589300D8282w
 End
 
-Definition target_withdrawal_requests_per_block_def:
-  target_withdrawal_requests_per_block = 2n
+Definition builder_exit_request_contract_def:
+  builder_exit_request_contract : address =
+    0x000064D678505AD48F8CCB093BC65613800E8282w
 End
 
-Definition max_consolidation_requests_per_block_def:
-  max_consolidation_requests_per_block = 2n
+(* EIP-7685: a request contract runs as a system transaction, with this much
+   execution gas and a state gas reservoir covering the writes it may make
+   (EIP-8282's SYSTEM_MAX_SSTORES_PER_CALL of them). *)
+Definition system_transaction_gas_def:
+  system_transaction_gas = 30000000n
 End
 
-Definition target_consolidation_requests_per_block_def:
-  target_consolidation_requests_per_block = 1n
+Definition system_max_sstores_per_call_def:
+  system_max_sstores_per_call = 16n
+End
+
+Definition system_state_gas_reservoir_def:
+  system_state_gas_reservoir =
+    system_max_sstores_per_call * storage_set_state_gas
 End
 
 Definition min_gas_limit_def:
