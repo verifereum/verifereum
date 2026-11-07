@@ -109,7 +109,7 @@ QED
 
 (* initial_context_simp rewrites a frame's msgParams to initial_msg_params,
    so the same bound is needed in that form. *)
-Theorem buffer_length_initial_msg_params:
+Theorem buffer_length_initial_msg_params[simp]:
   LENGTH t.data < 2 ** 256 ⇒
   buffer_length (initial_msg_params callee code static rd charged t).data <
   2 ** 256
@@ -601,6 +601,7 @@ Proof
           \\ rw (buffer_length_initial_context ::
                  buffer_length_initial_msg_params :: pres_simps))
   \\ gvs[dispatch_precompiles_returndata_bounded, return_def]
+  \\ rw[buffer_length_initial_msg_params, LENGTH_buffer_take_lt]
 QED
 
 Theorem preserves_returndata_bounded_step_call[simp]:
