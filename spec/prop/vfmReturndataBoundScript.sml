@@ -667,7 +667,7 @@ Theorem initial_state_returndata_bounded:
 Proof
   strip_tac \\ gvs[initial_state_def, AllCaseEqs()]
   \\ rpt (pairarg_tac \\ gvs[])
-  \\ qpat_x_assum `_ = SOME s` mp_tac
-  \\ gvs[apply_intrinsic_cost_def, AllCaseEqs()]
   \\ gvs[returndata_bounded_def]
+  \\ gvs[AllCaseEqs()]
+  \\ gvs[apply_intrinsic_cost_def]
 QED
