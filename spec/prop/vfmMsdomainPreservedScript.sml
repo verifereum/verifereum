@@ -171,13 +171,11 @@ Theorem SND_handle_create_msdomain[simp]:
   ∀e s. (SND (handle_create e s)).msdomain = s.msdomain
 Proof
   rpt gen_tac
-  >> simp[handle_create_def, bind_def, ignore_bind_def, return_def,
-          fail_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[bind_def, ignore_bind_def]
-  >> every_case_tac >> gvs[]
-  >> rpt (qpat_x_assum `_ = (_, _)` (mp_tac o Q.AP_TERM `\x. (SND x).msdomain`))
-  >> simp[]
+  >> simp[handle_create_def]
+  >> rpt (FIRST [irule SND_bind_msdomain, irule SND_ignore_bind_msdomain,
+                 IF_CASES_TAC, CASE_TAC]
+          >> rpt conj_tac >> rpt gen_tac >> BETA_TAC)
+  >> simp[assert_def, return_def, fail_def]
 QED
 
 (* handle_step does not modify msdomain. *)
