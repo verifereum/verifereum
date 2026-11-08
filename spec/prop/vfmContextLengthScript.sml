@@ -6,7 +6,7 @@ Ancestors
   While vfmState vfmContext vfmExecution vfmExecutionProp
   vfmStaticCalls vfmTxParams vfmDomainSeparation vfmDecreasesGas
   vfmSameFrame vfmStepLength vfmMsdomainPreserved vfmHandleStep
-  vfmRunWithinFrame vfmRunCall
+  vfmRunWithinFrame vfmRunCall vfmWfState
 Libs
   BasicProvers dep_rewrite
 

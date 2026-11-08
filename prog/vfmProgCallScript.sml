@@ -5,7 +5,7 @@
 Theory vfmProgCall
 Ancestors
   vfmProg vfmExecution vfmExecutionProp vfmContext vfmConstants vfmState
-  vfmDecreasesGas vfmRunCall vfmContextLength vfmAccountFrame vfmStaticCalls
+  vfmDecreasesGas vfmRunCall vfmWfState vfmContextLength vfmAccountFrame vfmStaticCalls
   vfmRunWithinFrame vfmSameFrame vfmDomainCollection vfmStepLength
   vfmTypes vfmBuffer vfmHandleStep vfmStoragePredicates
   prog set_sep pred_set pair list arithmetic option finite_map combin
