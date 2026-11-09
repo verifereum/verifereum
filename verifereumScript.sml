@@ -6,7 +6,7 @@ open HolKernel
   vfmReturndataBoundTheory vfmToDeleteTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib vfmChainIdTheory
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
-  vfmCreateCollisionTheory vfmDepositLogTheory
+  vfmCreateCollisionTheory vfmDepositLogTheory vfmSystemTransactionTheory
   vfmOriginalStateTheory vfmOriginalAccountsTheory
   vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
   vfmProgTheory vfmProgCallTheory
