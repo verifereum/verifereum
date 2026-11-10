@@ -1,5 +1,5 @@
 Theory vfmSystemTransaction
-Ancestors vfmCompute vfmSettlement vfmSystemContracts
+Ancestors byte vfmCompute vfmSettlement vfmSystemContracts
 Libs cv_transLib wordsLib
 
 (* Small modified contracts, independent of the external conformance suite. *)
@@ -93,7 +93,7 @@ Proof
 QED
 
 Definition system_oog_code_def:
-  system_oog_code = [0x60w; 7w; 0x5fw; 0x55w; 0x7fw] ++
+  system_oog_code : byte list = [0x60w; 7w; 0x5fw; 0x55w; 0x7fw] ++
                     REPLICATE 32 0xffw ++ [0x51w]
 End
 val () = cv_auto_trans system_oog_code_def;
@@ -117,7 +117,8 @@ Definition system_output_words_def:
       GENLIST (λi. word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (32 * i) output))) count)
       result
 End
-val () = cv_auto_trans system_output_words_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def] system_output_words_def;
 
 Theorem system_call_context:
   system_output_words 6 (system_test_call T
@@ -161,9 +162,14 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Definition system_test_domain_def:
+  system_test_domain checked code =
+    OPTION_MAP (λ(_, _, dom). dom) (system_test_call checked code)
+End
+val () = cv_auto_trans system_test_domain_def;
+
 Theorem system_collects_reverted_accesses:
-  OPTION_MAP (λ(_, _, dom). dom)
-    (system_test_call F [0x5fw; 0x54w; 0x5fw; 0x5fw; 0xfdw]) =
+  system_test_domain F [0x5fw; 0x54w; 0x5fw; 0x5fw; 0xfdw] =
   SOME (Collect (empty_domain with <|
     addresses := fINSERT withdrawal_request_contract fEMPTY;
     storageKeys := fINSERT (SK withdrawal_request_contract 0w) fEMPTY |>))
@@ -192,15 +198,22 @@ QED
 
 (* CREATE succeeds with initcode PUSH1 1; SELFDESTRUCT. Returning the created
    address distinguishes successful creation/deletion from a failed CREATE. *)
-Theorem system_finalizes_created_account_deletion:
-  OPTION_MAP (λ(output, accounts, dom).
+Definition system_creation_observation_def:
+  system_creation_observation code =
+    OPTION_MAP (λ(output, accounts, dom).
       (word_of_bytes T (0w:bytes32) output,
        (lookup_account (address_for_create withdrawal_request_contract 1) accounts).nonce,
        (lookup_account withdrawal_request_contract accounts).nonce))
-    (system_test_call T
+      (system_test_call T code)
+End
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def] system_creation_observation_def;
+
+Theorem system_finalizes_created_account_deletion:
+  system_creation_observation
       [0x62w; 0x60w; 1w; 0xffw; 0x5fw; 0x52w;
        0x60w; 3w; 0x60w; 0x1dw; 0x5fw; 0xf0w;
-       0x5fw; 0x52w; 0x60w; 0x20w; 0x5fw; 0xf3w]) =
+       0x5fw; 0x52w; 0x60w; 0x20w; 0x5fw; 0xf3w] =
   SOME (w2w (address_for_create withdrawal_request_contract 1), 0, 2)
 Proof
   CONV_TAC cv_eval
@@ -229,7 +242,8 @@ Definition system_block_def:
       withdrawalsRoot := word_of_bytes T 0w (withdrawals_root withdrawals);
       requestsHash := compute_requests_hash [] [withdrawal_data] [consolidation_data] |>
 End
-val () = cv_auto_trans system_block_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def] system_block_def;
 
 Definition system_block_accounts_def:
   system_block_accounts withdrawal_code consolidation_code =
@@ -311,6 +325,17 @@ QED
 
 (* Canonical queues return the source address, public keys and (for withdrawals)
    the little-endian amount. Use distinct bytes across the storage-word edges. *)
+Definition canonical_queue_observation_def:
+  canonical_queue_observation contract accounts =
+    OPTION_MAP (λ(output, accounts, dom).
+      (output, request_queue_metadata contract accounts,
+       (lookup_account contract accounts).nonce,
+       (lookup_account contract accounts).balance))
+      (run_system_transaction T (Collect empty_domain) 1 []
+        (settlement_block 0x300w) accounts contract [])
+End
+val () = cv_auto_trans canonical_queue_observation_def;
+
 Definition withdrawal_queue_witness_accounts_def:
   withdrawal_queue_witness_accounts =
   let accounts = request_inhibitor_accounts
@@ -327,16 +352,13 @@ Definition withdrawal_queue_witness_accounts_def:
   update_account withdrawal_request_contract
     (a with <| storage := storage; nonce := 7; balance := 23 |>) accounts
 End
-val () = cv_auto_trans withdrawal_queue_witness_accounts_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def]
+    withdrawal_queue_witness_accounts_def;
 
 Theorem withdrawal_queue_returns_request_bytes:
-  OPTION_MAP (λ(output, accounts, dom).
-    (output, request_queue_metadata withdrawal_request_contract accounts,
-     (lookup_account withdrawal_request_contract accounts).nonce,
-     (lookup_account withdrawal_request_contract accounts).balance))
-    (run_system_transaction T (Collect empty_domain) 1 []
-      (settlement_block 0x300w) withdrawal_queue_witness_accounts
-      withdrawal_request_contract []) =
+  canonical_queue_observation withdrawal_request_contract
+    withdrawal_queue_witness_accounts =
   SOME (word_to_bytes (0x1234w:address) T ++
         GENLIST (λi. n2w (i + 1)) 48 ++
         [8w; 7w; 6w; 5w; 4w; 3w; 2w; 1w],
@@ -363,16 +385,13 @@ Definition consolidation_queue_witness_accounts_def:
   update_account consolidation_request_contract
     (a with <| storage := storage; nonce := 7; balance := 23 |>) accounts
 End
-val () = cv_auto_trans consolidation_queue_witness_accounts_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def]
+    consolidation_queue_witness_accounts_def;
 
 Theorem consolidation_queue_returns_request_bytes:
-  OPTION_MAP (λ(output, accounts, dom).
-    (output, request_queue_metadata consolidation_request_contract accounts,
-     (lookup_account consolidation_request_contract accounts).nonce,
-     (lookup_account consolidation_request_contract accounts).balance))
-    (run_system_transaction T (Collect empty_domain) 1 []
-      (settlement_block 0x300w) consolidation_queue_witness_accounts
-      consolidation_request_contract []) =
+  canonical_queue_observation consolidation_request_contract
+    consolidation_queue_witness_accounts =
   SOME (word_to_bytes (0x1234w:address) T ++
         GENLIST (λi. n2w (i + 1)) 48 ++
         GENLIST (λi. n2w (i + 101)) 48,
