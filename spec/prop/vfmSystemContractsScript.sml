@@ -1630,6 +1630,22 @@ Proof
     ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
 QED
 
+Theorem system_monop_run:
+  c.stack <> [] /\ c.jumpDest = NONE /\ LENGTH c.stack <= stack_limit /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME op /\
+  step_inst op = step_monop op f /\ ~is_call op /\ LENGTH (opcode op) = 1 /\
+  c.gasUsed+static_gas op <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|stack := f (HD c.stack)::TL c.stack;
+      gasUsed := c.gasUsed+static_gas op; pc := c.pc+1|>,rb)::cs)
+Proof
+  strip_tac >> Cases_on `c.stack` >> gvs[] >>
+  irule system_run_step >>
+  simp[step_def, step_monop_def, consume_gas_def, push_stack_def, pop_stack_def,
+    inc_pc_or_jump_def, get_current_context_def, set_current_context_def, bind_def,
+    ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
+QED
+
 Theorem system_jumpi_run:
   2 <= LENGTH c.stack /\ c.jumpDest = NONE /\
   FLOOKUP c.msgParams.parsed c.pc = SOME JumpI /\
@@ -4065,6 +4081,92 @@ Proof
     vfmStateTheory.update_account_def, combinTheory.UPDATE_APPLY,
     combinTheory.UPDATE_EQ, vfmStateTheory.account_state_fupdcanon,
     combinTheory.o_DEF]
+QED
+
+Theorem withdrawal_pointer_run[local]:
+  c.pc = 387 /\ c.stack = [cnt;cnt;head;tail] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  416 < LENGTH c.msgParams.code /\ c.gasUsed+44245 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+44245 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 416; stack := [cnt]; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          (if head+cnt = tail then update_storage 3w 0w o update_storage 2w 0w
+           else update_storage 2w (head+cnt))) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `405 < LENGTH c.msgParams.code /\ c.gasUsed+29 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all withdrawal_pointer_test_run >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := if head+cnt = tail then 405 else 397;
+    stack := [cnt;head+cnt]; gasUsed := c.gasUsed+29|>` >>
+  Cases_on `head+cnt = tail`
+  >- (mp_tac (Q.INST [`c` |-> `c1`, `tail` |-> `tail`]
+        withdrawal_pointer_reset_run) >>
+      (impl_tac >- simp[Abbr `c1`]) >>
+      disch_then (qx_choosel_then [`g`, `ad`, `su`, `keys`, `d1`] strip_assume_tac) >>
+      qexistsl [`g`, `ad`, `su`, `keys`, `d1`] >>
+      conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+      gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `newhead` |-> `head+cnt`]
+    withdrawal_pointer_advance_run) >>
+  (impl_tac >- simp[Abbr `c1`]) >>
+  disch_then (qx_choosel_then [`g`, `ad`, `su`, `keys`, `d1`] strip_assume_tac) >>
+  qexistsl [`g`, `ad`, `su`, `keys`, `d1`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem withdrawal_excess_parse[local]:
+  withdrawal_instruction 416 = SOME JumpDest /\
+  withdrawal_instruction 417 = SOME (Push 0 []) /\
+  withdrawal_instruction 418 = SOME SLoad /\
+  withdrawal_instruction 419 = SOME (Dup 0) /\
+  withdrawal_instruction 420 = SOME (Push 32 (REPLICATE 32 255w)) /\
+  withdrawal_instruction 453 = SOME Eq /\
+  withdrawal_instruction 454 = SOME IsZero /\
+  withdrawal_instruction 455 = SOME (Push 2 [1w;205w]) /\
+  withdrawal_instruction 458 = SOME JumpI /\
+  withdrawal_instruction 459 = SOME Pop /\
+  withdrawal_instruction 460 = SOME (Push 0 []) /\
+  withdrawal_instruction 461 = SOME JumpDest /\
+  withdrawal_instruction 462 = SOME (Push 1 [1w]) /\
+  withdrawal_instruction 464 = SOME SLoad /\
+  withdrawal_instruction 465 = SOME (Push 1 [2w]) /\
+  withdrawal_instruction 467 = SOME (Dup 2) /\
+  withdrawal_instruction 468 = SOME (Dup 2) /\
+  withdrawal_instruction 469 = SOME Add /\
+  withdrawal_instruction 470 = SOME GT /\
+  withdrawal_instruction 471 = SOME (Push 2 [1w;226w]) /\
+  withdrawal_instruction 474 = SOME JumpI /\
+  withdrawal_instruction 475 = SOME Pop /\
+  withdrawal_instruction 476 = SOME Pop /\
+  withdrawal_instruction 477 = SOME (Push 0 []) /\
+  withdrawal_instruction 478 = SOME (Push 2 [1w;232w]) /\
+  withdrawal_instruction 481 = SOME Jump /\
+  withdrawal_instruction 482 = SOME JumpDest /\
+  withdrawal_instruction 483 = SOME Add /\
+  withdrawal_instruction 484 = SOME (Push 1 [2w]) /\
+  withdrawal_instruction 486 = SOME (Swap 0) /\
+  withdrawal_instruction 487 = SOME Sub /\
+  withdrawal_instruction 488 = SOME JumpDest /\
+  withdrawal_instruction 489 = SOME (Push 0 []) /\
+  withdrawal_instruction 490 = SOME SStore /\
+  withdrawal_instruction 491 = SOME (Push 0 []) /\
+  withdrawal_instruction 492 = SOME (Push 1 [1w]) /\
+  withdrawal_instruction 494 = SOME SStore /\
+  withdrawal_instruction 495 = SOME (Push 1 [76w]) /\
+  withdrawal_instruction 497 = SOME Mul /\
+  withdrawal_instruction 498 = SOME (Push 0 []) /\
+  withdrawal_instruction 499 = SOME Return
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
 QED
 
 Theorem withdrawal_request_code_correspondence:
