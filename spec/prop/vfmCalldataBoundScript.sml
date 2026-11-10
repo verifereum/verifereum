@@ -31,7 +31,10 @@ Theorem proceed_call_data_length:
   buffer_length (FST (HD s'.contexts)).msgParams.data ≤ az
 Proof
   strip_tac \\ Cases_on `op ≠ CallCode ∧ 0 < value`
+  (* EIP-8037: the branch's call reads the accounts for the creation charge and
+     drains the parent's state gas reservoir before it pushes the frame. *)
   \\ gvs[proceed_call_def, bind_def, ignore_bind_def,
+         get_accounts_def, drain_state_gas_reservoir_def, set_current_context_def,
          get_rollback_def, read_memory_def, get_current_context_def,
          get_caller_def, get_value_def, get_static_def,
          push_context_def, update_accounts_def, return_def, fail_def,
@@ -49,7 +52,11 @@ Theorem proceed_create_data_length:
   buffer_length (FST (HD s'.contexts)).msgParams.data = 0
 Proof
   strip_tac
+  (* EIP-8037: as in the call, the create reads the accounts and drains the
+     reservoir before it pushes the frame. *)
   \\ gvs[proceed_create_def, bind_def, ignore_bind_def,
+         get_accounts_def, drain_state_gas_reservoir_def, set_current_context_def,
+         get_current_context_def,
          get_rollback_def, get_original_def, set_original_def,
          update_accounts_def, push_context_def, return_def, fail_def,
          AllCaseEqs()]
@@ -102,7 +109,9 @@ Theorem initial_state_calldata_bounded:
 Proof
   strip_tac \\ gvs[initial_state_def, AllCaseEqs()]
   \\ rpt (pairarg_tac \\ gvs[])
-  \\ gvs[apply_intrinsic_cost_def, AllCaseEqs(), calldata_bounded_def,
-         initial_msg_params_def]
+  \\ gvs[calldata_bounded_def]
+  \\ gvs[AllCaseEqs()]
+  \\ gvs[initial_msg_params_def, apply_intrinsic_cost_def]
+  \\ Cases_on `tx.to` \\ gvs[]
   \\ drule pre_transaction_updates_data_length \\ rw[]
 QED

@@ -84,8 +84,28 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     blobGasUsed: string,
     excessBlobGas: string,
     parentBeaconBlockRoot: string,
-    requestsHash: string
+    requestsHash: string,
+    blockAccessListHash: string,
+    slotNumber: string
   }
+
+  (* EIP-7928 block access list.  An Amsterdam fixture block carries the BAL
+     beside its block RLP, not inside it; its entries are sorted by address
+     and its quantities are zero-padded hex. *)
+  type bal_nonce_change = {blockAccessIndex: string, postNonce: string}
+  type bal_balance_change = {blockAccessIndex: string, postBalance: string}
+  type bal_code_change = {blockAccessIndex: string, newCode: string}
+  type bal_storage_change = {blockAccessIndex: string, postValue: string}
+  type bal_storage_slot = {slot: string, slotChanges: bal_storage_change list}
+  type bal_account_change = {
+    address: string,
+    nonceChanges: bal_nonce_change list,
+    balanceChanges: bal_balance_change list,
+    codeChanges: bal_code_change list,
+    storageChanges: bal_storage_slot list,
+    storageReads: string list
+  }
+  type block_access_list = bal_account_change list
 
   type withdrawal = {
     index: string,
@@ -100,7 +120,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     blocknumber: string,
     transactions: transaction list,
     uncleHeaders: block_header list,
-    withdrawals: withdrawal list
+    withdrawals: withdrawal list,
+    blockAccessList: block_access_list option
   }
 
   type invalid_block = {
@@ -201,13 +222,14 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
   val blockHeaderDecoder : block_header decoder =
     JSONDecode.map (fn (((ph, uh, cb, sr), (tt, rt, bl, di),
                          (nu, gl, gu, ts), (ed, mh, no, ha)),
-                        (bf, wr, bg, eb), (pr, rh)) =>
+                        (bf, wr, bg, eb), (pr, rh, bh, sn)) =>
               {parentHash=ph, uncleHash=uh, coinbase=cb, stateRoot=sr,
                transactionsTrie=tt, receiptTrie=rt, bloom=bl, difficulty=di,
                number=nu, gasLimit=gl, gasUsed=gu, timestamp=ts,
                extraData=ed, mixHash=mh, nonce=no, hash=ha,
                baseFeePerGas=bf, withdrawalsRoot=wr, blobGasUsed=bg,
-               excessBlobGas=eb, parentBeaconBlockRoot=pr, requestsHash=rh}) $
+               excessBlobGas=eb, parentBeaconBlockRoot=pr, requestsHash=rh,
+               blockAccessListHash=bh, slotNumber=sn}) $
       tuple3 (
         tuple4 (tuple4 (field "parentHash" string,
                         field "uncleHash" string,
@@ -229,8 +251,48 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
                 field "withdrawalsRoot" string,
                 field "blobGasUsed" string,
                 field "excessBlobGas" string),
-        tuple2 (field "parentBeaconBlockRoot" string,
-                field "requestsHash" string))
+        tuple4 (field "parentBeaconBlockRoot" string,
+                field "requestsHash" string,
+                field "blockAccessListHash" string,
+                field "slotNumber" string))
+
+  (* A BAL entry's change lists are written even when empty, so they are
+     required here. *)
+  val balNonceChangeDecoder : bal_nonce_change decoder =
+    JSONDecode.map (fn (i,v) => {blockAccessIndex=i, postNonce=v}) $
+      tuple2 (field "blockAccessIndex" string, field "postNonce" string)
+
+  val balBalanceChangeDecoder : bal_balance_change decoder =
+    JSONDecode.map (fn (i,v) => {blockAccessIndex=i, postBalance=v}) $
+      tuple2 (field "blockAccessIndex" string, field "postBalance" string)
+
+  val balCodeChangeDecoder : bal_code_change decoder =
+    JSONDecode.map (fn (i,c) => {blockAccessIndex=i, newCode=c}) $
+      tuple2 (field "blockAccessIndex" string, field "newCode" string)
+
+  val balStorageChangeDecoder : bal_storage_change decoder =
+    JSONDecode.map (fn (i,v) => {blockAccessIndex=i, postValue=v}) $
+      tuple2 (field "blockAccessIndex" string, field "postValue" string)
+
+  val balStorageSlotDecoder : bal_storage_slot decoder =
+    JSONDecode.map (fn (s,cs) => {slot=s, slotChanges=cs}) $
+      tuple2 (field "slot" string,
+              field "slotChanges" (array balStorageChangeDecoder))
+
+  val balAccountChangeDecoder : bal_account_change decoder =
+    JSONDecode.map (fn ((a,no),(ba,co,(sl,rd))) =>
+              {address=a, nonceChanges=no, balanceChanges=ba,
+               codeChanges=co, storageChanges=sl, storageReads=rd}) $
+      tuple2 (tuple2 (field "address" string,
+                      field "nonceChanges" (array balNonceChangeDecoder)),
+              tuple3 (field "balanceChanges" (array balBalanceChangeDecoder),
+                      field "codeChanges" (array balCodeChangeDecoder),
+                      tuple2 (field "storageChanges"
+                                (array balStorageSlotDecoder),
+                              field "storageReads" (array string))))
+
+  val blockAccessListDecoder : block_access_list decoder =
+    array balAccountChangeDecoder
 
   val withdrawalDecoder : withdrawal decoder =
     JSONDecode.map (fn (i,v,a,m) => {
@@ -242,16 +304,18 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
               field "amount" string)
 
   val blockDecoder : block decoder =
-    JSONDecode.map (fn ((r,h,n),(t,u,w)) => {
+    JSONDecode.map (fn ((r,h,n),(t,u,(w,bal))) => {
                rlp=r, blockHeader=h, blocknumber=n,
-               transactions=t, uncleHeaders=u, withdrawals=w}) $
+               transactions=t, uncleHeaders=u, withdrawals=w,
+               blockAccessList=bal}) $
     tuple2 (tuple3 (orElse (field "rlp" string, succeed ""),
                     field "blockHeader" blockHeaderDecoder,
                     field "blocknumber" string),
             tuple3 (field "transactions" (array transactionDecoder),
                     field "uncleHeaders" (array blockHeaderDecoder),
-                    orElse (field "withdrawals" (array withdrawalDecoder),
-                            succeed [])))
+                    tuple2 (orElse (field "withdrawals" (array withdrawalDecoder),
+                                    succeed []),
+                            fieldO "blockAccessList" blockAccessListDecoder)))
 
   val blockOrInvalidDecoder : block_or_invalid decoder =
     orElse (JSONDecode.map (fn (x,r,d) => Invalid {
@@ -549,6 +613,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
     val stateRoot_tm = bytes32_from_hex $ #stateRoot header
     val parentBeaconBlockRoot_tm = bytes32_from_hex $ #parentBeaconBlockRoot header
     val requestsHash_tm = bytes32_from_hex $ #requestsHash header
+    val blockAccessListHash_tm = bytes32_from_hex $ #blockAccessListHash header
+    val slotNumber_tm = num_from_hex $ #slotNumber header
     val withdrawalsRoot_tm = bytes32_from_hex $ #withdrawalsRoot header
     val transactions_tm = mk_list(
       List.map (mk_transaction_tm baseFeePerGas_tm) $
@@ -571,6 +637,8 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
       ("rlpSize", rlpSize_tm),
       ("parentBeaconBlockRoot", parentBeaconBlockRoot_tm),
       ("requestsHash", requestsHash_tm),
+      ("blockAccessListHash", blockAccessListHash_tm),
+      ("slotNumber", slotNumber_tm),
       ("stateRoot", stateRoot_tm),
       ("withdrawalsRoot", withdrawalsRoot_tm),
       ("transactions", transactions_tm),
@@ -605,9 +673,12 @@ structure vfmTestDefLib :> vfmTestDefLib = struct
            optionSyntax.lift_option optional_block_ty (mk_block_tm rlp)
              rlp_decoded])
 
+  (* A fixture gives no BAL for the genesis block: it carries the header and
+     the block RLP only. *)
   fun mk_genesis_block (rlp: string) (h: block_header) : block =
     {rlp = rlp, blockHeader = h, blocknumber = #number h,
-     transactions = [], uncleHeaders = [], withdrawals = []}
+     transactions = [], uncleHeaders = [], withdrawals = [],
+     blockAccessList = NONE}
 
   fun define_test range_prefix test_number (test: test) = let
     val name_prefix = String.concat ["test_", range_prefix, "_", Int.toString test_number]

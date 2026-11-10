@@ -111,7 +111,9 @@ Proof
   \\ irule LESS_EQ_TRANS
   \\ first_x_assum $ irule_at Any
   \\ irule total_balance_update_account_le
-  \\ simp[empty_account_state_def]
+  (* EIP-8246: the sweep clears the account's nonce, storage and code but
+     keeps its balance, which is what makes the deletion total non-increasing. *)
+  \\ simp[clear_account_def]
 QED
 
 (* -------------------------------------------------------------------------
@@ -329,11 +331,21 @@ Proof
   \\ Cases_on `t` \\ gvs[]
   \\ PairCases_on `h` \\ PairCases_on `h'`
   \\ Cases_on `b` \\ Cases_on `t'`
+  (* EIP-8037: the branch's merge absorbs the child's state gas into the
+     parent, repays the spill it drifted over and, on a failed child, refills
+     the creation charge.  All four write only the head frame's fields, but
+     the refill is a conditional over the charge flag, which needs
+     `COND_RATOR` to reach the state argument and then a case split. *)
   \\ gvs[pop_and_incorporate_context_def, bind_def, ignore_bind_def,
          get_gas_left_def, get_current_context_def, pop_context_def,
          unuse_gas_def, set_current_context_def, assert_def,
+         absorb_state_gas_def, repay_state_gas_spill_def,
+         repay_state_gas_spill_context_def, credit_new_account_def,
+         credit_state_gas_refund_def, COND_RATOR,
          return_def, fail_def, push_logs_def, update_gas_refund_def,
-         set_rollback_def, balance_bounded_def, all_accounts_def, FRONT_DEF]
+         set_rollback_def, balance_bounded_def, all_accounts_def, FRONT_DEF,
+         AllCaseEqs()]
+  \\ rpt (IF_CASES_TAC \\ gvs[FRONT_DEF, balance_bounded_def, all_accounts_def])
   \\ rw[] \\ gvs[] \\ Cases_on `t` \\ gvs[FRONT_DEF]
 QED
 
@@ -399,14 +411,19 @@ Proof
       \\ irule total_balance_transfer_value \\ simp[])
   >- (tb_peel
       \\ ho_match_mp_tac tb_pres_ignore_bind_K \\ rpt conj_tac
-      >- (IF_CASES_TAC \\ simp[tb_pres_cp]
+      (* EIP-7708: the sweep logs its own transfer, which no account map
+         sees. *)
+      >- simp[tb_pres_push_logs]
+      >- (tb_peel
           \\ ho_match_mp_tac tb_pres_ignore_bind_K \\ rpt conj_tac
-          >- (irule tb_pres_update_accounts \\ rw[]
-              \\ irule total_balance_update_account_le \\ simp[])
-          >- simp[tb_pres_add_to_delete]
+          (* EIP-8246: the account it deletes keeps its balance, so the
+             branch that deletes has no update_accounts left to bound. *)
+          >- (IF_CASES_TAC \\ simp[tb_pres_cp, tb_pres_add_to_delete])
+          >- simp[tb_pres_cp]
           \\ ctx_tac)
-      >- simp[tb_pres_cp]
-      \\ ctx_tac)
+      (* the log write keeps the frame stack, which `ctx_tac` does not unfold *)
+      \\ rw[] \\ gvs[push_logs_def, get_current_context_def,
+                     set_current_context_def, bind_def, return_def, fail_def])
   \\ ctx_tac
 QED
 
@@ -416,7 +433,9 @@ Theorem tb_pres_proceed_call:
 Proof
   simp[proceed_call_def] \\ tb_peel
   \\ ho_match_mp_tac (GEN_ALL tb_pres_ignore_bind)
-  \\ qexists_tac `λs. total_balance x.accounts ≤ B` \\ simp[]
+  (* EIP-8037: the branch's call reads the accounts first, so `tb_peel` binds
+     the map to `x` and the rollback it then reads to `x'`. *)
+  \\ qexists_tac `λs. total_balance x'.accounts ≤ B` \\ simp[]
   \\ rpt conj_tac
   >- (IF_CASES_TAC \\ simp[tb_pres_cp]
       \\ irule tb_pres_update_accounts \\ rw[]
@@ -450,7 +469,9 @@ Theorem tb_pres_proceed_create:
   tb_pres B (λs. value ≤ (lookup_account sender s.rollback.accounts).balance)
     (proceed_create sender address value code gas)
 Proof
-  simp[proceed_create_def]
+  (* EIP-8037: the branch's create reads the accounts and drains the parent's
+     reservoir before the nonce bump, so they are peeled first. *)
+  simp[proceed_create_def] \\ tb_peel
   \\ ho_match_mp_tac (GEN_ALL tb_pres_ignore_bind)
   \\ qexists_tac `λs. value ≤ (lookup_account sender s.rollback.accounts).balance`
   \\ simp[]
@@ -458,12 +479,14 @@ Proof
   >- (irule tb_pres_update_accounts \\ simp[])
   >- (tb_peel
       \\ ho_match_mp_tac (GEN_ALL tb_pres_ignore_bind)
+      (* as in the call, `tb_peel` binds the accounts map to `x` and the
+         rollback it reads to `x'` *)
       \\ qexists_tac `λs. value ≤ (lookup_account sender s.rollback.accounts).balance ∧
-                          total_balance x.accounts ≤ B`
+                          total_balance x'.accounts ≤ B`
       \\ simp[tb_pres_set_original]
       \\ conj_tac
       >- (ho_match_mp_tac (GEN_ALL tb_pres_ignore_bind)
-          \\ qexists_tac `λs. total_balance x.accounts ≤ B`
+          \\ qexists_tac `λs. total_balance x'.accounts ≤ B`
           \\ simp[]
           \\ rpt conj_tac
           >- (irule tb_pres_update_accounts \\ rw[]
@@ -544,21 +567,32 @@ Proof
       \\ simp[])
   \\ rpt strip_tac
   \\ `LENGTH s.contexts > 1` by simp[]
-  \\ drule pop_and_incorporate_context_preserves
-  \\ disch_then (qspec_then `e = NONE` mp_tac) \\ simp[]
+  (* The branch carries `pop_and_incorporate_context_contexts_nonempty[simp]`,
+     which rewrites the antecedent of main's final implication to `T` and so
+     leaves `F`; derive the clause it needs instead of matching it in the
+     goal. *)
+  \\ `t = SND (pop_and_incorporate_context (e = NONE) s)` by
+       (qpat_x_assum `pop_and_incorporate_context (e = NONE) s = (INL (),t)`
+          (mp_tac o Q.AP_TERM `SND`) \\ simp[])
+  \\ `(SND (pop_and_incorporate_context (e = NONE) s)).contexts ≠ []` by
+       (irule pop_and_incorporate_context_preserves \\ fs[])
+  \\ metis_tac[]
 QED
 
 Theorem tb_pres_handle_exception:
   tb_pres B P (handle_exception e)
 Proof
   irule tb_pres_any
+  (* EIP-8037: the branch's prefix restores the frame's state gas first, and
+     restores it for a plain revert too, so the split is the branch's. *)
   \\ `handle_exception e =
       bind (if e ≠ NONE ∧ e ≠ SOME Reverted then
-              do gasLeft <- get_gas_left; consume_gas gasLeft;
-                 set_return_data [] od
+              do restore_state_gas; gasLeft <- get_gas_left;
+                 consume_gas gasLeft; set_return_data [] od
+            else if e = SOME Reverted then restore_state_gas
             else return ())
            (λu. handle_ex_helper e)`
-       by simp[FUN_EQ_THM, handle_exception_decomp]
+       by simp[FUN_EQ_THM, handle_exception_decomp, LET_THM]
   \\ pop_assum SUBST1_TAC
   \\ irule tb_pres_bind_cp \\ simp[tb_pres_handle_ex_helper]
   \\ rw[]
@@ -671,7 +705,8 @@ Theorem total_balance_pre_transaction_updates:
   pre_transaction_updates a bbf t = SOME a' ⇒
   total_balance a' + t.gasLimit * t.gasPrice ≤ total_balance a ∧
   t.value ≤ (lookup_account t.from a').balance ∧
-  calldata_floor_cost t.data ≤ t.gasLimit
+  calldata_floor_cost t.accessList (IS_NONE t.to) (t.to = SOME t.from)
+    t.value t.data ≤ t.gasLimit
 Proof
   strip_tac \\ gvs[pre_transaction_updates_def, AllCaseEqs()]
   \\ qmatch_goalsub_abbrev_tac `update_account t.from v a`
@@ -683,7 +718,8 @@ Proof
 QED
 
 Theorem lookup_balance_process_authorization:
-  process_authorization c au (a, x, r) = (a', x', r') ⇒
+  process_authorization chainId paid preAccs au (a, x, pw, ds, ch) =
+    (a', x', pw', ds', ch') ⇒
   (lookup_account y a').balance = (lookup_account y a).balance
 Proof
   rw[process_authorization_def]
@@ -692,8 +728,9 @@ Proof
 QED
 
 Theorem lookup_balance_process_authorizations:
-  ∀auths a x r a' x' r'.
-    process_authorizations c auths a x r = (a', x', r') ⇒
+  ∀auths a x pw ds ch a' x' pw' ds' ch'.
+    process_authorizations chainId paid preAccs auths a x pw ds ch =
+      (a', x', pw', ds', ch') ⇒
     ∀y. (lookup_account y a').balance = (lookup_account y a).balance
 Proof
   Induct \\ rw[process_authorizations_def]
@@ -707,7 +744,8 @@ Theorem initial_state_total_balance:
   total_balance s.rollback.accounts + tx.gasLimit * tx.gasPrice ≤
     total_balance accs ∧
   tx.value ≤ (lookup_account tx.from s.rollback.accounts).balance ∧
-  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  calldata_floor_cost tx.accessList (IS_NONE tx.to) (tx.to = SOME tx.from)
+    tx.value tx.data ≤ tx.gasLimit ∧
   LENGTH s.contexts = 1 ∧ s.contexts ≠ []
 Proof
   strip_tac \\ gvs[initial_state_def, AllCaseEqs(), initial_rollback_def]
@@ -720,12 +758,14 @@ Proof
 QED
 
 Theorem transaction_gas_accounting_le:
-  transaction_gas_accounting gp bf gL floor (gl, sr, ar) = (tu, re, tf) ∧
+  transaction_gas_accounting gp bf gL res spill comm floor
+    (gl, sgl, sr, ar) = (tu, eu, su, re, tf) ∧
   floor ≤ gL ⇒
   re + tf ≤ gL * gp
 Proof
   strip_tac
-  \\ qpat_x_assum `transaction_gas_accounting _ _ _ _ _ = _` mp_tac
+  \\ qpat_x_assum
+       `transaction_gas_accounting _ _ _ _ _ _ _ _ = _` mp_tac
   \\ simp_tac std_ss [transaction_gas_accounting_def, LET_THM, PAIR_EQ]
   \\ strip_tac
   \\ `tu ≤ gL`
@@ -753,7 +793,8 @@ QED
 
 Theorem total_balance_post_transaction_accounting:
   post_transaction_accounting blk tx result acc t = (r, a') ∧
-  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  calldata_floor_cost tx.accessList (IS_NONE tx.to) (tx.to = SOME tx.from)
+    tx.value tx.data ≤ tx.gasLimit ∧
   total_balance acc ≤ B ∧ total_balance t.rollback.accounts ≤ B ⇒
   total_balance a' ≤ B + tx.gasLimit * tx.gasPrice
 Proof
@@ -768,7 +809,8 @@ QED
 
 Theorem post_transaction_accounting_le:
   post_transaction_accounting blk tx r0 acc t = (r, a') ⇒
-  calldata_floor_cost tx.data ≤ tx.gasLimit ∧
+  calldata_floor_cost tx.accessList (IS_NONE tx.to) (tx.to = SOME tx.from)
+    tx.value tx.data ≤ tx.gasLimit ∧
   total_balance acc + tx.gasLimit * tx.gasPrice ≤ total_balance A ∧
   total_balance t.rollback.accounts ≤ total_balance acc ⇒
   total_balance a' ≤ total_balance A
@@ -780,6 +822,25 @@ Proof
   \\ decide_tac
 QED
 
+(* The accounts `initial_state` builds carry the pre-transaction updates' map
+   through the EIP-7702 authorization fold, which changes no balance, so the
+   two maps have the same total.  A preparation failure settles the
+   transaction from the pre-fold map, so this is what puts the state's own
+   map within it. *)
+Theorem initial_state_total_balance_pre_auth:
+  initial_state dom static chainId prevHashes blk accs tx = SOME s ⇒
+  total_balance s.rollback.accounts =
+  total_balance (THE (pre_transaction_updates accs
+                        (base_fee_per_blob_gas blk.excessBlobGas) tx))
+Proof
+  strip_tac \\ gvs[initial_state_def, AllCaseEqs(), initial_rollback_def]
+  \\ rpt (pairarg_tac \\ gvs[])
+  \\ drule lookup_balance_process_authorizations \\ strip_tac
+  \\ `total_balance postAuthAccounts = total_balance accounts`
+       by simp[total_balance_def]
+  \\ gvs[AllCaseEqs()]
+QED
+
 Theorem run_transaction_total_balance:
   run_transaction dom static chainId prevHashes blk accounts tx =
     SOME (r, accounts') ⇒
@@ -787,6 +848,10 @@ Theorem run_transaction_total_balance:
 Proof
   strip_tac \\ gvs[run_transaction_def, run_create_def, AllCaseEqs()]
   \\ drule initial_state_total_balance \\ strip_tac
+  (* EIP-8037: a preparation failure settles the transaction from the
+     pre-authorization map, whose total the state's own map shares. *)
+  \\ first_assum (fn ith =>
+       assume_tac (MATCH_MP initial_state_total_balance_pre_auth ith))
   \\ drule post_transaction_accounting_le \\ disch_then irule \\ simp[]
   \\ irule balance_bounded_rollback
   >~ [`handle (dispatch_precompiles _) handle_step _ = _`]

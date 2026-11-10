@@ -219,6 +219,20 @@ Definition empty_account_state_def:
      |>
 End
 
+(* EIP-8246: deleting an account clears its nonce, code and storage but
+   keeps its balance, so ether that reaches a self-destructed account
+   later in the transaction is not burned. *)
+Definition clear_account_def:
+  clear_account a =
+    a with <| nonce := 0; storage := empty_storage; code := [] |>
+End
+
+Theorem clear_account_idem[simp]:
+  clear_account (clear_account a) = clear_account a
+Proof
+  rw[clear_account_def]
+QED
+
 Definition account_empty_def:
   account_empty a ⇔ a.balance = 0 ∧ a.nonce = 0 ∧ NULL a.code
 End

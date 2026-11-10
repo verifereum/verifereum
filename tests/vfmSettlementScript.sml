@@ -8,7 +8,8 @@ Definition settlement_block_def:
     baseFeePerGas := 1; excessBlobGas := 0; gasUsed := 0; blobGasUsed := 0;
     number := 1; timeStamp := 1; coinBase := coinbase; gasLimit := 1000000;
     prevRandao := 0w; hash := 0w; rlpSize := 0;
-    parentBeaconBlockRoot := 0w; requestsHash := 0w; stateRoot := 0w;
+    parentBeaconBlockRoot := 0w; requestsHash := 0w; blockAccessListHash := 0w;
+    slotNumber := 0; stateRoot := 0w;
     withdrawalsRoot := 0w; transactions := []; withdrawals := [] |>
 End
 val () = cv_auto_trans settlement_block_def;
@@ -44,14 +45,14 @@ val () = cv_auto_trans settlement_observation_def;
 
 Theorem settlement_sender_is_coinbase:
   settlement_observation 0x100w (settlement_accounts 100000) settlement_tx =
-    SOME (NONE, 21000, 79000, 1, 79000, F)
+    SOME (NONE, 15000, 85000, 1, 85000, F)
 Proof
   CONV_TAC cv_eval
 QED
 
 Theorem settlement_distinct_coinbase:
   settlement_observation 0x300w (settlement_accounts 100000) settlement_tx =
-    SOME (NONE, 21000, 58000, 1, 21000, F)
+    SOME (NONE, 15000, 70000, 1, 15000, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -59,7 +60,7 @@ QED
 Theorem settlement_unused_gas_and_tip:
   settlement_observation 0x100w (settlement_accounts 100000)
     (settlement_tx with gasLimit := 40000) =
-    SOME (NONE, 21000, 79000, 1, 79000, F)
+    SOME (NONE, 15000, 85000, 1, 85000, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -67,17 +68,24 @@ QED
 Theorem settlement_zero_tip_empty_coinbase:
   settlement_observation 0x300w (settlement_accounts 100000)
     (settlement_tx with gasPrice := 1) =
-    SOME (NONE, 21000, 79000, 1, 0, T)
+    SOME (NONE, 15000, 85000, 1, 0, T)
 Proof
   CONV_TAC cv_eval
 QED
 
+(* EIP-8037 phase 3: a create transaction charges its new account 183600
+   state gas at the top frame, out of the reservoir first and then out of
+   the execution grant.  A 100000-gas create has neither: the limit is
+   below EIP-7825's 2**24 cap, so the reservoir is empty, and the grant is
+   75966.  The transaction halts at entry with OutOfGas and forfeits the
+   frame's whole grant; the sender still pays the fee, its nonce is still
+   taken, and the coinbase is credited. *)
 Theorem settlement_created_coinbase_selfdestruct:
   settlement_observation (address_for_create 0x100w 0)
     (settlement_accounts 1000000)
     (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
                           gasLimit := 100000 |>) =
-    SOME (NONE, 58036, 883928, 1, 0, T)
+    SOME (SOME OutOfGas, 100000, 800000, 1, 100000, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -87,7 +95,23 @@ Theorem settlement_created_coinbase_selfdestruct_zero_tip:
     (settlement_accounts 1000000)
     (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
                           gasLimit := 100000; gasPrice := 1 |>) =
-    SOME (NONE, 58036, 941964, 1, 0, T)
+    SOME (SOME OutOfGas, 100000, 900000, 1, 0, T)
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The same creation, funded: EIP-8037's state gas comes out of the part of
+   the gas limit above EIP-7825's 2**24 cap, so a 20000000-gas transaction
+   funds the 183600 the destination's creation needs out of its reservoir
+   and the create runs.  The contract self-destructs to itself, which is the
+   coinbase, and keeps its (zero) balance when it is cleared, so the only
+   thing in the coinbase is the transaction's tip. *)
+Theorem settlement_created_coinbase_selfdestruct_funded:
+  settlement_observation (address_for_create 0x100w 0)
+    (settlement_accounts 100000000)
+    (settlement_tx with <| to := NONE; data := [0x30w; 0xffw];
+                          gasLimit := 20000000 |>) =
+    SOME (NONE, 212636, 99574728, 1, 212636, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -98,7 +122,7 @@ Theorem settlement_reverted_sender_is_coinbase:
       (empty_account_state with code := [0x60w; 0w; 0x60w; 0w; 0xfdw])
       (settlement_accounts 100000))
     (settlement_tx with gasLimit := 40000) =
-    SOME (SOME Reverted, 21006, 78994, 1, 78994, F)
+    SOME (SOME Reverted, 15006, 84994, 1, 84994, F)
 Proof
   CONV_TAC cv_eval
 QED
@@ -111,7 +135,7 @@ Theorem settlement_storage_refund_and_tip:
         storage := update_storage 0w 1w empty_storage |>)
       (settlement_accounts 1000000))
     (settlement_tx with gasLimit := 100000) =
-    SOME (NONE, 21206, 978794, 1, 978794, F)
+    SOME (NONE, 21685, 978315, 1, 978315, F)
 Proof
   CONV_TAC cv_eval
 QED

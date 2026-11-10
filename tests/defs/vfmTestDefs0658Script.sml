@@ -1,5 +1,5 @@
 Theory vfmTestDefs0658[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCreateTest/create_empty000_createin_init_code_transaction/create_empty000_createin_init_code_transaction.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCreateTest/create_empty000_createin_init_code_transaction/create_empty000_createin_init_code_transaction.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_reservoir/revert_discards_descendant_storage_clear_credit_through_depth.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_reservoir/revert_discards_descendant_storage_clear_credit_through_depth.json");
 val defs = mapi (define_test "0658") tests;

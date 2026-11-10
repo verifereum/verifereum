@@ -1,5 +1,5 @@
 Theory vfmTestDefs0692[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stDelegatecallTestHomestead/delegatecall_and_oo_gat_tx_level/delegatecall_and_oo_gat_tx_level.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stDelegatecallTestHomestead/delegatecall_and_oo_gat_tx_level/delegatecall_and_oo_gat_tx_level.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_set_code/auth_state_gas_in_header_after_failure.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/state_gas_set_code/auth_state_gas_in_header_after_failure.json");
 val defs = mapi (define_test "0692") tests;

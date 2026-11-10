@@ -79,8 +79,25 @@ signature vfmTestDefLib = sig
     blobGasUsed: string,
     excessBlobGas: string,
     parentBeaconBlockRoot: string,
-    requestsHash: string
+    requestsHash: string,
+    blockAccessListHash: string,
+    slotNumber: string
   }
+
+  type bal_nonce_change = {blockAccessIndex: string, postNonce: string}
+  type bal_balance_change = {blockAccessIndex: string, postBalance: string}
+  type bal_code_change = {blockAccessIndex: string, newCode: string}
+  type bal_storage_change = {blockAccessIndex: string, postValue: string}
+  type bal_storage_slot = {slot: string, slotChanges: bal_storage_change list}
+  type bal_account_change = {
+    address: string,
+    nonceChanges: bal_nonce_change list,
+    balanceChanges: bal_balance_change list,
+    codeChanges: bal_code_change list,
+    storageChanges: bal_storage_slot list,
+    storageReads: string list
+  }
+  type block_access_list = bal_account_change list
 
   type withdrawal = {
     index: string,
@@ -95,7 +112,8 @@ signature vfmTestDefLib = sig
     blocknumber: string,
     transactions: transaction list,
     uncleHeaders: block_header list,
-    withdrawals: withdrawal list
+    withdrawals: withdrawal list,
+    blockAccessList: block_access_list option
   }
 
   type invalid_block = {

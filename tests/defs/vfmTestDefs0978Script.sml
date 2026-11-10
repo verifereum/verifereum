@@ -1,5 +1,5 @@
 Theory vfmTestDefs0978[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stNonZeroCallsTest/non_zero_value_transaction_cal_lwith_data_to_non_non_zero_balance/non_zero_value_transaction_cal_lwith_data_to_non_non_zero_balance.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stNonZeroCallsTest/non_zero_value_transaction_cal_lwith_data_to_non_non_zero_balance/non_zero_value_transaction_cal_lwith_data_to_non_non_zero_balance.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/cancun/eip5656_mcopy/mcopy/mcopy_on_empty_memory.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/cancun/eip5656_mcopy/mcopy/mcopy_on_empty_memory.json");
 val defs = mapi (define_test "0978") tests;

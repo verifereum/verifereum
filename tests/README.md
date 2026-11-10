@@ -110,7 +110,7 @@ The per-case timeout covers native input encoding and execution, but not JSON
 parsing or worker startup. Its minimum defaults to 60 seconds and reads
 `VFM_TIME_LIMIT` when the executable runs; `-t` overrides it. A case that uses
 a lot of gas gets more: its limit is its gas divided by `--gas-rate` (gas per
-second, default 300000) when that is longer. A case's gas is the sum of its
+second, default 150000) when that is longer. A case's gas is the sum of its
 blocks' header `gasUsed`, each capped at the block's `gasLimit` because an
 invalid block can claim any amount; an invalid block without `rlp_decoded`
 counts nothing. `--gas-rate 0` turns this off. When a case gets more than the
@@ -118,14 +118,16 @@ minimum, its output line ends with the limit it got, as in
 `(256.55s, limit 645s)`; the result file records only the seconds taken.
 
 The default rate leaves headroom below the slowest rate GitHub's runners
-showed on a heavy case. The EIP-6110 deposit cases are the slowest per gas,
-at 510k to 700k gas per second over two CI runs whose runners differed in
-speed by about a third: the `many_deposits_from_contract` case (11.8M gas)
-took 16.8 and 23.1 seconds, and `deposit_high_count` (194M gas) took 350
-seconds on the slower runner. Most cases near the block gas limit run several
-times faster. At this rate a case needs more than 18M gas to get more than 60
-seconds, which 14 of the 17550 cases in fixtures 21.0.1 have, so a case that
-is slow for reasons other than gas still times out at the minimum.
+showed on a heavy case. The slowest per gas are the cases EIP-8037's state gas
+prices up: `test_contract_creation_spam` (16.8M gas) ran at 280k to 460k gas
+per second over the runs that finished it, and timed out at the 60-second
+minimum in the slowest one; `test_return50000_2` (15.4M gas) ran at 295k to
+520k. The EIP-6110 deposit cases are the heaviest, `deposit_high_count` at
+212M gas: it took 235 to 372 seconds, or 571k to 906k gas per second, on
+runners whose speeds differed by about half. Most cases near the block gas
+limit run several times faster. At this rate a case needs more than 9M gas to
+get more than 60 seconds, so a case that is slow for reasons other than gas
+still times out at the minimum.
 
 Completed cases resume individually, including recorded timeouts. Use `-f` to
 rerun them after changing the limit.

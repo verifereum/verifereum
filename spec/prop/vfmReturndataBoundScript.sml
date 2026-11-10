@@ -100,10 +100,21 @@ QED
 
 Theorem buffer_length_initial_context:
   LENGTH t.data < 2 ** 256 ⇒
-  buffer_length (initial_context callee code static rd t).msgParams.data <
+  buffer_length
+    (initial_context callee code static rd charged sg t).msgParams.data <
   2 ** 256
 Proof
   rw[initial_context_def, initial_msg_params_def]
+QED
+
+(* initial_context_simp rewrites a frame's msgParams to initial_msg_params,
+   so the same bound is needed in that form. *)
+Theorem buffer_length_initial_msg_params[simp]:
+  LENGTH t.data < 2 ** 256 ⇒
+  buffer_length (initial_msg_params callee code static rd charged t).data <
+  2 ** 256
+Proof
+  rw[initial_msg_params_def]
 QED
 
 Theorem w2n_bytes32_lt:
@@ -251,9 +262,12 @@ fun pres_tac_with simps =
               irule preserves_returndata_bounded_ignore_bind,
               CASE_TAC, pairarg_tac] \\ rw simps);
 
+(* A frame merge absorbs the child's state-gas counters into the context it
+   goes back to, so the return-data bound has to see through it. *)
 val pres_simps = [preserves_returndata_bounded_set_current_context,
                   preserves_returndata_bounded_push_context,
-                  w2n_bytes32_lt, LENGTH_buffer_take_lt, UNCURRY];
+                  absorb_state_gas_def, w2n_bytes32_lt, LENGTH_buffer_take_lt,
+                  UNCURRY];
 
 val pres_tac = pres_tac_with pres_simps;
 
@@ -310,6 +324,30 @@ Proof
   \\ pres_tac
 QED
 
+(* EIP-8037: the state-gas meter actions the Amsterdam step definitions
+   added.  They move gas between the current frame's execution and state
+   meters and leave every frame's return data alone. *)
+
+Theorem preserves_returndata_bounded_state_gas[simp]:
+  preserves_returndata_bounded (charge_state_gas n) ∧
+  preserves_returndata_bounded (credit_state_gas_refund n) ∧
+  preserves_returndata_bounded (charge_new_account charged) ∧
+  preserves_returndata_bounded (credit_new_account charged) ∧
+  preserves_returndata_bounded restore_state_gas ∧
+  preserves_returndata_bounded repay_state_gas_spill ∧
+  preserves_returndata_bounded forfeit_remaining_gas ∧
+  preserves_returndata_bounded withhold_create_gas ∧
+  preserves_returndata_bounded drain_state_gas_reservoir ∧
+  preserves_returndata_bounded abort_create
+Proof
+  rw[charge_state_gas_def, credit_state_gas_refund_def,
+     charge_new_account_def, credit_new_account_def, restore_state_gas_def,
+     repay_state_gas_spill_def, repay_state_gas_spill_context_def,
+     forfeit_remaining_gas_def, withhold_create_gas_def,
+     drain_state_gas_reservoir_def, abort_create_def]
+  \\ pres_tac
+QED
+
 Theorem preserves_returndata_bounded_copy_to_memory[simp]:
   (∀f. src = SOME f ⇒ preserves_returndata_bounded f) ⇒
   preserves_returndata_bounded (copy_to_memory gas off soff sz src) ∧
@@ -349,7 +387,10 @@ Theorem preserves_returndata_bounded_steps[simp]:
   preserves_returndata_bounded (step_swap n) ∧
   preserves_returndata_bounded (step_log n) ∧
   preserves_returndata_bounded (step_return b) ∧
-  preserves_returndata_bounded step_self_destruct
+  preserves_returndata_bounded step_self_destruct ∧
+  preserves_returndata_bounded step_dupn ∧
+  preserves_returndata_bounded step_swapn ∧
+  preserves_returndata_bounded step_exchange
 Proof
   rw[step_binop_def, step_monop_def, step_modop_def, step_context_def,
      step_msgParams_def, step_txParams_def, step_exp_def,
@@ -360,7 +401,8 @@ Proof
      step_blob_hash_def, step_self_balance_def, step_mload_def,
      step_mstore_def, step_jump_def, step_jumpi_def, step_push_def,
      step_pop_def, step_dup_def, step_swap_def, step_log_def,
-     step_return_def, step_self_destruct_def, write_storage_def,
+     step_return_def, step_self_destruct_def, step_dupn_def,
+     step_swapn_def, step_exchange_def, write_storage_def,
      write_transient_storage_def, read_memory_def]
   \\ pres_tac
 QED
@@ -559,8 +601,11 @@ Proof
                  irule preserves_returndata_bounded_bind,
                  irule preserves_returndata_bounded_ignore_bind,
                  CASE_TAC, pairarg_tac]
-          \\ rw (buffer_length_initial_context :: pres_simps))
+          \\ rw (buffer_length_initial_context ::
+                 buffer_length_initial_msg_params :: pres_simps))
   \\ gvs[dispatch_precompiles_returndata_bounded, return_def]
+  \\ rw[initial_msg_params_def, buffer_length_initial_context,
+        buffer_length_initial_msg_params, LENGTH_buffer_take_lt]
 QED
 
 Theorem preserves_returndata_bounded_step_call[simp]:
@@ -622,5 +667,7 @@ Theorem initial_state_returndata_bounded:
 Proof
   strip_tac \\ gvs[initial_state_def, AllCaseEqs()]
   \\ rpt (pairarg_tac \\ gvs[])
-  \\ gvs[apply_intrinsic_cost_def, AllCaseEqs(), returndata_bounded_def]
+  \\ gvs[returndata_bounded_def]
+  \\ gvs[AllCaseEqs()]
+  \\ gvs[apply_intrinsic_cost_def]
 QED

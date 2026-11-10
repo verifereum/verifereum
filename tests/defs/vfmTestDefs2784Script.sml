@@ -1,0 +1,5 @@
+Theory vfmTestDefs2784[no_sig_docs]
+Libs vfmTestAuxLib vfmTestDefLib
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_amsterdam/ported_static/stSystemOperationsTest/double_selfdestruct_touch_paris/double_selfdestruct_touch_paris.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_amsterdam/ported_static/stSystemOperationsTest/double_selfdestruct_touch_paris/double_selfdestruct_touch_paris.json");
+val defs = mapi (define_test "2784") tests;
