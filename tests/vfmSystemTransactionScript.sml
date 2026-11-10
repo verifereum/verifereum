@@ -325,6 +325,17 @@ QED
 
 (* Canonical queues return the source address, public keys and (for withdrawals)
    the little-endian amount. Use distinct bytes across the storage-word edges. *)
+Definition canonical_queue_observation_def:
+  canonical_queue_observation contract accounts =
+    OPTION_MAP (λ(output, accounts, dom).
+      (output, request_queue_metadata contract accounts,
+       (lookup_account contract accounts).nonce,
+       (lookup_account contract accounts).balance))
+      (run_system_transaction T (Collect empty_domain) 1 []
+        (settlement_block 0x300w) accounts contract [])
+End
+val () = cv_auto_trans canonical_queue_observation_def;
+
 Definition withdrawal_queue_witness_accounts_def:
   withdrawal_queue_witness_accounts =
   let accounts = request_inhibitor_accounts
@@ -341,16 +352,13 @@ Definition withdrawal_queue_witness_accounts_def:
   update_account withdrawal_request_contract
     (a with <| storage := storage; nonce := 7; balance := 23 |>) accounts
 End
-val () = cv_auto_trans withdrawal_queue_witness_accounts_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def]
+    withdrawal_queue_witness_accounts_def;
 
 Theorem withdrawal_queue_returns_request_bytes:
-  OPTION_MAP (λ(output, accounts, dom).
-    (output, request_queue_metadata withdrawal_request_contract accounts,
-     (lookup_account withdrawal_request_contract accounts).nonce,
-     (lookup_account withdrawal_request_contract accounts).balance))
-    (run_system_transaction T (Collect empty_domain) 1 []
-      (settlement_block 0x300w) withdrawal_queue_witness_accounts
-      withdrawal_request_contract []) =
+  canonical_queue_observation withdrawal_request_contract
+    withdrawal_queue_witness_accounts =
   SOME (word_to_bytes (0x1234w:address) T ++
         GENLIST (λi. n2w (i + 1)) 48 ++
         [8w; 7w; 6w; 5w; 4w; 3w; 2w; 1w],
@@ -377,16 +385,13 @@ Definition consolidation_queue_witness_accounts_def:
   update_account consolidation_request_contract
     (a with <| storage := storage; nonce := 7; balance := 23 |>) accounts
 End
-val () = cv_auto_trans consolidation_queue_witness_accounts_def;
+val () = cv_auto_trans $
+  REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def]
+    consolidation_queue_witness_accounts_def;
 
 Theorem consolidation_queue_returns_request_bytes:
-  OPTION_MAP (λ(output, accounts, dom).
-    (output, request_queue_metadata consolidation_request_contract accounts,
-     (lookup_account consolidation_request_contract accounts).nonce,
-     (lookup_account consolidation_request_contract accounts).balance))
-    (run_system_transaction T (Collect empty_domain) 1 []
-      (settlement_block 0x300w) consolidation_queue_witness_accounts
-      consolidation_request_contract []) =
+  canonical_queue_observation consolidation_request_contract
+    consolidation_queue_witness_accounts =
   SOME (word_to_bytes (0x1234w:address) T ++
         GENLIST (λi. n2w (i + 1)) 48 ++
         GENLIST (λi. n2w (i + 101)) 48,
