@@ -375,6 +375,19 @@ Proof
   rpt conj_tac >> CONV_TAC cv_eval
 QED
 
+Theorem system_jumpdest_run[local]:
+  FLOOKUP c.msgParams.parsed c.pc = SOME JumpDest /\
+  c.jumpDest = NONE /\ c.gasUsed + 1 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|pc := c.pc + 1; gasUsed := c.gasUsed + 1|>, rb)::cs)
+Proof
+  strip_tac >> irule system_run_step >>
+  simp[step_def, step_inst_def, consume_gas_def, inc_pc_or_jump_def,
+       is_call_def, static_gas_def, opcode_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, handle_def]
+QED
+
 Theorem beacon_roots_dispatch_run[local]:
   s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
   c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
@@ -425,6 +438,17 @@ Proof
           vfmContextTheory.initial_context_def,
           vfmContextTheory.initial_msg_params_def,
           system_transaction_gas_def]) >>
+  asm_rewrite_tac [] >>
+  qabbrev_tac `c77 = c0 with <|pc := 77; gasUsed := c0.gasUsed + 21|>` >>
+  `run (s0 with contexts := [(c77, rb0)]) =
+   run (s0 with contexts :=
+     [(c77 with <|pc := c77.pc + 1; gasUsed := c77.gasUsed + 1|>, rb0)])` by
+    (irule system_jumpdest_run >>
+     simp[Abbr `c77`, Abbr `c0`, Abbr `s0`,
+          vfmContextTheory.initial_context_def,
+          vfmContextTheory.initial_msg_params_def,
+          system_transaction_gas_def, GSYM beacon_roots_instruction_def,
+          beacon_roots_parse]) >>
   asm_rewrite_tac [] >>
   cheat
 QED
