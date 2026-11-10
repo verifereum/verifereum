@@ -4798,6 +4798,826 @@ Proof
   gvs[Abbr `c1`, Abbr `s1`, vfmContextTheory.context_fupdcanon]
 QED
 
+Theorem consolidation_suffix_parse[local]:
+  consolidation_instruction 297 = SOME JumpDest /\
+  consolidation_instruction 298 = SOME (Swap 1) /\
+  consolidation_instruction 299 = SOME Add /\
+  consolidation_instruction 300 = SOME (Dup 0) /\
+  consolidation_instruction 301 = SOME (Swap 2) /\
+  consolidation_instruction 302 = SOME Eq /\
+  consolidation_instruction 303 = SOME (Push 2 [1w;59w]) /\
+  consolidation_instruction 306 = SOME JumpI /\
+  consolidation_instruction 307 = SOME (Swap 0) /\
+  consolidation_instruction 308 = SOME (Push 1 [2w]) /\
+  consolidation_instruction 310 = SOME SStore /\
+  consolidation_instruction 311 = SOME (Push 2 [1w;70w]) /\
+  consolidation_instruction 314 = SOME Jump /\
+  consolidation_instruction 315 = SOME JumpDest /\
+  consolidation_instruction 316 = SOME (Swap 0) /\
+  consolidation_instruction 317 = SOME Pop /\
+  consolidation_instruction 318 = SOME (Push 0 []) /\
+  consolidation_instruction 319 = SOME (Push 1 [2w]) /\
+  consolidation_instruction 321 = SOME SStore /\
+  consolidation_instruction 322 = SOME (Push 0 []) /\
+  consolidation_instruction 323 = SOME (Push 1 [3w]) /\
+  consolidation_instruction 325 = SOME SStore /\
+  consolidation_instruction 326 = SOME JumpDest /\
+  consolidation_instruction 327 = SOME (Push 0 []) /\
+  consolidation_instruction 328 = SOME SLoad /\
+  consolidation_instruction 329 = SOME (Dup 0) /\
+  consolidation_instruction 330 = SOME (Push 32 (REPLICATE 32 255w)) /\
+  consolidation_instruction 363 = SOME Eq /\
+  consolidation_instruction 364 = SOME IsZero /\
+  consolidation_instruction 365 = SOME (Push 2 [1w;115w]) /\
+  consolidation_instruction 368 = SOME JumpI /\
+  consolidation_instruction 369 = SOME Pop /\
+  consolidation_instruction 370 = SOME (Push 0 []) /\
+  consolidation_instruction 371 = SOME JumpDest /\
+  consolidation_instruction 372 = SOME (Push 1 [1w]) /\
+  consolidation_instruction 374 = SOME SLoad /\
+  consolidation_instruction 375 = SOME (Push 1 [1w]) /\
+  consolidation_instruction 377 = SOME (Dup 2) /\
+  consolidation_instruction 378 = SOME (Dup 2) /\
+  consolidation_instruction 379 = SOME Add /\
+  consolidation_instruction 380 = SOME GT /\
+  consolidation_instruction 381 = SOME (Push 2 [1w;136w]) /\
+  consolidation_instruction 384 = SOME JumpI /\
+  consolidation_instruction 385 = SOME Pop /\
+  consolidation_instruction 386 = SOME Pop /\
+  consolidation_instruction 387 = SOME (Push 0 []) /\
+  consolidation_instruction 388 = SOME (Push 2 [1w;142w]) /\
+  consolidation_instruction 391 = SOME Jump /\
+  consolidation_instruction 392 = SOME JumpDest /\
+  consolidation_instruction 393 = SOME Add /\
+  consolidation_instruction 394 = SOME (Push 1 [1w]) /\
+  consolidation_instruction 396 = SOME (Swap 0) /\
+  consolidation_instruction 397 = SOME Sub /\
+  consolidation_instruction 398 = SOME JumpDest /\
+  consolidation_instruction 399 = SOME (Push 0 []) /\
+  consolidation_instruction 400 = SOME SStore /\
+  consolidation_instruction 401 = SOME (Push 0 []) /\
+  consolidation_instruction 402 = SOME (Push 1 [1w]) /\
+  consolidation_instruction 404 = SOME SStore /\
+  consolidation_instruction 405 = SOME (Push 1 [116w]) /\
+  consolidation_instruction 407 = SOME Mul /\
+  consolidation_instruction 408 = SOME (Push 0 []) /\
+  consolidation_instruction 409 = SOME Return
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Theorem consolidation_pointer_test_run[local]:
+  c.pc = 297 /\ c.stack = [cnt;cnt;head;tail] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  315 < LENGTH c.msgParams.code /\ c.gasUsed+29 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := if head+cnt = tail then 315 else 307;
+      stack := [cnt;head+cnt]; gasUsed := c.gasUsed+29|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [59w:byte;1w] = (315w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, system_jumpdest_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`] system_swap_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Add`, `f` |-> `(word_add:bytes32->bytes32->bytes32)`]
+    system_binop_run, GSYM consolidation_instruction_def, consolidation_suffix_parse,
+    step_inst_def, is_call_def, static_gas_def, opcode_def, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_dup_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`] system_swap_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Eq`, `f` |-> `(\x y:bytes32. b2w (x=y))`]
+    system_binop_run, GSYM consolidation_instruction_def, consolidation_suffix_parse,
+    step_inst_def, is_call_def, static_gas_def, opcode_def, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;59w]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse,
+    static_gas_def, opcode_def, stack_limit_def] >>
+  Cases_on `head+cnt = tail` >>
+  simp[SimpLHS, system_jumpi_run, b2w_def, wordsTheory.dimword_def,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[vfmContextTheory.context_fupdcanon, wordsTheory.WORD_ADD_COMM] >> gvs[]
+QED
+
+Theorem consolidation_pointer_jump_run[local]:
+  c.pc = 311 /\ c.stack = [cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  326 < LENGTH c.msgParams.code /\ c.gasUsed+11 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 326; stack := [cnt]; gasUsed := c.gasUsed+11|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [70w:byte;1w] = (326w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;70w]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse,
+    static_gas_def, opcode_def, stack_limit_def] >>
+  simp[SimpLHS, system_jump_run, wordsTheory.dimword_def,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_pointer_advance_run[local]:
+  c.pc = 307 /\ c.stack = [cnt;newhead] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  326 < LENGTH c.msgParams.code /\ c.gasUsed+22117 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+22117 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 326; stack := [cnt]; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          update_storage 2w newhead) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [2w:byte] = (2w:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  qabbrev_tac `c1 = c with <|pc := 310; stack := [2w;newhead;cnt];
+    gasUsed := c.gasUsed+6|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    (simp[SimpLHS, Q.INST [`n` |-> `0`] system_swap_run,
+      GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+     simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[2w:byte]`] system_push_run,
+      GSYM consolidation_instruction_def, consolidation_suffix_parse,
+      static_gas_def, opcode_def, stack_limit_def] >>
+     simp[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `key` |-> `2w:bytes32`,
+    `value` |-> `newhead`, `ss` |-> `[cnt]`] system_sstore_bounded_run) >>
+  (impl_tac >- (simp[Abbr `c1`, GSYM consolidation_instruction_def,
+    consolidation_suffix_parse] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g1`, `ad`, `su`, `keys`, `d1`] strip_assume_tac) >>
+  qexistsl [`g1+11`, `ad`, `su`, `keys`, `d1`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+  qpat_x_assum `run (s with contexts := (c,rb)::cs) = _` (once_rewrite_tac o single) >>
+  qpat_x_assum `run (s with contexts := (c1,rb)::cs) = _` (once_rewrite_tac o single) >>
+  `g1+11 <= c.msgParams.gasLimit` by (gvs[Abbr `c1`] >> decide_tac) >>
+  mp_tac (Q.INST [`c` |-> `c with <|pc := 311; stack := [cnt]; gasUsed := g1;
+    addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>`,
+    `s` |-> `s with <|rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          update_storage 2w newhead) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+      msdomain := Collect d1|>`] consolidation_pointer_jump_run) >>
+  simp[Abbr `c1`, vfmContextTheory.context_fupdcanon,
+    vfmContextTheory.execution_state_fupdcanon]
+QED
+
+Theorem consolidation_pointer_reset_prefix_run[local]:
+  c.pc = 315 /\ c.stack = [cnt;tail] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  c.gasUsed+6 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 318; stack := [cnt]; gasUsed := c.gasUsed+6|>,rb)::cs)
+Proof
+  strip_tac >>
+  simp[SimpLHS, system_jumpdest_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_swap_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[SimpLHS, system_pop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_pointer_reset_run[local]:
+  c.pc = 315 /\ c.stack = [cnt;tail] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  c.gasUsed+44216 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+44216 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 326; stack := [cnt]; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          (update_storage 3w 0w o update_storage 2w 0w)) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `c.gasUsed+6 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_pointer_reset_prefix_run >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 318; stack := [cnt]; gasUsed := c.gasUsed+6|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `slot` |-> `2w:byte`] system_clear_slot_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM consolidation_instruction_def,
+    consolidation_suffix_parse, stack_limit_def]) >>
+  disch_then (qx_choosel_then [`g1`, `ad1`, `su1`, `keys1`, `d1`] strip_assume_tac) >>
+  qabbrev_tac `c2 = c1 with <|pc := 322; gasUsed := g1;
+    addRefund := ad1+c.addRefund; subRefund := su1+c.subRefund|>` >>
+  qabbrev_tac `s2 = s with <|rollback := s.rollback with <|
+    accounts := update_account c.msgParams.callee
+      ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+        update_storage 2w 0w) s.rollback.accounts;
+    accesses := s.rollback.accesses with storageKeys := keys1|>;
+    msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s2`, `d` |-> `d1`,
+    `slot` |-> `3w:byte`] system_clear_slot_run) >>
+  (impl_tac >- (simp[Abbr `c2`, Abbr `c1`, Abbr `s2`, GSYM consolidation_instruction_def,
+    consolidation_suffix_parse, stack_limit_def] >> gvs[] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `ad2`, `su2`, `keys2`, `d2`] strip_assume_tac) >>
+  qexistsl [`g2`, `ad2+ad1`, `su2+su1`, `keys2`, `d2`] >>
+  conj_tac >- (gvs[Abbr `c2`, Abbr `c1`] >> decide_tac) >>
+  qpat_x_assum `run (s with contexts := (c,rb)::cs) = _` (once_rewrite_tac o single) >>
+  qpat_x_assum `run (s with contexts := (c1,rb)::cs) = _` (once_rewrite_tac o single) >>
+  qpat_x_assum `run (s2 with contexts := _) = _` mp_tac >>
+  simp_tac pure_ss [Abbr `s2`, Abbr `c2`, Abbr `c1`] >>
+  simp_tac (srw_ss()) [vfmContextTheory.context_fupdcanon,
+    vfmContextTheory.execution_state_fupdcanon,
+    vfmContextTheory.rollback_state_fupdcanon, vfmContextTheory.access_sets_fupdcanon,
+    arithmeticTheory.ADD_ASSOC] >>
+  simp_tac (srw_ss()) [vfmStateTheory.lookup_account_def,
+    vfmStateTheory.update_account_def, combinTheory.UPDATE_APPLY,
+    combinTheory.UPDATE_EQ, vfmStateTheory.account_state_fupdcanon,
+    combinTheory.o_DEF]
+QED
+
+Theorem consolidation_pointer_run[local]:
+  c.pc = 297 /\ c.stack = [cnt;cnt;head;tail] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  326 < LENGTH c.msgParams.code /\ c.gasUsed+44245 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+44245 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 326; stack := [cnt]; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          (if head+cnt = tail then update_storage 3w 0w o update_storage 2w 0w
+           else update_storage 2w (head+cnt))) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `315 < LENGTH c.msgParams.code /\ c.gasUsed+29 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_pointer_test_run >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := if head+cnt = tail then 315 else 307;
+    stack := [cnt;head+cnt]; gasUsed := c.gasUsed+29|>` >>
+  Cases_on `head+cnt = tail`
+  >- (mp_tac (Q.INST [`c` |-> `c1`, `tail` |-> `tail`]
+        consolidation_pointer_reset_run) >>
+      (impl_tac >- simp[Abbr `c1`]) >>
+      disch_then (qx_choosel_then [`g`, `ad`, `su`, `keys`, `d1`] strip_assume_tac) >>
+      qexistsl [`g`, `ad`, `su`, `keys`, `d1`] >>
+      conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+      gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `newhead` |-> `head+cnt`]
+    consolidation_pointer_advance_run) >>
+  (impl_tac >- simp[Abbr `c1`]) >>
+  disch_then (qx_choosel_then [`g`, `ad`, `su`, `keys`, `d1`] strip_assume_tac) >>
+  qexistsl [`g`, `ad`, `su`, `keys`, `d1`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_inhibitor_run[local]:
+  c.pc = 329 /\ c.stack = [excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  371 < LENGTH c.msgParams.code /\
+  c.gasUsed+29 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 371; stack := [if excess = -1w then 0w else excess;cnt];
+      gasUsed := c.gasUsed+(if excess = -1w then 29 else 25)|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [115w:byte;1w] = (371w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_dup_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `32`, `ws` |-> `REPLICATE 32 (255w:byte)`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def, withdrawal_push_inhibitor] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Eq`, `f` |-> `(\x y:bytes32. b2w (x = y))`] system_binop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `IsZero`, `f` |-> `(\x:bytes32. b2w (x = 0w))`] system_monop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;115w]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  Cases_on `excess = -1w` >>
+  simp[SimpLHS, system_jumpi_run, b2w_def, wordsTheory.dimword_def,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[] >>
+  simp[SimpLHS, system_pop_run,
+    Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_excess_load_run[local]:
+  c.pc = 326 /\ c.stack = [cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  371 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  c.gasUsed+2132 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed+2132 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 371; gasUsed := g;
+      stack := [if lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage = -1w
+                then 0w else lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage;cnt]|>,rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 328; stack := [0w;cnt]; gasUsed := c.gasUsed+3|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    (simp[SimpLHS, system_jumpdest_run, GSYM consolidation_instruction_def,
+       consolidation_suffix_parse] >> simp[] >>
+     simp[SimpLHS, Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+       GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+       static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+     simp[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `key` |-> `0w:bytes32`, `ss` |-> `[cnt:bytes32]`]
+    system_sload_bounded_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM consolidation_instruction_def,
+    consolidation_suffix_parse, stack_limit_def]) >>
+  disch_then (qx_choosel_then [`g1`, `keys`, `d1`] strip_assume_tac) >>
+  qabbrev_tac `excess = lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage` >>
+  qabbrev_tac `c2 = c with <|pc := 329; stack := [excess;cnt]; gasUsed := g1|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s1`] consolidation_inhibitor_run) >>
+  (impl_tac >- (simp[Abbr `c2`] >> gvs[Abbr `c1`])) >>
+  strip_tac >>
+  qexistsl [`g1+(if excess = -1w then 29 else 25)`, `keys`, `d1`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> IF_CASES_TAC >> decide_tac) >>
+  gvs[Abbr `c1`, Abbr `c2`, Abbr `s1`, Abbr `excess`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_excess_test_run[local]:
+  c.pc = 375 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  392 < LENGTH c.msgParams.code /\ c.gasUsed+28 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := if 1 < w2n (added+excess) then 392 else 385;
+      stack := [added;excess;cnt]; gasUsed := c.gasUsed+28|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [1w:byte] = (1w:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  `word_of_bytes F 0w [136w:byte;1w] = (392w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[1w:byte]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`] system_dup_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`] system_dup_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Add`, `f` |-> `word_add:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `GT`, `f` |-> `(\x y:bytes32. b2w (w2n x > w2n y))`] system_binop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;136w]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  Cases_on `1 < w2n (added+excess)` >>
+  simp[SimpLHS, system_jumpi_run, b2w_def, wordsTheory.dimword_def,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, arithmeticTheory.GREATER_DEF] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_excess_zero_run[local]:
+  c.pc = 385 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  398 < LENGTH c.msgParams.code /\ c.gasUsed+17 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 398; stack := [0w;cnt]; gasUsed := c.gasUsed+17|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [142w:byte;1w] = (398w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, system_pop_run, GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[SimpLHS, system_pop_run, GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;142w]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, system_jump_run, GSYM consolidation_instruction_def, consolidation_suffix_parse,
+    wordsTheory.dimword_def] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_excess_sub_run[local]:
+  c.pc = 392 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  c.gasUsed+13 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 398; stack := [added+excess-1w;cnt]; gasUsed := c.gasUsed+13|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [1w:byte] = (1w:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  simp[SimpLHS, system_jumpdest_run, GSYM consolidation_instruction_def, consolidation_suffix_parse] >>
+  simp[] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Add`, `f` |-> `word_add:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[1w:byte]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_swap_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Sub`, `f` |-> `word_sub:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[vfmContextTheory.context_fupdcanon, wordsTheory.WORD_SUB_ADD]
+QED
+
+Theorem consolidation_excess_arithmetic_run[local]:
+  c.pc = 375 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  398 < LENGTH c.msgParams.code /\ c.gasUsed+45 <= c.msgParams.gasLimit ==>
+  ?g. g <= c.gasUsed+45 /\
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 398;
+      stack := [if 1 < w2n (added+excess) then added+excess-1w else 0w;cnt];
+      gasUsed := g|>,rb)::cs)
+Proof
+  strip_tac >>
+  `392 < LENGTH c.msgParams.code /\ c.gasUsed+28 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_excess_test_run >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := if 1 < w2n (added+excess) then 392 else 385;
+    stack := [added;excess;cnt]; gasUsed := c.gasUsed+28|>` >>
+  Cases_on `1 < w2n (added+excess)`
+  >- (qexists_tac `c.gasUsed+41` >> conj_tac >- decide_tac >>
+      mp_tac (Q.INST [`c` |-> `c1`] consolidation_excess_sub_run) >>
+      (impl_tac >- simp[Abbr `c1`]) >>
+      gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  qexists_tac `c.gasUsed+45` >> conj_tac >- decide_tac >>
+  mp_tac (Q.INST [`c` |-> `c1`] consolidation_excess_zero_run) >>
+  (impl_tac >- simp[Abbr `c1`]) >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_added_load_run[local]:
+  c.pc = 371 /\ c.stack = [excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  s.msdomain = Collect d /\ c.gasUsed+2104 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed+2104 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 375; gasUsed := g;
+      stack := [lookup_storage 1w (lookup_account c.msgParams.callee s.rollback.accounts).storage;excess;cnt]|>,rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 372; gasUsed := c.gasUsed+1|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    (simp[SimpLHS, system_jumpdest_run, GSYM consolidation_instruction_def,
+       consolidation_suffix_parse] >>
+     simp[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `slot` |-> `1w:byte`] system_push1_sload_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM consolidation_instruction_def,
+    consolidation_suffix_parse, stack_limit_def]) >>
+  disch_then (qx_choosel_then [`g`, `keys`, `d'`] strip_assume_tac) >>
+  qexistsl [`g`, `keys`, `d'`] >>
+  conj_tac >- gvs[Abbr `c1`] >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_excess_store_run[local]:
+  c.pc = 398 /\ c.stack = [value;cnt] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  c.gasUsed+22103 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+22103 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 401; stack := [cnt]; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          update_storage 0w value) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 400; stack := [0w;value;cnt]; gasUsed := c.gasUsed+3|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    (simp[SimpLHS, system_jumpdest_run, GSYM consolidation_instruction_def,
+       consolidation_suffix_parse] >> simp[] >>
+     simp[SimpLHS, Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+       GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+       static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+     simp[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `key` |-> `0w:bytes32`, `ss` |-> `[cnt:bytes32]`]
+    system_sstore_bounded_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM consolidation_instruction_def,
+    consolidation_suffix_parse, stack_limit_def]) >>
+  disch_then (qx_choosel_then [`g`, `ad`, `su`, `keys`, `d'`] strip_assume_tac) >>
+  qexistsl [`g`, `ad`, `su`, `keys`, `d'`] >>
+  conj_tac >- gvs[Abbr `c1`] >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_excess_compute_run[local]:
+  c.pc = 326 /\ c.stack = [cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  398 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  excess = (if lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage = -1w
+    then 0w else lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage) /\
+  added = lookup_storage 1w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  c.gasUsed+4281 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed+4281 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 398; gasUsed := g;
+      stack := [if 1 < w2n (added+excess) then added+excess-1w else 0w;cnt]|>,rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `371 < LENGTH c.msgParams.code /\ c.gasUsed+2132 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_excess_load_run >>
+  disch_then (qspecl_then [`rb`, `cs`] mp_tac) >>
+  disch_then (qx_choosel_then [`g1`, `keys1`, `d1`] strip_assume_tac) >>
+  qabbrev_tac `c1 = c with <|pc := 371; stack := [excess;cnt]; gasUsed := g1|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `s` |-> `s1`, `d` |-> `d1`] consolidation_added_load_run) >>
+  (impl_tac >- (simp[Abbr `c1`, Abbr `s1`] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `keys2`, `d2`] strip_assume_tac) >>
+  qabbrev_tac `c2 = c with <|pc := 375; stack := [added;excess;cnt]; gasUsed := g2|>` >>
+  qabbrev_tac `s2 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys2; msdomain := Collect d2|>` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s2`] consolidation_excess_arithmetic_run) >>
+  (impl_tac >- (simp[Abbr `c2`] >> gvs[Abbr `c1`] >> decide_tac)) >>
+  disch_then (qx_choose_then `g3` strip_assume_tac) >>
+  qexistsl [`g3`, `keys2`, `d2`] >>
+  conj_tac >- (gvs[Abbr `c1`, Abbr `c2`] >> decide_tac) >>
+  gvs[Abbr `c1`, Abbr `c2`, Abbr `s1`, Abbr `s2`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_counter_clear_run[local]:
+  c.pc = 401 /\ c.stack = [cnt] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  c.gasUsed+22105 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+22105 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 405; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          update_storage 1w 0w) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`slot` |-> `1w:byte`] system_clear_slot_run) >>
+  (impl_tac >- simp[GSYM consolidation_instruction_def, consolidation_suffix_parse,
+    stack_limit_def]) >> simp[]
+QED
+
+Theorem consolidation_excess_bookkeeping_run[local]:
+  c.pc = 326 /\ c.stack = [cnt] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  398 < LENGTH c.msgParams.code /\
+  excess = (if lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage = -1w
+    then 0w else lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage) /\
+  added = lookup_storage 1w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  value = (if 1 < w2n (added+excess) then added+excess-1w else 0w) /\
+  c.gasUsed+48489 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+48489 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 405; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          (update_storage 1w 0w o update_storage 0w value)) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `c.gasUsed+4281 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_excess_compute_run >>
+  disch_then (qspecl_then [`rb`, `cs`] mp_tac) >>
+  disch_then (qx_choosel_then [`g1`, `keys1`, `d1`] strip_assume_tac) >>
+  qabbrev_tac `c1 = c with <|pc := 398; stack := [value;cnt]; gasUsed := g1|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `s` |-> `s1`, `d` |-> `d1`] consolidation_excess_store_run) >>
+  (impl_tac >- (simp[Abbr `c1`, Abbr `s1`] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `ad2`, `su2`, `keys2`, `d2`] strip_assume_tac) >>
+  qabbrev_tac `c2 = c with <|pc := 401; stack := [cnt]; gasUsed := g2;
+    addRefund := ad2+c.addRefund; subRefund := su2+c.subRefund|>` >>
+  qabbrev_tac `s2 = s with <|rollback := s.rollback with <|
+    accounts := update_account c.msgParams.callee
+      ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+        update_storage 0w value) s.rollback.accounts;
+    accesses := s.rollback.accesses with storageKeys := keys2|>; msdomain := Collect d2|>` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s2`, `d` |-> `d2`] consolidation_counter_clear_run) >>
+  (impl_tac >- (simp[Abbr `c2`, Abbr `s2`] >> gvs[Abbr `c1`] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g3`, `ad3`, `su3`, `keys3`, `d3`] strip_assume_tac) >>
+  qexistsl [`g3`, `ad3+ad2`, `su3+su2`, `keys3`, `d3`] >>
+  conj_tac >- (gvs[Abbr `c1`, Abbr `c2`] >> decide_tac) >>
+  qpat_x_assum `run (s with contexts := (c,rb)::cs) = _` mp_tac >>
+  qpat_x_assum `run (s1 with contexts := _) = _` mp_tac >>
+  qpat_x_assum `run (s2 with contexts := _) = _` mp_tac >>
+  qpat_assum `value = _` (fn th => pure_rewrite_tac [GSYM th]) >>
+  simp_tac pure_ss [Abbr `s2`, Abbr `c2`, Abbr `s1`, Abbr `c1`] >>
+  simp_tac (srw_ss()) [vfmContextTheory.context_fupdcanon,
+    vfmContextTheory.execution_state_fupdcanon,
+    vfmContextTheory.rollback_state_fupdcanon, vfmContextTheory.access_sets_fupdcanon,
+    arithmeticTheory.ADD_ASSOC] >>
+  simp_tac (srw_ss()) [vfmStateTheory.lookup_account_def,
+    vfmStateTheory.update_account_def, combinTheory.UPDATE_APPLY,
+    combinTheory.UPDATE_EQ, vfmStateTheory.account_state_fupdcanon, combinTheory.o_DEF] >>
+  Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
+QED
+
+Theorem consolidation_bookkeeping_run[local]:
+  c.pc = 297 /\ c.stack = [cnt;cnt;head;tail] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  398 < LENGTH c.msgParams.code /\
+  excess = (if lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage = -1w
+    then 0w else lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage) /\
+  added = lookup_storage 1w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  w2n added+w2n excess < dimword (:256) /\
+  c.gasUsed+92734 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+92734 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 405; stack := [cnt]; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          ((if head+cnt = tail then update_storage 3w 0w o update_storage 2w 0w
+            else update_storage 2w (head+cnt)) o update_storage 1w 0w o
+           update_storage 0w (n2w (w2n added+w2n excess-1)))) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `326 < LENGTH c.msgParams.code /\ c.gasUsed+44245 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_pointer_run >>
+  disch_then (qspecl_then [`rb`, `cs`] mp_tac) >>
+  disch_then (qx_choosel_then [`g1`, `ad1`, `su1`, `keys1`, `d1`] strip_assume_tac) >>
+  qabbrev_tac `c1 = c with <|pc := 326; stack := [cnt]; gasUsed := g1;
+    addRefund := ad1+c.addRefund; subRefund := su1+c.subRefund|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with <|
+    accounts := update_account c.msgParams.callee
+      ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+        (if head+cnt = tail then update_storage 3w 0w o update_storage 2w 0w
+         else update_storage 2w (head+cnt))) s.rollback.accounts;
+    accesses := s.rollback.accesses with storageKeys := keys1|>; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `s` |-> `s1`, `d` |-> `d1`,
+    `value` |-> `n2w (w2n added+w2n excess-1):bytes32`] consolidation_excess_bookkeeping_run) >>
+  (impl_tac >- (simp[Abbr `c1`, Abbr `s1`] >>
+    conj_tac >- (Cases_on `head+cnt = tail` >>
+      gvs[vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+        vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+        combinTheory.UPDATE_APPLY, combinTheory.o_DEF, wordsTheory.dimword_def]) >>
+    conj_tac >- (Cases_on `head+cnt = tail` >>
+      gvs[vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+        vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+        combinTheory.UPDATE_APPLY, combinTheory.o_DEF, wordsTheory.dimword_def]) >>
+    mp_tac (Q.INST [`a` |-> `added:bytes32`, `b` |-> `excess:bytes32`,
+      `target` |-> `1`] queue_excess_word) >>
+    (impl_tac >- simp[wordsTheory.dimword_def]) >> simp[])) >>
+  disch_then (qx_choosel_then [`g2`, `ad2`, `su2`, `keys2`, `d2`] strip_assume_tac) >>
+  qexistsl [`g2`, `ad2+ad1`, `su2+su1`, `keys2`, `d2`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+  qpat_x_assum `run (s with contexts := (c,rb)::cs) = _` mp_tac >>
+  qpat_x_assum `run (s1 with contexts := _) = _` mp_tac >>
+  simp_tac pure_ss [Abbr `s1`, Abbr `c1`] >>
+  simp_tac (srw_ss()) [vfmContextTheory.context_fupdcanon,
+    vfmContextTheory.execution_state_fupdcanon, vfmContextTheory.rollback_state_fupdcanon,
+    vfmContextTheory.access_sets_fupdcanon, arithmeticTheory.ADD_ASSOC] >>
+  simp_tac (srw_ss()) [vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+    combinTheory.UPDATE_APPLY, combinTheory.UPDATE_EQ, vfmStateTheory.account_state_fupdcanon] >>
+  `update_storage 1w 0w o update_storage 0w (n2w (w2n added+w2n excess-1)) o
+     (if cnt+head = tail then update_storage 3w 0w o update_storage 2w 0w
+      else update_storage 2w (cnt+head)) =
+   (if cnt+head = tail then update_storage 3w 0w o update_storage 2w 0w
+    else update_storage 2w (cnt+head)) o update_storage 1w 0w o
+      update_storage 0w (n2w (w2n added+w2n excess-1))` by
+    (Cases_on `cnt+head = tail` >>
+     simp[FUN_EQ_THM, combinTheory.o_DEF, vfmStateTheory.update_storage_def,
+       combinTheory.UPDATE_COMMUTES, wordsTheory.dimword_def]) >>
+  simp[]
+QED
+
+Theorem consolidation_return_prepare_run[local]:
+  c.pc = 405 /\ c.stack = [cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  c.gasUsed+10 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 409; stack := [0w;116w*cnt]; gasUsed := c.gasUsed+10|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [116w:byte] = (116w:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[116w:byte]`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Mul`, `f` |-> `word_mul:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+    GSYM consolidation_instruction_def, consolidation_suffix_parse, stack_limit_def,
+    static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_return_run[local]:
+  c.pc = 405 /\ c.stack = [n2w n] /\ c.jumpDest = NONE /\ n <= 2 /\
+  c.msgParams.outputTo = empty_return_destination /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  buffer_length c.memory MOD 32 = 0 /\ 116*n <= buffer_length c.memory /\
+  c.gasUsed+10 <= c.msgParams.gasLimit ==>
+  run (s with contexts := [(c,rb)]) = SOME (INR NONE,
+    s with contexts := [(c with <|pc := 409; stack := []; gasUsed := c.gasUsed+10;
+      returnData := buffer_take 0 (116*n) c.memory|>,rb)])
+Proof
+  strip_tac >>
+  `w2n (116w*n2w n:bytes32) = 116*n` by
+    (simp[wordsTheory.word_mul_n2w, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+     irule arithmeticTheory.MOD_UNIQUE >> qexists_tac `0` >> simp[]) >>
+  drule_all consolidation_return_prepare_run >>
+  disch_then (qspecl_then [`s`, `rb`, `[]`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 409; stack := [0w;116w*n2w n]; gasUsed := c.gasUsed+10|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `sz` |-> `116w*n2w n:bytes32`] queue_return_allocated_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM consolidation_instruction_def, consolidation_suffix_parse]) >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem consolidation_suffix_run[local]:
+  c.pc = 297 /\ c.stack = [n2w n;n2w n;head;tail] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\ n <= 2 /\
+  c.msgParams.outputTo = empty_return_destination /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  398 < LENGTH c.msgParams.code /\
+  buffer_length c.memory MOD 32 = 0 /\ 116*n <= buffer_length c.memory /\
+  excess = (if lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage = -1w
+    then 0w else lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage) /\
+  added = lookup_storage 1w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  w2n added+w2n excess < dimword (:256) /\
+  c.gasUsed+92744 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+92744 /\
+  run (s with contexts := [(c,rb)]) = SOME (INR NONE, s with <|
+    contexts := [(c with <|pc := 409; stack := []; gasUsed := g;
+      returnData := buffer_take 0 (116*n) c.memory;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)];
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          ((if head+n2w n = tail then update_storage 3w 0w o update_storage 2w 0w
+            else update_storage 2w (head+n2w n)) o update_storage 1w 0w o
+           update_storage 0w (n2w (w2n added+w2n excess-1)))) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `c.gasUsed+92734 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_bookkeeping_run >>
+  disch_then (qspecl_then [`rb`, `[]`] mp_tac) >>
+  disch_then (qx_choosel_then [`g1`, `ad`, `su`, `keys`, `d1`] strip_assume_tac) >>
+  qabbrev_tac `c1 = c with <|pc := 405; stack := [n2w n]; gasUsed := g1;
+    addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with <|
+    accounts := update_account c.msgParams.callee
+      ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+        ((if head+n2w n = tail then update_storage 3w 0w o update_storage 2w 0w
+          else update_storage 2w (head+n2w n)) o update_storage 1w 0w o
+         update_storage 0w (n2w (w2n added+w2n excess-1)))) s.rollback.accounts;
+    accesses := s.rollback.accesses with storageKeys := keys|>; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `s` |-> `s1`] consolidation_return_run) >>
+  (impl_tac >- (simp[Abbr `c1`] >> decide_tac)) >>
+  strip_tac >> qexistsl [`g1+10`, `ad`, `su`, `keys`, `d1`] >>
+  conj_tac >- decide_tac >>
+  gvs[Abbr `c1`, Abbr `s1`, vfmContextTheory.context_fupdcanon]
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
