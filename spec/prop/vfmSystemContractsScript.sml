@@ -285,6 +285,49 @@ Proof
   Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
 QED
 
+Definition beacon_roots_caller_word_def:
+  beacon_roots_caller_word : bytes32 =
+    word_of_bytes F 0w (REVERSE (TAKE 20 (DROP 2 beacon_roots_code)))
+End
+val () = cv_auto_trans (REWRITE_RULE [GSYM byteTheory.word_of_bytes_le_def]
+  beacon_roots_caller_word_def);
+
+Theorem beacon_roots_caller_word[local]:
+  beacon_roots_caller_word = (w2w system_address : bytes32)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition beacon_roots_instruction_def:
+  beacon_roots_instruction pc =
+    FLOOKUP (parse_code 0 FEMPTY beacon_roots_code) pc
+End
+val () = cv_auto_trans beacon_roots_instruction_def;
+
+Theorem beacon_roots_parse[local]:
+  beacon_roots_instruction 0 = SOME Caller /\
+  beacon_roots_instruction 1 = SOME (Push 20 (TAKE 20 (DROP 2 beacon_roots_code))) /\
+  beacon_roots_instruction 22 = SOME Eq /\
+  beacon_roots_instruction 23 = SOME (Push 1 [0x4dw]) /\
+  beacon_roots_instruction 25 = SOME JumpI /\
+  beacon_roots_instruction 77 = SOME JumpDest /\
+  beacon_roots_instruction 78 = SOME (Push 3 [0w; 0x1fw; 0xffw]) /\
+  beacon_roots_instruction 82 = SOME TimeStamp /\
+  beacon_roots_instruction 83 = SOME Mod /\
+  beacon_roots_instruction 84 = SOME TimeStamp /\
+  beacon_roots_instruction 85 = SOME (Dup 1) /\
+  beacon_roots_instruction 86 = SOME SStore /\
+  beacon_roots_instruction 87 = SOME (Push 0 []) /\
+  beacon_roots_instruction 88 = SOME CallDataLoad /\
+  beacon_roots_instruction 89 = SOME (Swap 0) /\
+  beacon_roots_instruction 90 = SOME (Push 3 [0w; 0x1fw; 0xffw]) /\
+  beacon_roots_instruction 94 = SOME Add /\
+  beacon_roots_instruction 95 = SOME SStore /\
+  beacon_roots_instruction 96 = SOME Stop
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
 Theorem beacon_roots_not_delegation[local]:
   get_delegate beacon_roots_code = NONE
 Proof
@@ -307,6 +350,21 @@ Proof
        beacon_roots_not_delegation, domain_check_def, bind_def,
        ignore_bind_def, return_def, set_domain_def] >>
   qmatch_goalsub_abbrev_tac `run s0` >>
+  qabbrev_tac `c0 = FST (HD s0.contexts)` >>
+  qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
+  `FUNPOW (step o SND) 5 (INL (), s0) =
+    (INL (), s0 with contexts :=
+      [(c0 with <|pc := 77; gasUsed := c0.gasUsed + 21|>, rb0)])` by
+    (irule (system_privileged_dispatch |> SPEC_ALL |> Q.INST
+       [`dest` |-> `0x4dw:byte`,
+        `caller_bytes` |-> `TAKE 20 (DROP 2 beacon_roots_code)`]
+       |> SIMP_RULE (srw_ss()) []) >>
+     simp[Abbr `c0`, Abbr `rb0`, Abbr `s0`,
+          vfmContextTheory.initial_context_def,
+          vfmContextTheory.initial_msg_params_def] >>
+     simp[GSYM beacon_roots_instruction_def, beacon_roots_parse,
+          GSYM beacon_roots_caller_word_def, beacon_roots_caller_word] >>
+     simp[beacon_roots_code_def, system_transaction_gas_def]) >>
   cheat
 QED
 
