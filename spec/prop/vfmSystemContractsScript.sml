@@ -388,6 +388,23 @@ Proof
        assert_def, handle_def]
 QED
 
+Theorem system_stop_run[local]:
+  FLOOKUP c.msgParams.parsed c.pc = SOME Stop /\
+  c.msgParams.outputTo = empty_return_destination ==>
+  run (s with contexts := [(c, rb)]) =
+    SOME (INR NONE, s with contexts := [(c with returnData := [], rb)])
+Proof
+  strip_tac >>
+  simp[vfmDecreasesGasTheory.run_eq_tr] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def, step_def, step_inst_def,
+    set_return_data_def, get_current_context_def, set_current_context_def,
+    bind_def, ignore_bind_def, return_def, finish_def, handle_def,
+    handle_step_def, vfm_abort_def, handle_create_def, handle_exception_def,
+    get_return_data_def, get_output_to_def, get_num_contexts_def,
+    reraise_def, vfmContextTheory.empty_return_destination_def] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def]
+QED
+
 Theorem system_sstore_run[local]:
   c.stack = key::value::ss /\ c.jumpDest = NONE /\ ~c.msgParams.static /\
   FLOOKUP c.msgParams.parsed c.pc = SOME SStore /\ s.msdomain = Collect d /\
@@ -453,6 +470,32 @@ Proof
     is_call_def, static_gas_def, opcode_def, get_current_context_def,
     set_current_context_def, bind_def, ignore_bind_def, return_def,
     assert_def, handle_def, stack_limit_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse])
+QED
+
+Theorem beacon_roots_data_run[local]:
+  c.pc = 87 /\ c.stack = [key] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY beacon_roots_code /\
+  c.gasUsed + 14 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) =
+  run (s with contexts :=
+    (c with <|pc := 95; gasUsed := c.gasUsed + 14;
+      stack := [8191w + key;
+        word_of_bytes F 0w (REVERSE (take_pad_0 32 (buffer_to_list c.msgParams.data)))]|>, rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w (REVERSE [0w; 0x1fw; 0xffw]) = (8191w : bytes32)` by
+    (simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+          byteTheory.byte_index_def, byteTheory.word_slice_alt_zero,
+          byteTheory.word_slice_alt_shift, byteTheory.word_slice_alt_empty]) >>
+  simp[vfmDecreasesGasTheory.run_eq_tr] >>
+  ntac 5 (simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_call_data_load_def,
+    step_swap_def, step_binop_def, get_call_data_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def, CONJUNCT1 byteTheory.word_of_bytes_def,
     GSYM beacon_roots_instruction_def, beacon_roots_parse])
 QED
 
@@ -574,6 +617,89 @@ Proof
           storage_set_cost_def, storage_update_cost_def] >>
      rpt IF_CASES_TAC >> simp[]) >>
   asm_rewrite_tac [] >>
+  qabbrev_tac `c87 = FST (HD s87.contexts)` >>
+  qabbrev_tac `c95 = c87 with <|pc := 95; gasUsed := c87.gasUsed + 14;
+    stack := [8191w + key; word_of_bytes F 0w
+      (REVERSE (take_pad_0 32 (buffer_to_list c87.msgParams.data)))]|>` >>
+  `run s87 = run (s87 with contexts := [(c95, rb0)])` by
+    (simp_tac pure_ss [Abbr `c95`] >>
+     `s87 = s87 with contexts := [(c87, rb0)]` by
+       simp[Abbr `c87`, Abbr `s87`] >>
+     pop_assum (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     irule beacon_roots_data_run >>
+     rpt (qpat_x_assum `run _ = _` kall_tac) >>
+     simp[Abbr `c87`, Abbr `s87`, Abbr `c86`, Abbr `c78`, Abbr `c77`,
+       Abbr `c0`, Abbr `s0`, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, system_transaction_gas_def] >>
+     simp[Abbr `cost`, zero_warm_def, sstore_base_gas_def,
+       warm_access_cost_def, cold_sload_cost_def,
+       storage_set_cost_def, storage_update_cost_def] >>
+     rpt IF_CASES_TAC >> simp[]) >>
+  asm_rewrite_tac [] >>
+  qabbrev_tac `key2 = 8191w + key : bytes32` >>
+  qabbrev_tac `root = word_of_bytes F 0w
+    (REVERSE (take_pad_0 32 (buffer_to_list c87.msgParams.data))) : bytes32` >>
+  qabbrev_tac `cur2 = lookup_storage key2
+    (lookup_account beacon_roots_address s87.rollback.accounts).storage` >>
+  qabbrev_tac `orig2 = lookup_storage key2
+    (lookup_account beacon_roots_address s87.originalAccounts).storage` >>
+  qabbrev_tac `cost2 = sstore_base_gas orig2 cur2 root + zero_warm
+    (if fIN (SK beacon_roots_address key2) s87.rollback.accesses.storageKeys
+     then warm_access_cost else cold_sload_cost)` >>
+  Cases_on `sstore_refund_updates orig2 cur2 root` >>
+  rename1 `sstore_refund_updates orig2 cur2 root = (ad2, su2)` >>
+  qabbrev_tac `s96 = s87 with <|
+    contexts := [(c95 with <|pc := c95.pc + 1; stack := [];
+      gasUsed := c95.gasUsed + cost2; addRefund := ad2 + c95.addRefund;
+      subRefund := su2 + c95.subRefund|>, rb0)];
+    rollback := s87.rollback with <|
+      accounts := update_account beacon_roots_address
+        ((lookup_account beacon_roots_address s87.rollback.accounts) with
+          storage updated_by update_storage key2 root) s87.rollback.accounts;
+      accesses := s87.rollback.accesses with storageKeys updated_by
+        fINSERT (SK beacon_roots_address key2)|>;
+    msdomain := Collect (((d with addresses updated_by fINSERT beacon_roots_address)
+      with storageKeys updated_by fINSERT (SK beacon_roots_address key))
+      with storageKeys updated_by fINSERT (SK beacon_roots_address key2))|>` >>
+  `run (s87 with contexts := [(c95, rb0)]) = run s96` by
+    (simp_tac pure_ss [Abbr `s96`] >> irule system_sstore_run >>
+     simp[Abbr `cost2`, Abbr `cur2`, Abbr `orig2`] >>
+     rpt (qpat_x_assum `run _ = _` kall_tac) >>
+     rpt (qpat_x_assum `sstore_refund_updates _ _ _ = _` kall_tac) >>
+     qpat_x_assum `Abbrev (rb0 = _)` kall_tac >>
+     simp[Abbr `c95`, Abbr `key2`, Abbr `root`, Abbr `c87`, Abbr `s87`,
+       Abbr `c86`, Abbr `c78`, Abbr `c77`, Abbr `c0`, Abbr `s0`,
+       vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+       GSYM beacon_roots_instruction_def, beacon_roots_parse,
+       system_transaction_gas_def, call_stipend_def] >>
+     simp[Abbr `cost`, zero_warm_def, sstore_base_gas_def,
+       warm_access_cost_def, cold_sload_cost_def,
+       storage_set_cost_def, storage_update_cost_def] >>
+     rpt IF_CASES_TAC >> simp[]) >>
+  asm_rewrite_tac [] >>
+  rpt (qpat_x_assum `run _ = _` kall_tac) >>
+  qabbrev_tac `cf = FST (HD s96.contexts)` >>
+  `run s96 = SOME (INR NONE, s96 with contexts :=
+    [(cf with returnData := [], rb0)])` by
+    (`s96 = s96 with contexts := [(cf, rb0)]` by
+       simp[Abbr `cf`, Abbr `s96`] >>
+     pop_assum (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     irule system_stop_run >>
+     simp[Abbr `cf`, Abbr `s96`, Abbr `c95`, Abbr `c87`, Abbr `s87`,
+       Abbr `c86`, Abbr `c78`, Abbr `c77`, Abbr `c0`, Abbr `s0`,
+       vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+       GSYM beacon_roots_instruction_def, beacon_roots_parse]) >>
+  asm_rewrite_tac [] >>
+  simp[] >>
+  qpat_x_assum `run _ = _` kall_tac >>
+  rpt (qpat_x_assum `sstore_refund_updates _ _ _ = _` kall_tac) >>
+  map_every (fn v => qpat_x_assum v kall_tac)
+    [`Abbrev (cf = _)`, `Abbrev (c95 = _)`, `Abbrev (cur2 = _)`,
+     `Abbrev (orig2 = _)`, `Abbrev (cost2 = _)`, `Abbrev (cost = _)`,
+     `Abbrev (cur = _)`, `Abbrev (rb0 = _)`] >>
+  simp[Abbr `s96`, Abbr `s87`, Abbr `s0`,
+    vfmContextTheory.initial_rollback_def, update_beacon_block_def,
+    update_history_block_def] >>
   cheat
 QED
 
