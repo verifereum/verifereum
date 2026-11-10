@@ -1056,7 +1056,7 @@ Proof
   simp[read_consolidation_request_def, byteTheory.LENGTH_word_to_bytes]
 QED
 
-Theorem queue_sender_bytes[local]:
+Theorem queue_sender_bytes:
   TAKE 20 (word_to_bytes ((w:bytes32) << 96) T) =
   DROP 12 (word_to_bytes w T)
 Proof
@@ -1072,7 +1072,7 @@ Proof
   `i + 8 * (31 - x) - 96 = i + 8 * (19 - x)` by decide_tac >> simp[]
 QED
 
-Theorem queue_read_el[local]:
+Theorem queue_read_el:
   i < sz ==>
   EL i (buffer_read off sz b) =
     if off + i < buffer_length b then EL (off + i) (buffer_to_list b)
@@ -1085,7 +1085,7 @@ Proof
   >> gvs[]
 QED
 
-Theorem queue_read_extend[local]:
+Theorem queue_read_extend:
   buffer_read off sz (buffer_extend n b) = buffer_read off sz b
 Proof
   irule listTheory.LIST_EQ
@@ -1099,7 +1099,7 @@ Proof
   >> rw[] >> gvs[]
 QED
 
-Theorem queue_read_write_el[local]:
+Theorem queue_read_write_el:
   i < sz ==>
   EL i (buffer_read off sz (buffer_write p bs b)) =
     if p <= off + i /\ off + i < p + LENGTH bs
@@ -1117,7 +1117,7 @@ Proof
   >> gvs[]
 QED
 
-Theorem queue_read_write_cong[local]:
+Theorem queue_read_write_cong:
   (!off sz. buffer_read off sz b = buffer_read off sz b') ==>
   buffer_read off sz (buffer_write p bs b) =
   buffer_read off sz (buffer_write p bs b')
@@ -1129,14 +1129,14 @@ Proof
   >> simp[GSYM vfmBufferTheory.buffer_read_to_list, queue_read_write_el]
 QED
 
-Theorem queue_read_write_extend[local]:
+Theorem queue_read_write_extend:
   buffer_read off sz (buffer_write p bs (buffer_extend n b)) =
   buffer_read off sz (buffer_write p bs b)
 Proof
   irule queue_read_write_cong >> simp[queue_read_extend]
 QED
 
-Theorem queue_take_read[local]:
+Theorem queue_take_read:
   off + sz <= buffer_length b ==>
   buffer_take off sz b = buffer_read off sz b
 Proof
@@ -1147,7 +1147,7 @@ Proof
           vfmBufferTheory.LENGTH_buffer_to_list]
 QED
 
-Theorem queue_take_read_cong[local]:
+Theorem queue_take_read_cong:
   (!off sz. buffer_read off sz b = buffer_read off sz b') /\
   off + sz <= buffer_length b /\ off + sz <= buffer_length b' ==>
   buffer_take off sz b = buffer_take off sz b'
@@ -1155,7 +1155,7 @@ Proof
   simp[queue_take_read]
 QED
 
-Theorem queue_write_prefix[local]:
+Theorem queue_write_prefix:
   off <= buffer_length b /\ n <= LENGTH bs ==>
   buffer_take 0 (off + n) (buffer_write off bs b) =
   buffer_take 0 off b ++ TAKE n bs
@@ -1168,7 +1168,7 @@ Proof
   simp[listTheory.TAKE_TAKE_MIN, arithmeticTheory.MIN_DEF]
 QED
 
-Theorem queue_write_byte_tail[local]:
+Theorem queue_write_byte_tail:
   0 < n ==>
   buffer_take i n (buffer_write i [a] b) =
   [a] ++ buffer_take (i + 1) (n - 1) b
@@ -1217,7 +1217,7 @@ Proof
     listTheory.TAKE_LENGTH_TOO_LONG]
 QED
 
-Theorem queue_pubkey_bytes[local]:
+Theorem queue_pubkey_bytes:
   TAKE 16 (word_to_bytes ((w:bytes32) && (-1w << 128)) T) =
   TAKE 16 (word_to_bytes w T)
 Proof
@@ -1236,7 +1236,7 @@ Proof
   gvs[]
 QED
 
-Theorem queue_amount_bytes[local]:
+Theorem queue_amount_bytes:
   (GENLIST (\i. (w2w ((w:bytes32) >>> (64 + 8 * i)) : byte)) 8) =
   REVERSE (TAKE 8 (DROP 16 (word_to_bytes w T)))
 Proof
@@ -1340,7 +1340,7 @@ Proof
   rpt conj_tac >> CONV_TAC cv_eval
 QED
 
-Theorem system_sload_step[local]:
+Theorem system_sload_step:
   c.stack = key::ss /\ c.jumpDest = NONE /\ LENGTH ss < stack_limit /\
   FLOOKUP c.msgParams.parsed c.pc = SOME SLoad /\ s.msdomain = Collect d /\
   address = c.msgParams.callee /\
@@ -1369,7 +1369,7 @@ Proof
       vfmContextTheory.access_sets_fn_updates]
 QED
 
-Theorem system_push_run[local]:
+Theorem system_push_run:
   FLOOKUP c.msgParams.parsed c.pc = SOME (Push n ws) /\
   c.jumpDest = NONE /\ LENGTH c.stack < stack_limit /\
   c.gasUsed + static_gas (Push n ws) <= c.msgParams.gasLimit ==>
@@ -1381,7 +1381,7 @@ Proof
   strip_tac >> irule system_run_step >> irule system_dispatch_push >> simp[]
 QED
 
-Theorem system_sload_bounded_run[local]:
+Theorem system_sload_bounded_run:
   c.stack = key::ss /\ c.jumpDest = NONE /\ LENGTH ss < stack_limit /\
   FLOOKUP c.msgParams.parsed c.pc = SOME SLoad /\ s.msdomain = Collect d /\
   c.gasUsed + 2100 <= c.msgParams.gasLimit ==>
@@ -1413,7 +1413,7 @@ Proof
   simp[vfmContextTheory.access_sets_fn_updates]
 QED
 
-Theorem system_push1_sload_run[local]:
+Theorem system_push1_sload_run:
   FLOOKUP c.msgParams.parsed c.pc = SOME (Push 1 [slot]) /\
   FLOOKUP c.msgParams.parsed (c.pc + 2) = SOME SLoad /\
   c.jumpDest = NONE /\ LENGTH c.stack < stack_limit /\
@@ -1485,7 +1485,7 @@ Proof
   simp[]
 QED
 
-Theorem system_dup_run[local]:
+Theorem system_dup_run:
   FLOOKUP c.msgParams.parsed c.pc = SOME (Dup n) /\ n < 16 /\
   c.jumpDest = NONE /\ n < LENGTH c.stack /\ LENGTH c.stack < stack_limit /\
   c.gasUsed + 3 <= c.msgParams.gasLimit ==>
@@ -1500,7 +1500,7 @@ Proof
     ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
 QED
 
-Theorem system_binop_run[local]:
+Theorem system_binop_run:
   2 <= LENGTH c.stack /\ c.jumpDest = NONE /\ LENGTH c.stack <= stack_limit /\
   FLOOKUP c.msgParams.parsed c.pc = SOME op /\
   step_inst op = step_binop op f /\ ~is_call op /\ LENGTH (opcode op) = 1 /\
@@ -1517,7 +1517,7 @@ Proof
     ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
 QED
 
-Theorem system_jumpi_run[local]:
+Theorem system_jumpi_run:
   2 <= LENGTH c.stack /\ c.jumpDest = NONE /\
   FLOOKUP c.msgParams.parsed c.pc = SOME JumpI /\
   (HD (TL c.stack) <> 0w ==>
@@ -1538,7 +1538,7 @@ Proof
   Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
 QED
 
-Theorem system_pop_run[local]:
+Theorem system_pop_run:
   c.stack <> [] /\ c.jumpDest = NONE /\
   FLOOKUP c.msgParams.parsed c.pc = SOME Pop /\
   c.gasUsed + 2 <= c.msgParams.gasLimit ==>
@@ -1746,7 +1746,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem system_mstore_run[local]:
+Theorem system_mstore_run:
   let off = w2n (HD c.stack) in
   let sz = if op = MStore8 then 1 else 32 in
   let mx = word_size (off + sz) * 32 in
@@ -1933,7 +1933,7 @@ Proof
   strip_tac >> qexistsl [`g`, `keys`, `d'`] >> simp[]
 QED
 
-Theorem system_swap_run[local]:
+Theorem system_swap_run:
   FLOOKUP c.msgParams.parsed c.pc = SOME (Swap n) /\ n < 16 /\
   c.jumpDest = NONE /\ SUC n < LENGTH c.stack /\
   c.gasUsed + 3 <= c.msgParams.gasLimit ==>
@@ -2083,7 +2083,7 @@ Proof
   simp[vfmContextTheory.context_fupdcanon]
 QED
 
-Theorem system_shift_byte_store_run[local]:
+Theorem system_shift_byte_store_run:
   c.stack = off::v::ss /\ c.jumpDest = NONE /\
   LENGTH ss + 4 < stack_limit /\
   FLOOKUP c.msgParams.parsed c.pc = SOME (Dup 1) /\
@@ -2183,7 +2183,7 @@ Proof
     wordsTheory.w2n_n2w, wordsTheory.dimword_def]
 QED
 
-Theorem system_jump_run[local]:
+Theorem system_jump_run:
   c.stack <> [] /\ c.jumpDest = NONE /\
   FLOOKUP c.msgParams.parsed c.pc = SOME Jump /\
   FLOOKUP c.msgParams.parsed (w2n (HD c.stack)) = SOME JumpDest /\
@@ -2248,13 +2248,13 @@ Proof
   simp[vfmContextTheory.context_fupdcanon]
 QED
 
-Theorem queue_aligned_allocation[local]:
+Theorem queue_aligned_allocation:
   L MOD 32 = 0 /\ x <= L ==> word_size x * 32 <= L
 Proof
   simp[word_size_def] >> intLib.COOPER_TAC
 QED
 
-Theorem queue_allocated_expansion[local]:
+Theorem queue_allocated_expansion:
   buffer_length b MOD 32 = 0 /\ x <= buffer_length b ==>
   memory_expansion_cost (buffer_length b) (word_size x * 32) = 0 /\
   buffer_extend (MAX (buffer_length b) (word_size x * 32) - buffer_length b) b = b
@@ -2370,7 +2370,7 @@ Proof
   simp[vfmContextTheory.context_fupdcanon]
 QED
 
-Theorem queue_memory_cost_bound[local]:
+Theorem queue_memory_cost_bound:
   n <= 1280 ==> memory_cost n <= 123
 Proof
   strip_tac >>
@@ -2384,7 +2384,7 @@ Proof
   gvs[]
 QED
 
-Theorem queue_expanded_word_length[local]:
+Theorem queue_expanded_word_length:
   p + 32 <= 1280 /\ buffer_length b <= 1280 /\
   buffer_length b MOD 32 = 0 ==>
   let mx = word_size (p + 32) * 32 in
@@ -2741,6 +2741,54 @@ Proof
   BETA_TAC >> simp_tac pure_ss [arithmeticTheory.ADD_CLAUSES] >>
   AP_TERM_TAC >> AP_TERM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
   simp_tac std_ss [FUN_EQ_THM] >> gen_tac >> AP_TERM_TAC >> decide_tac
+QED
+
+Theorem withdrawal_copy_run[local]:
+  c.pc = 203 /\ c.stack = [] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  387 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  head = lookup_storage 2w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  tail = lookup_storage 3w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  w2n head <= w2n tail /\
+  buffer_length c.memory <= 1280 /\ buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 4246 + 7123 * MIN 16 (w2n tail-w2n head) + 23 <= c.msgParams.gasLimit ==>
+  ?g keys d' m. g <= c.gasUsed + 4246 + 7123 * MIN 16 (w2n tail-w2n head) + 23 /\
+    run (s with contexts := (c,rb)::cs) = run (s with <|
+      contexts := (c with <|pc := 387;
+        stack := [n2w (MIN 16 (w2n tail-w2n head));
+                  n2w (MIN 16 (w2n tail-w2n head));head;tail];
+        gasUsed := g; memory := m|>,rb)::cs;
+      rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+      msdomain := Collect d'|>) /\
+    buffer_take 0 (76 * MIN 16 (w2n tail-w2n head)) m =
+      FLAT (GENLIST (\j. read_withdrawal_request
+        (lookup_account c.msgParams.callee s.rollback.accounts).storage (w2n head+j))
+        (MIN 16 (w2n tail-w2n head))) /\
+    76 * MIN 16 (w2n tail-w2n head) <= buffer_length m /\
+    buffer_length m <= 1280 /\ buffer_length m MOD 32 = 0
+Proof
+  strip_tac >>
+  `c.gasUsed + 4246 <= c.msgParams.gasLimit` by decide_tac >>
+  `223 < LENGTH c.msgParams.code` by decide_tac >>
+  drule_all withdrawal_loop_entry_run >>
+  disch_then (qspecl_then [`rb`, `cs`]
+    (qx_choosel_then [`g1`, `keys1`, `d1`] strip_assume_tac)) >>
+  qabbrev_tac `n = MIN 16 (w2n tail-w2n head)` >>
+  qabbrev_tac `c1 = c with <|pc := 225; stack := [0w;n2w n;head;tail]; gasUsed := g1|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `s` |-> `s1`, `i` |-> `0`, `d` |-> `d1`]
+    withdrawal_loop_run) >>
+  (impl_tac >- (simp[Abbr `c1`, Abbr `s1`, Abbr `n`] >> gvs[])) >>
+  disch_then (qx_choosel_then [`g2`, `keys2`, `d2`, `m2`] strip_assume_tac) >>
+  qexistsl [`g2`, `keys2`, `d2`, `m2`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+  conj_tac
+  >- (qpat_x_assum `run (s with contexts := _) = _` (once_rewrite_tac o single) >>
+      qpat_x_assum `run (s1 with contexts := _) = _` (once_rewrite_tac o single) >>
+      simp[Abbr `s1`, Abbr `c1`, vfmContextTheory.context_fupdcanon,
+        vfmContextTheory.execution_state_fupdcanon]) >>
+  gvs[Abbr `s1`, Abbr `c1`] >> simp[vfmBufferTheory.buffer_take_to_list]
 QED
 
 Theorem withdrawal_request_code_correspondence:
