@@ -2306,6 +2306,129 @@ Proof
   simp[vfmContextTheory.context_fupdcanon]
 QED
 
+Theorem queue_memory_cost_bound[local]:
+  n <= 1280 ==> memory_cost n <= 123
+Proof
+  strip_tac >>
+  `word_size n <= 40` by (simp[word_size_def] >> intLib.COOPER_TAC) >>
+  `word_size n * word_size n <= 1600` by
+    (mp_tac (Q.SPECL [`word_size n`, `word_size n`, `40`, `40`]
+      arithmeticTheory.LESS_MONO_MULT2) >> simp[]) >>
+  simp[memory_cost_def, memory_cost_per_word_def] >>
+  `word_size n * word_size n DIV 512 <= 3` by
+    (simp[arithmeticTheory.DIV_LE_X] >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem queue_expanded_word_length[local]:
+  p + 32 <= 1280 /\ buffer_length b <= 1280 /\
+  buffer_length b MOD 32 = 0 ==>
+  let mx = word_size (p + 32) * 32 in
+  let m = buffer_write p (word_to_bytes (w:bytes32) T)
+    (buffer_extend (MAX (buffer_length b) mx - buffer_length b) b) in
+  buffer_length m = MAX (buffer_length b) mx /\
+  p + 32 <= buffer_length m /\ buffer_length m <= 1280 /\
+  buffer_length m MOD 32 = 0 /\
+  memory_expansion_cost (buffer_length b) mx <= 123
+Proof
+  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  `p + 32 <= word_size (p + 32) * 32 /\
+   word_size (p + 32) * 32 <= 1280 /\
+   (word_size (p + 32) * 32) MOD 32 = 0` by
+    (simp[word_size_def] >> intLib.COOPER_TAC) >>
+  `memory_cost (MAX (buffer_length b) (word_size (p + 32) * 32)) <= 123` by
+    (irule queue_memory_cost_bound >> simp[arithmeticTheory.MAX_DEF]) >>
+  simp[byteTheory.LENGTH_word_to_bytes, arithmeticTheory.MAX_DEF,
+    memory_expansion_cost_def] >>
+  rpt IF_CASES_TAC >> gvs[arithmeticTheory.MAX_DEF] >> intLib.COOPER_TAC
+QED
+
+Theorem withdrawal_expanded_record_memory[local]:
+  i < 16 /\ 76*i <= buffer_length b /\ buffer_length b <= 1280 /\
+  buffer_length b MOD 32 = 0 ==>
+  let off = 76*i in
+  let base = 4 + (h+i)*3 in
+  let w0 = lookup_storage (n2w base) storage in
+  let w1 = lookup_storage (n2w (base+1)) storage in
+  let w2 = lookup_storage (n2w (base+2)) storage in
+  let a = w2 >>> 64 in
+  let mx1 = word_size (off+32)*32 in
+  let m1 = buffer_write off (word_to_bytes (w0 << 96) T)
+    (buffer_extend (MAX (buffer_length b) mx1 - buffer_length b) b) in
+  let mx2 = word_size (off+52)*32 in
+  let m2 = buffer_write (off+20) (word_to_bytes w1 T)
+    (buffer_extend (MAX (buffer_length m1) mx2 - buffer_length m1) m1) in
+  let mx3 = word_size (off+84)*32 in
+  let m3 = buffer_write (off+52) (word_to_bytes (w2 && (-1w << 128)) T)
+    (buffer_extend (MAX (buffer_length m2) mx3 - buffer_length m2) m2) in
+  let m4 = buffer_write (off+75) [w2w (a >>> 56)] m3 in
+  let m5 = buffer_write (off+74) [w2w (a >>> 48)] m4 in
+  let m6 = buffer_write (off+73) [w2w (a >>> 40)] m5 in
+  let m7 = buffer_write (off+72) [w2w (a >>> 32)] m6 in
+  let m8 = buffer_write (off+71) [w2w (a >>> 24)] m7 in
+  let m9 = buffer_write (off+70) [w2w (a >>> 16)] m8 in
+  let m10 = buffer_write (off+69) [w2w (a >>> 8)] m9 in
+  let m11 = buffer_write (off+68) [w2w a] m10 in
+  memory_expansion_cost (buffer_length b) mx1 <= 123 /\
+  memory_expansion_cost (buffer_length m1) mx2 <= 123 /\
+  memory_expansion_cost (buffer_length m2) mx3 <= 123 /\
+  off+84 <= buffer_length m3 /\
+  buffer_length m11 = buffer_length m3 /\
+  off+76 <= buffer_length m11 /\ buffer_length m11 <= 1280 /\
+  buffer_length m11 MOD 32 = 0 /\
+  buffer_take 0 (off+76) m11 =
+    buffer_take 0 off b ++ read_withdrawal_request storage (h+i)
+Proof
+  strip_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  `off + 84 <= 1280` by (simp[Abbr `off`] >> decide_tac) >>
+  `buffer_length m1 <= 1280 /\ buffer_length m1 MOD 32 = 0 /\
+   memory_expansion_cost (buffer_length b) mx1 <= 123` by
+    (mp_tac (Q.INST [`p` |-> `off`, `w` |-> `w0 << 96`]
+      queue_expanded_word_length) >>
+     simp[Abbr `m1`, Abbr `mx1`, LET_THM,
+       Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
+  `buffer_length m2 <= 1280 /\ buffer_length m2 MOD 32 = 0 /\
+   memory_expansion_cost (buffer_length m1) mx2 <= 123` by
+    (mp_tac (Q.INST [`p` |-> `off+20`, `w` |-> `w1`, `b` |-> `m1`]
+      queue_expanded_word_length) >>
+     simp[Abbr `m2`, Abbr `mx2`, LET_THM,
+       Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
+  `off+84 <= buffer_length m3 /\ buffer_length m3 <= 1280 /\
+   buffer_length m3 MOD 32 = 0 /\
+   memory_expansion_cost (buffer_length m2) mx3 <= 123` by
+    (mp_tac (Q.INST [`p` |-> `off+52`, `w` |-> `w2 && (-1w << 128)`,
+      `b` |-> `m2`] queue_expanded_word_length) >>
+     simp[Abbr `m3`, Abbr `mx3`, LET_THM,
+       Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
+  `buffer_length m4 = buffer_length m3` by simp[Abbr `m4`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length m5 = buffer_length m3` by simp[Abbr `m5`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length m6 = buffer_length m3` by simp[Abbr `m6`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length m7 = buffer_length m3` by simp[Abbr `m7`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length m8 = buffer_length m3` by simp[Abbr `m8`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length m9 = buffer_length m3` by simp[Abbr `m9`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length m10 = buffer_length m3` by simp[Abbr `m10`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length m11 = buffer_length m3` by simp[Abbr `m11`, arithmeticTheory.MAX_DEF] >>
+  simp[Excl "buffer_length_write"] >>
+  mp_tac (Q.INST [`idx` |-> `h+i`] withdrawal_record_memory) >>
+  (impl_tac >- simp[]) >> simp_tac pure_ss [LET_THM] >>
+  disch_then (fn th => once_rewrite_tac[GSYM th]) >>
+  irule queue_take_read_cong >> conj_tac
+  >- (rpt gen_tac >>
+      simp_tac (srw_ss()) [Abbr `m11`, Abbr `m10`, Abbr `m9`, Abbr `m8`,
+        Abbr `m7`, Abbr `m6`, Abbr `m5`, Abbr `m4`, Abbr `m3`, Abbr `m2`,
+        Abbr `m1`, Abbr `a`, Abbr `w0`, Abbr `w1`, Abbr `w2`, Abbr `base'`,
+        queue_read_write_extend] >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      rpt (irule queue_read_write_cong >> rpt gen_tac >>
+        simp_tac pure_ss [queue_read_write_extend]) >> simp[]) >>
+  conj_tac >- simp[Excl "buffer_length_write"] >>
+  ntac 8 (irule vfmBufferTheory.buffer_write_preserves_coverage) >>
+  irule vfmBufferTheory.buffer_write_covers_endpoint >>
+  simp[byteTheory.LENGTH_word_to_bytes, Excl "buffer_length_write"] >>
+  pure_once_rewrite_tac[GSYM listTheory.LENGTH_NIL] >>
+  pure_rewrite_tac[byteTheory.LENGTH_word_to_bytes] >> simp[]
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
