@@ -388,6 +388,33 @@ Proof
        assert_def, handle_def]
 QED
 
+Theorem beacon_roots_index_run[local]:
+  c.pc = 78 /\ c.stack = [] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY beacon_roots_code /\
+  c.gasUsed + 15 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) =
+  run (s with contexts :=
+    (c with <| pc := 86; gasUsed := c.gasUsed + 15;
+       stack := [with_zero word_mod (n2w s.txParams.blockTimeStamp) 8191w;
+                 n2w s.txParams.blockTimeStamp;
+                 with_zero word_mod (n2w s.txParams.blockTimeStamp) 8191w] |>, rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w (REVERSE [0w; 0x1fw; 0xffw]) = (8191w : bytes32)` by
+    (simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+          byteTheory.byte_index_def, byteTheory.word_slice_alt_zero,
+          byteTheory.word_slice_alt_shift, byteTheory.word_slice_alt_empty]) >>
+  simp[vfmDecreasesGasTheory.run_eq_tr] >>
+  ntac 5 (simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_txParams_def,
+    step_binop_def, step_dup_def, get_tx_params_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse])
+QED
+
 Theorem beacon_roots_dispatch_run[local]:
   s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
   c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
@@ -449,6 +476,17 @@ Proof
           vfmContextTheory.initial_msg_params_def,
           system_transaction_gas_def, GSYM beacon_roots_instruction_def,
           beacon_roots_parse]) >>
+  asm_rewrite_tac [] >>
+  qabbrev_tac `c78 = c77 with <|pc := c77.pc + 1; gasUsed := c77.gasUsed + 1|>` >>
+  `run (s0 with contexts := [(c78, rb0)]) =
+   run (s0 with contexts := [(c78 with <|pc := 86; gasUsed := c78.gasUsed + 15;
+     stack := [with_zero word_mod (n2w s0.txParams.blockTimeStamp) 8191w;
+               n2w s0.txParams.blockTimeStamp;
+               with_zero word_mod (n2w s0.txParams.blockTimeStamp) 8191w]|>, rb0)])` by
+    (irule beacon_roots_index_run >>
+     simp[Abbr `c78`, Abbr `c77`, Abbr `c0`, Abbr `s0`,
+          vfmContextTheory.initial_context_def,
+          vfmContextTheory.initial_msg_params_def, system_transaction_gas_def]) >>
   asm_rewrite_tac [] >>
   cheat
 QED
