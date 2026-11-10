@@ -3437,6 +3437,317 @@ Proof
   pure_rewrite_tac[byteTheory.LENGTH_word_to_bytes] >> simp[]
 QED
 
+Theorem consolidation_record_run[local]:
+  c.pc = 241 /\ c.stack = [n2w i; cnt; head; tail] /\
+  c.jumpDest = NONE /\ i < 2 /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  233 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  116*i <= buffer_length c.memory /\ buffer_length c.memory <= 1280 /\
+  buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 9500 <= c.msgParams.gasLimit ==>
+  ?g keys d' m. g <= c.gasUsed + 9500 /\
+    run (s with contexts := (c, rb)::cs) = run (s with <|
+      contexts := (c with <|pc := 233; stack := [n2w (i+1); cnt; head; tail];
+        gasUsed := g; memory := m|>, rb)::cs;
+      rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+      msdomain := Collect d'|>) /\
+    buffer_take 0 (116*(i+1)) m = buffer_take 0 (116*i) c.memory ++
+      read_consolidation_request
+        (lookup_account c.msgParams.callee s.rollback.accounts).storage (w2n head+i) /\
+    116*(i+1) <= buffer_length m /\ buffer_length m <= 1280 /\
+    buffer_length m MOD 32 = 0
+Proof
+  strip_tac >>
+  `c.gasUsed + 2137 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all consolidation_copy_first_load_run >>
+  disch_then (qspecl_then [`rb`, `cs`]
+    (qx_choosel_then [`g1`, `keys1`, `d1`] strip_assume_tac)) >>
+  qabbrev_tac `slot = 4w + 4w * (n2w i + head)` >>
+  qabbrev_tac `storage = (lookup_account c.msgParams.callee s.rollback.accounts).storage` >>
+  qabbrev_tac `c1 = c with <|pc := 256; gasUsed := g1;
+    stack := [lookup_storage slot storage; 116w*n2w i; slot; n2w i; cnt; head; tail]|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s1 with contexts := (c1,rb)::cs)` by
+    simp[Abbr `c1`, Abbr `s1`, Abbr `storage`, Abbr `slot`] >>
+  qabbrev_tac `off = 116*i` >>
+  `116w * n2w i = (n2w off:bytes32)` by simp[Abbr `off`, wordsTheory.word_mul_n2w] >>
+  `w2n (n2w off:bytes32) = off` by
+    (simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def, Abbr `off`] >> decide_tac) >>
+  qabbrev_tac `mx1 = word_size (off+32)*32` >>
+  qabbrev_tac `cost1 = memory_expansion_cost (buffer_length c.memory) mx1` >>
+  `cost1 <= 123` by
+    (mp_tac (Q.INST [`p` |-> `off`, `b` |-> `c.memory`, `w` |-> `0w:bytes32`]
+      queue_expanded_word_length) >>
+     simp[LET_THM, Abbr `cost1`, Abbr `mx1`, Abbr `off`, Excl "buffer_length_write"] >>
+     strip_tac >> gvs[]) >>
+  `g1 + 12 + cost1 <= c.msgParams.gasLimit` by decide_tac >>
+  qpat_x_assum `run (s with contexts := _) = _` (once_rewrite_tac o single) >>
+  gs[Abbr `cost1`, Abbr `mx1`, Abbr `off`] >>
+  simp[Q.INST [`w0` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`,
+    `mx` |-> `word_size (w2n (EL 1 c.stack)+32)*32`,
+    `cost` |-> `memory_expansion_cost (buffer_length c.memory)
+      (word_size (w2n (EL 1 c.stack)+32)*32)`] consolidation_sender_run,
+    Abbr `c1`, stack_limit_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  simp[Q.INST [`off` |-> `HD c.stack`, `slot` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`] consolidation_pubkey_address_run, stack_limit_def] >>
+  qmatch_goalsub_abbrev_tac `run (s1 with contexts := (c2,rb)::cs)` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s1`, `d` |-> `d1`]
+    (Q.INST [`key` |-> `HD c.stack`, `ss` |-> `TL c.stack`]
+      system_sload_bounded_run)) >>
+  (impl_tac >- (simp[Abbr `c2`, Abbr `s1`, GSYM consolidation_instruction_def,
+    consolidation_copy_parse, stack_limit_def] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `keys2`, `d2`] strip_assume_tac) >>
+  `buffer_length c2.memory <= 1280 /\ buffer_length c2.memory MOD 32 = 0` by
+    (mp_tac (Q.INST [`p` |-> `116*i`, `b` |-> `c.memory`,
+      `w` |-> `lookup_storage slot storage << 96`] queue_expanded_word_length) >>
+     rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+       GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+     simp[LET_THM, Abbr `c2`, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  `memory_expansion_cost (buffer_length c2.memory) (word_size (116*i+52)*32) <= 123` by
+    (mp_tac (Q.INST [`p` |-> `116*i+20`, `b` |-> `c2.memory`,
+      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+     simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  qpat_x_assum `run (s1 with contexts := _) = _` (once_rewrite_tac o single) >>
+  simp[Abbr `c2`, Abbr `s1`, vfmContextTheory.context_fupdcanon,
+    wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m1; pc := _; gasUsed := _|>` >>
+  gs[] >>
+  simp[Q.INST [`w` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+    `slot` |-> `EL 2 c.stack`, `ss` |-> `DROP 3 c.stack`,
+    `mx` |-> `word_size (w2n (EL 1 c.stack)+32)*32`,
+    `cost` |-> `memory_expansion_cost (buffer_length c.memory)
+      (word_size (w2n (EL 1 c.stack)+32)*32)`] consolidation_pubkey_store_run,
+    stack_limit_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m2; pc := _; gasUsed := _|>` >>
+  `buffer_length m2 <= 1280 /\ buffer_length m2 MOD 32 = 0` by
+    (mp_tac (Q.INST [`p` |-> `116*i+20`, `b` |-> `m1`,
+      `w` |-> `lookup_storage (slot+1w) storage`] queue_expanded_word_length) >>
+     rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+       GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+     simp[LET_THM, Abbr `m2`, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  `memory_expansion_cost (buffer_length m2) (word_size (116*i+84)*32) <= 123` by
+    (mp_tac (Q.INST [`p` |-> `116*i+52`, `b` |-> `m2`,
+      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+     simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  simp[Q.INST [`off` |-> `HD c.stack`, `slot` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`] consolidation_second_address_run, stack_limit_def] >>
+  qmatch_goalsub_abbrev_tac `run (s2 with contexts := (c3,rb)::cs)` >>
+  mp_tac (Q.INST [`c` |-> `c3`, `s` |-> `s2`, `d` |-> `d2`]
+    (Q.INST [`key` |-> `HD c.stack`, `ss` |-> `TL c.stack`]
+      system_sload_bounded_run)) >>
+  (impl_tac >- (simp[Abbr `c3`, Abbr `s2`, GSYM consolidation_instruction_def,
+    consolidation_copy_parse, stack_limit_def] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g3`, `keys3`, `d3`] strip_assume_tac) >>
+  qpat_x_assum `run (s2 with contexts := _) = _` (once_rewrite_tac o single) >>
+  simp[Abbr `c3`, Abbr `s2`, vfmContextTheory.context_fupdcanon,
+    wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >> gs[] >>
+  simp[Q.INST [`w` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+    `slot` |-> `EL 2 c.stack`, `ss` |-> `DROP 3 c.stack`,
+    `mx` |-> `word_size (w2n (EL 1 c.stack)+32)*32`,
+    `cost` |-> `memory_expansion_cost (buffer_length c.memory)
+      (word_size (w2n (EL 1 c.stack)+32)*32)`] consolidation_pubkey_store_run,
+    stack_limit_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m3; pc := _; gasUsed := _|>` >>
+  `buffer_length m3 <= 1280 /\ buffer_length m3 MOD 32 = 0` by
+    (mp_tac (Q.INST [`p` |-> `116*i+52`, `b` |-> `m2`,
+      `w` |-> `lookup_storage (slot+2w) storage`] queue_expanded_word_length) >>
+     rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+       GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+     simp[LET_THM, Abbr `m3`, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  `memory_expansion_cost (buffer_length m3) (word_size (116*i+116)*32) <= 123` by
+    (mp_tac (Q.INST [`p` |-> `116*i+84`, `b` |-> `m3`,
+      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+     simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  simp[Q.INST [`off` |-> `HD c.stack`, `slot` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`] consolidation_third_address_run, stack_limit_def] >>
+  qmatch_goalsub_abbrev_tac `run (s3 with contexts := (c4,rb)::cs)` >>
+  mp_tac (Q.INST [`c` |-> `c4`, `s` |-> `s3`, `d` |-> `d3`]
+    (Q.INST [`key` |-> `HD c.stack`, `ss` |-> `TL c.stack`]
+      system_sload_bounded_run)) >>
+  (impl_tac >- (simp[Abbr `c4`, Abbr `s3`, GSYM consolidation_instruction_def,
+    consolidation_copy_parse, stack_limit_def] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g4`, `keys4`, `d4`] strip_assume_tac) >>
+  qpat_x_assum `run (s3 with contexts := _) = _` (once_rewrite_tac o single) >>
+  simp[Abbr `c4`, Abbr `s3`, vfmContextTheory.context_fupdcanon,
+    wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >> gs[] >>
+  simp[Q.INST [`w` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`,
+    `mx` |-> `word_size (w2n (EL 1 c.stack)+32)*32`,
+    `cost` |-> `memory_expansion_cost (buffer_length c.memory)
+      (word_size (w2n (EL 1 c.stack)+32)*32)`] consolidation_final_store_run,
+    stack_limit_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := mf; pc := _; gasUsed := _|>` >>
+  `116*(i+1) <= buffer_length mf /\ buffer_length mf <= 1280 /\
+    buffer_length mf MOD 32 = 0` by
+    (mp_tac (Q.INST [`p` |-> `116*i+84`, `b` |-> `m3`,
+      `w` |-> `lookup_storage (slot+3w) storage`] queue_expanded_word_length) >>
+     rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+       GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+     simp[LET_THM, Abbr `mf`, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  simp[Q.INST [`idx` |-> `HD c.stack`, `ss` |-> `TL c.stack`]
+    consolidation_backedge_run, stack_limit_def] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := _; pc := _; gasUsed := gf|>` >>
+  qexistsl [`gf`, `keys4`, `d4`, `mf`] >>
+  conj_tac >- (simp[Abbr `gf`] >> decide_tac) >>
+  conj_tac >- simp[wordsTheory.word_add_n2w] >>
+  reverse conj_tac >- simp[] >>
+  mp_tac (Q.INST [`b` |-> `c.memory`, `h` |-> `w2n (head:bytes32)`]
+    consolidation_expanded_record_memory) >>
+  (impl_tac >- simp[]) >> simp_tac pure_ss [LET_THM] >>
+  disch_then (mp_tac o cj 8) >>
+  simp_tac pure_ss [GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w,
+    wordsTheory.n2w_w2n] >>
+  `4w + (head + n2w i) * 4w = slot` by
+    (simp[Abbr `slot`] >> wordsLib.WORD_DECIDE_TAC) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp_tac pure_ss [Abbr `mf`, Abbr `m3`, Abbr `m2`, Abbr `m1`] >>
+  rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+    cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+    GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp_tac std_ss [wordsTheory.WORD_MULT_COMM, wordsTheory.WORD_ADD_ASSOC,
+    wordsTheory.WORD_ADD_COMM, arithmeticTheory.ADD_COMM,
+    arithmeticTheory.MULT_COMM, arithmeticTheory.LEFT_ADD_DISTRIB] >> simp[]
+QED
+
+Theorem consolidation_loop_run[local]:
+  c.pc = 233 /\ c.stack = [n2w i; n2w n; head; tail] /\
+  c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  297 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  i <= n /\ n <= 2 /\
+  116*i <= buffer_length c.memory /\ buffer_length c.memory <= 1280 /\
+  buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 9523*(n-i)+23 <= c.msgParams.gasLimit ==>
+  ?g keys d' m. g <= c.gasUsed + 9523*(n-i)+23 /\
+    run (s with contexts := (c,rb)::cs) = run (s with <|
+      contexts := (c with <|pc := 297; stack := [n2w n; n2w n; head; tail];
+        gasUsed := g; memory := m|>,rb)::cs;
+      rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+      msdomain := Collect d'|>) /\
+    buffer_take 0 (116*n) m = buffer_take 0 (116*i) c.memory ++
+      FLAT (GENLIST (\j. read_consolidation_request
+        (lookup_account c.msgParams.callee s.rollback.accounts).storage
+        (w2n head+i+j)) (n-i)) /\
+    116*n <= buffer_length m /\ buffer_length m <= 1280 /\
+    buffer_length m MOD 32 = 0
+Proof
+  map_every qid_spec_tac [`c`, `s`, `d`] >>
+  measureInduct_on `n-i` >> rpt strip_tac >>
+  Cases_on `i = n`
+  >- (gvs[] >> drule_all consolidation_loop_test_run >>
+      disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+      qexistsl [`c.gasUsed+23`, `s.rollback.accesses.storageKeys`, `d`, `c.memory`] >>
+      simp[] >>
+      qpat_x_assum `s.msdomain = _` (fn th => rewrite_tac[GSYM th]) >>
+      simp[vfmContextTheory.context_fupdcanon,
+        vfmContextTheory.context_component_equality,
+        vfmContextTheory.execution_state_component_equality] >>
+      AP_TERM_TAC >> simp[vfmContextTheory.execution_state_component_equality,
+        vfmContextTheory.context_component_equality]) >>
+  `i < n /\ i < 2 /\ c.gasUsed+23 <= c.msgParams.gasLimit` by decide_tac >>
+  `~((n2w i:bytes32) = n2w n)` by
+    (simp[wordsTheory.n2w_11, wordsTheory.dimword_def] >> decide_tac) >>
+  drule_all consolidation_loop_test_run >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 241; stack := [n2w i;n2w n;head;tail];
+    gasUsed := c.gasUsed+23|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    simp[Abbr `c1`] >>
+  mp_tac (Q.INST [`c` |-> `c1`, `cnt` |-> `n2w n`] consolidation_record_run) >>
+  (impl_tac >- (simp[Abbr `c1`] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g1`, `keys1`, `d1`, `m1`] strip_assume_tac) >>
+  qabbrev_tac `c2 = c1 with <|pc := 233; stack := [n2w (i+1);n2w n;head;tail];
+    gasUsed := g1; memory := m1|>` >>
+  qabbrev_tac `s2 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  first_x_assum (qspec_then `i+1` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (qspecl_then [`d1`, `s2`, `c2`] mp_tac) >>
+  (impl_tac >- (simp[Abbr `c2`, Abbr `s2`, Abbr `c1`] >> gvs[] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `keys2`, `d2`, `m2`] strip_assume_tac) >>
+  qexistsl [`g2`, `keys2`, `d2`, `m2`] >>
+  conj_tac >- (gvs[Abbr `c2`, Abbr `c1`] >> decide_tac) >>
+  conj_tac
+  >- (qpat_x_assum `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)`
+        (once_rewrite_tac o single) >>
+      qpat_x_assum `run (s with contexts := (c1,rb)::cs) = _`
+        (once_rewrite_tac o single) >>
+      qpat_x_assum `run (s2 with contexts := _) = _` (once_rewrite_tac o single) >>
+      simp[Abbr `s2`, Abbr `c2`, Abbr `c1`, vfmContextTheory.context_fupdcanon,
+        vfmContextTheory.execution_state_fupdcanon]) >>
+  reverse conj_tac >- simp[] >>
+  gvs[Abbr `c2`, Abbr `c1`, Abbr `s2`] >>
+  `n-i = SUC (n-(i+1))` by decide_tac >>
+  qpat_x_assum `n-i = _` (once_rewrite_tac o single) >>
+  once_rewrite_tac[listTheory.GENLIST_CONS] >>
+  simp_tac pure_ss [listTheory.FLAT, combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES] >>
+  BETA_TAC >> simp_tac pure_ss [arithmeticTheory.ADD_CLAUSES] >>
+  AP_TERM_TAC >> AP_TERM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp_tac std_ss [FUN_EQ_THM] >> gen_tac >> AP_TERM_TAC >> decide_tac
+QED
+
+Theorem consolidation_copy_run[local]:
+  c.pc = 211 /\ c.stack = [] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  297 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  head = lookup_storage 2w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  tail = lookup_storage 3w (lookup_account c.msgParams.callee s.rollback.accounts).storage /\
+  w2n head <= w2n tail /\
+  buffer_length c.memory <= 1280 /\ buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 4246 + 9523 * MIN 2 (w2n tail-w2n head) + 23 <= c.msgParams.gasLimit ==>
+  ?g keys d' m. g <= c.gasUsed + 4246 + 9523 * MIN 2 (w2n tail-w2n head) + 23 /\
+    run (s with contexts := (c,rb)::cs) = run (s with <|
+      contexts := (c with <|pc := 297;
+        stack := [n2w (MIN 2 (w2n tail-w2n head));
+                  n2w (MIN 2 (w2n tail-w2n head));head;tail];
+        gasUsed := g; memory := m|>,rb)::cs;
+      rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+      msdomain := Collect d'|>) /\
+    buffer_take 0 (116 * MIN 2 (w2n tail-w2n head)) m =
+      FLAT (GENLIST (\j. read_consolidation_request
+        (lookup_account c.msgParams.callee s.rollback.accounts).storage (w2n head+j))
+        (MIN 2 (w2n tail-w2n head))) /\
+    116 * MIN 2 (w2n tail-w2n head) <= buffer_length m /\
+    buffer_length m <= 1280 /\ buffer_length m MOD 32 = 0
+Proof
+  strip_tac >>
+  `c.gasUsed + 4246 <= c.msgParams.gasLimit` by decide_tac >>
+  `231 < LENGTH c.msgParams.code` by decide_tac >>
+  drule_all consolidation_loop_entry_run >>
+  disch_then (qspecl_then [`rb`, `cs`]
+    (qx_choosel_then [`g1`, `keys1`, `d1`] strip_assume_tac)) >>
+  qabbrev_tac `n = MIN 2 (w2n tail-w2n head)` >>
+  qabbrev_tac `c1 = c with <|pc := 233; stack := [0w;n2w n;head;tail]; gasUsed := g1|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c1`, `s` |-> `s1`, `i` |-> `0`, `d` |-> `d1`]
+    consolidation_loop_run) >>
+  (impl_tac >- (simp[Abbr `c1`, Abbr `s1`, Abbr `n`] >> gvs[])) >>
+  disch_then (qx_choosel_then [`g2`, `keys2`, `d2`, `m2`] strip_assume_tac) >>
+  qexistsl [`g2`, `keys2`, `d2`, `m2`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> decide_tac) >>
+  conj_tac
+  >- (qpat_x_assum `run (s with contexts := _) = _` (once_rewrite_tac o single) >>
+      qpat_x_assum `run (s1 with contexts := _) = _` (once_rewrite_tac o single) >>
+      simp[Abbr `s1`, Abbr `c1`, vfmContextTheory.context_fupdcanon,
+        vfmContextTheory.execution_state_fupdcanon]) >>
+  gvs[Abbr `s1`, Abbr `c1`] >> simp[vfmBufferTheory.buffer_take_to_list]
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
