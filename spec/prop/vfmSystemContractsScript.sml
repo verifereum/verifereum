@@ -15,7 +15,7 @@ Definition beacon_roots_code_def:
     0x42w; 0x81w; 0x55w; 0x5fw; 0x35w; 0x90w; 0x62w; 0x00w; 0x1fw; 0xffw; 0x01w; 0x55w;
     0x00w]
 End
-val () = cv_auto_trans beacon_roots_code_def;
+val () = cv_trans_deep_embedding EVAL beacon_roots_code_def;
 
 (* https://eips.ethereum.org/EIPS/eip-2935: canonical runtime. *)
 Definition history_storage_code_def:
@@ -28,7 +28,7 @@ Definition history_storage_code_def:
     0x5fw; 0x52w; 0x60w; 0x20w; 0x5fw; 0xf3w; 0x5bw; 0x5fw; 0x5fw; 0xfdw; 0x5bw; 0x5fw;
     0x35w; 0x61w; 0x1fw; 0xffw; 0x60w; 0x01w; 0x43w; 0x03w; 0x06w; 0x55w; 0x00w]
 End
-val () = cv_auto_trans history_storage_code_def;
+val () = cv_trans_deep_embedding EVAL history_storage_code_def;
 
 (* https://eips.ethereum.org/EIPS/eip-7002: canonical runtime. *)
 Definition withdrawal_request_code_def:
@@ -76,7 +76,7 @@ Definition withdrawal_request_code_def:
     0xe8w; 0x56w; 0x5bw; 0x01w; 0x60w; 0x02w; 0x90w; 0x03w; 0x5bw; 0x5fw; 0x55w; 0x5fw;
     0x60w; 0x01w; 0x55w; 0x60w; 0x4cw; 0x02w; 0x5fw; 0xf3w; 0x5bw; 0x5fw; 0x5fw; 0xfdw]
 End
-val () = cv_auto_trans withdrawal_request_code_def;
+val () = cv_trans_deep_embedding EVAL withdrawal_request_code_def;
 
 (* https://eips.ethereum.org/EIPS/eip-7251: canonical runtime. *)
 Definition consolidation_request_code_def:
@@ -117,7 +117,7 @@ Definition consolidation_request_code_def:
     0x90w; 0x03w; 0x5bw; 0x5fw; 0x55w; 0x5fw; 0x60w; 0x01w; 0x55w; 0x60w; 0x74w; 0x02w;
     0x5fw; 0xf3w; 0x5bw; 0x5fw; 0x5fw; 0xfdw]
 End
-val () = cv_auto_trans consolidation_request_code_def;
+val () = cv_trans_deep_embedding EVAL consolidation_request_code_def;
 
 (* Deployment starts with an inhibitor in the excess slot. The first system
    call clears it while retaining this block's additions in the fee update. *)
