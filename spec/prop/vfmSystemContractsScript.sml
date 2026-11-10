@@ -700,7 +700,24 @@ Proof
   simp[Abbr `s96`, Abbr `s87`, Abbr `s0`,
     vfmContextTheory.initial_rollback_def, update_beacon_block_def,
     update_history_block_def] >>
-  cheat
+  simp[Abbr `root`, Abbr `c87`, Abbr `c86`, Abbr `c78`, Abbr `c77`, Abbr `c0`,
+    vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+    vfmContextTheory.initial_tx_params_def] >>
+  simp[Abbr `key2`, Abbr `key`, Abbr `value`,
+    vfmContextTheory.initial_tx_params_def, with_zero_def, wordsTheory.word_mod_def,
+    take_pad_0_def, byteTheory.LENGTH_word_to_bytes,
+    vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def] >>
+  `blk.timeStamp MOD 115792089237316195423570985008687907853269984665640564039457584007913129639936 = blk.timeStamp` by
+    (irule arithmeticTheory.LESS_MOD >> fs[]) >>
+  simp[listTheory.TAKE_LENGTH_ID_rwt, listTheory.PAD_RIGHT,
+    byteTheory.LENGTH_word_to_bytes, GSYM wordsTheory.word_add_n2w] >>
+  rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+    cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+    GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num,
+    byteTheory.word_to_bytes_le_def] >>
+  simp[] >>
+  Cases_on `accounts beacon_roots_address` >>
+  simp[vfmStateTheory.recordtype_account_state_seldef_storage_fupd_def]
 QED
 
 Theorem beacon_roots_code_correspondence:
