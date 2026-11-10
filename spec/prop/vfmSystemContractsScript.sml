@@ -2080,6 +2080,232 @@ Proof
   simp[vfmContextTheory.context_fupdcanon]
 QED
 
+Theorem withdrawal_amount_parse[local]:
+  j < 7 ==>
+  withdrawal_instruction (317 + 9*j) = SOME (Dup 1) /\
+  withdrawal_instruction (318 + 9*j) = SOME (Push 1 [n2w (56 - 8*j)]) /\
+  withdrawal_instruction (320 + 9*j) = SOME ShR /\
+  withdrawal_instruction (321 + 9*j) = SOME (Dup 1) /\
+  withdrawal_instruction (322 + 9*j) = SOME (Push 1 [n2w (7-j)]) /\
+  withdrawal_instruction (324 + 9*j) = SOME Add /\
+  withdrawal_instruction (325 + 9*j) = SOME MStore8
+Proof
+  strip_tac >>
+  `j = 0 \/ j = 1 \/ j = 2 \/ j = 3 \/ j = 4 \/ j = 5 \/ j = 6` by decide_tac >>
+  gvs[] >> rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Theorem withdrawal_amount_byte_run[local]:
+  j < 7 /\ c.pc = 317 + 9*j /\
+  c.stack = off::v::ss /\ c.jumpDest = NONE /\
+  LENGTH ss + 4 < stack_limit /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  pos = w2n ((n2w (7-j):bytes32) + off) /\
+  mx = word_size (pos + 1) * 32 /\
+  cost = memory_expansion_cost (buffer_length c.memory) mx /\
+  c.gasUsed + 21 + cost <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := off::v::ss; pc := 326 + 9*j;
+      gasUsed := c.gasUsed + 21 + cost;
+      memory := buffer_write pos [w2w (v >>> (56 - 8*j))]
+        (buffer_extend (MAX (buffer_length c.memory) mx - buffer_length c.memory) c.memory)|>, rb)::cs)
+Proof
+  strip_tac >>
+  drule withdrawal_amount_parse >> strip_tac >>
+  mp_tac (Q.INST [`sh` |-> `n2w (56 - 8*j):byte`,
+    `k` |-> `n2w (7-j):byte`] system_shift_byte_store_run) >>
+  `j = 0 \/ j = 1 \/ j = 2 \/ j = 3 \/ j = 4 \/ j = 5 \/ j = 6` by decide_tac >>
+  gvs[GSYM withdrawal_instruction_def, wordsTheory.w2w_n2w,
+    wordsTheory.w2n_n2w, wordsTheory.dimword_def]
+QED
+
+Theorem system_jump_run[local]:
+  c.stack <> [] /\ c.jumpDest = NONE /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME Jump /\
+  FLOOKUP c.msgParams.parsed (w2n (HD c.stack)) = SOME JumpDest /\
+  w2n (HD c.stack) < LENGTH c.msgParams.code /\
+  c.gasUsed + 8 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := TL c.stack; pc := w2n (HD c.stack);
+      gasUsed := c.gasUsed + 8|>, rb)::cs)
+Proof
+  strip_tac >> Cases_on `c.stack` >> gvs[] >>
+  irule system_run_step >>
+  simp[step_def, step_inst_def, step_jump_def, pop_stack_def,
+    consume_gas_def, set_jump_dest_def, inc_pc_or_jump_def, is_call_def,
+    static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def] >>
+  Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
+QED
+
+Theorem withdrawal_copy_backedge_parse[local]:
+  withdrawal_instruction 380 = SOME MStore8 /\
+  withdrawal_instruction 381 = SOME (Push 1 [1w]) /\
+  withdrawal_instruction 383 = SOME Add /\
+  withdrawal_instruction 384 = SOME (Push 1 [225w]) /\
+  withdrawal_instruction 386 = SOME Jump
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Theorem withdrawal_amount_final_run[local]:
+  c.pc = 380 /\ c.stack = off::v::i::ss /\ c.jumpDest = NONE /\
+  225 < LENGTH c.msgParams.code /\
+  LENGTH ss + 3 < stack_limit /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  mx = word_size (w2n off + 1) * 32 /\
+  cost = memory_expansion_cost (buffer_length c.memory) mx /\
+  c.gasUsed + 20 + cost <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := (1w+i)::ss; pc := 225;
+      gasUsed := c.gasUsed + 20 + cost;
+      memory := buffer_write (w2n off) [w2w v]
+        (buffer_extend (MAX (buffer_length c.memory) mx - buffer_length c.memory) c.memory)|>, rb)::cs)
+Proof
+  strip_tac >> gvs[] >>
+  `!b:byte. word_of_bytes F 0w [b] = (w2w b:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  simp[SimpLHS, Q.INST [`op` |-> `MStore8`] (SRULE [LET_THM] system_mstore_run),
+    GSYM withdrawal_instruction_def, withdrawal_copy_backedge_parse] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[1w:byte]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_copy_backedge_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Add`,
+    `f` |-> `word_add:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_copy_backedge_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[225w:byte]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_copy_backedge_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, system_jump_run, GSYM withdrawal_instruction_def,
+    withdrawal_copy_backedge_parse, withdrawal_entry_parse] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem queue_aligned_allocation[local]:
+  L MOD 32 = 0 /\ x <= L ==> word_size x * 32 <= L
+Proof
+  simp[word_size_def] >> intLib.COOPER_TAC
+QED
+
+Theorem queue_allocated_expansion[local]:
+  buffer_length b MOD 32 = 0 /\ x <= buffer_length b ==>
+  memory_expansion_cost (buffer_length b) (word_size x * 32) = 0 /\
+  buffer_extend (MAX (buffer_length b) (word_size x * 32) - buffer_length b) b = b
+Proof
+  strip_tac >> drule_all queue_aligned_allocation >>
+  simp[memory_expansion_cost_def, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem withdrawal_amount_byte_allocated_run[local]:
+  j < 7 /\ c.pc = 317 + 9*j /\ 2 <= LENGTH c.stack /\
+  c.jumpDest = NONE /\ LENGTH c.stack + 2 < stack_limit /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  w2n (HD c.stack) + 8 < 2 ** 256 /\
+  w2n (HD c.stack) + 8 <= buffer_length c.memory /\
+  buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 21 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|pc := 326 + 9*j; gasUsed := c.gasUsed + 21;
+      memory := buffer_write (w2n (HD c.stack) + (7-j))
+        [w2w (HD (TL c.stack) >>> (56-8*j))] c.memory|>, rb)::cs)
+Proof
+  strip_tac >> Cases_on `c.stack` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  `w2n ((n2w (7-j):bytes32) + h) = w2n h + (7-j)` by
+    (simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w, wordsTheory.dimword_def]) >>
+  `w2n h + (7-j) + 1 <= buffer_length c.memory` by decide_tac >>
+  drule_all queue_allocated_expansion >> strip_tac >>
+  drule_at (Pat `c.stack = off::v::ss`)
+    (Q.INST [`pos` |-> `w2n (HD c.stack) + (7-j)`,
+      `mx` |-> `word_size (w2n (HD c.stack) + (7-j) + 1) * 32`, `cost` |-> `0`]
+      withdrawal_amount_byte_run) >>
+  `c with stack := h::h'::t' = c` by metis_tac[vfmContextTheory.context_fupdselfid] >>
+  simp[wordsTheory.WORD_ADD_COMM] >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >>
+  gs[wordsTheory.WORD_ADD_COMM] >>
+  Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
+QED
+
+Theorem withdrawal_amount_final_allocated_run[local]:
+  c.pc = 380 /\ 3 <= LENGTH c.stack /\ c.jumpDest = NONE /\
+  LENGTH c.stack + 2 < stack_limit /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  225 < LENGTH c.msgParams.code /\
+  w2n (HD c.stack) + 1 <= buffer_length c.memory /\
+  buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 20 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := (1w + HD (DROP 2 c.stack))::DROP 3 c.stack;
+      pc := 225; gasUsed := c.gasUsed + 20;
+      memory := buffer_write (w2n (HD c.stack)) [w2w (HD (TL c.stack))] c.memory|>, rb)::cs)
+Proof
+  strip_tac >> Cases_on `c.stack` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  drule_all queue_allocated_expansion >> strip_tac >>
+  drule_at (Pat `c.stack = off::v::i::ss`)
+    (Q.INST [`mx` |-> `word_size (w2n (HD c.stack) + 1) * 32`, `cost` |-> `0`]
+      withdrawal_amount_final_run) >>
+  gvs[]
+QED
+
+Theorem withdrawal_amount_allocated_run[local]:
+  c.pc = 317 /\ c.stack = n2w p::v::idx::ss /\ c.jumpDest = NONE /\
+  p + 8 < 2 ** 256 /\ p + 8 <= buffer_length c.memory /\
+  buffer_length c.memory MOD 32 = 0 /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  225 < LENGTH c.msgParams.code /\ LENGTH ss + 5 < stack_limit /\
+  c.gasUsed + 167 <= c.msgParams.gasLimit ==>
+  let b1 = buffer_write (p+7) [w2w (v >>> 56)] c.memory in
+  let b2 = buffer_write (p+6) [w2w (v >>> 48)] b1 in
+  let b3 = buffer_write (p+5) [w2w (v >>> 40)] b2 in
+  let b4 = buffer_write (p+4) [w2w (v >>> 32)] b3 in
+  let b5 = buffer_write (p+3) [w2w (v >>> 24)] b4 in
+  let b6 = buffer_write (p+2) [w2w (v >>> 16)] b5 in
+  let b7 = buffer_write (p+1) [w2w (v >>> 8)] b6 in
+  let m = buffer_write p [w2w v] b7 in
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := (1w+idx)::ss; pc := 225;
+      gasUsed := c.gasUsed + 167; memory := m|>, rb)::cs) /\
+  buffer_length m = buffer_length c.memory
+Proof
+  strip_tac >> simp_tac pure_ss [LET_THM] >>
+  `w2n (n2w p:bytes32) = p` by gvs[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  gs[stack_limit_def, wordsTheory.dimword_def] >>
+  qmatch_goalsub_abbrev_tac `buffer_write (p+6) _ b1` >>
+  qmatch_goalsub_abbrev_tac `buffer_write (p+5) _ b2` >>
+  qmatch_goalsub_abbrev_tac `buffer_write (p+4) _ b3` >>
+  qmatch_goalsub_abbrev_tac `buffer_write (p+3) _ b4` >>
+  qmatch_goalsub_abbrev_tac `buffer_write (p+2) _ b5` >>
+  qmatch_goalsub_abbrev_tac `buffer_write (p+1) _ b6` >>
+  qmatch_goalsub_abbrev_tac `buffer_write p _ b7` >>
+  `buffer_length b1 = buffer_length c.memory` by simp[Abbr `b1`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length b2 = buffer_length c.memory` by simp[Abbr `b2`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length b3 = buffer_length c.memory` by simp[Abbr `b3`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length b4 = buffer_length c.memory` by simp[Abbr `b4`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length b5 = buffer_length c.memory` by simp[Abbr `b5`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length b6 = buffer_length c.memory` by simp[Abbr `b6`, arithmeticTheory.MAX_DEF] >>
+  `buffer_length b7 = buffer_length c.memory` by simp[Abbr `b7`, arithmeticTheory.MAX_DEF] >>
+  reverse conj_tac >- simp[arithmeticTheory.MAX_DEF] >>
+  simp[SimpLHS, Q.INST [`j` |-> `0`] withdrawal_amount_byte_allocated_run,
+    Excl "buffer_length_write"] >>
+  simp[SimpLHS, Q.INST [`j` |-> `1`] withdrawal_amount_byte_allocated_run,
+    Excl "buffer_length_write"] >>
+  simp[SimpLHS, Q.INST [`j` |-> `2`] withdrawal_amount_byte_allocated_run,
+    Excl "buffer_length_write"] >>
+  simp[SimpLHS, Q.INST [`j` |-> `3`] withdrawal_amount_byte_allocated_run,
+    Excl "buffer_length_write"] >>
+  simp[SimpLHS, Q.INST [`j` |-> `4`] withdrawal_amount_byte_allocated_run,
+    Excl "buffer_length_write"] >>
+  simp[SimpLHS, Q.INST [`j` |-> `5`] withdrawal_amount_byte_allocated_run,
+    Excl "buffer_length_write"] >>
+  simp[SimpLHS, Q.INST [`j` |-> `6`] withdrawal_amount_byte_allocated_run,
+    Excl "buffer_length_write"] >>
+  simp[SimpLHS, withdrawal_amount_final_allocated_run, Excl "buffer_length_write"] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
