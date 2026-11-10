@@ -1221,6 +1221,122 @@ Proof
       vfmContextTheory.access_sets_fn_updates]
 QED
 
+Theorem system_push_run[local]:
+  FLOOKUP c.msgParams.parsed c.pc = SOME (Push n ws) /\
+  c.jumpDest = NONE /\ LENGTH c.stack < stack_limit /\
+  c.gasUsed + static_gas (Push n ws) <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <| stack := word_of_bytes F 0w (REVERSE ws) :: c.stack;
+               gasUsed := c.gasUsed + static_gas (Push n ws);
+               pc := c.pc + LENGTH (opcode (Push n ws)) |>, rb)::cs)
+Proof
+  strip_tac >> irule system_run_step >> irule system_dispatch_push >> simp[]
+QED
+
+Theorem system_sload_bounded_run[local]:
+  c.stack = key::ss /\ c.jumpDest = NONE /\ LENGTH ss < stack_limit /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME SLoad /\ s.msdomain = Collect d /\
+  c.gasUsed + 2100 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed + 2100 /\
+  run (s with contexts := (c, rb)::cs) =
+  run (s with <|
+    contexts := (c with <|pc := c.pc + 1;
+      stack := lookup_storage key (lookup_account c.msgParams.callee s.rollback.accounts).storage :: ss;
+      gasUsed := g|>, rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `cost = if fIN (SK c.msgParams.callee key) s.rollback.accesses.storageKeys
+    then warm_access_cost else cold_sload_cost` >>
+  `cost <= 2100` by
+    (simp[Abbr `cost`] >> IF_CASES_TAC >>
+     simp[warm_access_cost_def, cold_sload_cost_def]) >>
+  qexistsl [`c.gasUsed + cost`,
+    `fINSERT (SK c.msgParams.callee key) s.rollback.accesses.storageKeys`,
+    `d with storageKeys updated_by fINSERT (SK c.msgParams.callee key)`] >>
+  conj_tac >- decide_tac >>
+  `c.gasUsed + cost <= c.msgParams.gasLimit` by decide_tac >>
+  mp_tac (Q.INST [`address` |-> `c.msgParams.callee`, `cost` |-> `cost`]
+    system_sload_step) >>
+  (impl_tac >- simp[Abbr `cost`]) >>
+  disch_then (mp_tac o MATCH_MP system_run_step) >>
+  Cases_on `s.rollback.accesses` >>
+  simp[vfmContextTheory.access_sets_fn_updates]
+QED
+
+Theorem system_push1_sload_run[local]:
+  FLOOKUP c.msgParams.parsed c.pc = SOME (Push 1 [slot]) /\
+  FLOOKUP c.msgParams.parsed (c.pc + 2) = SOME SLoad /\
+  c.jumpDest = NONE /\ LENGTH c.stack < stack_limit /\
+  s.msdomain = Collect d /\ c.gasUsed + 2103 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed + 2103 /\
+  run (s with contexts := (c, rb)::cs) = run (s with <|
+    contexts := (c with <|pc := c.pc + 3;
+      stack := lookup_storage (w2w slot) (lookup_account c.msgParams.callee s.rollback.accounts).storage :: c.stack;
+      gasUsed := g|>, rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [slot] = (w2w slot:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  qabbrev_tac `c1 = c with <|stack := word_of_bytes F 0w (REVERSE [slot]) :: c.stack;
+    gasUsed := c.gasUsed + static_gas (Push 1 [slot]);
+    pc := c.pc + LENGTH (opcode (Push 1 [slot]))|>` >>
+  `run (s with contexts := (c, rb)::cs) =
+   run (s with contexts := (c1, rb)::cs)` by
+    (simp_tac pure_ss [Abbr `c1`] >> irule system_push_run >>
+     simp[static_gas_def]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `key` |-> `(w2w (slot:byte)):bytes32`,
+    `ss` |-> `c.stack`] system_sload_bounded_run) >>
+  (impl_tac >- simp[Abbr `c1`, static_gas_def, opcode_def]) >>
+  simp[Abbr `c1`, static_gas_def, opcode_def] >>
+  strip_tac >> qexistsl [`g`, `keys`, `d'`] >> simp[] >>
+  Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
+QED
+
+Theorem withdrawal_heads_run[local]:
+  c.pc = 203 /\ c.stack = [] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  s.msdomain = Collect d /\ c.gasUsed + 4207 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed + 4207 /\
+  run (s with contexts := (c, rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 210;
+      stack := [lookup_storage 2w (lookup_account c.msgParams.callee s.rollback.accounts).storage;
+                lookup_storage 3w (lookup_account c.msgParams.callee s.rollback.accounts).storage];
+      gasUsed := g|>, rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := c.pc + 1; gasUsed := c.gasUsed + 1|>` >>
+  `run (s with contexts := (c, rb)::cs) =
+   run (s with contexts := (c1, rb)::cs)` by
+    (simp_tac pure_ss [Abbr `c1`] >> irule system_jumpdest_run >>
+     simp[GSYM withdrawal_instruction_def, withdrawal_entry_parse]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `slot` |-> `3w:byte`] system_push1_sload_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM withdrawal_instruction_def,
+    withdrawal_entry_parse, stack_limit_def]) >>
+  simp[Abbr `c1`] >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `keys1` (qx_choose_then `d1` strip_assume_tac))) >>
+  qabbrev_tac `c2 = c with <|pc := 207;
+    stack := [lookup_storage 3w (lookup_account c.msgParams.callee s.rollback.accounts).storage];
+    gasUsed := g1|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s1`, `d` |-> `d1`,
+    `slot` |-> `2w:byte`] system_push1_sload_run) >>
+  (impl_tac >- simp[Abbr `c2`, Abbr `s1`, GSYM withdrawal_instruction_def,
+    withdrawal_entry_parse, stack_limit_def]) >>
+  simp[Abbr `c2`, Abbr `s1`] >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `keys2` (qx_choose_then `d2` strip_assume_tac))) >>
+  qexistsl [`g2`, `keys2`, `d2`] >>
+  conj_tac >- decide_tac >>
+  simp[]
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
