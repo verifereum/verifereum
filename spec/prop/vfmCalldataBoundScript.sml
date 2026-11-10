@@ -639,12 +639,6 @@ Proof
   rw[ignore_bind_def]
 QED
 
-Theorem bind_return_left[local,simp]:
-  bind (return x) f = f x
-Proof
-  rw[FUN_EQ_THM, bind_def, return_def]
-QED
-
 Theorem plain_case_option[local,simp]:
   plain m_none ∧ (∀x. plain (m_some x)) ⇒
   plain (case opt of NONE => m_none | SOME x => m_some x)
