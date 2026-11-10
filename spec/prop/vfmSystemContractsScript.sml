@@ -686,26 +686,32 @@ QED
 
 (* Header bounds exclude truncation by TIMESTAMP/NUMBER. Queue bounds exclude
    wrapped head subtraction and excess addition; storage keys may still wrap.
-   Canonical system paths leave account code, nonce and balance unchanged. *)
+   Canonical system paths leave account code, nonce and balance unchanged.
+
+   Computed helper contexts are bundled in tuple equations. Their components
+   depend only on earlier components, so successive one-point quantification
+   gives exactly the corresponding computed values, without extra semantic
+   assumptions. Simplifying PAIR_EQ at use sites eliminates these contexts. *)
 
 Theorem beacon_roots_run_certificate[local]:
   blk.timeStamp < 2 ** 256 ==>
-  let tx = <|from := system_address; to := SOME beacon_roots_address;
-    data := word_to_bytes blk.parentBeaconBlockRoot T; nonce := 0; value := 0;
-    gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
-    accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
-    maxFeePerGas := NONE; authorizationList := []|> in
-  let rb = initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|> in
-  let s0 = <|contexts := [(initial_context beacon_roots_address beacon_roots_code F
+  !tx rb s0. (tx, rb, s0) =
+    (<|from := system_address; to := SOME beacon_roots_address;
+      data := word_to_bytes blk.parentBeaconBlockRoot T; nonce := 0; value := 0;
+      gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
+      accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
+      maxFeePerGas := NONE; authorizationList := []|>,
+     initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|>,
+     <|contexts := [(initial_context beacon_roots_address beacon_roots_code F
                            empty_return_destination tx, rb)];
-    txParams := initial_tx_params chainId prevHashes blk tx 0;
-    rollback := rb; originalAccounts := accounts;
-    msdomain := Collect (d with addresses updated_by fINSERT beacon_roots_address)|> in
+       txParams := initial_tx_params chainId prevHashes blk tx 0;
+       rollback := rb; originalAccounts := accounts;
+       msdomain := Collect (d with addresses updated_by fINSERT beacon_roots_address)|>) ==>
   ?s c rb' d'. run s0 = SOME (INR NONE, s) /\ s.contexts = [(c, rb')] /\
     c.returnData = [] /\ s.rollback.accounts = update_beacon_block [] blk accounts /\
     s.rollback.toDelete = [] /\ s.msdomain = Collect d'
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   qmatch_goalsub_abbrev_tac `run s0` >>
   qabbrev_tac `c0 = FST (HD s0.contexts)` >>
   qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
@@ -887,7 +893,7 @@ Theorem beacon_roots_code_correspondence:
          beacon_roots_address (word_to_bytes blk.parentBeaconBlockRoot T) =
        SOME ([], update_beacon_block [] blk accounts, Collect d')
 Proof
-  rpt strip_tac >> drule beacon_roots_run_certificate >>
+  rpt strip_tac >> drule (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] beacon_roots_run_certificate) >>
   disch_then (qspecl_then [`prevHashes`, `d`, `chainId`, `accounts`] mp_tac) >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
@@ -999,22 +1005,23 @@ QED
 
 Theorem history_storage_run_certificate[local]:
   0 < blk.number /\ blk.number < 2 ** 256 ==>
-  let tx = <|from := system_address; to := SOME history_storage_address;
-    data := word_to_bytes parent_hash T; nonce := 0; value := 0;
-    gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
-    accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
-    maxFeePerGas := NONE; authorizationList := []|> in
-  let rb = initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|> in
-  let s0 = <|contexts := [(initial_context history_storage_address history_storage_code F
+  !tx rb s0. (tx, rb, s0) =
+    (<|from := system_address; to := SOME history_storage_address;
+      data := word_to_bytes parent_hash T; nonce := 0; value := 0;
+      gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
+      accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
+      maxFeePerGas := NONE; authorizationList := []|>,
+     initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|>,
+     <|contexts := [(initial_context history_storage_address history_storage_code F
                            empty_return_destination tx, rb)];
-    txParams := initial_tx_params chainId prevHashes blk tx 0;
-    rollback := rb; originalAccounts := accounts;
-    msdomain := Collect (d with addresses updated_by fINSERT history_storage_address)|> in
+       txParams := initial_tx_params chainId prevHashes blk tx 0;
+       rollback := rb; originalAccounts := accounts;
+       msdomain := Collect (d with addresses updated_by fINSERT history_storage_address)|>) ==>
   ?s c rb' d'. run s0 = SOME (INR NONE, s) /\ s.contexts = [(c, rb')] /\
     c.returnData = [] /\ s.rollback.accounts = update_history_block [parent_hash] blk accounts /\
     s.rollback.toDelete = [] /\ s.msdomain = Collect d'
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   qmatch_goalsub_abbrev_tac `run s0` >>
   qabbrev_tac `c0 = FST (HD s0.contexts)` >>
   qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
@@ -1130,7 +1137,7 @@ Theorem history_storage_code_correspondence:
        SOME ([], update_history_block [parent_hash] blk accounts, Collect d')
 Proof
   rpt strip_tac >>
-  drule_all history_storage_run_certificate >>
+  drule_all (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] history_storage_run_certificate) >>
   disch_then (qspecl_then [`prevHashes`, `parent_hash`, `d`, `chainId`, `accounts`] mp_tac) >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
@@ -1169,18 +1176,6 @@ Proof
   qexists_tac `d'` >> qexists_tac `d''` >>
   simp[update_beacon_block_def, update_history_block_def, LET_THM] >>
   Cases_on `prevHashes` >> fs[]
-QED
-
-Theorem read_withdrawal_request_length[local]:
-  LENGTH (read_withdrawal_request storage idx) = 76
-Proof
-  simp[read_withdrawal_request_def, byteTheory.LENGTH_word_to_bytes]
-QED
-
-Theorem read_consolidation_request_length[local]:
-  LENGTH (read_consolidation_request storage idx) = 116
-Proof
-  simp[read_consolidation_request_def, byteTheory.LENGTH_word_to_bytes]
 QED
 
 Theorem queue_sender_bytes:
@@ -1311,18 +1306,20 @@ QED
 
 Theorem consolidation_record_memory[local]:
   off <= buffer_length b ==>
-  let base = 4 + idx * 4 in
-  let w0 = lookup_storage (n2w base) storage in
-  let w1 = lookup_storage (n2w (base + 1)) storage in
-  let w2 = lookup_storage (n2w (base + 2)) storage in
-  let w3 = lookup_storage (n2w (base + 3)) storage in
-  let b1 = buffer_write off (word_to_bytes (w0 << 96) T) b in
-  let b2 = buffer_write (off + 20) (word_to_bytes w1 T) b1 in
-  let b3 = buffer_write (off + 52) (word_to_bytes w2 T) b2 in
-  let b4 = buffer_write (off + 84) (word_to_bytes w3 T) b3 in
+  !base w0 w1 w2 w3 b1 b2 b3 b4.
+  (base, w0, w1, w2, w3, b1, b2, b3, b4) =
+    (4 + idx * 4,
+     lookup_storage (n2w base) storage,
+     lookup_storage (n2w (base + 1)) storage,
+     lookup_storage (n2w (base + 2)) storage,
+     lookup_storage (n2w (base + 3)) storage,
+     buffer_write off (word_to_bytes (w0 << 96) T) b,
+     buffer_write (off + 20) (word_to_bytes w1 T) b1,
+     buffer_write (off + 52) (word_to_bytes w2 T) b2,
+     buffer_write (off + 84) (word_to_bytes w3 T) b3) ==>
   buffer_take 0 (off + 116) b4 = buffer_take 0 off b ++ read_consolidation_request storage idx
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   `off + 116 = (off + 84) + 32` by decide_tac >>
   pop_assum (fn th => once_rewrite_tac[th]) >>
   dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
@@ -1382,26 +1379,28 @@ QED
 
 Theorem withdrawal_record_memory[local]:
   off <= buffer_length b ==>
-  let base = 4 + idx * 3 in
-  let w0 = lookup_storage (n2w base) storage in
-  let w1 = lookup_storage (n2w (base + 1)) storage in
-  let w2 = lookup_storage (n2w (base + 2)) storage in
-  let a = w2 >>> 64 in
-  let b1 = buffer_write off (word_to_bytes (w0 << 96) T) b in
-  let b2 = buffer_write (off + 20) (word_to_bytes w1 T) b1 in
-  let b3 = buffer_write (off + 52) (word_to_bytes (w2 && (-1w << 128)) T) b2 in
-  let b4 = buffer_write (off + 75) [w2w (a >>> 56)] b3 in
-  let b5 = buffer_write (off + 74) [w2w (a >>> 48)] b4 in
-  let b6 = buffer_write (off + 73) [w2w (a >>> 40)] b5 in
-  let b7 = buffer_write (off + 72) [w2w (a >>> 32)] b6 in
-  let b8 = buffer_write (off + 71) [w2w (a >>> 24)] b7 in
-  let b9 = buffer_write (off + 70) [w2w (a >>> 16)] b8 in
-  let b10 = buffer_write (off + 69) [w2w (a >>> 8)] b9 in
-  let b11 = buffer_write (off + 68) [w2w a] b10 in
+  !base w0 w1 w2 a b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11.
+  (base, w0, w1, w2, a, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11) =
+    (4 + idx * 3,
+     lookup_storage (n2w base) storage,
+     lookup_storage (n2w (base + 1)) storage,
+     lookup_storage (n2w (base + 2)) storage,
+     w2 >>> 64,
+     buffer_write off (word_to_bytes (w0 << 96) T) b,
+     buffer_write (off + 20) (word_to_bytes w1 T) b1,
+     buffer_write (off + 52) (word_to_bytes (w2 && (-1w << 128)) T) b2,
+     buffer_write (off + 75) [w2w (a >>> 56)] b3,
+     buffer_write (off + 74) [w2w (a >>> 48)] b4,
+     buffer_write (off + 73) [w2w (a >>> 40)] b5,
+     buffer_write (off + 72) [w2w (a >>> 32)] b6,
+     buffer_write (off + 71) [w2w (a >>> 24)] b7,
+     buffer_write (off + 70) [w2w (a >>> 16)] b8,
+     buffer_write (off + 69) [w2w (a >>> 8)] b9,
+     buffer_write (off + 68) [w2w a] b10) ==>
   buffer_take 0 (off + 76) b11 =
     buffer_take 0 off b ++ read_withdrawal_request storage idx
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   `!w:bytes32. word_to_bytes w T <> []` by
     (gen_tac >> pure_once_rewrite_tac[GSYM listTheory.LENGTH_NIL] >>
      pure_rewrite_tac[byteTheory.LENGTH_word_to_bytes] >> simp[]) >>
@@ -1959,10 +1958,10 @@ Proof
 QED
 
 Theorem system_mstore_run:
-  let off = w2n (HD c.stack) in
-  let sz = if op = MStore8 then 1 else 32 in
-  let mx = word_size (off + sz) * 32 in
-  let cost = 3 + memory_expansion_cost (buffer_length c.memory) mx in
+  !off sz mx cost. (off, sz, mx, cost) =
+    (w2n (HD c.stack), if op = MStore8 then 1 else 32,
+     word_size (off + sz) * 32,
+     3 + memory_expansion_cost (buffer_length c.memory) mx) ==>
   (op = MStore \/ op = MStore8) /\
   FLOOKUP c.msgParams.parsed c.pc = SOME op /\ c.jumpDest = NONE /\
   2 <= LENGTH c.stack /\ 
@@ -1974,7 +1973,7 @@ Theorem system_mstore_run:
          else REVERSE (word_to_bytes (HD (TL c.stack)) F))
         (buffer_extend (MAX (buffer_length c.memory) mx - buffer_length c.memory) c.memory)|>, rb)::cs)
 Proof
-  simp_tac (srw_ss()) [LET_THM] >>
+  simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   strip_tac >> Cases_on `c.stack` >> gvs[] >> Cases_on `t` >> gvs[] >>
   irule system_run_step >>
   simp[step_def, is_call_def, get_current_context_def,
@@ -2080,7 +2079,7 @@ Proof
   gvs[] >>
   mp_tac (Q.INST [`op` |-> `MStore`,
     `c` |-> `c with <|stack := off::(w0 << 96)::off::ss; pc := 252; gasUsed := c.gasUsed + 9|>`]
-    (SRULE [LET_THM] system_mstore_run)) >>
+    (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run)) >>
   (impl_tac >- simp[GSYM withdrawal_instruction_def, withdrawal_sender_parse]) >>
   simp[vfmContextTheory.context_fupdcanon]
 QED
@@ -2206,7 +2205,7 @@ Proof
       byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
   simp[SimpLHS, Q.INST [`n` |-> `1`] system_dup_run,
     GSYM withdrawal_instruction_def, withdrawal_pubkey_parse, stack_limit_def] >>
-  simp[SimpLHS, Q.INST [`op` |-> `MStore`] (SRULE [LET_THM] system_mstore_run),
+  simp[SimpLHS, Q.INST [`op` |-> `MStore`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run),
     GSYM withdrawal_instruction_def, withdrawal_pubkey_parse] >>
   simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[32w:byte]`] system_push_run,
     GSYM withdrawal_instruction_def, withdrawal_pubkey_parse, stack_limit_def,
@@ -2254,7 +2253,7 @@ Proof
     step_inst_def, is_call_def, static_gas_def, opcode_def] >>
   simp[SimpLHS, Q.INST [`n` |-> `2`] system_dup_run,
     GSYM withdrawal_instruction_def, withdrawal_pubkey_parse, stack_limit_def] >>
-  simp[SimpLHS, Q.INST [`op` |-> `MStore`] (SRULE [LET_THM] system_mstore_run),
+  simp[SimpLHS, Q.INST [`op` |-> `MStore`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run),
     GSYM withdrawal_instruction_def, withdrawal_pubkey_parse] >>
   simp[vfmContextTheory.context_fupdcanon]
 QED
@@ -2352,7 +2351,7 @@ Proof
     `f` |-> `word_add:bytes32 -> bytes32 -> bytes32`] system_binop_run,
     stack_limit_def, step_inst_def, is_call_def, static_gas_def, opcode_def] >>
   simp[SimpLHS, vfmContextTheory.context_fupdcanon] >>
-  simp[SimpLHS, Q.INST [`op` |-> `MStore8`] (SRULE [LET_THM] system_mstore_run)] >>
+  simp[SimpLHS, Q.INST [`op` |-> `MStore8`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run)] >>
   simp[vfmContextTheory.context_fupdcanon]
 QED
 
@@ -2443,7 +2442,7 @@ Proof
   `!b:byte. word_of_bytes F 0w [b] = (w2w b:bytes32)` by
     simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
       byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
-  simp[SimpLHS, Q.INST [`op` |-> `MStore8`] (SRULE [LET_THM] system_mstore_run),
+  simp[SimpLHS, Q.INST [`op` |-> `MStore8`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run),
     GSYM withdrawal_instruction_def, withdrawal_copy_backedge_parse] >>
   simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[1w:byte]`] system_push_run,
     GSYM withdrawal_instruction_def, withdrawal_copy_backedge_parse, stack_limit_def,
@@ -2533,20 +2532,21 @@ Theorem withdrawal_amount_allocated_run[local]:
   c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
   225 < LENGTH c.msgParams.code /\ LENGTH ss + 5 < stack_limit /\
   c.gasUsed + 167 <= c.msgParams.gasLimit ==>
-  let b1 = buffer_write (p+7) [w2w (v >>> 56)] c.memory in
-  let b2 = buffer_write (p+6) [w2w (v >>> 48)] b1 in
-  let b3 = buffer_write (p+5) [w2w (v >>> 40)] b2 in
-  let b4 = buffer_write (p+4) [w2w (v >>> 32)] b3 in
-  let b5 = buffer_write (p+3) [w2w (v >>> 24)] b4 in
-  let b6 = buffer_write (p+2) [w2w (v >>> 16)] b5 in
-  let b7 = buffer_write (p+1) [w2w (v >>> 8)] b6 in
-  let m = buffer_write p [w2w v] b7 in
+  !b1 b2 b3 b4 b5 b6 b7 m. (b1, b2, b3, b4, b5, b6, b7, m) =
+    (buffer_write (p+7) [w2w (v >>> 56)] c.memory,
+     buffer_write (p+6) [w2w (v >>> 48)] b1,
+     buffer_write (p+5) [w2w (v >>> 40)] b2,
+     buffer_write (p+4) [w2w (v >>> 32)] b3,
+     buffer_write (p+3) [w2w (v >>> 24)] b4,
+     buffer_write (p+2) [w2w (v >>> 16)] b5,
+     buffer_write (p+1) [w2w (v >>> 8)] b6,
+     buffer_write p [w2w v] b7) ==>
   run (s with contexts := (c, rb)::cs) = run (s with contexts :=
     (c with <|stack := (1w+idx)::ss; pc := 225;
       gasUsed := c.gasUsed + 167; memory := m|>, rb)::cs) /\
   buffer_length m = buffer_length c.memory
 Proof
-  strip_tac >> simp_tac pure_ss [LET_THM] >>
+  strip_tac >> simp_tac bool_ss [pairTheory.PAIR_EQ] >>
   `w2n (n2w p:bytes32) = p` by gvs[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
   gs[stack_limit_def, wordsTheory.dimword_def] >>
   qmatch_goalsub_abbrev_tac `buffer_write (p+6) _ b1` >>
@@ -2599,15 +2599,15 @@ QED
 Theorem queue_expanded_word_length:
   p + 32 <= 1280 /\ buffer_length b <= 1280 /\
   buffer_length b MOD 32 = 0 ==>
-  let mx = word_size (p + 32) * 32 in
-  let m = buffer_write p (word_to_bytes (w:bytes32) T)
-    (buffer_extend (MAX (buffer_length b) mx - buffer_length b) b) in
+  !mx m. (mx, m) = (word_size (p + 32) * 32,
+    buffer_write p (word_to_bytes (w:bytes32) T)
+      (buffer_extend (MAX (buffer_length b) mx - buffer_length b) b)) ==>
   buffer_length m = MAX (buffer_length b) mx /\
   p + 32 <= buffer_length m /\ buffer_length m <= 1280 /\
   buffer_length m MOD 32 = 0 /\
   memory_expansion_cost (buffer_length b) mx <= 123
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   `p + 32 <= word_size (p + 32) * 32 /\
    word_size (p + 32) * 32 <= 1280 /\
    (word_size (p + 32) * 32) MOD 32 = 0` by
@@ -2622,29 +2622,30 @@ QED
 Theorem withdrawal_expanded_record_memory[local]:
   i < 16 /\ 76*i <= buffer_length b /\ buffer_length b <= 1280 /\
   buffer_length b MOD 32 = 0 ==>
-  let off = 76*i in
-  let base = 4 + (h+i)*3 in
-  let w0 = lookup_storage (n2w base) storage in
-  let w1 = lookup_storage (n2w (base+1)) storage in
-  let w2 = lookup_storage (n2w (base+2)) storage in
-  let a = w2 >>> 64 in
-  let mx1 = word_size (off+32)*32 in
-  let m1 = buffer_write off (word_to_bytes (w0 << 96) T)
-    (buffer_extend (MAX (buffer_length b) mx1 - buffer_length b) b) in
-  let mx2 = word_size (off+52)*32 in
-  let m2 = buffer_write (off+20) (word_to_bytes w1 T)
-    (buffer_extend (MAX (buffer_length m1) mx2 - buffer_length m1) m1) in
-  let mx3 = word_size (off+84)*32 in
-  let m3 = buffer_write (off+52) (word_to_bytes (w2 && (-1w << 128)) T)
-    (buffer_extend (MAX (buffer_length m2) mx3 - buffer_length m2) m2) in
-  let m4 = buffer_write (off+75) [w2w (a >>> 56)] m3 in
-  let m5 = buffer_write (off+74) [w2w (a >>> 48)] m4 in
-  let m6 = buffer_write (off+73) [w2w (a >>> 40)] m5 in
-  let m7 = buffer_write (off+72) [w2w (a >>> 32)] m6 in
-  let m8 = buffer_write (off+71) [w2w (a >>> 24)] m7 in
-  let m9 = buffer_write (off+70) [w2w (a >>> 16)] m8 in
-  let m10 = buffer_write (off+69) [w2w (a >>> 8)] m9 in
-  let m11 = buffer_write (off+68) [w2w a] m10 in
+  !off base w0 w1 w2 a mx1 m1 mx2 m2 mx3 m3 m4 m5 m6 m7 m8 m9 m10 m11.
+  (off, base, w0, w1, w2, a, mx1, m1, mx2, m2, mx3, m3,
+   m4, m5, m6, m7, m8, m9, m10, m11) =
+    (76*i, 4 + (h+i)*3,
+     lookup_storage (n2w base) storage,
+     lookup_storage (n2w (base+1)) storage,
+     lookup_storage (n2w (base+2)) storage,
+     w2 >>> 64, word_size (off+32)*32,
+     buffer_write off (word_to_bytes (w0 << 96) T)
+       (buffer_extend (MAX (buffer_length b) mx1 - buffer_length b) b),
+     word_size (off+52)*32,
+     buffer_write (off+20) (word_to_bytes w1 T)
+       (buffer_extend (MAX (buffer_length m1) mx2 - buffer_length m1) m1),
+     word_size (off+84)*32,
+     buffer_write (off+52) (word_to_bytes (w2 && (-1w << 128)) T)
+       (buffer_extend (MAX (buffer_length m2) mx3 - buffer_length m2) m2),
+     buffer_write (off+75) [w2w (a >>> 56)] m3,
+     buffer_write (off+74) [w2w (a >>> 48)] m4,
+     buffer_write (off+73) [w2w (a >>> 40)] m5,
+     buffer_write (off+72) [w2w (a >>> 32)] m6,
+     buffer_write (off+71) [w2w (a >>> 24)] m7,
+     buffer_write (off+70) [w2w (a >>> 16)] m8,
+     buffer_write (off+69) [w2w (a >>> 8)] m9,
+     buffer_write (off+68) [w2w a] m10) ==>
   memory_expansion_cost (buffer_length b) mx1 <= 123 /\
   memory_expansion_cost (buffer_length m1) mx2 <= 123 /\
   memory_expansion_cost (buffer_length m2) mx3 <= 123 /\
@@ -2655,25 +2656,28 @@ Theorem withdrawal_expanded_record_memory[local]:
   buffer_take 0 (off+76) m11 =
     buffer_take 0 off b ++ read_withdrawal_request storage (h+i)
 Proof
-  strip_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  strip_tac >> rpt gen_tac >> pure_rewrite_tac [pairTheory.PAIR_EQ] >>
+  disch_then (fn th => map_every
+    (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def)))
+    (CONJUNCTS th)) >>
   `off + 84 <= 1280` by (simp[Abbr `off`] >> decide_tac) >>
   `buffer_length m1 <= 1280 /\ buffer_length m1 MOD 32 = 0 /\
    memory_expansion_cost (buffer_length b) mx1 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off`, `w` |-> `w0 << 96`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[Abbr `m1`, Abbr `mx1`, LET_THM,
        Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
   `buffer_length m2 <= 1280 /\ buffer_length m2 MOD 32 = 0 /\
    memory_expansion_cost (buffer_length m1) mx2 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off+20`, `w` |-> `w1`, `b` |-> `m1`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[Abbr `m2`, Abbr `mx2`, LET_THM,
        Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
   `off+84 <= buffer_length m3 /\ buffer_length m3 <= 1280 /\
    buffer_length m3 MOD 32 = 0 /\
    memory_expansion_cost (buffer_length m2) mx3 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off+52`, `w` |-> `w2 && (-1w << 128)`,
-      `b` |-> `m2`] queue_expanded_word_length) >>
+      `b` |-> `m2`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[Abbr `m3`, Abbr `mx3`, LET_THM,
        Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
   `buffer_length m4 = buffer_length m3` by simp[Abbr `m4`, arithmeticTheory.MAX_DEF] >>
@@ -2685,8 +2689,8 @@ Proof
   `buffer_length m10 = buffer_length m3` by simp[Abbr `m10`, arithmeticTheory.MAX_DEF] >>
   `buffer_length m11 = buffer_length m3` by simp[Abbr `m11`, arithmeticTheory.MAX_DEF] >>
   simp[Excl "buffer_length_write"] >>
-  mp_tac (Q.INST [`idx` |-> `h+i`] withdrawal_record_memory) >>
-  (impl_tac >- simp[]) >> simp_tac pure_ss [LET_THM] >>
+  mp_tac (Q.INST [`idx` |-> `h+i`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] withdrawal_record_memory)) >>
+  (impl_tac >- simp[Abbr `off`]) >> simp_tac pure_ss [LET_THM] >>
   disch_then (fn th => once_rewrite_tac[GSYM th]) >>
   irule queue_take_read_cong >> conj_tac
   >- (rpt gen_tac >>
@@ -2746,7 +2750,7 @@ Proof
   qabbrev_tac `cost1 = memory_expansion_cost (buffer_length c.memory) mx1` >>
   `cost1 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off`, `b` |-> `c.memory`, `w` |-> `0w:bytes32`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[LET_THM, Abbr `cost1`, Abbr `mx1`, Abbr `off`, Excl "buffer_length_write"] >>
      strip_tac >> gvs[]) >>
   `g1 + 12 + cost1 <= c.msgParams.gasLimit` by decide_tac >>
@@ -2770,7 +2774,7 @@ Proof
   disch_then (qx_choosel_then [`g2`, `keys2`, `d2`] strip_assume_tac) >>
   `buffer_length c2.memory <= 1280 /\ buffer_length c2.memory MOD 32 = 0` by
     (mp_tac (Q.INST [`p` |-> `76*i`, `b` |-> `c.memory`,
-      `w` |-> `lookup_storage slot storage << 96`] queue_expanded_word_length) >>
+      `w` |-> `lookup_storage slot storage << 96`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
        cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
        GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
@@ -2778,7 +2782,7 @@ Proof
      strip_tac >> gvs[]) >>
   `memory_expansion_cost (buffer_length c2.memory) (word_size (76*i+52)*32) <= 123` by
     (mp_tac (Q.INST [`p` |-> `76*i+20`, `b` |-> `c2.memory`,
-      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+      `w` |-> `0w:bytes32`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
      strip_tac >> gvs[]) >>
   qpat_x_assum `run (s1 with contexts := _) = _` (once_rewrite_tac o single) >>
@@ -2795,7 +2799,7 @@ Proof
   qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m2; pc := _; gasUsed := _|>` >>
   `buffer_length m2 <= 1280 /\ buffer_length m2 MOD 32 = 0` by
     (mp_tac (Q.INST [`p` |-> `76*i+20`, `b` |-> `m1`,
-      `w` |-> `lookup_storage (slot+1w) storage`] queue_expanded_word_length) >>
+      `w` |-> `lookup_storage (slot+1w) storage`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
        cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
        GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
@@ -2803,7 +2807,7 @@ Proof
      strip_tac >> gvs[]) >>
   `memory_expansion_cost (buffer_length m2) (word_size (76*i+84)*32) <= 123` by
     (mp_tac (Q.INST [`p` |-> `76*i+52`, `b` |-> `m2`,
-      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+      `w` |-> `0w:bytes32`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
      strip_tac >> gvs[]) >>
   qmatch_goalsub_abbrev_tac `run (s2 with contexts := (c3,rb)::cs)` >>
@@ -2830,7 +2834,7 @@ Proof
     buffer_length m3 MOD 32 = 0` by
     (mp_tac (Q.INST [`p` |-> `76*i+52`, `b` |-> `m2`,
       `w` |-> `(-1w:bytes32) << 128 && lookup_storage (slot+2w) storage`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
        cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
        GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
@@ -2841,7 +2845,7 @@ Proof
   mp_tac (Q.INST [`c` |-> `c4`, `s` |-> `s3`]
     (Q.INST [`p` |-> `w2n (HD c.stack)`, `v` |-> `EL 1 c.stack`,
       `idx` |-> `EL 2 c.stack`, `ss` |-> `DROP 3 c.stack`]
-      withdrawal_amount_allocated_run)) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] withdrawal_amount_allocated_run))) >>
   (impl_tac >- (simp[Abbr `c4`, wordsTheory.w2n_n2w, wordsTheory.dimword_def,
      stack_limit_def] >> decide_tac)) >>
   simp_tac pure_ss [LET_THM] >> strip_tac >>
@@ -2855,7 +2859,7 @@ Proof
   conj_tac >- simp[wordsTheory.word_add_n2w] >>
   reverse conj_tac >- (gvs[Excl "buffer_length_write", Excl "buffer_length_extend"] >> decide_tac) >>
   mp_tac (Q.INST [`b` |-> `c.memory`, `h` |-> `w2n (head:bytes32)`]
-    withdrawal_expanded_record_memory) >>
+    (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] withdrawal_expanded_record_memory)) >>
   (impl_tac >- (simp[] >> decide_tac)) >>
   simp_tac pure_ss [LET_THM] >>
   disch_then (mp_tac o cj 9) >>
@@ -3394,7 +3398,7 @@ Proof
   gvs[] >>
   mp_tac (Q.INST [`op` |-> `MStore`,
     `c` |-> `c with <|stack := off::(w0 << 96)::off::ss; pc := 260; gasUsed := c.gasUsed + 9|>`]
-    (SRULE [LET_THM] system_mstore_run)) >>
+    (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run)) >>
   (impl_tac >- simp[GSYM consolidation_instruction_def, consolidation_copy_parse]) >>
   simp[vfmContextTheory.context_fupdcanon]
 QED
@@ -3451,7 +3455,7 @@ Proof
   mp_tac (Q.INST [`op` |-> `MStore`,
     `c` |-> `c with <|stack := off::w::off::slot::ss;
       pc := c.pc+1; gasUsed := c.gasUsed+3|>`]
-    (SRULE [LET_THM] system_mstore_run)) >>
+    (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run)) >>
   (impl_tac >- simp[GSYM consolidation_instruction_def, consolidation_copy_parse]) >>
   simp[vfmContextTheory.context_fupdcanon]
 QED
@@ -3540,7 +3544,7 @@ Proof
   mp_tac (Q.INST [`op` |-> `MStore`,
     `c` |-> `c with <|stack := off::w::ss;
       pc := 290; gasUsed := c.gasUsed+3|>`]
-    (SRULE [LET_THM] system_mstore_run)) >>
+    (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] system_mstore_run)) >>
   (impl_tac >- simp[GSYM consolidation_instruction_def, consolidation_copy_parse]) >>
   simp[vfmContextTheory.context_fupdcanon]
 QED
@@ -3576,24 +3580,25 @@ QED
 Theorem consolidation_expanded_record_memory[local]:
   i < 2 /\ 116*i <= buffer_length b /\ buffer_length b <= 1280 /\
   buffer_length b MOD 32 = 0 ==>
-  let off = 116*i in
-  let base = 4 + (h+i)*4 in
-  let w0 = lookup_storage (n2w base) storage in
-  let w1 = lookup_storage (n2w (base+1)) storage in
-  let w2 = lookup_storage (n2w (base+2)) storage in
-  let w3 = lookup_storage (n2w (base+3)) storage in
-  let mx1 = word_size (off+32)*32 in
-  let m1 = buffer_write off (word_to_bytes (w0 << 96) T)
-    (buffer_extend (MAX (buffer_length b) mx1 - buffer_length b) b) in
-  let mx2 = word_size (off+52)*32 in
-  let m2 = buffer_write (off+20) (word_to_bytes w1 T)
-    (buffer_extend (MAX (buffer_length m1) mx2 - buffer_length m1) m1) in
-  let mx3 = word_size (off+84)*32 in
-  let m3 = buffer_write (off+52) (word_to_bytes w2 T)
-    (buffer_extend (MAX (buffer_length m2) mx3 - buffer_length m2) m2) in
-  let mx4 = word_size (off+116)*32 in
-  let m4 = buffer_write (off+84) (word_to_bytes w3 T)
-    (buffer_extend (MAX (buffer_length m3) mx4 - buffer_length m3) m3) in
+  !off base w0 w1 w2 w3 mx1 m1 mx2 m2 mx3 m3 mx4 m4.
+  (off, base, w0, w1, w2, w3, mx1, m1, mx2, m2, mx3, m3, mx4, m4) =
+    (116*i, 4 + (h+i)*4,
+     lookup_storage (n2w base) storage,
+     lookup_storage (n2w (base+1)) storage,
+     lookup_storage (n2w (base+2)) storage,
+     lookup_storage (n2w (base+3)) storage,
+     word_size (off+32)*32,
+     buffer_write off (word_to_bytes (w0 << 96) T)
+       (buffer_extend (MAX (buffer_length b) mx1 - buffer_length b) b),
+     word_size (off+52)*32,
+     buffer_write (off+20) (word_to_bytes w1 T)
+       (buffer_extend (MAX (buffer_length m1) mx2 - buffer_length m1) m1),
+     word_size (off+84)*32,
+     buffer_write (off+52) (word_to_bytes w2 T)
+       (buffer_extend (MAX (buffer_length m2) mx3 - buffer_length m2) m2),
+     word_size (off+116)*32,
+     buffer_write (off+84) (word_to_bytes w3 T)
+       (buffer_extend (MAX (buffer_length m3) mx4 - buffer_length m3) m3)) ==>
   memory_expansion_cost (buffer_length b) mx1 <= 123 /\
   memory_expansion_cost (buffer_length m1) mx2 <= 123 /\
   memory_expansion_cost (buffer_length m2) mx3 <= 123 /\
@@ -3603,36 +3608,39 @@ Theorem consolidation_expanded_record_memory[local]:
   buffer_take 0 (off+116) m4 =
     buffer_take 0 off b ++ read_consolidation_request storage (h+i)
 Proof
-  strip_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  strip_tac >> rpt gen_tac >> pure_rewrite_tac [pairTheory.PAIR_EQ] >>
+  disch_then (fn th => map_every
+    (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def)))
+    (CONJUNCTS th)) >>
   `off + 116 <= 1280` by (simp[Abbr `off`] >> decide_tac) >>
   `buffer_length m1 <= 1280 /\ buffer_length m1 MOD 32 = 0 /\
    memory_expansion_cost (buffer_length b) mx1 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off`, `w` |-> `w0 << 96`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[Abbr `m1`, Abbr `mx1`, LET_THM,
        Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
   `buffer_length m2 <= 1280 /\ buffer_length m2 MOD 32 = 0 /\
    memory_expansion_cost (buffer_length m1) mx2 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off+20`, `w` |-> `w1`, `b` |-> `m1`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[Abbr `m2`, Abbr `mx2`, LET_THM,
        Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
   `buffer_length m3 <= 1280 /\ buffer_length m3 MOD 32 = 0 /\
    memory_expansion_cost (buffer_length m2) mx3 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off+52`, `w` |-> `w2`, `b` |-> `m2`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[Abbr `m3`, Abbr `mx3`, LET_THM,
        Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
   `off+116 <= buffer_length m4 /\ buffer_length m4 <= 1280 /\
    buffer_length m4 MOD 32 = 0 /\
    memory_expansion_cost (buffer_length m3) mx4 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off+84`, `w` |-> `w3`, `b` |-> `m3`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[Abbr `m4`, Abbr `mx4`, LET_THM,
        Excl "buffer_length_write", Excl "buffer_length_extend"] >> strip_tac >> gvs[]) >>
   simp[Excl "buffer_length_write"] >>
-  mp_tac (Q.INST [`idx` |-> `h+i`] consolidation_record_memory) >>
-  (impl_tac >- simp[]) >> simp_tac pure_ss [LET_THM] >>
+  mp_tac (Q.INST [`idx` |-> `h+i`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] consolidation_record_memory)) >>
+  (impl_tac >- simp[Abbr `off`]) >> simp_tac pure_ss [LET_THM] >>
   disch_then (fn th => once_rewrite_tac[GSYM th]) >>
   irule queue_take_read_cong >> conj_tac
   >- (rpt gen_tac >>
@@ -3690,7 +3698,7 @@ Proof
   qabbrev_tac `cost1 = memory_expansion_cost (buffer_length c.memory) mx1` >>
   `cost1 <= 123` by
     (mp_tac (Q.INST [`p` |-> `off`, `b` |-> `c.memory`, `w` |-> `0w:bytes32`]
-      queue_expanded_word_length) >>
+      (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[LET_THM, Abbr `cost1`, Abbr `mx1`, Abbr `off`, Excl "buffer_length_write"] >>
      strip_tac >> gvs[]) >>
   `g1 + 12 + cost1 <= c.msgParams.gasLimit` by decide_tac >>
@@ -3713,7 +3721,7 @@ Proof
   disch_then (qx_choosel_then [`g2`, `keys2`, `d2`] strip_assume_tac) >>
   `buffer_length c2.memory <= 1280 /\ buffer_length c2.memory MOD 32 = 0` by
     (mp_tac (Q.INST [`p` |-> `116*i`, `b` |-> `c.memory`,
-      `w` |-> `lookup_storage slot storage << 96`] queue_expanded_word_length) >>
+      `w` |-> `lookup_storage slot storage << 96`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
        cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
        GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
@@ -3721,7 +3729,7 @@ Proof
      strip_tac >> gvs[]) >>
   `memory_expansion_cost (buffer_length c2.memory) (word_size (116*i+52)*32) <= 123` by
     (mp_tac (Q.INST [`p` |-> `116*i+20`, `b` |-> `c2.memory`,
-      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+      `w` |-> `0w:bytes32`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
      strip_tac >> gvs[]) >>
   qpat_x_assum `run (s1 with contexts := _) = _` (once_rewrite_tac o single) >>
@@ -3738,7 +3746,7 @@ Proof
   qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m2; pc := _; gasUsed := _|>` >>
   `buffer_length m2 <= 1280 /\ buffer_length m2 MOD 32 = 0` by
     (mp_tac (Q.INST [`p` |-> `116*i+20`, `b` |-> `m1`,
-      `w` |-> `lookup_storage (slot+1w) storage`] queue_expanded_word_length) >>
+      `w` |-> `lookup_storage (slot+1w) storage`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
        cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
        GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
@@ -3746,7 +3754,7 @@ Proof
      strip_tac >> gvs[]) >>
   `memory_expansion_cost (buffer_length m2) (word_size (116*i+84)*32) <= 123` by
     (mp_tac (Q.INST [`p` |-> `116*i+52`, `b` |-> `m2`,
-      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+      `w` |-> `0w:bytes32`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
      strip_tac >> gvs[]) >>
   simp[Q.INST [`off` |-> `HD c.stack`, `slot` |-> `EL 1 c.stack`,
@@ -3770,7 +3778,7 @@ Proof
   qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m3; pc := _; gasUsed := _|>` >>
   `buffer_length m3 <= 1280 /\ buffer_length m3 MOD 32 = 0` by
     (mp_tac (Q.INST [`p` |-> `116*i+52`, `b` |-> `m2`,
-      `w` |-> `lookup_storage (slot+2w) storage`] queue_expanded_word_length) >>
+      `w` |-> `lookup_storage (slot+2w) storage`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
        cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
        GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
@@ -3778,7 +3786,7 @@ Proof
      strip_tac >> gvs[]) >>
   `memory_expansion_cost (buffer_length m3) (word_size (116*i+116)*32) <= 123` by
     (mp_tac (Q.INST [`p` |-> `116*i+84`, `b` |-> `m3`,
-      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+      `w` |-> `0w:bytes32`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
      strip_tac >> gvs[]) >>
   simp[Q.INST [`off` |-> `HD c.stack`, `slot` |-> `EL 1 c.stack`,
@@ -3803,7 +3811,7 @@ Proof
   `116*(i+1) <= buffer_length mf /\ buffer_length mf <= 1280 /\
     buffer_length mf MOD 32 = 0` by
     (mp_tac (Q.INST [`p` |-> `116*i+84`, `b` |-> `m3`,
-      `w` |-> `lookup_storage (slot+3w) storage`] queue_expanded_word_length) >>
+      `w` |-> `lookup_storage (slot+3w) storage`] (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] queue_expanded_word_length)) >>
      rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
        cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
        GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
@@ -3817,7 +3825,7 @@ Proof
   conj_tac >- simp[wordsTheory.word_add_n2w] >>
   reverse conj_tac >- simp[] >>
   mp_tac (Q.INST [`b` |-> `c.memory`, `h` |-> `w2n (head:bytes32)`]
-    consolidation_expanded_record_memory) >>
+    (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] consolidation_expanded_record_memory)) >>
   (impl_tac >- simp[]) >> simp_tac pure_ss [LET_THM] >>
   disch_then (mp_tac o cj 8) >>
   simp_tac pure_ss [GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w,
@@ -5690,23 +5698,24 @@ Theorem withdrawal_run_certificate[local]:
   (if lookup_storage 0w (lookup_account withdrawal_request_contract accounts).storage = -1w
    then 0 else w2n (lookup_storage 0w (lookup_account withdrawal_request_contract accounts).storage)) +
   w2n (lookup_storage 1w (lookup_account withdrawal_request_contract accounts).storage) < 2 ** 256 ==>
-  let tx = <|from := system_address; to := SOME withdrawal_request_contract;
-    data := []; nonce := 0; value := 0;
-    gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
-    accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
-    maxFeePerGas := NONE; authorizationList := []|> in
-  let rb = initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|> in
-  let s0 = <|contexts := [(initial_context withdrawal_request_contract withdrawal_request_code F
+  !tx rb s0. (tx, rb, s0) =
+    (<|from := system_address; to := SOME withdrawal_request_contract;
+      data := []; nonce := 0; value := 0;
+      gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
+      accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
+      maxFeePerGas := NONE; authorizationList := []|>,
+     initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|>,
+     <|contexts := [(initial_context withdrawal_request_contract withdrawal_request_code F
                            empty_return_destination tx, rb)];
-    txParams := initial_tx_params chainId prevHashes blk tx 0;
-    rollback := rb; originalAccounts := accounts;
-    msdomain := Collect (d with addresses updated_by fINSERT withdrawal_request_contract)|> in
+       txParams := initial_tx_params chainId prevHashes blk tx 0;
+       rollback := rb; originalAccounts := accounts;
+       msdomain := Collect (d with addresses updated_by fINSERT withdrawal_request_contract)|>) ==>
   ?s c rb' d'. run s0 = SOME (INR NONE, s) /\ s.contexts = [(c, rb')] /\
     c.returnData = FLAT (FST (dequeue_withdrawal_requests accounts)) /\
     s.rollback.accounts = SND (dequeue_withdrawal_requests accounts) /\
     s.rollback.toDelete = [] /\ s.msdomain = Collect d'
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   qmatch_goalsub_abbrev_tac `run s0` >>
   qabbrev_tac `c0 = FST (HD s0.contexts)` >>
   qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
@@ -5806,7 +5815,7 @@ Proof
     then 0 else w2n (lookup_storage 0w (lookup_account withdrawal_request_contract accounts).storage)) +
    w2n (lookup_storage 1w (lookup_account withdrawal_request_contract accounts).storage) < 2 ** 256`
     by gvs[] >>
-  drule_all withdrawal_run_certificate >>
+  drule_all (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] withdrawal_run_certificate) >>
   disch_then (qspecl_then [`prevHashes`, `d`, `chainId`, `blk`] mp_tac) >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
@@ -5857,23 +5866,24 @@ Theorem consolidation_run_certificate[local]:
   (if lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage = -1w
    then 0 else w2n (lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage)) +
   w2n (lookup_storage 1w (lookup_account consolidation_request_contract accounts).storage) < 2 ** 256 ==>
-  let tx = <|from := system_address; to := SOME consolidation_request_contract;
-    data := []; nonce := 0; value := 0;
-    gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
-    accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
-    maxFeePerGas := NONE; authorizationList := []|> in
-  let rb = initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|> in
-  let s0 = <|contexts := [(initial_context consolidation_request_contract consolidation_request_code F
+  !tx rb s0. (tx, rb, s0) =
+    (<|from := system_address; to := SOME consolidation_request_contract;
+      data := []; nonce := 0; value := 0;
+      gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
+      accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
+      maxFeePerGas := NONE; authorizationList := []|>,
+     initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|>,
+     <|contexts := [(initial_context consolidation_request_contract consolidation_request_code F
                            empty_return_destination tx, rb)];
-    txParams := initial_tx_params chainId prevHashes blk tx 0;
-    rollback := rb; originalAccounts := accounts;
-    msdomain := Collect (d with addresses updated_by fINSERT consolidation_request_contract)|> in
+       txParams := initial_tx_params chainId prevHashes blk tx 0;
+       rollback := rb; originalAccounts := accounts;
+       msdomain := Collect (d with addresses updated_by fINSERT consolidation_request_contract)|>) ==>
   ?s c rb' d'. run s0 = SOME (INR NONE, s) /\ s.contexts = [(c, rb')] /\
     c.returnData = FLAT (FST (dequeue_consolidation_requests accounts)) /\
     s.rollback.accounts = SND (dequeue_consolidation_requests accounts) /\
     s.rollback.toDelete = [] /\ s.msdomain = Collect d'
 Proof
-  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >> simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >>
   qmatch_goalsub_abbrev_tac `run s0` >>
   qabbrev_tac `c0 = FST (HD s0.contexts)` >>
   qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
@@ -5973,7 +5983,7 @@ Proof
     then 0 else w2n (lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage)) +
    w2n (lookup_storage 1w (lookup_account consolidation_request_contract accounts).storage) < 2 ** 256`
     by gvs[] >>
-  drule_all consolidation_run_certificate >>
+  drule_all (SIMP_RULE bool_ss [pairTheory.PAIR_EQ] consolidation_run_certificate) >>
   disch_then (qspecl_then [`prevHashes`, `d`, `chainId`, `blk`] mp_tac) >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
