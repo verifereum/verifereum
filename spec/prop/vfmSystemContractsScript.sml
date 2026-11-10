@@ -463,14 +463,46 @@ Proof
           byteTheory.byte_index_def, byteTheory.word_slice_alt_zero,
           byteTheory.word_slice_alt_shift, byteTheory.word_slice_alt_empty]) >>
   simp[vfmDecreasesGasTheory.run_eq_tr] >>
-  ntac 5 (simp[Once vfmDecreasesGasTheory.run_tr_def,
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
     step_def, step_inst_def, step_push_def, step_txParams_def,
     step_binop_def, step_dup_def, get_tx_params_def,
     consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
     is_call_def, static_gas_def, opcode_def, get_current_context_def,
     set_current_context_def, bind_def, ignore_bind_def, return_def,
     assert_def, handle_def, stack_limit_def,
-    GSYM beacon_roots_instruction_def, beacon_roots_parse])
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_txParams_def,
+    step_binop_def, step_dup_def, get_tx_params_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_txParams_def,
+    step_binop_def, step_dup_def, get_tx_params_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_txParams_def,
+    step_binop_def, step_dup_def, get_tx_params_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_txParams_def,
+    step_binop_def, step_dup_def, get_tx_params_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse]
 QED
 
 Theorem beacon_roots_data_run[local]:
@@ -489,14 +521,46 @@ Proof
           byteTheory.byte_index_def, byteTheory.word_slice_alt_zero,
           byteTheory.word_slice_alt_shift, byteTheory.word_slice_alt_empty]) >>
   simp[vfmDecreasesGasTheory.run_eq_tr] >>
-  ntac 5 (simp[Once vfmDecreasesGasTheory.run_tr_def,
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
     step_def, step_inst_def, step_push_def, step_call_data_load_def,
     step_swap_def, step_binop_def, get_call_data_def,
     consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
     is_call_def, static_gas_def, opcode_def, get_current_context_def,
     set_current_context_def, bind_def, ignore_bind_def, return_def,
     assert_def, handle_def, stack_limit_def, CONJUNCT1 byteTheory.word_of_bytes_def,
-    GSYM beacon_roots_instruction_def, beacon_roots_parse])
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_call_data_load_def,
+    step_swap_def, step_binop_def, get_call_data_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def, CONJUNCT1 byteTheory.word_of_bytes_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_call_data_load_def,
+    step_swap_def, step_binop_def, get_call_data_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def, CONJUNCT1 byteTheory.word_of_bytes_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_call_data_load_def,
+    step_swap_def, step_binop_def, get_call_data_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def, CONJUNCT1 byteTheory.word_of_bytes_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_call_data_load_def,
+    step_swap_def, step_binop_def, get_call_data_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def, CONJUNCT1 byteTheory.word_of_bytes_def,
+    GSYM beacon_roots_instruction_def, beacon_roots_parse]
 QED
 
 Theorem beacon_roots_dispatch_run[local]:
@@ -2427,6 +2491,176 @@ Proof
   simp[byteTheory.LENGTH_word_to_bytes, Excl "buffer_length_write"] >>
   pure_once_rewrite_tac[GSYM listTheory.LENGTH_NIL] >>
   pure_rewrite_tac[byteTheory.LENGTH_word_to_bytes] >> simp[]
+QED
+
+Theorem withdrawal_record_run[local]:
+  c.pc = 233 /\ c.stack = [n2w i; cnt; head; tail] /\
+  c.jumpDest = NONE /\ i < 16 /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  225 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  76*i <= buffer_length c.memory /\ buffer_length c.memory <= 1280 /\
+  buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 7100 <= c.msgParams.gasLimit ==>
+  ?g keys d' m. g <= c.gasUsed + 7100 /\
+    run (s with contexts := (c, rb)::cs) = run (s with <|
+      contexts := (c with <|pc := 225; stack := [n2w (i+1); cnt; head; tail];
+        gasUsed := g; memory := m|>, rb)::cs;
+      rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+      msdomain := Collect d'|>) /\
+    buffer_take 0 (76*(i+1)) m = buffer_take 0 (76*i) c.memory ++
+      read_withdrawal_request
+        (lookup_account c.msgParams.callee s.rollback.accounts).storage (w2n head+i) /\
+    76*(i+1) <= buffer_length m /\ buffer_length m <= 1280 /\
+    buffer_length m MOD 32 = 0
+Proof
+  strip_tac >>
+  `c.gasUsed + 2137 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all withdrawal_copy_first_load_run >>
+  disch_then (qspecl_then [`rb`, `cs`]
+    (qx_choosel_then [`g1`, `keys1`, `d1`] strip_assume_tac)) >>
+  qabbrev_tac `slot = 4w + 3w * (n2w i + head)` >>
+  qabbrev_tac `storage = (lookup_account c.msgParams.callee s.rollback.accounts).storage` >>
+  qabbrev_tac `c1 = c with <|pc := 248; gasUsed := g1;
+    stack := [lookup_storage slot storage; 76w*n2w i; slot; n2w i; cnt; head; tail]|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s1 with contexts := (c1,rb)::cs)` by
+    simp[Abbr `c1`, Abbr `s1`, Abbr `storage`, Abbr `slot`] >>
+  qabbrev_tac `off = 76*i` >>
+  `76w * n2w i = (n2w off:bytes32)` by simp[Abbr `off`, wordsTheory.word_mul_n2w] >>
+  `w2n (n2w off:bytes32) = off` by
+    (simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def, Abbr `off`] >> decide_tac) >>
+  qabbrev_tac `mx1 = word_size (off+32)*32` >>
+  qabbrev_tac `cost1 = memory_expansion_cost (buffer_length c.memory) mx1` >>
+  `cost1 <= 123` by
+    (mp_tac (Q.INST [`p` |-> `off`, `b` |-> `c.memory`, `w` |-> `0w:bytes32`]
+      queue_expanded_word_length) >>
+     simp[LET_THM, Abbr `cost1`, Abbr `mx1`, Abbr `off`, Excl "buffer_length_write"] >>
+     strip_tac >> gvs[]) >>
+  `g1 + 12 + cost1 <= c.msgParams.gasLimit` by decide_tac >>
+  qpat_x_assum `run (s with contexts := _) = _` (once_rewrite_tac o single) >>
+  gs[Abbr `cost1`, Abbr `mx1`, Abbr `off`] >>
+  simp[
+    Q.INST [`w0` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+      `ss` |-> `DROP 2 c.stack`,
+      `mx` |-> `word_size (w2n (EL 1 c.stack)+32)*32`,
+      `cost` |-> `memory_expansion_cost (buffer_length c.memory)
+        (word_size (w2n (EL 1 c.stack)+32)*32)`] withdrawal_sender_run,
+    Abbr `c1`, stack_limit_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  simp[Q.INST [`off` |-> `HD c.stack`, `slot` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`] withdrawal_pubkey_address_run, stack_limit_def] >>
+  qmatch_goalsub_abbrev_tac `run (s1 with contexts := (c2,rb)::cs)` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s1`, `d` |-> `d1`]
+    (Q.INST [`key` |-> `HD c.stack`, `ss` |-> `TL c.stack`]
+      system_sload_bounded_run)) >>
+  (impl_tac >- (simp[Abbr `c2`, Abbr `s1`, GSYM withdrawal_instruction_def,
+    withdrawal_sender_parse, stack_limit_def] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `keys2`, `d2`] strip_assume_tac) >>
+  `buffer_length c2.memory <= 1280 /\ buffer_length c2.memory MOD 32 = 0` by
+    (mp_tac (Q.INST [`p` |-> `76*i`, `b` |-> `c.memory`,
+      `w` |-> `lookup_storage slot storage << 96`] queue_expanded_word_length) >>
+     rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+       GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+     simp[LET_THM, Abbr `c2`, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  `memory_expansion_cost (buffer_length c2.memory) (word_size (76*i+52)*32) <= 123` by
+    (mp_tac (Q.INST [`p` |-> `76*i+20`, `b` |-> `c2.memory`,
+      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+     simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  qpat_x_assum `run (s1 with contexts := _) = _` (once_rewrite_tac o single) >>
+  simp[Abbr `c2`, Abbr `s1`, vfmContextTheory.context_fupdcanon,
+    wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m1; pc := _; gasUsed := _|>` >>
+  gs[] >>
+  simp[Q.INST [`w1` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+    `slot` |-> `EL 2 c.stack`, `ss` |-> `DROP 3 c.stack`,
+    `mx` |-> `word_size (w2n (EL 1 c.stack)+32)*32`,
+    `cost` |-> `memory_expansion_cost (buffer_length c.memory)
+      (word_size (w2n (EL 1 c.stack)+32)*32)`] withdrawal_pubkey_store_run,
+    stack_limit_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m2; pc := _; gasUsed := _|>` >>
+  `buffer_length m2 <= 1280 /\ buffer_length m2 MOD 32 = 0` by
+    (mp_tac (Q.INST [`p` |-> `76*i+20`, `b` |-> `m1`,
+      `w` |-> `lookup_storage (slot+1w) storage`] queue_expanded_word_length) >>
+     rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+       GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+     simp[LET_THM, Abbr `m2`, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  `memory_expansion_cost (buffer_length m2) (word_size (76*i+84)*32) <= 123` by
+    (mp_tac (Q.INST [`p` |-> `76*i+52`, `b` |-> `m2`,
+      `w` |-> `0w:bytes32`] queue_expanded_word_length) >>
+     simp[LET_THM, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  qmatch_goalsub_abbrev_tac `run (s2 with contexts := (c3,rb)::cs)` >>
+  mp_tac (Q.INST [`c` |-> `c3`, `s` |-> `s2`, `d` |-> `d2`]
+    (Q.INST [`key` |-> `HD c.stack`, `ss` |-> `TL c.stack`]
+      system_sload_bounded_run)) >>
+  (impl_tac >- (simp[Abbr `c3`, Abbr `s2`, GSYM withdrawal_instruction_def,
+    withdrawal_pubkey_parse, stack_limit_def] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g3`, `keys3`, `d3`] strip_assume_tac) >>
+  qpat_x_assum `run (s2 with contexts := _) = _` (once_rewrite_tac o single) >>
+  simp[Abbr `c3`, Abbr `s2`, vfmContextTheory.context_fupdcanon,
+    wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >>
+  gs[] >>
+  simp[Q.INST [`w2` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`,
+    `mx` |-> `word_size (w2n (EL 1 c.stack)+32)*32`,
+    `cost` |-> `memory_expansion_cost (buffer_length c.memory)
+      (word_size (w2n (EL 1 c.stack)+32)*32)`] withdrawal_pubkey_tail_run,
+    stack_limit_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := m3; pc := _; gasUsed := _|>` >>
+  simp[Q.INST [`w2` |-> `HD c.stack`, `off` |-> `EL 1 c.stack`,
+    `ss` |-> `DROP 2 c.stack`] withdrawal_amount_address_run, stack_limit_def] >>
+  `76*i+84 <= buffer_length m3 /\ buffer_length m3 <= 1280 /\
+    buffer_length m3 MOD 32 = 0` by
+    (mp_tac (Q.INST [`p` |-> `76*i+52`, `b` |-> `m2`,
+      `w` |-> `(-1w:bytes32) << 128 && lookup_storage (slot+2w) storage`]
+      queue_expanded_word_length) >>
+     rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+       cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+       GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+     simp[LET_THM, Abbr `m3`, Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+     strip_tac >> gvs[]) >>
+  simp[wordsTheory.word_add_n2w] >>
+  qmatch_goalsub_abbrev_tac `run (s3 with contexts := (c4,rb)::cs)` >>
+  mp_tac (Q.INST [`c` |-> `c4`, `s` |-> `s3`]
+    (Q.INST [`p` |-> `w2n (HD c.stack)`, `v` |-> `EL 1 c.stack`,
+      `idx` |-> `EL 2 c.stack`, `ss` |-> `DROP 3 c.stack`]
+      withdrawal_amount_allocated_run)) >>
+  (impl_tac >- (simp[Abbr `c4`, wordsTheory.w2n_n2w, wordsTheory.dimword_def,
+     stack_limit_def] >> decide_tac)) >>
+  simp_tac pure_ss [LET_THM] >> strip_tac >>
+  qpat_x_assum `run (s3 with contexts := _) = _` (once_rewrite_tac o single) >>
+  gs[Abbr `c4`, Abbr `s3`, vfmContextTheory.context_fupdcanon,
+    wordsTheory.w2n_n2w, wordsTheory.dimword_def,
+    Excl "buffer_length_write", Excl "buffer_length_extend"] >>
+  qmatch_goalsub_abbrev_tac `c with <|stack := _; memory := mf; pc := _; gasUsed := gf|>` >>
+  qexistsl [`gf`, `keys3`, `d3`, `mf`] >>
+  conj_tac >- (simp[Abbr `gf`] >> decide_tac) >>
+  conj_tac >- simp[wordsTheory.word_add_n2w] >>
+  reverse conj_tac >- (gvs[Excl "buffer_length_write", Excl "buffer_length_extend"] >> decide_tac) >>
+  mp_tac (Q.INST [`b` |-> `c.memory`, `h` |-> `w2n (head:bytes32)`]
+    withdrawal_expanded_record_memory) >>
+  (impl_tac >- (simp[] >> decide_tac)) >>
+  simp_tac pure_ss [LET_THM] >>
+  disch_then (mp_tac o cj 9) >>
+  simp_tac pure_ss [GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w,
+    wordsTheory.n2w_w2n] >>
+  simp_tac pure_ss [wordsTheory.n2w_w2n, wordsTheory.LSR_ADD,
+    wordsTheory.WORD_MULT_COMM, wordsTheory.WORD_ADD_ASSOC,
+    wordsTheory.WORD_ADD_COMM, Abbr `slot`] >>
+  simp_tac pure_ss [Abbr `mf`, Abbr `m3`, Abbr `m2`, Abbr `m1`] >>
+  rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+    cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+    GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num, byteTheory.word_to_bytes_le_def] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp_tac std_ss [wordsTheory.WORD_MULT_COMM, wordsTheory.WORD_ADD_ASSOC,
+    wordsTheory.WORD_ADD_COMM, wordsTheory.WORD_AND_COMM,
+    arithmeticTheory.ADD_COMM, arithmeticTheory.MULT_COMM,
+    arithmeticTheory.LEFT_ADD_DISTRIB] >> simp[]
 QED
 
 Theorem withdrawal_request_code_correspondence:
