@@ -980,6 +980,37 @@ Proof
   metis_tac[]
 QED
 
+Theorem beacon_history_code_correspondence:
+  (lookup_account beacon_roots_address accounts).code = beacon_roots_code ∧
+  (lookup_account history_storage_address accounts).code = history_storage_code ∧
+  blk.timeStamp < 2 ** 256 ∧ 0 < blk.number ∧ blk.number < 2 ** 256 ∧
+  prevHashes ≠ [] ⇒
+  ∃accounts' d1 d2.
+    run_system_transaction F (Collect d) chainId prevHashes blk accounts
+      beacon_roots_address (word_to_bytes blk.parentBeaconBlockRoot T) =
+      SOME ([], accounts', Collect d1) ∧
+    run_system_transaction F (Collect d1) chainId prevHashes blk accounts'
+      history_storage_address (word_to_bytes (HD prevHashes) T) =
+      SOME ([], update_beacon_block prevHashes blk accounts, Collect d2)
+Proof
+  strip_tac >>
+  drule_all beacon_roots_code_correspondence >>
+  disch_then (qspecl_then [`prevHashes`, `d`, `chainId`] strip_assume_tac) >>
+  `beacon_roots_address ≠ history_storage_address` by EVAL_TAC >>
+  `(lookup_account history_storage_address
+      (update_beacon_block [] blk accounts)).code = history_storage_code` by
+    fs[update_beacon_block_def, update_history_block_def, LET_THM,
+      vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+      combinTheory.UPDATE_APPLY] >>
+  drule_all history_storage_code_correspondence >>
+  disch_then (qspecl_then [`prevHashes`, `HD prevHashes`, `d'`, `chainId`]
+    strip_assume_tac) >>
+  qexists_tac `update_beacon_block [] blk accounts` >>
+  qexists_tac `d'` >> qexists_tac `d''` >>
+  simp[update_beacon_block_def, update_history_block_def, LET_THM] >>
+  Cases_on `prevHashes` >> fs[]
+QED
+
 Theorem read_withdrawal_request_length[local]:
   LENGTH (read_withdrawal_request storage idx) = 76
 Proof
