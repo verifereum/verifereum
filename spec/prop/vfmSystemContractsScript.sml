@@ -4169,6 +4169,267 @@ Proof
   rpt conj_tac >> CONV_TAC cv_eval
 QED
 
+Theorem withdrawal_push_inhibitor[local]:
+  word_of_bytes F 0w (REVERSE (REPLICATE 32 (255w:byte))) = (-1w:bytes32)
+Proof
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+  conj_tac >- EVAL_TAC >>
+  EVAL_TAC
+QED
+
+Theorem withdrawal_inhibitor_run[local]:
+  c.pc = 419 /\ c.stack = [excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  461 < LENGTH c.msgParams.code /\
+  c.gasUsed+29 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 461; stack := [if excess = -1w then 0w else excess;cnt];
+      gasUsed := c.gasUsed+(if excess = -1w then 29 else 25)|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [205w:byte;1w] = (461w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_dup_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `32`, `ws` |-> `REPLICATE 32 (255w:byte)`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def, withdrawal_push_inhibitor] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Eq`, `f` |-> `(\x y:bytes32. b2w (x = y))`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `IsZero`, `f` |-> `(\x:bytes32. b2w (x = 0w))`] system_monop_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;205w]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  Cases_on `excess = -1w` >>
+  simp[SimpLHS, system_jumpi_run, b2w_def, wordsTheory.dimword_def,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse] >>
+  simp[] >>
+  simp[SimpLHS, system_pop_run,
+    Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem withdrawal_excess_load_run[local]:
+  c.pc = 416 /\ c.stack = [cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  461 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  c.gasUsed+2132 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed+2132 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 461; gasUsed := g;
+      stack := [if lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage = -1w
+                then 0w else lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage;cnt]|>,rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 418; stack := [0w;cnt]; gasUsed := c.gasUsed+3|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    (simp[SimpLHS, system_jumpdest_run, GSYM withdrawal_instruction_def,
+       withdrawal_excess_parse] >> simp[] >>
+     simp[SimpLHS, Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+       GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+       static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+     simp[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `key` |-> `0w:bytes32`, `ss` |-> `[cnt:bytes32]`]
+    system_sload_bounded_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM withdrawal_instruction_def,
+    withdrawal_excess_parse, stack_limit_def]) >>
+  disch_then (qx_choosel_then [`g1`, `keys`, `d1`] strip_assume_tac) >>
+  qabbrev_tac `excess = lookup_storage 0w (lookup_account c.msgParams.callee s.rollback.accounts).storage` >>
+  qabbrev_tac `c2 = c with <|pc := 419; stack := [excess;cnt]; gasUsed := g1|>` >>
+  qabbrev_tac `s1 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys; msdomain := Collect d1|>` >>
+  mp_tac (Q.INST [`c` |-> `c2`, `s` |-> `s1`] withdrawal_inhibitor_run) >>
+  (impl_tac >- (simp[Abbr `c2`] >> gvs[Abbr `c1`])) >>
+  strip_tac >>
+  qexistsl [`g1+(if excess = -1w then 29 else 25)`, `keys`, `d1`] >>
+  conj_tac >- (gvs[Abbr `c1`] >> IF_CASES_TAC >> decide_tac) >>
+  gvs[Abbr `c1`, Abbr `c2`, Abbr `s1`, Abbr `excess`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem withdrawal_excess_test_run[local]:
+  c.pc = 465 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  482 < LENGTH c.msgParams.code /\ c.gasUsed+28 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := if 2 < w2n (added+excess) then 482 else 475;
+      stack := [added;excess;cnt]; gasUsed := c.gasUsed+28|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [2w:byte] = (2w:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  `word_of_bytes F 0w [226w:byte;1w] = (482w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[2w:byte]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`] system_dup_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`] system_dup_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Add`, `f` |-> `word_add:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `GT`, `f` |-> `(\x y:bytes32. b2w (w2n x > w2n y))`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;226w]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  Cases_on `2 < w2n (added+excess)` >>
+  simp[SimpLHS, system_jumpi_run, b2w_def, wordsTheory.dimword_def,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, arithmeticTheory.GREATER_DEF] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem withdrawal_excess_zero_run[local]:
+  c.pc = 475 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  488 < LENGTH c.msgParams.code /\ c.gasUsed+17 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 488; stack := [0w;cnt]; gasUsed := c.gasUsed+17|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [232w:byte;1w] = (488w:bytes32)` by
+    (dep_rewrite.DEP_ONCE_REWRITE_TAC[byteTheory.word_of_bytes_eq_or] >>
+     conj_tac >- EVAL_TAC >> EVAL_TAC) >>
+  simp[SimpLHS, system_pop_run, GSYM withdrawal_instruction_def, withdrawal_excess_parse] >>
+  simp[SimpLHS, system_pop_run, GSYM withdrawal_instruction_def, withdrawal_excess_parse] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte;232w]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, system_jump_run, GSYM withdrawal_instruction_def, withdrawal_excess_parse,
+    wordsTheory.dimword_def] >>
+  simp[vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem withdrawal_excess_sub_run[local]:
+  c.pc = 482 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  c.gasUsed+13 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 488; stack := [added+excess-2w;cnt]; gasUsed := c.gasUsed+13|>,rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [2w:byte] = (2w:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  simp[SimpLHS, system_jumpdest_run, GSYM withdrawal_instruction_def, withdrawal_excess_parse] >>
+  simp[] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Add`, `f` |-> `word_add:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[2w:byte]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_swap_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Sub`, `f` |-> `word_sub:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
+  simp[vfmContextTheory.context_fupdcanon, wordsTheory.WORD_SUB_ADD]
+QED
+
+Theorem withdrawal_excess_arithmetic_run[local]:
+  c.pc = 465 /\ c.stack = [added;excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  488 < LENGTH c.msgParams.code /\ c.gasUsed+45 <= c.msgParams.gasLimit ==>
+  ?g. g <= c.gasUsed+45 /\
+  run (s with contexts := (c,rb)::cs) = run (s with contexts :=
+    (c with <|pc := 488;
+      stack := [if 2 < w2n (added+excess) then added+excess-2w else 0w;cnt];
+      gasUsed := g|>,rb)::cs)
+Proof
+  strip_tac >>
+  `482 < LENGTH c.msgParams.code /\ c.gasUsed+28 <= c.msgParams.gasLimit` by decide_tac >>
+  drule_all withdrawal_excess_test_run >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := if 2 < w2n (added+excess) then 482 else 475;
+    stack := [added;excess;cnt]; gasUsed := c.gasUsed+28|>` >>
+  Cases_on `2 < w2n (added+excess)`
+  >- (qexists_tac `c.gasUsed+41` >> conj_tac >- decide_tac >>
+      mp_tac (Q.INST [`c` |-> `c1`] withdrawal_excess_sub_run) >>
+      (impl_tac >- simp[Abbr `c1`]) >>
+      gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  qexists_tac `c.gasUsed+45` >> conj_tac >- decide_tac >>
+  mp_tac (Q.INST [`c` |-> `c1`] withdrawal_excess_zero_run) >>
+  (impl_tac >- simp[Abbr `c1`]) >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem withdrawal_added_load_run[local]:
+  c.pc = 461 /\ c.stack = [excess;cnt] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  s.msdomain = Collect d /\ c.gasUsed+2104 <= c.msgParams.gasLimit ==>
+  ?g keys d'. g <= c.gasUsed+2104 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 465; gasUsed := g;
+      stack := [lookup_storage 1w (lookup_account c.msgParams.callee s.rollback.accounts).storage;excess;cnt]|>,rb)::cs;
+    rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 462; gasUsed := c.gasUsed+1|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    (simp[SimpLHS, system_jumpdest_run, GSYM withdrawal_instruction_def,
+       withdrawal_excess_parse] >>
+     simp[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `slot` |-> `1w:byte`] system_push1_sload_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM withdrawal_instruction_def,
+    withdrawal_excess_parse, stack_limit_def]) >>
+  disch_then (qx_choosel_then [`g`, `keys`, `d'`] strip_assume_tac) >>
+  qexistsl [`g`, `keys`, `d'`] >>
+  conj_tac >- gvs[Abbr `c1`] >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
+Theorem withdrawal_excess_store_run[local]:
+  c.pc = 488 /\ c.stack = [value;cnt] /\ c.jumpDest = NONE /\
+  ~c.msgParams.static /\ s.msdomain = Collect d /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  c.gasUsed+22103 <= c.msgParams.gasLimit ==>
+  ?g ad su keys d'. g <= c.gasUsed+22103 /\
+  run (s with contexts := (c,rb)::cs) = run (s with <|
+    contexts := (c with <|pc := 491; stack := [cnt]; gasUsed := g;
+      addRefund := ad+c.addRefund; subRefund := su+c.subRefund|>,rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account c.msgParams.callee
+        ((lookup_account c.msgParams.callee s.rollback.accounts) with storage updated_by
+          update_storage 0w value) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys := keys|>;
+    msdomain := Collect d'|>)
+Proof
+  strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 490; stack := [0w;value;cnt]; gasUsed := c.gasUsed+3|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    (simp[SimpLHS, system_jumpdest_run, GSYM withdrawal_instruction_def,
+       withdrawal_excess_parse] >> simp[] >>
+     simp[SimpLHS, Q.INST [`n` |-> `0`, `ws` |-> `[]:byte list`] system_push_run,
+       GSYM withdrawal_instruction_def, withdrawal_excess_parse, stack_limit_def,
+       static_gas_def, opcode_def, byteTheory.word_of_bytes_def] >>
+     simp[Abbr `c1`, vfmContextTheory.context_fupdcanon]) >>
+  mp_tac (Q.INST [`c` |-> `c1`, `key` |-> `0w:bytes32`, `ss` |-> `[cnt:bytes32]`]
+    system_sstore_bounded_run) >>
+  (impl_tac >- simp[Abbr `c1`, GSYM withdrawal_instruction_def,
+    withdrawal_excess_parse, stack_limit_def]) >>
+  disch_then (qx_choosel_then [`g`, `ad`, `su`, `keys`, `d'`] strip_assume_tac) >>
+  qexistsl [`g`, `ad`, `su`, `keys`, `d'`] >>
+  conj_tac >- gvs[Abbr `c1`] >>
+  gvs[Abbr `c1`, vfmContextTheory.context_fupdcanon]
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
