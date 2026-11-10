@@ -388,6 +388,47 @@ Proof
        assert_def, handle_def]
 QED
 
+Theorem system_sstore_run[local]:
+  c.stack = key::value::ss /\ c.jumpDest = NONE /\ ~c.msgParams.static /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME SStore /\ s.msdomain = Collect d /\
+  address = c.msgParams.callee /\
+  current = lookup_storage key (lookup_account address s.rollback.accounts).storage /\
+  original = lookup_storage key (lookup_account address s.originalAccounts).storage /\
+  cost = sstore_base_gas original current value +
+    zero_warm (if fIN (SK address key) s.rollback.accesses.storageKeys
+               then warm_access_cost else cold_sload_cost) /\
+  (ad, su) = sstore_refund_updates original current value /\
+  call_stipend < c.msgParams.gasLimit - c.gasUsed /\
+  c.gasUsed + cost <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) =
+  run (s with <|
+    contexts := (c with <|pc := c.pc + 1; stack := ss;
+      gasUsed := c.gasUsed + cost; addRefund := ad + c.addRefund;
+      subRefund := su + c.subRefund|>, rb)::cs;
+    rollback := s.rollback with <|
+      accounts := update_account address
+        ((lookup_account address s.rollback.accounts) with storage updated_by
+          update_storage key value) s.rollback.accounts;
+      accesses := s.rollback.accesses with storageKeys updated_by fINSERT (SK address key)|>;
+    msdomain := Collect (d with storageKeys updated_by fINSERT (SK address key))|>)
+Proof
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `(ad, su) = _` (assume_tac o SYM) >>
+  irule system_run_step >>
+  simp[step_def, step_inst_def, step_sstore_def, step_sstore_gas_consumption_def,
+       get_gas_left_def, get_callee_def, get_accounts_def, get_original_def,
+       access_slot_def, domain_check_def, set_domain_def, update_gas_refund_def,
+       assert_not_static_def, get_static_def, write_storage_def, update_accounts_def,
+       consume_gas_def, pop_stack_def, inc_pc_or_jump_def,
+       is_call_def, opcode_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, handle_def] >>
+  Cases_on `c` >> Cases_on `s.rollback.accesses` >> Cases_on `s.rollback` >>
+  gvs[vfmContextTheory.context_fn_updates,
+      vfmContextTheory.rollback_state_fn_updates,
+      vfmContextTheory.access_sets_fn_updates]
+QED
+
 Theorem beacon_roots_index_run[local]:
   c.pc = 78 /\ c.stack = [] /\ c.jumpDest = NONE /\
   c.msgParams.parsed = parse_code 0 FEMPTY beacon_roots_code /\
@@ -444,17 +485,24 @@ QED
    wrapped head subtraction and excess addition; storage keys may still wrap.
    Canonical system paths leave account code, nonce and balance unchanged. *)
 
-Theorem beacon_roots_code_correspondence:
-  (lookup_account beacon_roots_address accounts).code = beacon_roots_code ∧
-  blk.timeStamp < 2 ** 256 ⇒
-  ∃d'. run_system_transaction F (Collect d) chainId prevHashes blk accounts
-         beacon_roots_address (word_to_bytes blk.parentBeaconBlockRoot T) =
-       SOME ([], update_beacon_block [] blk accounts, Collect d')
+Theorem beacon_roots_run_certificate[local]:
+  blk.timeStamp < 2 ** 256 ==>
+  let tx = <|from := system_address; to := SOME beacon_roots_address;
+    data := word_to_bytes blk.parentBeaconBlockRoot T; nonce := 0; value := 0;
+    gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
+    accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
+    maxFeePerGas := NONE; authorizationList := []|> in
+  let rb = initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|> in
+  let s0 = <|contexts := [(initial_context beacon_roots_address beacon_roots_code F
+                           empty_return_destination tx, rb)];
+    txParams := initial_tx_params chainId prevHashes blk tx 0;
+    rollback := rb; originalAccounts := accounts;
+    msdomain := Collect (d with addresses updated_by fINSERT beacon_roots_address)|> in
+  ?s c rb' d'. run s0 = SOME (INR NONE, s) /\ s.contexts = [(c, rb')] /\
+    c.returnData = [] /\ s.rollback.accounts = update_beacon_block [] blk accounts /\
+    s.rollback.toDelete = [] /\ s.msdomain = Collect d'
 Proof
-  rpt strip_tac >>
-  simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
-       beacon_roots_not_delegation, domain_check_def, bind_def,
-       ignore_bind_def, return_def, set_domain_def] >>
+  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
   qmatch_goalsub_abbrev_tac `run s0` >>
   qabbrev_tac `c0 = FST (HD s0.contexts)` >>
   qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
@@ -488,7 +536,62 @@ Proof
           vfmContextTheory.initial_context_def,
           vfmContextTheory.initial_msg_params_def, system_transaction_gas_def]) >>
   asm_rewrite_tac [] >>
+  qabbrev_tac `c86 = c78 with <|pc := 86; gasUsed := c78.gasUsed + 15;
+     stack := [with_zero word_mod (n2w s0.txParams.blockTimeStamp) 8191w;
+               n2w s0.txParams.blockTimeStamp;
+               with_zero word_mod (n2w s0.txParams.blockTimeStamp) 8191w]|>` >>
+  qabbrev_tac `key = with_zero word_mod (n2w s0.txParams.blockTimeStamp) 8191w : bytes32` >>
+  qabbrev_tac `value = n2w s0.txParams.blockTimeStamp : bytes32` >>
+  qabbrev_tac `cur = lookup_storage key
+    (lookup_account beacon_roots_address accounts).storage` >>
+  qabbrev_tac `cost = sstore_base_gas cur cur value + zero_warm cold_sload_cost` >>
+  Cases_on `sstore_refund_updates cur cur value` >>
+  rename1 `sstore_refund_updates cur cur value = (ad, su)` >>
+  qabbrev_tac `s87 = s0 with <|
+    contexts := [(c86 with <|pc := c86.pc + 1; stack := [key];
+      gasUsed := c86.gasUsed + cost; addRefund := ad + c86.addRefund;
+      subRefund := su + c86.subRefund|>, rb0)];
+    rollback := s0.rollback with <|
+      accounts := update_account beacon_roots_address
+        ((lookup_account beacon_roots_address s0.rollback.accounts) with
+          storage updated_by update_storage key value) s0.rollback.accounts;
+      accesses := s0.rollback.accesses with storageKeys updated_by
+        fINSERT (SK beacon_roots_address key)|>;
+    msdomain := Collect ((d with addresses updated_by fINSERT beacon_roots_address)
+      with storageKeys updated_by fINSERT (SK beacon_roots_address key))|>` >>
+  `run (s0 with contexts := [(c86, rb0)]) = run s87` by
+    (simp_tac pure_ss [Abbr `s87`] >> irule system_sstore_run >>
+     rpt (qpat_x_assum `run _ = _` kall_tac) >>
+     qpat_x_assum `Abbrev (rb0 = _)` kall_tac >>
+     simp[Abbr `c86`, Abbr `c78`, Abbr `c77`, Abbr `c0`, Abbr `s0`,
+          vfmContextTheory.initial_context_def,
+          vfmContextTheory.initial_msg_params_def,
+          vfmContextTheory.initial_rollback_def,
+          GSYM beacon_roots_instruction_def, beacon_roots_parse,
+          system_transaction_gas_def, call_stipend_def] >>
+     simp[Abbr `cost`, Abbr `cur`, zero_warm_def, sstore_base_gas_def,
+          warm_access_cost_def, cold_sload_cost_def,
+          storage_set_cost_def, storage_update_cost_def] >>
+     rpt IF_CASES_TAC >> simp[]) >>
+  asm_rewrite_tac [] >>
   cheat
+QED
+
+Theorem beacon_roots_code_correspondence:
+  (lookup_account beacon_roots_address accounts).code = beacon_roots_code ∧
+  blk.timeStamp < 2 ** 256 ⇒
+  ∃d'. run_system_transaction F (Collect d) chainId prevHashes blk accounts
+         beacon_roots_address (word_to_bytes blk.parentBeaconBlockRoot T) =
+       SOME ([], update_beacon_block [] blk accounts, Collect d')
+Proof
+  rpt strip_tac >> drule beacon_roots_run_certificate >>
+  disch_then (qspecl_then [`prevHashes`, `d`, `chainId`, `accounts`] mp_tac) >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
+       beacon_roots_not_delegation, domain_check_def, bind_def,
+       ignore_bind_def, return_def, set_domain_def, vfm_abort_def,
+       process_deletions_def] >>
+  metis_tac[]
 QED
 
 Theorem history_storage_code_correspondence:
