@@ -980,6 +980,185 @@ Proof
   metis_tac[]
 QED
 
+Theorem read_withdrawal_request_length[local]:
+  LENGTH (read_withdrawal_request storage idx) = 76
+Proof
+  simp[read_withdrawal_request_def, byteTheory.LENGTH_word_to_bytes]
+QED
+
+Theorem read_consolidation_request_length[local]:
+  LENGTH (read_consolidation_request storage idx) = 116
+Proof
+  simp[read_consolidation_request_def, byteTheory.LENGTH_word_to_bytes]
+QED
+
+Theorem queue_sender_bytes[local]:
+  TAKE 20 (word_to_bytes ((w:bytes32) << 96) T) =
+  DROP 12 (word_to_bytes w T)
+Proof
+  simp[byteTheory.word_to_bytes_def] >>
+  irule listTheory.LIST_EQ >>
+  simp[byteTheory.LENGTH_word_to_bytes_aux, listTheory.EL_TAKE,
+    listTheory.EL_DROP, byteTheory.EL_word_to_bytes_aux] >>
+  rpt strip_tac >>
+  simp[byteTheory.get_byte_def, byteTheory.byte_index_def] >>
+  simp[wordsTheory.w2w, wordsTheory.word_lsr_def, wordsTheory.word_lsl_def,
+    fcpTheory.CART_EQ, fcpTheory.FCP_BETA] >>
+  rpt strip_tac >> simp[] >>
+  `i + 8 * (31 - x) - 96 = i + 8 * (19 - x)` by decide_tac >> simp[]
+QED
+
+Theorem queue_write_prefix[local]:
+  off <= buffer_length b /\ n <= LENGTH bs ==>
+  buffer_take 0 (off + n) (buffer_write off bs b) =
+  buffer_take 0 off b ++ TAKE n bs
+Proof
+  strip_tac >>
+  simp[vfmBufferTheory.buffer_take_to_list, vfmBufferTheory.buffer_to_list_write_le,
+    rich_listTheory.TAKE_APPEND, listTheory.LENGTH_TAKE_EQ,
+    vfmBufferTheory.LENGTH_buffer_to_list] >>
+  `n - LENGTH bs = 0` by decide_tac >>
+  simp[listTheory.TAKE_TAKE_MIN, arithmeticTheory.MIN_DEF]
+QED
+
+Theorem queue_write_byte_tail[local]:
+  0 < n ==>
+  buffer_take i n (buffer_write i [a] b) =
+  [a] ++ buffer_take (i + 1) (n - 1) b
+Proof
+  Cases_on `n` >- simp[] >> strip_tac >>
+  simp_tac (srw_ss()) [arithmeticTheory.SUC_SUB1] >>
+  rewrite_tac[arithmeticTheory.ADD1] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  once_rewrite_tac[vfmBufferTheory.buffer_take_split] >>
+  simp[vfmBufferTheory.buffer_take_write_same,
+    vfmBufferTheory.buffer_take_write_after]
+QED
+
+Theorem consolidation_record_memory[local]:
+  off <= buffer_length b ==>
+  let base = 4 + idx * 4 in
+  let w0 = lookup_storage (n2w base) storage in
+  let w1 = lookup_storage (n2w (base + 1)) storage in
+  let w2 = lookup_storage (n2w (base + 2)) storage in
+  let w3 = lookup_storage (n2w (base + 3)) storage in
+  let b1 = buffer_write off (word_to_bytes (w0 << 96) T) b in
+  let b2 = buffer_write (off + 20) (word_to_bytes w1 T) b1 in
+  let b3 = buffer_write (off + 52) (word_to_bytes w2 T) b2 in
+  let b4 = buffer_write (off + 84) (word_to_bytes w3 T) b3 in
+  buffer_take 0 (off + 116) b4 = buffer_take 0 off b ++ read_consolidation_request storage idx
+Proof
+  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  `off + 116 = (off + 84) + 32` by decide_tac >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
+  `!w:bytes32. word_to_bytes w T <> []` by
+    (gen_tac >> pure_once_rewrite_tac[GSYM listTheory.LENGTH_NIL] >>
+     pure_rewrite_tac[byteTheory.LENGTH_word_to_bytes] >> simp[]) >>
+  simp[byteTheory.LENGTH_word_to_bytes] >>
+  `off + 84 = (off + 52) + 32` by decide_tac >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
+  simp[byteTheory.LENGTH_word_to_bytes] >>
+  `off + 52 = (off + 20) + 32` by decide_tac >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
+  simp[byteTheory.LENGTH_word_to_bytes] >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
+  simp[byteTheory.LENGTH_word_to_bytes, queue_sender_bytes,
+    read_consolidation_request_def, listTheory.APPEND_ASSOC,
+    listTheory.TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem queue_pubkey_bytes[local]:
+  TAKE 16 (word_to_bytes ((w:bytes32) && (-1w << 128)) T) =
+  TAKE 16 (word_to_bytes w T)
+Proof
+  `!j. 128 <= j /\ j < 256 ==> (((-1w:bytes32) << 128) ' j)` by
+    (pure_rewrite_tac[wordsTheory.word_lsl_def] >>
+     simp[fcpTheory.FCP_BETA, wordsTheory.WORD_NEG_1_T]) >>
+  simp[byteTheory.word_to_bytes_def] >>
+  irule listTheory.LIST_EQ >>
+  simp[byteTheory.LENGTH_word_to_bytes_aux, listTheory.EL_TAKE,
+    byteTheory.EL_word_to_bytes_aux] >>
+  rpt strip_tac >>
+  simp[byteTheory.get_byte_def, byteTheory.byte_index_def] >>
+  simp[wordsTheory.w2w, wordsTheory.word_lsr_def, wordsTheory.word_lsl_def,
+    wordsTheory.word_and_def, fcpTheory.CART_EQ, fcpTheory.FCP_BETA] >>
+  rpt strip_tac >> simp[] >>
+  gvs[]
+QED
+
+Theorem queue_amount_bytes[local]:
+  (GENLIST (\i. (w2w ((w:bytes32) >>> (64 + 8 * i)) : byte)) 8) =
+  REVERSE (TAKE 8 (DROP 16 (word_to_bytes w T)))
+Proof
+  irule listTheory.LIST_EQ >>
+  simp[byteTheory.word_to_bytes_def, byteTheory.LENGTH_word_to_bytes_aux,
+    listTheory.EL_REVERSE, listTheory.EL_TAKE, listTheory.EL_DROP,
+    byteTheory.EL_word_to_bytes_aux] >>
+  rpt strip_tac >>
+  simp[byteTheory.get_byte_def, byteTheory.byte_index_def] >>
+  simp[wordsTheory.w2w, wordsTheory.word_lsr_def,
+    fcpTheory.CART_EQ, fcpTheory.FCP_BETA] >>
+  rpt strip_tac >> simp[] >>
+  `i + (8 * x + 64) = i + 8 * (15 - PRE (8 - x))` by decide_tac >>
+  simp[]
+QED
+
+Theorem withdrawal_record_memory[local]:
+  off <= buffer_length b ==>
+  let base = 4 + idx * 3 in
+  let w0 = lookup_storage (n2w base) storage in
+  let w1 = lookup_storage (n2w (base + 1)) storage in
+  let w2 = lookup_storage (n2w (base + 2)) storage in
+  let a = w2 >>> 64 in
+  let b1 = buffer_write off (word_to_bytes (w0 << 96) T) b in
+  let b2 = buffer_write (off + 20) (word_to_bytes w1 T) b1 in
+  let b3 = buffer_write (off + 52) (word_to_bytes (w2 && (-1w << 128)) T) b2 in
+  let b4 = buffer_write (off + 75) [w2w (a >>> 56)] b3 in
+  let b5 = buffer_write (off + 74) [w2w (a >>> 48)] b4 in
+  let b6 = buffer_write (off + 73) [w2w (a >>> 40)] b5 in
+  let b7 = buffer_write (off + 72) [w2w (a >>> 32)] b6 in
+  let b8 = buffer_write (off + 71) [w2w (a >>> 24)] b7 in
+  let b9 = buffer_write (off + 70) [w2w (a >>> 16)] b8 in
+  let b10 = buffer_write (off + 69) [w2w (a >>> 8)] b9 in
+  let b11 = buffer_write (off + 68) [w2w a] b10 in
+  buffer_take 0 (off + 76) b11 =
+    buffer_take 0 off b ++ read_withdrawal_request storage idx
+Proof
+  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  `!w:bytes32. word_to_bytes w T <> []` by
+    (gen_tac >> pure_once_rewrite_tac[GSYM listTheory.LENGTH_NIL] >>
+     pure_rewrite_tac[byteTheory.LENGTH_word_to_bytes] >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `buffer_write (off + 75) _ m` >>
+  `off + 68 <= buffer_length m` by
+    simp[Abbr `m`, byteTheory.LENGTH_word_to_bytes] >>
+  `off + 76 = (off + 68) + 8` by decide_tac >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  once_rewrite_tac[vfmBufferTheory.buffer_take_split] >>
+  simp[vfmBufferTheory.buffer_take_write_before,
+    byteTheory.LENGTH_word_to_bytes, queue_write_byte_tail] >>
+  `!i b. buffer_take i 0 b = []` by
+    simp[vfmBufferTheory.buffer_take_to_list] >>
+  simp[] >>
+  unabbrev_all_tac >>
+  `off + 68 = (off + 52) + 16` by decide_tac >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
+  simp[byteTheory.LENGTH_word_to_bytes] >>
+  `off + 52 = (off + 20) + 32` by decide_tac >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
+  simp[byteTheory.LENGTH_word_to_bytes] >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC[queue_write_prefix] >>
+  simp[byteTheory.LENGTH_word_to_bytes, queue_sender_bytes,
+    listTheory.TAKE_LENGTH_TOO_LONG] >>
+  simp[read_withdrawal_request_def, SRULE [] queue_pubkey_bytes,
+    GSYM queue_amount_bytes, listTheory.APPEND_ASSOC] >>
+  CONV_TAC (RAND_CONV (EVAL))
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
