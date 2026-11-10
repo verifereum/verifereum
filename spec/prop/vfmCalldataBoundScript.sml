@@ -23,7 +23,8 @@ Theory vfmCalldataBound
 Ancestors
   arithmetic list rich_list pair
   vfmTypes vfmConstants vfmBuffer vfmState vfmContext vfmExecution
-  vfmExecutionProp vfmPreserves
+  vfmExecutionProp vfmPreserves vfmStaticCalls vfmStoragePredicates
+  vfmRunCall
 Libs
   BasicProvers wordsLib
 
@@ -1071,4 +1072,54 @@ Proof
   \\ mp_tac (Q.INST [`n` |-> `buffer_length c.memory`,
                     `g` |-> `c.msgParams.gasLimit`] memory_cost_le_lt_2_64)
   \\ simp[]
+QED
+
+(* -------------------------------------------------------------------------
+ * The data of the frame a step pushes, under wf_state alone.
+ * ------------------------------------------------------------------------- *)
+
+Theorem proceed_call_data_length:
+  proceed_call op sender address value ao az code gas rd s = (r, s') ∧
+  s.contexts ≠ [] ⇒
+  buffer_length (FST (HD s'.contexts)).msgParams.data ≤ az
+Proof
+  strip_tac \\ Cases_on `op ≠ CallCode ∧ 0 < value`
+  \\ gvs[proceed_call_def, bind_def, ignore_bind_def,
+         get_rollback_def, read_memory_def, get_current_context_def,
+         get_caller_def, get_value_def, get_static_def,
+         push_context_def, update_accounts_def, return_def, fail_def,
+         AllCaseEqs()]
+  \\ Cases_on `fIN address precompile_addresses` \\ gvs[return_def]
+  \\ TRY (drule (REWRITE_RULE [cp_def] cp_dispatch_precompiles)
+          \\ simp[] \\ strip_tac \\ gvs[])
+  \\ simp[initial_msg_params_def, buffer_take_to_list, LENGTH_TAKE_EQ]
+  \\ rw[]
+QED
+
+Theorem proceed_create_data_length:
+  proceed_create sender address value code gas s = (r, s') ∧
+  s.contexts ≠ [] ⇒
+  buffer_length (FST (HD s'.contexts)).msgParams.data = 0
+Proof
+  strip_tac
+  \\ gvs[proceed_create_def, bind_def, ignore_bind_def,
+         get_rollback_def, get_original_def, set_original_def,
+         update_accounts_def, push_context_def, return_def, fail_def,
+         AllCaseEqs()]
+  \\ simp[initial_msg_params_def]
+QED
+
+Theorem step_push_data_length:
+  wf_state s ∧ step s = (r, s') ∧ LENGTH s.contexts < LENGTH s'.contexts ⇒
+  buffer_length (FST (HD s'.contexts)).msgParams.data < 2 ** 256
+Proof
+  strip_tac
+  \\ `s.contexts ≠ []` by gvs[wf_state_def]
+  \\ drule_all step_grow_dispatch \\ strip_tac
+  >- (drule_all step_call_reaches_proceed_call \\ strip_tac
+      \\ `u.contexts ≠ []` by gvs[cp_rel_def]
+      \\ drule_all proceed_call_data_length \\ decide_tac)
+  \\ drule_all step_create_reaches_proceed_create \\ strip_tac
+  \\ `u.contexts ≠ []` by gvs[cp_rel_def]
+  \\ drule_all proceed_create_data_length \\ simp[]
 QED
