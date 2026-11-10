@@ -1356,16 +1356,15 @@ QED
 Theorem system_binop_run[local]:
   2 <= LENGTH c.stack /\ c.jumpDest = NONE /\ LENGTH c.stack <= stack_limit /\
   FLOOKUP c.msgParams.parsed c.pc = SOME op /\
-  step_inst op = step_binop op f /\ static_gas op = 3 /\ LENGTH (opcode op) = 1 /\
-  c.gasUsed + 3 <= c.msgParams.gasLimit ==>
+  step_inst op = step_binop op f /\ ~is_call op /\ LENGTH (opcode op) = 1 /\
+  c.gasUsed + static_gas op <= c.msgParams.gasLimit ==>
   run (s with contexts := (c, rb)::cs) = run (s with contexts :=
     (c with <|stack := f (HD c.stack) (HD (TL c.stack)) :: DROP 2 c.stack;
-      gasUsed := c.gasUsed + 3; pc := c.pc + 1|>, rb)::cs)
+      gasUsed := c.gasUsed + static_gas op; pc := c.pc + 1|>, rb)::cs)
 Proof
   strip_tac >>
   Cases_on `c.stack` >> gvs[] >> Cases_on `t` >> gvs[] >>
   irule system_run_step >>
-  `~is_call op` by (Cases_on `op` >> gvs[opcode_def, is_call_def, step_inst_def]) >>
   simp[step_def, step_binop_def, consume_gas_def, push_stack_def, pop_stack_def,
     inc_pc_or_jump_def, get_current_context_def, set_current_context_def, bind_def,
     ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
@@ -1426,16 +1425,16 @@ Proof
     GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def] >>
   simp[SimpLHS, Q.INST [`op` |-> `Sub`, `f` |-> `word_sub:bytes32 -> bytes32 -> bytes32`] system_binop_run,
     GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
-    step_inst_def, static_gas_def, opcode_def] >>
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
   simp[SimpLHS, Q.INST [`n` |-> `0`] system_dup_run,
     GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def] >>
   simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[16w:byte]`] system_push_run,
     GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
     static_gas_def, opcode_def] >>
-  simp[SimpLHS, Q.INST [`op` |-> `Gt`,
+  simp[SimpLHS, Q.INST [`op` |-> `GT`,
     `f` |-> `(\x y:bytes32. b2w (w2n x > w2n y))`] system_binop_run,
     GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
-    step_inst_def, static_gas_def, opcode_def] >>
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
   `-1w * head + tail = tail - head` by wordsLib.WORD_DECIDE_TAC >>
   pop_assum (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [arithmeticTheory.GREATER_DEF,
@@ -1581,7 +1580,7 @@ Proof
   simp[SimpLHS, Q.INST [`op` |-> `Eq`,
     `f` |-> `(\x y:bytes32. b2w (x = y))`] system_binop_run,
     GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
-    step_inst_def, static_gas_def, opcode_def] >>
+    step_inst_def, is_call_def, static_gas_def, opcode_def] >>
   simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte; 131w]`] system_push_run,
     GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
     static_gas_def, opcode_def] >>
