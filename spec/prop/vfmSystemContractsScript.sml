@@ -2663,6 +2663,86 @@ Proof
     arithmeticTheory.LEFT_ADD_DISTRIB] >> simp[]
 QED
 
+Theorem withdrawal_loop_run[local]:
+  c.pc = 225 /\ c.stack = [n2w i; n2w n; head; tail] /\
+  c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  387 < LENGTH c.msgParams.code /\ s.msdomain = Collect d /\
+  i <= n /\ n <= 16 /\
+  76*i <= buffer_length c.memory /\ buffer_length c.memory <= 1280 /\
+  buffer_length c.memory MOD 32 = 0 /\
+  c.gasUsed + 7123*(n-i)+23 <= c.msgParams.gasLimit ==>
+  ?g keys d' m. g <= c.gasUsed + 7123*(n-i)+23 /\
+    run (s with contexts := (c,rb)::cs) = run (s with <|
+      contexts := (c with <|pc := 387; stack := [n2w n; n2w n; head; tail];
+        gasUsed := g; memory := m|>,rb)::cs;
+      rollback := s.rollback with accesses := s.rollback.accesses with storageKeys := keys;
+      msdomain := Collect d'|>) /\
+    buffer_take 0 (76*n) m = buffer_take 0 (76*i) c.memory ++
+      FLAT (GENLIST (\j. read_withdrawal_request
+        (lookup_account c.msgParams.callee s.rollback.accounts).storage
+        (w2n head+i+j)) (n-i)) /\
+    76*n <= buffer_length m /\ buffer_length m <= 1280 /\
+    buffer_length m MOD 32 = 0
+Proof
+  map_every qid_spec_tac [`c`, `s`, `d`] >>
+  measureInduct_on `n-i` >> rpt strip_tac >>
+  Cases_on `i = n`
+  >- (gvs[] >> drule_all withdrawal_loop_test_run >>
+      disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >>
+      strip_tac >>
+      qexistsl [`c.gasUsed+23`, `s.rollback.accesses.storageKeys`, `d`, `c.memory`] >>
+      simp[] >>
+      qpat_x_assum `s.msdomain = _` (fn th => rewrite_tac[GSYM th]) >>
+      simp[ vfmContextTheory.context_fupdcanon,
+        vfmContextTheory.context_component_equality,
+        vfmContextTheory.execution_state_component_equality] >>
+      AP_TERM_TAC >> simp[vfmContextTheory.execution_state_component_equality,
+        vfmContextTheory.context_component_equality]) >>
+  `i < n /\ i < 16 /\ c.gasUsed+23 <= c.msgParams.gasLimit` by decide_tac >>
+  `~((n2w i:bytes32) = n2w n)` by
+    (simp[wordsTheory.n2w_11, wordsTheory.dimword_def] >> decide_tac) >>
+  drule_all withdrawal_loop_test_run >>
+  disch_then (qspecl_then [`s`, `rb`, `cs`] mp_tac) >> strip_tac >>
+  qabbrev_tac `c1 = c with <|pc := 233; stack := [n2w i;n2w n;head;tail];
+    gasUsed := c.gasUsed+23|>` >>
+  `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)` by
+    simp[Abbr `c1`] >>
+  mp_tac (Q.INST [`c` |-> `c1`, `cnt` |-> `n2w n`] withdrawal_record_run) >>
+  (impl_tac >- (simp[Abbr `c1`] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g1`, `keys1`, `d1`, `m1`] strip_assume_tac) >>
+  qabbrev_tac `c2 = c1 with <|pc := 225; stack := [n2w (i+1);n2w n;head;tail];
+    gasUsed := g1; memory := m1|>` >>
+  qabbrev_tac `s2 = s with <|rollback := s.rollback with accesses :=
+    s.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  first_x_assum (qspec_then `i+1` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (qspecl_then [`d1`, `s2`, `c2`] mp_tac) >>
+  (impl_tac >- (simp[Abbr `c2`, Abbr `s2`, Abbr `c1`] >>
+    gvs[] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `keys2`, `d2`, `m2`] strip_assume_tac) >>
+  qexistsl [`g2`, `keys2`, `d2`, `m2`] >>
+  conj_tac >- (gvs[Abbr `c2`, Abbr `c1`] >> decide_tac) >>
+  conj_tac
+  >- (qpat_x_assum `run (s with contexts := (c,rb)::cs) = run (s with contexts := (c1,rb)::cs)`
+        (once_rewrite_tac o single) >>
+      qpat_x_assum `run (s with contexts := (c1,rb)::cs) = _`
+        (once_rewrite_tac o single) >>
+      qpat_x_assum `run (s2 with contexts := _) = _` (once_rewrite_tac o single) >>
+      simp[Abbr `s2`, Abbr `c2`, Abbr `c1`, vfmContextTheory.context_fupdcanon,
+        vfmContextTheory.execution_state_fupdcanon]) >>
+  reverse conj_tac >- simp[] >>
+  gvs[Abbr `c2`, Abbr `c1`, Abbr `s2`] >>
+  `n-i = SUC (n-(i+1))` by decide_tac >>
+  qpat_x_assum `n-i = _` (once_rewrite_tac o single) >>
+  once_rewrite_tac[listTheory.GENLIST_CONS] >>
+  simp_tac pure_ss [listTheory.FLAT, combinTheory.o_DEF,
+    arithmeticTheory.ADD_CLAUSES] >>
+  BETA_TAC >> simp_tac pure_ss [arithmeticTheory.ADD_CLAUSES] >>
+  AP_TERM_TAC >> AP_TERM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp_tac std_ss [FUN_EQ_THM] >> gen_tac >> AP_TERM_TAC >> decide_tac
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
