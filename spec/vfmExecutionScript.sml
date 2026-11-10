@@ -2231,7 +2231,7 @@ Definition run_block_def:
         (run_system_transaction T d chainId prevHashes b a
            consolidation_request_contract []) (λ(consolidations, a, d).
       if block_invalid rs deposits [withdrawals] [consolidations] b then NONE
-      else SOME (rs, a, d)))))))
+      else SOME (rs, a, d))))))))
 End
 
 Definition run_blocks_def:

@@ -1135,8 +1135,9 @@ QED
 val () = run_transaction_def |> cv_auto_trans;
 
 val () = run_system_transaction_def
-  |> SIMP_RULE std_ss [domain_check_def, bind_def, ignore_bind_def,
-                       LET_RATOR, COND_RATOR]
+  |> SIMP_RULE std_ss [domain_check_def, bind_def, ignore_bind_def, LET_THM,
+                       LET_RATOR, COND_RATOR, LET_PROD_RATOR,
+                       option_CASE_rator, prod_CASE_rator, LET_UNCURRY, UNCURRY]
   |> cv_auto_trans;
 
 Definition run_transactions_def:
@@ -1224,8 +1225,8 @@ Theorem run_block_system_eq:
     if block_invalid rs deposits [withdrawals] [consolidations] b then NONE
     else SOME (rs, a, d)
 Proof
-  rw[run_block_def, OPTION_BIND_eq_case]
-  \\ simp[run_transactions_fold]
+  rewrite_tac[run_block_def, run_transactions_fold]
+  \\ simp[OPTION_BIND_eq_case]
   \\ rpt (CASE_TAC \\ gvs[])
 QED
 
