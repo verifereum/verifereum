@@ -285,6 +285,12 @@ Proof
   Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
 QED
 
+Theorem beacon_roots_not_delegation[local]:
+  get_delegate beacon_roots_code = NONE
+Proof
+  EVAL_TAC
+QED
+
 (* Header bounds exclude truncation by TIMESTAMP/NUMBER. Queue bounds exclude
    wrapped head subtraction and excess addition; storage keys may still wrap.
    Canonical system paths leave account code, nonce and balance unchanged. *)
@@ -296,6 +302,11 @@ Theorem beacon_roots_code_correspondence:
          beacon_roots_address (word_to_bytes blk.parentBeaconBlockRoot T) =
        SOME ([], update_beacon_block [] blk accounts, Collect d')
 Proof
+  rpt strip_tac >>
+  simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
+       beacon_roots_not_delegation, domain_check_def, bind_def,
+       ignore_bind_def, return_def, set_domain_def] >>
+  qmatch_goalsub_abbrev_tac `run s0` >>
   cheat
 QED
 
