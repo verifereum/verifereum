@@ -1008,6 +1008,89 @@ Proof
   `i + 8 * (31 - x) - 96 = i + 8 * (19 - x)` by decide_tac >> simp[]
 QED
 
+Theorem queue_read_el[local]:
+  i < sz ==>
+  EL i (buffer_read off sz b) =
+    if off + i < buffer_length b then EL (off + i) (buffer_to_list b)
+    else 0w
+Proof
+  rw[vfmBufferTheory.buffer_read_to_list, take_pad_0_def,
+     listTheory.PAD_RIGHT, listTheory.EL_APPEND_EQN,
+     listTheory.EL_TAKE, listTheory.EL_DROP, rich_listTheory.EL_REPLICATE,
+     listTheory.LENGTH_TAKE_EQ, vfmBufferTheory.LENGTH_buffer_to_list]
+  >> gvs[]
+QED
+
+Theorem queue_read_extend[local]:
+  buffer_read off sz (buffer_extend n b) = buffer_read off sz b
+Proof
+  irule listTheory.LIST_EQ
+  >> simp[vfmBufferTheory.buffer_read_to_list]
+  >> rpt strip_tac
+  >> simp[GSYM vfmBufferTheory.buffer_read_to_list, queue_read_el,
+          vfmBufferTheory.buffer_to_list_extend,
+          vfmBufferTheory.buffer_length_extend,
+          vfmBufferTheory.LENGTH_buffer_to_list,
+          listTheory.EL_APPEND_EQN, rich_listTheory.EL_REPLICATE]
+  >> rw[] >> gvs[]
+QED
+
+Theorem queue_read_write_el[local]:
+  i < sz ==>
+  EL i (buffer_read off sz (buffer_write p bs b)) =
+    if p <= off + i /\ off + i < p + LENGTH bs
+    then EL (off + i - p) bs else EL i (buffer_read off sz b)
+Proof
+  Cases_on `bs = []` >- simp[]
+  >> strip_tac
+  >> simp[queue_read_el, vfmBufferTheory.buffer_to_list_write,
+          vfmBufferTheory.buffer_length_write]
+  >> rw[listTheory.EL_APPEND_EQN, listTheory.EL_TAKE,
+        listTheory.PAD_RIGHT, listTheory.LENGTH_TAKE_EQ,
+        vfmBufferTheory.LENGTH_buffer_to_list,
+        rich_listTheory.EL_REPLICATE, listTheory.EL_DROP,
+        arithmeticTheory.MAX_DEF]
+  >> gvs[]
+QED
+
+Theorem queue_read_write_cong[local]:
+  (!off sz. buffer_read off sz b = buffer_read off sz b') ==>
+  buffer_read off sz (buffer_write p bs b) =
+  buffer_read off sz (buffer_write p bs b')
+Proof
+  strip_tac
+  >> irule listTheory.LIST_EQ
+  >> simp[vfmBufferTheory.buffer_read_to_list]
+  >> rpt strip_tac
+  >> simp[GSYM vfmBufferTheory.buffer_read_to_list, queue_read_write_el]
+QED
+
+Theorem queue_read_write_extend[local]:
+  buffer_read off sz (buffer_write p bs (buffer_extend n b)) =
+  buffer_read off sz (buffer_write p bs b)
+Proof
+  irule queue_read_write_cong >> simp[queue_read_extend]
+QED
+
+Theorem queue_take_read[local]:
+  off + sz <= buffer_length b ==>
+  buffer_take off sz b = buffer_read off sz b
+Proof
+  strip_tac
+  >> simp[vfmBufferTheory.buffer_take_to_list,
+          vfmBufferTheory.buffer_read_to_list, take_pad_0_def,
+          listTheory.PAD_RIGHT, listTheory.LENGTH_TAKE_EQ,
+          vfmBufferTheory.LENGTH_buffer_to_list]
+QED
+
+Theorem queue_take_read_cong[local]:
+  (!off sz. buffer_read off sz b = buffer_read off sz b') /\
+  off + sz <= buffer_length b /\ off + sz <= buffer_length b' ==>
+  buffer_take off sz b = buffer_take off sz b'
+Proof
+  simp[queue_take_read]
+QED
+
 Theorem queue_write_prefix[local]:
   off <= buffer_length b /\ n <= LENGTH bs ==>
   buffer_take 0 (off + n) (buffer_write off bs b) =
