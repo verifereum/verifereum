@@ -405,6 +405,58 @@ Proof
   simp[Once vfmDecreasesGasTheory.run_tr_def]
 QED
 
+Theorem system_return_inst[local]:
+  c.stack = [offset;sz] /\
+  mx = (if 0 < w2n sz then word_size (w2n offset+w2n sz)*32 else 0) /\
+  cost = memory_expansion_cost (buffer_length c.memory) mx /\
+  mem = buffer_extend (MAX (buffer_length c.memory) mx-buffer_length c.memory) c.memory /\
+  c.gasUsed+cost <= c.msgParams.gasLimit ==>
+  step_return T (s with contexts := (c,rb)::cs) =
+    ((INR NONE : unit + exception option), s with contexts := (c with <|stack := []; gasUsed := c.gasUsed+cost;
+      memory := mem; returnData := buffer_take (w2n offset) (w2n sz) mem|>,rb)::cs)
+Proof
+  strip_tac >>
+  simp[step_return_def, pop_stack_def, assert_def,
+    get_current_context_def, set_current_context_def,
+    bind_def, ignore_bind_def, return_def] >>
+  simp[memory_expansion_info_def, get_current_context_def, return_def, bind_def,
+    GSYM arithmeticTheory.MULT_ASSOC] >>
+  qpat_assum `mx = _` (fn th => pure_rewrite_tac [GSYM (SRULE [] th)]) >>
+  qpat_assum `cost = _` (fn th => pure_rewrite_tac [GSYM th]) >>
+  simp[consume_gas_def, get_current_context_def, set_current_context_def,
+    bind_def, ignore_bind_def, return_def, assert_def] >>
+  simp[expand_memory_def, get_current_context_def, set_current_context_def,
+    bind_def, return_def] >>
+  simp[read_memory_def, set_return_data_def, finish_def,
+    get_current_context_def, set_current_context_def, bind_def, return_def,
+    ignore_bind_def, vfmContextTheory.context_fupdcanon] >> gvs[]
+QED
+
+Theorem system_return_run:
+  c.stack = [offset;sz] /\ c.msgParams.outputTo = empty_return_destination /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME Return /\
+  mx = (if 0 < w2n sz then word_size (w2n offset+w2n sz)*32 else 0) /\
+  cost = memory_expansion_cost (buffer_length c.memory) mx /\
+  mem = buffer_extend (MAX (buffer_length c.memory) mx-buffer_length c.memory) c.memory /\
+  c.gasUsed+cost <= c.msgParams.gasLimit ==>
+  run (s with contexts := [(c,rb)]) =
+    SOME (INR NONE, s with contexts := [(c with <|stack := []; gasUsed := c.gasUsed+cost;
+      memory := mem; returnData := buffer_take (w2n offset) (w2n sz) mem|>,rb)])
+Proof
+  strip_tac >>
+  drule_all system_return_inst >>
+  disch_then (qspecl_then [`s`, `rb`, `[]`] assume_tac) >>
+  simp[vfmDecreasesGasTheory.run_eq_tr] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def, step_def, step_inst_def] >>
+  simp[handle_def, get_current_context_def, bind_def, ignore_bind_def,
+    return_def, step_inst_def] >>
+  simp[handle_step_def, vfm_abort_def, handle_create_def, handle_exception_def,
+    get_return_data_def, get_output_to_def, get_num_contexts_def,
+    get_current_context_def, set_current_context_def, bind_def, ignore_bind_def,
+    return_def, reraise_def, handle_def, vfmContextTheory.empty_return_destination_def] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def]
+QED
+
 Theorem system_sstore_run[local]:
   c.stack = key::value::ss /\ c.jumpDest = NONE /\ ~c.msgParams.static /\
   FLOOKUP c.msgParams.parsed c.pc = SOME SStore /\ s.msdomain = Collect d /\
