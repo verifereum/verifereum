@@ -5785,6 +5785,140 @@ Proof
   metis_tac[]
 QED
 
+Theorem consolidation_dispatch_parse[local]:
+  consolidation_instruction 0 = SOME Caller /\
+  consolidation_instruction 1 = SOME (Push 20 (TAKE 20 (DROP 2 beacon_roots_code))) /\
+  consolidation_instruction 22 = SOME Eq /\
+  consolidation_instruction 23 = SOME (Push 1 [211w]) /\
+  consolidation_instruction 25 = SOME JumpI
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Theorem consolidation_dispatch_run[local]:
+  s.contexts = (c,rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
+  c.jumpDest = NONE /\ c.gasUsed+21 <= c.msgParams.gasLimit /\
+  c.msgParams.code = consolidation_request_code /\
+  c.msgParams.parsed = parse_code 0 FEMPTY consolidation_request_code /\
+  c.msgParams.caller = system_address ==>
+  run s = run (s with contexts :=
+    (c with <|pc := 211; gasUsed := c.gasUsed+21|>,rb)::cs)
+Proof
+  strip_tac >>
+  irule (system_privileged_dispatch_run |> SPEC_ALL |> Q.INST
+    [`dest` |-> `211w:byte`,
+     `caller_bytes` |-> `TAKE 20 (DROP 2 beacon_roots_code)`]
+    |> SIMP_RULE (srw_ss()) []) >>
+  simp[GSYM consolidation_instruction_def, consolidation_dispatch_parse, consolidation_entry_parse,
+    GSYM beacon_roots_caller_word_def, beacon_roots_caller_word] >>
+  simp[consolidation_request_code_def, beacon_roots_code_def]
+QED
+
+Theorem consolidation_not_delegation[local]:
+  get_delegate consolidation_request_code = NONE /\ ~NULL consolidation_request_code
+Proof
+  EVAL_TAC
+QED
+
+Theorem consolidation_run_certificate[local]:
+  w2n (lookup_storage 2w (lookup_account consolidation_request_contract accounts).storage) <=
+  w2n (lookup_storage 3w (lookup_account consolidation_request_contract accounts).storage) /\
+  (if lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage = -1w
+   then 0 else w2n (lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage)) +
+  w2n (lookup_storage 1w (lookup_account consolidation_request_contract accounts).storage) < 2 ** 256 ==>
+  let tx = <|from := system_address; to := SOME consolidation_request_contract;
+    data := []; nonce := 0; value := 0;
+    gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
+    accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
+    maxFeePerGas := NONE; authorizationList := []|> in
+  let rb = initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|> in
+  let s0 = <|contexts := [(initial_context consolidation_request_contract consolidation_request_code F
+                           empty_return_destination tx, rb)];
+    txParams := initial_tx_params chainId prevHashes blk tx 0;
+    rollback := rb; originalAccounts := accounts;
+    msdomain := Collect (d with addresses updated_by fINSERT consolidation_request_contract)|> in
+  ?s c rb' d'. run s0 = SOME (INR NONE, s) /\ s.contexts = [(c, rb')] /\
+    c.returnData = FLAT (FST (dequeue_consolidation_requests accounts)) /\
+    s.rollback.accounts = SND (dequeue_consolidation_requests accounts) /\
+    s.rollback.toDelete = [] /\ s.msdomain = Collect d'
+Proof
+  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `run s0` >>
+  qabbrev_tac `c0 = FST (HD s0.contexts)` >>
+  qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
+  `run s0 = run (s0 with contexts :=
+      [(c0 with <|pc := 211; gasUsed := c0.gasUsed+21|>, rb0)])` by
+    (irule consolidation_dispatch_run >>
+     simp[Abbr `c0`, Abbr `rb0`, Abbr `s0`,
+       vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+       system_transaction_gas_def]) >>
+  qabbrev_tac `c211 = c0 with <|pc := 211; gasUsed := c0.gasUsed+21|>` >>
+  qabbrev_tac `head = lookup_storage 2w (lookup_account consolidation_request_contract accounts).storage` >>
+  qabbrev_tac `tail = lookup_storage 3w (lookup_account consolidation_request_contract accounts).storage` >>
+  `398 < LENGTH consolidation_request_code` by EVAL_TAC >>
+  `MIN 2 (w2n tail-w2n head) <= 2` by simp[] >>
+  mp_tac (Q.INST [`c` |-> `c211`, `s` |-> `s0`, `head` |-> `head`, `tail` |-> `tail`,
+    `d` |-> `d with addresses updated_by fINSERT consolidation_request_contract`,
+    `rb` |-> `rb0`, `cs` |-> `[]`] consolidation_copy_run) >>
+  (impl_tac >- (simp[Abbr `c211`, Abbr `c0`, Abbr `s0`,
+    vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+    vfmContextTheory.initial_rollback_def, system_transaction_gas_def,
+    Abbr `head`, Abbr `tail`] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g1`, `keys1`, `d1`, `m1`] strip_assume_tac) >>
+  qabbrev_tac `n = MIN 2 (w2n tail-w2n head)` >>
+  qabbrev_tac `c297 = c211 with <|pc := 297;
+    stack := [n2w n;n2w n;head;tail]; gasUsed := g1; memory := m1|>` >>
+  qabbrev_tac `s1 = s0 with <|rollback := s0.rollback with accesses :=
+    s0.rollback.accesses with storageKeys := keys1; msdomain := Collect d1|>` >>
+  qabbrev_tac `excess = (if lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage = -1w
+    then 0w else lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage)` >>
+  qabbrev_tac `added = lookup_storage 1w (lookup_account consolidation_request_contract accounts).storage` >>
+  `g1 <= 23336` by
+    (qpat_x_assum `g1 <= _` mp_tac >>
+     simp[Abbr `c211`, Abbr `c0`, Abbr `s0`,
+       vfmContextTheory.initial_context_def] >> decide_tac) >>
+  `w2n added+w2n excess < dimword (:256)` by
+    (simp[Abbr `added`, Abbr `excess`, wordsTheory.dimword_def] >>
+     IF_CASES_TAC >> gvs[] >> decide_tac) >>
+  mp_tac (Q.INST [`c` |-> `c297`, `s` |-> `s1`, `n` |-> `n`, `head` |-> `head`,
+    `tail` |-> `tail`, `excess` |-> `excess`, `added` |-> `added`, `d` |-> `d1`,
+    `rb` |-> `rb0`] consolidation_suffix_run) >>
+  (impl_tac >- (simp[Abbr `c297`, Abbr `c211`, Abbr `c0`, Abbr `s1`, Abbr `s0`,
+    vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+    vfmContextTheory.initial_rollback_def, system_transaction_gas_def,
+    Abbr `excess`, Abbr `added`, wordsTheory.dimword_def] >> decide_tac)) >>
+  disch_then (qx_choosel_then [`g2`, `ad`, `su`, `keys2`, `d2`] strip_assume_tac) >>
+  asm_rewrite_tac [] >> simp[] >>
+  rpt (qpat_x_assum `run _ = _` kall_tac) >>
+  simp[Abbr `c297`, Abbr `s1`] >>
+  `w2n head+n <= w2n tail` by (simp[Abbr `n`] >> intLib.COOPER_TAC) >>
+  `w2n head+n < dimword (:256)` by
+    (mp_tac (wordsTheory.w2n_lt |> Q.ISPEC `tail:bytes32`) >> decide_tac) >>
+  `head+n2w n = n2w (w2n head+n)` by
+    (simp[GSYM wordsTheory.word_add_n2w]) >>
+  `(head+n2w n = tail) = (w2n head+n = w2n tail)` by
+    (pop_assum (fn th => rewrite_tac [th]) >>
+     pure_once_rewrite_tac[GSYM wordsTheory.w2n_11] >>
+     simp[wordsTheory.w2n_n2w, Excl "w2n_11"]) >>
+  simp[Abbr `c211`, Abbr `c0`, Abbr `s0`,
+    vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+    vfmContextTheory.initial_rollback_def] >>
+  simp[dequeue_consolidation_requests_def, dequeue_requests_def,
+    max_consolidation_requests_per_block_def, target_consolidation_requests_per_block_def,
+    GSYM wordsTheory.word_T_def, combinTheory.o_DEF] >>
+  simp[Abbr `n`, arithmeticTheory.MIN_COMM, arithmeticTheory.ADD_COMM] >>
+  `(n2w (2 ** 256-1):bytes32) = -1w` by EVAL_TAC >>
+  `w2n excess = (if lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage =
+    (n2w (2 ** 256-1):bytes32) then 0 else
+    w2n (lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage))` by
+    (simp[Abbr `excess`] >> IF_CASES_TAC >> simp[]) >>
+  simp[] >>
+  Cases_on `lookup_account consolidation_request_contract accounts` >>
+  simp[vfmStateTheory.recordtype_account_state_seldef_storage_fupd_def,
+    wordsTheory.WORD_NEG_1, wordsTheory.word_T_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
 Theorem consolidation_request_code_correspondence:
   (lookup_account consolidation_request_contract accounts).code = consolidation_request_code ∧
   w2n (lookup_storage 2w (lookup_account consolidation_request_contract accounts).storage) ≤
@@ -5800,5 +5934,20 @@ Theorem consolidation_request_code_correspondence:
        SOME (FLAT (FST (dequeue_consolidation_requests accounts)),
              SND (dequeue_consolidation_requests accounts), Collect d')
 Proof
-  cheat
+  rpt strip_tac >>
+  `(n2w (2 ** 256-1):bytes32) = -1w` by EVAL_TAC >>
+  `w2n (lookup_storage 2w (lookup_account consolidation_request_contract accounts).storage) <=
+   w2n (lookup_storage 3w (lookup_account consolidation_request_contract accounts).storage) /\
+   (if lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage = -1w
+    then 0 else w2n (lookup_storage 0w (lookup_account consolidation_request_contract accounts).storage)) +
+   w2n (lookup_storage 1w (lookup_account consolidation_request_contract accounts).storage) < 2 ** 256`
+    by gvs[] >>
+  drule_all consolidation_run_certificate >>
+  disch_then (qspecl_then [`prevHashes`, `d`, `chainId`, `blk`] mp_tac) >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
+    consolidation_not_delegation, domain_check_def, bind_def,
+    ignore_bind_def, return_def, set_domain_def, vfm_abort_def,
+    process_deletions_def] >>
+  metis_tac[]
 QED
