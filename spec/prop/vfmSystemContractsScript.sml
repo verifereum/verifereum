@@ -1337,6 +1337,73 @@ Proof
   simp[]
 QED
 
+Theorem system_dup_run[local]:
+  FLOOKUP c.msgParams.parsed c.pc = SOME (Dup n) /\ n < 16 /\
+  c.jumpDest = NONE /\ n < LENGTH c.stack /\ LENGTH c.stack < stack_limit /\
+  c.gasUsed + 3 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := EL n c.stack :: c.stack;
+      gasUsed := c.gasUsed + 3; pc := c.pc + 1|>, rb)::cs)
+Proof
+  strip_tac >> irule system_run_step >>
+  simp[step_def, step_inst_def, step_dup_def, consume_gas_def, push_stack_def,
+    inc_pc_or_jump_def, is_call_def, opcode_def, static_gas_def,
+    get_current_context_def, set_current_context_def, bind_def,
+    ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
+QED
+
+Theorem system_binop_run[local]:
+  2 <= LENGTH c.stack /\ c.jumpDest = NONE /\ LENGTH c.stack <= stack_limit /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME op /\
+  step_inst op = step_binop op f /\ static_gas op = 3 /\ LENGTH (opcode op) = 1 /\
+  c.gasUsed + 3 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := f (HD c.stack) (HD (TL c.stack)) :: DROP 2 c.stack;
+      gasUsed := c.gasUsed + 3; pc := c.pc + 1|>, rb)::cs)
+Proof
+  strip_tac >>
+  Cases_on `c.stack` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  irule system_run_step >>
+  `~is_call op` by (Cases_on `op` >> gvs[opcode_def, is_call_def, step_inst_def]) >>
+  simp[step_def, step_binop_def, consume_gas_def, push_stack_def, pop_stack_def,
+    inc_pc_or_jump_def, get_current_context_def, set_current_context_def, bind_def,
+    ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
+QED
+
+Theorem withdrawal_count_test_run[local]:
+  c.pc = 210 /\ c.stack = [head; tail] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  c.gasUsed + 18 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := [b2w (w2n (tail - head) < 16); tail - head; head; tail];
+      gasUsed := c.gasUsed + 18; pc := 217|>, rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [16w:byte] = (16w:bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_dup_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`] system_dup_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Sub`, `f` |-> `word_sub:bytes32 -> bytes32 -> bytes32`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
+    step_inst_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `0`] system_dup_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`, `ws` |-> `[16w:byte]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Gt`,
+    `f` |-> `(\x y:bytes32. b2w (w2n x > w2n y))`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
+    step_inst_def, static_gas_def, opcode_def] >>
+  `-1w * head + tail = tail - head` by wordsLib.WORD_DECIDE_TAC >>
+  pop_assum (fn th => pure_rewrite_tac [th]) >>
+  pure_rewrite_tac [arithmeticTheory.GREATER_DEF,
+    vfmContextTheory.context_fupdcanon] >> REFL_TAC
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
