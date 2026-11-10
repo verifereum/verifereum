@@ -1,5 +1,5 @@
 Theory vfmSystemContracts
-Ancestors vfmCompute
+Ancestors vfmCompute vfmExecution vfmTypes vfmConstants vfmOperation
 Libs cv_transLib wordsLib
 
 (* https://eips.ethereum.org/EIPS/eip-4788: canonical runtime. *)
@@ -153,6 +153,136 @@ Theorem consolidation_inhibitor_model:
   [2w; 0w; 0w; 0w]
 Proof
   CONV_TAC cv_eval
+QED
+
+Theorem system_dispatch_caller[local]:
+  s.contexts = (c, rb)::cs /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME Caller /\
+  c.jumpDest = NONE /\ LENGTH c.stack < stack_limit /\
+  c.gasUsed + 2 <= c.msgParams.gasLimit ==>
+  step s = (INL (), s with contexts :=
+    (c with <| stack := w2w c.msgParams.caller :: c.stack;
+               gasUsed := c.gasUsed + 2; pc := c.pc + 1 |>, rb)::cs)
+Proof
+  rpt strip_tac >> gvs[stack_limit_def] >>
+  simp[step_def, step_inst_def, step_msgParams_def, step_context_def,
+       consume_gas_def, push_stack_def, inc_pc_or_jump_def, is_call_def,
+       static_gas_def, opcode_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, handle_def]
+QED
+
+Theorem system_dispatch_push[local]:
+  FLOOKUP c.msgParams.parsed c.pc = SOME (Push n ws) /\
+  c.jumpDest = NONE /\ LENGTH c.stack < stack_limit /\
+  c.gasUsed + static_gas (Push n ws) <= c.msgParams.gasLimit ==>
+  step (s with contexts := (c, rb)::cs) = (INL (), s with contexts :=
+    (c with <| stack := word_of_bytes F 0w (REVERSE ws) :: c.stack;
+               gasUsed := c.gasUsed + static_gas (Push n ws);
+               pc := c.pc + LENGTH (opcode (Push n ws)) |>, rb)::cs)
+Proof
+  rpt strip_tac >> gvs[stack_limit_def] >>
+  simp[step_def, step_inst_def, step_push_def,
+       consume_gas_def, push_stack_def, inc_pc_or_jump_def, is_call_def,
+       get_current_context_def, set_current_context_def, bind_def,
+       ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def]
+QED
+
+Theorem system_dispatch_eq[local]:
+  c.stack = x::y::ss /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME Eq /\
+  c.jumpDest = NONE /\ LENGTH ss < stack_limit /\
+  c.gasUsed + 3 <= c.msgParams.gasLimit ==>
+  step (s with contexts := (c, rb)::cs) = (INL (), s with contexts :=
+    (c with <| stack := b2w (x = y) :: ss;
+               gasUsed := c.gasUsed + 3; pc := c.pc + 1 |>, rb)::cs)
+Proof
+  rpt strip_tac >> gvs[stack_limit_def] >>
+  simp[step_def, step_inst_def, step_binop_def, pop_stack_def,
+       consume_gas_def, push_stack_def, inc_pc_or_jump_def, is_call_def,
+       static_gas_def, opcode_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, handle_def, stack_limit_def]
+QED
+
+Theorem system_dispatch_jumpi[local]:
+  c.stack = dest::cond::ss /\ cond <> 0w /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME JumpI /\
+  FLOOKUP c.msgParams.parsed (w2n dest) = SOME JumpDest /\
+  w2n dest < LENGTH c.msgParams.code /\
+  c.gasUsed + 10 <= c.msgParams.gasLimit ==>
+  step (s with contexts := (c, rb)::cs) = (INL (), s with contexts :=
+    (c with <| stack := ss; jumpDest := NONE;
+               gasUsed := c.gasUsed + 10; pc := w2n dest |>, rb)::cs)
+Proof
+  rpt strip_tac >>
+  simp[step_def, step_inst_def, step_jumpi_def, pop_stack_def,
+       consume_gas_def, set_jump_dest_def, inc_pc_or_jump_def, is_call_def,
+       static_gas_def, opcode_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, handle_def]
+QED
+
+Theorem system_privileged_dispatch:
+  s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
+  c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
+  FLOOKUP c.msgParams.parsed 0 = SOME Caller /\
+  FLOOKUP c.msgParams.parsed 1 = SOME (Push 20 caller_bytes) /\
+  LENGTH caller_bytes = 20 /\
+  word_of_bytes F 0w (REVERSE caller_bytes) = (w2w c.msgParams.caller : bytes32) /\
+  FLOOKUP c.msgParams.parsed 22 = SOME Eq /\
+  FLOOKUP c.msgParams.parsed 23 = SOME (Push 1 [dest]) /\
+  FLOOKUP c.msgParams.parsed 25 = SOME JumpI /\
+  FLOOKUP c.msgParams.parsed (w2n dest) = SOME JumpDest /\
+  w2n dest < LENGTH c.msgParams.code ==>
+  FUNPOW (step o SND) 5 (INL (), s) =
+    (INL (), s with contexts :=
+      (c with <| pc := w2n dest; gasUsed := c.gasUsed + 21 |>, rb)::cs)
+Proof
+  rpt strip_tac >>
+  `word_of_bytes F 0w [dest] = (w2w dest : bytes32)` by
+    (simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+          byteTheory.byte_index_def, byteTheory.word_slice_alt_zero]) >>
+  qabbrev_tac `c1 = c with <|stack := w2w c.msgParams.caller :: c.stack;
+    gasUsed := c.gasUsed + 2; pc := c.pc + 1|>` >>
+  `step s = (INL (), s with contexts := (c1, rb)::cs)` by
+    (simp[Abbr `c1`] >> drule system_dispatch_caller >> simp[stack_limit_def]) >>
+  qabbrev_tac `c2 = c1 with <|
+    stack := word_of_bytes F 0w (REVERSE caller_bytes) :: c1.stack;
+    gasUsed := c1.gasUsed + static_gas (Push 20 caller_bytes);
+    pc := c1.pc + LENGTH (opcode (Push 20 caller_bytes))|>` >>
+  `step (s with contexts := (c1, rb)::cs) =
+     (INL (), s with contexts := (c2, rb)::cs)` by
+    (simp_tac pure_ss [Abbr `c2`] >> irule system_dispatch_push >>
+     simp[Abbr `c1`, stack_limit_def, static_gas_def]) >>
+  qabbrev_tac `c3 = c2 with <|
+    stack := b2w ((w2w c.msgParams.caller : bytes32) = w2w c.msgParams.caller) :: [];
+    gasUsed := c2.gasUsed + 3; pc := c2.pc + 1|>` >>
+  `step (s with contexts := (c2, rb)::cs) =
+     (INL (), s with contexts := (c3, rb)::cs)` by
+    (simp_tac pure_ss [Abbr `c3`] >> irule system_dispatch_eq >>
+     simp[Abbr `c2`, Abbr `c1`, stack_limit_def, static_gas_def, opcode_def]) >>
+  qabbrev_tac `c4 = c3 with <|
+    stack := word_of_bytes F 0w (REVERSE [dest]) :: c3.stack;
+    gasUsed := c3.gasUsed + static_gas (Push 1 [dest]);
+    pc := c3.pc + LENGTH (opcode (Push 1 [dest]))|>` >>
+  `step (s with contexts := (c3, rb)::cs) =
+     (INL (), s with contexts := (c4, rb)::cs)` by
+    (simp_tac pure_ss [Abbr `c4`] >> irule system_dispatch_push >>
+     simp[Abbr `c3`, Abbr `c2`, Abbr `c1`, stack_limit_def, static_gas_def,
+          opcode_def]) >>
+  `step (s with contexts := (c4, rb)::cs) =
+     (INL (), s with contexts :=
+       (c4 with <| stack := []; jumpDest := NONE;
+         gasUsed := c4.gasUsed + 10;
+         pc := w2n (word_of_bytes F 0w (REVERSE [dest]) : bytes32) |>, rb)::cs)` by
+    (irule system_dispatch_jumpi >>
+     simp[Abbr `c4`, Abbr `c3`, Abbr `c2`, Abbr `c1`,
+          static_gas_def, opcode_def, wordsTheory.w2n_w2w]) >>
+  simp[numeralTheory.numeral_funpow] >>
+  simp[Abbr `c4`, Abbr `c3`, Abbr `c2`, Abbr `c1`,
+       static_gas_def, opcode_def, wordsTheory.w2n_w2w] >>
+  Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
 QED
 
 (* Header bounds exclude truncation by TIMESTAMP/NUMBER. Queue bounds exclude
