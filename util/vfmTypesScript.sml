@@ -1,7 +1,6 @@
 Theory vfmTypes
 Ancestors
   arithmetic byte cv_std divides list rich_list sptree combin numposrep words
-  keccak
 Libs
   blastLib
   cv_transLib
@@ -20,28 +19,6 @@ Theorem sum_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
 
-(* TODO: move to sptree? like MAP FST (toAList t) but ignores values *)
-Definition domain_list_def:
-  domain_list LN = [] ∧
-  domain_list (LS _) = [0n] ∧
-  domain_list (BN t1 t2) =
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2) ∧
-  domain_list (BS t1 v t2) =
-     0::
-     MAP (λn. 2 * n + 2) (domain_list t1) ++
-     MAP (λn. 2 * n + 1) (domain_list t2)
-End
-
-val () = cv_auto_trans domain_list_def;
-
-Theorem set_domain_list:
-  set (domain_list t) = domain t
-Proof
-  Induct_on`t` \\ rw[domain_list_def, LIST_TO_SET_MAP]
-  \\ rw[pred_setTheory.EXTENSION] \\ metis_tac[]
-QED
-
 val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:160”] |> SRULE[compute_divides]);
 val () = cv_trans (word_of_bytes_be_eq_num_of_bytes |> INST_TYPE [alpha |-> “:160”] |> SRULE[compute_divides]);
 val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:256”] |> SRULE[compute_divides]);
@@ -52,6 +29,7 @@ val () = cv_trans (word_to_bytes_le_eq_bytes_of_num |> INST_TYPE [alpha |-> “:
 val () = cv_trans (word_to_bytes_be_eq_bytes_of_num |> INST_TYPE [alpha |-> “:256”]);
 val () = cv_trans (word_to_bytes_le_eq_bytes_of_num |> INST_TYPE [alpha |-> “:64”]);
 val () = cv_trans (word_to_bytes_be_eq_bytes_of_num |> INST_TYPE [alpha |-> “:64”]);
+val () = cv_auto_trans (word_to_bytes_def |> INST_TYPE [alpha |-> “:64”]);
 
 val vars = List.tabulate(32, fn n => mk_var("w" ^ Int.toString n, “:256 word”))
 

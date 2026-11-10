@@ -3,6 +3,7 @@ Ancestors
   list rich_list
   secp256k1
   vfmTypes vfmBuffer vfmConstants vfmOperation vfmState vfmTransaction
+  keccak
 
 Datatype:
   transaction_parameters =

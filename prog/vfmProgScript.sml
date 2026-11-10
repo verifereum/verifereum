@@ -1,6 +1,6 @@
 Theory vfmProg
 Ancestors
-  vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas vfmState vfmRunCall
+  vfmExecution vfmExecutionProp vfmContext vfmConstants vfmDecreasesGas vfmState vfmWfState
   vfmTypes vfmBuffer
   prog words set_sep pred_set pair list arithmetic option finite_map combin
 Libs
