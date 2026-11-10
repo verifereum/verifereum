@@ -5618,6 +5618,41 @@ Proof
   gvs[Abbr `c1`, Abbr `s1`, vfmContextTheory.context_fupdcanon]
 QED
 
+Theorem withdrawal_dispatch_parse[local]:
+  withdrawal_instruction 0 = SOME Caller /\
+  withdrawal_instruction 1 = SOME (Push 20 (TAKE 20 (DROP 2 beacon_roots_code))) /\
+  withdrawal_instruction 22 = SOME Eq /\
+  withdrawal_instruction 23 = SOME (Push 1 [203w]) /\
+  withdrawal_instruction 25 = SOME JumpI
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Theorem withdrawal_dispatch_run[local]:
+  s.contexts = (c,rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
+  c.jumpDest = NONE /\ c.gasUsed+21 <= c.msgParams.gasLimit /\
+  c.msgParams.code = withdrawal_request_code /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  c.msgParams.caller = system_address ==>
+  run s = run (s with contexts :=
+    (c with <|pc := 203; gasUsed := c.gasUsed+21|>,rb)::cs)
+Proof
+  strip_tac >>
+  irule (system_privileged_dispatch_run |> SPEC_ALL |> Q.INST
+    [`dest` |-> `203w:byte`,
+     `caller_bytes` |-> `TAKE 20 (DROP 2 beacon_roots_code)`]
+    |> SIMP_RULE (srw_ss()) []) >>
+  simp[GSYM withdrawal_instruction_def, withdrawal_dispatch_parse, withdrawal_entry_parse,
+    GSYM beacon_roots_caller_word_def, beacon_roots_caller_word] >>
+  simp[withdrawal_request_code_def, beacon_roots_code_def]
+QED
+
+Theorem withdrawal_not_delegation[local]:
+  get_delegate withdrawal_request_code = NONE /\ ~NULL withdrawal_request_code
+Proof
+  EVAL_TAC
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
