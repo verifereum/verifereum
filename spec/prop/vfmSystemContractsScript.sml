@@ -1159,6 +1159,68 @@ Proof
   CONV_TAC (RAND_CONV (EVAL))
 QED
 
+Definition withdrawal_instruction_def:
+  withdrawal_instruction pc = FLOOKUP (parse_code 0 FEMPTY withdrawal_request_code) pc
+End
+val () = cv_auto_trans withdrawal_instruction_def;
+
+Theorem withdrawal_entry_parse[local]:
+  withdrawal_instruction 203 = SOME JumpDest /\
+  withdrawal_instruction 204 = SOME (Push 1 [3w]) /\
+  withdrawal_instruction 206 = SOME SLoad /\
+  withdrawal_instruction 207 = SOME (Push 1 [2w]) /\
+  withdrawal_instruction 209 = SOME SLoad /\
+  withdrawal_instruction 210 = SOME (Dup 0) /\
+  withdrawal_instruction 211 = SOME (Dup 2) /\
+  withdrawal_instruction 212 = SOME Sub /\
+  withdrawal_instruction 213 = SOME (Dup 0) /\
+  withdrawal_instruction 214 = SOME (Push 1 [16w]) /\
+  withdrawal_instruction 216 = SOME GT /\
+  withdrawal_instruction 217 = SOME (Push 1 [223w]) /\
+  withdrawal_instruction 219 = SOME JumpI /\
+  withdrawal_instruction 220 = SOME Pop /\
+  withdrawal_instruction 221 = SOME (Push 1 [16w]) /\
+  withdrawal_instruction 223 = SOME JumpDest /\
+  withdrawal_instruction 224 = SOME (Push 0 []) /\
+  withdrawal_instruction 225 = SOME JumpDest /\
+  withdrawal_instruction 226 = SOME (Dup 1) /\
+  withdrawal_instruction 227 = SOME (Dup 1) /\
+  withdrawal_instruction 228 = SOME Eq /\
+  withdrawal_instruction 229 = SOME (Push 2 [1w; 131w]) /\
+  withdrawal_instruction 232 = SOME JumpI
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Theorem system_sload_step[local]:
+  c.stack = key::ss /\ c.jumpDest = NONE /\ LENGTH ss < stack_limit /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME SLoad /\ s.msdomain = Collect d /\
+  address = c.msgParams.callee /\
+  cost = (if fIN (SK address key) s.rollback.accesses.storageKeys
+          then warm_access_cost else cold_sload_cost) /\
+  c.gasUsed + cost <= c.msgParams.gasLimit ==>
+  step (s with contexts := (c, rb)::cs) =
+    (INL (), s with <|
+      contexts := (c with <|pc := c.pc + 1;
+        stack := lookup_storage key (lookup_account address s.rollback.accounts).storage :: ss;
+        gasUsed := c.gasUsed + cost|>, rb)::cs;
+      rollback := s.rollback with accesses :=
+        s.rollback.accesses with storageKeys updated_by fINSERT (SK address key);
+      msdomain := Collect (d with storageKeys updated_by fINSERT (SK address key))|>)
+Proof
+  rpt strip_tac >> gvs[] >>
+  simp[step_def, step_inst_def, step_sload_def,
+    get_callee_def, get_accounts_def, access_slot_def, domain_check_def,
+    set_domain_def, consume_gas_def, pop_stack_def, push_stack_def,
+    inc_pc_or_jump_def, is_call_def, opcode_def,
+    get_current_context_def, set_current_context_def, bind_def,
+    ignore_bind_def, return_def, assert_def, handle_def, stack_limit_def] >>
+  Cases_on `c` >> Cases_on `s.rollback.accesses` >> Cases_on `s.rollback` >>
+  gvs[vfmContextTheory.context_fn_updates,
+      vfmContextTheory.rollback_state_fn_updates,
+      vfmContextTheory.access_sets_fn_updates]
+QED
+
 Theorem withdrawal_request_code_correspondence:
   (lookup_account withdrawal_request_contract accounts).code = withdrawal_request_code ∧
   w2n (lookup_storage 2w (lookup_account withdrawal_request_contract accounts).storage) ≤
