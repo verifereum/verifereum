@@ -22,6 +22,18 @@ The semantics is executable in the logic. This is not intended to be a fast EVM 
 
 Beyond executable specification and test-suite validation, the repository contains machine-checked theorems about the semantics. The proof library includes frame-style theorems showing that EVM execution only mutates storage, transient storage, code, and nonce in the accounts and slots it is allowed to touch, plus gas monotonicity theorems showing that consumed gas in a frame only increases through execution, including across CALL/CREATE structure. These results support program verification and program-logic developments for EVM bytecode.
 
+Block processing executes the deployed beacon-roots and block-history contracts
+before transactions, then applies beacon-chain withdrawals and executes the
+withdrawal-request and consolidation-request contracts. Each system call uses
+the system address, 30 million execution gas, the block's base fee as gas price,
+and fresh access and transient-storage sets (with any code-delegation target
+initially warm). It charges no transaction fee and does not increment the
+caller's nonce. Ordinary failures in the first two calls roll back their
+account changes; empty code or failure in either
+request contract invalidates the block. Request bytes come from the calls'
+return data. The high-level ring-buffer and queue models remain available for
+reasoning about canonical code.
+
 Other active directions include:
 
 - Program logic and proof infrastructure in `prog/`
