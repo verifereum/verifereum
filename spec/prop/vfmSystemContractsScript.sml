@@ -223,7 +223,14 @@ Proof
        assert_def, handle_def]
 QED
 
-Theorem system_privileged_dispatch:
+Theorem system_run_step[local]:
+  step s = (INL (), t) ==> run s = run t
+Proof
+  strip_tac >> simp[vfmDecreasesGasTheory.run_eq_tr] >>
+  simp[Once vfmDecreasesGasTheory.run_tr_def]
+QED
+
+Theorem system_privileged_dispatch_cert[local]:
   s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
   c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
   FLOOKUP c.msgParams.parsed 0 = SOME Caller /\
@@ -237,6 +244,8 @@ Theorem system_privileged_dispatch:
   w2n dest < LENGTH c.msgParams.code ==>
   FUNPOW (step o SND) 5 (INL (), s) =
     (INL (), s with contexts :=
+      (c with <| pc := w2n dest; gasUsed := c.gasUsed + 21 |>, rb)::cs) /\
+  run s = run (s with contexts :=
       (c with <| pc := w2n dest; gasUsed := c.gasUsed + 21 |>, rb)::cs)
 Proof
   rpt strip_tac >>
@@ -279,10 +288,48 @@ Proof
     (irule system_dispatch_jumpi >>
      simp[Abbr `c4`, Abbr `c3`, Abbr `c2`, Abbr `c1`,
           static_gas_def, opcode_def, wordsTheory.w2n_w2w]) >>
+  imp_res_tac system_run_step >>
   simp[numeralTheory.numeral_funpow] >>
   simp[Abbr `c4`, Abbr `c3`, Abbr `c2`, Abbr `c1`,
        static_gas_def, opcode_def, wordsTheory.w2n_w2w] >>
   Cases_on `c` >> gvs[vfmContextTheory.context_fn_updates]
+QED
+
+Theorem system_privileged_dispatch:
+  s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
+  c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
+  FLOOKUP c.msgParams.parsed 0 = SOME Caller /\
+  FLOOKUP c.msgParams.parsed 1 = SOME (Push 20 caller_bytes) /\
+  LENGTH caller_bytes = 20 /\
+  word_of_bytes F 0w (REVERSE caller_bytes) = (w2w c.msgParams.caller : bytes32) /\
+  FLOOKUP c.msgParams.parsed 22 = SOME Eq /\
+  FLOOKUP c.msgParams.parsed 23 = SOME (Push 1 [dest]) /\
+  FLOOKUP c.msgParams.parsed 25 = SOME JumpI /\
+  FLOOKUP c.msgParams.parsed (w2n dest) = SOME JumpDest /\
+  w2n dest < LENGTH c.msgParams.code ==>
+  FUNPOW (step o SND) 5 (INL (), s) =
+    (INL (), s with contexts :=
+      (c with <| pc := w2n dest; gasUsed := c.gasUsed + 21 |>, rb)::cs)
+Proof
+  metis_tac[system_privileged_dispatch_cert]
+QED
+
+Theorem system_privileged_dispatch_run:
+  s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
+  c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
+  FLOOKUP c.msgParams.parsed 0 = SOME Caller /\
+  FLOOKUP c.msgParams.parsed 1 = SOME (Push 20 caller_bytes) /\
+  LENGTH caller_bytes = 20 /\
+  word_of_bytes F 0w (REVERSE caller_bytes) = (w2w c.msgParams.caller : bytes32) /\
+  FLOOKUP c.msgParams.parsed 22 = SOME Eq /\
+  FLOOKUP c.msgParams.parsed 23 = SOME (Push 1 [dest]) /\
+  FLOOKUP c.msgParams.parsed 25 = SOME JumpI /\
+  FLOOKUP c.msgParams.parsed (w2n dest) = SOME JumpDest /\
+  w2n dest < LENGTH c.msgParams.code ==>
+  run s = run (s with contexts :=
+      (c with <| pc := w2n dest; gasUsed := c.gasUsed + 21 |>, rb)::cs)
+Proof
+  metis_tac[system_privileged_dispatch_cert]
 QED
 
 Definition beacon_roots_caller_word_def:
@@ -328,6 +375,25 @@ Proof
   rpt conj_tac >> CONV_TAC cv_eval
 QED
 
+Theorem beacon_roots_dispatch_run[local]:
+  s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
+  c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
+  c.msgParams.code = beacon_roots_code /\
+  c.msgParams.parsed = parse_code 0 FEMPTY beacon_roots_code /\
+  c.msgParams.caller = system_address ==>
+  run s = run (s with contexts :=
+    (c with <|pc := 77; gasUsed := c.gasUsed + 21|>, rb)::cs)
+Proof
+  strip_tac >>
+  irule (system_privileged_dispatch_run |> SPEC_ALL |> Q.INST
+    [`dest` |-> `0x4dw:byte`,
+     `caller_bytes` |-> `TAKE 20 (DROP 2 beacon_roots_code)`]
+    |> SIMP_RULE (srw_ss()) []) >>
+  simp[GSYM beacon_roots_instruction_def, beacon_roots_parse,
+       GSYM beacon_roots_caller_word_def, beacon_roots_caller_word] >>
+  simp[beacon_roots_code_def]
+QED
+
 Theorem beacon_roots_not_delegation[local]:
   get_delegate beacon_roots_code = NONE
 Proof
@@ -352,19 +418,14 @@ Proof
   qmatch_goalsub_abbrev_tac `run s0` >>
   qabbrev_tac `c0 = FST (HD s0.contexts)` >>
   qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
-  `FUNPOW (step o SND) 5 (INL (), s0) =
-    (INL (), s0 with contexts :=
+  `run s0 = run (s0 with contexts :=
       [(c0 with <|pc := 77; gasUsed := c0.gasUsed + 21|>, rb0)])` by
-    (irule (system_privileged_dispatch |> SPEC_ALL |> Q.INST
-       [`dest` |-> `0x4dw:byte`,
-        `caller_bytes` |-> `TAKE 20 (DROP 2 beacon_roots_code)`]
-       |> SIMP_RULE (srw_ss()) []) >>
+    (irule beacon_roots_dispatch_run >>
      simp[Abbr `c0`, Abbr `rb0`, Abbr `s0`,
           vfmContextTheory.initial_context_def,
-          vfmContextTheory.initial_msg_params_def] >>
-     simp[GSYM beacon_roots_instruction_def, beacon_roots_parse,
-          GSYM beacon_roots_caller_word_def, beacon_roots_caller_word] >>
-     simp[beacon_roots_code_def, system_transaction_gas_def]) >>
+          vfmContextTheory.initial_msg_params_def,
+          system_transaction_gas_def]) >>
+  asm_rewrite_tac [] >>
   cheat
 QED
 
