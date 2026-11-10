@@ -737,6 +737,231 @@ Proof
   metis_tac[]
 QED
 
+Definition history_storage_instruction_def:
+  history_storage_instruction pc =
+    FLOOKUP (parse_code 0 FEMPTY history_storage_code) pc
+End
+val () = cv_auto_trans history_storage_instruction_def;
+
+Theorem history_storage_parse[local]:
+  history_storage_instruction 0 = SOME Caller /\
+  history_storage_instruction 1 = SOME (Push 20 (TAKE 20 (DROP 2 history_storage_code))) /\
+  history_storage_instruction 22 = SOME Eq /\
+  history_storage_instruction 23 = SOME (Push 1 [0x46w]) /\
+  history_storage_instruction 25 = SOME JumpI /\
+  history_storage_instruction 70 = SOME JumpDest /\
+  history_storage_instruction 71 = SOME (Push 0 []) /\
+  history_storage_instruction 72 = SOME CallDataLoad /\
+  history_storage_instruction 73 = SOME (Push 2 [0x1fw; 0xffw]) /\
+  history_storage_instruction 76 = SOME (Push 1 [1w]) /\
+  history_storage_instruction 78 = SOME Number /\
+  history_storage_instruction 79 = SOME Sub /\
+  history_storage_instruction 80 = SOME Mod /\
+  history_storage_instruction 81 = SOME SStore /\
+  history_storage_instruction 82 = SOME Stop
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Definition history_storage_caller_word_def:
+  history_storage_caller_word : bytes32 =
+    word_of_bytes F 0w (REVERSE (TAKE 20 (DROP 2 history_storage_code)))
+End
+val () = cv_auto_trans (REWRITE_RULE [GSYM byteTheory.word_of_bytes_le_def]
+  history_storage_caller_word_def);
+
+Theorem history_storage_caller_word[local]:
+  history_storage_caller_word = (w2w system_address : bytes32)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem history_storage_dispatch_run[local]:
+  s.contexts = (c, rb)::cs /\ c.pc = 0 /\ c.stack = [] /\
+  c.jumpDest = NONE /\ c.gasUsed + 21 <= c.msgParams.gasLimit /\
+  c.msgParams.code = history_storage_code /\
+  c.msgParams.parsed = parse_code 0 FEMPTY history_storage_code /\
+  c.msgParams.caller = system_address ==>
+  run s = run (s with contexts :=
+    (c with <|pc := 70; gasUsed := c.gasUsed + 21|>, rb)::cs)
+Proof
+  strip_tac >>
+  irule (system_privileged_dispatch_run |> SPEC_ALL |> Q.INST
+    [`dest` |-> `0x46w:byte`,
+     `caller_bytes` |-> `TAKE 20 (DROP 2 history_storage_code)`]
+    |> SIMP_RULE (srw_ss()) []) >>
+  simp[GSYM history_storage_instruction_def, history_storage_parse,
+       GSYM history_storage_caller_word_def, history_storage_caller_word] >>
+  simp[history_storage_code_def]
+QED
+
+Theorem history_storage_body_run[local]:
+  c.pc = 71 /\ c.stack = [] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY history_storage_code /\
+  c.gasUsed + 21 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) =
+  run (s with contexts :=
+    (c with <|pc := 81; gasUsed := c.gasUsed + 21;
+      stack := [with_zero word_mod (n2w s.txParams.blockNumber - 1w) 8191w;
+        word_of_bytes F 0w (REVERSE (take_pad_0 32 (buffer_to_list c.msgParams.data)))]|>, rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w (REVERSE [0x1fw; 0xffw]) = (8191w : bytes32)` by
+    (simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+          byteTheory.byte_index_def, byteTheory.word_slice_alt_zero,
+          byteTheory.word_slice_alt_shift, byteTheory.word_slice_alt_empty]) >>
+  `word_of_bytes F 0w [1w] = (1w : bytes32)` by
+    simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero] >>
+  simp[vfmDecreasesGasTheory.run_eq_tr] >>
+  ntac 4 (simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_push_def, step_call_data_load_def,
+    step_txParams_def, step_binop_def, get_call_data_def, get_tx_params_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def, CONJUNCT1 byteTheory.word_of_bytes_def,
+    GSYM history_storage_instruction_def, history_storage_parse]) >>
+  ntac 3 (simp[Once vfmDecreasesGasTheory.run_tr_def,
+    step_def, step_inst_def, step_txParams_def, step_binop_def, get_tx_params_def,
+    consume_gas_def, push_stack_def, pop_stack_def, inc_pc_or_jump_def,
+    is_call_def, static_gas_def, opcode_def, get_current_context_def,
+    set_current_context_def, bind_def, ignore_bind_def, return_def,
+    assert_def, handle_def, stack_limit_def,
+    GSYM history_storage_instruction_def, history_storage_parse])
+QED
+
+Theorem history_storage_not_delegation[local]:
+  get_delegate history_storage_code = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem history_storage_run_certificate[local]:
+  0 < blk.number /\ blk.number < 2 ** 256 ==>
+  let tx = <|from := system_address; to := SOME history_storage_address;
+    data := word_to_bytes parent_hash T; nonce := 0; value := 0;
+    gasLimit := system_transaction_gas; gasPrice := blk.baseFeePerGas;
+    accessList := []; blobVersionedHashes := []; maxFeePerBlobGas := NONE;
+    maxFeePerGas := NONE; authorizationList := []|> in
+  let rb = initial_rollback accounts <|addresses := fEMPTY; storageKeys := fEMPTY|> in
+  let s0 = <|contexts := [(initial_context history_storage_address history_storage_code F
+                           empty_return_destination tx, rb)];
+    txParams := initial_tx_params chainId prevHashes blk tx 0;
+    rollback := rb; originalAccounts := accounts;
+    msdomain := Collect (d with addresses updated_by fINSERT history_storage_address)|> in
+  ?s c rb' d'. run s0 = SOME (INR NONE, s) /\ s.contexts = [(c, rb')] /\
+    c.returnData = [] /\ s.rollback.accounts = update_history_block [parent_hash] blk accounts /\
+    s.rollback.toDelete = [] /\ s.msdomain = Collect d'
+Proof
+  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `run s0` >>
+  qabbrev_tac `c0 = FST (HD s0.contexts)` >>
+  qabbrev_tac `rb0 = SND (HD s0.contexts)` >>
+  `run s0 = run (s0 with contexts :=
+      [(c0 with <|pc := 70; gasUsed := c0.gasUsed + 21|>, rb0)])` by
+    (irule history_storage_dispatch_run >>
+     simp[Abbr `c0`, Abbr `rb0`, Abbr `s0`,
+          vfmContextTheory.initial_context_def,
+          vfmContextTheory.initial_msg_params_def,
+          system_transaction_gas_def]) >>
+  asm_rewrite_tac [] >>
+  qabbrev_tac `c70 = c0 with <|pc := 70; gasUsed := c0.gasUsed + 21|>` >>
+  `run (s0 with contexts := [(c70, rb0)]) =
+   run (s0 with contexts :=
+     [(c70 with <|pc := c70.pc + 1; gasUsed := c70.gasUsed + 1|>, rb0)])` by
+    (irule system_jumpdest_run >>
+     simp[Abbr `c70`, Abbr `c0`, Abbr `s0`,
+          vfmContextTheory.initial_context_def,
+          vfmContextTheory.initial_msg_params_def,
+          system_transaction_gas_def, GSYM history_storage_instruction_def,
+          history_storage_parse]) >>
+  asm_rewrite_tac [] >>
+  qabbrev_tac `c71 = c70 with <|pc := c70.pc + 1; gasUsed := c70.gasUsed + 1|>` >>
+  `run (s0 with contexts := [(c71, rb0)]) =
+   run (s0 with contexts := [(c71 with <|pc := 81; gasUsed := c71.gasUsed + 21;
+     stack := [with_zero word_mod (n2w s0.txParams.blockNumber - 1w) 8191w;
+       word_of_bytes F 0w (REVERSE (take_pad_0 32 (buffer_to_list c71.msgParams.data)))]|>, rb0)])` by
+    (irule history_storage_body_run >>
+     simp[Abbr `c71`, Abbr `c70`, Abbr `c0`, Abbr `s0`,
+          vfmContextTheory.initial_context_def,
+          vfmContextTheory.initial_msg_params_def, system_transaction_gas_def]) >>
+  asm_rewrite_tac [] >>
+  qabbrev_tac `key = with_zero word_mod (n2w s0.txParams.blockNumber - 1w) 8191w : bytes32` >>
+  qabbrev_tac `root = word_of_bytes F 0w
+    (REVERSE (take_pad_0 32 (buffer_to_list c71.msgParams.data))) : bytes32` >>
+  qabbrev_tac `c81 = c71 with <|pc := 81; gasUsed := c71.gasUsed + 21;
+    stack := [key; root]|>` >>
+  qabbrev_tac `cur = lookup_storage key
+    (lookup_account history_storage_address accounts).storage` >>
+  qabbrev_tac `cost = sstore_base_gas cur cur root + zero_warm cold_sload_cost` >>
+  Cases_on `sstore_refund_updates cur cur root` >>
+  rename1 `sstore_refund_updates cur cur root = (ad, su)` >>
+  qabbrev_tac `s82 = s0 with <|
+    contexts := [(c81 with <|pc := c81.pc + 1; stack := [];
+      gasUsed := c81.gasUsed + cost; addRefund := ad + c81.addRefund;
+      subRefund := su + c81.subRefund|>, rb0)];
+    rollback := s0.rollback with <|
+      accounts := update_account history_storage_address
+        ((lookup_account history_storage_address s0.rollback.accounts) with
+          storage updated_by update_storage key root) s0.rollback.accounts;
+      accesses := s0.rollback.accesses with storageKeys updated_by
+        fINSERT (SK history_storage_address key)|>;
+    msdomain := Collect ((d with addresses updated_by fINSERT history_storage_address)
+      with storageKeys updated_by fINSERT (SK history_storage_address key))|>` >>
+  `run (s0 with contexts := [(c81, rb0)]) = run s82` by
+    (simp_tac pure_ss [Abbr `s82`] >> irule system_sstore_run >>
+     rpt (qpat_x_assum `run _ = _` kall_tac) >>
+     qpat_x_assum `Abbrev (rb0 = _)` kall_tac >>
+     simp[Abbr `c81`, Abbr `c71`, Abbr `c70`,
+       Abbr `c0`, Abbr `s0`, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, vfmContextTheory.initial_rollback_def,
+       GSYM history_storage_instruction_def, history_storage_parse,
+       system_transaction_gas_def, call_stipend_def] >>
+     simp[Abbr `cost`, Abbr `cur`, zero_warm_def, sstore_base_gas_def,
+       warm_access_cost_def, cold_sload_cost_def,
+       storage_set_cost_def, storage_update_cost_def] >>
+     rpt IF_CASES_TAC >> simp[]) >>
+  asm_rewrite_tac [] >>
+  rpt (qpat_x_assum `run _ = _` kall_tac) >>
+  qabbrev_tac `cf = FST (HD s82.contexts)` >>
+  `run s82 = SOME (INR NONE, s82 with contexts :=
+    [(cf with returnData := [], rb0)])` by
+    (`s82 = s82 with contexts := [(cf, rb0)]` by
+       simp[Abbr `cf`, Abbr `s82`] >>
+     pop_assum (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     irule system_stop_run >>
+     simp[Abbr `cf`, Abbr `s82`, Abbr `c81`, Abbr `c71`, Abbr `c70`,
+       Abbr `c0`, Abbr `s0`, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def,
+       GSYM history_storage_instruction_def, history_storage_parse]) >>
+  asm_rewrite_tac [] >> simp[] >>
+  qpat_x_assum `run _ = _` kall_tac >>
+  rpt (qpat_x_assum `sstore_refund_updates _ _ _ = _` kall_tac) >>
+  map_every (fn v => qpat_x_assum v kall_tac)
+    [`Abbrev (cf = _)`, `Abbrev (cost = _)`, `Abbrev (cur = _)`,
+     `Abbrev (c81 = _)`, `Abbrev (rb0 = _)`] >>
+  simp[Abbr `s82`, Abbr `s0`, vfmContextTheory.initial_rollback_def,
+    update_history_block_def] >>
+  simp[Abbr `root`, Abbr `c71`, Abbr `c70`, Abbr `c0`, Abbr `key`,
+    vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def,
+    vfmContextTheory.initial_tx_params_def, take_pad_0_def,
+    listTheory.TAKE_LENGTH_ID_rwt, listTheory.PAD_RIGHT,
+    byteTheory.LENGTH_word_to_bytes] >>
+  rewrite_tac[GSYM byteTheory.word_to_bytes_be_def,
+    cv_stdTheory.word_to_bytes_be_eq_bytes_of_num, listTheory.REVERSE_REVERSE,
+    GSYM cv_stdTheory.word_to_bytes_le_eq_bytes_of_num,
+    byteTheory.word_to_bytes_le_def] >>
+  simp[] >>
+  `((n2w blk.number : bytes32) - 1w) = n2w (blk.number - 1)` by
+    (sym_tac >> irule wordsTheory.n2w_sub >> simp[]) >>
+  `blk.number - 1 < 2 ** 256` by decide_tac >>
+  simp[with_zero_def, wordsTheory.word_mod_def, wordsTheory.w2n_n2w,
+    wordsTheory.dimword_def] >>
+  Cases_on `lookup_account history_storage_address accounts` >>
+  simp[vfmStateTheory.recordtype_account_state_seldef_storage_fupd_def] >> gvs[]
+QED
+
 Theorem history_storage_code_correspondence:
   (lookup_account history_storage_address accounts).code = history_storage_code ∧
   0 < blk.number ∧ blk.number < 2 ** 256 ⇒
@@ -744,7 +969,15 @@ Theorem history_storage_code_correspondence:
          history_storage_address (word_to_bytes parent_hash T) =
        SOME ([], update_history_block [parent_hash] blk accounts, Collect d')
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all history_storage_run_certificate >>
+  disch_then (qspecl_then [`prevHashes`, `parent_hash`, `d`, `chainId`, `accounts`] mp_tac) >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  simp[run_system_transaction_def, vfmContextTheory.code_from_tx_def,
+       history_storage_not_delegation, domain_check_def, bind_def,
+       ignore_bind_def, return_def, set_domain_def, vfm_abort_def,
+       process_deletions_def] >>
+  metis_tac[]
 QED
 
 Theorem withdrawal_request_code_correspondence:
