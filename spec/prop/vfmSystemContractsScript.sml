@@ -1187,7 +1187,8 @@ Theorem withdrawal_entry_parse[local]:
   withdrawal_instruction 227 = SOME (Dup 1) /\
   withdrawal_instruction 228 = SOME Eq /\
   withdrawal_instruction 229 = SOME (Push 2 [1w; 131w]) /\
-  withdrawal_instruction 232 = SOME JumpI
+  withdrawal_instruction 232 = SOME JumpI /\
+  withdrawal_instruction 387 = SOME JumpDest
 Proof
   rpt conj_tac >> CONV_TAC cv_eval
 QED
@@ -1540,6 +1541,54 @@ Proof
   qexistsl [`g2`, `keys`, `d'`] >>
   conj_tac >- gvs[Abbr `c1`] >>
   gvs[Abbr `c1`, Abbr `s1`]
+QED
+
+Theorem withdrawal_copy_address_parse[local]:
+  withdrawal_instruction 233 = SOME (Dup 2) /\
+  withdrawal_instruction 234 = SOME (Dup 1) /\
+  withdrawal_instruction 235 = SOME Add /\
+  withdrawal_instruction 236 = SOME (Push 1 [3w]) /\
+  withdrawal_instruction 238 = SOME Mul /\
+  withdrawal_instruction 239 = SOME (Push 1 [4w]) /\
+  withdrawal_instruction 241 = SOME Add /\
+  withdrawal_instruction 242 = SOME (Dup 1) /\
+  withdrawal_instruction 243 = SOME (Push 1 [76w]) /\
+  withdrawal_instruction 245 = SOME Mul /\
+  withdrawal_instruction 246 = SOME (Dup 1) /\
+  withdrawal_instruction 247 = SOME SLoad
+Proof
+  rpt conj_tac >> CONV_TAC cv_eval
+QED
+
+Theorem withdrawal_loop_test_run[local]:
+  c.pc = 225 /\ c.stack = [idx; cnt; head; tail] /\ c.jumpDest = NONE /\
+  c.msgParams.parsed = parse_code 0 FEMPTY withdrawal_request_code /\
+  387 < LENGTH c.msgParams.code /\
+  c.gasUsed + 23 <= c.msgParams.gasLimit ==>
+  run (s with contexts := (c, rb)::cs) = run (s with contexts :=
+    (c with <|stack := [idx; cnt; head; tail]; gasUsed := c.gasUsed + 23;
+      pc := if idx = cnt then 387 else 233|>, rb)::cs)
+Proof
+  strip_tac >>
+  `word_of_bytes F 0w [131w:byte; 1w] = (387w:bytes32)` by
+    (simp[byteTheory.word_of_bytes_def, byteTheory.set_byte_def,
+      byteTheory.byte_index_def, byteTheory.word_slice_alt_zero,
+      byteTheory.word_slice_alt_def] >> wordsLib.WORD_DECIDE_TAC) >>
+  simp[SimpLHS, system_jumpdest_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse] >>
+  simp[SimpLHS, Q.INST [`n` |-> `1`] system_dup_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def] >>
+  simp[SimpLHS, Q.INST [`op` |-> `Eq`,
+    `f` |-> `(\x y:bytes32. b2w (x = y))`] system_binop_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
+    step_inst_def, static_gas_def, opcode_def] >>
+  simp[SimpLHS, Q.INST [`n` |-> `2`, `ws` |-> `[1w:byte; 131w]`] system_push_run,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse, stack_limit_def,
+    static_gas_def, opcode_def] >>
+  Cases_on `idx = cnt` >>
+  simp[SimpLHS, system_jumpi_run, b2w_def, wordsTheory.dimword_def,
+    GSYM withdrawal_instruction_def, withdrawal_entry_parse] >>
+  simp[vfmContextTheory.context_fupdcanon]
 QED
 
 Theorem withdrawal_request_code_correspondence:
