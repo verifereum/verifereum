@@ -1108,14 +1108,24 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-val update_beacon_block_pre_def =
-  cv_auto_trans_pre "update_beacon_block_pre" update_beacon_block_def;
+val update_history_block_pre_def =
+  cv_auto_trans_pre "update_history_block_pre" update_history_block_def;
 
-Theorem update_beacon_block_pre[cv_pre]:
-  update_beacon_block_pre prevHashes b accounts
+Theorem update_history_block_pre[cv_pre]:
+  update_history_block_pre prevHashes b accounts
 Proof
-  rw[update_beacon_block_pre_def]
+  rw[update_history_block_pre_def]
 QED
+
+val () = dequeue_withdrawal_requests_def
+  |> SRULE [dequeue_requests_def]
+  |> cv_auto_trans;
+
+val () = dequeue_consolidation_requests_def
+  |> SRULE [dequeue_requests_def]
+  |> cv_auto_trans;
+
+val () = cv_auto_trans update_beacon_block_def;
 
 val () = cv_auto_trans empty_return_destination_def;
 
@@ -1135,8 +1145,9 @@ QED
 val () = run_transaction_def |> cv_auto_trans;
 
 val () = run_system_transaction_def
-  |> SIMP_RULE std_ss [domain_check_def, bind_def, ignore_bind_def,
-                       LET_RATOR, COND_RATOR]
+  |> SIMP_RULE std_ss [domain_check_def, bind_def, ignore_bind_def, LET_THM,
+                       LET_RATOR, COND_RATOR, LET_PROD_RATOR,
+                       option_CASE_rator, prod_CASE_rator, LET_UNCURRY, UNCURRY]
   |> cv_auto_trans;
 
 Definition run_transactions_def:
@@ -1224,8 +1235,8 @@ Theorem run_block_system_eq:
     if block_invalid rs deposits [withdrawals] [consolidations] b then NONE
     else SOME (rs, a, d)
 Proof
-  rw[run_block_def, OPTION_BIND_eq_case]
-  \\ simp[run_transactions_fold]
+  rewrite_tac[run_block_def, run_transactions_fold]
+  \\ simp[OPTION_BIND_eq_case]
   \\ rpt (CASE_TAC \\ gvs[])
 QED
 

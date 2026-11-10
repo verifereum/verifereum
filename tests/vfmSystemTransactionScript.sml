@@ -1,5 +1,5 @@
 Theory vfmSystemTransaction
-Ancestors vfmCompute vfmSettlement
+Ancestors vfmCompute vfmSettlement vfmSystemContracts
 Libs cv_transLib wordsLib
 
 (* Small modified contracts, independent of the external conformance suite. *)
@@ -305,6 +305,78 @@ QED
 Theorem system_block_rejects_empty_request_code:
   system_block_observation (system_block_accounts [0w] [])
     (system_block [] [] []) = NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* Canonical queues return the source address, public keys and (for withdrawals)
+   the little-endian amount. Use distinct bytes across the storage-word edges. *)
+Definition withdrawal_queue_witness_accounts_def:
+  withdrawal_queue_witness_accounts =
+  let accounts = request_inhibitor_accounts
+    withdrawal_request_contract withdrawal_request_code in
+  let a = lookup_account withdrawal_request_contract accounts in
+  let storage = update_storage 3w 1w a.storage in
+  let storage = update_storage 4w 0x1234w storage in
+  let storage = update_storage 5w
+    (word_of_bytes T 0w (GENLIST (λi. n2w (i + 1)) 32)) storage in
+  let storage = update_storage 6w
+    (word_of_bytes T 0w
+      (GENLIST (λi. n2w (i + 33)) 16 ++
+       [1w; 2w; 3w; 4w; 5w; 6w; 7w; 8w] ++ REPLICATE 8 0w)) storage in
+  update_account withdrawal_request_contract
+    (a with <| storage := storage; nonce := 7; balance := 23 |>) accounts
+End
+val () = cv_auto_trans withdrawal_queue_witness_accounts_def;
+
+Theorem withdrawal_queue_returns_request_bytes:
+  OPTION_MAP (λ(output, accounts, dom).
+    (output, request_queue_metadata withdrawal_request_contract accounts,
+     (lookup_account withdrawal_request_contract accounts).nonce,
+     (lookup_account withdrawal_request_contract accounts).balance))
+    (run_system_transaction T (Collect empty_domain) 1 []
+      (settlement_block 0x300w) withdrawal_queue_witness_accounts
+      withdrawal_request_contract []) =
+  SOME (word_to_bytes (0x1234w:address) T ++
+        GENLIST (λi. n2w (i + 1)) 48 ++
+        [8w; 7w; 6w; 5w; 4w; 3w; 2w; 1w],
+        [1w; 0w; 0w; 0w], 7, 23)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition consolidation_queue_witness_accounts_def:
+  consolidation_queue_witness_accounts =
+  let accounts = request_inhibitor_accounts
+    consolidation_request_contract consolidation_request_code in
+  let a = lookup_account consolidation_request_contract accounts in
+  let storage = update_storage 3w 1w a.storage in
+  let storage = update_storage 4w 0x1234w storage in
+  let storage = update_storage 5w
+    (word_of_bytes T 0w (GENLIST (λi. n2w (i + 1)) 32)) storage in
+  let storage = update_storage 6w
+    (word_of_bytes T 0w
+      (GENLIST (λi. n2w (i + 33)) 16 ++
+       GENLIST (λi. n2w (i + 101)) 16)) storage in
+  let storage = update_storage 7w
+    (word_of_bytes T 0w (GENLIST (λi. n2w (i + 117)) 32)) storage in
+  update_account consolidation_request_contract
+    (a with <| storage := storage; nonce := 7; balance := 23 |>) accounts
+End
+val () = cv_auto_trans consolidation_queue_witness_accounts_def;
+
+Theorem consolidation_queue_returns_request_bytes:
+  OPTION_MAP (λ(output, accounts, dom).
+    (output, request_queue_metadata consolidation_request_contract accounts,
+     (lookup_account consolidation_request_contract accounts).nonce,
+     (lookup_account consolidation_request_contract accounts).balance))
+    (run_system_transaction T (Collect empty_domain) 1 []
+      (settlement_block 0x300w) consolidation_queue_witness_accounts
+      consolidation_request_contract []) =
+  SOME (word_to_bytes (0x1234w:address) T ++
+        GENLIST (λi. n2w (i + 1)) 48 ++
+        GENLIST (λi. n2w (i + 101)) 48,
+        [2w; 0w; 0w; 0w], 7, 23)
 Proof
   CONV_TAC cv_eval
 QED

@@ -34,6 +34,19 @@ request contract invalidates the block. Request bytes come from the calls'
 return data. The high-level ring-buffer and queue models remain available for
 reasoning about canonical code.
 
+The canonical-code correspondence statements in
+`spec/prop/vfmSystemContractsScript.sml` compare both return bytes and the
+entire resulting account state with these models. They require the target
+account to contain the corresponding canonical runtime. The beacon-roots
+statement bounds the timestamp below 2²⁵⁶; the history statement requires a
+positive block number below 2²⁵⁶. Each request-queue statement requires the
+head not to exceed the tail and the normalized excess plus the current
+request count to be below 2²⁵⁶. Normalization maps the deployment inhibitor
+(2²⁵⁶ − 1) to zero before adding the count. These bounds prevent EVM word
+arithmetic from wrapping where the high-level models use natural numbers;
+request storage keys may still wrap. The statements use collecting access
+domains, so they do not require a precomputed access list.
+
 Other active directions include:
 
 - Program logic and proof infrastructure in `prog/`
