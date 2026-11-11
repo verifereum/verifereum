@@ -156,6 +156,23 @@ Definition deposit_event_topic_def:
     0x649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5w
 End
 
+(* Block-processing calls use a separate caller and execution-gas budget. *)
+Definition system_address_def:
+  system_address : address = 0xfffffffffffffffffffffffffffffffffffffffew
+End
+
+Definition system_transaction_gas_def:
+  system_transaction_gas = 30000000n
+End
+
+Definition beacon_roots_address_def:
+  beacon_roots_address : address = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w
+End
+
+Definition history_storage_address_def:
+  history_storage_address : address = 0x0000F90827F1C53a10cb7A02335B175320002935w
+End
+
 Definition withdrawal_request_contract_def:
   withdrawal_request_contract : address =
     0x00000961Ef480Eb55e80D19ad83579A64c007002w

@@ -2,7 +2,7 @@ Theory contractABI
 Ancestors
   arithmetic bit byte combin list rich_list pair numposrep
   integer words integer_word cv cv_std
-  vfmTypes
+  vfmTypes keccak
 Libs
   cv_transLib
   intLib wordsLib
