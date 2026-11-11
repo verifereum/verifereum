@@ -584,6 +584,19 @@ Proof
   rw[buffer_write_def, buffer_extend_def, buffer_length_def, MAX_DEF]
 QED
 
+Theorem buffer_write_preserves_coverage:
+  n <= buffer_length b ==> n <= buffer_length (buffer_write p bs b)
+Proof
+  Cases_on `bs = []` >> simp[buffer_length_write, MAX_DEF]
+QED
+
+Theorem buffer_write_covers_endpoint:
+  bs <> [] /\ n <= p + LENGTH bs ==>
+  n <= buffer_length (buffer_write p bs b)
+Proof
+  simp[buffer_length_write, MAX_DEF]
+QED
+
 Theorem buffer_to_list_write_le:
   (bs ≠ [] ⇒ offset ≤ buffer_length b) ⇒
   buffer_to_list (buffer_write offset bs b) =
