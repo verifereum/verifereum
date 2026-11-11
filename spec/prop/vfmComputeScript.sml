@@ -1134,6 +1134,12 @@ QED
 
 val () = run_transaction_def |> cv_auto_trans;
 
+val () = run_system_transaction_def
+  |> SIMP_RULE std_ss [domain_check_def, bind_def, ignore_bind_def, LET_THM,
+                       LET_RATOR, COND_RATOR, LET_PROD_RATOR,
+                       option_CASE_rator, prod_CASE_rator, LET_UNCURRY, UNCURRY]
+  |> cv_auto_trans;
+
 Definition run_transactions_def:
   run_transactions d st c h b a rs [] = SOME (REVERSE rs, a, d) ∧
   run_transactions d st c h b a rs (tx::txs) =
@@ -1165,52 +1171,63 @@ val () = cv_auto_trans header_invalid_def;
 val () = cv_auto_trans $
   REWRITE_RULE [GSYM word_of_bytes_be_def] block_invalid_def;
 
-Theorem run_block_eq:
+Theorem run_transactions_fold:
+  FOLDL
+    (λx tx.
+       OPTION_BIND x (λ(ls, a, dom).
+         if tx.gasLimit > b.gasLimit - SUM (MAP (λr. r.gasUsed) ls) ∨
+            (case tx.maxFeePerGas of SOME x => x | NONE => tx.gasPrice)
+              < b.baseFeePerGas
+         then NONE else
+         OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
+         run_transaction dom F chainId h b a tx))
+    (SOME (rs, a, d)) ts =
+  run_transactions d F chainId h b a (REVERSE rs) ts
+Proof
+  qmatch_goalsub_abbrev_tac`FOLDL f`
+  \\ `∀xs. FOLDL f NONE xs = NONE` by
+       (Induct \\ simp[Abbr`f`])
+  \\ map_every qid_spec_tac [`d`, `a`, `rs`]
+  \\ Induct_on`ts`
+  \\ rw[run_transactions_def, Abbr`f`,
+        MAP_REVERSE, SUM_REVERSE]
+  \\ rpt (CASE_TAC \\ gvs[REVERSE_SNOC])
+QED
+
+(* Executable block equation: transaction recursion uses a reversed accumulator. *)
+Theorem run_block_system_eq:
   run_block d chainId h p a b =
   if b.rlpSize > max_rlp_block_size then NONE else
   if header_invalid p b then NONE else
-  case
-    run_transactions d F chainId h b
-      (update_beacon_block h b a) [] b.transactions
-  of NONE => NONE
-   | SOME (rs, a, d) =>
-     let all_logs = FLAT (MAP (λr. r.logs) rs) in
-     case extract_deposit_requests all_logs of
-       NONE => NONE
-     | SOME deposits =>
-         let (withdrawals, a1) = dequeue_withdrawal_requests a in
-         let (consolidations, a2) = dequeue_consolidation_requests a1 in
-         (if block_invalid rs deposits withdrawals consolidations b then NONE else
-          case process_withdrawals b.withdrawals (a2, d) of
-               NONE => NONE
-             | SOME (a, d) => SOME (rs, a, d))
+  case run_system_transaction F d chainId h b a beacon_roots_address
+         (word_to_bytes b.parentBeaconBlockRoot T) of
+    NONE => NONE
+  | SOME (_, a, d) =>
+  case run_system_transaction F d chainId h b a history_storage_address
+         (word_to_bytes p.hash T) of
+    NONE => NONE
+  | SOME (_, a, d) =>
+  case run_transactions d F chainId h b a [] b.transactions of
+    NONE => NONE
+  | SOME (rs, a, d) =>
+  case process_withdrawals b.withdrawals (a, d) of
+    NONE => NONE
+  | SOME (a, d) =>
+  case extract_deposit_requests (FLAT (MAP (λr. r.logs) rs)) of
+    NONE => NONE
+  | SOME deposits =>
+  case run_system_transaction T d chainId h b a withdrawal_request_contract [] of
+    NONE => NONE
+  | SOME (withdrawals, a, d) =>
+  case run_system_transaction T d chainId h b a consolidation_request_contract [] of
+    NONE => NONE
+  | SOME (consolidations, a, d) =>
+    if block_invalid rs deposits [withdrawals] [consolidations] b then NONE
+    else SOME (rs, a, d)
 Proof
-  rw[run_block_def]
-  \\ qspec_tac(`b.transactions`,`ts`)
-  \\ qspec_tac(`update_beacon_block h b a`,`blk`)
-  \\ qid_spec_tac`d`
-  \\ simp_tac std_ss
-       [Once (Q.prove(`[]:transaction_result list = REVERSE []`, simp[])), SimpRHS]
-  \\ qspec_tac(`[]:transaction_result list`,`rs`)
-  \\ Induct_on`ts`
-  \\ rw[run_transactions_def, MAP_REVERSE, SUM_REVERSE]
-  >- ( gs[OPTION_BIND_eq_case, UNCURRY, CaseEq"prod"]
-       \\ CASE_TAC \\ gs[] \\ Cases_on`x` \\ gs[] )
-  \\ qmatch_goalsub_abbrev_tac`FOLDL f`
-  \\ `∀ts. FOLDL f NONE ts = NONE` by (simp[Abbr`f`] \\ Induct \\ simp[])
-  \\ TRY (simp[] \\ NO_TAC)
-  \\ qmatch_goalsub_abbrev_tac`OPTION_MAP _ rt`
-  \\ Cases_on`rt`
-  >- (
-    gvs[]
-    \\ disj1_tac
-    \\ rw[Abbr`f`]
-    \\ rpt (pop_assum kall_tac)
-    \\ Induct_on`ts` \\ rw[] )
-  \\ qmatch_goalsub_rename_tac`SOME q`
-  \\ PairCases_on`q` \\ gvs[OPTION_BIND_eq_case]
-  \\ CASE_TAC \\ gvs[SNOC_APPEND, REVERSE_APPEND]
-  \\ Cases_on`x` \\ gs[]
+  rewrite_tac[run_block_def, run_transactions_fold]
+  \\ simp[OPTION_BIND_eq_case]
+  \\ rpt (CASE_TAC \\ gvs[])
 QED
 
 val () = cv_auto_trans parse_deposit_request_def;
@@ -1221,7 +1238,7 @@ val () = process_withdrawals_def
          |> SRULE [OPTION_BIND_eq_case]
          |> cv_auto_trans;
 
-val () = cv_auto_trans run_block_eq;
+val () = cv_auto_trans run_block_system_eq;
 
 val () = cv_auto_trans run_block_to_hash_def;
 

@@ -22,7 +22,7 @@ Theory vfmAccountFrame
 Ancestors
   combin pair option list rich_list relation arithmetic While
   vfmTypes vfmState vfmContext vfmExecution vfmExecutionProp
-  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmStaticCalls vfmDecreasesGas
+  vfmSameFrame vfmRunWithinFrame vfmRunCall vfmWfState vfmStaticCalls vfmDecreasesGas
   vfmStoragePredicates vfmPreserves vfmHandleStep vfmStepLength
 Libs
   BasicProvers

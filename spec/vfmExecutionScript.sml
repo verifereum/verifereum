@@ -1898,6 +1898,51 @@ Definition run_transaction_def:
      | _ => NONE
 End
 
+(* No transaction admission, intrinsic gas, nonce increment or fee settlement.
+   Only delegated code starts warm. Domain errors are evaluator failures even
+   for unchecked calls; ordinary EVM failures roll back their account changes. *)
+Definition run_system_transaction_def:
+  run_system_transaction checked dom chainId prevHashes blk accounts target data =
+  let stored_code = (lookup_account target accounts).code in
+  if checked ∧ NULL stored_code then NONE else
+  let tx = <| from := system_address; to := SOME target; value := 0;
+              gasLimit := system_transaction_gas; data := data; nonce := 0;
+              gasPrice := blk.baseFeePerGas; accessList := [];
+              blobVersionedHashes := []; maxFeePerGas := NONE;
+              maxFeePerBlobGas := NONE; authorizationList := [] |> in
+  let (code, accesses) = code_from_tx accounts
+    <| addresses := fEMPTY; storageKeys := fEMPTY |> tx in
+  let rb = initial_rollback accounts accesses in
+  let ctxt = initial_context target code F empty_return_destination tx in
+  let st = <| contexts := [(ctxt, rb)];
+              txParams := initial_tx_params chainId prevHashes blk tx 0;
+              rollback := rb; originalAccounts := accounts; msdomain := dom |> in
+  let check_domain = do
+    domain_check (INL target)
+      (λd. fIN target d.addresses)
+      (λd. d with addresses updated_by fINSERT target) (return ());
+    case get_delegate stored_code of
+      NONE => return ()
+    | SOME delegate => do access_address delegate; return () od
+  od in
+  case check_domain st of
+    (INL (), s0) =>
+      (case run s0 of
+         SOME (INR e, s) =>
+           if vfm_abort e ∨ (checked ∧ e ≠ NONE) then NONE else
+           (case s.contexts of
+              [(c, _)] =>
+                SOME (c.returnData,
+                      if e = NONE then
+                        process_deletions s.rollback.toDelete s.rollback.accounts
+                      else accounts,
+                      s.msdomain)
+            | _ => NONE)
+       | _ => NONE)
+  | _ => NONE
+End
+
+(* High-level canonical-code model, retained independently of block execution. *)
 Definition update_beacon_block_def:
   update_beacon_block prevHashes b (accounts: evm_accounts) =
   let beacon_addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
@@ -2155,6 +2200,14 @@ Definition run_block_def:
   run_block dom chainId prevHashes parent accounts b =
   if b.rlpSize > max_rlp_block_size then NONE else
   if header_invalid parent b then NONE else
+  OPTION_BIND
+    (run_system_transaction F dom chainId prevHashes b accounts
+       beacon_roots_address (word_to_bytes b.parentBeaconBlockRoot T))
+  (λ(_, a, dom).
+  OPTION_BIND
+    (run_system_transaction F dom chainId prevHashes b a
+       history_storage_address (word_to_bytes parent.hash T))
+  (λ(_, a, dom).
   OPTION_BIND (
     FOLDL
       (λx tx.
@@ -2165,17 +2218,20 @@ Definition run_block_def:
            then NONE else
            OPTION_MAP (λ(r, a). (SNOC r ls, a, r.domain)) $
            run_transaction dom F chainId prevHashes b a tx))
-      (SOME ([], update_beacon_block prevHashes b accounts, dom))
+      (SOME ([], a, dom))
       b.transactions )
   (λ(rs, a, d).
+    OPTION_BIND (process_withdrawals b.withdrawals (a, d)) (λ(a, d).
     let all_logs = FLAT (MAP (λr. r.logs) rs) in
     OPTION_BIND (extract_deposit_requests all_logs) (λdeposits.
-      let (withdrawals, a1) = dequeue_withdrawal_requests a in
-      let (consolidations, a2) = dequeue_consolidation_requests a1 in
-      if block_invalid rs deposits withdrawals consolidations b then NONE
-      else
-        OPTION_BIND (process_withdrawals b.withdrawals (a2, d))
-          (λ(a, d). SOME (rs, a, d))))
+      OPTION_BIND
+        (run_system_transaction T d chainId prevHashes b a
+           withdrawal_request_contract []) (λ(withdrawals, a, d).
+      OPTION_BIND
+        (run_system_transaction T d chainId prevHashes b a
+           consolidation_request_contract []) (λ(consolidations, a, d).
+      if block_invalid rs deposits [withdrawals] [consolidations] b then NONE
+      else SOME (rs, a, d))))))))
 End
 
 Definition run_blocks_def:

@@ -4,7 +4,7 @@ Ancestors
   sorting While words
   finite_map sptree
   recursiveLengthPrefix
-  vfmTypes
+  vfmTypes keccak
 Libs
   cv_transLib
   blastLib wordsLib
