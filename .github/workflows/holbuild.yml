@@ -133,7 +133,7 @@ jobs:
       - name: Export HBX archive
         run: |
           archive="$HBX_BASENAME.hbx"
-          holbuild export \
+          holbuild export --closure \
             -o "$archive" \
             --metadata-out "$archive.json"
           sha256sum "$archive" > "$archive.sha256"
