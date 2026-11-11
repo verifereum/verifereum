@@ -12,18 +12,6 @@ Libs
 
 Overload Num[local] = “cv$Num”
 
-(* TODO: move *)
-
-Theorem fCARD_num_cv_rep[cv_rep]:
-  Num (fCARD (s: num fset)) =
-  cv_size' (from_num_fset s)
-Proof
-  rw[from_num_fset_def, GSYM cv_size'_thm, size_list_to_num_set]
-  \\ irule EQ_SYM
-  \\ irule(SIMP_RULE std_ss [quotientTheory.FUN_REL] fCARD_relates)
-  \\ simp[FSET_def]
-QED
-
 Theorem word_lsl_modexp:
   word_lsl (w:'a word) n =
   if n < dimindex(:'a) then
@@ -319,7 +307,7 @@ QED
 Theorem fCARD_word_cv_rep[cv_rep]:
   Num (fCARD s) = cv_size' (from_word_fset s)
 Proof
-  rw[from_word_fset_def, GSYM fCARD_num_cv_rep, GSYM CARD_toSet, toSet_fIMAGE]
+  rw[from_word_fset_def, GSYM cv_stdTheory.fCARD_num_cv_rep, GSYM CARD_toSet, toSet_fIMAGE]
   \\ irule EQ_SYM
   \\ irule pred_setTheory.CARD_INJ_IMAGE
   \\ simp[]
@@ -328,7 +316,7 @@ QED
 Theorem fCARD_storage_key_cv_rep[cv_rep]:
   Num (fCARD s) = cv_size' (from_storage_key_fset s)
 Proof
-  rw[from_storage_key_fset_def, GSYM fCARD_num_cv_rep,
+  rw[from_storage_key_fset_def, GSYM cv_stdTheory.fCARD_num_cv_rep,
      GSYM CARD_toSet, toSet_fIMAGE]
   \\ irule EQ_SYM
   \\ irule pred_setTheory.CARD_INJ_IMAGE
