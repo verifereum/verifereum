@@ -1,5 +1,5 @@
 Theory vfmTestDefs0248[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/osaka/eip7594_peerdas/max_blob_per_tx/invalid_max_blobs_per_tx.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/osaka/eip7594_peerdas/max_blob_per_tx/invalid_max_blobs_per_tx.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/london/eip1559_fee_market_change/tx_type/invalid_chain_id.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/london/eip1559_fee_market_change/tx_type/invalid_chain_id.json");
 val defs = mapi (define_test "0248") tests;

@@ -1,5 +1,5 @@
 Theory vfmTestDefs1572[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stReturnDataTest/call_outsize_then_create_successful_then_returndatasize/call_outsize_then_create_successful_then_returndatasize.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stReturnDataTest/call_outsize_then_create_successful_then_returndatasize/call_outsize_then_create_successful_then_returndatasize.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stShift/sar_2_255_257/sar_2_255_257.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stShift/sar_2_255_257/sar_2_255_257.json");
 val defs = mapi (define_test "1572") tests;

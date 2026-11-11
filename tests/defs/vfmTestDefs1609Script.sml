@@ -1,5 +1,5 @@
 Theory vfmTestDefs1609[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stReturnDataTest/revert_ret_data_size/revert_ret_data_size.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stReturnDataTest/revert_ret_data_size/revert_ret_data_size.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stSolidityTest/recursive_create_contracts/recursive_create_contracts.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stSolidityTest/recursive_create_contracts/recursive_create_contracts.json");
 val defs = mapi (define_test "1609") tests;

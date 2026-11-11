@@ -1,7 +1,7 @@
 Theory vfmTest2114[no_sig_docs]
 Ancestors vfmTestDefs2114
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result2114_0.nsv"];
+val () = holbuild_extra_outputs ["result2114_0.nsv", "result2114_1.nsv", "result2114_2.nsv", "result2114_3.nsv", "result2114_4.nsv"];
 val thyn = "vfmTestDefs2114";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
