@@ -1,5 +1,5 @@
 Theory vfmTestDefs0246[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/london/eip1559_fee_market_change/tx_type/invalid_chain_id.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/london/eip1559_fee_market_change/tx_type/invalid_chain_id.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/istanbul/eip2200_net_gas_metering/sstore_combinations/sstore_combinations_initial_staticcall_only.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/istanbul/eip2200_net_gas_metering/sstore_combinations/sstore_combinations_initial_staticcall_only.json");
 val defs = mapi (define_test "0246") tests;

@@ -1,7 +1,7 @@
 Theory vfmTest2178[no_sig_docs]
 Ancestors vfmTestDefs2178
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result2178_0.nsv"];
+val () = holbuild_extra_outputs ["result2178_0.nsv", "result2178_1.nsv", "result2178_2.nsv", "result2178_3.nsv"];
 val thyn = "vfmTestDefs2178";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

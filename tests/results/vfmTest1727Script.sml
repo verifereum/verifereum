@@ -1,7 +1,7 @@
 Theory vfmTest1727[no_sig_docs]
 Ancestors vfmTestDefs1727
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result1727_0.nsv"];
+val () = holbuild_extra_outputs ["result1727_0.nsv", "result1727_1.nsv"];
 val thyn = "vfmTestDefs1727";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

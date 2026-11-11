@@ -1,5 +1,5 @@
 Theory vfmTestDefs2121[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stWalletTest/multi_owned_change_owner_to_is_owner/multi_owned_change_owner_to_is_owner.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stWalletTest/multi_owned_change_owner_to_is_owner/multi_owned_change_owner_to_is_owner.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/vmTests/block_info/block_info.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/vmTests/block_info/block_info.json");
 val defs = mapi (define_test "2121") tests;

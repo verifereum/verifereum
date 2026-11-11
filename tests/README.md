@@ -29,7 +29,7 @@ in anything meant to outlast a release.
 ## Fixtures
 
 The EEST release is `fixtures_version` in `vfmTestAuxLib.sml` (currently
-21.0.1, which has 2449 Osaka blockchain test files with 17550 cases). When
+21.0.2, which has 2333 Osaka blockchain test files with 17441 cases). When
 `fixtures/version.txt` does not match it, `runtests.exe` downloads
 `fixtures.tar.gz` from the `tests@v<version>` release of
 ethereum/execution-specs (about 1 GB) and extracts it into `fixtures/`
@@ -195,20 +195,20 @@ a path that is not in the fixtures' index is an error, so a release that
 drops or renames one of these files stops the run rather than silently
 running it in parallel.
 
-The current list, with its indices at 21.0.1:
+The current list, with its indices at 21.0.2:
 
 | Index | Json path (under `blockchain_tests/for_osaka/`) |
 | --- | --- |
-| 0258 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_addr.json` |
-| 0259 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_keys.json` |
-| 0279 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_logs.json` |
-| 0280 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_withdrawals.json` |
-| 0281 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_size_limit_boundary.json` |
-| 0282 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_rlp_size_at_limit_with_all_typed_transactions.json` |
-| 0984 | `ported_static/stPreCompiledContracts/precomps_eip2929_cancun/precomps_eip2929_cancun.json` |
-| 2263 | `prague/eip2537_bls_12_381_precompiles/bls12_g2msm/valid.json` |
-| 2327 | `prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_4.json` |
-| 2335 | `prague/eip7702_set_code_tx/gas/intrinsic_gas_cost.json` |
+| 0309 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_addr.json` |
+| 0310 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_keys.json` |
+| 0330 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_logs.json` |
+| 0331 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_withdrawals.json` |
+| 0332 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_size_limit_boundary.json` |
+| 0333 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_rlp_size_at_limit_with_all_typed_transactions.json` |
+| 0863 | `ported_static/stPreCompiledContracts/precomps_eip2929_cancun/precomps_eip2929_cancun.json` |
+| 2143 | `prague/eip2537_bls_12_381_precompiles/bls12_g2msm/valid.json` |
+| 2209 | `prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_4.json` |
+| 2218 | `prague/eip7702_set_code_tx/gas/intrinsic_gas_cost.json` |
 
 The list and the timings below come from full runs at 20.0.2 ([#95
 (comment)](https://github.com/verifereum/verifereum/issues/95#issuecomment-5558158839),
