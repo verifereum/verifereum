@@ -7,16 +7,6 @@ Libs
   wordsLib
   cv_transLib
 
-(* TODO: move? *)
-
-Theorem SUM_less_EVERY_less:
-  SUM ls < n ==> EVERY (λx. x < n) ls
-Proof
-  Induct_on`ls` \\ rw[]
-QED
-
-(* -- *)
-
 Datatype:
   rlp = RLPB (word8 list) | RLPL (rlp list)
 End
@@ -958,7 +948,7 @@ Proof
     \\ gs[MAP_MAP_o, o_DEF]
     \\ qmatch_asmsub_abbrev_tac`SUM lf`
     \\ `SUM lf < 2 ** 64` by simp[]
-    \\ drule SUM_less_EVERY_less
+    \\ drule listTheory.SUM_less_EVERY_less
     \\ simp[Abbr`lf`, EVERY_MAP]
     \\ simp[TAKE_APPEND, DROP_LENGTH_TOO_LONG, LENGTH_FLAT, MAP_MAP_o, o_DEF])
   \\ qmatch_asmsub_abbrev_tac`rlp_list bs = off ++ bs`
@@ -1010,6 +1000,6 @@ Proof
   \\ gvs[LENGTH_rlp_list, Abbr`bs`, LENGTH_FLAT]
   \\ qmatch_asmsub_abbrev_tac`SUM lf`
   \\ `SUM lf < 2 ** 64` by simp[]
-  \\ drule SUM_less_EVERY_less
+  \\ drule listTheory.SUM_less_EVERY_less
   \\ simp[Abbr`lf`, EVERY_MAP]
 QED
