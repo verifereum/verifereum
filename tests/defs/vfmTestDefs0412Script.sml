@@ -1,5 +1,5 @@
 Theory vfmTestDefs0412[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCallCodes/callcodecall_10_ooge/callcodecall_10_ooge.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCallCodes/callcodecall_10_ooge/callcodecall_10_ooge.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stBadOpcode/invalid_addr/invalid_addr.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stBadOpcode/invalid_addr/invalid_addr.json");
 val defs = mapi (define_test "0412") tests;

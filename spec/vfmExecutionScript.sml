@@ -1942,26 +1942,26 @@ Definition run_system_transaction_def:
   | _ => NONE
 End
 
-(* High-level canonical-code model, retained independently of block execution. *)
+(* High-level canonical-code models, independent of block execution. *)
+Definition update_history_block_def:
+  update_history_block prevHashes b (accounts: evm_accounts) =
+  if b.number = 0 ∨ prevHashes = [] then accounts else
+  let slot = (b.number - 1) MOD 8191 in
+  let a = lookup_account history_storage_address accounts in
+  update_account history_storage_address
+    (a with storage := update_storage (n2w slot) (HD prevHashes) a.storage)
+    accounts
+End
+
 Definition update_beacon_block_def:
   update_beacon_block prevHashes b (accounts: evm_accounts) =
-  let beacon_addr = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02w in
-  let beacon_buffer_length = 8191n in
-  let timestamp_idx = b.timeStamp MOD beacon_buffer_length in
-  let root_idx = timestamp_idx + beacon_buffer_length in
-  let a = lookup_account beacon_addr accounts in
-  let s0 = a.storage in
-  let s1 = update_storage (n2w timestamp_idx) (n2w b.timeStamp) s0 in
-  let s2 = update_storage (n2w root_idx) (b.parentBeaconBlockRoot) s1 in
-  let accounts1 = update_account beacon_addr (a with storage := s2) accounts in
-  if b.number = 0 ∨ prevHashes = [] then accounts1 else
-  let blockhash_addr = 0x0000F90827F1C53a10cb7A02335B175320002935w in
-  let blockhash_buffer_length = 8191n in
-  let slot = (b.number - 1) MOD blockhash_buffer_length in
-  let parent_hash = HD prevHashes in
-  let a2 = lookup_account blockhash_addr accounts1 in
-  let s3 = update_storage (n2w slot) parent_hash a2.storage in
-  update_account blockhash_addr (a2 with storage := s3) accounts1
+  let timestamp_idx = b.timeStamp MOD 8191 in
+  let root_idx = timestamp_idx + 8191 in
+  let a = lookup_account beacon_roots_address accounts in
+  let s1 = update_storage (n2w timestamp_idx) (n2w b.timeStamp) a.storage in
+  let s2 = update_storage (n2w root_idx) b.parentBeaconBlockRoot s1 in
+  update_history_block prevHashes b
+    (update_account beacon_roots_address (a with storage := s2) accounts)
 End
 
 Definition process_withdrawal_def:
@@ -2051,28 +2051,34 @@ Definition read_withdrawal_request_def:
   source_addr ++ pubkey_part1 ++ pubkey_part2 ++ amount
 End
 
-Definition dequeue_withdrawal_requests_def:
-  dequeue_withdrawal_requests accounts =
-  let contract = lookup_account withdrawal_request_contract accounts in
+(* Share queue bookkeeping; each request format supplies its own reader.
+   The deployment inhibitor is cleared before updating the next-block excess. *)
+Definition dequeue_requests_def:
+  dequeue_requests address limit target reader accounts =
+  let contract = lookup_account address accounts in
   let storage = contract.storage in
   let head = w2n (lookup_storage 2w storage) in
   let tail = w2n (lookup_storage 3w storage) in
-  let dequeue_count = MIN (tail - head) max_withdrawal_requests_per_block in
-  let requests = GENLIST (λi. read_withdrawal_request storage (head + i)) dequeue_count in
+  let dequeue_count = MIN (tail - head) limit in
+  let requests = GENLIST (λi. reader storage (head + i)) dequeue_count in
   let new_head = head + dequeue_count in
-  let old_excess = w2n (lookup_storage 0w storage) in
+  let excess_word = lookup_storage 0w storage in
+  let old_excess = if excess_word = (n2w (2 ** 256 - 1) : bytes32)
+                   then 0 else w2n excess_word in
   let add_count = w2n (lookup_storage 1w storage) in
-  let new_excess = if old_excess + add_count > target_withdrawal_requests_per_block
-                   then old_excess + add_count - target_withdrawal_requests_per_block
-                   else 0 in
+  let new_excess = old_excess + add_count - target in
   let storage1 = update_storage 0w (n2w new_excess) storage in
   let storage2 = update_storage 1w 0w storage1 in
   let storage3 = if new_head = tail
                  then update_storage 3w 0w (update_storage 2w 0w storage2)
                  else update_storage 2w (n2w new_head) storage2 in
-  let updated_contract = contract with storage := storage3 in
-  let updated_accounts = update_account withdrawal_request_contract updated_contract accounts in
-  (requests, updated_accounts)
+  (requests, update_account address (contract with storage := storage3) accounts)
+End
+
+Definition dequeue_withdrawal_requests_def:
+  dequeue_withdrawal_requests accounts =
+    dequeue_requests withdrawal_request_contract max_withdrawal_requests_per_block
+      target_withdrawal_requests_per_block read_withdrawal_request accounts
 End
 
 Definition read_consolidation_request_def:
@@ -2094,26 +2100,8 @@ End
 
 Definition dequeue_consolidation_requests_def:
   dequeue_consolidation_requests accounts =
-  let contract = lookup_account consolidation_request_contract accounts in
-  let storage = contract.storage in
-  let head = w2n (lookup_storage 2w storage) in
-  let tail = w2n (lookup_storage 3w storage) in
-  let dequeue_count = MIN (tail - head) max_consolidation_requests_per_block in
-  let requests = GENLIST (λi. read_consolidation_request storage (head + i)) dequeue_count in
-  let new_head = head + dequeue_count in
-  let old_excess = w2n (lookup_storage 0w storage) in
-  let add_count = w2n (lookup_storage 1w storage) in
-  let new_excess = if old_excess + add_count > target_consolidation_requests_per_block
-                   then old_excess + add_count - target_consolidation_requests_per_block
-                   else 0 in
-  let storage1 = update_storage 0w (n2w new_excess) storage in
-  let storage2 = update_storage 1w 0w storage1 in
-  let storage3 = if new_head = tail
-                 then update_storage 3w 0w (update_storage 2w 0w storage2)
-                 else update_storage 2w (n2w new_head) storage2 in
-  let updated_contract = contract with storage := storage3 in
-  let updated_accounts = update_account consolidation_request_contract updated_contract accounts in
-  (requests, updated_accounts)
+    dequeue_requests consolidation_request_contract max_consolidation_requests_per_block
+      target_consolidation_requests_per_block read_consolidation_request accounts
 End
 
 Definition compute_requests_hash_def:

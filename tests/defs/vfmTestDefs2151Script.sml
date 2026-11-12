@@ -1,5 +1,5 @@
 Theory vfmTestDefs2151[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stWalletTest/wallet_remove_owner_remove_pending_transaction/wallet_remove_owner_remove_pending_transaction.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stWalletTest/wallet_remove_owner_remove_pending_transaction/wallet_remove_owner_remove_pending_transaction.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip2537_bls_12_381_precompiles/bls12_map_fp2_to_g2/valid.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip2537_bls_12_381_precompiles/bls12_map_fp2_to_g2/valid.json");
 val defs = mapi (define_test "2151") tests;

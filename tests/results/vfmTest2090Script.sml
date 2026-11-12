@@ -1,7 +1,7 @@
 Theory vfmTest2090[no_sig_docs]
 Ancestors vfmTestDefs2090
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result2090_0.nsv"];
+val () = holbuild_extra_outputs ["result2090_0.nsv", "result2090_1.nsv", "result2090_2.nsv", "result2090_3.nsv", "result2090_4.nsv"];
 val thyn = "vfmTestDefs2090";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;
