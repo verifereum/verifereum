@@ -1096,14 +1096,24 @@ Proof
   \\ strip_tac \\ gs[]
 QED
 
-val update_beacon_block_pre_def =
-  cv_auto_trans_pre "update_beacon_block_pre" update_beacon_block_def;
+val update_history_block_pre_def =
+  cv_auto_trans_pre "update_history_block_pre" update_history_block_def;
 
-Theorem update_beacon_block_pre[cv_pre]:
-  update_beacon_block_pre prevHashes b accounts
+Theorem update_history_block_pre[cv_pre]:
+  update_history_block_pre prevHashes b accounts
 Proof
-  rw[update_beacon_block_pre_def]
+  rw[update_history_block_pre_def]
 QED
+
+val () = dequeue_withdrawal_requests_def
+  |> SRULE [dequeue_requests_def]
+  |> cv_auto_trans;
+
+val () = dequeue_consolidation_requests_def
+  |> SRULE [dequeue_requests_def]
+  |> cv_auto_trans;
+
+val () = cv_auto_trans update_beacon_block_def;
 
 val () = cv_auto_trans empty_return_destination_def;
 

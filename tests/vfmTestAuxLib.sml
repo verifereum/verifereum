@@ -52,7 +52,7 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
     else s
   end
 
-  val fixtures_version = "21.0.1"
+  val fixtures_version = "21.0.2"
   val fork_name = "Osaka"
 
   val time_limit = Option.getOpt

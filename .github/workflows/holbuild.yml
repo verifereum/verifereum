@@ -39,7 +39,7 @@ jobs:
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          holbuild-ref: v0.14.16
+          holbuild-ref: v0.14.24
 
       - name: Report selected holbuild version
         run: holbuild --version
@@ -134,6 +134,7 @@ jobs:
         run: |
           archive="$HBX_BASENAME.hbx"
           holbuild export \
+            --closure \
             -o "$archive" \
             --metadata-out "$archive.json"
           sha256sum "$archive" > "$archive.sha256"
