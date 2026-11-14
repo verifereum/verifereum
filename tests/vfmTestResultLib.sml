@@ -9,7 +9,8 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
 
   (* The genesis state root check dominates evaluation, and tests in a file
      often share their pre-state, or storage maps and code within it. Each
-     distinct value is proved once by cv_eval, cached here for the rest of
+     distinct pre-state's root, and each storage map or code that repeats
+     in the file, is proved once by cv_eval, cached here for the rest of
      the file, and the per-test evaluation starts from the proved root. *)
 
   val storage_root_tm = prim_mk_const{Thy="vfmRoot",Name="storage_root"}
@@ -23,6 +24,10 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
   val storage_root_cache : (term, thm) Redblackmap.dict ref = empty_cache ()
   val code_hash_cache : (term, thm) Redblackmap.dict ref = empty_cache ()
   val state_root_cache : (term, thm) Redblackmap.dict ref = empty_cache ()
+
+  fun empty_seen () = ref $ Redblackset.empty Term.compare
+  val storage_seen : term Redblackset.set ref = empty_seen ()
+  val code_seen : term Redblackset.set ref = empty_seen ()
 
   fun cached cache prove key =
     case Redblackmap.peek(!cache, key) of
@@ -43,12 +48,23 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
   fun account_field name account =
     Lib.assoc name $ #2 $ TypeBase.dest_record account
 
-  (* Theorems `f k = v` for the distinct k among keys, each proved once. *)
-  fun lemmas_for cache f keys = let
+  (* Theorems `f k = v` for the k among keys that repeat: met in an earlier
+     pre-state of the file, or more than once among keys. Each is proved
+     once. A key met only once is left to the memo's fallback, which
+     computes it inside the root's cv_eval: cv_eval translates the literal
+     table superlinearly in its size, so thousands of single-use entries
+     would cost far more than computing them in place. *)
+  fun lemmas_for cache seen f keys = let
     fun prove k = cv_eval $ mk_comb(f, k)
-    val distinct = Redblackset.addList(Redblackset.empty Term.compare, keys)
+    fun note (k, (seen, repeated)) =
+      if Redblackset.member(seen, k)
+      then (seen, Redblackset.add(repeated, k))
+      else (Redblackset.add(seen, k), repeated)
+    val (seen', repeated) =
+      List.foldl note (!seen, Redblackset.empty Term.compare) keys
+    val () = seen := seen'
   in
-    List.map (cached cache prove) $ Redblackset.listItems distinct
+    List.map (cached cache prove) $ Redblackset.listItems repeated
   end
 
   (* The table [(k, v); ...] of lemmas ⊢ f k = v, and
@@ -73,9 +89,10 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
   fun prove_state_root pre_def = let
     val pre = lhs $ concl pre_def
     val accounts = account_list $ rhs $ concl pre_def
-    val storage_lemmas = lemmas_for storage_root_cache storage_root_tm $
-      List.map (account_field "storage") accounts
-    val code_lemmas = lemmas_for code_hash_cache keccak_tm $
+    val storage_lemmas =
+      lemmas_for storage_root_cache storage_seen storage_root_tm $
+        List.map (account_field "storage") accounts
+    val code_lemmas = lemmas_for code_hash_cache code_seen keccak_tm $
       List.map (account_field "code") accounts
     val (st, st_valid) = lemma_table storage_root_tm storage_lemmas
     val (ct, ct_valid) = lemma_table keccak_tm code_lemmas
@@ -97,14 +114,16 @@ structure vfmTestResultLib :> vfmTestResultLib = struct
 
   (* The root gets its own time limit, so whether a test passes does not
      depend on whether an earlier test already proved its root. A timed-out
-     root leaves the caches as they were, so every test sharing it times out
-     alike. *)
+     root leaves the caches and seen sets as they were, so every test
+     sharing it times out alike. *)
   fun timed_state_root_thm pre_def = let
-    val saved = (!storage_root_cache, !code_hash_cache)
+    val saved = (!storage_root_cache, !code_hash_cache,
+                 !storage_seen, !code_seen)
   in
     Timeout.apply time_limit state_root_thm pre_def
     handle e as Timeout.TIMEOUT _ =>
-      (storage_root_cache := #1 saved; code_hash_cache := #2 saved; raise e)
+      (storage_root_cache := #1 saved; code_hash_cache := #2 saved;
+       storage_seen := #3 saved; code_seen := #4 saved; raise e)
   end
 
   fun eval_rhs thyn result_def = let
