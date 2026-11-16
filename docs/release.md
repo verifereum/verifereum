@@ -31,12 +31,13 @@ commit and uploads those exact files to the GitHub Release.
 ## Manual archive build
 
 The CI artefact is the preferred release source. To build the same archive
-locally or from another CI system, use holbuild v0.12.0 or newer:
+locally or from another CI system, use holbuild v0.14.20 or newer:
 
 ```bash
 holbuild buildhol
 holbuild -j"$(nproc)" build
 holbuild export \
+  --closure \
   -o verifereum.hbx \
   --metadata-out verifereum.hbx.json
 sha256sum verifereum.hbx > verifereum.hbx.sha256

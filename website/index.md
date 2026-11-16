@@ -14,7 +14,11 @@ Verifereum is an executable formal semantics of the [Ethereum](https://ethereum.
 
 ## Status
 
-The semantics targets the live fork, Osaka, and is tested against the 17550 Osaka blockchain tests in the [Ethereum Execution Spec Tests (EEST)](https://steel.ethereum.foundation/docs/execution-specs/) v21.0.1, in two ways. The checked runner evaluates each test inside the logic, so every result is a theorem; a full run takes about five hours on 16 cores, and the last one passed 17485 of them, 99.6% ([checked results](table.html)). The unchecked runner compiles the same definitions to native code and runs them without proof, which takes about half an hour on CI; it passed 17530, 99.9% ([unchecked results](table-unchecked.html)). The 45 tests that only the unchecked runner passes time out in the checked one. The 20 tests both fail all involve the EIP-7002 and EIP-7251 request contracts, which the semantics models instead of executing their code, so it can't follow the tests that modify, break or deploy them ([issue #177](https://github.com/verifereum/verifereum/issues/177)).
+[Verifereum v1.2.0](https://github.com/verifereum/verifereum/releases/tag/v1.2.0) targets Osaka and is tested against all 17,441 Osaka blockchain cases in the [Ethereum Execution Spec Tests (EEST) v21.0.2](https://github.com/ethereum/execution-specs/releases/tag/tests%40v21.0.2).
+
+The checked runner evaluates the semantics inside HOL4: a Passed result is backed by a kernel-checked theorem. The latest full run passed 17,386 cases (99.7%) in 5h22m on 16 cores; 55 cases timed out, with no other failures ([checked results](table.html)). The unchecked runner compiles the same definitions to native code and runs them without producing proofs. It passed all 17,441 cases (100%) in 38 minutes on CI, including every case that timed out in the checked run ([unchecked results](table-unchecked.html)).
+
+Block processing executes the deployed beacon-roots, block-history, withdrawal-request and consolidation-request contracts. For their canonical bytecode, HOL4 correspondence proofs relate both return bytes and final account state to the high-level models, under [documented bounds](https://github.com/verifereum/verifereum/blob/main/README.md).
 
 ## What's in the repository
 
