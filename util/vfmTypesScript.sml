@@ -23,12 +23,8 @@ val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:
 val () = cv_trans (word_of_bytes_be_eq_num_of_bytes |> INST_TYPE [alpha |-> “:160”] |> SRULE[compute_divides]);
 val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:256”] |> SRULE[compute_divides]);
 val () = cv_trans (word_of_bytes_be_eq_num_of_bytes |> INST_TYPE [alpha |-> “:256”] |> SRULE[compute_divides]);
-val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:64”] |> SRULE[compute_divides]);
-val () = cv_trans (word_of_bytes_be_eq_num_of_bytes |> INST_TYPE [alpha |-> “:64”] |> SRULE[compute_divides]);
 val () = cv_trans (word_to_bytes_le_eq_bytes_of_num |> INST_TYPE [alpha |-> “:256”]);
 val () = cv_trans (word_to_bytes_be_eq_bytes_of_num |> INST_TYPE [alpha |-> “:256”]);
-val () = cv_trans (word_to_bytes_le_eq_bytes_of_num |> INST_TYPE [alpha |-> “:64”]);
-val () = cv_trans (word_to_bytes_be_eq_bytes_of_num |> INST_TYPE [alpha |-> “:64”]);
 val () = cv_auto_trans (word_to_bytes_def |> INST_TYPE [alpha |-> “:64”]);
 
 val vars = List.tabulate(32, fn n => mk_var("w" ^ Int.toString n, “:256 word”))
