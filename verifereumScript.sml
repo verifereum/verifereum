@@ -9,7 +9,7 @@ open HolKernel
   vfmCreateCollisionTheory vfmDepositLogTheory vfmSystemTransactionTheory
   vfmSystemContractsTheory
   vfmOriginalStateTheory vfmOriginalAccountsTheory
-  vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
+  vfmRunFrameTheory vfmContextLengthTheory vfmAccountFrameTheory vfmAccountDeletionTheory
   vfmProgTheory vfmProgCallTheory
 
 val () = new_theory "verifereum";

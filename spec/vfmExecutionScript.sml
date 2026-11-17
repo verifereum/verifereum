@@ -1758,8 +1758,9 @@ Definition handle_step_def:
   handle (handle_create e) handle_exception
 End
 
-Definition step_def:
-  step = handle do
+(* One step, with the supplied handler deciding how an exception is settled. *)
+Definition step_with_def:
+  step_with h = handle do
     context <- get_current_context;
     code <<- context.msgParams.code;
     parsed <<- context.msgParams.parsed;
@@ -1769,19 +1770,48 @@ Definition step_def:
         if LENGTH code ≤ context.pc
         then step_inst Stop
         else step_inst Invalid
-  od handle_step
+  od h
 End
+
+Definition step_via_handler_def:
+  step = step_with handle_step
+End
+
+Theorem step_def = REWRITE_RULE[step_with_def] step_via_handler_def;
 
 Definition run_def:
   run s = OWHILE (ISL o FST) (step o SND) (INL (), s)
 End
 
+(* Settle callee exceptions, leaving frame n's own end to the caller. *)
+Definition handle_step_frame_def:
+  handle_step_frame n e =
+    if vfm_abort e then reraise e else do
+      m <- get_num_contexts;
+      if m = n then handle_create e
+      else handle (handle_create e) handle_exception
+    od
+End
+
+(* Run this frame and its callees, leaving its own end unsettled.
+   From a well-formed state, a non-abort INR result names this frame's end
+   and retains its context, return data and logs before caller settlement. *)
+Definition run_frame_def:
+  run_frame es =
+    OWHILE (ISL o FST)
+      (step_with (handle_step_frame (LENGTH es.contexts)) o SND)
+      (INL (), es)
+End
+
+(* Run this frame and its callees, including settlement back into its caller. *)
 Definition run_call_def:
   run_call es =
     OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts ≥ LENGTH es.contexts)
            (step o SND) (INL (), es)
 End
 
+(* Run ordinary steps only while this frame stays at the top; stop on a push,
+   a return, or an exception, without running a newly entered callee. *)
 Definition run_within_frame_def:
   run_within_frame es =
     OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts = LENGTH es.contexts)
