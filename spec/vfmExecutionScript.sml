@@ -1758,8 +1758,9 @@ Definition handle_step_def:
   handle (handle_create e) handle_exception
 End
 
-Definition step_def:
-  step = handle do
+(* One step, with the supplied handler deciding how an exception is settled. *)
+Definition step_with_def:
+  step_with h = handle do
     context <- get_current_context;
     code <<- context.msgParams.code;
     parsed <<- context.msgParams.parsed;
@@ -1769,32 +1770,27 @@ Definition step_def:
         if LENGTH code ≤ context.pc
         then step_inst Stop
         else step_inst Invalid
-  od handle_step
+  od h
 End
+
+Definition step_via_handler_def:
+  step = step_with handle_step
+End
+
+Theorem step_def = REWRITE_RULE[step_with_def] step_via_handler_def;
 
 Definition run_def:
   run s = OWHILE (ISL o FST) (step o SND) (INL (), s)
 End
 
-(* A step of this frame, including an immediately executed precompile child.
-   Its own end runs CREATE code deposit but leaves caller settlement pending. *)
-Definition step_frame_def:
-  step_frame s =
-    handle do
-      context <- get_current_context;
-      code <<- context.msgParams.code;
-      parsed <<- context.msgParams.parsed;
-      case FLOOKUP parsed context.pc of
-      | SOME op => do step_inst op; inc_pc_or_jump op od
-      | NONE =>
-          if LENGTH code ≤ context.pc
-          then step_inst Stop
-          else step_inst Invalid
-    od (λe s'.
-      if vfm_abort e then reraise e s'
-      else if LENGTH s'.contexts = LENGTH s.contexts
-      then handle_create e s'
-      else handle (handle_create e) handle_exception s') s
+(* Settle callee exceptions, leaving frame n's own end to the caller. *)
+Definition handle_step_frame_def:
+  handle_step_frame n e =
+    if vfm_abort e then reraise e else do
+      m <- get_num_contexts;
+      if m = n then handle_create e
+      else handle (handle_create e) handle_exception
+    od
 End
 
 (* Run this frame and its callees, leaving its own end unsettled.
@@ -1803,8 +1799,7 @@ End
 Definition run_frame_def:
   run_frame es =
     OWHILE (ISL o FST)
-      (λ(r, s). if LENGTH s.contexts = LENGTH es.contexts
-               then step_frame s else step s)
+      (step_with (handle_step_frame (LENGTH es.contexts)) o SND)
       (INL (), es)
 End
 
