@@ -90,6 +90,24 @@ Proof
   drule handle_step_not_abort_returns_inl >> simp[]
 QED
 
+Theorem frame_loop_terminates_if_continuations_agree[local]:
+  (!s. ISL (FST ((f:'a -> (unit + 'b) # 'a) s)) ==> f s = g s) /\
+  OWHILE (ISL o FST) (g o SND) p = SOME z ==>
+  ?w. OWHILE (ISL o FST) (f o SND) p = SOME w
+Proof
+  strip_tac >>
+  qpat_x_assum `OWHILE _ _ _ = _` mp_tac >>
+  map_every qid_spec_tac [`z`, `p`] >>
+  ho_match_mp_tac OWHILE_IND >> conj_tac
+  >- (rpt strip_tac >> simp[Once OWHILE_THM]) >>
+  rpt strip_tac >>
+  rename1 `(ISL o FST) q` >>
+  Cases_on `ISL (FST (f (SND q)))`
+  >- (simp[Once OWHILE_THM] >> gvs[]) >>
+  simp[Once OWHILE_THM] >>
+  qexists_tac `f (SND q)` >> simp[Once OWHILE_THM]
+QED
+
 Theorem run_frame_inr:
   run_frame es = SOME (r, es1) ⇒ ISR r
 Proof
