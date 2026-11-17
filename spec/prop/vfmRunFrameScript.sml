@@ -169,11 +169,9 @@ Proof
   drule (cj 2 run_frame_loop_boundary) >> simp[]
 QED
 
-Theorem run_call_imp_run_frame:
-  run_call es = SOME r ⇒
+Theorem run_frame_terminates:
   ∃e es1. run_frame es = SOME (INR e, es1)
 Proof
-  strip_tac >>
   `?z. OWHILE (ISL o FST) (step o SND) (INL (),es) = SOME z` by
     (mp_tac (Q.SPEC `es` (GEN_ALL run_eq_tr)) >>
      Cases_on `run_tr (step es)` >> simp[run_def]) >>
