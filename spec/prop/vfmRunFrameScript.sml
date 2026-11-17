@@ -108,6 +108,43 @@ Proof
   qexists_tac `f (SND q)` >> simp[Once OWHILE_THM]
 QED
 
+Theorem run_frame_loop_boundary[local]:
+  !n p z.
+  OWHILE (ISL o FST)
+    (\(r,u). if LENGTH u.contexts = n then step_frame u else step u)
+    p = SOME z ==>
+  (~ISL (FST p) ==> p = z) /\
+  !s e t. p = (INL (),s) /\ z = (INR e,t) /\
+    wf_state s /\ 0 < n /\ n <= LENGTH s.contexts /\ ~vfm_abort e ==>
+    LENGTH t.contexts = n /\
+    OWHILE (\(r,u). ISL r /\ LENGTH u.contexts >= n)
+      (step o SND) (INL (),s) = SOME (handle_exception e t)
+Proof
+  gen_tac >> ho_match_mp_tac OWHILE_IND >> conj_tac
+  >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (Cases_on `FST p` >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `LENGTH s.contexts = n`
+  >- (gvs[] >> Cases_on `step_frame s` >> Cases_on `q` >> gvs[]
+      >- (drule_all step_frame_inl_length >> strip_tac >>
+          drule step_frame_inl_eq_step >> strip_tac >>
+          `wf_state r` by metis_tac[step_preserves_wf_state, SND] >>
+          simp[Once OWHILE_THM] >> first_x_assum irule >> simp[]) >>
+      drule_all step_frame_nonabort_boundary >> strip_tac >>
+      Cases_on `handle_exception e r` >> Cases_on `q` >> gvs[] >>
+      simp[Once OWHILE_THM] >> simp[Once OWHILE_THM]) >>
+  gvs[] >> Cases_on `step s` >> Cases_on `q` >> gvs[]
+  >- (drule_all step_length_not_drop_more_than_one >> strip_tac >>
+      `wf_state r` by metis_tac[step_preserves_wf_state, SND] >>
+      `n <= LENGTH r.contexts` by decide_tac >>
+      simp[Once OWHILE_THM] >> first_x_assum irule >> simp[]) >>
+  `outputTo_consistent s` by
+    metis_tac[wf_state_def, outputTo_consistent_stack_imp_consistent] >>
+  `LENGTH s.contexts >= 2` by decide_tac >>
+  metis_tac[step_ge2_inr_is_abort]
+QED
+
 Theorem run_frame_inr:
   run_frame es = SOME (r, es1) ⇒ ISR r
 Proof
@@ -119,19 +156,42 @@ Theorem run_frame_length:
   wf_state es ∧ run_frame es = SOME (INR e, es1) ∧ ¬vfm_abort e ⇒
   LENGTH es1.contexts = LENGTH es.contexts
 Proof
-  cheat
+  simp[run_frame_def] >> strip_tac >>
+  `0 < LENGTH es.contexts` by
+    (Cases_on `es.contexts` >> gvs[wf_state_def]) >>
+  drule (cj 2 run_frame_loop_boundary) >> simp[]
 QED
 
 Theorem run_frame_call:
   wf_state es ∧ run_frame es = SOME (INR e, es1) ∧ ¬vfm_abort e ⇒
   run_call es = SOME (handle_exception e es1)
 Proof
-  cheat
+  simp[run_frame_def, run_call_def] >> strip_tac >>
+  `0 < LENGTH es.contexts` by
+    (Cases_on `es.contexts` >> gvs[wf_state_def]) >>
+  drule (cj 2 run_frame_loop_boundary) >> simp[]
 QED
 
 Theorem run_call_imp_run_frame:
   run_call es = SOME r ⇒
   ∃e es1. run_frame es = SOME (INR e, es1)
 Proof
-  cheat
+  strip_tac >>
+  `?z. OWHILE (ISL o FST) (step o SND) (INL (),es) = SOME z` by
+    (mp_tac (Q.SPEC `es` (GEN_ALL run_eq_tr)) >>
+     Cases_on `run_tr (step es)` >> simp[run_def]) >>
+  `?w. OWHILE (ISL o FST)
+    ((\s. if LENGTH s.contexts = LENGTH es.contexts
+          then step_frame s else step s) o SND) (INL (),es) = SOME w` by
+    (irule frame_loop_terminates_if_continuations_agree >>
+     qexistsl_tac [`step`, `z`] >> simp[] >>
+     gen_tac >> Cases_on `LENGTH s.contexts = LENGTH es.contexts` >>
+     simp[] >> Cases_on `step_frame s` >> Cases_on `q` >>
+     simp[] >> rename1 `step_frame s = (INL a,t)` >>
+     Cases_on `a` >> drule step_frame_inl_eq_step >> simp[]) >>
+  `?w. run_frame es = SOME w` by
+    (gvs[run_frame_def, o_DEF, ELIM_UNCURRY]) >>
+  rename1 `run_frame es = SOME out` >>
+  Cases_on `out` >> drule run_frame_inr >>
+  Cases_on `q` >> simp[] >> metis_tac[]
 QED
