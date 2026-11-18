@@ -12,14 +12,10 @@ Libs
 
 Overload Num[local] = “cv$Num”
 
-(* Keep vfmTypes' byte/numeral helpers and SHA's bit-list helpers when
+(* Keep vfmTypes' numeral helpers and SHA's bit-list helpers when
    their independently translated crypto ancestors meet here. *)
 val () = List.app cv_rep_delete
   ["keccak.cv_l2n_thm",
-   "keccak.cv_word_to_bytes_thm",
-   "keccak.cv_word_to_bytes_aux_thm",
-   "keccak.cv_get_byte_thm",
-   "keccak.cv_byte_index_thm",
    "messageDigestPadding.cv_l2n_thm",
    "messageDigestPadding.cv_n2l_thm",
    "messageDigestPadding.n2lA_NIL_I_ho",

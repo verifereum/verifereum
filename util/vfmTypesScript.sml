@@ -25,7 +25,16 @@ val () = cv_trans (word_of_bytes_le_eq_num_of_bytes |> INST_TYPE [alpha |-> “:
 val () = cv_trans (word_of_bytes_be_eq_num_of_bytes |> INST_TYPE [alpha |-> “:256”] |> SRULE[compute_divides]);
 val () = cv_trans (word_to_bytes_le_eq_bytes_of_num |> INST_TYPE [alpha |-> “:256”]);
 val () = cv_trans (word_to_bytes_be_eq_bytes_of_num |> INST_TYPE [alpha |-> “:256”]);
-val () = cv_auto_trans (word_to_bytes_def |> INST_TYPE [alpha |-> “:64”]);
+
+Theorem cv_string_to_bytes[cv_rep]:
+  from_list from_word (MAP (n2w o ORD) s : word8 list) =
+  from_list from_char s
+Proof
+  Induct_on `s`
+  \\ simp[cv_typeTheory.from_list_def, cv_typeTheory.from_word_def,
+          cv_typeTheory.from_char_def, w2n_n2w, dimword_8, LESS_MOD,
+          stringTheory.ORD_BOUND]
+QED
 
 val vars = List.tabulate(32, fn n => mk_var("w" ^ Int.toString n, “:256 word”))
 
