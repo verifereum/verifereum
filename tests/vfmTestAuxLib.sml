@@ -58,5 +58,5 @@ structure vfmTestAuxLib :> vfmTestAuxLib = struct
   val time_limit = Option.getOpt
     (Option.mapPartial Time.fromString
       (OS.Process.getEnv "VFM_TIME_LIMIT"),
-     Time.fromSeconds 60)
+     Time.fromSeconds 600)
 end

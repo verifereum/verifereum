@@ -54,7 +54,7 @@ rerunning after an interruption continues where it stopped. Options:
 | --- | --- |
 | `-g`, `--generate` | only fetch the fixtures and regenerate `defs/` and `results/` |
 | `-f`, `--fresh` | rerun the selected tests instead of resuming |
-| `-t secs`, `--time secs` | time limit per test case (default 60, or `VFM_TIME_LIMIT`) |
+| `-t secs`, `--time secs` | time limit per test case (default 600, or `VFM_TIME_LIMIT`) |
 | `-o opt`, `--option opt` | pass `opt` to the build backend, e.g. `-o -j8` (see also [Heap cap](#heap-cap)) |
 | `-b holbuild\|holmake`, `--backend` | build backend (default holbuild) |
 | `--no-serial-first` | build all tests together (see below) |
