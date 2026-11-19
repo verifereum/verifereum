@@ -39,7 +39,7 @@ jobs:
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          holbuild-ref: v0.14.62
+          holbuild-ref: v0.14.76
 
       - name: Report selected holbuild version
         run: holbuild --version
