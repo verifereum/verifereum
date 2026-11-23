@@ -419,12 +419,17 @@ Definition authorization_from_rlp_def:
   let chainIdRlp = EL 0 ls in
   let chainId = num_of_be_bytes $ dest_RLPB chainIdRlp in
   let addressRlp = EL 1 ls in
+  if LENGTH (dest_RLPB addressRlp) ≠ 20 then NONE else
   let address : address = word_of_bytes T 0w $ dest_RLPB addressRlp in
   let nonceRlp = EL 2 ls in
   let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
   let yParity = num_of_be_bytes $ dest_RLPB $ EL 3 ls in
   let r = num_of_be_bytes $ dest_RLPB $ EL 4 ls in
   let s = num_of_be_bytes $ dest_RLPB $ EL 5 ls in
+  (* Field bounds invalidate the transaction; recovery failures only skip
+     this authorization during processing. *)
+  if chainId ≥ 2 ** 256 ∨ nonce ≥ 2 ** 64 ∨ yParity ≥ 2 ** 8 ∨
+     r ≥ 2 ** 256 ∨ s ≥ 2 ** 256 then NONE else
   let authLs = [chainIdRlp; addressRlp; nonceRlp] in
   let hash = word_of_bytes T 0w $ Keccak_256_w64 $
     5w :: rlp_encode (RLPL authLs) in
