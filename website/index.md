@@ -37,10 +37,10 @@ The [repository](https://github.com/verifereum/verifereum) is GPLv3. It contains
 
 ## Talks
 
-- [Towards a verified Vyper → EVM compiler in HOL4](talks/EthProofs2026/), EthProofs project status, June 2026.
-- [Verifereum update](talks/EVMTrack2025Q1/), EVM track call, March 2025.
-- [Verifereum](talks/HOL4Users2024/), HOL4 Users' Workshop, June 2024.
-- [Verifereum](talks/ETHDenver2024/), ETHDenver Lift Off, March 2024.
+- [Towards a verified Vyper → EVM compiler in HOL4](https://github.com/verifereum/verifereum/tree/main/talks/EthProofs2026), EthProofs project status, June 2026.
+- [Verifereum update](https://github.com/verifereum/verifereum/tree/main/talks/EVMTrack2025Q1), EVM track call, March 2025.
+- [Verifereum](https://github.com/verifereum/verifereum/tree/main/talks/HOL4Users2024), HOL4 Users' Workshop, June 2024.
+- [Verifereum](https://github.com/verifereum/verifereum/tree/main/talks/ETHDenver2024), ETHDenver Lift Off, March 2024.
 
 ## Get involved
 
