@@ -26,7 +26,7 @@ deps = ["vfmUncheckedEmitTheory"]
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "dc64d85262a64b9a78f080a0dbdd9af88158363b"
+rev = "b818ed18c69ae82e18faecb4bd8a8c8f31f9ce14"
 
 [dependencies.holexamples]
 from = "hol"

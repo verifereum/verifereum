@@ -45,8 +45,6 @@ Proof
   EVAL_TAC
 QED
 
-val () = cv_auto_trans numposrepTheory.n2l_n2lA;
-
 Type address = “:160 word”
 Type bytes32 = “:256 word”
 Type byte = “:word8”

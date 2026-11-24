@@ -12,22 +12,6 @@ Libs
 
 Overload Num[local] = “cv$Num”
 
-(* Keep vfmTypes' numeral helpers and SHA's bit-list helpers when
-   their independently translated crypto ancestors meet here. *)
-val () = List.app cv_rep_delete
-  ["keccak.cv_l2n_thm",
-   "messageDigestPadding.cv_l2n_thm",
-   "messageDigestPadding.cv_n2l_thm",
-   "messageDigestPadding.n2lA_NIL_I_ho",
-   "ripemd160.MAP_o_REVERSE_o_PAD_RIGHT_0_8__ho",
-   "ripemd160.cv_word_to_bin_list'_thm",
-   "ripemd160.cv_w2l'_thm",
-   "ripemd160.cv_word_from_bin_list_thm",
-   "ripemd160.cv_l2w_thm",
-   "ripemd160.cv_l2n_thm",
-   "ripemd160.cv_n2l_thm",
-   "ripemd160.n2lA_NIL_I_ho"];
-
 Theorem word_lsl_modexp:
   word_lsl (w:'a word) n =
   if n < dimindex(:'a) then
