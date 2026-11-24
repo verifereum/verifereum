@@ -3,7 +3,7 @@
 open HolKernel
   contractABITheory contractABISyntax
   vfmDomainCollectionTheory vfmTotalBalanceTheory vfmCalldataBoundTheory
-  vfmReturndataBoundTheory vfmToDeleteTheory
+  vfmReturndataBoundTheory vfmToDeleteTheory vfmDeletionQueueTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib vfmChainIdTheory
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
   vfmCreateCollisionTheory vfmDepositLogTheory vfmSystemTransactionTheory
