@@ -1115,8 +1115,6 @@ val () = dequeue_consolidation_requests_def
 
 val () = cv_auto_trans update_beacon_block_def;
 
-val () = cv_auto_trans empty_return_destination_def;
-
 val run_create_pre_def = run_create_def
   |> SIMP_RULE std_ss [o_DEF]
   |> cv_auto_trans_pre "run_create_pre";

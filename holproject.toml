@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.12.0"
+minimum_version = "0.14.59"
 
 [project]
 name = "verifereum"
@@ -26,7 +26,7 @@ deps = ["vfmUncheckedEmitTheory"]
 
 [dependencies.hol]
 git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "89fecbfbc23dd327166a150aa25f5d993dc00172"
+rev = "8a43aacacae49a9106526452c481a07acfbf7a37"
 
 [dependencies.holexamples]
 from = "hol"
