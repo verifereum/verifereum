@@ -150,7 +150,9 @@ Definition blake2f_def:
   in FLAT [h0;h1;h2;h3;h4;h5;h6;h7]
 End
 
-val blake2f_pre_def = cv_trans_pre "blake2f_pre" blake2f_def;
+val blake2f_pre_def = blake2f_def
+  |> REWRITE_RULE [GSYM byteTheory.word_to_bytes_le_def]
+  |> cv_trans_pre "blake2f_pre";
 
 Theorem blake2f_pre_length:
   LENGTH hs = 8 ∧ LENGTH m = 16 ⇒
