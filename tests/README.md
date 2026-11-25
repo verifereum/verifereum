@@ -26,6 +26,14 @@ of Osaka blockchain tests in the fixtures' `.meta/index.json`. Indices are
 reassigned whenever the fixtures change, so refer to a test by its json path
 in anything meant to outlast a release.
 
+## Focused decoder regressions
+
+RLP canonicality and typed-field validation, included in the default build:
+
+```bash
+holbuild build recursiveLengthPrefixCanonicalTheory vfmTypedDecodeTheory
+```
+
 ## Fixtures
 
 The EEST release is `fixtures_version` in `vfmTestAuxLib.sml` (currently

@@ -5,6 +5,44 @@ Ancestors
 Libs
   cv_transLib wordsLib
 
+(* Typed RLP field contracts:
+   Access lists: https://eips.ethereum.org/EIPS/eip-2930#specification
+   Blobs and header counters:
+     https://eips.ethereum.org/EIPS/eip-4844#specification
+   Withdrawals: https://eips.ethereum.org/EIPS/eip-4895#specification
+   Authorizations: https://eips.ethereum.org/EIPS/eip-7702#specification
+   Minimal integer encoding:
+     https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp/
+   RLP byte strings may start with zero; unsigned INTEGER fields may not.
+   Bounds are in bytes, and are used only for U8/U64/U256, never Uint. *)
+Definition minimal_be_bytes_def:
+  minimal_be_bytes (bs : word8 list) ⇔
+    case bs of [] => T | b::rest => b ≠ 0w
+End
+val () = cv_auto_trans minimal_be_bytes_def;
+
+Definition rlp_bytes_width_def:
+  rlp_bytes_width width rlp ⇔
+    is_RLPB rlp ∧ LENGTH (dest_RLPB rlp) = width
+End
+val () = cv_auto_trans rlp_bytes_width_def;
+
+Definition rlp_uint_def:
+  rlp_uint rlp ⇔ is_RLPB rlp ∧ minimal_be_bytes (dest_RLPB rlp)
+End
+val () = cv_auto_trans rlp_uint_def;
+
+Definition rlp_uint_bounded_def:
+  rlp_uint_bounded width rlp ⇔
+    rlp_uint rlp ∧ LENGTH (dest_RLPB rlp) ≤ width
+End
+val () = cv_auto_trans rlp_uint_bounded_def;
+
+Definition rlp_destination_def:
+  rlp_destination rlp ⇔ rlp_bytes_width 0 rlp ∨ rlp_bytes_width 20 rlp
+End
+val () = cv_auto_trans rlp_destination_def;
+
 (* EELS EMPTY_OMMER_HASH *)
 Definition empty_ommer_hash_def:
   empty_ommer_hash : bytes32 =
@@ -26,6 +64,18 @@ Definition block_header_from_rlp_def:
   if ¬is_RLPL rlp then NONE else
   let ls = dest_RLPL rlp in
   if ¬(LENGTH ls = 21 ∧ EVERY is_RLPB ls) then NONE else
+  (* Include fields discarded by the execution record: their wire types still
+     constrain block validity (parent/transaction/receipt roots and bloom). *)
+  if ¬EVERY (rlp_bytes_width 32)
+    [EL 0 ls; EL 1 ls; EL 3 ls; EL 4 ls; EL 5 ls; EL 13 ls;
+     EL 16 ls; EL 19 ls; EL 20 ls] then NONE else
+  if ¬rlp_bytes_width 20 (EL 2 ls) then NONE else
+  if ¬rlp_bytes_width 256 (EL 6 ls) then NONE else
+  if ¬EVERY rlp_uint [EL 8 ls; EL 9 ls; EL 10 ls; EL 15 ls]
+    then NONE else
+  if ¬rlp_uint_bounded 32 (EL 11 ls) then NONE else
+  if ¬(rlp_uint_bounded 8 (EL 17 ls) ∧
+       rlp_uint_bounded 8 (EL 18 ls)) then NONE else
   let ommersHash = dest_RLPB (EL  1 ls) in
   let difficulty = dest_RLPB (EL  7 ls) in
   let extraData  = dest_RLPB (EL 12 ls) in
@@ -116,6 +166,9 @@ Definition withdrawal_from_rlp_def:
   let validatorIndex = EL 1 ls in
   let address = EL 2 ls in
   let amount = EL 3 ls in
+  if ¬(rlp_uint_bounded 8 index ∧ rlp_uint_bounded 8 validatorIndex ∧
+       rlp_bytes_width 20 address ∧ rlp_uint_bounded 8 amount)
+    then NONE else
   SOME <|
     withdrawalIndex := num_of_be_bytes (dest_RLPB index)
   ; validatorIndex := num_of_be_bytes (dest_RLPB validatorIndex)
@@ -141,11 +194,13 @@ Definition access_list_entry_from_rlp_def:
   if LENGTH ls ≠ 2 then NONE else
   let account = EL 0 ls in
   if ¬is_RLPB account then NONE else
+  if ¬rlp_bytes_width 20 account then NONE else
   let account = word_of_bytes T 0w $ dest_RLPB account in
   let slots = EL 1 ls in
   if ¬is_RLPL slots then NONE else
   let ls = dest_RLPL slots in
   if ¬(EVERY is_RLPB ls) then NONE else
+  if ¬EVERY (rlp_bytes_width 32) ls then NONE else
   let slots = MAP (word_of_bytes T 0w o dest_RLPB) ls in
   SOME <| account := account; keys := slots |>
 End
@@ -189,11 +244,11 @@ val () = cv_auto_trans valid_transaction_s_def;
 
 Definition verify_tx_signature_def:
   verify_tx_signature (prefix_byte:word8) txLs yParityRlp rRlp sRlp =
-  if ¬is_RLPB yParityRlp then NONE else
+  if ¬rlp_uint_bounded 32 yParityRlp then NONE else
   let yParity = num_of_be_bytes $ dest_RLPB yParityRlp in
-  if ¬is_RLPB rRlp then NONE else
+  if ¬rlp_uint_bounded 32 rRlp then NONE else
   let r = num_of_be_bytes $ dest_RLPB rRlp in
-  if ¬is_RLPB sRlp then NONE else
+  if ¬rlp_uint_bounded 32 sRlp then NONE else
   let s = num_of_be_bytes $ dest_RLPB sRlp in
   if ¬valid_transaction_s s then NONE else
   let hash = word_of_bytes T 0w $ Keccak_256_w64 $
@@ -208,25 +263,25 @@ Definition decode_eip1559_core_def:
   decode_eip1559_core ls =
   if LENGTH ls < 9 then NONE else
   let nonceRlp = EL 1 ls in
-  if ¬is_RLPB nonceRlp then NONE else
+  if ¬rlp_uint_bounded 32 nonceRlp then NONE else
   let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
   let maxPrioRlp = EL 2 ls in
-  if ¬is_RLPB maxPrioRlp then NONE else
+  if ¬rlp_uint maxPrioRlp then NONE else
   let maxPrio = num_of_be_bytes $ dest_RLPB maxPrioRlp in
   let maxFeeRlp = EL 3 ls in
-  if ¬is_RLPB maxFeeRlp then NONE else
+  if ¬rlp_uint maxFeeRlp then NONE else
   let maxFee = num_of_be_bytes $ dest_RLPB maxFeeRlp in
   if maxFee < maxPrio then NONE else
   let gasRlp = EL 4 ls in
-  if ¬is_RLPB gasRlp then NONE else
+  if ¬rlp_uint gasRlp then NONE else
   let gas = num_of_be_bytes $ dest_RLPB gasRlp in
   let toRlp = EL 5 ls in
-  if ¬is_RLPB toRlp then NONE else
+  if ¬rlp_destination toRlp then NONE else
   let to = dest_RLPB toRlp in
   let to = if LENGTH to = 0 then NONE
            else SOME $ word_of_bytes T (0w:address) to in
   let valueRlp = EL 6 ls in
-  if ¬is_RLPB valueRlp then NONE else
+  if ¬rlp_uint_bounded 32 valueRlp then NONE else
   let value = num_of_be_bytes $ dest_RLPB valueRlp in
   let dataRlp = EL 7 ls in
   if ¬is_RLPB dataRlp then NONE else
@@ -256,23 +311,24 @@ Definition transaction1_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 11 then NONE else
   let chainIdRlp = EL 0 ls in
+  if ¬rlp_uint_bounded 8 chainIdRlp then NONE else
   if chainIdRlp ≠ rlp_number chainId then NONE else
   let nonceRlp = EL 1 ls in
-  if ¬is_RLPB nonceRlp then NONE else
+  if ¬rlp_uint_bounded 32 nonceRlp then NONE else
   let nonce = num_of_be_bytes $ dest_RLPB nonceRlp in
   let gasPriceRlp = EL 2 ls in
-  if ¬is_RLPB gasPriceRlp then NONE else
+  if ¬rlp_uint gasPriceRlp then NONE else
   let gasPrice = num_of_be_bytes $ dest_RLPB gasPriceRlp in
   let gasRlp = EL 3 ls in
-  if ¬is_RLPB gasRlp then NONE else
+  if ¬rlp_uint gasRlp then NONE else
   let gas = num_of_be_bytes $ dest_RLPB gasRlp in
   let toRlp = EL 4 ls in
-  if ¬is_RLPB toRlp then NONE else
+  if ¬rlp_destination toRlp then NONE else
   let to = dest_RLPB toRlp in
   let to = if LENGTH to = 0 then NONE
            else SOME $ word_of_bytes T 0w to in
   let valueRlp = EL 5 ls in
-  if ¬is_RLPB valueRlp then NONE else
+  if ¬rlp_uint_bounded 32 valueRlp then NONE else
   let value = num_of_be_bytes $ dest_RLPB valueRlp in
   let dataRlp = EL 6 ls in
   if ¬is_RLPB dataRlp then NONE else
@@ -322,6 +378,7 @@ Definition transaction2_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 12 then NONE else
   let chainIdRlp = EL 0 ls in
+  if ¬rlp_uint_bounded 8 chainIdRlp then NONE else
   if chainIdRlp ≠ rlp_number chainId then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
@@ -364,17 +421,20 @@ Definition transaction3_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 14 then NONE else
   let chainIdRlp = EL 0 ls in
+  if ¬rlp_uint_bounded 8 chainIdRlp then NONE else
   if chainIdRlp ≠ rlp_number chainId then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
   let maxBlobFeeRlp = EL 9 ls in
-  if ¬is_RLPB maxBlobFeeRlp then NONE else
+  if ¬rlp_uint_bounded 32 maxBlobFeeRlp then NONE else
   let maxBlobFee = num_of_be_bytes $ dest_RLPB maxBlobFeeRlp in
   let blobHashesRlp = EL 10 ls in
   if ¬is_RLPL blobHashesRlp then NONE else
   let blobHashes = dest_RLPL blobHashesRlp in
-  if IS_NONE to /\ ~(NULL blobHashes) then NONE else
+  (* BlobTransaction.to is Address, even when the blob list is empty. *)
+  if IS_NONE to then NONE else
   if ¬(EVERY is_RLPB blobHashes) then NONE else
+  if ¬EVERY (rlp_bytes_width 32) blobHashes then NONE else
   let blobHashes = MAP (word_of_bytes T 0w o dest_RLPB) blobHashes in
   let txLs = [
     chainIdRlp; EL 1 ls; EL 2 ls; EL 3 ls; EL 4 ls;
@@ -416,6 +476,14 @@ Definition authorization_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 6 then NONE else
   if ¬(EVERY is_RLPB ls) then NONE else
+  (* Structural type bounds only: in-range invalid signatures are still
+     decoded and skipped by authorization processing, as required by EIP-7702. *)
+  if ¬(rlp_uint_bounded 32 (EL 0 ls) ∧
+       rlp_bytes_width 20 (EL 1 ls) ∧
+       rlp_uint_bounded 8 (EL 2 ls) ∧
+       rlp_uint_bounded 1 (EL 3 ls) ∧
+       rlp_uint_bounded 32 (EL 4 ls) ∧
+       rlp_uint_bounded 32 (EL 5 ls)) then NONE else
   let chainIdRlp = EL 0 ls in
   let chainId = num_of_be_bytes $ dest_RLPB chainIdRlp in
   let addressRlp = EL 1 ls in
@@ -475,9 +543,12 @@ Definition transaction4_from_rlp_def:
   let ls = dest_RLPL rlp in
   if LENGTH ls ≠ 13 then NONE else
   let chainIdRlp = EL 0 ls in
+  if ¬rlp_uint_bounded 8 chainIdRlp then NONE else
   if chainIdRlp ≠ rlp_number chainId then NONE else
   case decode_eip1559_core ls of NONE => NONE |
   SOME (nonce, maxPrio, maxFee, gas, to, value, data, accessList) =>
+  (* SetCodeTransaction narrows the shared core's U256 nonce to U64. *)
+  if ¬rlp_uint_bounded 8 (EL 1 ls) then NONE else
   (* destination cannot be null in type 4 *)
   if IS_NONE to then NONE else
   let authListRlp = EL 9 ls in
@@ -532,6 +603,11 @@ Definition transaction_from_rlp_def:
     let to = dest_RLPB $ toRlp in
     let value = EL 4 ls in
     let data = EL 5 ls in
+    if ¬(rlp_uint_bounded 32 nonce ∧ rlp_uint gasPrice ∧ rlp_uint gas ∧
+         rlp_destination toRlp ∧ rlp_uint_bounded 32 value ∧
+         rlp_uint_bounded 32 (EL 6 ls) ∧
+         rlp_uint_bounded 32 (EL 7 ls) ∧
+         rlp_uint_bounded 32 (EL 8 ls)) then NONE else
     let v = num_of_be_bytes $ dest_RLPB $ EL 6 ls in
     let r = num_of_be_bytes $ dest_RLPB $ EL 7 ls in
     let s = num_of_be_bytes $ dest_RLPB $ EL 8 ls in

@@ -86,12 +86,17 @@ Definition rlp_decode_length_def:
   then SOME (0, 1, T) else
   let strLen = prefix - 0x80 in
   if prefix ≤ 0xb7 then
-    if length > strLen then SOME (1, strLen, T) else NONE
+    if length > strLen then
+      if strLen = 1 then
+        if w2n (EL 1 bs) < 128 then NONE else SOME (1, strLen, T)
+      else SOME (1, strLen, T)
+    else NONE
   else
   let lenOfStrLen = prefix - 0xb7 in
   let strLen = num_of_be_bytes (TAKE lenOfStrLen (TL bs)) in
   if prefix ≤ 0xbf then
-    if length > lenOfStrLen + strLen
+    if length > lenOfStrLen + strLen ∧ 56 ≤ strLen ∧
+       256 ** (lenOfStrLen - 1) ≤ strLen
     then SOME (1 + lenOfStrLen, strLen, T) else NONE
   else
   let listLen = prefix - 0xc0 in
@@ -101,7 +106,8 @@ Definition rlp_decode_length_def:
   let lenOfListLen = prefix - 0xf7 in
   let listLen = num_of_be_bytes (TAKE lenOfListLen (TL bs)) in
   if prefix ≤ 0xff then
-    if length > lenOfListLen + listLen
+    if length > lenOfListLen + listLen ∧ 56 ≤ listLen ∧
+       256 ** (lenOfListLen - 1) ≤ listLen
     then SOME (1 + lenOfListLen, listLen, F)
     else NONE
   else NONE
@@ -133,7 +139,7 @@ Proof
   rw[rlp_encode_def]
   \\ rewrite_tac[rlp_bytes_def, rlp_decode_length_def]
   \\ IF_CASES_TAC >- rw[]
-  \\ IF_CASES_TAC >- rw[]
+  \\ IF_CASES_TAC >- (rw[] \\ gvs[LENGTH_EQ_NUM_compute])
   \\ qexists_tac`1 + 1 + LOG 256 (LENGTH bs)`
   \\ reverse conj_tac
   >- ( rw[DROP_APPEND, LENGTH_n2l, ADD1, TAKE_APPEND] \\ gvs[] )
@@ -148,6 +154,8 @@ Proof
   \\ `prefix = LOG 256 (LENGTH bs) + 184`
   by simp[Abbr`prefix`]
   \\ gvs[Abbr`prefix`]
+  \\ `256 ** LOG 256 (LENGTH bs) ≤ LENGTH bs`
+      by simp[LOG]
   \\ `lengthBytes = num_to_be_bytes $ LENGTH bs`
   by (
     simp[Abbr`lengthBytes`, num_to_be_bytes_def]
@@ -387,13 +395,19 @@ Definition rlp_decode_length_chunks_def:
   then SOME (0, 1, T) else
   let strLen = prefix - 0x80 in
   if prefix ≤ 0xb7 then
-    if length > strLen then SOME (1, strLen, T) else NONE
+    if length > strLen then
+      if strLen = 1 then
+        case chunk_stream_uncons rest of NONE => NONE | SOME (c,_) =>
+          if w2n c < 128 then NONE else SOME (1, strLen, T)
+      else SOME (1, strLen, T)
+    else NONE
   else if prefix ≤ 0xbf then
     let lenOfStrLen = prefix - 0xb7 in
     case chunk_stream_take_bytes lenOfStrLen rest of NONE => NONE |
       SOME (lengthBytes,_) =>
       let strLen = num_of_be_bytes lengthBytes in
-      if length > lenOfStrLen + strLen
+      if length > lenOfStrLen + strLen ∧ 56 ≤ strLen ∧
+         256 ** (lenOfStrLen - 1) ≤ strLen
       then SOME (1 + lenOfStrLen, strLen, T) else NONE
   else
   let listLen = prefix - 0xc0 in
@@ -405,7 +419,8 @@ Definition rlp_decode_length_chunks_def:
     SOME (lengthBytes,_) =>
     let listLen = num_of_be_bytes lengthBytes in
     if prefix ≤ 0xff then
-      if length > lenOfListLen + listLen
+      if length > lenOfListLen + listLen ∧ 56 ≤ listLen ∧
+         256 ** (lenOfListLen - 1) ≤ listLen
       then SOME (1 + lenOfListLen, listLen, F)
       else NONE
     else NONE
@@ -426,19 +441,37 @@ Proof
   \\ drule chunk_stream_uncons_correct
   \\ strip_tac
   \\ gvs[chunk_stream_length_eq]
-  \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 183) x1`
-  \\ TRY (PairCases_on`x`)
-  \\ imp_res_tac chunk_stream_take_bytes_none_imp
-  \\ imp_res_tac chunk_stream_take_bytes_correct
-  \\ Cases_on`w2n x0 - 183 ≤ length - 1`
-  \\ gvs[chunk_stream_length_eq, TAKE_TAKE]
-  \\ rpt strip_tac
+  \\ Cases_on`w2n x0 ≤ 127` >- gvs[]
+  \\ Cases_on`w2n x0 ≤ 183`
+  >- (
+    gvs[]
+    \\ Cases_on`length > w2n x0 - 128` \\ gvs[]
+    \\ Cases_on`w2n x0 - 128 = 1` \\ gvs[]
+    \\ Cases_on`chunk_stream_uncons x1`
+    >- gvs[chunk_stream_uncons_none, chunk_stream_length_eq]
+    \\ rename1`chunk_stream_uncons x1 = SOME y`
+    \\ PairCases_on`y`
+    \\ drule chunk_stream_uncons_correct
+    \\ rw[] \\ gvs[] )
+  \\ Cases_on`w2n x0 ≤ 191`
+  >- (
+    gvs[]
+    \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 183) x1`
+    \\ TRY (PairCases_on`x`)
+    \\ imp_res_tac chunk_stream_take_bytes_none_imp
+    \\ imp_res_tac chunk_stream_take_bytes_correct
+    \\ Cases_on`w2n x0 - 183 ≤ length - 1`
+    \\ gvs[chunk_stream_length_eq, TAKE_TAKE]
+    \\ rw[] \\ gvs[] )
+  \\ Cases_on`w2n x0 ≤ 247` >- gvs[]
+  \\ gvs[]
   \\ Cases_on`chunk_stream_take_bytes (w2n x0 - 247) x1`
   \\ TRY (PairCases_on`x`)
   \\ imp_res_tac chunk_stream_take_bytes_none_imp
   \\ imp_res_tac chunk_stream_take_bytes_correct
   \\ Cases_on`w2n x0 - 247 ≤ length - 1`
   \\ gvs[chunk_stream_length_eq, TAKE_TAKE]
+  \\ rw[] \\ gvs[]
 QED
 
 Theorem rlp_decode_length_chunks_correct:
@@ -453,14 +486,16 @@ QED
 Definition rlp_decode_list_def:
   rlp_decode_list bs =
     case rlp_decode_length bs
-      of NONE => []
+      of NONE => if bs = [] then SOME [] else NONE
        | SOME (offset, dataLen, isBS) =>
            let bs = DROP offset bs in
            let data = TAKE dataLen bs in
            let bs = DROP dataLen bs in
-           let rlp = if isBS then RLPB data
-                     else RLPL $ rlp_decode_list data in
-           rlp :: rlp_decode_list bs
+           if isBS then
+             OPTION_MAP (CONS (RLPB data)) (rlp_decode_list bs)
+           else
+             case rlp_decode_list data of NONE => NONE | SOME rs =>
+               OPTION_MAP (CONS (RLPL rs)) (rlp_decode_list bs)
 Termination
   WF_REL_TAC ‘measure LENGTH’
   \\ rw[] \\ CCONTR_TAC \\ gvs[]
@@ -479,14 +514,21 @@ Termination
   \\ rw[]
 End
 
+Theorem rlp_decode_list_nil[simp]:
+  rlp_decode_list [] = SOME []
+Proof
+  simp[Once rlp_decode_list_def]
+QED
+
 Definition rlp_decode_list_tr_def:
   rlp_decode_list_tr bs ls stk =
   case rlp_decode_length bs
-    of NONE => (
-      case stk
-        of [] => REVERSE ls
-         | ((pbs,pls)::stk) =>
-             rlp_decode_list_tr pbs ((RLPL (REVERSE ls))::pls) stk)
+    of NONE =>
+      if bs ≠ [] then NONE else (
+        case stk
+          of [] => SOME (REVERSE ls)
+           | ((pbs,pls)::stk) =>
+               rlp_decode_list_tr pbs ((RLPL (REVERSE ls))::pls) stk)
      | SOME (offset, dataLen, isBS) =>
        let bs = DROP offset bs in
        let data = TAKE dataLen bs in
@@ -510,71 +552,54 @@ End
 
 val () = cv_auto_trans rlp_decode_list_tr_def;
 
+(* Interpret a tail-recursive decoder's saved parent frames.  NONE is
+   absorbing: a malformed child cannot become an empty, successful list. *)
 Definition unwind_stk_def:
-  unwind_stk [] = [] ∧
-  unwind_stk ((bs,ls)::[]) =
-    REVERSE ls ++ rlp_decode_list bs ∧
-  unwind_stk ((bs,ls)::(pbs,pls)::stk) =
-    unwind_stk ((pbs,(RLPL (REVERSE ls ++ rlp_decode_list bs))::pls)::stk)
-Termination
-  WF_REL_TAC ‘inv_image ($< LEX $<)
-    (λx. (SUM (MAP (LENGTH o FST) x), LENGTH x))’
-  \\ rw[]
-  \\ Cases_on`bs` \\ gvs[]
+  unwind_stk NONE stk = NONE ∧
+  unwind_stk (SOME rs) [] = SOME rs ∧
+  unwind_stk (SOME rs) ((bs,ls)::stk) =
+    case rlp_decode_list bs of NONE => NONE | SOME suffix =>
+      unwind_stk (SOME (REVERSE ls ++ RLPL rs :: suffix)) stk
 End
 
 Theorem rlp_decode_list_tr_unwind_stk:
   ∀bs ls stk.
     rlp_decode_list_tr bs ls stk =
-    unwind_stk ((bs,ls)::stk)
+    unwind_stk (OPTION_MAP (APPEND (REVERSE ls)) (rlp_decode_list bs)) stk
 Proof
   ho_match_mp_tac rlp_decode_list_tr_ind
-  \\ rw[]
-  \\ rw[Once rlp_decode_list_tr_def]
-  \\ Cases_on`rlp_decode_length bs` \\ gvs[]
+  \\ rpt strip_tac
+  \\ rewrite_tac[Once rlp_decode_list_tr_def, Once rlp_decode_list_def]
+  \\ Cases_on`rlp_decode_length bs`
   >- (
-    CASE_TAC
-    >- (
-      rw[Once unwind_stk_def]
-      \\ rw[Once rlp_decode_list_def] )
-    \\ CASE_TAC \\ gvs[]
-    \\ rw[Once unwind_stk_def, SimpRHS]
-    \\ rw[Once rlp_decode_list_def] )
-  \\ CASE_TAC
-  \\ CASE_TAC
-  \\ gvs[]
-  \\ rw[] \\ gvs[]
-  >- (
-    simp[Once $ oneline unwind_stk_def]
-    \\ CASE_TAC
-    >- (
-      simp[unwind_stk_def]
-      \\ simp[Once rlp_decode_list_def, SimpRHS] )
-    \\ CASE_TAC \\ gvs[]
-    \\ simp[Once unwind_stk_def, SimpRHS]
-    \\ simp[Once rlp_decode_list_def, SimpRHS] )
-  \\ simp[Once $ oneline unwind_stk_def]
-  \\ simp[Once $ oneline unwind_stk_def, SimpRHS]
-  \\ CASE_TAC
-  >- (
-    simp[Once rlp_decode_list_def, SimpRHS]
-    \\ simp[unwind_stk_def] )
-  \\ CASE_TAC
-  \\ simp[Once rlp_decode_list_def, SimpRHS]
-  \\ simp[Once unwind_stk_def]
+    Cases_on`bs = []` \\ gvs[unwind_stk_def]
+    \\ Cases_on`stk` \\ gvs[unwind_stk_def]
+    \\ PairCases_on`h`
+    \\ Cases_on`rlp_decode_list h0`
+    \\ gvs[unwind_stk_def]
+    \\ metis_tac[APPEND_ASSOC, APPEND] )
+  \\ PairCases_on`x` \\ gvs[]
+  \\ Cases_on`x2` \\ gvs[]
+  \\ TRY (
+    Cases_on`rlp_decode_list (TAKE x1 (DROP x0 bs))`
+    \\ gvs[unwind_stk_def] )
+  \\ Cases_on`rlp_decode_list (DROP x1 (DROP x0 bs))`
+  \\ gvs[unwind_stk_def]
+  \\ metis_tac[APPEND_ASSOC, APPEND]
 QED
 
 Theorem rlp_decode_list_eq_tr:
   rlp_decode_list bs =
   rlp_decode_list_tr bs [] []
 Proof
-  rw[rlp_decode_list_tr_unwind_stk, unwind_stk_def]
+  Cases_on`rlp_decode_list bs`
+  \\ simp[rlp_decode_list_tr_unwind_stk, unwind_stk_def]
 QED
 
 Definition rlp_decode_def:
   rlp_decode bs =
   case rlp_decode_list bs of
-     | [rlp] => SOME rlp
+     | SOME [rlp] => SOME rlp
      | _ => NONE
 End
 
@@ -604,22 +629,20 @@ QED
 Definition rlp_decode_list_chunks_tr_def:
   rlp_decode_list_chunks_tr css remaining ls stk =
   case rlp_decode_length_chunks remaining css of
-    NONE => (
-      case stk of
-        [] => REVERSE ls
-      | ((parentRemaining,pls)::stk) =>
-          case chunk_stream_drop remaining css of
-            NONE => REVERSE ls
-          | SOME rest =>
-              rlp_decode_list_chunks_tr rest parentRemaining
-                ((RLPL (REVERSE ls))::pls) stk) |
+    NONE =>
+      if remaining ≠ 0 then NONE else (
+        case stk of
+          [] => SOME (REVERSE ls)
+        | ((parentRemaining,pls)::stk) =>
+            rlp_decode_list_chunks_tr css parentRemaining
+              ((RLPL (REVERSE ls))::pls) stk) |
     SOME (offset,dataLen,isBS) =>
       case chunk_stream_drop offset css of
-        NONE => REVERSE ls
+        NONE => NONE
       | SOME data =>
           if isBS then
             case chunk_stream_take_bytes dataLen data of
-              NONE => REVERSE ls
+              NONE => NONE
             | SOME (bytes,rest) =>
                 rlp_decode_list_chunks_tr rest
                   (remaining - offset - dataLen) ((RLPB bytes)::ls) stk
@@ -660,7 +683,7 @@ val () = cv_trans rlp_decode_list_chunks_def;
 Definition rlp_decode_chunks_def:
   rlp_decode_chunks css =
   case rlp_decode_list_chunks css of
-    [rlp] => SOME rlp
+    SOME [rlp] => SOME rlp
   | _ => NONE
 End
 
@@ -698,19 +721,17 @@ Proof
        (fn th => rewrite_tac[GSYM th])
   \\ Cases_on`rlp_decode_length_chunks remaining css`
   >- (
-    gvs[]
-    \\ Cases_on`stk`
-    >- simp[chunk_decode_stack_def]
-    \\ PairCases_on`h`
-    \\ simp[chunk_decode_stack_def]
-    \\ `IS_SOME (chunk_stream_drop remaining css)`
-        by gvs[chunk_stream_drop_some, chunk_stream_length_eq]
-    \\ Cases_on`chunk_stream_drop remaining css`
-    >- gvs[]
-    \\ imp_res_tac chunk_stream_drop_correct
-    \\ gvs[]
-    \\ qpat_x_assum`_ ⇒ rlp_decode_list_chunks_tr _ _ _ _ = _` irule
-    \\ gvs[chunk_stream_length_eq] )
+    Cases_on`remaining = 0`
+    >- (
+      gvs[]
+      \\ Cases_on`stk`
+      >- simp[chunk_decode_stack_def]
+      \\ PairCases_on`h`
+      \\ gvs[chunk_decode_stack_def] )
+    \\ `TAKE remaining (chunk_stream_bytes css) ≠ []`
+        by (Cases_on`chunk_stream_bytes css`
+            \\ gvs[chunk_stream_length_eq, LENGTH_TAKE_EQ])
+    \\ gvs[] )
   \\ PairCases_on`x`
   \\ gvs[]
   \\ imp_res_tac rlp_decode_length_chunks_length_less_eq
@@ -831,7 +852,12 @@ Proof
   \\ Cases_on`b1` \\ gvs[Abbr`prefix`, Abbr`prefix'`]
   \\ IF_CASES_TAC \\ gvs[]
   \\ qpat_x_assum`_ = SOME _`mp_tac
-  \\ IF_CASES_TAC >> gvs[]
+  \\ IF_CASES_TAC
+  >- (
+    Cases_on`t`
+    \\ gvs[Abbr`length`, EL_APPEND]
+    \\ rw[] \\ gvs[] )
+  \\ gvs[]
   \\ IF_CASES_TAC
   >- (
     gvs[]
@@ -891,14 +917,28 @@ Proof
   \\ qmatch_goalsub_abbrev_tac`num_of_be_bytes bb`
   \\ `bb = num_to_be_bytes (LENGTH bs)`
   by ( simp[num_to_be_bytes_def, Abbr`bb`, MAP_REVERSE] )
-  \\ simp[DROP_APPEND, LENGTH_num_to_be_bytes]
+  \\ simp[DROP_APPEND, LENGTH_num_to_be_bytes, LOG]
+QED
+
+Theorem rlp_decode_option_cons[local]:
+  (OPTION_MAP (CONS x) opt = SOME (x::xs)) ⇔ opt = SOME xs
+Proof
+  Cases_on`opt` \\ simp[EQ_SYM_EQ]
+QED
+
+Theorem rlp_decode_option_list_cons[local]:
+  ((case children of NONE => NONE | SOME rs =>
+      OPTION_MAP (CONS (RLPL rs)) suffix) = SOME (RLPL xs::ys)) ⇔
+  children = SOME xs ∧ suffix = SOME ys
+Proof
+  Cases_on`children` \\ Cases_on`suffix` \\ simp[EQ_SYM_EQ]
 QED
 
 Theorem rlp_decode_list_encode:
   ∀ls xs. ls = FLAT (MAP rlp_encode xs) ∧
   EVERY (λx. LENGTH (rlp_encode x) < 2 ** 64) xs
   ⇒
-  rlp_decode_list ls = xs
+  rlp_decode_list ls = SOME xs
 Proof
   ho_match_mp_tac rlp_decode_list_ind
   \\ rw[]
@@ -917,9 +957,12 @@ Proof
     \\ qmatch_goalsub_abbrev_tac`_ ++ ws`
     \\ drule_then(qspec_then`ws`mp_tac) rlp_decode_length_append
     \\ rw[DROP_DROP, DROP_APPEND, DROP_LENGTH_TOO_LONG, iffRL SUB_EQ_0]
-    \\ rw[TAKE_APPEND, Abbr`ws`]
-    \\ last_x_assum irule
-    \\ gs[DROP_APPEND, DROP_DROP, iffRL SUB_EQ_0])
+    \\ simp[Once rlp_decode_list_def]
+    \\ rw[TAKE_APPEND, Abbr`ws`, rlp_decode_option_cons]
+    \\ gvs[DROP_APPEND, DROP_DROP, iffRL SUB_EQ_0, TAKE_APPEND]
+    \\ qpat_x_assum`LENGTH (rlp_encode (RLPB bs)) = _`
+         (fn th => gvs[GSYM th])
+    \\ metis_tac[])
   \\ qmatch_asmsub_rename_tac`RLPL ls`
   \\ qmatch_goalsub_abbrev_tac`_ ++ ws`
   \\ gs[rlp_encode_def, rlp_encode_list_map]
@@ -932,7 +975,10 @@ Proof
   \\ drule rlp_decode_length_length_less_eq
   \\ strip_tac
   \\ rw[DROP_APPEND, DROP_DROP, TAKE_APPEND, iffRL SUB_EQ_0]
-  \\ gvs[DROP_APPEND, iffRL SUB_EQ_0, TAKE_APPEND]
+  \\ simp[Once rlp_decode_list_def]
+  \\ gvs[DROP_APPEND, iffRL SUB_EQ_0, TAKE_APPEND,
+          rlp_decode_option_list_cons]
+  \\ conj_tac
   >- (
     qmatch_asmsub_abbrev_tac`rlp_list bs = off ++ bs`
     \\ simp[DROP_APPEND]
@@ -962,6 +1008,15 @@ Proof
   \\ qunabbrev_tac`ws`
   \\ last_x_assum irule
   \\ simp[DROP_APPEND, TAKE_APPEND, DROP_LENGTH_TOO_LONG]
+  \\ qexists_tac`ls`
+  \\ qunabbrev_tac`bs`
+  \\ first_x_assum irule
+  \\ simp[DROP_APPEND, TAKE_APPEND, DROP_LENGTH_TOO_LONG]
+  \\ gs[LENGTH_FLAT, MAP_MAP_o, o_DEF]
+  \\ qmatch_asmsub_abbrev_tac`SUM lf`
+  \\ `SUM lf < 2 ** 64` by simp[]
+  \\ drule listTheory.SUM_less_EVERY_less
+  \\ simp[Abbr`lf`, EVERY_MAP]
 QED
 
 Theorem rlp_decode_encode:
@@ -969,37 +1024,36 @@ Theorem rlp_decode_encode:
   ⇒ rlp_decode (rlp_encode x) = SOME x
 Proof
   Cases_on`x`
-  \\ rw[rlp_encode_def, rlp_encode_list_map]
   >- (
-    rw[rlp_decode_def]
-    \\ rw[Once rlp_decode_list_def]
-    \\ qmatch_goalsub_rename_tac`rlp_decode_length (rlp_bytes bs)`
-    \\ `rlp_bytes bs = rlp_encode (RLPB bs)` by rw[rlp_encode_def]
-    \\ pop_assum SUBST1_TAC
+    rename1`RLPB bs`
+    \\ strip_tac
     \\ `LENGTH bs < 2 ** 64`
-    by ( fs[rlp_bytes_def] \\ pop_assum mp_tac \\ rw[] )
+        by (fs[rlp_encode_def, rlp_bytes_def] \\ pop_assum mp_tac \\ rw[])
     \\ drule rlp_decode_length_RLPB
     \\ strip_tac
-    \\ simp[DROP_DROP, DROP_LENGTH_TOO_LONG]
-    \\ rw[Once rlp_decode_list_def] )
+    \\ simp[rlp_decode_def, Once rlp_decode_list_def]
+    \\ simp[DROP_DROP, DROP_LENGTH_TOO_LONG, Once rlp_decode_list_def] )
+  \\ rename1`RLPL rs`
   \\ rw[rlp_encode_def, rlp_encode_list_map]
   \\ qmatch_goalsub_abbrev_tac`rlp_list bs`
-  \\ rw[rlp_decode_def]
-  \\ rw[Once rlp_decode_list_def]
   \\ `LENGTH bs < 2 ** 64` by fs[LENGTH_rlp_list]
+  \\ `rlp_decode_list bs = SOME rs`
+      by (
+        irule rlp_decode_list_encode
+        \\ simp[Abbr`bs`]
+        \\ gvs[LENGTH_rlp_list, LENGTH_FLAT]
+        \\ qmatch_asmsub_abbrev_tac`SUM lf`
+        \\ `SUM lf < 2 ** 64` by simp[]
+        \\ drule listTheory.SUM_less_EVERY_less
+        \\ simp[Abbr`lf`, EVERY_MAP] )
   \\ drule rlp_decode_length_list
-  \\ rw[] \\ rw[DROP_DROP]
-  \\ rw[Once rlp_decode_list_def]
-  \\ qmatch_asmsub_abbrev_tac`off ++ bs`
-  \\ `LENGTH off = offset` by simp[Abbr`off`]
-  \\ simp[DROP_APPEND]
-  \\ `DROP offset off = []` by metis_tac[DROP_LENGTH_NIL]
-  \\ rw[]
-  \\ irule rlp_decode_list_encode
-  \\ rw[]
-  \\ gvs[LENGTH_rlp_list, Abbr`bs`, LENGTH_FLAT]
-  \\ qmatch_asmsub_abbrev_tac`SUM lf`
-  \\ `SUM lf < 2 ** 64` by simp[]
-  \\ drule listTheory.SUM_less_EVERY_less
-  \\ simp[Abbr`lf`, EVERY_MAP]
+  \\ strip_tac
+  \\ `DROP offset (rlp_list bs) = bs`
+      by (
+        qpat_x_assum`rlp_list bs = _ ++ bs` (fn th =>
+          CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th])))
+        \\ simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, LENGTH_TAKE_EQ] )
+  \\ simp[rlp_decode_def, Once rlp_decode_list_def,
+          DROP_DROP, DROP_LENGTH_TOO_LONG]
+  \\ simp[Once rlp_decode_list_def]
 QED

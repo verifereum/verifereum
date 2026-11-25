@@ -5,6 +5,7 @@ open HolKernel
   vfmDomainCollectionTheory vfmTotalBalanceTheory vfmCalldataBoundTheory
   vfmReturndataBoundTheory vfmToDeleteTheory vfmDeletionQueueTheory
   vfmTestRunTheory vfmTestDefLib vfmTestResultLib vfmChainIdTheory
+  recursiveLengthPrefixCanonicalTheory vfmTypedDecodeTheory
   vfmSettlementTheory vfmAccountingTheory vfmHistoryRingTheory
   vfmCreateCollisionTheory vfmDepositLogTheory vfmSystemTransactionTheory
   vfmSystemContractsTheory
