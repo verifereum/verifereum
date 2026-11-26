@@ -10,7 +10,7 @@ header-includes:
 
 ## Formal semantics of the Ethereum Virtual Machine in HOL4
 
-Verifereum is an executable formal semantics of the [Ethereum](https://ethereum.org) Execution Layer's EVM, mechanised in the [HOL4 theorem prover](https://hol-theorem-prover.org). The semantics runs inside the logic, which is how it is checked against Ethereum's conformance tests, and it is the foundation for machine-checked proofs about EVM bytecode: theorems about the semantics itself, a program logic for contracts, and compiler verification targeting the EVM. Audits find bugs; proofs rule out whole classes of them, and Ethereum's small, deterministic programs are a good fit for that.
+Verifereum is an executable formal semantics of the [Ethereum](https://ethereum.org) Execution Layer's EVM, mechanised in the [HOL4 theorem prover](https://hol-theorem-prover.org). The semantics runs inside the logic, which is how it is checked against Ethereum's conformance tests, and it is the foundation for machine-checked proofs about EVM bytecode: theorems about the semantics itself, a program logic for contracts, and compiler verification targeting the EVM.
 
 ## Status
 
@@ -18,29 +18,19 @@ Verifereum is an executable formal semantics of the [Ethereum](https://ethereum.
 
 The checked runner evaluates the semantics inside HOL4: a Passed result is backed by a kernel-checked theorem. The latest full run passed 17,386 cases (99.7%) in 5h22m on 16 cores; 55 cases timed out, with no other failures ([checked results](table.html)). The unchecked runner compiles the same definitions to native code and runs them without producing proofs. It passed all 17,441 cases (100%) in 38 minutes on CI, including every case that timed out in the checked run ([unchecked results](table-unchecked.html)).
 
-Block processing executes the deployed beacon-roots, block-history, withdrawal-request and consolidation-request contracts. For their canonical bytecode, HOL4 correspondence proofs relate both return bytes and final account state to the high-level models, under [documented bounds](https://github.com/verifereum/verifereum/blob/main/README.md).
-
 ## What's in the repository
 
 The [repository](https://github.com/verifereum/verifereum) is GPLv3. It contains:
 
 - The semantics, in `spec/`: EVM state (`vfmStateScript.sml`), operations (`vfmOperationScript.sml`), and execution (`vfmExecutionScript.sml`) as a definitional interpreter, with block and transaction processing.
-- Theorems about the semantics, in `spec/prop/`: frame theorems about what execution can touch, such as `run_call_preserves_storage_outside_accessed_slots` in `vfmRunCallScript.sml` (a storage slot a call never accesses is unchanged by it) and `run_static_preserves` in `vfmStaticCallsScript.sml` (a static call changes no account, transient storage, or deletion); the gas accounting theorems of `vfmDecreasesGasScript.sml`; and the `preserves` combinators of `vfmPreservesScript.sml` for proving invariants of the monadic semantics.
+- Theorems in `spec/prop/` cover frame and static-call preservation, gas accounting, and correspondence between canonical system-contract bytecode and high-level models under [documented bounds](https://github.com/verifereum/verifereum/blob/main/README.md).
 - A program logic, in `prog/vfmProgScript.sml`: a separation-logic model of the EVM, with `EVM_SPEC_SEMANTICS` relating specifications to execution traces.
 - Utilities, in `util/`: RLP, Merkle Patricia tries, the contract ABI, and the precompiles' cryptography (secp256k1, secp256r1, BN254, BLS12-381, Blake2f).
 - The test driver, in `tests/`, which fetches the EEST fixtures, runs them through the semantics, and writes the results table.
 
 ## News
 
-- **July 2026:** Verifereum received $403 in donations and 1.085 ETH in matching funds in the [Ethereum Security QF round](https://forum.giveth.io/t/ethereum-security-qf-round-results-april-23-may-14-2026/2201). The funding will primarily support updating our formal EVM semantics for Glamsterdam, with remaining funds supporting infrastructure work such as [researching a proof-producing translation to CakeML](https://github.com/verifereum/verifereum/issues/14). Support associated with the round has also enabled significant progress in [Vyper-HOL](https://github.com/verifereum/vyper-hol). Thank you to all contributors, especially [The DAO Fund](https://x.com/TheDAOfund) and [Wintermute](https://x.com/wintermute_t) for their major donations.
-- **February 2025:** We hosted our first community event, Higher Order Log Cabin, bringing together researchers and developers.
-
-## Talks
-
-- [Towards a verified Vyper → EVM compiler in HOL4](https://github.com/verifereum/verifereum/tree/main/talks/EthProofs2026), EthProofs project status, June 2026.
-- [Verifereum update](https://github.com/verifereum/verifereum/tree/main/talks/EVMTrack2025Q1), EVM track call, March 2025.
-- [Verifereum](https://github.com/verifereum/verifereum/tree/main/talks/HOL4Users2024), HOL4 Users' Workshop, June 2024.
-- [Verifereum](https://github.com/verifereum/verifereum/tree/main/talks/ETHDenver2024), ETHDenver Lift Off, March 2024.
+- **July 2026:** The [Ethereum Security QF round](https://forum.giveth.io/t/ethereum-security-qf-round-results-april-23-may-14-2026/2201) brought in $403 in donations and 1.085 ETH in matching funds, primarily for the Glamsterdam update, with some funding for [CakeML translation research](https://github.com/verifereum/verifereum/issues/14). The round also supported [Vyper-HOL](https://github.com/verifereum/vyper-hol). Thanks to all donors, especially [The DAO Fund](https://x.com/TheDAOfund) and [Wintermute](https://x.com/wintermute_t).
 
 ## Get involved
 
