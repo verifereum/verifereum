@@ -1,7 +1,7 @@
 Theory vfmTest0442[no_sig_docs]
 Ancestors vfmTestDefs0442
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result0442_0.nsv"];
+val () = holbuild_extra_outputs ["result0442_0.nsv", "result0442_1.nsv", "result0442_2.nsv", "result0442_3.nsv", "result0442_4.nsv", "result0442_5.nsv", "result0442_6.nsv", "result0442_7.nsv", "result0442_8.nsv", "result0442_9.nsv", "result0442_10.nsv", "result0442_11.nsv", "result0442_12.nsv", "result0442_13.nsv", "result0442_14.nsv", "result0442_15.nsv", "result0442_16.nsv", "result0442_17.nsv"];
 val thyn = "vfmTestDefs0442";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

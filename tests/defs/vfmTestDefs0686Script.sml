@@ -1,5 +1,5 @@
 Theory vfmTestDefs0686[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stInitCodeTest/stack_under_flow_contract_creation/stack_under_flow_contract_creation.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stInitCodeTest/stack_under_flow_contract_creation/stack_under_flow_contract_creation.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stHomesteadSpecific/create_contract_via_contract/create_contract_via_contract.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stHomesteadSpecific/create_contract_via_contract/create_contract_via_contract.json");
 val defs = mapi (define_test "0686") tests;

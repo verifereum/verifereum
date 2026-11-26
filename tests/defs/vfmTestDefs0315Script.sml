@@ -1,5 +1,5 @@
 Theory vfmTestDefs0315[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/osaka/eip7883_modexp_gas_increase/eip_mainnet/modexp_different_base_lengths.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/osaka/eip7883_modexp_gas_increase/eip_mainnet/modexp_different_base_lengths.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/osaka/eip7594_peerdas/max_blob_per_tx/valid_max_blobs_per_tx.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/osaka/eip7594_peerdas/max_blob_per_tx/valid_max_blobs_per_tx.json");
 val defs = mapi (define_test "0315") tests;
