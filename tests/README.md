@@ -26,6 +26,29 @@ of Osaka blockchain tests in the fixtures' `.meta/index.json`. Indices are
 reassigned whenever the fixtures change, so refer to a test by its json path
 in anything meant to outlast a release.
 
+## Focused authorization regressions
+
+The standalone EIP-7702 regressions do not need external fixtures:
+
+```bash
+holbuild build --skip-proof-steps \
+  vfmAuthorizationDecodeTheory vfmAuthorizationTransactionTheory
+```
+
+These theories also belong to the root build. `vfmAuthorizationDecode` checks
+each numeric upper bound, short/long addresses, and decoding at the in-bounds
+extremes. `vfmAuthorizationTransaction` checks an independently verified outer
+signature on a type-4 transaction containing canonical authorization parity
+256; both type-4 and typed-byte decoding must reject it. Its funded nonce-0
+sender, non-null destination, 50,000 gas limit, and valid fees were also used
+to reproduce successful execution before the bounds fix.
+
+Positive controls execute signed transactions with authorization parity 2 and
+255, check valid authorization recovery and delegation, and check that a
+correctly signed authorization with a matching nonce of 2⁶⁴ − 1 decodes but
+leaves account state, accesses, and refund unchanged. These are numeric-bound
+regressions, not leading-zero integer canonicality checks.
+
 ## Fixtures
 
 The EEST release is `fixtures_version` in `vfmTestAuxLib.sml` (currently
