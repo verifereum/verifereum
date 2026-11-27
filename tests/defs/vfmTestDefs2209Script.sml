@@ -1,5 +1,5 @@
 Theory vfmTestDefs2209[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_4.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_4.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip7002_el_triggerable_withdrawals/withdrawal_requests/withdrawal_requests_negative.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip7002_el_triggerable_withdrawals/withdrawal_requests/withdrawal_requests_negative.json");
 val defs = mapi (define_test "2209") tests;

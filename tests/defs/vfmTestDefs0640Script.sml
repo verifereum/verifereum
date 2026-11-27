@@ -1,5 +1,5 @@
 Theory vfmTestDefs0640[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stEIP3607/transaction_colliding_with_non_empty_account_calls_itself/transaction_colliding_with_non_empty_account_calls_itself.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stEIP3607/transaction_colliding_with_non_empty_account_calls_itself/transaction_colliding_with_non_empty_account_calls_itself.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stEIP158Specific/call_to_empty_then_call_error_paris/call_to_empty_then_call_error_paris.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stEIP158Specific/call_to_empty_then_call_error_paris/call_to_empty_then_call_error_paris.json");
 val defs = mapi (define_test "0640") tests;

@@ -1,5 +1,5 @@
 Theory vfmTestDefs0343[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/osaka/eip7939_count_leading_zeros/count_leading_zeros/clz_push_operation_same_value.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/osaka/eip7939_count_leading_zeros/count_leading_zeros/clz_push_operation_same_value.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/osaka/eip7918_blob_reserve_price/blob_base_fee/reserve_price_boundary.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/osaka/eip7918_blob_reserve_price/blob_base_fee/reserve_price_boundary.json");
 val defs = mapi (define_test "0343") tests;
