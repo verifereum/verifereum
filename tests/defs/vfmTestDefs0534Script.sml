@@ -1,5 +1,5 @@
 Theory vfmTestDefs0534[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCreateTest/create_e_contract_create_e_contract_in_init_tr/create_e_contract_create_e_contract_in_init_tr.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCreateTest/create_e_contract_create_e_contract_in_init_tr/create_e_contract_create_e_contract_in_init_tr.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stCreate2/returndatacopy_following_revert_in_create/returndatacopy_following_revert_in_create.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stCreate2/returndatacopy_following_revert_in_create/returndatacopy_following_revert_in_create.json");
 val defs = mapi (define_test "0534") tests;

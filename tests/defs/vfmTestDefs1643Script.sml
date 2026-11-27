@@ -1,5 +1,5 @@
 Theory vfmTestDefs1643[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stStaticCall/static_ab_acalls_suicide1/static_ab_acalls_suicide1.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stStaticCall/static_ab_acalls_suicide1/static_ab_acalls_suicide1.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stSpecialTest/stack_depth_limit_sec/stack_depth_limit_sec.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stSpecialTest/stack_depth_limit_sec/stack_depth_limit_sec.json");
 val defs = mapi (define_test "1643") tests;

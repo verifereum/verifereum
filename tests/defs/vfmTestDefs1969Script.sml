@@ -1,5 +1,5 @@
 Theory vfmTestDefs1969[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stTransactionTest/point_at_infinity_ec_recover/point_at_infinity_ec_recover.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stTransactionTest/point_at_infinity_ec_recover/point_at_infinity_ec_recover.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/ported_static/stTransactionTest/create_message_success/create_message_success.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/ported_static/stTransactionTest/create_message_success/create_message_success.json");
 val defs = mapi (define_test "1969") tests;
