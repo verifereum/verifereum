@@ -1,7 +1,7 @@
 Theory vfmTest0443[no_sig_docs]
 Ancestors vfmTestDefs0443
 Libs wordsLib vfmTestAuxLib vfmTestResultLib
-val () = holbuild_extra_outputs ["result0443_0.nsv"];
+val () = holbuild_extra_outputs ["result0443_0.nsv", "result0443_1.nsv", "result0443_2.nsv", "result0443_3.nsv", "result0443_4.nsv", "result0443_5.nsv", "result0443_6.nsv", "result0443_7.nsv", "result0443_8.nsv"];
 val thyn = "vfmTestDefs0443";
 val defs = get_result_defs thyn;
 val () = vfmTestLib.remove_nsv_files thyn;

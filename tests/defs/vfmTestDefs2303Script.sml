@@ -1,5 +1,5 @@
 Theory vfmTestDefs2303[no_sig_docs]
 Libs vfmTestAuxLib vfmTestDefLib
-val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/shanghai/eip3855_push0/push0/push0_contract_during_call_contexts.json"];
-val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/shanghai/eip3855_push0/push0/push0_contract_during_call_contexts.json");
+val () = holbuild_extra_deps ["../fixtures/blockchain_tests/for_osaka/prague/eip7702_set_code_tx/set_code_txs_2/gas_diff_pointer_vs_direct_call.json"];
+val tests = json_path_to_tests (vfmTestAuxLib.fixtures_path "blockchain_tests/for_osaka/prague/eip7702_set_code_tx/set_code_txs_2/gas_diff_pointer_vs_direct_call.json");
 val defs = mapi (define_test "2303") tests;

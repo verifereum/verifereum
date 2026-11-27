@@ -52,7 +52,7 @@ regressions, not leading-zero integer canonicality checks.
 ## Fixtures
 
 The EEST release is `fixtures_version` in `vfmTestAuxLib.sml` (currently
-21.0.2, which has 2333 Osaka blockchain test files with 17441 cases). When
+21.0.3, which has 2349 Osaka blockchain test files with 17463 cases). When
 `fixtures/version.txt` does not match it, `runtests.exe` downloads
 `fixtures.tar.gz` from the `tests@v<version>` release of
 ethereum/execution-specs (about 1 GB) and extracts it into `fixtures/`
@@ -218,20 +218,20 @@ a path that is not in the fixtures' index is an error, so a release that
 drops or renames one of these files stops the run rather than silently
 running it in parallel.
 
-The current list, with its indices at 21.0.2:
+The current list, with its indices at 21.0.3:
 
 | Index | Json path (under `blockchain_tests/for_osaka/`) |
 | --- | --- |
-| 0309 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_addr.json` |
-| 0310 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_keys.json` |
-| 0330 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_logs.json` |
-| 0331 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_withdrawals.json` |
-| 0332 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_size_limit_boundary.json` |
-| 0333 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_rlp_size_at_limit_with_all_typed_transactions.json` |
-| 0863 | `ported_static/stPreCompiledContracts/precomps_eip2929_cancun/precomps_eip2929_cancun.json` |
-| 2143 | `prague/eip2537_bls_12_381_precompiles/bls12_g2msm/valid.json` |
-| 2209 | `prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_4.json` |
-| 2218 | `prague/eip7702_set_code_tx/gas/intrinsic_gas_cost.json` |
+| 0324 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_addr.json` |
+| 0325 | `osaka/eip7825_transaction_gas_limit_cap/tx_gas_limit/tx_gas_limit_cap_access_list_with_diff_keys.json` |
+| 0345 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_logs.json` |
+| 0346 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_limit_with_withdrawals.json` |
+| 0347 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_at_rlp_size_limit_boundary.json` |
+| 0348 | `osaka/eip7934_block_rlp_limit/max_block_rlp_size/block_rlp_size_at_limit_with_all_typed_transactions.json` |
+| 0878 | `ported_static/stPreCompiledContracts/precomps_eip2929_cancun/precomps_eip2929_cancun.json` |
+| 2158 | `prague/eip2537_bls_12_381_precompiles/bls12_g2msm/valid.json` |
+| 2224 | `prague/eip7623_increase_calldata_cost/transaction_validity/transaction_validity_type_4.json` |
+| 2233 | `prague/eip7702_set_code_tx/gas/intrinsic_gas_cost.json` |
 
 The list and the timings below come from full runs at 20.0.2 ([#95
 (comment)](https://github.com/verifereum/verifereum/issues/95#issuecomment-5558158839),
@@ -258,7 +258,7 @@ Linux holbuild rejects it
 ([HOL-Theorem-Prover/holbuild#237](https://github.com/HOL-Theorem-Prover/holbuild/issues/237)).
 
 The Poly/ML 5.9.2 release is not enough for a full run: under the 24000 MB
-cap, tests 0225 (`frontier/scenarios/scenarios/scenarios.json`) and 0243
+cap, tests 0226 (`frontier/scenarios/scenarios/scenarios.json`) and 0245
 (`istanbul/eip2200_net_gas_metering/sstore_combinations/sstore_combinations_initial.json`)
 never finish; the process sits at the cap without completing a case.
 Use a Poly/ML built from master, or 5.9.2 with four commits cherry-picked in
