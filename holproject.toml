@@ -25,8 +25,8 @@ objects = ["runtests_unchecked"]
 deps = ["vfmUncheckedEmitTheory"]
 
 [dependencies.hol]
-git = "https://github.com/HOL-Theorem-Prover/HOL.git"
-rev = "dc64d85262a64b9a78f080a0dbdd9af88158363b"
+git = "https://github.com/sequent-dev-bot/HOL.git"
+rev = "b6bcf5177586c862a2f30da3a73bdd06ce1da977"
 
 [dependencies.holexamples]
 from = "hol"
