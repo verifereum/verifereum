@@ -63,6 +63,52 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* Direct precompiles use native dispatch, but checked calls still require
+   stored code before execution. These are generic runner inputs, not the
+   fixed block system targets. *)
+Definition system_identity_observation_def:
+  system_identity_observation checked code =
+    OPTION_MAP (λ(output, accounts, dom).
+      (output, (lookup_account 4w accounts).balance,
+       (lookup_account 4w accounts).nonce,
+       (lookup_account system_address accounts).balance,
+       (lookup_account system_address accounts).nonce))
+    (run_system_transaction checked (Collect empty_domain) 1 []
+      (settlement_block 0x300w)
+      (update_account 4w
+        (empty_account_state with <| code := code; balance := 19; nonce := 1 |>)
+        (system_test_accounts []))
+      4w [0xaaw; 0xbbw; 0xccw])
+End
+val () = cv_auto_trans system_identity_observation_def;
+
+Theorem system_identity_unchecked:
+  system_identity_observation F [] = SOME ([0xaaw; 0xbbw; 0xccw], 19, 1, 17, 9)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem system_identity_checked_empty:
+  system_identity_observation T [] = NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem system_identity_checked_stored_code:
+  system_identity_observation T [0xfew] =
+  SOME ([0xaaw; 0xbbw; 0xccw], 19, 1, 17, 9)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem system_identity_domain_required:
+  run_system_transaction F (Enforce empty_domain) 1 []
+    (settlement_block 0x300w) (system_test_accounts [])
+    4w [0xaaw; 0xbbw; 0xccw] = NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* Write storage, then fail, so success and rollback cannot look alike. *)
 Theorem system_revert_checked:
   system_test_observation T

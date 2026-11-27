@@ -34,6 +34,9 @@ request contract invalidates the block. Request bytes come from the calls'
 return data. The high-level ring-buffer and queue models remain available for
 reasoning about canonical code.
 
+The generic `run_system_transaction` dispatches direct precompile targets
+natively, while checked calls still require nonempty stored target code.
+
 The canonical-code correspondence statements in
 `spec/prop/vfmSystemContractsScript.sml` compare both return bytes and the
 entire resulting account state with these models. They require the target
