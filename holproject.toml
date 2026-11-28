@@ -26,7 +26,7 @@ deps = ["vfmUncheckedEmitTheory"]
 
 [dependencies.hol]
 git = "https://github.com/sequent-dev-bot/HOL.git"
-rev = "e49418094ee94d7319a03c708252ad1158e4c4bc"
+rev = "a21760dd12d4c1f40ab9f7ddcba9f1096a116072"
 
 [dependencies.holexamples]
 from = "hol"
