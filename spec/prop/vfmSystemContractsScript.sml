@@ -886,6 +886,15 @@ Proof
   simp[vfmStateTheory.recordtype_account_state_seldef_storage_fupd_def]
 QED
 
+Theorem system_targets_not_precompiles[local,simp]:
+  ¬fIN beacon_roots_address precompile_addresses ∧
+  ¬fIN history_storage_address precompile_addresses ∧
+  ¬fIN withdrawal_request_contract precompile_addresses ∧
+  ¬fIN consolidation_request_contract precompile_addresses
+Proof
+  CONV_TAC cv_eval
+QED
+
 Theorem beacon_roots_code_correspondence:
   (lookup_account beacon_roots_address accounts).code = beacon_roots_code ∧
   blk.timeStamp < 2 ** 256 ⇒

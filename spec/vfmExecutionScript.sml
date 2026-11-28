@@ -1957,7 +1957,9 @@ Definition run_system_transaction_def:
   od in
   case check_domain st of
     (INL (), s0) =>
-      (case run s0 of
+      (case (if fIN target precompile_addresses then
+               SOME $ handle (dispatch_precompiles target) handle_step s0
+             else run s0) of
          SOME (INR e, s) =>
            if vfm_abort e ∨ (checked ∧ e ≠ NONE) then NONE else
            (case s.contexts of
